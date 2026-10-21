@@ -105,12 +105,19 @@ type Props =
        */
       cartaoPreSelecionadoId?: string;
       trigger?: React.ReactNode;
+      /** Aberto por fora, sem gatilho (o menu "Novo lançamento" da
+       *  conciliação, decisão 195). */
+      open?: boolean;
+      onOpenChange?: (b: boolean) => void;
       /**
        * Habilita o botão "Criar e dar baixa" da Tela 3.2: cria o
        * lançamento e devolve o id para quem chamou abrir o modal de baixa
        * em seguida. Sem esta prop, o drawer segue só com "Criar".
        */
       onCriadaParaBaixa?: (contaAvulsaId: string) => void;
+      /** O "Lançar avulso" da conciliação com o banco (decisão 200): o
+       *  formulário abre com a descrição, o valor e a data da linha. */
+      inicial?: { descricao: string; valor: number; data: string };
     }
   | {
       mode: "editar";
@@ -147,13 +154,19 @@ export function ContaAvulsaDrawer(props: Props) {
   const conta = isEditar ? (props as Extract<Props, { mode: "editar" }>).conta : undefined;
 
   // Controle de abertura (suporte a modo controlado e não-controlado)
-  const isControlled = isEditar;
-  const open = isControlled
+  // Controlado na edição e no "criar" aberto por fora (decisão 195).
+  const controladoDeFora =
+    props.mode === "criar" && props.open !== undefined && props.onOpenChange !== undefined;
+  const open = isEditar
     ? (props as Extract<Props, { mode: "editar" }>).open
-    : internalOpen;
-  const setOpen = isControlled
+    : controladoDeFora
+      ? (props.open as boolean)
+      : internalOpen;
+  const setOpen = isEditar
     ? (props as Extract<Props, { mode: "editar" }>).onOpenChange
-    : setInternalOpen;
+    : controladoDeFora
+      ? (props.onOpenChange as (b: boolean) => void)
+      : setInternalOpen;
 
   // ---------------------------------------------------------------------------
   // Estado dos campos do formulário
@@ -234,6 +247,8 @@ export function ContaAvulsaDrawer(props: Props) {
 
   // Anexos (só em modo criar)
   const [anexos, setAnexos] = React.useState<AnexoPendente[]>([]);
+  /** A cada abertura para criar, a data monta de novo com o valor inicial. */
+  const [aberturas, setAberturas] = React.useState(0);
   const [uploadError, setUploadError] = React.useState<string | null>(null);
   const [uploadingFile, setUploadingFile] = React.useState<string | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -259,10 +274,12 @@ export function ContaAvulsaDrawer(props: Props) {
       );
     }
     if (open && !isEditar) {
+      const inicial = (props as Extract<Props, { mode: "criar" }>).inicial;
       setEmpresaId("");
-      setDescricao("");
-      setValor("");
-      setDataPrevista("");
+      setDescricao(inicial?.descricao ?? "");
+      setValor(inicial ? String(inicial.valor) : "");
+      setDataPrevista(inicial?.data ?? "");
+      setAberturas((n) => n + 1);
       setFornecedorId("__none__");
       setClienteId("__none__");
       setTipoId("");
@@ -507,7 +524,7 @@ export function ContaAvulsaDrawer(props: Props) {
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       {props.trigger && <DialogTrigger asChild>{props.trigger}</DialogTrigger>}
-      {props.mode === "criar" && !props.trigger && (
+      {props.mode === "criar" && !props.trigger && !controladoDeFora && (
         <DialogTrigger asChild>
           <button
             type="button"
@@ -692,7 +709,7 @@ export function ContaAvulsaDrawer(props: Props) {
             <div className="space-y-2">
               <Label>Data prevista de pagamento</Label>
               <DatePicker
-                key={isEditar ? (conta?.id ?? "criar") : "criar"}
+                key={isEditar ? (conta?.id ?? "criar") : `criar-${aberturas}`}
                 name="data_prevista_pagamento_hidden"
                 defaultValue={dataPrevista}
                 placeholder="Selecione a data (opcional)"

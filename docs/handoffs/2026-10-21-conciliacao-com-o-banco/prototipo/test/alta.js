@@ -1,0 +1,12 @@
+import { TITULOS_INICIAIS, LANCAMENTOS_INICIAIS, LOTES, REGRAS, ofxDeExemplo } from "../src/data.js";
+import { lerOfx, casar, diasEntre, formaDoHistorico } from "../src/ofx.js";
+const ofx = lerOfx(ofxDeExemplo("091923").replace("__SALDO__","0"));
+const res = casar(ofx.movimentos, {titulos: TITULOS_INICIAIS, lancamentos: LANCAMENTOS_INICIAIS.filter(l=>!l.conciliado), lotes: LOTES, regras: REGRAS, deslocamento: 0}, {recomendada: true});
+const alta = res.filter(r => r.estado === "sugestao" && r.confianca === "alta");
+const c = {};
+alta.forEach(r => { const k = `d=${Math.abs(diasEntre(r.titulo.vencimento, r.mov.data))} forma=${formaDoHistorico(r.mov.historico)}/${r.titulo.forma ?? "—"} centro=${r.titulo.centro ? "sim" : "não"} pts=${r.pontos}`; c[k]=(c[k]||0)+1; });
+console.log(alta.length, c);
+const semCentro = res.filter(r => r.titulo && !r.titulo.centro && !r.resolvido);
+console.log("sem centro:", semCentro.map(r => [r.estado, r.confianca, r.titulo.ref, r.titulo.origem]));
+const div = res.filter(r => r.estado === "divergencia");
+console.log(div.map(r => ({ mov: r.mov.valor, hist: r.mov.historico, lanc: r.lancamento.valor, juros: r.lancamento.juros, tit: r.lancamento.tituloId ?? r.lancamento.titulo?.id, forma: r.lancamento.titulo?.forma, liq: r.lancamento.titulo?.liquido })));

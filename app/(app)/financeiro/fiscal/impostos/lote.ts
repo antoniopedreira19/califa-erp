@@ -45,6 +45,8 @@ export function paraOLoteImposto(t: ImpostoDaLista): TituloParaLote {
     contraparte: orgaoDoImposto(t),
     vencimento: t.vencimento,
     aberto: t.valor,
+    // Imposto não se paga com cartão (decisão 197).
+    semCartao: "Imposto não se paga com cartão de crédito.",
     // O centro de custo vem do imposto (o banco escolhe), não do lote.
     centroDeCusto: null,
     imposto: {

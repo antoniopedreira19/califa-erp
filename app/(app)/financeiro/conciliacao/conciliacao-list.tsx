@@ -1,11 +1,25 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { ChevronRight, CreditCard, ExternalLink, Info } from "lucide-react";
+import { AlertTriangle, CheckCheck, ChevronDown, CreditCard, ExternalLink, Info, Upload } from "lucide-react";
 import type { LancamentoLinha } from "@/lib/calculos/saldo-conta";
-import type { DetalheDaFatura } from "@/lib/data/fatura-cartao-extrato";
 import type { DetalheDoImposto } from "@/lib/data/imposto-extrato";
-import { limparDescricaoDaFatura } from "@/lib/cartoes/descricao-fatura";
+import { Dica } from "@/components/ui/dica";
+import { BotaoDetalhes } from "@/components/financeiro/detalhes-do-titulo/botao-detalhes";
+import { CentrosDaFatura, LinhasDosItens } from "@/components/financeiro/planilha-de-titulos/planilha";
+import { colunasDoExtratoNaGrade } from "@/components/financeiro/planilha-de-titulos/colunas";
+import { TOTAL_LISTA } from "@/app/(app)/_planilha/blocos";
+import {
+  centrosDosItens,
+  jobsDosItens,
+  juntarRateio,
+  rateioPonderado,
+  siglaDaRegional,
+  textoDaRegional,
+  type ItemDaFatura,
+  type ParteDoRateio,
+} from "@/lib/financeiro/planilha-de-titulos";
+import { gravarPrevia, lerPrevia, type LinhaPrevista } from "./previa-do-extrato";
 import {
   Popover,
   PopoverContent,
@@ -114,6 +128,21 @@ export function colunasDoExtrato<L extends Omit<LancamentoLinha, "saldo">>({
       celula: (l) => celulaTexto(trimestreDe(l.data_movimento)),
     },
     { chave: "empresa", rotulo: "Empresa", tipo: "texto", celula: (l) => celulaTexto(empresa(l)) },
+    {
+      // A sigla da regional, ou "TD" no rateio (decisão 195).
+      chave: "reg",
+      rotulo: "REG",
+      tipo: "texto",
+      celula: (l) => {
+        const partes = juntarRateio(
+          l.regional_nome
+            ? [{ regional: l.regional_nome, percentual: 100 }]
+            : l.rateio.map((r) => ({ regional: r.regional_nome, percentual: r.percentual })),
+        );
+        if (partes.length === 0) return celulaTexto("—");
+        return celulaTexto(partes.length === 1 ? siglaDaRegional(partes[0].regional) : "TD");
+      },
+    },
   ];
 }
 
@@ -121,30 +150,64 @@ export function colunasDoExtrato<L extends Omit<LancamentoLinha, "saldo">>({
  *  largo que o botão do filtro traz). */
 const TITULO = "tracking-normal";
 
+/**
+ * O Extrato da conta (decisão 195, task 029 fase 1): as mesmas colunas e
+ * larguras da planilha de títulos — Data · Crédito · Débito · Saldo ·
+ * Descrição · Fornecedor · Job · Centro de Custo · TRI · Empresa · REG · ⓘ
+ * —, em `table-fixed` com `colgroup` (`colunasDoExtratoNaGrade`). Até
+ * 21/10/2026 a tabela tinha largura automática e não alinhava com nada.
+ *
+ * O ⓘ é o mesmo da planilha de títulos (variante A), lido pelo lançamento:
+ * a trilha do documento que ele pagou, a baixa, o retido e os documentos.
+ * O pagamento da fatura do cartão abre nos ITENS, nas mesmas colunas, cada
+ * um com o centro dele; a guia de imposto continua uma linha só (decisão
+ * 141), que abre no rateio.
+ *
+ * Com o extrato do banco importado (decisão 202), a coluna Banco primeiro:
+ * ✓ conciliado com a linha do banco, ⚠ não bate (a dica diz por quê) e ○
+ * ainda não apareceu no extrato do banco. O cadeado do período fechado
+ * entra com o fechamento (fase 4).
+ */
+
+/** As marcas do banco no Extrato (decisão 202), lidas no servidor. */
+export interface MarcasDoBanco {
+  /** Os lançamentos do período ligados a uma linha do extrato do banco. */
+  conciliados: string[];
+  /** Por id de lançamento: por que o ⚠ (`alertasDoExtrato`). */
+  alertas: Record<string, string>;
+}
 export function ConciliacaoList({
   linhas,
   highlight,
-  detalhesFatura = {},
+  itensDasFaturas = {},
   detalhesImposto = {},
+  jurosDasBaixas = {},
   contexto = "",
+  contaId,
+  banco = null,
 }: {
   linhas: LancamentoLinha[];
   highlight?: string;
   /** A conta e o período que a página carregou: trocar qualquer um zera os
    *  filtros dos títulos, porque os lançamentos são outros (decisão 165). */
   contexto?: string;
-  /** Por id do lançamento: o que o pagamento de uma fatura de cartão abre
-   *  — centro de custo → itens (decisão 093, entrega 3). */
-  detalhesFatura?: Record<string, DetalheDaFatura>;
+  /** Por id do lançamento: os itens que o pagamento de uma fatura de cartão
+   *  pagou, cada um com o centro de custo dele (decisão 195). */
+  itensDasFaturas?: Record<string, ItemDaFatura[]>;
   /** Por id da linha: o que o pagamento de uma guia de imposto abre —
    *  empresa · regional, e a multa e os juros (módulo fiscal, entrega 2).
    *  A guia é UMA linha, o débito do banco: a soma dos lançamentos que a
    *  baixa grava, um por parte do rateio (`lib/data/imposto-extrato.ts`). */
   detalhesImposto?: Record<string, DetalheDoImposto>;
+  /** A baixa com juros e multa (decisão 196): linha → os juros que ela
+   *  inclui. O débito da linha já é a soma; o ⓘ separa. */
+  jurosDasBaixas?: Record<string, number>;
+  /** A conta aberta: a prévia dos títulos marcados na aba Títulos. */
+  contaId: string;
+  /** `null`: a conta não tem extrato do banco importado (sem a coluna Banco). */
+  banco?: MarcasDoBanco | null;
 }) {
   const rowRefs = React.useRef<Record<string, HTMLTableRowElement | null>>({});
-  // Duas camadas de abertura: a linha do pagamento, e cada centro dentro
-  // dela. Chaves: id do lançamento, e `${lancamento}|${tipo}`.
   const [abertos, setAbertos] = React.useState<Set<string>>(() => new Set());
   const alternar = (chave: string) =>
     setAbertos((prev) => {
@@ -153,6 +216,12 @@ export function ConciliacaoList({
       else prox.add(chave);
       return prox;
     });
+
+  // "Ver no Extrato antes": os títulos marcados na aba Títulos, lidos da aba
+  // do navegador depois da hidratação (o servidor não os conhece).
+  const [previstas, setPrevistas] = React.useState<LinhaPrevista[]>([]);
+  const [mostrarPrevistas, setMostrarPrevistas] = React.useState(true);
+  React.useEffect(() => setPrevistas(lerPrevia(contaId)), [contaId]);
 
   React.useEffect(() => {
     if (!highlight) return;
@@ -187,8 +256,20 @@ export function ConciliacaoList({
     (s, l) => ({ credito: s.credito + l.credito, debito: s.debito + l.debito }),
     { credito: 0, debito: 0 },
   );
+  const comBanco = banco !== null;
+  const conciliados = React.useMemo(() => new Set(banco?.conciliados ?? []), [banco]);
+  const grade = colunasDoExtratoNaGrade(comBanco);
+  const chaves = grade.map(([k]) => k);
+  const pendentesNoBanco = comBanco ? linhas.filter((l) => !conciliados.has(l.id)).length : 0;
+  const saldoFinal = linhas.length ? linhas[linhas.length - 1].saldo : 0;
+  const fantasmas = React.useMemo(() => {
+    let s = saldoFinal;
+    return [...previstas]
+      .sort((a, b) => a.data.localeCompare(b.data))
+      .map((p) => ({ ...p, saldo: (s = Math.round((s + p.credito - p.debito) * 100) / 100) }));
+  }, [previstas, saldoFinal]);
 
-  if (linhas.length === 0) {
+  if (linhas.length === 0 && previstas.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border py-16 text-center">
         <p className="text-sm text-muted-foreground">
@@ -200,6 +281,50 @@ export function ConciliacaoList({
 
   return (
     <>
+    <div className="flex flex-wrap items-center gap-3">
+      <Link
+        href={`/financeiro/conciliacao?conta=${contaId}&aba=banco`}
+        prefetch={false}
+        className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm font-semibold hover:bg-muted/50"
+      >
+        <Upload className="h-4 w-4" />
+        Importar extrato do banco (OFX)
+      </Link>
+      {comBanco && (
+        <span className="text-xs text-muted-foreground">
+          <span className="font-semibold text-emerald-700">
+            {linhas.length - pendentesNoBanco} {linhas.length - pendentesNoBanco === 1 ? "conciliada" : "conciliadas"}
+          </span>{" "}
+          com o banco ·{" "}
+          <span className="font-semibold text-amber-700">{pendentesNoBanco} aguardando o extrato do banco</span>
+        </span>
+      )}
+    {previstas.length > 0 && (
+      <div className="ml-auto flex flex-wrap items-center gap-3">
+        <label className="inline-flex cursor-pointer items-center gap-2 text-xs font-semibold text-violet-700">
+          <input
+            type="checkbox"
+            checked={mostrarPrevistas}
+            onChange={(e) => setMostrarPrevistas(e.target.checked)}
+            className="h-3.5 w-3.5 accent-violet-600"
+          />
+          {previstas.length === 1
+            ? "Mostrar o título marcado como previsto"
+            : `Mostrar os ${previstas.length} títulos marcados como previstos`}
+        </label>
+        <button
+          type="button"
+          onClick={() => {
+            gravarPrevia(contaId, []);
+            setPrevistas([]);
+          }}
+          className="text-xs font-semibold text-muted-foreground hover:text-california-red"
+        >
+          Tirar a prévia
+        </button>
+      </div>
+    )}
+    </div>
     {colunas.ativo && (
       <div>
         {/* "do período": o filtro dos títulos age dentro do período de/até
@@ -213,52 +338,61 @@ export function ConciliacaoList({
         />
       </div>
     )}
-    <div className="overflow-x-auto rounded-xl border border-border">
-      <table className="w-full min-w-[1200px] text-sm">
+    <div className="overflow-x-auto rounded-xl border border-border bg-card">
+      <table className={cn("w-full table-fixed text-sm", comBanco ? "min-w-[1528px]" : "min-w-[1480px]")}>
+        <colgroup>
+          {grade.map(([k, w]) => (
+            <col key={k} style={w ? { width: w } : undefined} />
+          ))}
+        </colgroup>
         <thead className="border-b border-border bg-muted/40 text-xs uppercase text-muted-foreground">
-          {/* Ordem da tabela: extrato bancário puro à esquerda (Data, Crédito,
-              Débito, Saldo), contexto do lançamento à direita (Descrição,
-              Fornecedor, Job, Centro de Custo, Trimestre, Empresa). Regional,
-              Origem, Documento e rateio/save moveram pro botão de detalhes
-              (ⓘ) — a coluna Origem/Rateado inline poluía sem necessidade. */}
           <tr>
-            <th className="px-3 py-2 text-left">{colunas.titulo("data", TITULO)}</th>
-            <th className="px-3 py-2 text-right">{colunas.titulo("credito", TITULO)}</th>
-            <th className="px-3 py-2 text-right">{colunas.titulo("debito", TITULO)}</th>
+            {comBanco && (
+              <th className="px-2 py-3 text-center font-semibold" title="Conciliado com o extrato do banco">
+                Banco
+              </th>
+            )}
+            <th className="px-3 py-3 text-left">{colunas.titulo("data", TITULO)}</th>
+            <th className="px-3 py-3 text-right">{colunas.titulo("credito", TITULO)}</th>
+            <th className="px-3 py-3 text-right">{colunas.titulo("debito", TITULO)}</th>
             {/* Saldo corrente: sem filtro e sem ordem (ver `colunasDoExtrato`). */}
             <th
-              className="px-3 py-2 text-right"
+              className="px-3 py-3 text-right font-semibold"
               title={colunas.ativo ? "Saldo do extrato: não muda com o filtro nem com a ordem dos títulos." : undefined}
             >
               Saldo
             </th>
-            <th className="px-3 py-2 text-left">{colunas.titulo("descricao", TITULO)}</th>
-            <th className="px-3 py-2 text-left">{colunas.titulo("fornecedor", TITULO)}</th>
-            <th className="px-3 py-2 text-left">{colunas.titulo("job", TITULO)}</th>
-            <th className="px-3 py-2 text-left">{colunas.titulo("centro", TITULO)}</th>
-            <th className="px-3 py-2 text-center">{colunas.titulo("trimestre", TITULO)}</th>
-            <th className="px-3 py-2 text-left">{colunas.titulo("empresa", TITULO)}</th>
-            <th className="w-10 px-3 py-2 text-center" aria-label="Detalhes" />
+            <th className="px-3 py-3 text-left">{colunas.titulo("descricao", TITULO)}</th>
+            <th className="px-3 py-3 text-left">{colunas.titulo("fornecedor", TITULO)}</th>
+            <th className="px-3 py-3 text-left">{colunas.titulo("job", TITULO)}</th>
+            <th className="px-3 py-3 text-left">{colunas.titulo("centro", TITULO)}</th>
+            <th className="px-3 py-3 text-center">{colunas.titulo("trimestre", TITULO, "TRI")}</th>
+            <th className="px-3 py-3 text-left">{colunas.titulo("empresa", TITULO)}</th>
+            <th className="px-3 py-3 text-left">{colunas.titulo("reg", TITULO)}</th>
+            <th className="px-3 py-3 text-center" aria-label="Detalhes" />
           </tr>
         </thead>
         <tbody>
-          {colunas.visiveis.length === 0 && (
+          {colunas.visiveis.length === 0 && linhas.length > 0 && (
             <tr>
-              <td colSpan={11} className="px-3 py-10 text-center text-sm text-muted-foreground">
+              <td colSpan={grade.length} className="px-3 py-10 text-center text-sm text-muted-foreground">
                 Nenhum lançamento com esse filtro.
               </td>
             </tr>
           )}
           {colunas.visiveis.map((l) => {
             const estornada = l.estornada;
-            const temSave = l.origens.some((o) => o.tipo === "save");
-            const temRateio = l.rateio.length > 1;
-            const temOrigensMultiplas = l.origens.length > 1;
             const jobParaColuna = derivarJobParaColuna(l);
-            const detalhe = detalhesFatura[l.id];
-            // A guia de imposto abre pelo mesmo mecanismo da fatura.
+            const itens = itensDasFaturas[l.id] ?? [];
+            // A guia de imposto abre no rateio; a fatura, nos itens.
             const detalheImposto = detalhesImposto[l.id];
-            const aberta = (!!detalhe || !!detalheImposto) && abertos.has(l.id);
+            const aberta = (itens.length > 0 || !!detalheImposto) && abertos.has(l.id);
+            const transferencia = l.tipo_nome === "Transferência entre contas";
+            const rateio: ParteDoRateio[] = l.regional_nome
+              ? [{ regional: l.regional_nome, percentual: 100 }]
+              : l.rateio.map((r) => ({ regional: r.regional_nome, percentual: r.percentual }));
+            const reg = textoDaRegional(itens.length > 0 ? rateioPonderado(itens) : rateio);
+            const centroDoPlano = l.tipo_codigo ? `${l.tipo_codigo} · ${l.tipo_nome}` : null;
             return (
               <React.Fragment key={l.id}>
               <tr
@@ -270,6 +404,11 @@ export function ConciliacaoList({
                   aberta && "bg-muted/20",
                 )}
               >
+                {comBanco && (
+                  <td className="px-2 py-2 text-center">
+                    <MarcaDoBanco alerta={banco?.alertas[l.id] ?? null} conciliado={conciliados.has(l.id)} />
+                  </td>
+                )}
                 <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
                   {formatDate(l.data_movimento)}
                 </td>
@@ -282,149 +421,178 @@ export function ConciliacaoList({
                 <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-xs font-semibold">
                   {formatMoney(l.saldo)}
                 </td>
-                <td
-                  className={cn(
-                    "px-3 py-2 text-xs",
-                    estornada && "text-muted-foreground line-through",
+                <td className={cn("px-3 py-2 text-xs", estornada && "text-muted-foreground line-through")}>
+                  <span className="break-words">{limparPrefixoDescricao(l.descricao, l.origem)}</span>
+                  {(jurosDasBaixas[l.id] ?? 0) > 0 && (
+                    <span className="text-[10px] text-muted-foreground">
+                      {" "}· inclui {formatMoney(jurosDasBaixas[l.id])} de juros
+                    </span>
                   )}
-                >
-                  {detalhe ? (
+                  {itens.length > 0 && (
                     <button
                       type="button"
                       onClick={() => alternar(l.id)}
                       aria-expanded={aberta}
-                      aria-label={aberta ? "Recolher os itens da fatura" : "Ver os itens da fatura"}
-                      className="inline-flex items-center gap-1.5 text-left hover:text-california-red"
+                      className="ml-1 inline-flex items-center gap-0.5 rounded px-1 text-[10.5px] font-semibold text-california-red hover:bg-california-red/5"
                     >
-                      <ChevronRight
-                        className={cn(
-                          "h-3.5 w-3.5 shrink-0 text-california-red transition-transform",
-                          aberta && "rotate-90",
-                        )}
-                      />
-                      <span>{limparPrefixoDescricao(l.descricao, l.origem)}</span>
-                      <span className="text-[10px] text-muted-foreground">
-                        · {detalhe.centros.length}{" "}
-                        {detalhe.centros.length === 1 ? "centro de custo" : "centros de custo"}
-                      </span>
+                      {itens.length} {itens.length === 1 ? "item" : "itens"}
+                      <ChevronDown className={cn("h-3 w-3 transition-transform", aberta && "rotate-180")} />
                     </button>
-                  ) : detalheImposto ? (
-                    // A seta da guia de imposto: o mesmo botão da fatura,
-                    // com o rateio no lugar dos centros de custo.
+                  )}
+                  {detalheImposto && (
+                    // A guia de imposto em uma linha (decisão 141): o rateio
+                    // por empresa e regional abre embaixo.
                     <button
                       type="button"
                       onClick={() => alternar(l.id)}
                       aria-expanded={aberta}
-                      aria-label={
-                        aberta
-                          ? "Recolher o rateio da guia"
-                          : "Ver o rateio da guia por empresa e regional"
-                      }
-                      className="inline-flex items-center gap-1.5 text-left hover:text-california-red"
+                      aria-label={aberta ? "Recolher o rateio da guia" : "Ver o rateio da guia por empresa e regional"}
+                      className="ml-1 inline-flex items-center gap-0.5 rounded px-1 text-[10.5px] font-semibold text-california-red hover:bg-california-red/5"
                     >
-                      <ChevronRight
-                        className={cn(
-                          "h-3.5 w-3.5 shrink-0 text-california-red transition-transform",
-                          aberta && "rotate-90",
-                        )}
-                      />
-                      <span>{limparPrefixoDescricao(l.descricao, l.origem)}</span>
-                      <span className="text-[10px] text-muted-foreground">
-                        · {detalheImposto.regionais}{" "}
-                        {detalheImposto.regionais === 1 ? "regional" : "regionais"}
-                        {detalheImposto.multaJuros > 0 && " + multa e juros"}
-                      </span>
+                      {detalheImposto.regionais} {detalheImposto.regionais === 1 ? "regional" : "regionais"}
+                      {detalheImposto.multaJuros > 0 && " + multa e juros"}
+                      <ChevronDown className={cn("h-3 w-3 transition-transform", aberta && "rotate-180")} />
                     </button>
-                  ) : (
-                    limparPrefixoDescricao(l.descricao, l.origem)
                   )}
                 </td>
                 <td className="px-3 py-2 text-xs">
-                  {l.fornecedor_nome ?? (
-                    <span className="text-muted-foreground">—</span>
-                  )}
+                  <span className="block truncate" title={l.fornecedor_nome ?? undefined}>
+                    {l.fornecedor_nome ?? <span className="text-muted-foreground">—</span>}
+                  </span>
                 </td>
                 <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
                   {jobParaColuna.tipo === "link" ? (
                     <Link
                       href={`/financeiro/jobs/${jobParaColuna.id}`}
                       prefetch={false}
-                      className="text-california-red hover:underline"
+                      className="block truncate text-california-red hover:underline"
                     >
                       {jobParaColuna.codigo}
                     </Link>
                   ) : jobParaColuna.tipo === "multi" ? (
-                    <span className="italic text-muted-foreground/70 font-sans">
-                      Múltiplos
-                    </span>
+                    <span className="font-sans italic text-muted-foreground/70">Múltiplos</span>
+                  ) : itens.length > 0 && jobsDosItens(itens).length > 0 ? (
+                    <Dica conteudo={jobsDosItens(itens).join(" · ")} className="font-sans underline decoration-dotted underline-offset-2">
+                      {jobsDosItens(itens).length} {jobsDosItens(itens).length === 1 ? "job" : "jobs"}
+                    </Dica>
                   ) : (
-                    <span className="italic text-muted-foreground/70 font-sans">
-                      Não Vinculado
-                    </span>
+                    <span className="font-sans italic text-muted-foreground/70">Não Vinculado</span>
                   )}
                 </td>
                 <td className="px-3 py-2 text-xs">
-                  <span className="text-foreground">{l.tipo_nome}</span>
-                  <span className="text-muted-foreground"> · </span>
-                  <span className="text-muted-foreground">{l.subtipo_nome}</span>
+                  {itens.length > 0 ? (
+                    <Dica
+                      conteudo={<CentrosDaFatura centros={centrosDosItens(itens)} />}
+                      className="block w-full truncate italic text-muted-foreground underline decoration-dotted underline-offset-2"
+                    >
+                      Itens da fatura
+                    </Dica>
+                  ) : transferencia ? (
+                    <span className="block truncate italic text-muted-foreground" title="Transferência entre contas · fora do DRE">
+                      Fora do DRE
+                    </span>
+                  ) : centroDoPlano ? (
+                    // Só o tipo, como na planilha de títulos; o centro
+                    // inteiro na dica.
+                    <Dica
+                      conteudo={l.subtipo_nome && l.subtipo_nome !== "—" ? `${centroDoPlano} · ${l.subtipo_nome}` : centroDoPlano}
+                      className="block w-full truncate"
+                    >
+                      {centroDoPlano}
+                    </Dica>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
                 </td>
                 <td className="whitespace-nowrap px-3 py-2 text-center font-mono text-xs text-muted-foreground">
                   {trimestreDe(l.data_movimento)}
                 </td>
-                <td className="whitespace-nowrap px-3 py-2 text-xs">
-                  {l.empresa_nome ??
-                    // A guia rateada entre empresas diz "Múltiplas", como a
-                    // coluna Job diz "Múltiplos"; as sublinhas abrem.
-                    (detalheImposto && detalheImposto.empresas > 1 ? (
-                      <span className="italic text-muted-foreground/70 font-sans">
-                        Múltiplas
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">—</span>
-                    ))}
+                <td className="px-3 py-2 text-xs">
+                  <span className="block truncate" title={l.empresa_nome ?? undefined}>
+                    {l.empresa_nome ??
+                      // A guia rateada entre empresas diz "Múltiplas", como a
+                      // coluna Job diz "Múltiplos"; as sublinhas abrem.
+                      (detalheImposto && detalheImposto.empresas > 1 ? (
+                        <span className="font-sans italic text-muted-foreground/70">Múltiplas</span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      ))}
+                  </span>
                 </td>
-                <td className="w-10 px-3 py-2 text-center">
-                  <DetalhesPopover
-                    linha={l}
-                    temSave={temSave}
-                    temRateio={temRateio}
-                    temOrigensMultiplas={temOrigensMultiplas}
+                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
+                  {reg.texto === "—" ? (
+                    <span className="text-muted-foreground">—</span>
+                  ) : (
+                    <Dica conteudo={reg.dica} className={cn(reg.rateado && "underline decoration-dotted underline-offset-2")}>
+                      {reg.texto}
+                    </Dica>
+                  )}
+                </td>
+                <td className="px-2 py-2 text-center">
+                  <BotaoDetalhes
+                    chave={`lancamento|${l.id}`}
+                    titulo={limparPrefixoDescricao(l.descricao, l.origem)}
+                    rotulo="Ver detalhes do lançamento"
+                    recebimento={l.natureza === "entrada"}
+                    job={null}
+                    vencimentoDiferente={null}
+                    retencoes={[]}
+                    rateio={itens.length > 0 ? rateioPonderado(itens) : rateio}
+                    acoes={[]}
                   />
                 </td>
-                {/* variáveis temSave/temRateio/temOrigensMultiplas continuam
-                    sendo lidas pelo popover pra decidir qual seção mostrar,
-                    mas o ESTILO do botão não muda mais entre linhas. */}
               </tr>
-              {aberta && detalhe && (
-                <LinhasDaFatura
-                  lancamentoId={l.id}
-                  detalhe={detalhe}
-                  abertos={abertos}
-                  alternar={alternar}
-                />
-              )}
-              {aberta && detalheImposto && <LinhasDoImposto detalhe={detalheImposto} />}
+              {aberta && itens.length > 0 && <LinhasDosItens itens={itens} chaves={chaves} />}
+              {aberta && detalheImposto && <LinhasDoImposto detalhe={detalheImposto} comBanco={comBanco} />}
               </React.Fragment>
             );
           })}
+          {mostrarPrevistas &&
+            fantasmas.map((p) => (
+              <tr key={`previsto-${p.chave}`} className="border-b border-dashed border-violet-200 bg-violet-50/50 italic text-violet-900/80">
+                {comBanco && <td />}
+                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
+                  <span className="mr-1.5 rounded bg-violet-100 px-1 py-px text-[9px] font-bold not-italic uppercase text-violet-700">prev.</span>
+                  {formatDate(p.data)}
+                </td>
+                <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-xs">{p.credito > 0 ? formatMoney(p.credito) : ""}</td>
+                <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-xs">{p.debito > 0 ? formatMoney(p.debito) : ""}</td>
+                <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-xs font-semibold">{formatMoney(p.saldo)}</td>
+                <td className="px-3 py-2 text-xs">{p.descricao}</td>
+                <td className="px-3 py-2 text-xs">
+                  <span className="block truncate">{p.contraparte}</span>
+                </td>
+                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">{p.job ?? "—"}</td>
+                <td className="px-3 py-2 text-xs">
+                  <span className="block truncate" title={p.centroCompleto || undefined}>
+                    {p.centro}
+                  </span>
+                </td>
+                <td className="px-3 py-2 text-center font-mono text-xs">{trimestreDe(p.data)}</td>
+                <td className="px-3 py-2 text-xs">
+                  <span className="block truncate">{p.empresa ?? "—"}</span>
+                </td>
+                <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">{textoDaRegional(p.rateio).texto}</td>
+                <td />
+              </tr>
+            ))}
         </tbody>
         {/* Só com filtro: quanto entrou e saiu nos lançamentos que sobraram
             (o "Total do filtro" da página inicial da conciliação). Sem
             filtro, os cartões de cima já dizem o do período. */}
         {colunas.filtrando && colunas.visiveis.length > 0 && (
-          <tfoot className="border-t-2 border-border bg-muted/30">
+          <tfoot className={cn(TOTAL_LISTA, "text-xs")}>
             <tr>
-              <td className="whitespace-nowrap px-3 py-2.5 text-xs font-semibold">
-                Total do filtro
-              </td>
-              <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono text-xs font-semibold text-emerald-700">
+              {comBanco && <td />}
+              <td className="whitespace-nowrap px-3 py-2.5 font-semibold">Total do filtro</td>
+              <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono font-semibold text-emerald-700">
                 {somaDoFiltro.credito > 0 ? formatMoney(somaDoFiltro.credito) : ""}
               </td>
-              <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono text-xs font-semibold text-california-red">
+              <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono font-semibold text-california-red">
                 {somaDoFiltro.debito > 0 ? formatMoney(somaDoFiltro.debito) : ""}
               </td>
               <td />
-              <td colSpan={7} className="px-3 py-2.5 text-xs text-muted-foreground">
+              <td colSpan={grade.length - 4 - (comBanco ? 1 : 0)} className="px-3 py-2.5 text-muted-foreground">
                 {colunas.visiveis.length} de {colunas.total}{" "}
                 {colunas.total === 1 ? "lançamento" : "lançamentos"} do período
               </td>
@@ -433,124 +601,47 @@ export function ConciliacaoList({
         )}
       </table>
     </div>
+    {mostrarPrevistas && fantasmas.length > 0 && (
+      <p className="text-xs text-violet-700">
+        As linhas em lilás ainda não existem: são os títulos marcados na aba Títulos, mostrados onde a baixa vai pô-los.
+        Nada é gravado até a baixa.
+      </p>
+    )}
     </>
   );
 }
 
-/**
- * O pagamento da fatura aberto em dois níveis (decisão 093, entrega 3):
- * uma linha por CENTRO DE CUSTO, com o total dele, e dentro de cada um os
- * ITENS — data, descrição, fornecedor, job, subtipo, valor. O rodapé
- * confere: a soma dos centros é o débito da linha do pagamento.
- *
- * Linhas de tabela, não uma tabela dentro da célula: assim as colunas de
- * valor ficam na mesma vertical do Débito da linha-mãe.
- */
-function LinhasDaFatura({
-  lancamentoId,
-  detalhe,
-  abertos,
-  alternar,
-}: {
-  lancamentoId: string;
-  detalhe: DetalheDaFatura;
-  abertos: Set<string>;
-  alternar: (chave: string) => void;
-}) {
-  // As células seguem as colunas da linha-mãe: valor sob DÉBITO (o que
-  // fecha com o pagamento), nome sob DESCRIÇÃO, fornecedor, job e o
-  // subtipo sob CENTRO DE CUSTO. Sem isso os números ficavam soltos na
-  // borda direita e o olho não batia a soma.
+/** A marca da coluna Banco (protótipo, `AbaExtrato`). */
+function MarcaDoBanco({ alerta, conciliado }: { alerta: string | null; conciliado: boolean }) {
+  if (alerta) {
+    return (
+      <Dica conteudo={alerta}>
+        <span
+          className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-red-100 text-california-red"
+          aria-label="Não bate com o banco"
+        >
+          <AlertTriangle className="h-3 w-3" />
+        </span>
+      </Dica>
+    );
+  }
+  if (conciliado) {
+    return (
+      <span
+        title="Conciliado com o extrato do banco"
+        aria-label="Conciliado com o extrato do banco"
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"
+      >
+        <CheckCheck className="h-3 w-3" />
+      </span>
+    );
+  }
   return (
-    <>
-      {detalhe.centros.map((c) => {
-        const chave = `${lancamentoId}|${c.tipo_codigo}`;
-        const abertoCentro = abertos.has(chave);
-        return (
-          <React.Fragment key={chave}>
-            <tr className="border-b border-border/60 bg-muted/10 text-xs">
-              <td colSpan={2} />
-              <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono font-semibold">
-                {formatMoney(c.total)}
-              </td>
-              <td />
-              <td colSpan={7} className="px-3 py-1.5">
-                <button
-                  type="button"
-                  onClick={() => alternar(chave)}
-                  aria-expanded={abertoCentro}
-                  className="inline-flex items-center gap-1.5 pl-4 font-medium hover:text-california-red"
-                >
-                  <ChevronRight
-                    className={cn(
-                      "h-3 w-3 shrink-0 text-muted-foreground transition-transform",
-                      abertoCentro && "rotate-90",
-                    )}
-                  />
-                  <span className="font-mono text-muted-foreground">{c.tipo_codigo}</span>
-                  <span>{c.tipo_nome}</span>
-                  <span className="text-[10px] text-muted-foreground">
-                    · {c.itens.length} {c.itens.length === 1 ? "item" : "itens"}
-                  </span>
-                </button>
-              </td>
-            </tr>
-            {abertoCentro &&
-              c.itens.map((it) => (
-                <tr key={it.id} className="border-b border-border/40 bg-muted/5 text-[11.5px]">
-                  <td className="whitespace-nowrap px-3 py-1.5 pl-6 font-mono text-muted-foreground">
-                    {formatDate(it.data)}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono text-emerald-700">
-                    {it.valor < 0 ? formatMoney(-it.valor) : ""}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono">
-                    {it.valor > 0 ? formatMoney(it.valor) : ""}
-                  </td>
-                  <td />
-                  <td className="px-3 py-1.5 pl-8">
-                    {limparPrefixoDescricao(limparDescricaoDaFatura(it.descricao), it.origem)}
-                    {it.papel === "ajuste" && (
-                      <span className="ml-1.5 rounded border border-slate-300 bg-slate-100 px-1 py-0.5 text-[9px] font-semibold uppercase text-slate-700">
-                        ajuste
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-1.5 text-muted-foreground">
-                    {it.fornecedor_nome ?? "—"}
-                  </td>
-                  <td className="whitespace-nowrap px-3 py-1.5 font-mono">
-                    {it.job_id && it.job_codigo ? (
-                      <Link
-                        href={`/financeiro/jobs/${it.job_id}`}
-                        prefetch={false}
-                        className="text-california-red hover:underline"
-                      >
-                        {it.job_codigo}
-                      </Link>
-                    ) : (
-                      <span className="font-sans italic text-muted-foreground/70">—</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-1.5 text-muted-foreground">{it.subtipo_nome}</td>
-                  <td colSpan={3} />
-                </tr>
-              ))}
-          </React.Fragment>
-        );
-      })}
-      <tr className="border-b border-border bg-muted/10 text-xs">
-        <td colSpan={2} />
-        <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono font-bold">
-          {formatMoney(detalhe.total)}
-        </td>
-        <td />
-        <td colSpan={7} className="px-3 py-1.5 pl-7 text-muted-foreground">
-          Total da fatura {detalhe.codigo} · fecha {formatDate(detalhe.competencia_fechamento)} ·{" "}
-          {detalhe.centros.reduce((s, c) => s + c.itens.length, 0)} itens
-        </td>
-      </tr>
-    </>
+    <span
+      title="Ainda não apareceu no extrato do banco"
+      aria-label="Ainda não apareceu no extrato do banco"
+      className="inline-block h-3 w-3 rounded-full border-2 border-amber-400"
+    />
   );
 }
 
@@ -560,22 +651,22 @@ function LinhasDaFatura({
  * rateio do título, com o valor sob DÉBITO e o centro de custo do imposto
  * sob CENTRO DE CUSTO; a multa e os juros numa sublinha própria, em Despesa
  * com Juros. O rodapé confere: a soma das sublinhas é o débito da linha do
- * pagamento — o mesmo desenho das linhas da fatura, um nível só.
+ * pagamento. Desde a decisão 195 nas colunas da grade do Extrato.
  */
-function LinhasDoImposto({ detalhe }: { detalhe: DetalheDoImposto }) {
+function LinhasDoImposto({ detalhe, comBanco }: { detalhe: DetalheDoImposto; comBanco: boolean }) {
   return (
     <>
       {detalhe.partes.map((p) => (
-        <tr key={p.chave} className="border-b border-border/60 bg-muted/10 text-xs">
-          <td colSpan={2} />
-          <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono font-semibold">
-            {formatMoney(p.valor)}
-          </td>
+        <tr key={p.chave} className="border-b border-dashed border-border/70 bg-slate-50/70 text-[11px] text-muted-foreground">
+          {comBanco && <td />}
+          <td className="whitespace-nowrap py-1.5 pl-6 pr-3 font-mono">↳</td>
           <td />
-          <td className="px-3 py-1.5 pl-8">
-            {p.rotulo}
+          <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono text-[#b3323c]/80">{formatMoney(p.valor)}</td>
+          <td />
+          <td className="px-3 py-1.5">
+            <span className="text-foreground/80">{p.rotulo}</span>
             {p.percentual !== null && (
-              <span className="ml-1.5 text-[10px] text-muted-foreground">
+              <span className="ml-1.5 text-[10px]">
                 {p.percentual.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}% do imposto
               </span>
             )}
@@ -583,24 +674,21 @@ function LinhasDoImposto({ detalhe }: { detalhe: DetalheDoImposto }) {
           <td />
           <td />
           <td className="px-3 py-1.5">
-            <span className="text-foreground">{p.tipo_nome}</span>
-            {p.subtipo_nome && (
-              <>
-                <span className="text-muted-foreground"> · </span>
-                <span className="text-muted-foreground">{p.subtipo_nome}</span>
-              </>
-            )}
+            <Dica
+              conteudo={p.subtipo_nome ? `${p.tipo_nome} · ${p.subtipo_nome}` : p.tipo_nome}
+              className="block w-full truncate"
+            >
+              {p.tipo_nome}
+            </Dica>
           </td>
-          <td colSpan={3} />
+          <td colSpan={4} />
         </tr>
       ))}
-      <tr className="border-b border-border bg-muted/10 text-xs">
-        <td colSpan={2} />
-        <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono font-bold">
-          {formatMoney(detalhe.total)}
-        </td>
+      <tr className="border-b border-border bg-slate-50/70 text-[11px] text-muted-foreground">
+        <td colSpan={comBanco ? 3 : 2} />
+        <td className="whitespace-nowrap px-3 py-1.5 text-right font-mono font-bold">{formatMoney(detalhe.total)}</td>
         <td />
-        <td colSpan={7} className="px-3 py-1.5 pl-7 text-muted-foreground">
+        <td colSpan={8} className="px-3 py-1.5">
           Total da {detalhe.guia}
           {detalhe.competencia && ` · ${detalhe.competencia}`}
           {detalhe.vencimento && ` · vence ${formatDate(detalhe.vencimento)}`}
@@ -834,9 +922,10 @@ function tagDaOrigem(
   return null;
 }
 
+/** "21/10/2026": o ano inteiro, como a planilha de títulos (decisão 195). */
 function formatDate(iso: string): string {
-  const [y, m, d] = iso.split("-");
-  return `${d}/${m}/${y.slice(2)}`;
+  const [y, m, d] = iso.slice(0, 10).split("-");
+  return `${d}/${m}/${y}`;
 }
 
 /**
@@ -898,9 +987,7 @@ export function trimestreDe(iso: string): string {
   return "T4";
 }
 
+/** "R$ 1.443,91", como a planilha de títulos (decisão 195). */
 function formatMoney(n: number): string {
-  return n.toLocaleString("pt-BR", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }

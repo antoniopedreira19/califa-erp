@@ -128,7 +128,9 @@ function arquivoDaDeclaracaoInvalido(
  * (formulário fechado sem salvar, arquivo trocado ou tirado antes de
  * salvar). O que algum cadastro aponta nunca sai daqui, nem se a tela pedir
  * — a tela pode achar que não gravou quando gravou. Melhor esforço: a falha
- * só vai ao log.
+ * só vai ao log. Desde 21/10/2026 só administrador e financeiro apagam do
+ * bucket: para quem é da produção a remoção não apaga nada e o arquivo solto
+ * fica (hoje a produção não tem o campo da declaração na tela).
  */
 async function removerDeclaracoesSoltas(
   supabase: ReturnType<typeof createClient>,
@@ -916,8 +918,9 @@ export async function reservarArquivoDaDeclaracao(input: {
 }
 
 /** URL assinada (10 minutos) para abrir o arquivo da declaração. Lê com a
- *  sessão de quem pede: a policy do bucket é a de `fornecedores` (qualquer
- *  membro do tenant). */
+ *  sessão de quem pede: desde 21/10/2026 a policy do bucket deixa abrir quem
+ *  cadastra fornecedor (administrador, financeiro, gerente de projeto,
+ *  produtor e freelancer); o RH recebe "Não foi possível abrir o arquivo". */
 export async function urlDaDeclaracaoSimples(
   path: string,
 ): Promise<{ ok: true; url: string } | { ok: false; message: string }> {

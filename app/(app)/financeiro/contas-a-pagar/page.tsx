@@ -8,13 +8,16 @@ import { pode } from "@/lib/permissoes";
 import { listarConversasPPs } from "@/lib/data/chat-pps-conversas";
 import { COLUNAS_DE_PAGAMENTO } from "@/lib/data/foto-pagamento-da-pp";
 import { carregarFiscalDaAprovacaoPP } from "@/lib/fiscal/aprovacao-da-pp";
-import { montarRetencaoDaAprovacao } from "@/lib/fiscal/retencao-da-aprovacao";
-import { aliquotasDaParcela, retencoesPelaAprovacao } from "@/lib/financeiro/baixa-em-lote";
 import { ChatPPsProvider } from "./chat/chat-pps-provider";
 import { PedidosCompraList, type PPRow } from "./pedidos-compra-list";
 import { ContasPagarTabs } from "./contas-pagar-tabs";
 import { lerTab } from "./contas-pagar-tab-url";
 import { TitulosPagarList } from "./titulos-pagar-list";
+import { montarDadosDaRemessa } from "./titulos-da-remessa";
+import { carregarExtrasDaPlanilha } from "@/lib/data/planilha-de-titulos";
+import { carregarFaturasNaBaixa } from "@/lib/data/faturas-na-baixa";
+import { somaDias } from "@/lib/financeiro/planilha-de-titulos";
+import { idsDaPlanilha } from "../conciliacao/linhas-da-aba";
 import {
   ORIGENS_DA_BAIXA_A_PAGAR,
   ORIGENS_DO_ESTORNO_A_PAGAR,
@@ -45,25 +48,14 @@ import type { FaturaDoCartao } from "./fechar-fatura-dialog";
 import { RecorrentesList, type RecorrenteRow } from "./recorrentes-list";
 import { DesembolsosContasPagarList, type DesembolsoRow } from "./desembolsos-list";
 import { FolhasPagarList, type FolhaLinhaFinanceiro } from "./folhas-pagar-list";
-import {
-  carregarColaboradoresPagamento,
-  temConta,
-  temPix,
-} from "@/lib/financeiro/colaboradores-pagamento";
-import {
-  ExportarRemessaCnabDialog,
-  type ContaSantanderElegivel,
-  type TituloElegivelParaRemessa,
-} from "./remessa-cnab-dialog";
+import { carregarColaboradoresPagamento } from "@/lib/financeiro/colaboradores-pagamento";
+import { ExportarRemessaCnabDialog } from "./remessa-cnab-dialog";
 import type {
   PlanoContaTipo,
   PlanoContaSubtipo,
   ContaBancaria,
   BandeiraCartao,
   DesembolsoStatus,
-  PagamentoForaDoCadastroDaPP,
-  PixTipoChave,
-  TipoContaBancariaFornecedor,
 } from "@/lib/types";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
@@ -147,6 +139,7 @@ export default async function PedidosCompraFinanceiroPage({
     remessasItensRes,
     ultimasRetencoesRes,
     retencoesDaAprovacaoRes,
+    faturasNaBaixa,
   ] = await Promise.all([
     (() => {
       let q = supabase
@@ -193,7 +186,7 @@ export default async function PedidosCompraFinanceiroPage({
     // Contas avulsas (todos os status) — viram títulos de origem AVULSO ou
     // RECORRÊNCIA na aba unificada, conforme `recorrente_id`.
     (() => {
-      const hoje = new Date().toISOString().slice(0, 10);
+      const hoje = hojeEmSaoPauloIso();
       let q = supabase
         .from("contas_avulsas")
         .select(SELECT_AVULSA_A_PAGAR)
@@ -395,6 +388,9 @@ export default async function PedidosCompraFinanceiroPage({
       .from("pedidos_compra_retencoes")
       .select("pedido_compra_id, imposto, aliquota")
       .eq("tenant_id", session.activeTenant.id),
+    // As faturas recentes dos cartões, para o campo Fatura da baixa no
+    // cartão (decisão 197).
+    carregarFaturasNaBaixa(supabase, session.activeTenant.id, hojeEmSaoPauloIso()),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
@@ -586,6 +582,18 @@ export default async function PedidosCompraFinanceiroPage({
     (t) => t.forma_pagamento !== "cartao_credito",
   );
   const titulosAPagarCount = titulosNaoCartao.filter((t) => t.status === "a_pagar").length;
+
+  // A planilha de títulos (decisão 195): o pago no cartão fica na lista como
+  // "No cartão", e a regional, a retenção da aprovação e os itens da fatura
+  // são lidos à parte — a leitura começa já e corre junto das que vêm abaixo.
+  const pagosNoCartao = titulosCartao.filter((t) => t.status === "pago");
+  const idsDaLista = idsDaPlanilha([...titulosNaoCartao, ...pagosNoCartao], []);
+  // Os itens da fatura: das que esperam baixa e das pagas há até 180 dias.
+  const corteDasFaturas = somaDias(hojeISO, -180);
+  idsDaLista.faturas = titulosNaoCartao
+    .filter((t) => t.origem === "fatura_cartao" && (t.status === "a_pagar" || (t.data_pagamento ?? "") >= corteDasFaturas))
+    .map((t) => t.id);
+  const extrasDaPlanilha = carregarExtrasDaPlanilha(supabase, session.activeTenant.id, idsDaLista);
 
   // Mapeamento das recorrências para RecorrenteRow
   const recorrentesRows: RecorrenteRow[] = ((recorrentesRes.data ?? []) as unknown as Array<{
@@ -886,179 +894,23 @@ export default async function PedidosCompraFinanceiroPage({
   }
 
   // -------------------------------------------------------------------
-  // CNAB: dados pra o Dialog de "Exportar remessa Santander"
+  // CNAB: dados pra o Dialog de "Exportar remessa Santander" — a montagem
+  // mora em `titulos-da-remessa.ts` desde 21/10/2026 (decisão 195): a aba
+  // Títulos da conciliação abre o mesmo diálogo.
   // -------------------------------------------------------------------
-  const contasSantander: ContaSantanderElegivel[] = ((contasRes.data ?? []) as ContaBancaria[])
-    .filter(
-      (c) =>
-        c.ativo &&
-        c.banco.toLowerCase().includes("santander") &&
-        c.convenio_cnab_santander !== null &&
-        c.agencia !== null &&
-        c.numero_conta !== null &&
-        c.numero_conta_dv !== null,
-    )
-    .map((c) => ({
-      id: c.id,
-      nome: c.nome,
-      agencia: c.agencia!,
-      numero_conta: c.numero_conta!,
-      numero_conta_dv: c.numero_conta_dv!,
-    }));
-
-  // Decisão 137: chave e conta vão ao diálogo, para a coluna "Dados de
-  // pagamento". `temPix`/`temBanco` seguem as mesmas regras do gerador.
-  type DestinoNaRemessa = {
-    nome: string;
-    temPix: boolean;
-    temBanco: boolean;
-    pix: TituloElegivelParaRemessa["pix"];
-    conta: TituloElegivelParaRemessa["conta"];
-  };
-  const pixDe = (tipo: string | null, chave: string | null): DestinoNaRemessa["pix"] =>
-    tipo && chave ? { tipo: tipo as PixTipoChave, chave } : null;
-  const contaDe = (d: {
-    banco_codigo: string | null;
-    banco_nome: string | null;
-    agencia: string | null;
-    agencia_dv: string | null;
-    conta: string | null;
-    conta_dv: string | null;
-    tipo_conta: string | null;
-  }): DestinoNaRemessa["conta"] =>
-    d.banco_codigo && d.agencia && d.conta && d.conta_dv
-      ? {
-          banco_codigo: d.banco_codigo,
-          banco_nome: d.banco_nome,
-          agencia: d.agencia,
-          agencia_dv: d.agencia_dv,
-          conta: d.conta,
-          conta_dv: d.conta_dv,
-          tipo_conta: (d.tipo_conta as TipoContaBancariaFornecedor | null) ?? null,
-        }
-      : null;
-  const fornecedorBancoMap = new Map<string, DestinoNaRemessa>();
-  for (const f of (fornecedoresRes.data ?? []) as Array<{
-    id: string;
-    nome: string;
-    banco_codigo: string | null;
-    banco_nome: string | null;
-    agencia: string | null;
-    agencia_dv: string | null;
-    conta: string | null;
-    conta_dv: string | null;
-    tipo_conta: string | null;
-    pix_tipo: string | null;
-    pix_chave: string | null;
-  }>) {
-    const pix = pixDe(f.pix_tipo, f.pix_chave);
-    const conta = contaDe(f);
-    fornecedorBancoMap.set(f.id, { nome: f.nome, temPix: !!pix, temBanco: !!conta, pix, conta });
-  }
-  const colaboradorBancoMap = new Map<string, DestinoNaRemessa>();
-  for (const c of cnabColaboradoresRes.values()) {
-    colaboradorBancoMap.set(c.id, {
-      nome: c.nome,
-      temPix: temPix(c),
-      temBanco: temConta(c),
-      pix: temPix(c) ? pixDe(c.pix_tipo, c.pix_chave) : null,
-      conta: temConta(c) ? contaDe(c) : null,
-    });
-  }
-  // A PP fora do cadastro paga pela chave ou conta dela (decisão 137): o
-  // título da remessa é a parcela, então o mapa vai da parcela à PP.
-  const foraPorParcela = new Map<string, PagamentoForaDoCadastroDaPP>();
-  for (const pp of rows) {
-    if (!pp.pagamento_fora_do_cadastro) continue;
-    for (const par of pp.parcelas) foraPorParcela.set(par.id, pp.pagamento_fora_do_cadastro);
-  }
-  // Decisão 145: a remessa paga a parcela de PP pelo líquido — o que falta
-  // menos a retenção da aprovação, pela mesma conta da geração do arquivo.
-  const linhasDaAprovacao = new Map<string, Array<{ imposto: string; aliquota: number | string | null }>>();
-  for (const r of (retencoesDaAprovacaoRes.data ?? []) as Array<{
-    pedido_compra_id: string;
-    imposto: string;
-    aliquota: number | string | null;
-  }>) {
-    const lista = linhasDaAprovacao.get(r.pedido_compra_id) ?? [];
-    lista.push(r);
-    linhasDaAprovacao.set(r.pedido_compra_id, lista);
-  }
-  const aliquotasPorParcela = new Map<string, ReturnType<typeof aliquotasDaParcela>>();
-  for (const pp of rows) {
-    const aliquotas = aliquotasDaParcela({
-      verba: pp.verba_producao,
-      remessa: null,
-      aliquotas: montarRetencaoDaAprovacao(linhasDaAprovacao.get(pp.id) ?? [], null)?.aliquotas ?? null,
-    });
-    if (!aliquotas) continue;
-    for (const par of pp.parcelas) aliquotasPorParcela.set(par.id, aliquotas);
-  }
-
-  const titulosCnab: TituloElegivelParaRemessa[] = ((cnabAPagarRes.data ?? []) as Array<{
-    origem_tipo: string;
-    origem_id: string;
-    descricao: string;
-    valor: string | number;
-    fornecedor_id: string | null;
-    colaborador_id: string | null;
-  }>)
-    .map((row) => {
-      let destinatario: DestinoNaRemessa | null = null;
-      let destinatarioTipo: "fornecedor" | "colaborador" | null = null;
-      if (row.colaborador_id) {
-        destinatario = colaboradorBancoMap.get(row.colaborador_id) ?? null;
-        destinatarioTipo = "colaborador";
-      } else if (row.fornecedor_id) {
-        destinatario = fornecedorBancoMap.get(row.fornecedor_id) ?? null;
-        destinatarioTipo = "fornecedor";
-      }
-      if (!destinatario || !destinatarioTipo) return null;
-      // A view expõe "pp"/"avulsa"/"folha"/"recorrente"/"desembolso" — todos válidos.
-      const origemTipo = row.origem_tipo as
-        | "pp"
-        | "avulsa"
-        | "folha"
-        | "recorrente"
-        | "desembolso";
-      const fora = origemTipo === "pp" ? (foraPorParcela.get(row.origem_id) ?? null) : null;
-      // Decisão 161: PP paga por boleto não entra na remessa (o gerador não
-      // tem o segmento J) — paga-se pelo boleto anexado.
-      if (fora?.meio === "boleto") return null;
-      const pixFora = fora?.meio === "pix" ? pixDe(fora.pix_tipo, fora.pix_chave) : null;
-      const contaFora = fora?.meio === "conta" ? contaDe(fora) : null;
-      const bruto = Number(row.valor);
-      const { retido, liquido } =
-        origemTipo === "pp"
-          ? retencoesPelaAprovacao(bruto, aliquotasPorParcela.get(row.origem_id) ?? null)
-          : { retido: 0, liquido: bruto };
-      const linha: TituloElegivelParaRemessa = {
-        origemTipo,
-        origemId: row.origem_id,
-        descricao: row.descricao,
-        valor: liquido,
-        bruto,
-        retido,
-        destinatarioNome: destinatario.nome,
-        destinatarioTipo,
-        // Fora do cadastro, só o meio da PP vale: a forma fica fixa.
-        temPix: fora ? !!pixFora : destinatario.temPix,
-        temBanco: fora ? !!contaFora : destinatario.temBanco,
-        pix: fora ? pixFora : destinatario.pix,
-        conta: fora ? contaFora : destinatario.conta,
-        foraDoCadastro: fora,
-      };
-      return linha;
-    })
-    .filter((t): t is TituloElegivelParaRemessa => t !== null)
-    .sort((a, b) =>
-      a.destinatarioNome.localeCompare(b.destinatarioNome, "pt-BR"),
-    );
+  const { contasSantander, titulosCnab } = montarDadosDaRemessa({
+    contas: (contasRes.data ?? []) as ContaBancaria[],
+    fornecedores: fornecedoresRes.data,
+    colaboradores: cnabColaboradoresRes,
+    pps: rows,
+    retencoesDaAprovacao: retencoesDaAprovacaoRes.data,
+    aPagar: cnabAPagarRes.data,
+  });
 
   const canGerarRemessa = pode(session.activeRole, "financeiro.contas_pagar");
 
-  // Disparada junto das linhas das PPs (ver acima); nunca rejeita.
-  const fiscalDaAprovacao = await fiscalDaAprovacaoPromise;
+  // Disparadas antes (ver acima): correram junto das leituras do meio.
+  const [fiscalDaAprovacao, extrasProntos] = await Promise.all([fiscalDaAprovacaoPromise, extrasDaPlanilha]);
 
   return (
     <div className="space-y-8">
@@ -1095,6 +947,14 @@ export default async function PedidosCompraFinanceiroPage({
           titulos={
             <TitulosPagarList
               rows={titulosNaoCartao}
+              pagosNoCartao={pagosNoCartao}
+              hoje={hojeISO}
+              nomesDasEmpresas={Object.fromEntries(
+                ((empresasRes.data ?? []) as Array<{ id: string; razao_social: string | null; nome_fantasia: string | null }>).map(
+                  (e) => [e.id, e.nome_fantasia ?? e.razao_social ?? "—"],
+                ),
+              )}
+              extras={extrasProntos}
               tenantId={session.activeTenant.id}
               contas={contasRes.data ?? []}
               tipos={tiposRes.data ?? []}
@@ -1104,6 +964,7 @@ export default async function PedidosCompraFinanceiroPage({
               clientes={clientesList}
               regionais={regionaisList}
               cartoes={cartoesList}
+              faturasNaBaixa={faturasNaBaixa}
               ultimasRetencoes={ultimasRetencoes}
               podeDevolverFolha={pode(session.activeRole, "rh.folhas.aprovar_financeiro")}
               exportarRemessaBotao={

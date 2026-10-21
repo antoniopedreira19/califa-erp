@@ -29,8 +29,11 @@
  *   retenção diferente da aprovação (e o recebimento com imposto retido
  *   pelo cliente) se baixa sozinho, imposto a imposto.
  * - **Baixa parcial.** Uma por vez, no pop-up de um título.
- * - **Cartão de crédito.** No cartão a baixa é a entrada do item na fatura
- *   (decisão 093), um de cada vez; o lote paga pela conta bancária.
+ * - **Cartão de crédito na folha e na parcial.** Desde a decisão 197
+ *   (21/10/2026) o lote também baixa no cartão: um cartão e uma fatura para
+ *   todos, cada título vira um item dela, pelo valor inteiro e sem
+ *   retenção. Ficam de fora a folha (não se paga com cartão) e o título com
+ *   baixa parcial (o restante segue pela conta) — `semCartao` de cada um.
  *
  * - **Outra origem.** Um lote leva uma origem só (revisão da decisão 140,
  *   05/10/2026): PP com PP, folha com folha. `OrigemDoLote`.
@@ -252,10 +255,21 @@ const itemSchema = z.object({
 export const baixaEmLoteSchema = z
   .object({
     pago_em: dataIso,
-    conta_bancaria_id: z.string().uuid("Escolha a conta bancária."),
-    /** Só PIX, transferência e boleto: no cartão a baixa é pela fatura
-     *  (decisão 093). Obrigatória quando há título a pagar. */
-    forma_pagamento: z.enum(["pix", "transferencia", "boleto"]).nullable(),
+    /** Nula no cartão: o item entra na fatura e nada sai da conta
+     *  (decisão 093). Obrigatória nas outras formas. */
+    conta_bancaria_id: z.string().uuid("Escolha a conta bancária.").nullable(),
+    /** Obrigatória quando há título a pagar. O cartão só com títulos a
+     *  pagar que aceitam cartão (decisão 197). */
+    forma_pagamento: z.enum(["pix", "transferencia", "boleto", "cartao_credito"]).nullable(),
+    /** O cartão do lote, quando a forma é cartão. */
+    cartao_credito_id: z.string().uuid().nullable().default(null),
+    /** A fatura de todos, quando a forma é cartão: o dia 1 da competência
+     *  (decisão 197). */
+    fatura_competencia: z
+      .string()
+      .regex(/^\d{4}-\d{2}-01$/, "Fatura inválida.")
+      .nullable()
+      .default(null),
     /** O centro de custo dos pagamentos que não têm um. */
     centro_pagar: centroSchema.nullable(),
     /** O centro de custo dos recebimentos que não têm um. */
@@ -268,6 +282,41 @@ export const baixaEmLoteSchema = z
   .superRefine((d, ctx) => {
     const pagar = d.itens.filter((i) => i.alvo.modulo === "pagar");
     const receber = d.itens.filter((i) => i.alvo.modulo === "receber");
+    if (d.forma_pagamento === "cartao_credito") {
+      // No cartão (decisão 197): só títulos a pagar que vão para a fatura,
+      // um cartão e uma fatura, nenhuma conta.
+      if (!d.cartao_credito_id) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Escolha o cartão.", path: ["cartao_credito_id"] });
+      }
+      if (!d.fatura_competencia) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Escolha a fatura.", path: ["fatura_competencia"] });
+      }
+      if (d.conta_bancaria_id !== null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "No cartão nada sai da conta bancária: não escolha conta.",
+          path: ["conta_bancaria_id"],
+        });
+      }
+      if (d.itens.some((i) => i.alvo.modulo !== "pagar" || !ORIGENS_NO_CARTAO.includes(i.alvo.origem))) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "No cartão só entram PP, avulso e recorrência.",
+          path: ["itens"],
+        });
+      }
+    } else {
+      if (!d.conta_bancaria_id) {
+        ctx.addIssue({ code: z.ZodIssueCode.custom, message: "Escolha a conta bancária.", path: ["conta_bancaria_id"] });
+      }
+      if (d.cartao_credito_id !== null || d.fatura_competencia !== null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Cartão e fatura só quando a forma é cartão de crédito.",
+          path: ["cartao_credito_id"],
+        });
+      }
+    }
     if (pagar.length > 0 && !d.forma_pagamento) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -327,6 +376,10 @@ export const baixaEmLoteSchema = z
     }
   });
 
+/** As origens a pagar que o lote leva ao cartão (decisão 197): as do lote
+ *  menos a folha. */
+export const ORIGENS_NO_CARTAO: readonly OrigemPagarNoLote[] = ["pp", "avulso", "recorrencia"];
+
 export type EntradaDaBaixaEmLote = z.input<typeof baixaEmLoteSchema>;
 export type DadosDaBaixaEmLote = z.output<typeof baixaEmLoteSchema>;
 export type ItemDaBaixaEmLote = DadosDaBaixaEmLote["itens"][number];
@@ -337,9 +390,10 @@ export type ItemDaBaixaEmLote = DadosDaBaixaEmLote["itens"][number];
 
 /**
  * Uma baixa do lote, já no formato da action da baixa de um por um. O lote
- * nunca leva cartão nem baixa parcial: `cartao_credito_id` vai nulo e
- * `valor_baixa` é o que falta (líquido + retidos). `retencoes` só existe na
- * parcela de PP com retenção na aprovação; no resto, vai vazio.
+ * nunca leva baixa parcial: `valor_baixa` é o que falta (líquido +
+ * retidos). `retencoes` só existe na parcela de PP com retenção na
+ * aprovação, fora do cartão; no resto, vai vazio. No cartão (decisão 197) a
+ * conta vai nula, e o cartão e a fatura são os do lote.
  */
 export type ChamadaDaBaixa =
   | {
@@ -351,11 +405,12 @@ export type ChamadaDaBaixa =
         origem: OrigemPagarNoLote;
         id: string;
         pago_em: string;
-        conta_bancaria_id: string;
+        conta_bancaria_id: string | null;
         plano_conta_tipo_id: string;
         plano_conta_subtipo_id: string;
-        forma_pagamento: "pix" | "transferencia" | "boleto";
-        cartao_credito_id: null;
+        forma_pagamento: "pix" | "transferencia" | "boleto" | "cartao_credito";
+        cartao_credito_id: string | null;
+        fatura_competencia: string | null;
         valor_baixa: number;
         retencoes: RetencaoDaBaixa[];
       };
@@ -507,13 +562,20 @@ export function montarChamadas(
   aliquotasPorParcela: ReadonlyMap<string, AliquotasDaAprovacao | null>,
 ): { ok: true; chamadas: ChamadaDaBaixa[] } | { ok: false; mensagem: string } {
   const chamadas: ChamadaDaBaixa[] = [];
+  const noCartao = dados.forma_pagamento === "cartao_credito";
+  const conta = dados.conta_bancaria_id;
   for (const item of dados.itens) {
+    // Só o pagamento no cartão dispensa a conta (o schema já cobra).
+    if (!conta && !(noCartao && item.alvo.modulo === "pagar")) {
+      return { ok: false, mensagem: "Escolha a conta bancária." };
+    }
     // O imposto: o centro de custo vem dele (o banco escolhe), e a baixa é
     // pelo valor inteiro, com a multa e os juros e os anexos.
     if (item.alvo.modulo === "imposto") {
       if (!item.imposto || !item.imposto.comprovante_path) {
         return { ok: false, mensagem: `Anexe o comprovante de pagamento de “${item.rotulo}”.` };
       }
+      if (!conta) return { ok: false, mensagem: "Escolha a conta bancária." };
       chamadas.push({
         acao: "imposto",
         chave: item.chave,
@@ -521,7 +583,7 @@ export function montarChamadas(
         entrada: {
           imposto_id: item.alvo.id,
           pago_em: dados.pago_em,
-          conta_bancaria_id: dados.conta_bancaria_id,
+          conta_bancaria_id: conta,
           multa_juros: r2(item.imposto.multa_juros),
           guia_path: item.imposto.guia_path,
           comprovante_path: item.imposto.comprovante_path,
@@ -542,7 +604,7 @@ export function montarChamadas(
     }
     const comum = {
       pago_em: dados.pago_em,
-      conta_bancaria_id: dados.conta_bancaria_id,
+      conta_bancaria_id: conta,
       plano_conta_tipo_id: centro.tipoId,
       plano_conta_subtipo_id: centro.subtipoId,
       valor_baixa: r2(item.aberto),
@@ -553,7 +615,8 @@ export function montarChamadas(
         return { ok: false, mensagem: "Escolha a forma de pagamento." };
       }
       let retencoes: RetencaoDaBaixa[] = [];
-      if (item.alvo.origem === "pp") {
+      // No cartão a baixa é do valor inteiro, sem retenção (decisão 125).
+      if (item.alvo.origem === "pp" && !noCartao) {
         if (!aliquotasPorParcela.has(item.alvo.id)) {
           return {
             ok: false,
@@ -573,25 +636,30 @@ export function montarChamadas(
           origem: item.alvo.origem,
           id: item.alvo.id,
           ...comum,
+          conta_bancaria_id: noCartao ? null : conta,
           forma_pagamento: dados.forma_pagamento,
-          cartao_credito_id: null,
+          cartao_credito_id: noCartao ? dados.cartao_credito_id : null,
+          fatura_competencia: noCartao ? dados.fatura_competencia : null,
           retencoes,
         },
       });
-    } else if (item.alvo.origem === "nf") {
-      chamadas.push({
-        acao: "receber_nf",
-        chave: item.chave,
-        rotulo: item.rotulo,
-        entrada: { titulo_id: item.alvo.id, ...comum },
-      });
     } else {
-      chamadas.push({
-        acao: "receber_avulso",
-        chave: item.chave,
-        rotulo: item.rotulo,
-        entrada: { conta_avulsa_id: item.alvo.id, ...comum },
-      });
+      if (!conta) return { ok: false, mensagem: "Escolha a conta bancária." };
+      if (item.alvo.origem === "nf") {
+        chamadas.push({
+          acao: "receber_nf",
+          chave: item.chave,
+          rotulo: item.rotulo,
+          entrada: { titulo_id: item.alvo.id, ...comum, conta_bancaria_id: conta },
+        });
+      } else {
+        chamadas.push({
+          acao: "receber_avulso",
+          chave: item.chave,
+          rotulo: item.rotulo,
+          entrada: { conta_avulsa_id: item.alvo.id, ...comum, conta_bancaria_id: conta },
+        });
+      }
     }
   }
   return { ok: true, chamadas };

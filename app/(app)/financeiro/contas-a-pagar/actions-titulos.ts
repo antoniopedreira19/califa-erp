@@ -645,8 +645,42 @@ const baixaSchema = z
     // recorrência e folha levam isto ao banco; as demais origens baixam
     // sempre o valor inteiro, e quem recusa o que não cabe é o banco.
     ...valorDaBaixaSchema,
+    // Juros e multa (decisão 196): um lançamento à parte em 11 · Despesa
+    // com Juros, que não quita o título. Só no boleto de PP, avulso e
+    // recorrência — o banco cobra o atraso no próprio pagamento. A fase 3
+    // (conciliação) abre a exceção da linha do banco que pagou mais.
+    juros: z.number().min(0, "Juros e multa não podem ser negativos.").default(0),
+    // A fatura escolhida na baixa no cartão (decisão 197): o dia 1 da
+    // competência. Nula, vale a da data do pagamento.
+    fatura_competencia: z
+      .string()
+      .regex(/^\d{4}-\d{2}-01$/, "Fatura inválida.")
+      .nullable()
+      .default(null),
   })
   .superRefine((data, ctx) => {
+    if (data.juros > 0) {
+      if (!["pp", "avulso", "recorrencia"].includes(data.origem)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Juros e multa só na baixa de PP, avulso ou recorrência.",
+          path: ["juros"],
+        });
+      } else if (data.forma_pagamento !== "boleto") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Juros e multa só no pagamento por boleto.",
+          path: ["juros"],
+        });
+      }
+    }
+    if (data.fatura_competencia !== null && data.forma_pagamento !== "cartao_credito") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "A fatura só se escolhe na baixa no cartão.",
+        path: ["fatura_competencia"],
+      });
+    }
     if (data.forma_pagamento !== "cartao_credito" && !data.conta_bancaria_id) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -786,6 +820,8 @@ export async function darBaixaTitulo(input: unknown): Promise<ResultBaixa> {
       p_cartao_credito_id: d.cartao_credito_id,
       p_valor_baixa: d.valor_baixa ?? null,
       p_retencoes: d.retencoes,
+      p_juros: d.juros,
+      p_fatura_competencia: d.fatura_competencia,
     });
     if (error) {
       console.error("[titulos.baixa.pp]", error.message);
@@ -804,6 +840,8 @@ export async function darBaixaTitulo(input: unknown): Promise<ResultBaixa> {
         valor: Number(parcela.valor),
         valor_baixa: d.valor_baixa ?? null,
         retencoes: d.retencoes,
+        juros: d.juros,
+        fatura_competencia: d.fatura_competencia,
         pago_em: d.pago_em,
         job_id: parcela.pedido.job_id,
         conta_bancaria_id: d.conta_bancaria_id,
@@ -848,6 +886,7 @@ export async function darBaixaTitulo(input: unknown): Promise<ResultBaixa> {
       p_criado_por: session.profile.id,
       p_forma_pagamento: d.forma_pagamento,
       p_cartao_credito_id: d.cartao_credito_id,
+      p_fatura_competencia: d.fatura_competencia,
     });
     if (error) {
       console.error("[titulos.baixa.desembolso]", error.message);
@@ -869,6 +908,7 @@ export async function darBaixaTitulo(input: unknown): Promise<ResultBaixa> {
         lancamento_id: lancId,
         forma_pagamento: d.forma_pagamento,
         cartao_credito_id: d.cartao_credito_id,
+        fatura_competencia: d.fatura_competencia,
       },
     });
 
@@ -997,6 +1037,8 @@ export async function darBaixaTitulo(input: unknown): Promise<ResultBaixa> {
     p_cartao_credito_id: d.cartao_credito_id,
     p_valor_baixa: d.valor_baixa ?? null,
     p_retencoes: d.retencoes,
+    p_juros: d.juros,
+    p_fatura_competencia: d.fatura_competencia,
   });
   if (error) {
     console.error("[titulos.baixa.avulsa]", error.message);
@@ -1013,6 +1055,8 @@ export async function darBaixaTitulo(input: unknown): Promise<ResultBaixa> {
       valor: Number(avulsa.valor),
       valor_baixa: d.valor_baixa ?? null,
       retencoes: d.retencoes,
+      juros: d.juros,
+      fatura_competencia: d.fatura_competencia,
       pago_em: d.pago_em,
       // Lida do título, não da `origem` que a tela mandou.
       origem: avulsa.folha_id ? "folha" : avulsa.recorrente_id ? "recorrencia" : "avulso",

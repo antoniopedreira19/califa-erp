@@ -2,10 +2,13 @@
 
 /**
  * As abas da conciliação de uma conta (pedido do Tiago em 02/10/2026):
- * **Extrato** — os cartões de saldo e o extrato de sempre — e **Títulos** —
- * tudo que aguarda baixa no financeiro, igual para todas as contas.
+ * **Extrato** — os cartões de saldo e o extrato de sempre —, **Títulos** —
+ * tudo que aguarda baixa no financeiro, igual para todas as contas — e
+ * **Conciliação automática** — o extrato importado do banco, linha a linha,
+ * com o que o sistema tem para cada uma (task 029, fase 3).
  *
- * A aba vive na URL (`&aba=titulos`; o Extrato é a URL sem `aba`) e cada
+ * A aba vive na URL (`&aba=titulos`, `&aba=banco`; o Extrato é a URL sem
+ * `aba`) e cada
  * uma é lida no servidor só quando está aberta: o Extrato não paga pela
  * leitura dos títulos. Por isso trocar de aba vai ao servidor; a aba
  * clicada acende na hora e o conteúdo fica esmaecido até ele responder,
@@ -19,7 +22,7 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
-export type AbaDaConta = "extrato" | "titulos";
+export type AbaDaConta = "extrato" | "titulos" | "banco";
 
 /** A barra das abas e, embaixo, o conteúdo da aba aberta (que a página
  *  monta no servidor). A página lê `?aba=` por conta própria: função de
@@ -27,12 +30,17 @@ export type AbaDaConta = "extrato" | "titulos";
 export function AbasDaConta({
   aba,
   totalTitulos,
+  pendentesNoBanco,
   children,
 }: {
   aba: AbaDaConta;
   /** Quantos títulos aguardam baixa — só se sabe com a aba Títulos aberta
    *  (no Extrato eles nem são lidos), e por isso no Extrato não há número. */
   totalTitulos: number | null;
+  /** As linhas do banco ainda sem solução, ou "novo" sem extrato nenhum.
+   *  O extrato do banco é lido nas três abas desde a decisão 202 (as marcas
+   *  do Extrato e o sinal dos Títulos), então o número aparece em todas. */
+  pendentesNoBanco: number | "novo" | null;
   children: React.ReactNode;
 }) {
   const router = useRouter();
@@ -71,6 +79,18 @@ export function AbasDaConta({
           count={totalTitulos ?? undefined}
         >
           Títulos
+        </TabButton>
+        <TabButton
+          active={pedida === "banco"}
+          onClick={() => irPara("banco")}
+          count={typeof pendentesNoBanco === "number" ? pendentesNoBanco : undefined}
+        >
+          Conciliação automática
+          {pendentesNoBanco === "novo" && (
+            <span className="rounded bg-violet-100 px-1.5 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-violet-700">
+              novo
+            </span>
+          )}
         </TabButton>
       </div>
 

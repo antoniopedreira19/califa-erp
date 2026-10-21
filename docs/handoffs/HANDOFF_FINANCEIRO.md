@@ -7722,8 +7722,10 @@ dado ou marca situação; no banco, só os estornos.
     tinha a próxima data recalculada.
   - **"Inadimplente"** (`faturamentoPorJob`, a lista Visualizar Jobs e a
     página do job no financeiro): a nota que vence hoje já marcava o job.
-    Na página do job, só a inadimplência mudou. O `hoje` da página segue o
-    de UTC porque alimenta o fluxo, que acompanha a `vw_fluxo_caixa`.
+    Na página do job, só a inadimplência mudou. ~~O `hoje` da página segue o
+    de UTC porque alimenta o fluxo, que acompanha a `vw_fluxo_caixa`.~~
+    ⚠️ **Desde 2026-10-21**, o `hoje` da página e a view são os de Brasília:
+    ver a nota de 2026-10-21 (1).
 - **Banco** (migration `20261019700001`): função nova
   `public.hoje_em_sao_paulo()`, par do `hojeEmSaoPauloIso()`. As 7 funções
   que lançam estorno (`estornar_baixa_avulsa`, `_desembolso_parcela`,
@@ -7741,7 +7743,9 @@ dado ou marca situação; no banco, só os estornos.
   09/10 em UTC. No dev do worktree, como administrador e sem gravar nada:
   Aprovar desembolso e Exportar remessa Santander abrem com 19/10/2026;
   Visualizar Jobs e a página do job no financeiro carregam sem erro.
-- **Ficaram em UTC, de propósito ou para depois:**
+- **Ficaram em UTC, de propósito ou para depois:** ⚠️ **Os três primeiros
+  itens passaram para o dia de Brasília em 2026-10-21**, autorizados pelo
+  Tiago: ver a nota de 2026-10-21 (1). Ficam os "certos como estão".
   - **Fluxo de caixa e "Saldo hoje":** o código acompanha a `vw_fluxo_caixa`,
     que usa `current_date`. Mudar um lado sem o outro faz os dois
     discordarem à noite.
@@ -7818,3 +7822,145 @@ dado ou marca situação; no banco, só os estornos.
   −R$ 1.263,60 (data prevista 26/10) foi baixado na Conta Teste. Pelo banco,
   numa transação desfeita: o GP não corrige documento, o freela de fora não
   alcança a PP e `anon` não executa as funções novas.
+
+## ⚠️ Nota de 2026-10-21 (1) — o fluxo de caixa, três funções e as contagens de vencidos no dia de Brasília
+
+Termina o que a nota de 2026-10-19 (6) deixou em UTC. Das 21h à meia-noite de
+Brasília, o banco (`current_date`) e o servidor da Vercel já estão no dia
+seguinte. O Tiago autorizou a lista inteira em 21/10/2026, inclusive a função e
+os arquivos da frente do Antonio.
+
+- **Banco** (migration `20261021300001`):
+  - **`vw_fluxo_caixa`:** eram 16 `current_date`, não 1. Todos viraram
+    `(select public.hoje_em_sao_paulo())`: a rolagem da previsão vencida
+    (Cronograma de desembolsos, Previsão de recebimento, Faturamento previsto
+    e as mesmas nas fatias de save) e a Recorrência prevista (rolagem e
+    horizonte de 12 meses). A `vw_fluxo_caixa_job_totais`, que lê dela,
+    acompanha.
+  - **O único `current_date` de três funções:** `avulsa_entra_na_fatura` (a
+    compra no cartão sem data da compra escolhia a fatura pelo dia de amanhã),
+    `conciliacao_resumo_contas` (o "Saldo atual" da Conciliação já somava o
+    movimento datado de amanhã) e `calcular_proxima_data_inicial`, da frente
+    do Antonio. Por ela, a recorrência mensal do dia 22 criada às 22h de 21/10
+    começava em 22/11, e não em 22/10.
+  - **Por que `(select …)`:** com o `set search_path`, a função não é embutida
+    no plano e custa 5,4 µs por linha (1,16 s em 200 mil linhas, contra 73 ms
+    do `current_date`). Com o `select`, ela roda uma vez por consulta.
+  - **Como:** a mesma técnica da `20261019700001`, com a troca sobre a
+    definição no ar e a conferência dentro da migration. A migration foi
+    ensaiada antes numa transação desfeita.
+- **Código** (`hojeEmSaoPauloIso()`):
+  - **Fluxo:** Fluxo de caixa, página do job, página do projeto e abertura no
+    financeiro, `fluxo-do-job.ts`, o saldo de hoje do seletor de conta
+    (`lib/data/contas-bancarias.ts`) e a data das avulsas a receber sem data
+    na aba Títulos da Conciliação.
+  - **Na página do job e na abertura**, o mesmo `hoje` também dá a competência
+    e o ano sugeridos, e as datas sugeridas da curva e do recebimento quando o
+    job não tem data. Essas datas são gravadas, e agora também são de Brasília.
+  - **Frente do Antonio:** o filtro "vencidas" do Contas a Pagar e do Contas a
+    Receber, a contagem de inadimplentes da Central Financeira (agora bate com
+    o "Inadimplente" do Visualizar Jobs) e a home: cartões de vencidas,
+    indicadores do mês e "há 15 dias".
+  - **Conciliação** (`hub-periodo.ts`): "Mês atual", "Mês anterior", "Últimos
+    90 dias" e "No ano".
+- **Conferido:**
+  - **Banco, de dia:** com o dia de UTC igual ao de Brasília (02h40 de 21/10),
+    o resultado não mudou (mesmo md5 antes e depois): as 329 linhas da
+    `vw_fluxo_caixa`, a `vw_fluxo_caixa_job_totais`, o resumo da Conciliação e
+    a próxima data da recorrência. Desfeita a troca, as três funções voltam ao
+    md5 de antes, e a view ao texto de antes. Dono, `security definer`,
+    GRANTs (`authenticated`, nada para `anon`) e o comentário da view não
+    mudaram.
+  - **Banco, à noite:** numa cópia temporária da view com o dia fixo, às 23h30
+    de 21/10 o UTC punha 4 previsões de recebimento e 2 fatias de save em
+    23/10. O dia de Brasília as deixa em 22/10.
+  - **Código, com `TZ=UTC` e o relógio parado:**
+    - Às 22h30 de 21/10, o "hoje" antigo dava 22/10, e o novo dá 21/10.
+    - Às 23h30 de 31/10, o mês da home e o "Mês atual" da Conciliação eram
+      novembro, e agora são outubro.
+    - Às 23h30 de 31/12, o "No ano" ia de 01/01/2027 a 01/01/2027, e agora
+      cobre 2026 inteiro.
+    - De dia, o antigo e o novo batem. Com `TZ=America/Sao_Paulo`, o fuso do
+      Mac, o novo dá o mesmo.
+  - **Navegador** (dev do worktree, como administrador, sem gravar nada):
+    - As 12 telas tocadas abrem sem erro, e o servidor não registrou nenhum:
+      Fluxo de caixa, as páginas do job (TES-1014/26, aba Fluxo), do projeto
+      e da abertura (TES-1012/26) no financeiro, Contas a Pagar e a Receber
+      com "vencidas", Central Financeira, home, a Conciliação nos 4 períodos e
+      a aba Títulos.
+    - "Últimos 90 dias" vai de 24/07/26 a 21/10/26.
+    - Os números batem com o banco no dia de Brasília. Na Central, o Contas
+      a Receber mostra 21 pendentes (19 a faturar + 2 vencidos). Na home, são
+      12 contas a pagar e 2 a receber vencidas.
+- **Fica como está:**
+  - As views `freelancers_com_status` (10 `current_date`) e
+    `freelancers_lookup` (2), da frente do Antonio.
+  - Na home, o `created_at` é comparado com `"…T00:00:00"` sem fuso, e o mês
+    de cadastros começa às 21h do último dia do mês anterior. Só registro.
+
+## ⚠️ Nota de 2026-10-21 (2) — o PDF da NF emitida só para administrador e financeiro
+
+- **Por quê:** o bucket `faturamentos-nf` (PDF da NF do Contas a Receber)
+  pedia só que a pessoa fosse do tenant, para abrir, anexar e apagar. A tela
+  esconde a NF de quem não tem o menu Financeiro, mas o banco não escondia:
+  com o próprio login e o console do navegador, RH, gerente de projeto,
+  produtor e freelancer (87 pessoas ativas) listavam, baixavam e podiam
+  apagar os 20 PDFs. O Tiago autorizou em 21/10/2026.
+- **O que mudou:** migration `20261021500001_faturamentos_nf_storage_so_admin_e_financeiro.sql`.
+  As três policies do bucket passam a pedir `is_tenant_admin` ou
+  `is_tenant_financeiro` do tenant da pasta, a mesma regra do bucket
+  `impostos`. Nenhum código mudou: `uploadNfPdf`, `urlAnexoNf` e
+  `abrirDocumentoDoLancamento` já eram só de administrador e financeiro, e
+  nenhuma tela do job abre o PDF da NF.
+- **Conferido:**
+  - **Banco** (`authenticated`, `begin read only`): administrador e
+    financeiro veem os 20 PDFs e passam nas regras de anexar e apagar. RH,
+    gerente de projeto, produtor e freelancer veem 0 e são recusados ao
+    anexar. Os buckets `fornecedores` e `envios-faturamento` seguem como
+    estavam.
+  - **API real do Storage**, com os logins de teste de produtor, freelancer
+    e GP: a lista do bucket volta vazia e o link assinado de uma NF do
+    TES-1013/26 é recusado ("Object not found"). Os dois buckets de controle
+    continuam listando. As sessões foram encerradas.
+  - **Não conferido na tela como administrador ou financeiro:** não há login
+    de teste desses papéis. A regra deles é a mesma do `impostos`, que já
+    está em uso.
+- **Fica como está:** a tabela `faturamentos` (Task 016) continua mostrando
+  número e valor das notas a quem tem acesso à empresa. A declaração do
+  Simples (`fornecedores`) e o anexo da PO (`envios-faturamento`) aguardam a
+  decisão do Tiago.
+
+## ⚠️ Nota de 2026-10-21 (3) — a declaração do Simples: quem abre, anexa e apaga (revisão da decisão 142)
+
+- **Por quê:** o bucket `fornecedores` pedia só que a pessoa fosse do
+  tenant. Qualquer login, inclusive o RH, listava, anexava e apagava
+  declarações pelo console do navegador.
+- **O que mudou:** migrations `20261021500002` e `20261021500003`. Abrir e
+  anexar: quem cadastra fornecedor (administrador, financeiro, gerente de
+  projeto, produtor e freelancer). Apagar: só administrador e financeiro,
+  porque o arquivo tirado do cadastro fica no bucket como comprovante
+  (decisão 142 §2). Regras e conferência na decisão 142 §6. Só comentários
+  mudaram no código (`fornecedores/actions.ts`).
+- **Na tela, nada muda:** a produção continua sem o campo da declaração no
+  cadastro rápido e no lápis da PP (decisão 142 §5).
+
+## ⚠️ Nota de 2026-10-21 (4) — a empresa do job nos pop-ups de aprovar save e de cancelamento da fila
+
+- **Completa a nota de 2026-10-19 (1):** a linha **Empresa**, logo abaixo
+  do Projeto, tinha entrado em "Dados da produção", na conferência da fila e
+  no envio da produção, mas não nos outros dois pop-ups da fila. Agora entra
+  também no **"Aprovar save"** e no **"Cancelar o job…?"**. O Tiago achava
+  que já estava no sistema e pediu para colocar.
+- **Dado:** o mesmo embed da conferência
+  (`empresa:empresas!jobs_empresa_id_fkey(nome_fantasia, razao_social)`,
+  nome fantasia ou razão social), em `listarSavesNaFila` (`dados.ts`,
+  `SaveNaFila.empresaNome`) e em `listarCancelamentosNaFila`
+  (`cancelamentos.ts`, `CancelamentoNaFila.empresaNome`). A página passa os
+  dois objetos inteiros (`...s`, `...c`) aos pop-ups.
+- **Conferido no dev do worktree, como administrador, sem gravar nada:**
+  - "Aprovar save" do TES-1030/26 mostrou "Empresa · Empresa Teste". Não
+    havia pedido aguardando: um desvio temporário na leitura da fila listou
+    o pedido já aprovado; ficou fora do commit.
+  - "Cancelar o job ESC-1001/26?" mostrou "Empresa · Agência California".
+    Só aberto e fechado: o pedido continua pendente.
+  - tsc, lint e build limpos.

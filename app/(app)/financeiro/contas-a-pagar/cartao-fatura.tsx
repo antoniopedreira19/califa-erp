@@ -301,6 +301,18 @@ export function CartaoFatura({
 
           <FaturaExtrato
             itens={extrato.itens}
+            // A fatura paga fecha com a linha do pagamento (decisão 197).
+            pagamento={
+              extrato.pagamento && fatura
+                ? {
+                    data: extrato.pagamento.data,
+                    contaNome: extrato.pagamento.conta_nome,
+                    valor: extrato.pagamento.valor,
+                    codigo: fatura.codigo,
+                    bancoDoCartao: cartao?.banco ?? null,
+                  }
+                : null
+            }
             contexto={`${tela.cartaoId}|${tela.competencia}`}
             titulosPorChave={titulosPorChave}
             onVerBaixa={(t) => {

@@ -23,27 +23,19 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
 import { format } from "date-fns";
 import {
   CalendarClock,
   CheckCheck,
-  CreditCard,
   Eye,
   Info,
-  Pencil,
   Plus,
   Search,
   Undo2,
   Wallet,
 } from "lucide-react";
 import { DevolverFolhaDialog } from "./devolver-folha-dialog";
-import { situacaoVerbaLabel, verbaAguardaProducao } from "@/lib/types";
-import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
+import { verbaAguardaProducao } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { DatePicker } from "@/components/ui/date-picker";
 import type {
@@ -57,7 +49,7 @@ import type {
 } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import type { UltimaRetencao } from "@/components/financeiro/valor-da-baixa";
-import { totalRetido } from "@/lib/data/baixas-do-documento";
+import type { FaturaDoCartaoNaBaixa } from "@/lib/financeiro/fatura-do-cartao";
 import { ContaAvulsaDrawer } from "./conta-avulsa-drawer";
 import {
   BaixaTituloDialog,
@@ -95,15 +87,18 @@ import {
   ORIGENS_PAGAR_NO_LOTE,
   type OrigemPagarNoLote,
 } from "@/lib/financeiro/baixa-em-lote";
+import { BarraDosFiltrosDeColuna, useFiltrosDeColuna } from "@/components/ui/filtro-de-coluna";
+import { PlanilhaDeTitulos } from "@/components/financeiro/planilha-de-titulos/planilha";
+import { colunasFiltraveis } from "@/components/financeiro/planilha-de-titulos/colunas";
+import { BotaoDetalhes, type AcaoDoDetalhe } from "@/components/financeiro/detalhes-do-titulo/botao-detalhes";
+import type { ExtrasDaPlanilha } from "@/lib/data/planilha-de-titulos";
+import { linhaAPagar, prepararContexto, type Linha } from "../conciliacao/linhas-da-aba";
 import {
-  BarraDosFiltrosDeColuna,
-  celulaData,
-  celulaTexto,
-  celulaValor,
-  useFiltrosDeColuna,
-  type CelulaDaColuna,
-  type ColunaFiltravel,
-} from "@/components/ui/filtro-de-coluna";
+  alvoDaBaixaAPagar,
+  chaveDoLoteAPagar,
+  motivoForaDoLoteAPagar,
+  paraOLoteAPagar,
+} from "../conciliacao/alvos-da-baixa";
 
 // ---------------------------------------------------------------------------
 // Tipo da linha
@@ -322,30 +317,6 @@ const CHIP_ORIGEM: Array<{ key: "todas" | OrigemTitulo; label: string }> = [
   { key: "fatura_cartao", label: "Faturas de cartão" },
 ];
 
-/** Cores do chip de origem — copiadas do protótipo. */
-function origemChipClass(origem: OrigemTitulo): string {
-  switch (origem) {
-    case "pp":
-      return "border-border bg-muted text-muted-foreground";
-    case "avulso":
-      return "border-violet-200 bg-violet-50 text-violet-700";
-    case "folha":
-      // Rosa: folha é despesa recorrente com humano, merece
-      // identidade visual própria pra separar da avulsa (violeta).
-      return "border-rose-200 bg-rose-50 text-rose-700";
-    case "recorrencia":
-      return "border-blue-200 bg-blue-50 text-blue-700";
-    case "desembolso":
-      return "border-amber-200 bg-amber-50 text-amber-700";
-    case "fatura_cartao":
-      // Grafite: a fatura não é uma despesa nova, é o agregado do que já
-      // foi classificado item a item no fechamento.
-      return "border-slate-300 bg-slate-100 text-slate-700";
-    case "pp_devolucao_verba":
-      return "border-teal-200 bg-teal-50 text-teal-800";
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Componente
 // ---------------------------------------------------------------------------
@@ -391,221 +362,17 @@ function pagoNasDatas(r: TituloRow, casa: (data: string) => boolean): number {
   );
 }
 
-/** Por que a origem só aceita a baixa do valor inteiro (decisão 125).
- *  `null`: aceita a parcial. */
-function motivoSemParcialDa(r: TituloRow): string | null {
-  switch (r.origem) {
-    case "desembolso":
-      return "Desembolso só aceita a baixa do valor inteiro.";
-    case "fatura_cartao":
-      return "Fatura de cartão só aceita a baixa do valor inteiro.";
-    case "pp_devolucao_verba":
-      return "Devolução de verba só aceita a baixa do valor inteiro.";
-    case "folha":
-      return "Folha só aceita a baixa do valor inteiro.";
-  }
-  if (r.eh_verba) return "PP de verba só aceita a baixa do valor inteiro.";
-  if (r.em_remessa)
-    return r.em_remessa_com_retencao
-      ? "Pago pela remessa: só a baixa do que falta."
-      : "Pago pela remessa com o valor cheio: só a baixa do que falta.";
-  return null;
-}
-
 // ---------------------------------------------------------------------------
-// Baixa em lote (pedido do Tiago, 02/10/2026)
+// Baixa em lote (pedido do Tiago, 02/10/2026): quem entra, por que não e o
+// título no formato do lote são os da aba Títulos da conciliação
+// (`../conciliacao/alvos-da-baixa.ts`) desde a decisão 196.
 // ---------------------------------------------------------------------------
 
-function origemNoLote(o: OrigemTitulo): o is OrigemPagarNoLote {
-  return (ORIGENS_PAGAR_NO_LOTE as readonly string[]).includes(o);
+/** O título a pagar por trás da linha da planilha (a lista só monta linhas
+ *  a pagar). */
+function tituloDe(l: Linha): TituloRow {
+  return l.t as TituloRow;
 }
-
-/** A chave do título na seleção e no lote — única entre as origens. */
-function chaveDoLote(r: TituloRow): string {
-  return `pagar|${r.origem}|${r.id}`;
-}
-
-/**
- * Por que o título não entra na baixa em lote; `null` entra. O lote paga
- * pela conta escolhida, uma baixa por título, sempre pelo que falta (a
- * parcial entra pelo restante). Entram PP, avulso e recorrência em
- * aberto (decisão aprovada pelo Tiago em 02/10/2026) e, desde 05/10/2026,
- * a folha (revisão da decisão 140); fatura de cartão e devolução de verba
- * têm baixa própria, o previsto no cartão vira item da fatura na baixa
- * (decisão 093), e o desembolso tem o centro de custo escolhido na baixa —
- * todos um de cada vez. A origem já marcada barra as outras na seleção
- * (`useSelecao`), não aqui.
- */
-function motivoForaDoLote(r: TituloRow): string | null {
-  if (r.status === "pago") return "Título já pago.";
-  switch (r.origem) {
-    case "fatura_cartao":
-      return "Fatura de cartão tem baixa própria: dê baixa nela sozinha.";
-    case "pp_devolucao_verba":
-      return "Devolução de verba tem baixa própria: dê baixa nela sozinha.";
-    case "desembolso":
-      return "Desembolso: dê baixa nele sozinho, para escolher o centro de custo.";
-  }
-  if (!origemNoLote(r.origem)) return "Este título não entra na baixa em lote: dê baixa nele sozinho.";
-  if (r.forma_pagamento === "cartao_credito" || r.forma_prevista === "cartao_credito") {
-    return "Previsto no cartão de crédito: dê baixa nele sozinho, para o item entrar na fatura.";
-  }
-  // Decisão 137: para onde vai o dinheiro aparece só na baixa do título.
-  if (r.fora_do_cadastro) {
-    return "Pagamento fora do cadastro: dê baixa nele sozinho, para ver para onde vai o dinheiro.";
-  }
-  if (faltaPagar(r) <= 0.004) return "Título sem valor em aberto.";
-  return null;
-}
-
-/** O título no formato do lote. `null` na origem que não entra nele. */
-function paraOLote(r: TituloRow): TituloParaLote | null {
-  if (!origemNoLote(r.origem)) return null;
-  // A PP com NF registrada leva o número junto do código (módulo fiscal):
-  // "PP-00110 · NF 602".
-  const origem = r.nf_numero ? `${r.origem_label} · NF ${r.nf_numero}` : r.origem_label;
-  return {
-    chave: chaveDoLote(r),
-    tipo: "pagar",
-    alvo: { modulo: "pagar", origem: r.origem, id: r.id },
-    titulo: r.descricao,
-    referencia:
-      r.parcela_total > 1
-        ? `${origem} · ${r.parcela_numero}/${r.parcela_total}`
-        : origem,
-    contraparte: r.fornecedor_nome || "—",
-    vencimento: r.data_pagamento,
-    aberto: faltaPagar(r),
-    // Avulso, recorrência e folha já têm o par; a PP tem só o tipo
-    // (decisão 068) e usa o subtipo do lote.
-    centroDeCusto:
-      r.plano_conta_tipo_id && r.plano_conta_subtipo_id
-        ? { tipoId: r.plano_conta_tipo_id, subtipoId: r.plano_conta_subtipo_id }
-        : null,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// Filtro e ordem pelo título da coluna, como no Excel (pedido do Tiago,
-// 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do job)
-// ---------------------------------------------------------------------------
-
-/** O texto do status, como o selo da linha mostra (inclusive o da verba). */
-function rotuloDoStatus(r: TituloRow): string {
-  if (r.verba_situacao) return situacaoVerbaLabel(r.verba_situacao);
-  const pago = r.status === "pago";
-  if (r.origem === "pp_devolucao_verba") return pago ? "Devolvido" : "Devolução pendente";
-  return pago ? "Pago" : ehParcial(r) ? "Parcial" : "A pagar";
-}
-
-/** A lista do funil de Status na ordem do caminho do título, não de A a Z. */
-const ORDEM_DO_STATUS = [
-  "A pagar",
-  "Parcial",
-  "Devolução pendente",
-  "Aguardando prestação",
-  "Prestação reprovada",
-  "Prestação em avaliação",
-  "Concluída",
-  "Pago",
-  "Devolvido",
-];
-
-/** Célula de texto com o rótulo do vazio da coluna ("(sem job)"). */
-function celulaOuVazio(texto: string | null | undefined, vazio: string): CelulaDaColuna {
-  const t = texto?.trim() ?? "";
-  return t && t !== "—" ? celulaTexto(t) : { valor: "", rotulo: vazio, ordem: "\uffff" };
-}
-
-/**
- * As colunas que filtram e ordenam. Ficam de fora a caixa da baixa em lote
- * e a coluna Ação (só botões).
- *
- * A ordem da tela é fixa — urgente primeiro, depois a data de pagamento (o
- * pago mais recente antes, em "Pagos"). Sem ordem pelo título, vale ela; com
- * ordem pelo título, vale SÓ a do título (o urgente não fura a ordem: o selo
- * "Urgente" continua na linha). Empate no título mantém a ordem de sempre.
- */
-const COLUNAS: ColunaFiltravel<TituloRow>[] = [
-  { chave: "data", rotulo: "Data Pgto.", tipo: "data", alinhar: "center", celula: (r) => celulaData(r.data_pagamento) },
-  { chave: "venc", rotulo: "Venc. Orig.", tipo: "data", alinhar: "center", celula: (r) => celulaData(r.venc_original) },
-  {
-    chave: "titulo",
-    rotulo: "Título",
-    tipo: "texto",
-    // A busca da coluna acha também pela NF ("NF 602") e pelo selo Urgente.
-    celula: (r) => ({
-      ...celulaTexto(r.descricao),
-      busca: [
-        r.descricao,
-        r.nf_numero ? `NF ${r.nf_numero}` : "",
-        r.urgente && r.status === "a_pagar" ? "Urgente" : "",
-      ].join(" "),
-    }),
-  },
-  {
-    chave: "fornecedor",
-    rotulo: "Fornecedor",
-    tipo: "texto",
-    celula: (r) => celulaOuVazio(r.fornecedor_nome, "(sem fornecedor)"),
-  },
-  {
-    chave: "job",
-    rotulo: "Job",
-    tipo: "texto",
-    // Código e nome, como a célula; ordena pelo código.
-    celula: (r) =>
-      r.job_codigo && r.job_codigo !== "—"
-        ? { ...celulaTexto(`${r.job_codigo} ${r.job_nome}`.trim()), ordem: r.job_codigo }
-        : { valor: "", rotulo: "(sem job)", ordem: "\uffff" },
-  },
-  {
-    // Árvore tipo ▸ código, como os chips de origem: "PPs ▸ PP-00118".
-    chave: "origem",
-    rotulo: "Origem",
-    tipo: "texto",
-    alinhar: "center",
-    celula: (r) => {
-      const i = CHIP_ORIGEM.findIndex((c) => c.key === r.origem);
-      return {
-        valor: r.origem_label,
-        rotulo: r.origem_label,
-        ordem: `${i}|${r.origem_label}`,
-        grupo: CHIP_ORIGEM[i]?.label ?? "",
-      };
-    },
-  },
-  {
-    // Com o sinal da tela: o estorno de verba é negativo.
-    chave: "valor",
-    rotulo: "Valor",
-    tipo: "valor",
-    faixa: true,
-    alinhar: "right",
-    celula: (r) => celulaValor(valorComSinal(r), formatMoney),
-  },
-  {
-    chave: "parcela",
-    rotulo: "Parcela",
-    // Lista dos valores ("1/3"), ordem de número: do menor para o maior.
-    tipo: "valor",
-    alinhar: "center",
-    celula: (r) => {
-      const t = `${r.parcela_numero}/${r.parcela_total}`;
-      return { valor: t, rotulo: t, ordem: r.parcela_numero * 1000 + r.parcela_total };
-    },
-  },
-  {
-    chave: "status",
-    rotulo: "Status",
-    tipo: "texto",
-    alinhar: "center",
-    celula: (r) => ({
-      ...celulaTexto(rotuloDoStatus(r)),
-      ordemNaLista: ORDEM_DO_STATUS.indexOf(rotuloDoStatus(r)),
-    }),
-  },
-];
 
 interface Props {
   /** Base bruta — inclui a_pagar e pago (não cartão). Filtro é interno. */
@@ -625,6 +392,9 @@ interface Props {
   regionais: Array<{ id: string; nome: string; ativo: boolean; empresa_id: string }>;
   /** Cartões de crédito ativos — repassados ao drawer de conta avulsa. */
   cartoes?: CartaoOption[];
+  /** As faturas recentes dos cartões, para o campo Fatura da baixa no
+   *  cartão (decisão 197). */
+  faturasNaBaixa: FaturaDoCartaoNaBaixa[];
   /** A última retenção de cada fornecedor (por `parte_id`), para o
    *  "Repetir as alíquotas" da baixa (decisão 125). */
   ultimasRetencoes: Record<string, UltimaRetencao>;
@@ -635,6 +405,16 @@ interface Props {
   /** Quem aprova folha pode devolver o título de folha para a aprovação
    *  (decisão 132). Obrigatório: a página decide, a lista não adivinha. */
   podeDevolverFolha: boolean;
+  /** O dia de hoje em Brasília (decisão 195): o vencido e o trimestre. */
+  hoje: string;
+  /** Empresa → nome curto, para a coluna Empresa (a lista `empresas` leva a
+   *  razão social, que é a do formulário). */
+  nomesDasEmpresas: Record<string, string>;
+  /** Regional, retenção da aprovação e itens da fatura (decisão 195). */
+  extras: ExtrasDaPlanilha;
+  /** Os títulos pagos no cartão: ficam na lista como "No cartão", com a
+   *  fatura em que entraram (decisão 195), fora das somas do caixa. */
+  pagosNoCartao: TituloRow[];
 }
 
 export function TitulosPagarList({
@@ -648,9 +428,14 @@ export function TitulosPagarList({
   clientes,
   regionais,
   cartoes = [],
+  faturasNaBaixa,
   ultimasRetencoes,
   exportarRemessaBotao,
   podeDevolverFolha,
+  hoje,
+  nomesDasEmpresas,
+  extras,
+  pagosNoCartao,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -666,7 +451,7 @@ export function TitulosPagarList({
   // Recorte pelo filtro de status — o resto do componente enxerga só isso.
   const rows = React.useMemo(
     () =>
-      rowsBruto.filter((r) =>
+      [...rowsBruto, ...pagosNoCartao].filter((r) =>
         statusFiltro === "todos"
           ? true
           : statusFiltro === "aguardando_prestacao"
@@ -675,7 +460,7 @@ export function TitulosPagarList({
               ? ehParcial(r)
               : r.status === statusFiltro,
       ),
-    [rowsBruto, statusFiltro],
+    [rowsBruto, pagosNoCartao, statusFiltro],
   );
 
   const [baixando, setBaixando] = React.useState<TituloRow | null>(null);
@@ -799,22 +584,47 @@ export function TitulosPagarList({
   // tabela mostra — e é dele que a baixa em lote tira os elegíveis: o
   // "selecionar todos" do cabeçalho só marca o que o filtro deixou, e o
   // título que some do filtro sai da seleção (`useSelecao`).
-  const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "contas-a-pagar-titulos" });
+  //
+  // Desde a decisão 195 a lista é a planilha de títulos: as linhas saem do
+  // título pela mesma montagem da conciliação (`linhaAPagar`), e o filtro
+  // pelo título vale sobre as colunas novas.
+  const contexto = React.useMemo(
+    () =>
+      prepararContexto({
+        hoje,
+        empresas: nomesDasEmpresas,
+        tipos,
+        subtipos,
+        cartoes,
+        contas,
+        centroDoImposto: {},
+        extras,
+      }),
+    [hoje, nomesDasEmpresas, tipos, subtipos, cartoes, contas, extras],
+  );
+  const linhasDoTopo = React.useMemo(() => doTopo.map((r) => linhaAPagar(r, contexto)), [doTopo, contexto]);
+  const colunasDoFiltro = React.useMemo(
+    () => colunasFiltraveis({ contaId: null, hoje, rotuloContraparte: "Fornecedor", status: true }),
+    [hoje],
+  );
+  const colunas = useFiltrosDeColuna<Linha>(linhasDoTopo, colunasDoFiltro, { guardarEm: "contas-a-pagar-planilha" });
   const filtrados = colunas.visiveis;
 
   // Baixa em lote (pedido do Tiago, 02/10/2026): marcar vários títulos da
   // lista e dar baixa de uma vez. A seleção vale para o que está na tela:
   // o título que some do filtro, ou que foi pago, sai dela sozinho. Uma
   // origem por lote (revisão da decisão 140, 05/10/2026).
-  const elegiveis = filtrados.flatMap((r) => {
-    const t = motivoForaDoLote(r) === null ? paraOLote(r) : null;
+  const elegiveis = filtrados.flatMap((l) => {
+    const r = tituloDe(l);
+    const t = motivoForaDoLoteAPagar(r) === null ? paraOLoteAPagar(r) : null;
     return t ? [elegivelDoLote(t)] : [];
   });
   const selecao = useSelecao(elegiveis);
   const [loteAberto, setLoteAberto] = React.useState(false);
   const selecionados = filtrados
-    .filter((r) => selecao.marcado(chaveDoLote(r)))
-    .map(paraOLote)
+    .map(tituloDe)
+    .filter((r) => selecao.marcado(chaveDoLoteAPagar(r)))
+    .map(paraOLoteAPagar)
     .filter((t): t is TituloParaLote => t !== null);
 
   // Faixa de resumo — sobre a base bruta (todos os status), não sobre o
@@ -852,62 +662,9 @@ export function TitulosPagarList({
     };
   }, [rowsBruto, mostraPeriodo, dataDe, dataAte]);
 
+  // O mesmo `alvo` da aba Títulos da conciliação (decisão 196).
   const alvoBaixa: BaixaTituloAlvo | null = baixando
-    ? {
-        titulo: baixando.descricao,
-        origem:
-          baixando.origem === "pp"
-            ? `Pedido de produção ${baixando.origem_label}`
-            : baixando.origem === "recorrencia"
-              ? `Recorrência · ${baixando.descricao}`
-              : baixando.origem === "desembolso"
-                ? `Desembolso ${baixando.origem_label}`
-                : baixando.origem === "pp_devolucao_verba"
-                  ? `Estorno de verba ${baixando.origem_label.replace(/^ESTORNO /, "")}`
-                  : baixando.origem === "fatura_cartao"
-                    ? `Fatura de cartão ${baixando.origem_label}`
-                    : baixando.origem === "folha"
-                      ? "Folha de pagamento"
-                      : "Lançamento avulso",
-        parcela: `${baixando.parcela_numero}/${baixando.parcela_total}`,
-        vencimento: baixando.data_pagamento,
-        chave: `${baixando.origem}-${baixando.id}-${baixando.baixas.length}`,
-        valor: baixando.valor,
-        aberto: faltaPagar(baixando),
-        restoTexto: baixando.data_pagamento
-          ? `, na data de ${formatDate(baixando.data_pagamento)}, que dá para repactuar pelo lápis.`
-          : null,
-        motivoSemParcial: motivoSemParcialDa(baixando),
-        // Retenção só no serviço de fornecedor (decisão 125): PP que não é
-        // de verba, avulso e recorrência. O que foi para uma remessa com o
-        // valor cheio sai sem retenção; a remessa que pagou o líquido
-        // (decisão 145) abre com a retenção dela.
-        retencao:
-          (baixando.origem === "pp" && !baixando.eh_verba) ||
-          baixando.origem === "avulso" ||
-          baixando.origem === "recorrencia"
-            ? {
-                mostra: true,
-                motivo:
-                  baixando.em_remessa && !baixando.em_remessa_com_retencao
-                    ? "Pago pela remessa com o valor cheio."
-                    : null,
-              }
-            : { mostra: false },
-        ultimaRetencao: baixando.parte_id ? ultimasRetencoes[baixando.parte_id] ?? null : null,
-        empresaId: baixando.empresa_id,
-        planoContaTipoId: baixando.plano_conta_tipo_id,
-        planoContaSubtipoId: baixando.plano_conta_subtipo_id,
-        foraDoCadastro: baixando.fora_do_cadastro,
-        isDevolucao: baixando.origem === "pp_devolucao_verba",
-        // Fatura não se paga com cartão, folha também não (Tiago,
-        // 01/10/2026; o banco recusa), e o restante de uma parcial não vai
-        // para a fatura.
-        semCartao:
-          baixando.origem === "fatura_cartao" ||
-          baixando.origem === "folha" ||
-          baixando.baixas.length > 0,
-      }
+    ? alvoDaBaixaAPagar(baixando, ultimasRetencoes)
     : null;
 
   const alvoConferencia: BaixaRegistradaAlvo | null = conferindo
@@ -1159,340 +916,90 @@ export function TitulosPagarList({
         />
       )}
 
-      <div className="rounded-2xl border border-border bg-card shadow-soft">
-        <table className="w-full table-fixed text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted/30 text-center text-[11px] uppercase tracking-wider text-muted-foreground">
-              {/* A caixa do cabeçalho marca todos os que a lista mostra e
-                  aceitam a baixa em lote — da origem já marcada. */}
-              <th className="w-10 py-3 pl-4 pr-2 font-semibold">
-                <CaixaDoCabecalho {...selecao.cabecalho} />
-              </th>
-              <th className="w-[9%] px-2 py-3 font-semibold">{colunas.titulo("data")}</th>
-              <th className="w-[8%] px-2 py-3 font-semibold">{colunas.titulo("venc")}</th>
-              <th className="w-[15%] px-3 py-3 text-left font-semibold">{colunas.titulo("titulo")}</th>
-              <th className="w-[13%] px-3 py-3 text-left font-semibold">{colunas.titulo("fornecedor")}</th>
-              <th className="w-[12%] px-2 py-3 text-left font-semibold">{colunas.titulo("job")}</th>
-              <th className="w-[9%] px-2 py-3 font-semibold">{colunas.titulo("origem")}</th>
-              <th className="w-[9%] px-3 py-3 text-right font-semibold">{colunas.titulo("valor")}</th>
-              <th className="w-[6%] px-2 py-3 font-semibold">{colunas.titulo("parcela")}</th>
-              <th className="w-[7%] px-2 py-3 font-semibold">{colunas.titulo("status")}</th>
-              <th className="w-[7%] px-3 py-3 font-semibold">Ação</th>
-            </tr>
-          </thead>
-          <tbody>
-            {/* Vazio pelos filtros dos títulos: a tabela fica, com os
-                títulos, para desfazer. */}
-            {doTopo.length > 0 && filtrados.length === 0 && (
-              <tr>
-                <td colSpan={11} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                  Nenhum título com esse filtro.
-                </td>
-              </tr>
-            )}
-            {doTopo.length === 0 && (
-              <tr>
-                <td colSpan={11} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                  {rows.length === 0
-                    ? statusFiltro === "a_pagar"
-                      ? "Nenhum título a pagar. Aprove um Pedido de Produção ou crie um lançamento avulso."
-                      : statusFiltro === "pago"
-                        ? "Nenhum título pago ainda. Baixas registradas aparecerão aqui."
-                        : "Nenhum título encontrado."
-                    : "Nenhum título encontrado com esses filtros."}
-                </td>
-              </tr>
-            )}
-            {filtrados.map((r) => {
-              const repactuado =
-                r.venc_original !== null &&
-                r.data_pagamento !== null &&
-                r.venc_original !== r.data_pagamento;
-              const pago = r.status === "pago";
-              const parcial = ehParcial(r);
-              const retido = totalRetido(r.baixas);
-              const estornos =
-                r.baixas.length > 0 ? r.baixas.flatMap((b) => b.estornos) : r.estornos_da_baixa;
-              // Baixa em lote: `null` = a linha entra na seleção.
-              const chaveLote = chaveDoLote(r);
-              const motivoLote = motivoForaDoLote(r) ?? selecao.foraDaOrigem(chaveLote);
-              const noLote = motivoLote === null;
-              const marcado = selecao.marcado(chaveLote);
-              return (
-                <tr
-                  key={`${r.origem}-${r.id}`}
-                  // Título pago (ou parcial, decisão 125) abre as baixas
-                  // registradas ao clique, como o Tiago pediu em
-                  // 18/08/2026. Em aberto o clique não dispara pagamento:
-                  // as ações dele são os botões próprios (lápis e
-                  // "Baixar"). Desde 02/10/2026 (baixa em lote) o clique no
-                  // título em aberto marca e desmarca a linha, como na
-                  // remessa CNAB — marcar não paga nada. No parcial, que
-                  // segue abrindo as baixas, a seleção é só pela caixa.
-                  onClick={pago || parcial ? () => {
-                    setErroAcao(null);
-                    setConferindo(r);
-                  } : noLote ? () => selecao.alternar(chaveLote) : undefined}
-                  className={cn(
-                    "border-b border-border transition-colors last:border-0 hover:bg-accent/40",
-                    (pago || parcial || noLote) && "cursor-pointer",
-                    marcado && "bg-california-red/[0.04]",
-                  )}
-                >
-                  {/* A caixa da baixa em lote. Desligada, com o motivo no
-                      título, no que não entra no lote (o título vai também
-                      na célula: caixa desligada nem sempre mostra o
-                      próprio). A célula é só da seleção: clicar nela não
-                      abre as baixas registradas do parcial. */}
-                  <td
-                    className="py-3 pl-4 pr-2 text-center"
-                    title={motivoLote ?? undefined}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (noLote) selecao.alternar(chaveLote);
-                    }}
-                  >
-                    <CaixaDaLinha
-                      marcado={marcado}
-                      onAlternar={() => selecao.alternar(chaveLote)}
-                      disponivel={noLote}
-                      motivo={motivoLote ?? undefined}
-                    />
-                  </td>
-                  <td className="px-2 py-3">
-                    <div className="flex items-center justify-center gap-1.5">
-                      {!pago && r.origem !== "pp_devolucao_verba" && (
-                        <button
-                          type="button"
-                          title="Editar data de pagamento"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setErroAcao(null);
-                            setEditando(r);
-                          }}
-                          className="inline-flex h-5 w-5 flex-none items-center justify-center rounded border border-border bg-white text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
-                        >
-                          <Pencil className="h-2.5 w-2.5" />
-                        </button>
-                      )}
-                      <span
-                        className={cn(
-                          "whitespace-nowrap font-mono text-xs",
-                          repactuado && "font-semibold text-california-red",
-                        )}
-                      >
-                        {formatDate(r.data_pagamento)}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-2 py-3 text-center">
-                    <span
-                      className={cn(
-                        "whitespace-nowrap font-mono text-xs",
-                        repactuado ? "text-amber-800" : "text-muted-foreground",
-                      )}
-                    >
-                      {formatDate(r.venc_original)}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3">
-                    <div className="flex min-w-0 flex-col gap-0.5">
-                      {/* "Pago em X · conta · centro de custo" saiu daqui em
-                          08/09/2026: repetia, em corpo 11 e numa segunda
-                          linha, o que o olho da linha paga já abre inteiro. */}
-                      <span className="break-words font-semibold">
-                        {r.urgente && r.status === "a_pagar" && (
-                          <span className="mr-1.5 inline-block rounded-md bg-california-red px-1.5 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wider text-white">
-                            Urgente
-                          </span>
-                        )}
-                        {r.descricao}
-                      </span>
-                      {/* A mesma justificativa da aprovação (decisão 077,
-                          pergunta 4a) — some quando o título é pago. */}
-                      {r.urgente && r.status === "a_pagar" && r.urgente_justificativa && (
-                        <span
-                          title={r.urgente_justificativa}
-                          className="line-clamp-2 text-[11px] leading-snug text-california-red"
-                        >
-                          “{r.urgente_justificativa}”
-                        </span>
-                      )}
-                      {/* Módulo fiscal: o número da NF do fornecedor,
-                          registrado pelo financeiro na aprovação da PP. */}
-                      {r.nf_numero && (
-                        <span className="self-start text-[11px] text-muted-foreground">
-                          NF {r.nf_numero}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 text-xs text-muted-foreground">
-                    <span className="block truncate" title={r.fornecedor_nome || "—"}>
-                      {r.fornecedor_nome || "—"}
-                      {/* Asterisco da decisão 067: o cadastro do fornecedor
-                          mudou de conta depois que a PP tirou a foto. O
-                          título continua valendo pela foto — o que o
-                          asterisco diz é que o cadastro de hoje já não é o
-                          que este pedido manda pagar. */}
-                      {r.cadastro_do_fornecedor_mudou && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span
-                              tabIndex={0}
-                              className="ml-1 cursor-help font-bold text-amber-600"
-                              aria-label="O cadastro do fornecedor mudou depois desta PP"
-                            >
-                              *
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-[280px]">
-                            Os dados de pagamento do fornecedor mudaram
-                            depois desta PP. Ela continua valendo pelos
-                            dados que estão no documento dela; o cadastro
-                            novo vale para as próximas.
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                    </span>
-                  </td>
-                  {/* Código e nome, como na aba de PPs. */}
-                  <td className="break-words px-2 py-3 text-xs text-muted-foreground">
-                    <span className="font-mono">{r.job_codigo}</span>
-                    {r.job_nome && <> <span>{r.job_nome}</span></>}
-                  </td>
-                  <td className="px-2 py-3 text-center">
-                    <span
-                      className={cn(
-                        "inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-                        origemChipClass(r.origem),
-                      )}
-                    >
-                      {r.origem_label}
-                    </span>
-                  </td>
-                  <td className={cn(
-                    "whitespace-nowrap px-3 py-3 text-right font-semibold tabular-nums",
-                    r.origem === "pp_devolucao_verba" && "text-teal-700",
-                  )}>
-                    {/* Despesa negativa (decisão 081, 8a). */}
-                    {r.origem === "pp_devolucao_verba" ? `−${formatMoney(r.valor)}` : formatMoney(r.valor)}
-                    {/* As linhas de baixo quebram entre as partes, nunca no
-                        meio de um valor (10/10/2026): numa linha só, "pago
-                        R$ 10.000,00 · falta R$ 6.000,00" passava da coluna
-                        e invadia a Parcela, porque a célula é `nowrap`. */}
-                    {parcial && (
-                      <span className="block whitespace-normal text-[10.5px] font-medium text-sky-700">
-                        <span className="whitespace-nowrap">pago {formatMoney(r.baixado)}</span>{" "}
-                        <span className="whitespace-nowrap">
-                          · falta <b className="font-semibold">{formatMoney(faltaPagar(r))}</b>
-                        </span>
-                      </span>
-                    )}
-                    {retido > 0 && (
-                      <span className="block whitespace-normal text-[10.5px] font-medium text-muted-foreground">
-                        <span className="whitespace-nowrap">{formatMoney(retido)} retidos</span>{" "}
-                        <span className="whitespace-nowrap">· a recolher</span>
-                      </span>
-                    )}
-                    {estornos.length > 0 && (
-                      <span className="block text-[10.5px] font-medium text-rose-700">
-                        estornado{" "}
-                        {formatMoney(
-                          estornos.reduce((acc, e) => acc + Math.round(e.valor * 100), 0) / 100,
-                        )}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-2 py-3 text-center font-mono text-xs text-muted-foreground">
-                    {r.parcela_numero}/{r.parcela_total}
-                  </td>
-                  <td className="px-2 py-3 text-center">
-                    {r.verba_situacao ? (
-                      // Verba paga: o status é o da prestação (decisão 081).
-                      <SituacaoVerbaChip
-                        situacao={r.verba_situacao}
-                        className="whitespace-normal text-center leading-tight"
-                      />
-                    ) : (
-                      <span
-                        className={cn(
-                          "inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-                          r.origem === "pp_devolucao_verba" && !pago
-                            ? "whitespace-normal border-teal-200 bg-teal-50 text-center leading-tight text-teal-800"
-                            : pago
-                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                              : parcial
-                                ? "border-sky-200 bg-sky-50 text-sky-700"
-                                : "border-[#fde68a] bg-[#fffbeb] text-[#92400e]",
-                        )}
-                      >
-                        {r.origem === "pp_devolucao_verba"
-                          ? pago
-                            ? "Devolvido"
-                            : "Devolução pendente"
-                          : pago
-                            ? "Pago"
-                            : parcial
-                              ? "Parcial"
-                              : "A pagar"}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-3 py-3 text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      {!pago && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setErroAcao(null);
-                            setBaixando(r);
-                          }}
-                          className="inline-flex items-center gap-1 whitespace-nowrap rounded-md bg-emerald-600 px-2 py-1.5 text-[11px] font-semibold text-white transition-colors hover:bg-emerald-700"
-                        >
-                          <CreditCard className="h-3 w-3" />
-                          Baixar
-                        </button>
-                      )}
-                      {podeDevolverFolha && r.origem === "folha" && !pago && !parcial && (
-                        <button
-                          type="button"
-                          title="Devolver para a aprovação — para corrigir valor ou pagamento"
-                          aria-label="Devolver para a aprovação"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setErroAcao(null);
-                            setDevolvendo(r);
-                          }}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
-                        >
-                          <Undo2 className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                      {(pago || parcial) && (
-                        <button
-                          type="button"
-                          title="Ver as baixas registradas — estornar ou cancelar, se preciso"
-                          aria-label="Ver baixa registrada"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setErroAcao(null);
-                            setConferindo(r);
-                          }}
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <PlanilhaDeTitulos<Linha>
+        linhas={filtrados}
+        contaId={null}
+        hoje={hoje}
+        colunaStatus
+        titulo={(chave) => colunas.titulo(chave)}
+        cabecalhoDaSelecao={<CaixaDoCabecalho {...selecao.cabecalho} />}
+        caixa={(l) => {
+          const r = tituloDe(l);
+          const chaveLote = chaveDoLoteAPagar(r);
+          const motivoLote = motivoForaDoLoteAPagar(r) ?? selecao.foraDaOrigem(chaveLote);
+          return (
+            <span title={motivoLote ?? undefined}>
+              <CaixaDaLinha
+                marcado={selecao.marcado(chaveLote)}
+                onAlternar={() => selecao.alternar(chaveLote)}
+                disponivel={motivoLote === null}
+                motivo={motivoLote ?? undefined}
+              />
+            </span>
+          );
+        }}
+        onBaixar={(l) => {
+          setErroAcao(null);
+          setBaixando(tituloDe(l));
+        }}
+        onEditarData={(l) => {
+          setErroAcao(null);
+          setEditando(tituloDe(l));
+        }}
+        onVerBaixas={(l) => {
+          setErroAcao(null);
+          setConferindo(tituloDe(l));
+        }}
+        detalhes={(l) => {
+          const r = tituloDe(l);
+          // As ações que moravam soltas na linha (decisão 195): o olho do
+          // parcial e o "Devolver para a aprovação" da folha.
+          const acoes: AcaoDoDetalhe[] = [];
+          if (ehParcial(r)) {
+            acoes.push({
+              rotulo: "Ver as baixas",
+              icone: Eye,
+              onClick: () => {
+                setErroAcao(null);
+                setConferindo(r);
+              },
+            });
+          }
+          if (podeDevolverFolha && r.origem === "folha" && r.status !== "pago" && !ehParcial(r)) {
+            acoes.push({
+              rotulo: "Devolver para a aprovação",
+              icone: Undo2,
+              onClick: () => {
+                setErroAcao(null);
+                setDevolvendo(r);
+              },
+            });
+          }
+          return (
+            <BotaoDetalhes
+              chave={l.chave}
+              titulo={l.descricao}
+              recebimento={l.entra}
+              job={l.job}
+              vencimentoDiferente={l.vencimento && l.vencimento !== l.dataPrevista ? l.vencimento : null}
+              retencoes={l.valor.retencoes}
+              rateio={l.rateio}
+              acoes={acoes}
+            />
+          );
+        }}
+        vazio={
+          doTopo.length > 0
+            ? "Nenhum título com esse filtro."
+            : rows.length === 0
+              ? statusFiltro === "a_pagar"
+                ? "Nenhum título a pagar. Aprove um Pedido de Produção ou crie um lançamento avulso."
+                : statusFiltro === "pago"
+                  ? "Nenhum título pago ainda. Baixas registradas aparecerão aqui."
+                  : "Nenhum título encontrado."
+              : "Nenhum título encontrado com esses filtros."
+        }
+      />
 
       {/* Baixa em lote: a barra da seleção — quantos títulos, o que sai da
           conta e "Dar baixa". Gruda no pé da tela enquanto a lista rola, e
@@ -1506,8 +1013,8 @@ export function TitulosPagarList({
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <Info className="h-3.5 w-3.5" />
         Baixa é feita aqui. A aprovação e a rejeição continuam na aba de
-        Pedidos de Produção. Clique num título pago ou parcial para conferir
-        as baixas e, se preciso, estornar ou cancelar.
+        Pedidos de Produção. O olho do título pago e o ⓘ do parcial abrem as
+        baixas para conferir e, se preciso, estornar ou cancelar.
       </p>
 
       {devolvendo && (
@@ -1535,7 +1042,7 @@ export function TitulosPagarList({
         tipos={tipos}
         subtipos={subtipos}
         cartoes={cartoes}
-        formaPlanejada={baixando?.forma_pagamento ?? baixando?.forma_prevista ?? null}
+        faturas={faturasNaBaixa}
         cartaoPlanejadoId={baixando?.cartao_credito_id ?? baixando?.cartao_previsto_id ?? null}
         pending={pending}
         erro={erroAcao}
@@ -1573,6 +1080,9 @@ export function TitulosPagarList({
               res.fatura
                 ? `Confirmado no cartão · ${formatMoney(alvo.valor)} entrou na fatura${competencia ? ` de ${rotuloCurto(competencia)}` : ""}${cartao ? ` do ${cartao.nome}` : ""} (${res.fatura.codigo}).`
                 : `Baixa registrada · ${formatMoney(liquido)} enviado para a conciliação.` +
+                    (payload.juros > 0
+                      ? ` Mais ${formatMoney(payload.juros)} de juros e multa, em 11 · Despesa com Juros.`
+                      : "") +
                     (retidoNaBaixa > 0
                       ? ` ${formatMoney(retidoNaBaixa)} retidos, a recolher.`
                       : "") +
@@ -1629,7 +1139,7 @@ export function TitulosPagarList({
             setToast(
               alvo.origem === "fatura_cartao"
                 ? `Pagamento cancelado · a fatura ${alvo.origem_label} voltou para Fechada.`
-                : `Baixa cancelada · ${formatMoney(baixa.movimentado)} saíram do extrato e o título voltou para ${sobraBaixa ? "Parcial" : "A pagar"}.`,
+                : `Baixa cancelada · ${formatMoney(baixa.movimentado)}${res.juros > 0 ? ` e ${formatMoney(res.juros)} de juros e multa` : ""} saíram do extrato e o título voltou para ${sobraBaixa ? "Parcial" : "A pagar"}.`,
             );
             router.refresh();
           });
@@ -1700,6 +1210,8 @@ export function TitulosPagarList({
         contas={contas}
         tipos={tipos}
         subtipos={subtipos}
+        cartoes={cartoes}
+        faturas={faturasNaBaixa}
         onConcluido={(mensagem) => {
           selecao.limpar();
           setToast(mensagem);

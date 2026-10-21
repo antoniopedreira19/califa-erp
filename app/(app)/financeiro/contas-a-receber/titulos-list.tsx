@@ -39,10 +39,9 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Banknote, CheckCheck, Eye, Layers, Pencil, Plus, Trash2 } from "lucide-react";
+import { CheckCheck, Eye, Info, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
-  BotaoInfo,
   InfoFaturamentoModal,
   type InfoFaturamento,
 } from "@/components/financeiro/info-faturamento-modal";
@@ -52,7 +51,6 @@ import {
   type BaixaRegistradaAlvo,
 } from "@/components/financeiro/baixa-registrada-dialog";
 import type { UltimaRetencao } from "@/components/financeiro/valor-da-baixa";
-import { totalRetido } from "@/lib/data/baixas-do-documento";
 import {
   cancelarBaixa,
   estornarValorDaBaixa,
@@ -98,14 +96,13 @@ import {
   useSelecao,
   type TituloParaLote,
 } from "@/components/financeiro/baixa-em-lote";
-import {
-  BarraDosFiltrosDeColuna,
-  celulaData,
-  celulaTexto,
-  celulaValor,
-  useFiltrosDeColuna,
-  type ColunaFiltravel,
-} from "@/components/ui/filtro-de-coluna";
+import { BarraDosFiltrosDeColuna, useFiltrosDeColuna } from "@/components/ui/filtro-de-coluna";
+import { PlanilhaDeTitulos } from "@/components/financeiro/planilha-de-titulos/planilha";
+import { colunasFiltraveis } from "@/components/financeiro/planilha-de-titulos/colunas";
+import { BotaoDetalhes, type AcaoDoDetalhe } from "@/components/financeiro/detalhes-do-titulo/botao-detalhes";
+import type { ExtrasDaPlanilha } from "@/lib/data/planilha-de-titulos";
+import { ordenarLinhas } from "@/lib/financeiro/planilha-de-titulos";
+import { linhaAReceber, prepararContexto, type Linha } from "../conciliacao/linhas-da-aba";
 
 export interface TituloRow {
   id: string;
@@ -184,23 +181,12 @@ interface Props {
   ultimasRetencoes: Record<string, UltimaRetencao>;
   /** PO, instrução do GP e contatos, por job — o conteúdo do botão `i`. */
   infoPorJob: Record<string, InfoJob>;
-}
-
-/** Hoje em ISO local. `toISOString` volta em UTC e erra o dia à noite. */
-function hojeIso(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
-    d.getDate(),
-  ).padStart(2, "0")}`;
-}
-
-/** Dias corridos entre o vencimento e hoje. Só faz sentido em atraso. */
-function diasDeAtraso(vencimento: string): number {
-  const [y, m, d] = vencimento.slice(0, 10).split("-").map(Number);
-  const venc = new Date(y, m - 1, d);
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
-  return Math.max(0, Math.round((hoje.getTime() - venc.getTime()) / 86400000));
+  /** O dia de hoje em Brasília (decisão 195). */
+  hoje: string;
+  /** Empresa → nome curto, para a coluna Empresa. */
+  nomesDasEmpresas: Record<string, string>;
+  /** Regional e centro de custo da nota (decisão 195). */
+  extras: ExtrasDaPlanilha;
 }
 
 function formatDate(iso: string | null): string {
@@ -266,6 +252,8 @@ function paraOLote(r: TituloRow): TituloParaLote | null {
       contraparte: r.contraparte_nome,
       vencimento: r.data_vencimento,
       aberto: faltaReceber(r),
+      // O recebimento nunca vai para o cartão (decisão 197).
+      semCartao: "Recebimento não entra na fatura do cartão.",
       // A nota não tem centro de custo: usa o do lote.
       centroDeCusto: null,
     };
@@ -280,6 +268,8 @@ function paraOLote(r: TituloRow): TituloParaLote | null {
       contraparte: r.contraparte_nome,
       vencimento: r.data_vencimento,
       aberto: faltaReceber(r),
+      // O recebimento nunca vai para o cartão (decisão 197).
+      semCartao: "Recebimento não entra na fatura do cartão.",
       // O recebimento avulso nasce com o centro de custo (decisão 124).
       centroDeCusto:
         r.plano_conta_tipo_id && r.plano_conta_subtipo_id
@@ -290,119 +280,10 @@ function paraOLote(r: TituloRow): TituloParaLote | null {
   return null;
 }
 
-// ---------------------------------------------------------------------------
-// Filtro e ordem pelo título da coluna, como no Excel (pedido do Tiago,
-// 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do job)
-// ---------------------------------------------------------------------------
-
-/** O selo da coluna Status — o mesmo texto da pastilha da linha. */
-function statusDoTitulo(r: TituloRow, inadimplente: boolean): string {
-  if (r.status === "cancelado") return "Cancelado";
-  if (r.status === "pago") return r.origem === "transferencia" ? "Transferida" : "Recebido";
-  if (ehParcial(r)) return "Parcial";
-  if (inadimplente) return "Inadimplente";
-  return r.origem === "transferencia" ? "A transferir" : "Em aberto";
-}
-/** A lista do Status na ordem da cobrança, não a alfabética. */
-const ORDEM_DO_STATUS = ["Em aberto", "A transferir", "Inadimplente", "Parcial", "Recebido", "Transferida", "Cancelado"];
-
-/** O tipo do título, como a coluna Nota fiscal escreve embaixo do número. */
-function tipoDoTitulo(r: TituloRow): string {
-  if (r.origem === "nf") return "Nota fiscal";
-  if (r.origem === "rendimento") return "Rendimento";
-  if (r.origem === "transferencia") return "Transferência";
-  return "Recebimento avulso";
-}
-const ORDEM_DO_TIPO = ["Nota fiscal", "Recebimento avulso", "Rendimento", "Transferência"];
-
-/** A data que a coluna "Data de recebimento" mostra; nula sem baixa. */
-function dataDeRecebimento(r: TituloRow): string | null {
-  const ultima = r.baixas[r.baixas.length - 1] ?? null;
-  if (r.status === "pago") return r.pago_em ?? ultima?.data ?? null;
-  if (ehParcial(r)) return ultima?.data ?? null;
-  return null;
-}
-
-function colunasDosTitulos(estaInadimplente: (r: TituloRow) => boolean): ColunaFiltravel<TituloRow>[] {
-  return [
-    { chave: "vencimento", rotulo: "Vencimento", tipo: "data", celula: (r) => celulaData(r.data_vencimento) },
-    {
-      chave: "previsao",
-      rotulo: "Previsão de recebimento",
-      tipo: "data",
-      celula: (r) => celulaData(r.data_previsao_recebimento),
-    },
-    {
-      // Árvore tipo ▸ número: "Nota fiscal" marca todas as NFs; o
-      // recebimento avulso, o rendimento e a transferência vêm pelo código.
-      chave: "nota",
-      rotulo: "Nota fiscal",
-      tipo: "texto",
-      celula: (r) => {
-        const tipo = tipoDoTitulo(r);
-        if (r.origem === "nf") {
-          return {
-            valor: `NF ${r.fat_numero_nf}`,
-            rotulo: `NF ${r.fat_numero_nf}`,
-            // O número como número: "NF 99" antes de "NF 100".
-            ordem: `0|${r.fat_numero_nf.replace(/\D/g, "").padStart(12, "0")}`,
-            busca: `NF ${r.fat_numero_nf} emitida ${formatDate(r.fat_data_emissao)}`,
-            grupo: tipo,
-          };
-        }
-        const codigo = r.codigo_avulsa ?? "—";
-        return {
-          valor: codigo,
-          rotulo: codigo,
-          ordem: `${ORDEM_DO_TIPO.indexOf(tipo)}|${codigo}`,
-          busca: `${codigo} ${tipo}`,
-          grupo: tipo,
-        };
-      },
-    },
-    { chave: "cliente", rotulo: "Cliente", tipo: "texto", celula: (r) => celulaTexto(r.contraparte_nome) },
-    {
-      // Vários jobs numa nota agrupada: a linha passa se ALGUM estiver
-      // marcado. No título sem nota, a coluna mostra a descrição.
-      chave: "jobs",
-      rotulo: "Jobs cobertos",
-      tipo: "texto",
-      celula: (r) => (r.jobs_cobertos.length ? r.jobs_cobertos.map((j) => celulaTexto(j)) : celulaTexto("")),
-    },
-    {
-      chave: "recebimento",
-      rotulo: "Data de recebimento",
-      tipo: "data",
-      celula: (r) => celulaData(dataDeRecebimento(r)),
-    },
-    {
-      chave: "valor",
-      rotulo: "Valor",
-      tipo: "valor",
-      faixa: true,
-      alinhar: "right",
-      celula: (r) => celulaValor(r.valor, formatMoney),
-    },
-    {
-      chave: "parcela",
-      rotulo: "Parcela",
-      tipo: "texto",
-      celula: (r) => ({
-        ...celulaTexto(`${r.numero_parcela}/${r.total_parcelas}`),
-        ordem: r.total_parcelas * 1000 + r.numero_parcela,
-      }),
-    },
-    {
-      // A lista na ordem da cobrança; as linhas, de A a Z pelo rótulo.
-      chave: "status",
-      rotulo: "Status",
-      tipo: "texto",
-      celula: (r) => {
-        const rotulo = statusDoTitulo(r, estaInadimplente(r));
-        return { ...celulaTexto(rotulo), ordemNaLista: ORDEM_DO_STATUS.indexOf(rotulo) };
-      },
-    },
-  ];
+/** O título a receber por trás da linha da planilha (a lista só monta
+ *  linhas a receber e transferências). */
+function tituloDe(l: Linha): TituloRow {
+  return l.t as TituloRow;
 }
 
 /** NF agrupada junta os contatos de todos os jobs — sem repetir o mesmo. */
@@ -428,6 +309,9 @@ export function TitulosList({
   rendimentosLancados,
   ultimasRetencoes,
   infoPorJob,
+  hoje,
+  nomesDasEmpresas,
+  extras,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -468,8 +352,6 @@ export function TitulosList({
   const [filtroStatus, setFiltroStatus] = React.useState<
     "todos" | "abertos" | "inadimplentes" | "parciais" | "recebidos"
   >("todos");
-
-  const hoje = hojeIso();
 
   /**
    * Inadimplente é o título que passou do VENCIMENTO sem ser recebido
@@ -534,11 +416,35 @@ export function TitulosList({
       }),
     [rows, filtroStatus, estaInadimplente],
   );
-  const colunasDaTabela = React.useMemo(() => colunasDosTitulos(estaInadimplente), [estaInadimplente]);
-  const colunas = useFiltrosDeColuna(doTopo, colunasDaTabela, { guardarEm: "contas-a-receber-titulos" });
+  // Desde a decisão 195 a lista é a planilha de títulos: as linhas saem do
+  // título pela mesma montagem da conciliação (`linhaAReceber`).
+  const contexto = React.useMemo(
+    () =>
+      prepararContexto({
+        hoje,
+        empresas: nomesDasEmpresas,
+        tipos,
+        subtipos,
+        cartoes: [],
+        contas,
+        centroDoImposto: {},
+        extras,
+      }),
+    [hoje, nomesDasEmpresas, tipos, subtipos, contas, extras],
+  );
+  // Na ordem da data prevista, a da coluna (a lista vinha pelo vencimento).
+  const linhasDoTopo = React.useMemo(
+    () => ordenarLinhas(doTopo.map((r) => linhaAReceber(r, contexto))),
+    [doTopo, contexto],
+  );
+  const colunasDoFiltro = React.useMemo(
+    () => colunasFiltraveis({ contaId: null, hoje, rotuloContraparte: "Cliente", status: true }),
+    [hoje],
+  );
+  const colunas = useFiltrosDeColuna<Linha>(linhasDoTopo, colunasDoFiltro, { guardarEm: "contas-a-receber-planilha" });
   /** Os títulos que passam em tudo, na ordem do título escolhido (sem
    *  nenhum, a de sempre: pelo vencimento). A seleção do lote sai daqui. */
-  const visiveis = colunas.visiveis;
+  const visiveis = React.useMemo(() => colunas.visiveis.map(tituloDe), [colunas.visiveis]);
 
   // Baixa em lote (pedido do Tiago, 02/10/2026). A caixa do cabeçalho marca
   // só os visíveis (o filtro de status vale), e quem sai da lista sai da
@@ -754,335 +660,86 @@ export function TitulosList({
         />
       )}
 
-      {/* A caixa reserva 46px à direita para a calha, e o botão `i` mora numa
-          célula de largura ZERO — a calha nunca alarga a tabela
-          (`app/(app)/_planilha/calha.tsx`). */}
-      <div className="overflow-x-auto pb-1.5">
-      <div className="mr-[46px] box-border w-max min-w-[calc(100%-46px)] rounded-2xl border border-border bg-card shadow-soft">
-        <table className="w-full min-w-[1400px] text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted/30 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
-              {/* A seleção da baixa em lote (02/10/2026), com a caixa da
-                  remessa CNAB. A do cabeçalho marca os visíveis que aceitam
-                  baixa — da origem já marcada. */}
-              <th className="w-10 px-3 py-3 text-center">
-                <CaixaDoCabecalho {...selecao.cabecalho} />
-              </th>
-              <th className="w-[150px] px-3.5 py-3 font-semibold">{colunas.titulo("vencimento")}</th>
-              <th className="w-[150px] px-3.5 py-3 font-semibold">{colunas.titulo("previsao")}</th>
-              <th className="w-[130px] px-4 py-3 font-semibold">{colunas.titulo("nota")}</th>
-              <th className="min-w-[140px] px-4 py-3 font-semibold">{colunas.titulo("cliente")}</th>
-              <th className="min-w-[250px] px-4 py-3 font-semibold">{colunas.titulo("jobs")}</th>
-              <th className="w-[130px] px-3.5 py-3 font-semibold">{colunas.titulo("recebimento")}</th>
-              <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("valor")}</th>
-              <th className="w-[72px] px-3 py-3 font-semibold">{colunas.titulo("parcela")}</th>
-              <th className="w-[96px] px-3.5 py-3 font-semibold">{colunas.titulo("status")}</th>
-              <th className="w-[110px] px-4 py-3 text-right font-semibold">Ação</th>
-              <th className="w-0 p-0" />
-            </tr>
-          </thead>
-          <tbody>
-            {visiveis.length === 0 && (
-              <tr>
-                <td
-                  colSpan={12}
-                  className="px-4 py-12 text-center text-sm text-muted-foreground"
-                >
-                  {rows.length === 0
-                    ? "Nenhum título a receber ainda. Emita uma NF na aba Faturamento."
-                    : doTopo.length === 0
-                      ? "Nenhum título com esse status."
-                      : // Vazio por causa dos títulos: a tabela fica, para desfazer.
-                        "Nenhum título com esse filtro."}
-                </td>
-              </tr>
-            )}
-            {visiveis.map((r) => {
-              const recebido = r.status === "pago";
-              const cancelado = r.status === "cancelado";
-              const parcial = ehParcial(r);
-              const ultimaBaixa = r.baixas[r.baixas.length - 1] ?? null;
-              const retido = totalRetido(r.baixas);
-              const estornado =
-                r.baixas
-                  .flatMap((b) => b.estornos)
-                  .reduce((acc, e) => acc + Math.round(e.valor * 100), 0) / 100;
-              const adiada = r.data_previsao_recebimento !== r.data_vencimento;
-              const inadimplente = estaInadimplente(r);
-              const agrupada = r.jobs_cobertos.length > 1;
-              // Baixa em lote: entra ou não, e por quê.
-              const chaveLote = chaveDoLote(r);
-              const motivoLote = motivoForaDoLote(r) ?? selecao.foraDaOrigem(chaveLote);
-              return (
-                <tr
-                  key={r.id}
-                  onClick={() => {
-                    if (cancelado) return;
-                    setErro(null);
-                    // Recebido ou parcial abre as baixas registradas; em
-                    // aberto abre o formulário de baixa.
-                    if (recebido || parcial) setConferindo(r);
-                    else abrirBaixa(r);
-                  }}
-                  className={cn(
-                    "border-b border-border transition-colors last:border-0 hover:bg-accent/40",
-                    !cancelado && "cursor-pointer",
-                  )}
-                >
-                  {/* A caixa da baixa em lote. A linha continua abrindo a
-                      baixa (ou as baixas registradas); a seleção é só pela
-                      caixa, e o clique na célula dela não abre nada. */}
-                  <td
-                    className="px-3 py-3 text-center"
-                    title={motivoLote ?? undefined}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <CaixaDaLinha
-                      marcado={selecao.marcado(chaveLote)}
-                      onAlternar={() => selecao.alternar(chaveLote)}
-                      disponivel={motivoLote === null}
-                      motivo={motivoLote ?? undefined}
-                    />
-                  </td>
-                  <td className="px-3.5 py-3">
-                    <div className="flex items-center gap-2">
-                      {!recebido && !cancelado && r.origem === "nf" && (
-                        <button
-                          type="button"
-                          title="Editar previsão de recebimento"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setErro(null);
-                            setEditando(r);
-                          }}
-                          className="inline-flex h-[26px] w-[26px] flex-none items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </button>
-                      )}
-                      <span className="whitespace-nowrap font-mono text-xs">
-                        {formatDate(r.data_vencimento)}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-3.5 py-3">
-                    <span
-                      className={cn(
-                        "whitespace-nowrap font-mono text-xs",
-                        adiada ? "font-bold text-amber-800" : "font-medium",
-                      )}
-                    >
-                      {formatDate(r.data_previsao_recebimento)}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    {r.origem === "nf" ? (
-                      <div className="flex flex-col gap-0.5">
-                        <span className="font-mono text-xs font-bold text-california-red">
-                          NF {r.fat_numero_nf}
-                        </span>
-                        <span className="text-[11px] text-muted-foreground">
-                          Emitida {formatDate(r.fat_data_emissao)}
-                        </span>
-                      </div>
-                    ) : (
-                      // Sem nota (decisão 124): o código AV e o tipo.
-                      <div className="flex flex-col gap-0.5">
-                        <span className="font-mono text-xs font-bold text-foreground">
-                          {r.codigo_avulsa ?? "—"}
-                        </span>
-                        <span className="text-[11px] text-muted-foreground">
-                          {r.origem === "rendimento"
-                            ? "Rendimento"
-                            : r.origem === "transferencia"
-                              ? "Transferência"
-                              : "Recebimento avulso"}
-                        </span>
-                      </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-[13px]">{r.contraparte_nome}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col gap-1">
-                      {agrupada && (
-                        <span className="inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full border border-violet-200 bg-violet-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700">
-                          <Layers className="h-3 w-3" />
-                          Agrupada · {r.jobs_cobertos.length} jobs
-                        </span>
-                      )}
-                      {/* Só os jobs, sem repetição. O contato de cobrança
-                          mudou para o botão `i` em 31/08/2026. */}
-                      <span className="font-mono text-[11.5px] text-muted-foreground text-pretty">
-                        {r.jobs_cobertos.join("  ·  ")}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-3.5 py-3">
-                    {(recebido || parcial) && ultimaBaixa ? (
-                      <div className="flex flex-col gap-0.5">
-                        <span
-                          className={cn(
-                            "whitespace-nowrap font-mono text-xs font-bold",
-                            recebido ? "text-emerald-700" : "text-sky-700",
-                          )}
-                        >
-                          {formatDate(recebido ? r.pago_em ?? ultimaBaixa.data : ultimaBaixa.data)}
-                        </span>
-                        {r.baixas.length > 1 && (
-                          <span className="text-[10.5px] text-muted-foreground">
-                            {r.baixas.length} baixas
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <span
-                        className={cn(
-                          "whitespace-nowrap font-mono text-xs",
-                          recebido ? "font-bold text-emerald-700" : "text-muted-foreground/50",
-                        )}
-                      >
-                        {recebido ? formatDate(r.pago_em) : "—"}
-                      </span>
-                    )}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums">
-                    <div className="flex flex-col items-end gap-0.5">
-                      <span>{formatMoney(r.valor)}</span>
-                      {parcial && (
-                        <span className="text-[10.5px] font-medium text-sky-700">
-                          recebido {formatMoney(r.baixado)} · falta{" "}
-                          <b className="font-semibold">{formatMoney(faltaReceber(r))}</b>
-                        </span>
-                      )}
-                      {retido > 0 && (
-                        <span className="text-[10.5px] font-medium text-muted-foreground">
-                          {formatMoney(retido)} retidos
-                        </span>
-                      )}
-                      {estornado > 0 && (
-                        <span className="text-[10.5px] font-medium text-rose-700">
-                          estornado {formatMoney(estornado)}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
-                    {r.numero_parcela}/{r.total_parcelas}
-                  </td>
-                  <td className="px-3.5 py-3">
-                    <div className="flex flex-col items-start gap-0.5">
-                      <span
-                        className={cn(
-                          "inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide",
-                          cancelado
-                            ? "border-border bg-muted text-muted-foreground"
-                            : recebido
-                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                              : parcial
-                                ? "border-sky-200 bg-sky-50 text-sky-700"
-                                : inadimplente
-                                ? "border-[#fecaca] bg-[#fef2f2] text-[#b3323c]"
-                                : "border-[#fde68a] bg-[#fffbeb] text-[#92400e]",
-                        )}
-                      >
-                        {cancelado
-                          ? "Cancelado"
-                          : recebido
-                            ? r.origem === "transferencia"
-                              ? "Transferida"
-                              : "Recebido"
-                            : parcial
-                              ? "Parcial"
-                              : inadimplente
-                              ? "Inadimplente"
-                              : r.origem === "transferencia"
-                                ? "A transferir"
-                                : "Em aberto"}
-                      </span>
-                      {inadimplente && (
-                        <span className="whitespace-nowrap text-[10.5px] font-bold text-[#b3323c]">
-                          {diasDeAtraso(r.data_vencimento)}{" "}
-                          {diasDeAtraso(r.data_vencimento) === 1
-                            ? "dia de atraso"
-                            : "dias de atraso"}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      {!recebido && !cancelado && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            abrirBaixa(r);
-                          }}
-                          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md bg-emerald-700 px-2.5 py-1.5 text-[11.5px] font-semibold text-white transition-colors hover:bg-emerald-800"
-                        >
-                          <Banknote className="h-3.5 w-3.5" />
-                          Dar baixa
-                        </button>
-                      )}
-                      {(recebido || parcial) && (
-                        // Simetria com Títulos a Pagar (31/08/2026): a linha
-                        // com baixa abre as baixas registradas, e é lá dentro
-                        // que moram o estorno e o cancelamento, em dois
-                        // tempos. Conta e centro de custo saíram daqui em
-                        // 08/09/2026 — ocupavam meia tabela para repetir o
-                        // que o olho já mostra.
-                        <button
-                          type="button"
-                          title="Ver as baixas registradas — estornar ou cancelar, se preciso"
-                          aria-label="Ver as baixas registradas"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setErro(null);
-                            setConferindo(r);
-                          }}
-                          className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
-                        >
-                          <Eye className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                  <td className="relative w-0 p-0">
-                    {/* Na calha: o ⓘ da nota, ou a lixeira do título em
-                        aberto que não vem de nota — nunca os dois, e a
-                        tabela não alarga. */}
-                    {r.origem !== "nf" && !recebido && !cancelado && r.baixas.length === 0 && (
-                      <button
-                        type="button"
-                        title="Excluir este título (criado por engano)"
-                        aria-label="Excluir título"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setErro(null);
-                          setExcluindo(r);
-                        }}
-                        className="absolute left-3 top-1/2 inline-flex h-[30px] w-[30px] -translate-y-1/2 items-center justify-center rounded-full border border-border bg-white text-muted-foreground shadow-sm transition-colors hover:border-california-red hover:text-california-red"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                    {r.origem === "nf" && (
-                    <BotaoInfo
-                      className="absolute left-3 top-1/2 h-[30px] w-[30px] -translate-y-1/2 shadow-sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setInfo(infoDoTitulo(r));
-                      }}
-                    />
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-      </div>
+      <PlanilhaDeTitulos<Linha>
+        linhas={colunas.visiveis}
+        contaId={null}
+        hoje={hoje}
+        colunaStatus
+        titulo={(chave) => colunas.titulo(chave)}
+        cabecalhoDaSelecao={<CaixaDoCabecalho {...selecao.cabecalho} />}
+        caixa={(l) => {
+          const chaveLote = chaveDoLote(tituloDe(l));
+          const motivoLote = motivoForaDoLote(tituloDe(l)) ?? selecao.foraDaOrigem(chaveLote);
+          return (
+            <span title={motivoLote ?? undefined}>
+              <CaixaDaLinha
+                marcado={selecao.marcado(chaveLote)}
+                onAlternar={() => selecao.alternar(chaveLote)}
+                disponivel={motivoLote === null}
+                motivo={motivoLote ?? undefined}
+              />
+            </span>
+          );
+        }}
+        onBaixar={(l) => abrirBaixa(tituloDe(l))}
+        onEditarData={(l) => {
+          setErro(null);
+          setEditando(tituloDe(l));
+        }}
+        onVerBaixas={(l) => {
+          setErro(null);
+          setConferindo(tituloDe(l));
+        }}
+        detalhes={(l) => {
+          const r = tituloDe(l);
+          // As ações que moravam soltas na linha (decisão 195): o `i` da nota,
+          // o olho do parcial e a lixeira do título criado por engano.
+          const acoes: AcaoDoDetalhe[] = [];
+          if (r.origem === "nf") {
+            acoes.push({ rotulo: "Informações de faturamento e cobrança", icone: Info, onClick: () => setInfo(infoDoTitulo(r)) });
+          }
+          if (ehParcial(r)) {
+            acoes.push({
+              rotulo: "Ver as baixas",
+              icone: Eye,
+              onClick: () => {
+                setErro(null);
+                setConferindo(r);
+              },
+            });
+          }
+          if (r.origem !== "nf" && r.status === "em_aberto" && r.baixas.length === 0) {
+            acoes.push({
+              rotulo: r.origem === "transferencia" ? "Excluir a transferência" : "Excluir este título",
+              icone: Trash2,
+              perigo: true,
+              onClick: () => {
+                setErro(null);
+                setExcluindo(r);
+              },
+            });
+          }
+          return (
+            <BotaoDetalhes
+              chave={l.chave}
+              titulo={l.descricao}
+              recebimento={l.entra}
+              job={l.job}
+              vencimentoDiferente={l.vencimento && l.vencimento !== l.dataPrevista ? l.vencimento : null}
+              retencoes={l.valor.retencoes}
+              rateio={l.rateio}
+              acoes={acoes}
+            />
+          );
+        }}
+        vazio={
+          rows.length === 0
+            ? "Nenhum título a receber ainda. Emita uma NF na aba Faturamento."
+            : doTopo.length === 0
+              ? "Nenhum título com esse status."
+              : "Nenhum título com esse filtro."
+        }
+      />
 
       {/* Baixa em lote: a barra da seleção, logo abaixo da tabela (ela gruda
           no pé da tela enquanto a lista rola), e o diálogo — a data e a
@@ -1099,6 +756,9 @@ export function TitulosList({
         contas={contas}
         tipos={tipos}
         subtipos={subtipos}
+        // Recebimento não vai para o cartão (decisão 197).
+        cartoes={[]}
+        faturas={[]}
         onConcluido={(mensagem) => {
           selecao.limpar();
           setToast(mensagem);

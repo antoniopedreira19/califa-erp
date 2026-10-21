@@ -2,14 +2,15 @@
  * O `alvo` das duas baixas reais, para a aba Títulos da conciliação abrir a
  * MESMA baixa que as listas abrem (02/10/2026).
  *
- * CÓPIA FIEL da montagem de `titulos-pagar-list.tsx` (alvoBaixa,
- * motivoSemParcialDa, faltaPagar) e de `titulos-list.tsx` (alvoBaixa,
- * faltaReceber). As listas ainda montam o delas: quando passarem a importar
- * daqui, a cópia some. Até lá, mudou uma, mude a outra.
+ * O `alvo` a pagar é o de Contas a Pagar também: `titulos-pagar-list.tsx`
+ * importa `alvoDaBaixaAPagar` daqui desde a decisão 196. O a receber ainda é
+ * CÓPIA FIEL da montagem de `titulos-list.tsx` (alvoBaixa, faltaReceber):
+ * mudou uma, mude a outra.
  *
  * O mesmo vale para a baixa em lote: quem entra no lote, por que não, e o
- * título no formato do lote são cópias de `chaveDoLote`, `motivoForaDoLote`
- * e `paraOLote` das duas listas.
+ * título no formato do lote. A pagar, Contas a Pagar importa daqui; a
+ * receber, é cópia de `chaveDoLote`, `motivoForaDoLote` e `paraOLote` de
+ * `titulos-list.tsx`.
  */
 
 import type { BaixaTituloAlvo } from "@/components/financeiro/baixa-titulo-dialog";
@@ -85,7 +86,10 @@ export function alvoDaBaixaAPagar(
                   ? "Folha de pagamento"
                   : "Lançamento avulso",
     parcela: `${baixando.parcela_numero}/${baixando.parcela_total}`,
-    vencimento: baixando.data_pagamento,
+    // As três datas com os nomes certos (decisão 196): o vencimento do
+    // documento e a data prevista, que o lápis repactua.
+    vencimento: baixando.venc_original ?? baixando.data_pagamento,
+    dataPrevista: baixando.data_pagamento,
     chave: `${baixando.origem}-${baixando.id}-${baixando.baixas.length}`,
     valor: baixando.valor,
     aberto: faltaPagar(baixando),
@@ -109,6 +113,10 @@ export function alvoDaBaixaAPagar(
           }
         : { mostra: false },
     ultimaRetencao: baixando.parte_id ? ultimasRetencoes[baixando.parte_id] ?? null : null,
+    // Juros e multa no boleto (decisão 196): PP, avulso e recorrência. A
+    // folha, o desembolso, a fatura e a devolução de verba não.
+    aceitaJuros:
+      baixando.origem === "pp" || baixando.origem === "avulso" || baixando.origem === "recorrencia",
     empresaId: baixando.empresa_id,
     planoContaTipoId: baixando.plano_conta_tipo_id,
     planoContaSubtipoId: baixando.plano_conta_subtipo_id,
@@ -227,10 +235,10 @@ export function chaveDoLoteAPagar(r: TituloAPagar): string {
  * parcial entra pelo restante). Entram PP, avulso e recorrência em
  * aberto (decisão aprovada pelo Tiago em 02/10/2026) e, desde 05/10/2026,
  * a folha (revisão da decisão 140); fatura de cartão e devolução de verba
- * têm baixa própria, o previsto no cartão vira item da fatura na baixa
- * (decisão 093), e o desembolso tem o centro de custo escolhido na baixa —
- * todos um de cada vez. A origem já marcada barra as outras na seleção
- * (`useSelecao`), não aqui.
+ * têm baixa própria, e o desembolso tem o centro de custo escolhido na
+ * baixa — todos um de cada vez. O previsto no cartão entra desde a decisão
+ * 197: o lote também baixa no cartão, numa fatura só. A origem já marcada
+ * barra as outras na seleção (`useSelecao`), não aqui.
  */
 export function motivoForaDoLoteAPagar(r: TituloAPagar): string | null {
   if (r.status === "pago") return "Título já pago.";
@@ -243,9 +251,6 @@ export function motivoForaDoLoteAPagar(r: TituloAPagar): string | null {
       return "Desembolso: dê baixa nele sozinho, para escolher o centro de custo.";
   }
   if (!origemNoLote(r.origem)) return "Este título não entra na baixa em lote: dê baixa nele sozinho.";
-  if (r.forma_pagamento === "cartao_credito" || r.forma_prevista === "cartao_credito") {
-    return "Previsto no cartão de crédito: dê baixa nele sozinho, para o item entrar na fatura.";
-  }
   // Decisão 137: para onde vai o dinheiro aparece só na baixa do título.
   if (r.fora_do_cadastro) {
     return "Pagamento fora do cadastro: dê baixa nele sozinho, para ver para onde vai o dinheiro.";
@@ -272,6 +277,14 @@ export function paraOLoteAPagar(r: TituloAPagar): TituloParaLote | null {
     contraparte: r.fornecedor_nome || "—",
     vencimento: r.data_pagamento,
     aberto: faltaPagar(r),
+    // O lote no cartão (decisão 197): a folha não se paga com cartão, e o
+    // restante de uma parcial segue pela conta.
+    semCartao:
+      r.origem === "folha"
+        ? "Folha não se paga com cartão de crédito."
+        : r.baixas.length > 0
+          ? "Título com baixa parcial não vai para o cartão: o restante segue pela conta."
+          : null,
     // Avulso, recorrência e folha já têm o par; a PP tem só o tipo
     // (decisão 068) e usa o subtipo do lote.
     centroDeCusto:
@@ -284,6 +297,9 @@ export function paraOLoteAPagar(r: TituloAPagar): TituloParaLote | null {
 // ---------------------------------------------------------------------------
 // Baixa em lote — a receber (cópia de `titulos-list.tsx`)
 // ---------------------------------------------------------------------------
+
+/** O recebimento nunca vai para o cartão (decisão 197). */
+const SEM_CARTAO_NO_RECEBIMENTO = "Recebimento não entra na fatura do cartão.";
 
 /** A chave do título na seleção e no lote — única entre as origens. */
 export function chaveDoLoteAReceber(r: TituloAReceber): string {
@@ -325,6 +341,7 @@ export function paraOLoteAReceber(r: TituloAReceber): TituloParaLote | null {
       contraparte: r.contraparte_nome,
       vencimento: r.data_vencimento,
       aberto: faltaReceber(r),
+      semCartao: SEM_CARTAO_NO_RECEBIMENTO,
       // A nota não tem centro de custo: usa o do lote.
       centroDeCusto: null,
     };
@@ -339,6 +356,7 @@ export function paraOLoteAReceber(r: TituloAReceber): TituloParaLote | null {
       contraparte: r.contraparte_nome,
       vencimento: r.data_vencimento,
       aberto: faltaReceber(r),
+      semCartao: SEM_CARTAO_NO_RECEBIMENTO,
       // O recebimento avulso nasce com o centro de custo (decisão 124).
       centroDeCusto:
         r.plano_conta_tipo_id && r.plano_conta_subtipo_id

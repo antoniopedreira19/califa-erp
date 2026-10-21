@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { type SessionContext } from "@/lib/types";
 import { createClient } from "@/lib/supabase/server";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import {
   impedimentosDosJobs,
   podeEncerrar,
@@ -65,20 +66,26 @@ async function faltaReceberDosTitulos(
   return total - baixado;
 }
 
+/** Data de calendário em ISO, montada em UTC: fuso nenhum muda o dia. */
+const isoDoDia = (ano: number, mes: number, dia: number) =>
+  new Date(Date.UTC(ano, mes - 1, dia)).toISOString().slice(0, 10);
+
+/**
+ * Ano, mês e dia de hoje em Brasília (21/10/2026). Na Vercel (UTC), depois
+ * das 21h o "hoje" já seria amanhã, e no último dia do mês, o mês seguinte.
+ */
+const hojeEmPartes = () => hojeEmSaoPauloIso().split("-").map(Number);
+
 function limitesDoMes(): { primeiro: string; ultimo: string } {
-  const hoje = new Date();
-  const p = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
-  const u = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0);
-  const iso = (d: Date) => d.toISOString().slice(0, 10);
-  return { primeiro: iso(p), ultimo: iso(u) };
+  const [ano, mes] = hojeEmPartes();
+  return { primeiro: isoDoDia(ano, mes, 1), ultimo: isoDoDia(ano, mes + 1, 0) };
 }
 
-const hojeISO = () => new Date().toISOString().slice(0, 10);
+const hojeISO = () => hojeEmSaoPauloIso();
 
 function diasNoFuturo(dias: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() + dias);
-  return d.toISOString().slice(0, 10);
+  const [ano, mes, dia] = hojeEmPartes();
+  return isoDoDia(ano, mes, dia + dias);
 }
 
 /**

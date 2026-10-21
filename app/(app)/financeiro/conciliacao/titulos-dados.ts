@@ -13,9 +13,10 @@
  *   inclusive) — os não cartão. O item no cartão espera a fatura, e a
  *   fatura fechada já é um título daqui;
  * - **a receber**: o que Títulos a Receber mostra como "Em aberto"
- *   (inadimplentes e parciais inclusive), menos a transferência entre
- *   contas: as duas contas dela já estão no título, e a baixa não escolhe
- *   conta.
+ *   (inadimplentes e parciais inclusive);
+ * - **transferências** "A transferir" (decisão 195): na planilha nova elas
+ *   entram, com o chip Transferências, porque mexem no saldo previsto das
+ *   duas contas. A baixa delas é o "Registrar" de Contas a Receber.
  *
  * Diferenças de propósito em relação às páginas, todas só de recorte:
  * - sem o filtro de empresa do cabeçalho de Contas a Pagar — a conciliação
@@ -63,6 +64,7 @@ import {
   SELECT_BAIXA_DA_AVULSA_A_RECEBER,
   SELECT_BAIXA_DA_NOTA,
   SELECT_TITULO_A_RECEBER,
+  SELECT_TRANSFERENCIA,
   consultarJobsDasNotas,
   listaDeClientes,
   listaDeFornecedores,
@@ -71,13 +73,23 @@ import {
 } from "../contas-a-receber/dados-dos-titulos";
 import type { TituloRow as TituloAReceber } from "../contas-a-receber/titulos-list";
 import { lerImpostos, type ImpostoDaLista } from "../fiscal/impostos/dados";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
+import { carregarFaturasNaBaixa } from "@/lib/data/faturas-na-baixa";
+import type { FaturaDoCartaoNaBaixa } from "@/lib/financeiro/fatura-do-cartao";
+import { carregarExtrasDaPlanilha, type ExtrasDaPlanilha } from "@/lib/data/planilha-de-titulos";
+import { idsDaPlanilha } from "./linhas-da-aba";
 
 export interface DadosDaAbaTitulos {
+  /** O dia de hoje em Brasília: o vencido, o saldo previsto, os quadros. */
+  hoje: string;
   /** Os títulos a pagar em aberto (não cartão), no tipo da lista real. */
   aPagar: TituloAPagar[];
-  /** Os títulos a receber em aberto (sem transferência), no tipo da lista
-   *  real. */
+  /** Os títulos a receber em aberto e as transferências a transferir, no
+   *  tipo da lista real. */
   aReceber: TituloAReceber[];
+  /** Regional, retenção da aprovação, centro da nota e itens da fatura
+   *  (decisão 195). */
+  extras: ExtrasDaPlanilha;
   /** Os impostos a pagar em aberto (módulo fiscal), como a aba Impostos a
    *  Pagar os lê. */
   impostos: ImpostoDaLista[];
@@ -94,8 +106,13 @@ export interface DadosDaAbaTitulos {
   tipos: PlanoContaTipo[];
   subtipos: PlanoContaSubtipo[];
   cartoes: CartaoOption[];
+  /** As faturas recentes dos cartões, para o campo Fatura (decisão 197). */
+  faturasNaBaixa: FaturaDoCartaoNaBaixa[];
   ultimasRetencoesPagar: Record<string, UltimaRetencao>;
   ultimasRetencoesReceber: Record<string, UltimaRetencao>;
+  /** Fornecedor ou cliente → CPF/CNPJ só com os dígitos: o motor da aba
+   *  Banco reconhece o CNPJ no histórico do banco (decisão 199). */
+  documentoDaParte: Record<string, string>;
 }
 
 export async function carregarTitulosDaConciliacao(
@@ -104,7 +121,7 @@ export async function carregarTitulosDaConciliacao(
 ): Promise<DadosDaAbaTitulos> {
   // O "hoje" das avulsas a receber sem data, como a página de Contas a
   // Receber o calcula.
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeEmSaoPauloIso();
 
   // Todas as leituras em paralelo — regra de performance do projeto.
   const [
@@ -130,6 +147,8 @@ export async function carregarTitulosDaConciliacao(
     cartoesRes,
     empresasRes,
     impostosLidos,
+    transferenciasRes,
+    faturasNaBaixa,
   ] = await Promise.all([
     // ---- A pagar ----
     // Só aprovada e paga viram título; a paga entra porque uma parcela
@@ -219,7 +238,7 @@ export async function carregarTitulosDaConciliacao(
       .not("conta_avulsa_id", "is", null),
     supabase
       .from("clientes")
-      .select("id, nome_fantasia, razao_social")
+      .select("id, nome_fantasia, razao_social, cnpj")
       .eq("tenant_id", tenantId)
       .eq("status", "ativo")
       .order("nome_fantasia"),
@@ -266,6 +285,15 @@ export async function carregarTitulosDaConciliacao(
       .eq("tenant_id", tenantId),
     // ---- Impostos a pagar em aberto (módulo fiscal) ----
     lerImpostos(supabase, tenantId, { soEmAberto: true }),
+    // ---- Transferências a transferir (decisão 195) ----
+    supabase
+      .from("transferencias_contas")
+      .select(SELECT_TRANSFERENCIA)
+      .eq("tenant_id", tenantId)
+      .eq("status", "a_transferir")
+      .order("data_prevista", { ascending: true }),
+    // ---- As faturas do campo Fatura da baixa no cartão (decisão 197) ----
+    carregarFaturasNaBaixa(supabase, tenantId, hoje),
   ]);
 
   // ⚠️ O erro é LIDO: uma consulta quebrada faria a aba dizer "nenhum
@@ -292,6 +320,7 @@ export async function carregarTitulosDaConciliacao(
     ["subtipos", subtiposRes],
     ["cartoes", cartoesRes],
     ["empresas", empresasRes],
+    ["transferencias", transferenciasRes],
   ] as const) {
     if (res.error) console.error(`[conciliacao.titulos.${nome}]`, res.error.message);
   }
@@ -320,7 +349,7 @@ export async function carregarTitulosDaConciliacao(
     estornos: estornosRes.data,
     avulsas: avulsasReceberRes.data,
     baixasAvulsas: baixasAvulsasReceberRes.data,
-    transferencias: [],
+    transferencias: transferenciasRes.data,
     contas,
     clientes: listaDeClientes(clientesRes.data),
     fornecedores: listaDeFornecedores(fornecedoresRes.data),
@@ -328,6 +357,10 @@ export async function carregarTitulosDaConciliacao(
     apenasVencidas: false,
     hoje,
   }).filter((t) => t.status === "em_aberto");
+
+  // O que a planilha mostra e as listas não liam: uma leitura por fonte,
+  // só dos títulos que ficaram.
+  const extras = await carregarExtrasDaPlanilha(supabase, tenantId, idsDaPlanilha(aPagar, aReceber));
 
   const retencoes = (ultimasRetencoesRes.data ?? []) as Array<{ natureza: string }>;
 
@@ -338,6 +371,15 @@ export async function carregarTitulosDaConciliacao(
     nome_fantasia: string | null;
   }>) {
     empresas[e.id] = e.nome_fantasia ?? e.razao_social ?? "—";
+  }
+
+  const documentoDaParte: Record<string, string> = {};
+  for (const p of [
+    ...((fornecedoresRes.data ?? []) as Array<{ id: string; cpf_cnpj: string | null }>).map((f) => [f.id, f.cpf_cnpj] as const),
+    ...((clientesRes.data ?? []) as Array<{ id: string; cnpj: string | null }>).map((c) => [c.id, c.cnpj] as const),
+  ]) {
+    const digitos = (p[1] ?? "").replace(/\D/g, "");
+    if (digitos) documentoDaParte[p[0]] = digitos;
   }
 
   const cartoes: CartaoOption[] = (
@@ -363,8 +405,10 @@ export async function carregarTitulosDaConciliacao(
   }));
 
   return {
+    hoje,
     aPagar,
     aReceber,
+    extras,
     impostos: impostosLidos.impostos,
     nomesDasPJs: Object.fromEntries(impostosLidos.pjs.map((p) => [p.id, p.nome])),
     tenantId,
@@ -373,11 +417,13 @@ export async function carregarTitulosDaConciliacao(
     tipos,
     subtipos: subtiposRes.data ?? [],
     cartoes,
+    faturasNaBaixa,
     ultimasRetencoesPagar: mapearUltimasRetencoes(
       retencoes.filter((r) => r.natureza === "saida"),
     ),
     ultimasRetencoesReceber: mapearUltimasRetencoes(
       retencoes.filter((r) => r.natureza === "entrada"),
     ),
+    documentoDaParte,
   };
 }

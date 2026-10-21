@@ -184,6 +184,8 @@ export function BaixaImpostoDialog({
   nomesDasPJs,
   tenantId,
   contaInicial,
+  dataInicial,
+  multaInicial,
   onClose,
   onBaixado,
 }: {
@@ -195,15 +197,19 @@ export function BaixaImpostoDialog({
   tenantId: string;
   /** A conta já escolhida (a da conciliação aberta). */
   contaInicial?: string | null;
+  /** A baixa aberta pela linha do extrato do banco (decisão 200): a data
+   *  dela e a multa e os juros que o banco cobrou a mais. */
+  dataInicial?: string | null;
+  multaInicial?: number;
   onClose: () => void;
   onBaixado: (feita: BaixaDeImpostoFeita) => void;
 }) {
   const [pending, startTransition] = React.useTransition();
-  const [data, setData] = React.useState<string>(hojeIso);
+  const [data, setData] = React.useState<string>(() => dataInicial ?? hojeIso());
   const [conta, setConta] = React.useState<string>(
     contaInicial && contas.some((c) => c.id === contaInicial) ? contaInicial : "",
   );
-  const [multa, setMulta] = React.useState(0);
+  const [multa, setMulta] = React.useState(multaInicial ?? 0);
   const guia = useCampoDeAnexo(t.guia_path);
   const comprovante = useCampoDeAnexo(null);
   const [erro, setErro] = React.useState<string | null>(null);

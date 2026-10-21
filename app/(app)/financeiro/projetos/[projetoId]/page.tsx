@@ -19,6 +19,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { ResumoResultado } from "@/components/resumo-resultado";
 import { FluxoCaixaJobs } from "@/components/financeiro/fluxo-caixa-jobs";
 import { listarContasBancarias } from "@/lib/data/contas-bancarias";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { carregarPlanilhasDosJobs } from "@/app/(app)/jobs/projeto/[projetoId]/carregar-planilhas";
 import { PlanilhasDoProjeto } from "@/app/(app)/jobs/projeto/[projetoId]/planilhas-do-projeto";
 import { STATUS_NA_LISTA } from "../../abertura-de-job/dados-abertos";
@@ -75,7 +76,7 @@ export default async function ProjetoNoFinanceiroPage({
 
   const supabase = createClient();
   const tenantId = session.activeTenant.id;
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeEmSaoPauloIso();
 
   const [projetoRes, jobsRes] = await Promise.all([
     supabase

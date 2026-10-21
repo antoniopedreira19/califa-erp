@@ -22,6 +22,7 @@ import type { LancamentoLinha, OrigemDaTransacao } from "@/lib/calculos/saldo-co
 export const SELECT_LANCAMENTO_LINHA = `id, data_movimento, descricao, natureza, valor, origem, created_at,
          papel_na_fatura, fatura_cartao_id,
          conta_avulsa_id, pedido_compra_parcela_id, desembolso_parcela_id,
+         juros_de_lancamento_id,
          fornecedores(nome, razao_social),
          jobs(id, codigo, regional:regionais(nome)),
          empresas(nome_fantasia, razao_social),
@@ -79,6 +80,7 @@ export type LancamentoRaw = {
   conta_avulsa_id: string | null;
   pedido_compra_parcela_id: string | null;
   desembolso_parcela_id: string | null;
+  juros_de_lancamento_id: string | null;
   fornecedores: { nome: string | null; razao_social: string | null } | null;
   jobs: { id: string; codigo: string; regional: { nome: string } | null } | null;
   empresas: { nome_fantasia: string | null; razao_social: string | null } | null;
@@ -120,6 +122,9 @@ export type LinhaSemSaldo = Omit<LancamentoLinha, "credito" | "debito" | "saldo"
   conta_avulsa_id: string | null;
   pedido_compra_parcela_id: string | null;
   desembolso_parcela_id: string | null;
+  /** Os juros e a multa de uma baixa (origem `juros_baixa`, decisão 196):
+   *  a baixa que eles acompanham. O Extrato os junta na linha dela. */
+  juros_de_lancamento_id: string | null;
 };
 
 /**
@@ -243,6 +248,7 @@ export async function montarLinhasDeLancamentos(
       papel_na_fatura: r.papel_na_fatura,
       fatura_cartao_id: r.fatura_cartao_id,
       conta_avulsa_id: r.conta_avulsa_id,
+      juros_de_lancamento_id: r.juros_de_lancamento_id,
       pedido_compra_parcela_id: r.pedido_compra_parcela_id,
       desembolso_parcela_id: r.desembolso_parcela_id,
       rateio,

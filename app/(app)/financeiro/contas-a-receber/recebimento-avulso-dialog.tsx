@@ -186,6 +186,8 @@ export function RecebimentoAvulsoDialog({
   contas,
   rendimentosLancados,
   onCriado,
+  tipoInicial = "recebimento_avulso",
+  inicial,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -201,6 +203,12 @@ export function RecebimentoAvulsoDialog({
    *  seguida (o "Criar e dar baixa" do recebimento avulso e do
    *  rendimento); `mensagem` é o aviso para quando não abre. */
   onCriado: (id: string, abrirBaixa: boolean, mensagem: string) => void;
+  /** O tipo com que o formulário abre (o menu "Novo lançamento" da
+   *  conciliação abre o rendimento e a transferência direto, decisão 195). */
+  tipoInicial?: TipoDoRecebimentoAvulso;
+  /** O "Lançar avulso" da conciliação com o banco (decisão 200): o
+   *  recebimento avulso abre com a descrição, o valor e a data da linha. */
+  inicial?: { descricao: string; valor: number; data: string };
 }) {
   const [pending, startTransition] = React.useTransition();
   const [tipo, setTipo] = React.useState<TipoDoRecebimentoAvulso>("recebimento_avulso");
@@ -236,8 +244,13 @@ export function RecebimentoAvulsoDialog({
 
   React.useEffect(() => {
     if (!open) return;
-    setTipo("recebimento_avulso");
+    setTipo(tipoInicial);
     limpar();
+    if (inicial) {
+      setDescricao(inicial.descricao);
+      setCentavos(String(Math.round(inicial.valor * 100)));
+      setDataPrevista(inicial.data);
+    }
     setEmpresaId(empresas.length === 1 ? empresas[0].id : "");
     setRateio(RATEIO_INICIAL);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -517,6 +530,7 @@ export function RecebimentoAvulsoDialog({
                 <Campo rotulo="Valor" obrigatorio>
                   <MoedaInput
                     key={`valor-${geracao}`}
+                    defaultValue={centavos ? (Number(centavos) / 100).toFixed(2) : ""}
                     onCentavosChange={(c) => {
                       setCentavos(c);
                       setErro(null);

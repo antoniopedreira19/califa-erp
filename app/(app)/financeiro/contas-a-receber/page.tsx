@@ -41,6 +41,9 @@ import {
 } from "./dados-dos-titulos";
 import { carregarCadastroFiscal } from "@/lib/fiscal/cadastro";
 import { montarFiscalDoFaturar } from "@/lib/fiscal/faturar";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
+import { carregarExtrasDaPlanilha } from "@/lib/data/planilha-de-titulos";
+import { idsDaPlanilha } from "../conciliacao/linhas-da-aba";
 
 export const dynamic = "force-dynamic";
 
@@ -56,7 +59,7 @@ export default async function ContasReceberPage({
 
   const supabase = createClient();
   const tenantId = session.activeTenant.id;
-  const hoje = new Date().toISOString().slice(0, 10);
+  const hoje = hojeEmSaoPauloIso();
 
   // Todas as leituras em paralelo — regra de performance do projeto.
   const [
@@ -685,6 +688,13 @@ export default async function ContasReceberPage({
     apenasVencidas: searchParams?.filtro === "vencidas",
     hoje,
   });
+  // A planilha de títulos (decisão 195): regional e centro da nota, lidos
+  // à parte, só dos títulos que a lista tem.
+  const extrasDaPlanilha = await carregarExtrasDaPlanilha(
+    supabase,
+    session.activeTenant.id,
+    idsDaPlanilha([], linhasTitulos),
+  );
   // Um rendimento por conta e por mês: o diálogo avisa antes de o banco
   // recusar.
   const rendimentosLancados = ((avulsasReceberRes.data ?? []) as unknown as Array<{
@@ -824,6 +834,13 @@ export default async function ContasReceberPage({
             tipos={tiposRes.data ?? []}
             subtipos={subtiposRes.data ?? []}
             infoPorJob={infoPorJob}
+            hoje={hoje}
+            nomesDasEmpresas={Object.fromEntries(
+              ((empresasRes.data ?? []) as Array<{ id: string; razao_social: string | null; nome_fantasia: string | null }>).map(
+                (e) => [e.id, e.nome_fantasia ?? e.razao_social ?? "—"],
+              ),
+            )}
+            extras={extrasDaPlanilha}
           />
         }
         titulosCount={linhasTitulos.filter((t) => t.status === "em_aberto").length}

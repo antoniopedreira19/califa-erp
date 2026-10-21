@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 
 /**
  * Uma conta bancária como o seletor da abertura de job precisa dela:
@@ -30,7 +31,7 @@ export interface ContaBancariaOpcao {
  */
 export async function listarContasBancarias(
   tenantId: string,
-  hoje: string = new Date().toISOString().slice(0, 10),
+  hoje: string = hojeEmSaoPauloIso(),
 ): Promise<ContaBancariaOpcao[]> {
   const supabase = createClient();
 

@@ -9,6 +9,7 @@ import { calcularPrazosDoJob } from "@/lib/calculos/prazos-do-job";
 import { notasEmitidasDosJobs } from "@/lib/data/faturamento-por-job";
 import { carregarCronogramaDeImpostos } from "@/lib/fiscal/fluxo-fiscal-dados";
 import { saidasDoCronogramaDeImpostos } from "@/lib/fiscal/fluxo-fiscal";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 
 /**
  * As linhas de fluxo de caixa de um conjunto de jobs.
@@ -59,8 +60,8 @@ export async function carregarLinhasDeFluxo(
   }
 
   // Vencida, a previsão é lida em hoje + 1, como a de recebimento da view
-  // (`CURRENT_DATE + 1`, em UTC).
-  const hoje = new Date().toISOString().slice(0, 10);
+  // (`hoje_em_sao_paulo() + 1`). Os dois lados usam o dia de Brasília.
+  const hoje = hojeEmSaoPauloIso();
   const impostos = saidasDoCronogramaDeImpostos(cronograma, hoje).map((s) => ({
     job_id: s.job_id,
     conta_bancaria_id: s.conta_bancaria_id,
@@ -126,7 +127,7 @@ function soDepoisDaBaixa(classe: string, origemTipo: string): boolean {
 export async function carregarFluxoDoJob(
   tenantId: string,
   jobId: string,
-  hoje: string = new Date().toISOString().slice(0, 10),
+  hoje: string = hojeEmSaoPauloIso(),
 ): Promise<MatrizFluxo> {
   const linhas = await carregarLinhasDeFluxo(tenantId, [jobId]);
   return montarMatrizFluxo(linhas, hoje);

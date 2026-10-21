@@ -31,6 +31,7 @@
 
 import * as React from "react";
 import { format } from "date-fns";
+import { conciliacaoDaBaixa } from "@/app/(app)/financeiro/conciliacao/actions-conciliacao";
 import {
   AlertCircle,
   AlertTriangle,
@@ -596,6 +597,11 @@ function FormEstorno({
   );
 }
 
+function formatarDia(iso: string): string {
+  const [a, m, d] = iso.slice(0, 10).split("-");
+  return `${d}/${m}/${a}`;
+}
+
 /** O aviso e o motivo do cancelamento, dentro do cartão da baixa. */
 function FormCancelamento({
   ehReceber,
@@ -620,6 +626,19 @@ function FormCancelamento({
   const [motivo, setMotivo] = React.useState("");
   const motivoOk = motivo.trim().length >= MOTIVO_MINIMO;
   const valor = <b className="font-mono">{formatCurrency(baixa.movimentado, "BRL")}</b>;
+  // A baixa conciliada com a linha do extrato do banco (M3.8, decisão 200):
+  // cancelar desfaz a conciliação, e o aviso diz qual linha volta.
+  const [conciliada, setConciliada] = React.useState<{ data: string; valor: number } | null>(null);
+  React.useEffect(() => {
+    if (!baixa.lancamentoId) return;
+    let vivo = true;
+    conciliacaoDaBaixa(baixa.lancamentoId)
+      .then((c) => vivo && setConciliada(c))
+      .catch(() => undefined);
+    return () => {
+      vivo = false;
+    };
+  }, [baixa.lancamentoId]);
   const nEstornos = baixa.estornos.length;
   const temRetidos = baixa.retencoes.length > 0;
   const voltaPara = sobraOutraBaixa ? "Parcial" : ehReceber ? "Em aberto" : "A pagar";
@@ -667,6 +686,13 @@ function FormCancelamento({
           Fica no log de auditoria quem cancelou, quando e por quê.
         </span>
       </p>
+      {conciliada && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12px] leading-relaxed text-amber-900">
+          Esta baixa está conciliada com a linha do extrato do banco de {formatarDia(conciliada.data)} (
+          {formatCurrency(conciliada.valor, "BRL")}). Cancelar desfaz a conciliação: a linha volta para a
+          Conciliação automática da conta e não se resolve mais sozinha.
+        </p>
+      )}
       <label className="text-xs font-semibold">
         Motivo do cancelamento <span className="text-california-red">*</span>
       </label>

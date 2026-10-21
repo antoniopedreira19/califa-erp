@@ -1,0 +1,65 @@
+/* Casca do protótipo: só a barra de controles e o lado a lado são do
+   protótipo. Dentro da janela, tudo é o CSS do ERP (Tailwind com a
+   configuração do repositório). O ERP só tem tema claro; o protótipo
+   também. */
+:root {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Fraunces", "Inter", serif;
+  --pg-fundo: #e9e7e4;
+  --pg-barra: #1f1d1c;
+  --pg-barra-texto: #f4f2ef;
+  --pg-barra-suave: #a8a29c;
+  --pg-seg: #2e2b29;
+  --pg-seg-borda: #45413e;
+  --pg-ativo: #e74b56;
+  --pg-destaque: #7c3aed;
+  --pg-nota: #f5f3ff;
+  --pg-nota-texto: #3b2a6b;
+  --pg-janela: #fafafa;
+  color-scheme: light;
+}
+html, body { background: var(--pg-fundo); }
+body { margin: 0; font-family: var(--font-sans); }
+
+.pg-tool {
+  position: sticky;
+  top: env(safe-area-inset-top, 0px);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--pg-barra);
+  color: var(--pg-barra-texto);
+  padding-block: 10px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+}
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--pg-barra); }
+.pg-linha { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.pg-titulo { font-weight: 700; font-size: 13px; letter-spacing: 0.01em; margin-right: 6px; }
+.pg-rotulo { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--pg-barra-suave); font-weight: 600; }
+.pg-seg { display: inline-flex; flex-wrap: wrap; gap: 2px; background: var(--pg-seg); border: 1px solid var(--pg-seg-borda); border-radius: 10px; padding: 2px; }
+.pg-seg button { border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: 600; color: var(--pg-barra-suave); white-space: nowrap; }
+.pg-seg button:hover { color: var(--pg-barra-texto); }
+.pg-seg button.ativo { background: var(--pg-ativo); color: #fff; }
+.pg-seg button.destaque:not(.ativo) { color: #c4b5fd; }
+.pg-seg button:focus-visible, .pg-botao:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+.pg-botao { border: 1px solid var(--pg-seg-borda); border-radius: 8px; padding: 5px 10px; font-size: 12px; font-weight: 600; color: var(--pg-barra-texto); }
+.pg-botao:hover { background: var(--pg-seg); }
+.pg-notas { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 8px; }
+.pg-nota { background: var(--pg-nota); color: var(--pg-nota-texto); border-radius: 10px; padding: 8px 12px; font-size: 12px; line-height: 1.5; max-height: 168px; overflow-y: auto; }
+.pg-nota strong { font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em; }
+.pg-nota ul { margin: 4px 0 0; padding-left: 16px; list-style: disc; }
+.pg-nota li { margin: 1px 0; }
+
+.pg-janela { display: flex; min-height: 100vh; background: var(--pg-janela); }
+.pg-lado { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 10px; padding-left: max(10px, env(safe-area-inset-left, 0px)); padding-right: max(10px, env(safe-area-inset-right, 0px)); }
+.pg-painel { min-width: 0; background: var(--pg-janela); border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12); }
+.pg-painel-rotulo { position: sticky; top: 0; z-index: 5; background: #282828; color: #fff; font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; padding: 6px 14px; }
+@media (max-width: 900px) {
+  .pg-lado { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

@@ -3519,14 +3519,26 @@ export type OrigemLancamento =
   // A baixa de uma guia de imposto (módulo fiscal, entrega 2): uma linha
   // por parte do rateio, mais a multa e os juros, todas com
   // `imposto_a_pagar_id`. A conciliação as mostra como uma linha só.
-  | "imposto_baixa";
+  | "imposto_baixa"
+  // Os juros e a multa pagos numa baixa de PP ou de avulsa (decisão 196):
+  // um lançamento à parte, em 11 · Despesa com Juros, ligado à baixa por
+  // `juros_de_lancamento_id`. Guarda as chaves do documento, mas nunca o
+  // quita: toda soma do baixado filtra por `pp_baixa`/`avulsa_baixa`.
+  | "juros_baixa"
+  // O pagamento que o banco devolveu no mesmo dia (decisão 200): a saída e
+  // a devolução, fora do DRE, sem empresa e sem plano, como as pernas de
+  // uma transferência. Só a Conciliação automática grava.
+  | "devolucao_bancaria";
 
 export interface LancamentoFinanceiro {
   id: string;
   tenant_id: string;
   /** Nulo só na perna de transferência entre contas (decisão 124). */
   empresa_id: string | null;
-  regional_id: string;
+  /** Nulável no banco: a regional mora no job, no rateio do documento ou
+   *  na nota (decisão 069); o lançamento só a guarda quando não há outra
+   *  fonte. Corrigido em 21/10/2026 (decisão 195): o tipo dizia `string`. */
+  regional_id: string | null;
   conta_bancaria_id: string;
   data_movimento: string; // YYYY-MM-DD
   valor: string; // numeric — Number(...)
@@ -3577,8 +3589,135 @@ export interface LancamentoFinanceiro {
   transferencia_id: string | null;
   /** O imposto a pagar que esta linha paga (origem `imposto_baixa`). */
   imposto_a_pagar_id: string | null;
+  /** O título a receber que esta linha recebeu (origem `titulo_baixa`). */
+  titulo_receber_id: string | null;
+  /** A fatura do cartão de que a linha é item, ajuste ou pagamento
+   *  (decisão 093). */
+  fatura_cartao_id: string | null;
+  /** O papel na fatura: `item`, `ajuste`, `pagamento` ou `pagamento_estorno`.
+   *  Nulo fora do cartão. */
+  papel_na_fatura: string | null;
+  /** Só na origem `juros_baixa`: a baixa cujos juros e multa esta linha
+   *  paga (decisão 196). Cancelar a baixa apaga os juros junto. */
+  juros_de_lancamento_id: string | null;
+  /** A linha do extrato do banco a que este lançamento está ligado
+   *  (decisão 199): conciliado é ter a linha. Várias baixas podem ir numa
+   *  linha só (remessa, soma de títulos, guia com rateio, a baixa e os
+   *  juros dela). Só a aba Banco da Conciliação grava. */
+  extrato_linha_id: string | null;
   origem: OrigemLancamento;
   criado_por: string;
+  created_at: string;
+}
+
+// ---------- Task 029: conciliação com o banco (decisões 198 e 199) ----------
+
+/** Um arquivo OFX importado numa conta (`extrato_importacoes`). */
+export interface ExtratoImportacao {
+  id: string;
+  tenant_id: string;
+  conta_bancaria_id: string;
+  arquivo_nome: string;
+  /** BANKID: "033" no Santander. */
+  banco_id: string | null;
+  /** ACCTID, como o arquivo diz. */
+  conta_no_arquivo: string | null;
+  periodo_inicio: string | null;
+  periodo_fim: string | null;
+  /** Quando o banco gerou o arquivo (DTSERVER). */
+  gerado_em: string | null;
+  /** LEDGERBAL: o saldo que o banco informa. */
+  saldo_banco: number | null;
+  saldo_em: string | null;
+  qtd_movimentos: number;
+  qtd_novos: number;
+  importado_por: string;
+  created_at: string;
+}
+
+/** Como a linha se resolveu sozinha na importação (decisão 201). */
+export type ResolucaoSozinha = "manual" | "titulo" | "remessa" | "regra";
+
+/** Um movimento do extrato do banco, sem repetir (`extrato_linhas`; a
+ *  view `vw_extrato_linhas` traz o `conciliada`). */
+export interface ExtratoLinha {
+  id: string;
+  tenant_id: string;
+  conta_bancaria_id: string;
+  /** A primeira importação que trouxe a linha. */
+  importacao_id: string;
+  /** Conta | data | centavos | histórico normalizado | posição entre os
+   *  iguais: reconhece a linha na reimportação (decisão 198). */
+  digital: string;
+  data: string;
+  /** Com sinal: o que sai do banco é negativo. */
+  valor: number;
+  tipo: string | null;
+  historico: string;
+  documento: string | null;
+  fitid: string | null;
+  ordem: number;
+  ignorada_em: string | null;
+  ignorada_por: string | null;
+  motivo_ignorada: string | null;
+  resolvida_sozinha: ResolucaoSozinha | null;
+  /** A avaliação única da automação na importação (decisão 201). */
+  avaliada_em: string | null;
+  /** Alguém desfez: a linha não se resolve mais sozinha. */
+  sem_auto: boolean;
+  /** Como a linha se conciliou (decisão 200). Nulo na pendente e na
+   *  ignorada. */
+  conciliada_como: ConciliadaComo | null;
+  conciliada_em: string | null;
+  conciliada_por: string | null;
+  /** O que o desfazer precisa: as datas de antes, a correção, a regra. */
+  desfazer: { datas?: Array<{ id: string; de: string }>; correcao_id?: string; regra_id?: string } | null;
+  /** As linhas que se resolveram juntas e se desfazem juntas. */
+  grupo: string | null;
+  created_at: string;
+}
+
+/** Ligacao: a baixa já existia. Baixa e avulso: nasceu na conciliação. */
+export type ConciliadaComo = "ligacao" | "baixa" | "avulso" | "regra" | "par" | "correcao";
+
+/** A baixa feita à mão corrigida pela conciliação (`baixa_correcoes`). */
+export interface BaixaCorrecao {
+  id: string;
+  tenant_id: string;
+  extrato_linha_id: string;
+  documento_origem: "pp_baixa" | "avulsa_baixa" | "titulo_baixa";
+  documento_id: string;
+  lancamento_antes_id: string;
+  lancamento_id: string;
+  de: { data: string; principal: number; juros: number; total: number };
+  para: { data: string; principal: number; juros: number; total: number };
+  motivo: string;
+  corrigida_por: string;
+  created_at: string;
+  desfeita_em: string | null;
+  desfeita_por: string | null;
+}
+
+/** A linha com a situação, como `vw_extrato_linhas` a devolve. */
+export interface ExtratoLinhaComSituacao extends ExtratoLinha {
+  /** Tem lançamento ligado. */
+  conciliada: boolean;
+}
+
+/** Uma regra do histórico ("TAR" → tarifa bancária), `extrato_regras`. */
+export interface ExtratoRegra {
+  id: string;
+  tenant_id: string;
+  /** `null` vale para todas as contas. */
+  conta_bancaria_id: string | null;
+  /** O começo do histórico normalizado. */
+  padrao: string;
+  plano_conta_tipo_id: string;
+  plano_conta_subtipo_id: string;
+  empresa_id: string;
+  usos: number;
+  ativa: boolean;
+  criada_por: string | null;
   created_at: string;
 }
 

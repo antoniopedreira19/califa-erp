@@ -67,8 +67,9 @@ export type ExtratoDaFatura = {
     /** compras − estornos + ajustes + pendentes. */
     total: number;
   };
-  /** A baixa da fatura, quando paga: a perna do banco. */
-  pagamento: { data: string; conta_nome: string | null } | null;
+  /** A baixa da fatura, quando paga: a perna do banco. O valor é o que
+   *  saiu do banco (a linha do pagamento no extrato da fatura, decisão 197). */
+  pagamento: { data: string; conta_nome: string | null; valor: number } | null;
 };
 
 type FaturaRaw = {
@@ -220,6 +221,7 @@ export async function carregarExtratoDaFatura(
   const pagamento = pagamentoVivo
     ? {
         data: pagamentoVivo.data_movimento,
+        valor: Number(pagamentoVivo.valor ?? 0),
         conta_nome: pagamentoVivo.conta_bancaria
           ? `${pagamentoVivo.conta_bancaria.nome}${
               pagamentoVivo.conta_bancaria.banco ? ` · ${pagamentoVivo.conta_bancaria.banco}` : ""

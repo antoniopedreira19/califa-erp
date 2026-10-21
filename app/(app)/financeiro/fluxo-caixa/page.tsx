@@ -7,6 +7,7 @@ import { FluxoCaixaView, type FluxoItem, type ContaOpcao } from "./fluxo-caixa-v
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { carregarFiscalDoFluxo } from "@/lib/fiscal/fluxo-fiscal-dados";
 import { parcelaSemIssRetido } from "@/lib/fiscal/fluxo-fiscal";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 
 export const dynamic = "force-dynamic";
 
@@ -21,13 +22,6 @@ export const dynamic = "force-dynamic";
  * saldo na véspera da âncora mais os movimentos daí em diante, o cliente
  * reconstrói o saldo de QUALQUER data da janela sem nova consulta.
  */
-function hojeISO(): string {
-  const d = new Date();
-  const mes = String(d.getMonth() + 1).padStart(2, "0");
-  const dia = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${mes}-${dia}`;
-}
-
 function iso(ano: number, mesZeroBased: number, dia: number): string {
   const d = new Date(ano, mesZeroBased, dia);
   const mes = String(d.getMonth() + 1).padStart(2, "0");
@@ -61,7 +55,9 @@ export default async function FluxoCaixaPage({
 
   const supabase = createClient();
 
-  const hoje = hojeISO();
+  // O dia de Brasília, como o da `vw_fluxo_caixa`: o relógio do servidor
+  // (UTC na Vercel) já dá amanhã depois das 21h.
+  const hoje = hojeEmSaoPauloIso();
   const [ano, mes] = hoje.split("-").map(Number);
   const ancora = iso(ano, mes - 1 - 4, 1); // 1º dia, 4 meses atrás
   const vespera = iso(ano, mes - 1 - 4, 0); // véspera da âncora
