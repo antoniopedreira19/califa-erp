@@ -25,8 +25,9 @@
  * os juros e o comprovante de cada guia na linha (a guia é a da aprovação;
  * o imposto sem guia pede a dele ali). O centro de custo vem do imposto.
  *
- * No lote não entram baixa parcial nem cartão: cada título é baixado pelo
- * que falta, inteiro, pela conta escolhida. A parcela de PP sai com as
+ * No lote não entra baixa parcial: cada título é baixado pelo que falta,
+ * inteiro, pela conta escolhida — ou, no cartão (decisão 197), como item da
+ * fatura escolhida, a mesma para todos. A parcela de PP sai com as
  * retenções na fonte que o financeiro decidiu na APROVAÇÃO da PP (módulo
  * fiscal): o diálogo as busca ao abrir e mostra na coluna Ajuste, e o
  * servidor relê na hora de baixar. Retenção diferente da aprovação, só na
@@ -56,6 +57,14 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import type { ContaBancaria, PlanoContaSubtipo, PlanoContaTipo } from "@/lib/types";
+import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
+import {
+  competenciaParaOBanco,
+  faturaDestino,
+  opcoesDeFatura,
+  rotuloDaCompetencia,
+  type FaturaDoCartaoNaBaixa,
+} from "@/lib/financeiro/fatura-do-cartao";
 import {
   origemDoLote,
   retencoesPelaAprovacao,
@@ -96,6 +105,9 @@ interface TituloParaLoteBase {
   /** O que falta: o valor menos as baixas já feitas (decisão 125). É por
    *  ele que o título é baixado. */
   aberto: number;
+  /** Por que o título não vai para o cartão no lote (decisão 197): a folha,
+   *  a parcial, o que não é a pagar. `null`: vai. */
+  semCartao: string | null;
   /** O centro de custo que o título já tem — o par completo, tipo e
    *  subtipo. `null`: usa o do lote (o imposto usa o dele, do banco). */
   centroDeCusto: CentroDeCusto | null;
@@ -364,14 +376,15 @@ export function BarraDeSelecao({
 // O diálogo
 // ---------------------------------------------------------------------------
 
-// As formas reais (`FormaPagamento`), sem o cartão: no cartão a baixa é a
-// entrada do item na fatura (decisão 093), que não cabe num lote de conta.
+// As formas reais (`FormaPagamento`). O cartão entra só quando todos os
+// títulos vão para a fatura (decisão 197): cada um vira um item dela.
 const FORMAS = [
   ["pix", "PIX"],
   ["transferencia", "Transferência"],
   ["boleto", "Boleto"],
 ] as const;
-type FormaDoLote = (typeof FORMAS)[number][0];
+const FORMA_CARTAO = ["cartao_credito", "Cartão de crédito"] as const;
+type FormaDoLote = (typeof FORMAS)[number][0] | (typeof FORMA_CARTAO)[0];
 
 /**
  * O tipo do centro de custo de quem não tem um, como no protótipo aprovado:
@@ -442,6 +455,8 @@ export function BaixaEmLoteDialog({
   contaPadrao,
   tenantId,
   nomesDasPJs,
+  cartoes,
+  faturas,
   onConcluido,
 }: {
   open: boolean;
@@ -460,6 +475,10 @@ export function BaixaEmLoteDialog({
   tenantId?: string | null;
   /** Só com imposto no lote: PJ → nome, para o aviso de conta de outra PJ. */
   nomesDasPJs?: Record<string, string>;
+  /** Os cartões e as faturas recentes deles, para o lote no cartão
+   *  (decisão 197). Onde o lote nunca é a pagar, listas vazias. */
+  cartoes: CartaoOption[];
+  faturas: FaturaDoCartaoNaBaixa[];
   /** Todas as baixas feitas: recebe a mensagem do toast. A lista limpa a
    *  seleção e mostra o toast; a página já foi atualizada. */
   onConcluido?: (mensagem: string) => void;
@@ -490,6 +509,8 @@ export function BaixaEmLoteDialog({
           contaPadrao={contaPadrao ?? null}
           tenantId={tenantId ?? null}
           nomesDasPJs={nomesDasPJs ?? {}}
+          cartoes={cartoes}
+          faturas={faturas}
           onOcupado={marcarOcupado}
           onCancelar={() => onOpenChange(false)}
           onConcluido={(mensagem) => {
@@ -511,6 +532,8 @@ function FormularioDoLote({
   contaPadrao,
   tenantId,
   nomesDasPJs,
+  cartoes,
+  faturas,
   onOcupado,
   onCancelar,
   onConcluido,
@@ -522,6 +545,8 @@ function FormularioDoLote({
   contaPadrao: string | null;
   tenantId: string | null;
   nomesDasPJs: Record<string, string>;
+  cartoes: CartaoOption[];
+  faturas: FaturaDoCartaoNaBaixa[];
   onOcupado: (ocupado: boolean) => void;
   onCancelar: () => void;
   onConcluido: (mensagem: string) => void;
@@ -540,6 +565,9 @@ function FormularioDoLote({
   const [data, setData] = React.useState<string>(hojeIso);
   const [conta, setConta] = React.useState<string>(contaPadrao ?? "");
   const [forma, setForma] = React.useState<FormaDoLote>("pix");
+  // O cartão e a fatura de todos (decisão 197).
+  const [cartaoId, setCartaoId] = React.useState<string | null>(null);
+  const [competenciaEscolhida, setCompetenciaEscolhida] = React.useState<string | null>(null);
   const [subtipoSaida, setSubtipoSaida] = React.useState<string>("");
   const [subtipoEntrada, setSubtipoEntrada] = React.useState<string>("");
   const [erro, setErro] = React.useState<string | null>(null);
@@ -550,6 +578,28 @@ function FormularioDoLote({
   const receber = itens.filter((t) => t.tipo === "receber");
   const impostos = itens.filter((t) => t.tipo === "imposto");
   const misto = new Set(itens.map((t) => t.tipo)).size > 1;
+
+  // O cartão só quando todos vão para a fatura (decisão 197): só títulos a
+  // pagar, nenhum com `semCartao`.
+  const podeCartao =
+    cartoes.length > 0 && pagar.length > 0 && pagar.length === itens.length && pagar.every((t) => t.semCartao === null);
+  const motivoSemCartao =
+    pagar.length > 0 && !podeCartao ? (pagar.find((t) => t.semCartao !== null)?.semCartao ?? null) : null;
+  const noCartao = podeCartao && forma === "cartao_credito";
+  const cartaoEscolhido = noCartao ? cartoes.find((c) => c.id === cartaoId) ?? null : null;
+  const cartaoDaFatura = cartaoEscolhido
+    ? {
+        id: cartaoEscolhido.id,
+        dia_vencimento_fatura: cartaoEscolhido.dia_vencimento_fatura,
+        dia_fechamento_fatura: cartaoEscolhido.dia_fechamento_fatura ?? null,
+      }
+    : null;
+  const destino = cartaoDaFatura && data ? faturaDestino(cartaoDaFatura, data, faturas) : null;
+  const opcoesFatura = cartaoDaFatura ? opcoesDeFatura(cartaoDaFatura, faturas, destino) : [];
+  const faturaAlvo =
+    opcoesFatura.find((o) => o.competencia === competenciaEscolhida) ??
+    opcoesFatura.find((o) => o.padrao) ??
+    destino;
 
   // Impostos (módulo fiscal): a multa e os juros, o comprovante e — no
   // imposto sem guia — a guia, um por linha. O arquivo sobe na hora; o que
@@ -628,6 +678,8 @@ function FormularioDoLote({
    *  da PP não chegou. */
   function naContaDe(t: TituloParaLote): { retido: number; liquido: number } | null {
     if (t.tipo === "imposto") return { retido: 0, liquido: r2(t.aberto + (multa[t.chave] ?? 0)) };
+    // No cartão, o item entra inteiro na fatura, sem retenção.
+    if (noCartao) return { retido: 0, liquido: r2(t.aberto) };
     if (!ehParcelaDePP(t)) return { retido: 0, liquido: r2(t.aberto) };
     if (aprovacao.estado !== "pronto") return null;
     const r = retencoesPelaAprovacao(r2(t.aberto), aprovacao.aliquotas[t.alvo.id] ?? null);
@@ -668,7 +720,9 @@ function FormularioDoLote({
     }
     const falta = new Set<string>();
     if (!data) falta.add("data");
-    if (!contaEscolhida) falta.add("conta");
+    if (!noCartao && !contaEscolhida) falta.add("conta");
+    if (noCartao && !cartaoEscolhido) falta.add("cartao");
+    if (noCartao && !faturaAlvo) falta.add("fatura");
     if (pagar.length > 0 && !forma) falta.add("forma");
     if (pagarSemCentro.length > 0 && !subtipoSaida) falta.add("subtipo-saida");
     if (receberSemCentro.length > 0 && !subtipoEntrada) falta.add("subtipo-entrada");
@@ -683,6 +737,8 @@ function FormularioDoLote({
       setErro(
         falta.has("data") || falta.has("conta")
           ? "Escolha a data e a conta do movimento."
+          : falta.has("cartao") || falta.has("fatura")
+            ? "Escolha a data, o cartão e a fatura."
           : falta.has("forma")
             ? "Escolha a forma de pagamento e o subtipo do centro de custo."
             : falta.has("subtipo-saida") || falta.has("subtipo-entrada")
@@ -710,8 +766,10 @@ function FormularioDoLote({
 
     const entrada: EntradaDaBaixaEmLote = {
       pago_em: data,
-      conta_bancaria_id: conta,
-      forma_pagamento: pagar.length > 0 ? forma : null,
+      conta_bancaria_id: noCartao ? null : conta,
+      forma_pagamento: pagar.length > 0 ? (noCartao ? "cartao_credito" : forma === "cartao_credito" ? "pix" : forma) : null,
+      cartao_credito_id: noCartao ? cartaoId : null,
+      fatura_competencia: noCartao && faturaAlvo ? competenciaParaOBanco(faturaAlvo.competencia) : null,
       centro_pagar:
         pagarSemCentro.length > 0 && tipoPagar
           ? { tipoId: tipoPagar.id, subtipoId: subtipoSaida }
@@ -739,6 +797,9 @@ function FormularioDoLote({
       })),
     };
     const nomeDaConta = contaEscolhida?.nome ?? "";
+    const naFatura = noCartao && faturaAlvo
+      ? `na fatura ${faturaAlvo.existente?.codigo ?? "nova"} de ${rotuloDaCompetencia(faturaAlvo.competencia)}${cartaoEscolhido ? ` do ${cartaoEscolhido.nome}` : ""}`
+      : null;
     const total = itens.length;
 
     startTransition(async () => {
@@ -767,7 +828,9 @@ function FormularioDoLote({
       if (res.ok) {
         const n = res.feitas.length;
         onConcluido(
-          `${n} ${n === 1 ? "baixa registrada" : "baixas registradas"} em ${br(data)}, na conta ${nomeDaConta}. Cada uma vira um movimento na Conciliação.`,
+          naFatura
+            ? `${n} ${n === 1 ? "item entrou" : "itens entraram"} ${naFatura}. Nada sai da conta bancária agora.`
+            : `${n} ${n === 1 ? "baixa registrada" : "baixas registradas"} em ${br(data)}, na conta ${nomeDaConta}. Cada uma vira um movimento na Conciliação.`,
         );
         return;
       }
@@ -795,8 +858,9 @@ function FormularioDoLote({
           {itens.length === 1 ? "Dar baixa em 1 título" : `Dar baixa em ${itens.length} títulos`}
         </DialogTitle>
         <DialogDescription>
-          Uma data e uma conta para todos; cada título vira uma baixa própria, pelo valor em
-          aberto.
+          {noCartao
+            ? "Uma data, um cartão e uma fatura para todos; cada título vira um item da fatura, pelo valor em aberto."
+            : "Uma data e uma conta para todos; cada título vira uma baixa própria, pelo valor em aberto."}
         </DialogDescription>
       </DialogHeader>
 
@@ -835,6 +899,7 @@ function FormularioDoLote({
               }}
             />
           </div>
+          {!noCartao && (
           <div className="space-y-1">
             <label className="text-xs font-semibold">
               Conta bancária <span className="text-california-red">*</span>
@@ -867,19 +932,56 @@ function FormularioDoLote({
               </SelectContent>
             </Select>
           </div>
+          )}
           {pagar.length > 0 && (
             <div className="space-y-1">
               <label className="text-xs font-semibold">
                 Forma de pagamento <span className="text-california-red">*</span>
               </label>
-              <Select value={forma} onValueChange={(v) => setForma(v as FormaDoLote)}>
+              <Select
+                value={!podeCartao && forma === "cartao_credito" ? "pix" : forma}
+                onValueChange={(v) => {
+                  setForma(v as FormaDoLote);
+                  setErro(null);
+                  if (v === "cartao_credito" && !cartaoId && cartoes.length === 1) setCartaoId(cartoes[0].id);
+                }}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {FORMAS.map(([v, r]) => (
+                  {(podeCartao ? [...FORMAS, FORMA_CARTAO] : FORMAS).map(([v, r]) => (
                     <SelectItem key={v} value={v}>
                       {r}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {motivoSemCartao && itens.length > 1 && (
+                <p className="text-[11px] text-muted-foreground">{motivoSemCartao}</p>
+              )}
+            </div>
+          )}
+          {noCartao && (
+            <div className="space-y-1">
+              <label className="text-xs font-semibold">
+                Cartão <span className="text-california-red">*</span>
+              </label>
+              <Select
+                value={cartaoId ?? undefined}
+                onValueChange={(id) => {
+                  setCartaoId(id);
+                  setCompetenciaEscolhida(null);
+                  setErro(null);
+                }}
+              >
+                <SelectTrigger className={cn(faltando.has("cartao") && !cartaoEscolhido && "border-california-red")}>
+                  <SelectValue placeholder="Selecione o cartão" />
+                </SelectTrigger>
+                <SelectContent>
+                  {cartoes.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.nome} · ••••{c.ultimos_4_digitos}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -887,6 +989,49 @@ function FormularioDoLote({
             </div>
           )}
         </div>
+
+        {noCartao && opcoesFatura.length > 0 && (
+          <div className="space-y-1">
+            <label className="text-xs font-semibold">
+              Fatura <span className="text-california-red">*</span>
+            </label>
+            <Select
+              value={faturaAlvo?.competencia}
+              onValueChange={(c) => {
+                setCompetenciaEscolhida(c);
+                setErro(null);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione a fatura" />
+              </SelectTrigger>
+              <SelectContent>
+                {opcoesFatura.map((o) => (
+                  <SelectItem key={o.competencia} value={o.competencia}>
+                    {o.existente ? o.existente.codigo : "Nova fatura"} · {rotuloDaCompetencia(o.competencia)} · fecha {br(o.fecha)} ·
+                    vence {br(o.vence)}
+                    {o.padrao ? " · pela data do pagamento" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">
+              Vem pela data do pagamento. Troque se o banco lançou as compras em outra fatura. Fatura fechada não
+              recebe item: reabra-a na aba Cartão.
+            </p>
+          </div>
+        )}
+        {noCartao && faturaAlvo && (
+          <div className="flex items-start gap-2 rounded-lg border border-violet-200 bg-violet-50 p-3 text-xs text-violet-900">
+            <CreditCard className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              Entram na fatura {faturaAlvo.existente?.codigo ?? "nova"} de{" "}
+              <strong className="font-semibold">{rotuloDaCompetencia(faturaAlvo.competencia)}</strong> — fecha{" "}
+              {br(faturaAlvo.fecha)}, vence {br(faturaAlvo.vence)}. Nada sai da conta bancária agora: o dinheiro sai na
+              baixa da fatura.
+            </span>
+          </div>
+        )}
 
         <div className="overflow-hidden rounded-xl border border-border">
           <div className="max-h-[300px] overflow-y-auto">
@@ -898,7 +1043,7 @@ function FormularioDoLote({
                   <th className="w-[92px] px-2 py-2 text-center font-semibold">Vencimento</th>
                   <th className="w-[112px] px-3 py-2 text-right font-semibold">Em aberto</th>
                   <th className="w-[150px] px-3 py-2 text-right font-semibold">Ajuste</th>
-                  <th className="w-[132px] px-3 py-2 text-right font-semibold">Na conta</th>
+                  <th className="w-[132px] px-3 py-2 text-right font-semibold">{noCartao ? "Na fatura" : "Na conta"}</th>
                   {impostos.length > 0 && (
                     <th className="w-[170px] px-3 py-2 text-left font-semibold">Comprovante</th>
                   )}
@@ -1042,7 +1187,7 @@ function FormularioDoLote({
           <div className="flex flex-wrap items-center justify-end gap-x-6 gap-y-1 border-t border-border bg-muted/30 px-3 py-2 text-[12.5px]">
             {pagar.length + impostos.length > 0 && (saidas === null || saidas > 0) && (
               <span className="text-muted-foreground">
-                Saem da conta{" "}
+                {noCartao ? "Entram na fatura" : "Saem da conta"}{" "}
                 <strong className="font-mono font-semibold text-foreground">
                   {saidas === null ? "…" : moeda(saidas)}
                 </strong>
@@ -1173,7 +1318,7 @@ function FormularioDoLote({
             os dados sozinho, depois da leitura das retenções. */}
         <NoFiscalDoLote
           data={data}
-          pagamentos={pagar.filter(ehParcelaDePP).map((t) => ({
+          pagamentos={(noCartao ? [] : pagar.filter(ehParcelaDePP)).map((t) => ({
             parcelaId: t.alvo.id,
             retencoes:
               aprovacao.estado === "pronto"
@@ -1185,12 +1330,19 @@ function FormularioDoLote({
 
         <div className="flex items-start gap-2 rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
           <ArrowRightLeft className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-700" />
-          <span>
-            Ao confirmar, cada baixa é registrada e enviada para a{" "}
-            <strong className="font-semibold text-foreground">Conciliação</strong>
-            {contaEscolhida ? ` da conta ${contaEscolhida.nome}` : ""}, em linhas separadas, como se
-            tivessem sido feitas uma a uma.
-          </span>
+          {noCartao ? (
+            <span>
+              Ao confirmar, cada título vira um item da fatura do cartão e aparece no extrato dele, na aba{" "}
+              <strong className="font-semibold text-foreground">Cartão</strong>.
+            </span>
+          ) : (
+            <span>
+              Ao confirmar, cada baixa é registrada e enviada para a{" "}
+              <strong className="font-semibold text-foreground">Conciliação</strong>
+              {contaEscolhida ? ` da conta ${contaEscolhida.nome}` : ""}, em linhas separadas, como se
+              tivessem sido feitas uma a uma.
+            </span>
+          )}
         </div>
       </div>
 

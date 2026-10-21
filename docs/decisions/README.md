@@ -215,8 +215,8 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 193 | [A conta ou o PIX do titular da verba: automático pelo cadastro quando ele tem, digitado na PP quando não tem](193-conta-ou-pix-do-titular-da-verba.md) | 2026-10-19 |
 | 194 | *Reservada* — a nota depois do pagamento: PP enviada com o orçamento, "Nota pendente" e "Anexar a nota" | 2026-10-20 |
 | 195 | [As planilhas de títulos e o Extrato nas mesmas colunas: Conciliação › Títulos, Contas a Pagar, Contas a Receber e Impostos a Pagar (revê a 091 e a 140)](195-planilhas-de-titulos-e-extrato-nas-mesmas-colunas.md) | 2026-10-21 |
-| 196 | *Reservada* — conciliação com o banco (task 029, fase 2): o popup de baixa (PIX padrão, caixas, juros e multa no boleto, avisos) | 2026-10-21 |
-| 197 | *Reservada* — conciliação com o banco (task 029, fase 2): o cartão (fatura escolhida na baixa, lote no cartão, novo layout da fatura) | 2026-10-21 |
+| 196 | [O popup de baixa: PIX como padrão, caixas no lugar das chaves, e juros e multa no boleto num lançamento à parte (revê a 125)](196-popup-de-baixa-pix-caixas-e-juros-no-boleto.md) | 2026-10-21 |
+| 197 | [O cartão: a fatura escolhida na baixa, o lote no cartão e o extrato da fatura na grade das planilhas; baixa e fatura só por admin e financeiro no banco (revê a 093 e a 140)](197-cartao-fatura-escolhida-lote-e-novo-layout.md) | 2026-10-21 |
 | 198 | *Reservada* — conciliação com o banco (task 029, fase 3): a importação do extrato OFX | 2026-10-21 |
 | 199 | *Reservada* — conciliação com o banco (task 029, fase 3): o motor de correspondência | 2026-10-21 |
 | 200 | *Reservada* — conciliação com o banco (task 029, fase 3): as seções e as ações da Conciliação automática | 2026-10-21 |

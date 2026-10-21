@@ -26,6 +26,10 @@ import { logAuditEvent } from "@/lib/auth/audit";
 
 type Result = { ok: true } | { ok: false; message: string };
 
+/** O cancelamento diz também os juros e a multa que saíram junto com a
+ *  baixa (decisão 196), para o aviso dizer quanto saiu do extrato. */
+type ResultDoCancelamento = { ok: true; juros: number } | { ok: false; message: string };
+
 const motivoSchema = z
   .string()
   .trim()
@@ -127,7 +131,7 @@ const cancelarSchema = z.object({
   motivo: motivoSchema,
 });
 
-export async function cancelarBaixa(input: unknown): Promise<Result> {
+export async function cancelarBaixa(input: unknown): Promise<ResultDoCancelamento> {
   const parsed = cancelarSchema.safeParse(input);
   if (!parsed.success) {
     return {
@@ -139,6 +143,19 @@ export async function cancelarBaixa(input: unknown): Promise<Result> {
 
   const gate = await gateFinanceiro(d.tipo, d.id, "baixa.cancelada");
   if (!gate.ok) return gate;
+
+  // Os juros e a multa da baixa (decisão 196) saem junto, pela FK em
+  // cascata: lidos antes, só para o aviso.
+  let juros = 0;
+  if (d.tipo === "baixa") {
+    const { data: lidos } = await gate.supabase
+      .from("lancamentos_financeiros")
+      .select("valor")
+      .eq("origem", "juros_baixa")
+      .eq("juros_de_lancamento_id", d.id);
+    juros =
+      Math.round(((lidos ?? []) as Array<{ valor: number | string }>).reduce((acc, j) => acc + Number(j.valor) * 100, 0)) / 100;
+  }
 
   const { rpc, param } = RPC_DO_CANCELAMENTO[d.tipo];
   const { error } = await gate.supabase.rpc(rpc, {
@@ -158,7 +175,7 @@ export async function cancelarBaixa(input: unknown): Promise<Result> {
   }
 
   revalidarBaixas();
-  return { ok: true };
+  return { ok: true, juros };
 }
 
 // ---------------------------------------------------------------------

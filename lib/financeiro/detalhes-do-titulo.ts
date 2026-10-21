@@ -35,6 +35,10 @@ export interface DetalhesDoTitulo {
   /** O que a baixa reteve na fonte (o ⓘ do Extrato); vazio no título, cuja
    *  retenção vem da linha. */
   retido: Array<{ rotulo: string; valor: number }>;
+  /** A baixa com juros e multa (o ⓘ do Extrato, decisão 196): o principal,
+   *  que quita o título, e os juros, em 11 · Despesa com Juros. A linha do
+   *  Extrato mostra a soma. Nulo sem juros. */
+  saidaDaBaixa: { principal: number; juros: number } | null;
   documentos: DocumentoDoDetalhe[];
 }
 

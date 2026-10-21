@@ -204,6 +204,7 @@ async function daPP(supabase: Supabase, tenantId: string, id: string): Promise<R
       pagamento,
       origensDoDinheiro: [],
       retido: [],
+        saidaDaBaixa: null,
       documentos: await assinar(supabase, pedidos),
     },
   };
@@ -258,6 +259,7 @@ async function daAvulsa(supabase: Supabase, tenantId: string, id: string, origem
       pagamento,
       origensDoDinheiro: [],
       retido: [],
+        saidaDaBaixa: null,
       documentos: await assinar(supabase, anexosParaPedidos("contas-avulsas", a.anexos)),
     },
   };
@@ -292,6 +294,7 @@ async function doDesembolso(supabase: Supabase, tenantId: string, id: string): P
       pagamento: pagamentoPelaForma(d.forma_pagamento, d.cartao, null),
       origensDoDinheiro: [],
       retido: [],
+        saidaDaBaixa: null,
       documentos: await assinar(supabase, anexosParaPedidos("desembolsos", d.anexos)),
     },
   };
@@ -350,6 +353,7 @@ async function daVerba(supabase: Supabase, tenantId: string, id: string): Promis
       },
       origensDoDinheiro: [],
       retido: [],
+        saidaDaBaixa: null,
       documentos: await assinar(supabase, pedidos),
     },
   };
@@ -399,6 +403,7 @@ async function daFatura(supabase: Supabase, tenantId: string, id: string): Promi
       },
       origensDoDinheiro: [],
       retido: [],
+        saidaDaBaixa: null,
       documentos: [],
     },
   };
@@ -463,6 +468,7 @@ async function daNota(supabase: Supabase, tenantId: string, id: string): Promise
       pagamento: { linha: "TED ou PIX na conta da empresa", detalhe: null },
       origensDoDinheiro: origens.length > 1 ? origens : [],
       retido: [],
+        saidaDaBaixa: null,
       documentos: await assinar(supabase, pedidos),
     },
   };
@@ -487,6 +493,7 @@ async function daTransferencia(supabase: Supabase, tenantId: string, id: string)
       pagamento: { linha: `Sai da ${tr.origem?.nome ?? "conta de origem"}`, detalhe: `Entra na ${tr.destino?.nome ?? "conta de destino"}` },
       origensDoDinheiro: [],
       retido: [],
+        saidaDaBaixa: null,
       documentos: [],
     },
   };
@@ -551,6 +558,7 @@ async function doImposto(supabase: Supabase, tenantId: string, id: string): Prom
       pagamento: { linha: `${referencia} · código de barras na guia`, detalhe: cnpj ? `CNPJ ${cnpj}` : null },
       origensDoDinheiro: [],
       retido: [],
+        saidaDaBaixa: null,
       documentos: await assinar(supabase, pedidos),
     },
   };
@@ -562,10 +570,17 @@ async function doImposto(supabase: Supabase, tenantId: string, id: string): Prom
  * reteve na fonte.
  */
 async function doLancamento(supabase: Supabase, tenantId: string, id: string): Promise<Resultado> {
+  // Os juros e a multa desta baixa (decisão 196), lidos junto.
+  const jurosPromise = supabase
+    .from("lancamentos_financeiros")
+    .select("valor")
+    .eq("tenant_id", tenantId)
+    .eq("origem", "juros_baixa")
+    .eq("juros_de_lancamento_id", id);
   const { data: l } = await supabase
     .from("lancamentos_financeiros")
     .select(
-      `id, origem, descricao, data_movimento, forma_pagamento,
+      `id, origem, descricao, data_movimento, valor, forma_pagamento,
        pedido_compra_parcela_id, conta_avulsa_id, desembolso_parcela_id, pp_verba_devolucao_id,
        titulo_receber_id, imposto_a_pagar_id, transferencia_id, fatura_cartao_id, papel_na_fatura,
        conta:contas_bancarias!conta_bancaria_id(nome),
@@ -606,6 +621,7 @@ async function doLancamento(supabase: Supabase, tenantId: string, id: string): P
         pagamento: pagamentoPelaForma(l.forma_pagamento, l.cartao, null),
         origensDoDinheiro: [],
         retido: [],
+        saidaDaBaixa: null,
         documentos: [],
       },
     };
@@ -626,7 +642,18 @@ async function doLancamento(supabase: Supabase, tenantId: string, id: string): P
       rotulo: r.aliquota ? `${r.imposto} ${Number(r.aliquota).toLocaleString("pt-BR", { maximumFractionDigits: 4 })}%` : r.imposto,
       valor: Number(r.valor),
     }));
-  return { ok: true, detalhes: { ...base.detalhes, trilha: [...base.detalhes.trilha, baixa], retido } };
+  const { data: jurosLidos } = await jurosPromise;
+  const juros =
+    Math.round(((jurosLidos ?? []) as Array<{ valor: number | string }>).reduce((acc, j) => acc + Number(j.valor) * 100, 0)) / 100;
+  return {
+    ok: true,
+    detalhes: {
+      ...base.detalhes,
+      trilha: [...base.detalhes.trilha, baixa],
+      retido,
+      saidaDaBaixa: juros > 0 ? { principal: Number(l.valor), juros } : null,
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------

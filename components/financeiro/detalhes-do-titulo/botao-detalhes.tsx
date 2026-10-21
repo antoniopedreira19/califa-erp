@@ -187,6 +187,28 @@ export function BotaoDetalhes({
                   </div>
                 </Grupo>
               )}
+              {detalhes?.saidaDaBaixa && (
+                // A baixa com juros e multa (decisão 196): a linha do Extrato
+                // mostra a soma; aqui, o que quita o título e o que é juros.
+                <Grupo rotulo="Saiu da conta">
+                  <div className="flex flex-col gap-0.5">
+                    <div className="flex items-baseline justify-between gap-4">
+                      <span>Principal · quita o título</span>
+                      <span className="font-mono text-muted-foreground">{formatBRL(detalhes.saidaDaBaixa.principal)}</span>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-4">
+                      <span>Juros e multa · 11 · Despesa com Juros</span>
+                      <span className="font-mono text-muted-foreground">{formatBRL(detalhes.saidaDaBaixa.juros)}</span>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-4 border-t border-border pt-0.5 font-semibold">
+                      <span>Total</span>
+                      <span className="font-mono">
+                        {formatBRL(Math.round((detalhes.saidaDaBaixa.principal + detalhes.saidaDaBaixa.juros) * 100) / 100)}
+                      </span>
+                    </div>
+                  </div>
+                </Grupo>
+              )}
               {detalhes && detalhes.origensDoDinheiro.length > 1 && (
                 <Grupo rotulo="De onde vem este dinheiro">
                   <div className="flex flex-col gap-1">

@@ -70,7 +70,9 @@ export const TOM_DA_ETIQUETA: Record<TomDaEtiqueta, string> = {
   ceu: "border-sky-200 bg-sky-50 text-sky-700",
 };
 
-const ITEM_TIPO: Record<ItemDaFatura["tipo"], [string, string]> = {
+/** A etiqueta de cada tipo de item da fatura (a planilha e o extrato da
+ *  fatura, decisão 197). */
+export const ITEM_TIPO: Record<ItemDaFatura["tipo"], [string, string]> = {
   pp: ["PP", "border-border bg-white text-muted-foreground"],
   avulso: ["Avulso", "border-violet-200 bg-violet-50 text-violet-700"],
   recorrencia: ["Recorrência", "border-blue-200 bg-blue-50 text-blue-700"],

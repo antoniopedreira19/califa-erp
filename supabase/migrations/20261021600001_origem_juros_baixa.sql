@@ -1,0 +1,26 @@
+-- =============================================================================
+-- Origem nova: os juros e a multa pagos numa baixa (task 029, fase 2, M2.1)
+-- =============================================================================
+-- Decisão 196 (Tiago, 21/10/2026). O boleto pago depois do vencimento sai do
+-- banco com o principal mais os juros e a multa. O principal quita o
+-- documento; os juros entram no DRE em 11 · Despesa com Juros, num
+-- lançamento próprio, ligado à baixa por `juros_de_lancamento_id` (migration
+-- 20261021600002).
+--
+-- Por que uma origem própria, e não `pp_baixa`/`avulsa_baixa`:
+-- • toda soma do que foi baixado de um documento filtra pela origem e pela
+--   chave dele (`_bruto_baixado`, `vw_baixado_por_documento`, `vw_a_pagar`, o
+--   previsto de `vw_fluxo_caixa`, as listas de baixas e a apuração fiscal).
+--   Na mesma origem, os juros contariam como pagamento do título: R$ 50 de
+--   juros numa baixa parcial de R$ 500 diriam "falta R$ 450";
+-- • com origem própria, o lançamento dos juros pode guardar as chaves do
+--   documento (a PP, a parcela, a avulsa), e o rateio de regional dele vem do
+--   documento, como o da baixa.
+--
+-- Só o valor do enum, numa migration só dele: o Postgres não deixa usar um
+-- valor novo de enum na mesma transação que o criou.
+--
+-- Mudança ADITIVA: um valor novo no enum.
+-- =============================================================================
+
+alter type public.origem_lancamento add value if not exists 'juros_baixa';

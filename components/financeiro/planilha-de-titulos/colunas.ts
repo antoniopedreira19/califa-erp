@@ -85,6 +85,13 @@ export function colunasDoExtratoNaGrade(): Array<[ChaveDaColuna, number | null]>
   ];
 }
 
+/** O extrato da fatura do cartão (decisão 197): a grade do Extrato, com o
+ *  Acumulado no lugar do Saldo e a Ação larga (o ⓘ, estornar a compra e ver
+ *  a baixa). Sem Situação. */
+export function colunasDaFaturaNaGrade(): Array<[ChaveDaColuna, number | null]> {
+  return colunasDoExtratoNaGrade().map(([k, w]) => [k, k === "acao" ? 120 : w]);
+}
+
 export const ROTULO_DO_STATUS: Record<StatusDaLinha, string> = {
   a_pagar: "A pagar",
   parcial: "Parcial",

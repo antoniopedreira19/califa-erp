@@ -47,6 +47,7 @@ function linha(p: Partial<LinhaSemSaldo> & Pick<LinhaSemSaldo, "id" | "valor">):
     conta_avulsa_id: null,
     pedido_compra_parcela_id: null,
     desembolso_parcela_id: null,
+    juros_de_lancamento_id: null,
     ...p,
   };
 }

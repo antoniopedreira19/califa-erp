@@ -27,7 +27,7 @@
  */
 
 import * as React from "react";
-import { Info } from "lucide-react";
+import { Check, Info } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { MoneyInput } from "@/components/ui/money-input";
 import {
@@ -316,7 +316,10 @@ function PercentualInput({
   );
 }
 
-function Chave({
+/** A caixa de marcar das linhas do bloco. Era uma chave liga/desliga; com
+ *  "Baixa parcial" e "Reter impostos na fonte" juntas, duas chaves pareciam
+ *  estranhas (decisão 196, Tiago, 20/10/2026). */
+function Caixa({
   id,
   ligada,
   onChange,
@@ -333,23 +336,20 @@ function Chave({
     <button
       id={id}
       type="button"
-      role="switch"
+      role="checkbox"
       aria-checked={ligada}
       aria-label={rotulo}
       disabled={desligada}
       onClick={() => onChange(!ligada)}
       className={cn(
-        "relative inline-flex h-5 w-9 flex-none items-center rounded-full border-2 border-transparent transition-colors disabled:cursor-not-allowed",
-        ligada ? "bg-california-red" : "bg-muted-foreground/30",
-        desligada && "bg-[#e5e5e5]",
+        "inline-flex h-4 w-4 flex-none items-center justify-center rounded border transition-colors disabled:cursor-not-allowed",
+        ligada
+          ? "border-california-red bg-california-red text-white"
+          : "border-gray-300 bg-white hover:border-california-red/60",
+        desligada && "border-gray-200 bg-[#f2f2f2] hover:border-gray-200",
       )}
     >
-      <span
-        className={cn(
-          "inline-block h-4 w-4 rounded-full bg-white shadow transition-transform",
-          ligada ? "translate-x-4" : "translate-x-0",
-        )}
-      />
+      {ligada && <Check className="h-3 w-3" strokeWidth={3} />}
     </button>
   );
 }
@@ -378,7 +378,7 @@ function LinhaChave({
         desligada && "opacity-60",
       )}
     >
-      <Chave id={id} ligada={ligada} onChange={onChange} rotulo={rotulo} desligada={desligada} />
+      <Caixa id={id} ligada={ligada} onChange={onChange} rotulo={rotulo} desligada={desligada} />
       <label htmlFor={id} className={cn("flex-1 text-[13px]", !desligada && "cursor-pointer")}>
         <span className="font-semibold">{rotulo}</span>
         {ajuda && <span className="ml-2 text-[11.5px] text-muted-foreground">{ajuda}</span>}
@@ -406,6 +406,7 @@ export function BlocoValorDaBaixa({
   parcial,
   retencao,
   ajudaDaRetencao = null,
+  rodape = null,
 }: {
   v: EstadoDoValorDaBaixa;
   lado: LadoDaBaixa;
@@ -421,6 +422,9 @@ export function BlocoValorDaBaixa({
    *  liberada ("Retenções informadas na aprovação da PP (20/10/2026) ·
    *  editáveis"). Com a chave travada, vale o motivo. */
   ajudaDaRetencao?: string | null;
+  /** O que fecha o bloco, embaixo das caixas: o "+ Juros e multa" do título
+   *  a pagar (decisão 196). */
+  rodape?: React.ReactNode;
 }) {
   const t = TEXTOS[lado];
   const jaBaixado = arredondar(valorDoTitulo - v.aberto);
@@ -538,6 +542,7 @@ export function BlocoValorDaBaixa({
           </div>
         </div>
       )}
+      {rodape}
     </div>
   );
 }

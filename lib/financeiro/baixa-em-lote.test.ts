@@ -124,6 +124,7 @@ test("monta uma chamada por título, na ordem, cada uma pela action da origem", 
     plano_conta_subtipo_id: SUB_02,
     forma_pagamento: "pix",
     cartao_credito_id: null,
+    fatura_competencia: null,
     valor_baixa: 1500,
     retencoes: [],
   });
@@ -168,21 +169,90 @@ test("o valor da baixa é o que falta, em centavos", () => {
   assert.equal(deTitulo(m.chamadas[1]).valor_baixa, 800.56);
 });
 
-test("sem cartão, e sem retenção fora da PP com retenção na aprovação", () => {
+test("fora do cartão: sem cartão nem fatura, e sem retenção fora da PP com retenção na aprovação", () => {
   const d = validadoPorOrigem(entrada());
   const m = montarChamadas(d, SEM_RETENCAO);
   assert.ok(m.ok);
   if (!m.ok) return;
   for (const c of m.chamadas) {
     assert.deepEqual(deTitulo(c).retencoes, []);
-    if (c.acao === "pagar") assert.equal(c.entrada.cartao_credito_id, null);
+    if (c.acao === "pagar") {
+      assert.equal(c.entrada.cartao_credito_id, null);
+      assert.equal(c.entrada.fatura_competencia, null);
+    }
   }
-  // E a forma "cartão" nem passa pelo schema.
+  // Cartão e fatura só com a forma cartão.
   const comCartao = baixaEmLoteSchema.safeParse({
     ...entrada({ itens: soOs(1) }),
-    forma_pagamento: "cartao_credito",
+    cartao_credito_id: U(90),
   });
   assert.equal(comCartao.success, false);
+});
+
+// --- O lote no cartão (decisão 197) ------------------------------------------
+
+const CARTAO = U(90);
+
+function noCartao(over: Partial<EntradaDaBaixaEmLote> = {}): EntradaDaBaixaEmLote {
+  return entrada({
+    conta_bancaria_id: null,
+    forma_pagamento: "cartao_credito",
+    cartao_credito_id: CARTAO,
+    fatura_competencia: "2026-10-01",
+    itens: soOs(0),
+    ...over,
+  });
+}
+
+test("lote no cartão: todos na mesma fatura, sem conta e sem retenção", () => {
+  const segundaPP = {
+    chave: `pagar|pp|${U(20)}`,
+    rotulo: "Locação",
+    alvo: { modulo: "pagar" as const, origem: "pp" as const, id: U(20) },
+    aberto: 700,
+    centro: null,
+  };
+  const d = baixaEmLoteSchema.parse(noCartao({ itens: [...soOs(0), segundaPP] }));
+  // Mesmo com a retenção da aprovação: no cartão o item entra inteiro.
+  const m = montarChamadas(d, new Map([[U(10), PADRAO], [U(20), PADRAO]]));
+  assert.ok(m.ok);
+  if (!m.ok) return;
+  assert.equal(m.chamadas.length, 2);
+  for (const c of m.chamadas) {
+    assert.equal(c.acao, "pagar");
+    if (c.acao !== "pagar") continue;
+    assert.equal(c.entrada.conta_bancaria_id, null);
+    assert.equal(c.entrada.forma_pagamento, "cartao_credito");
+    assert.equal(c.entrada.cartao_credito_id, CARTAO);
+    assert.equal(c.entrada.fatura_competencia, "2026-10-01");
+    assert.deepEqual(c.entrada.retencoes, []);
+  }
+  assert.deepEqual(m.chamadas.map((c) => deTitulo(c).valor_baixa), [1500, 700]);
+});
+
+test("lote no cartão exige o cartão e a fatura, e não aceita conta", () => {
+  const sem = (over: Partial<EntradaDaBaixaEmLote>) => baixaEmLoteSchema.safeParse(noCartao(over));
+  const semCartao = sem({ cartao_credito_id: null });
+  assert.equal(semCartao.success, false);
+  if (!semCartao.success) assert.equal(semCartao.error.issues[0].message, "Escolha o cartão.");
+  const semFatura = sem({ fatura_competencia: null });
+  assert.equal(semFatura.success, false);
+  if (!semFatura.success) assert.equal(semFatura.error.issues[0].message, "Escolha a fatura.");
+  assert.equal(sem({ conta_bancaria_id: CONTA }).success, false);
+  // Fora do cartão, a conta continua obrigatória.
+  const semConta = baixaEmLoteSchema.safeParse(entrada({ conta_bancaria_id: null, itens: soOs(1) }));
+  assert.equal(semConta.success, false);
+  if (!semConta.success) assert.equal(semConta.error.issues[0].message, "Escolha a conta bancária.");
+});
+
+test("no cartão só entram PP, avulso e recorrência", () => {
+  assert.equal(baixaEmLoteSchema.safeParse(noCartao({ itens: soOs(1) })).success, true);
+  // Recebimento não vai para a fatura.
+  const receber = baixaEmLoteSchema.safeParse(noCartao({ itens: soOs(2) }));
+  assert.equal(receber.success, false);
+  if (!receber.success) {
+    assert.ok(receber.error.issues.some((i) => i.message === "No cartão só entram PP, avulso e recorrência."));
+  }
 });
 
 test("título a pagar exige a forma de pagamento", () => {
@@ -518,10 +588,16 @@ test("folha entra no lote: baixa como avulso, pelo valor inteiro e com o centro 
       plano_conta_subtipo_id: SUB_SALARIO,
       forma_pagamento: "pix",
       cartao_credito_id: null,
+      fatura_competencia: null,
       valor_baixa: 4696.9,
       retencoes: [],
     },
   });
+});
+
+test("folha não vai para o cartão, nem no lote", () => {
+  const r = baixaEmLoteSchema.safeParse(noCartao({ itens: [itemFolha(1)] }));
+  assert.equal(r.success, false);
 });
 
 test("uma origem por lote: o schema recusa o lote misto e diz quais origens", () => {

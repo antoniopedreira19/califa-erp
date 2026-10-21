@@ -10,6 +10,7 @@ import {
 } from "@/lib/data/lancamento-linha";
 import { carregarExtratoDaFatura } from "@/lib/data/fatura-cartao-extrato";
 import { itensDoExtratoDaFatura } from "@/lib/data/planilha-de-titulos";
+import { juntarJurosNaBaixa } from "@/lib/financeiro/juros-no-extrato";
 import {
   agruparGuiasDeImposto,
   carregarLancamentosDasGuias,
@@ -135,6 +136,8 @@ export default async function ConciliacaoPage({
   let detalhesImposto: Record<string, DetalheDoImposto> = {};
   /** De cada lançamento de uma guia de imposto para a linha que o mostra. */
   let linhaDoLancamento = new Map<string, string>();
+  /** A baixa com juros e multa (decisão 196): os juros que cada linha inclui. */
+  let jurosDasBaixas: Record<string, number> = {};
   let creditos = 0;
   let debitos = 0;
 
@@ -186,9 +189,13 @@ export default async function ConciliacaoPage({
     // Uma linha por guia, na posição do primeiro lançamento dela e com a
     // soma de todos: o saldo acumulado e os totais do período não mudam.
     const comGuias = agruparGuiasDeImposto(montadas, lancamentosDasGuias);
-    const semSaldo = comGuias.linhas;
+    // A baixa e os juros dela também são um débito só no banco (decisão
+    // 196): uma linha, com a soma, e "inclui R$ X de juros".
+    const comJuros = juntarJurosNaBaixa(comGuias.linhas);
+    const semSaldo = comJuros.linhas;
     detalhesImposto = comGuias.detalhes;
-    linhaDoLancamento = comGuias.linhaDoLancamento;
+    jurosDasBaixas = comJuros.juros;
+    linhaDoLancamento = new Map([...comGuias.linhaDoLancamento, ...comJuros.linhaDoLancamento]);
     linhas = derivarSaldo(semSaldo, saldoAnterior);
 
     // O pagamento de uma fatura de cartão abre nos itens, cada um com o
@@ -283,6 +290,7 @@ export default async function ConciliacaoPage({
                 highlight={highlight}
                 itensDasFaturas={itensDasFaturas}
                 detalhesImposto={detalhesImposto}
+                jurosDasBaixas={jurosDasBaixas}
                 contexto={`${contaId}|${dataDe}|${dataAte}`}
                 contaId={contaId}
               />

@@ -169,6 +169,7 @@ export function ConciliacaoList({
   highlight,
   itensDasFaturas = {},
   detalhesImposto = {},
+  jurosDasBaixas = {},
   contexto = "",
   contaId,
 }: {
@@ -185,6 +186,9 @@ export function ConciliacaoList({
    *  A guia é UMA linha, o débito do banco: a soma dos lançamentos que a
    *  baixa grava, um por parte do rateio (`lib/data/imposto-extrato.ts`). */
   detalhesImposto?: Record<string, DetalheDoImposto>;
+  /** A baixa com juros e multa (decisão 196): linha → os juros que ela
+   *  inclui. O débito da linha já é a soma; o ⓘ separa. */
+  jurosDasBaixas?: Record<string, number>;
   /** A conta aberta: a prévia dos títulos marcados na aba Títulos. */
   contaId: string;
 }) {
@@ -372,6 +376,11 @@ export function ConciliacaoList({
                 </td>
                 <td className={cn("px-3 py-2 text-xs", estornada && "text-muted-foreground line-through")}>
                   <span className="break-words">{limparPrefixoDescricao(l.descricao, l.origem)}</span>
+                  {(jurosDasBaixas[l.id] ?? 0) > 0 && (
+                    <span className="text-[10px] text-muted-foreground">
+                      {" "}· inclui {formatMoney(jurosDasBaixas[l.id])} de juros
+                    </span>
+                  )}
                   {itens.length > 0 && (
                     <button
                       type="button"

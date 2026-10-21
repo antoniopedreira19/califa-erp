@@ -49,6 +49,7 @@ import type {
 } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import type { UltimaRetencao } from "@/components/financeiro/valor-da-baixa";
+import type { FaturaDoCartaoNaBaixa } from "@/lib/financeiro/fatura-do-cartao";
 import { ContaAvulsaDrawer } from "./conta-avulsa-drawer";
 import {
   BaixaTituloDialog,
@@ -92,6 +93,12 @@ import { colunasFiltraveis } from "@/components/financeiro/planilha-de-titulos/c
 import { BotaoDetalhes, type AcaoDoDetalhe } from "@/components/financeiro/detalhes-do-titulo/botao-detalhes";
 import type { ExtrasDaPlanilha } from "@/lib/data/planilha-de-titulos";
 import { linhaAPagar, prepararContexto, type Linha } from "../conciliacao/linhas-da-aba";
+import {
+  alvoDaBaixaAPagar,
+  chaveDoLoteAPagar,
+  motivoForaDoLoteAPagar,
+  paraOLoteAPagar,
+} from "../conciliacao/alvos-da-baixa";
 
 // ---------------------------------------------------------------------------
 // Tipo da linha
@@ -355,99 +362,11 @@ function pagoNasDatas(r: TituloRow, casa: (data: string) => boolean): number {
   );
 }
 
-/** Por que a origem só aceita a baixa do valor inteiro (decisão 125).
- *  `null`: aceita a parcial. */
-function motivoSemParcialDa(r: TituloRow): string | null {
-  switch (r.origem) {
-    case "desembolso":
-      return "Desembolso só aceita a baixa do valor inteiro.";
-    case "fatura_cartao":
-      return "Fatura de cartão só aceita a baixa do valor inteiro.";
-    case "pp_devolucao_verba":
-      return "Devolução de verba só aceita a baixa do valor inteiro.";
-    case "folha":
-      return "Folha só aceita a baixa do valor inteiro.";
-  }
-  if (r.eh_verba) return "PP de verba só aceita a baixa do valor inteiro.";
-  if (r.em_remessa)
-    return r.em_remessa_com_retencao
-      ? "Pago pela remessa: só a baixa do que falta."
-      : "Pago pela remessa com o valor cheio: só a baixa do que falta.";
-  return null;
-}
-
 // ---------------------------------------------------------------------------
-// Baixa em lote (pedido do Tiago, 02/10/2026)
+// Baixa em lote (pedido do Tiago, 02/10/2026): quem entra, por que não e o
+// título no formato do lote são os da aba Títulos da conciliação
+// (`../conciliacao/alvos-da-baixa.ts`) desde a decisão 196.
 // ---------------------------------------------------------------------------
-
-function origemNoLote(o: OrigemTitulo): o is OrigemPagarNoLote {
-  return (ORIGENS_PAGAR_NO_LOTE as readonly string[]).includes(o);
-}
-
-/** A chave do título na seleção e no lote — única entre as origens. */
-function chaveDoLote(r: TituloRow): string {
-  return `pagar|${r.origem}|${r.id}`;
-}
-
-/**
- * Por que o título não entra na baixa em lote; `null` entra. O lote paga
- * pela conta escolhida, uma baixa por título, sempre pelo que falta (a
- * parcial entra pelo restante). Entram PP, avulso e recorrência em
- * aberto (decisão aprovada pelo Tiago em 02/10/2026) e, desde 05/10/2026,
- * a folha (revisão da decisão 140); fatura de cartão e devolução de verba
- * têm baixa própria, o previsto no cartão vira item da fatura na baixa
- * (decisão 093), e o desembolso tem o centro de custo escolhido na baixa —
- * todos um de cada vez. A origem já marcada barra as outras na seleção
- * (`useSelecao`), não aqui.
- */
-function motivoForaDoLote(r: TituloRow): string | null {
-  if (r.status === "pago") return "Título já pago.";
-  switch (r.origem) {
-    case "fatura_cartao":
-      return "Fatura de cartão tem baixa própria: dê baixa nela sozinha.";
-    case "pp_devolucao_verba":
-      return "Devolução de verba tem baixa própria: dê baixa nela sozinha.";
-    case "desembolso":
-      return "Desembolso: dê baixa nele sozinho, para escolher o centro de custo.";
-  }
-  if (!origemNoLote(r.origem)) return "Este título não entra na baixa em lote: dê baixa nele sozinho.";
-  if (r.forma_pagamento === "cartao_credito" || r.forma_prevista === "cartao_credito") {
-    return "Previsto no cartão de crédito: dê baixa nele sozinho, para o item entrar na fatura.";
-  }
-  // Decisão 137: para onde vai o dinheiro aparece só na baixa do título.
-  if (r.fora_do_cadastro) {
-    return "Pagamento fora do cadastro: dê baixa nele sozinho, para ver para onde vai o dinheiro.";
-  }
-  if (faltaPagar(r) <= 0.004) return "Título sem valor em aberto.";
-  return null;
-}
-
-/** O título no formato do lote. `null` na origem que não entra nele. */
-function paraOLote(r: TituloRow): TituloParaLote | null {
-  if (!origemNoLote(r.origem)) return null;
-  // A PP com NF registrada leva o número junto do código (módulo fiscal):
-  // "PP-00110 · NF 602".
-  const origem = r.nf_numero ? `${r.origem_label} · NF ${r.nf_numero}` : r.origem_label;
-  return {
-    chave: chaveDoLote(r),
-    tipo: "pagar",
-    alvo: { modulo: "pagar", origem: r.origem, id: r.id },
-    titulo: r.descricao,
-    referencia:
-      r.parcela_total > 1
-        ? `${origem} · ${r.parcela_numero}/${r.parcela_total}`
-        : origem,
-    contraparte: r.fornecedor_nome || "—",
-    vencimento: r.data_pagamento,
-    aberto: faltaPagar(r),
-    // Avulso, recorrência e folha já têm o par; a PP tem só o tipo
-    // (decisão 068) e usa o subtipo do lote.
-    centroDeCusto:
-      r.plano_conta_tipo_id && r.plano_conta_subtipo_id
-        ? { tipoId: r.plano_conta_tipo_id, subtipoId: r.plano_conta_subtipo_id }
-        : null,
-  };
-}
 
 /** O título a pagar por trás da linha da planilha (a lista só monta linhas
  *  a pagar). */
@@ -473,6 +392,9 @@ interface Props {
   regionais: Array<{ id: string; nome: string; ativo: boolean; empresa_id: string }>;
   /** Cartões de crédito ativos — repassados ao drawer de conta avulsa. */
   cartoes?: CartaoOption[];
+  /** As faturas recentes dos cartões, para o campo Fatura da baixa no
+   *  cartão (decisão 197). */
+  faturasNaBaixa: FaturaDoCartaoNaBaixa[];
   /** A última retenção de cada fornecedor (por `parte_id`), para o
    *  "Repetir as alíquotas" da baixa (decisão 125). */
   ultimasRetencoes: Record<string, UltimaRetencao>;
@@ -506,6 +428,7 @@ export function TitulosPagarList({
   clientes,
   regionais,
   cartoes = [],
+  faturasNaBaixa,
   ultimasRetencoes,
   exportarRemessaBotao,
   podeDevolverFolha,
@@ -693,15 +616,15 @@ export function TitulosPagarList({
   // origem por lote (revisão da decisão 140, 05/10/2026).
   const elegiveis = filtrados.flatMap((l) => {
     const r = tituloDe(l);
-    const t = motivoForaDoLote(r) === null ? paraOLote(r) : null;
+    const t = motivoForaDoLoteAPagar(r) === null ? paraOLoteAPagar(r) : null;
     return t ? [elegivelDoLote(t)] : [];
   });
   const selecao = useSelecao(elegiveis);
   const [loteAberto, setLoteAberto] = React.useState(false);
   const selecionados = filtrados
     .map(tituloDe)
-    .filter((r) => selecao.marcado(chaveDoLote(r)))
-    .map(paraOLote)
+    .filter((r) => selecao.marcado(chaveDoLoteAPagar(r)))
+    .map(paraOLoteAPagar)
     .filter((t): t is TituloParaLote => t !== null);
 
   // Faixa de resumo — sobre a base bruta (todos os status), não sobre o
@@ -739,62 +662,9 @@ export function TitulosPagarList({
     };
   }, [rowsBruto, mostraPeriodo, dataDe, dataAte]);
 
+  // O mesmo `alvo` da aba Títulos da conciliação (decisão 196).
   const alvoBaixa: BaixaTituloAlvo | null = baixando
-    ? {
-        titulo: baixando.descricao,
-        origem:
-          baixando.origem === "pp"
-            ? `Pedido de produção ${baixando.origem_label}`
-            : baixando.origem === "recorrencia"
-              ? `Recorrência · ${baixando.descricao}`
-              : baixando.origem === "desembolso"
-                ? `Desembolso ${baixando.origem_label}`
-                : baixando.origem === "pp_devolucao_verba"
-                  ? `Estorno de verba ${baixando.origem_label.replace(/^ESTORNO /, "")}`
-                  : baixando.origem === "fatura_cartao"
-                    ? `Fatura de cartão ${baixando.origem_label}`
-                    : baixando.origem === "folha"
-                      ? "Folha de pagamento"
-                      : "Lançamento avulso",
-        parcela: `${baixando.parcela_numero}/${baixando.parcela_total}`,
-        vencimento: baixando.data_pagamento,
-        chave: `${baixando.origem}-${baixando.id}-${baixando.baixas.length}`,
-        valor: baixando.valor,
-        aberto: faltaPagar(baixando),
-        restoTexto: baixando.data_pagamento
-          ? `, na data de ${formatDate(baixando.data_pagamento)}, que dá para repactuar pelo lápis.`
-          : null,
-        motivoSemParcial: motivoSemParcialDa(baixando),
-        // Retenção só no serviço de fornecedor (decisão 125): PP que não é
-        // de verba, avulso e recorrência. O que foi para uma remessa com o
-        // valor cheio sai sem retenção; a remessa que pagou o líquido
-        // (decisão 145) abre com a retenção dela.
-        retencao:
-          (baixando.origem === "pp" && !baixando.eh_verba) ||
-          baixando.origem === "avulso" ||
-          baixando.origem === "recorrencia"
-            ? {
-                mostra: true,
-                motivo:
-                  baixando.em_remessa && !baixando.em_remessa_com_retencao
-                    ? "Pago pela remessa com o valor cheio."
-                    : null,
-              }
-            : { mostra: false },
-        ultimaRetencao: baixando.parte_id ? ultimasRetencoes[baixando.parte_id] ?? null : null,
-        empresaId: baixando.empresa_id,
-        planoContaTipoId: baixando.plano_conta_tipo_id,
-        planoContaSubtipoId: baixando.plano_conta_subtipo_id,
-        foraDoCadastro: baixando.fora_do_cadastro,
-        isDevolucao: baixando.origem === "pp_devolucao_verba",
-        // Fatura não se paga com cartão, folha também não (Tiago,
-        // 01/10/2026; o banco recusa), e o restante de uma parcial não vai
-        // para a fatura.
-        semCartao:
-          baixando.origem === "fatura_cartao" ||
-          baixando.origem === "folha" ||
-          baixando.baixas.length > 0,
-      }
+    ? alvoDaBaixaAPagar(baixando, ultimasRetencoes)
     : null;
 
   const alvoConferencia: BaixaRegistradaAlvo | null = conferindo
@@ -1055,8 +925,8 @@ export function TitulosPagarList({
         cabecalhoDaSelecao={<CaixaDoCabecalho {...selecao.cabecalho} />}
         caixa={(l) => {
           const r = tituloDe(l);
-          const chaveLote = chaveDoLote(r);
-          const motivoLote = motivoForaDoLote(r) ?? selecao.foraDaOrigem(chaveLote);
+          const chaveLote = chaveDoLoteAPagar(r);
+          const motivoLote = motivoForaDoLoteAPagar(r) ?? selecao.foraDaOrigem(chaveLote);
           return (
             <span title={motivoLote ?? undefined}>
               <CaixaDaLinha
@@ -1172,7 +1042,7 @@ export function TitulosPagarList({
         tipos={tipos}
         subtipos={subtipos}
         cartoes={cartoes}
-        formaPlanejada={baixando?.forma_pagamento ?? baixando?.forma_prevista ?? null}
+        faturas={faturasNaBaixa}
         cartaoPlanejadoId={baixando?.cartao_credito_id ?? baixando?.cartao_previsto_id ?? null}
         pending={pending}
         erro={erroAcao}
@@ -1210,6 +1080,9 @@ export function TitulosPagarList({
               res.fatura
                 ? `Confirmado no cartão · ${formatMoney(alvo.valor)} entrou na fatura${competencia ? ` de ${rotuloCurto(competencia)}` : ""}${cartao ? ` do ${cartao.nome}` : ""} (${res.fatura.codigo}).`
                 : `Baixa registrada · ${formatMoney(liquido)} enviado para a conciliação.` +
+                    (payload.juros > 0
+                      ? ` Mais ${formatMoney(payload.juros)} de juros e multa, em 11 · Despesa com Juros.`
+                      : "") +
                     (retidoNaBaixa > 0
                       ? ` ${formatMoney(retidoNaBaixa)} retidos, a recolher.`
                       : "") +
@@ -1266,7 +1139,7 @@ export function TitulosPagarList({
             setToast(
               alvo.origem === "fatura_cartao"
                 ? `Pagamento cancelado · a fatura ${alvo.origem_label} voltou para Fechada.`
-                : `Baixa cancelada · ${formatMoney(baixa.movimentado)} saíram do extrato e o título voltou para ${sobraBaixa ? "Parcial" : "A pagar"}.`,
+                : `Baixa cancelada · ${formatMoney(baixa.movimentado)}${res.juros > 0 ? ` e ${formatMoney(res.juros)} de juros e multa` : ""} saíram do extrato e o título voltou para ${sobraBaixa ? "Parcial" : "A pagar"}.`,
             );
             router.refresh();
           });
@@ -1337,6 +1210,8 @@ export function TitulosPagarList({
         contas={contas}
         tipos={tipos}
         subtipos={subtipos}
+        cartoes={cartoes}
+        faturas={faturasNaBaixa}
         onConcluido={(mensagem) => {
           selecao.limpar();
           setToast(mensagem);

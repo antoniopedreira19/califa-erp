@@ -195,7 +195,7 @@ export function ConferenciaDasBaixas({
             mensagem =
               t.origem === "fatura_cartao"
                 ? `Pagamento cancelado · a fatura ${t.origem_label} voltou para Fechada.`
-                : `Baixa cancelada · ${formatMoney(baixa.movimentado)} saíram do extrato e o título voltou para ${sobraBaixa ? "Parcial" : "A pagar"}.`;
+                : `Baixa cancelada · ${formatMoney(baixa.movimentado)}${res.juros > 0 ? ` e ${formatMoney(res.juros)} de juros e multa` : ""} saíram do extrato e o título voltou para ${sobraBaixa ? "Parcial" : "A pagar"}.`;
           } else {
             const t = c.t;
             // A transferência não tem um lançamento só: cancela pelo título.

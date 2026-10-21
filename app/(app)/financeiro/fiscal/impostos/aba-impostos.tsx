@@ -374,6 +374,9 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
         subtipos={[]}
         tenantId={dados.tenantId}
         nomesDasPJs={nomesDasPJs}
+        // Imposto não se paga com cartão (decisão 197).
+        cartoes={[]}
+        faturas={[]}
         onConcluido={(mensagem) => {
           selecao.limpar();
           setToast(mensagem);

@@ -74,6 +74,8 @@ import {
 import type { TituloRow as TituloAReceber } from "../contas-a-receber/titulos-list";
 import { lerImpostos, type ImpostoDaLista } from "../fiscal/impostos/dados";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
+import { carregarFaturasNaBaixa } from "@/lib/data/faturas-na-baixa";
+import type { FaturaDoCartaoNaBaixa } from "@/lib/financeiro/fatura-do-cartao";
 import { carregarExtrasDaPlanilha, type ExtrasDaPlanilha } from "@/lib/data/planilha-de-titulos";
 import { idsDaPlanilha } from "./linhas-da-aba";
 
@@ -104,6 +106,8 @@ export interface DadosDaAbaTitulos {
   tipos: PlanoContaTipo[];
   subtipos: PlanoContaSubtipo[];
   cartoes: CartaoOption[];
+  /** As faturas recentes dos cartões, para o campo Fatura (decisão 197). */
+  faturasNaBaixa: FaturaDoCartaoNaBaixa[];
   ultimasRetencoesPagar: Record<string, UltimaRetencao>;
   ultimasRetencoesReceber: Record<string, UltimaRetencao>;
 }
@@ -141,6 +145,7 @@ export async function carregarTitulosDaConciliacao(
     empresasRes,
     impostosLidos,
     transferenciasRes,
+    faturasNaBaixa,
   ] = await Promise.all([
     // ---- A pagar ----
     // Só aprovada e paga viram título; a paga entra porque uma parcela
@@ -284,6 +289,8 @@ export async function carregarTitulosDaConciliacao(
       .eq("tenant_id", tenantId)
       .eq("status", "a_transferir")
       .order("data_prevista", { ascending: true }),
+    // ---- As faturas do campo Fatura da baixa no cartão (decisão 197) ----
+    carregarFaturasNaBaixa(supabase, tenantId, hoje),
   ]);
 
   // ⚠️ O erro é LIDO: uma consulta quebrada faria a aba dizer "nenhum
@@ -398,6 +405,7 @@ export async function carregarTitulosDaConciliacao(
     tipos,
     subtipos: subtiposRes.data ?? [],
     cartoes,
+    faturasNaBaixa,
     ultimasRetencoesPagar: mapearUltimasRetencoes(
       retencoes.filter((r) => r.natureza === "saida"),
     ),

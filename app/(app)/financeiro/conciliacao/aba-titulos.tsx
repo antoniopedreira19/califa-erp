@@ -486,6 +486,8 @@ export function AbaTitulos({
         contaPadrao={dados.contas.some((c) => c.id === contaId) ? contaId : null}
         tenantId={dados.tenantId}
         nomesDasPJs={dados.nomesDasPJs}
+        cartoes={dados.cartoes}
+        faturas={dados.faturasNaBaixa}
         onConcluido={(mensagem) => {
           selecao.limpar();
           setToast(mensagem);
@@ -503,7 +505,7 @@ export function AbaTitulos({
         tipos={dados.tipos}
         subtipos={dados.subtipos}
         cartoes={dados.cartoes}
-        formaPlanejada={baixandoPagar?.forma_pagamento ?? baixandoPagar?.forma_prevista ?? null}
+        faturas={dados.faturasNaBaixa}
         cartaoPlanejadoId={baixandoPagar?.cartao_credito_id ?? baixandoPagar?.cartao_previsto_id ?? null}
         pending={pending}
         erro={erro}
@@ -533,6 +535,9 @@ export function AbaTitulos({
               const resta = Math.round((faltaPagar(alvo) - payload.valor_baixa) * 100) / 100;
               setToast(
                 avisoDaBaixa(payload.conta_bancaria_id, payload.pago_em) +
+                  (payload.juros > 0
+                    ? ` Mais ${formatBRL(payload.juros)} de juros e multa, em 11 · Despesa com Juros.`
+                    : "") +
                   (retido > 0 ? ` ${formatBRL(retido)} retidos, a recolher.` : "") +
                   (resta > 0.004 ? ` Faltam ${formatBRL(resta)}.` : ""),
               );

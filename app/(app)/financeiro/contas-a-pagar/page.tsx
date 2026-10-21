@@ -15,6 +15,7 @@ import { lerTab } from "./contas-pagar-tab-url";
 import { TitulosPagarList } from "./titulos-pagar-list";
 import { montarDadosDaRemessa } from "./titulos-da-remessa";
 import { carregarExtrasDaPlanilha } from "@/lib/data/planilha-de-titulos";
+import { carregarFaturasNaBaixa } from "@/lib/data/faturas-na-baixa";
 import { somaDias } from "@/lib/financeiro/planilha-de-titulos";
 import { idsDaPlanilha } from "../conciliacao/linhas-da-aba";
 import {
@@ -138,6 +139,7 @@ export default async function PedidosCompraFinanceiroPage({
     remessasItensRes,
     ultimasRetencoesRes,
     retencoesDaAprovacaoRes,
+    faturasNaBaixa,
   ] = await Promise.all([
     (() => {
       let q = supabase
@@ -386,6 +388,9 @@ export default async function PedidosCompraFinanceiroPage({
       .from("pedidos_compra_retencoes")
       .select("pedido_compra_id, imposto, aliquota")
       .eq("tenant_id", session.activeTenant.id),
+    // As faturas recentes dos cartões, para o campo Fatura da baixa no
+    // cartão (decisão 197).
+    carregarFaturasNaBaixa(supabase, session.activeTenant.id, hojeEmSaoPauloIso()),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
@@ -959,6 +964,7 @@ export default async function PedidosCompraFinanceiroPage({
               clientes={clientesList}
               regionais={regionaisList}
               cartoes={cartoesList}
+              faturasNaBaixa={faturasNaBaixa}
               ultimasRetencoes={ultimasRetencoes}
               podeDevolverFolha={pode(session.activeRole, "rh.folhas.aprovar_financeiro")}
               exportarRemessaBotao={

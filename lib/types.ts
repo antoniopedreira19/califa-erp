@@ -3519,7 +3519,12 @@ export type OrigemLancamento =
   // A baixa de uma guia de imposto (módulo fiscal, entrega 2): uma linha
   // por parte do rateio, mais a multa e os juros, todas com
   // `imposto_a_pagar_id`. A conciliação as mostra como uma linha só.
-  | "imposto_baixa";
+  | "imposto_baixa"
+  // Os juros e a multa pagos numa baixa de PP ou de avulsa (decisão 196):
+  // um lançamento à parte, em 11 · Despesa com Juros, ligado à baixa por
+  // `juros_de_lancamento_id`. Guarda as chaves do documento, mas nunca o
+  // quita: toda soma do baixado filtra por `pp_baixa`/`avulsa_baixa`.
+  | "juros_baixa";
 
 export interface LancamentoFinanceiro {
   id: string;
@@ -3588,6 +3593,9 @@ export interface LancamentoFinanceiro {
   /** O papel na fatura: `item`, `ajuste`, `pagamento` ou `pagamento_estorno`.
    *  Nulo fora do cartão. */
   papel_na_fatura: string | null;
+  /** Só na origem `juros_baixa`: a baixa cujos juros e multa esta linha
+   *  paga (decisão 196). Cancelar a baixa apaga os juros junto. */
+  juros_de_lancamento_id: string | null;
   origem: OrigemLancamento;
   criado_por: string;
   created_at: string;

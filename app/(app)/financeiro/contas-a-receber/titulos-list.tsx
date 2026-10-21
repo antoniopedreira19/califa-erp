@@ -252,6 +252,8 @@ function paraOLote(r: TituloRow): TituloParaLote | null {
       contraparte: r.contraparte_nome,
       vencimento: r.data_vencimento,
       aberto: faltaReceber(r),
+      // O recebimento nunca vai para o cartão (decisão 197).
+      semCartao: "Recebimento não entra na fatura do cartão.",
       // A nota não tem centro de custo: usa o do lote.
       centroDeCusto: null,
     };
@@ -266,6 +268,8 @@ function paraOLote(r: TituloRow): TituloParaLote | null {
       contraparte: r.contraparte_nome,
       vencimento: r.data_vencimento,
       aberto: faltaReceber(r),
+      // O recebimento nunca vai para o cartão (decisão 197).
+      semCartao: "Recebimento não entra na fatura do cartão.",
       // O recebimento avulso nasce com o centro de custo (decisão 124).
       centroDeCusto:
         r.plano_conta_tipo_id && r.plano_conta_subtipo_id
@@ -752,6 +756,9 @@ export function TitulosList({
         contas={contas}
         tipos={tipos}
         subtipos={subtipos}
+        // Recebimento não vai para o cartão (decisão 197).
+        cartoes={[]}
+        faturas={[]}
         onConcluido={(mensagem) => {
           selecao.limpar();
           setToast(mensagem);
