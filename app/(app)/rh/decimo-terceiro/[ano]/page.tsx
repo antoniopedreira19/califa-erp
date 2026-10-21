@@ -1,16 +1,15 @@
 import { notFound, redirect } from "next/navigation";
-import Link from "next/link";
 import {
   Gift,
   Users,
   Wallet,
   Calculator,
-  ArrowLeft,
   RefreshCw,
 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { pode } from "@/lib/permissoes";
 import { recalcularFolhaDecimoTerceiro } from "../actions";
 import { TabelaLinhas, type LinhaRow } from "./tabela-linhas";
@@ -132,16 +131,8 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
   }
 
   return (
-    <div className="space-y-8">
-      <div>
-        <Link
-          href="/rh/decimo-terceiro"
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Voltar
-        </Link>
-      </div>
+    <div className="space-y-6 max-w-[1480px] mx-auto">
+      <BotaoVoltar reserva="/rh/decimo-terceiro" />
 
       <PageHeader
         eyebrow="RH · 13º Salário"

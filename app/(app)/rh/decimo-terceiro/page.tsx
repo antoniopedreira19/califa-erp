@@ -5,6 +5,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/empty-state";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { pode } from "@/lib/permissoes";
 import { CriarFolhaButton } from "./_components/criar-folha-button";
 
@@ -98,7 +99,8 @@ export default async function DecimoTerceiroPage() {
   const podeEditar = pode(session.activeRole, "rh.decimo_terceiro.editar");
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6 max-w-[1480px] mx-auto">
+      <BotaoVoltar reserva="/rh" />
       <PageHeader
         eyebrow="RH"
         title="13º Salário"
