@@ -5,13 +5,19 @@ import {
   Wallet,
   Calculator,
   RefreshCw,
+  Send,
+  CheckCircle2,
 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { pode } from "@/lib/permissoes";
-import { recalcularFolhaDecimoTerceiro } from "../actions";
+import {
+  recalcularFolhaDecimoTerceiro,
+  fecharPrimeiraParcelaDecimoTerceiro,
+  fecharSegundaParcelaDecimoTerceiro,
+} from "../actions";
 import { TabelaLinhas, type LinhaRow } from "./tabela-linhas";
 import { BotaoExportar } from "./botao-exportar";
 
@@ -161,10 +167,21 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
   const totalLiquido = linhas.reduce((acc, l) => acc + l.total_liquido, 0);
 
   const podeEditar = pode(session.activeRole, "rh.decimo_terceiro.editar");
+  const podeRecalcular = podeEditar && folha.status === "rascunho";
+  const podeFechar1a = podeEditar && folha.status === "rascunho";
+  const podeFechar2a = podeEditar && folha.status === "fechada_parcial_1";
 
   async function recalcular() {
     "use server";
     await recalcularFolhaDecimoTerceiro(folha!.id);
+  }
+  async function fechar1a() {
+    "use server";
+    await fecharPrimeiraParcelaDecimoTerceiro(folha!.id);
+  }
+  async function fechar2a() {
+    "use server";
+    await fecharSegundaParcelaDecimoTerceiro(folha!.id);
   }
 
   return (
@@ -174,12 +191,12 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
       <PageHeader
         eyebrow="RH · 13º Salário"
         title={`13º ${folha.ano}`}
-        description={`${totalLinhas} ${totalLinhas === 1 ? "colaborador" : "colaboradores"} na folha. Clique numa linha para editar o cálculo.`}
+        description={descricaoDoStatus(folha.status, totalLinhas)}
         icon={Gift}
         actions={
           <div className="flex items-center gap-2">
             <BotaoExportar folhaId={folha.id} />
-            {podeEditar && (
+            {podeRecalcular && (
               <form action={recalcular}>
                 <button
                   type="submit"
@@ -189,6 +206,34 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
                   Recalcular folha
                 </button>
               </form>
+            )}
+            {podeFechar1a && (
+              <form action={fechar1a}>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red/90 transition-colors"
+                >
+                  <Send className="h-4 w-4" />
+                  Fechar 1ª parcela
+                </button>
+              </form>
+            )}
+            {podeFechar2a && (
+              <form action={fechar2a}>
+                <button
+                  type="submit"
+                  className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red/90 transition-colors"
+                >
+                  <Send className="h-4 w-4" />
+                  Fechar 2ª parcela
+                </button>
+              </form>
+            )}
+            {folha.status === "fechada_parcial_2" && (
+              <span className="inline-flex items-center gap-2 rounded-lg bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-700">
+                <CheckCircle2 className="h-4 w-4" />
+                Parcelas enviadas
+              </span>
             )}
           </div>
         }
@@ -216,7 +261,10 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
         />
       </div>
 
-      <TabelaLinhas linhas={linhas} podeEditar={podeEditar} />
+      <TabelaLinhas
+        linhas={linhas}
+        podeEditar={podeEditar && folha.status === "rascunho"}
+      />
     </div>
   );
 }
@@ -256,4 +304,20 @@ function KpiCard({
       )}
     </div>
   );
+}
+
+function descricaoDoStatus(status: string, totalLinhas: number): string {
+  const n = `${totalLinhas} ${totalLinhas === 1 ? "colaborador" : "colaboradores"}`;
+  switch (status) {
+    case "rascunho":
+      return `${n} na folha. Clique numa linha para editar o cálculo. Quando estiver tudo pronto, feche a 1ª parcela para enviar ao financeiro.`;
+    case "fechada_parcial_1":
+      return `${n}. 1ª parcela enviada ao financeiro — aguardando aprovação. Quando aprovada e paga, feche a 2ª parcela.`;
+    case "fechada_parcial_2":
+      return `${n}. Ambas as parcelas enviadas ao financeiro. Acompanhe a aprovação em Contas a Pagar.`;
+    case "concluida":
+      return `${n}. Folha concluída.`;
+    default:
+      return `${n} na folha.`;
+  }
 }

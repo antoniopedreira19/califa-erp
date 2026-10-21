@@ -623,3 +623,170 @@ export async function exportarFolhaDecimoTerceiroXlsx(
     base64: buffer.toString("base64"),
   };
 }
+
+// ----------------- Fechar 1a e 2a parcela -----------------
+
+type FecharParcelaOut = ActionResult<{
+  total_linhas_geradas: number;
+}>;
+
+interface LinhaParaFechamento {
+  id: string;
+  colaborador_id: string;
+  avos: number;
+  primeira_parcela: string;
+  segunda_parcela: string;
+  desconto_inss: string;
+  desconto_irrf: string;
+  snapshot_valor_recibo: string | null;
+}
+
+/**
+ * Fecha a 1a parcela do 13o: cria 1 linha em folhas_pagamento por colaborador
+ * da folha, com tipo='decimo_terceiro_1a_parcela', status='enviada' (vai
+ * direto pra tela do financeiro aprovar). Atualiza status da folha pra
+ * 'fechada_parcial_1'. So pode ser chamada quando status='rascunho'.
+ *
+ * Linhas com avos=0 (admitido apos 15/dez, sem direito) sao puladas — nao
+ * geram linha em folhas_pagamento.
+ */
+export async function fecharPrimeiraParcelaDecimoTerceiro(
+  folhaId: string,
+): Promise<FecharParcelaOut> {
+  return fecharParcela(folhaId, 1);
+}
+
+export async function fecharSegundaParcelaDecimoTerceiro(
+  folhaId: string,
+): Promise<FecharParcelaOut> {
+  return fecharParcela(folhaId, 2);
+}
+
+async function fecharParcela(
+  folhaId: string,
+  numeroParcela: 1 | 2,
+): Promise<FecharParcelaOut> {
+  const session = await requireSession();
+  if (!pode(session.activeRole, "rh.decimo_terceiro.editar")) {
+    return { ok: false, message: "Sem permissão para esta ação." };
+  }
+  const tenantId = session.activeTenant.id;
+  const supabase = createClient();
+
+  const { data: folha, error: errFolha } = await supabase
+    .from("decimo_terceiro_folhas")
+    .select("id, ano, status")
+    .eq("id", folhaId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (errFolha || !folha) {
+    return { ok: false, message: "Folha não encontrada." };
+  }
+
+  const statusEsperado = numeroParcela === 1 ? "rascunho" : "fechada_parcial_1";
+  if (folha.status !== statusEsperado) {
+    const label = numeroParcela === 1 ? "a 1ª" : "a 2ª";
+    return {
+      ok: false,
+      message: `A folha precisa estar em "${statusEsperado}" para fechar ${label} parcela. Status atual: ${folha.status}.`,
+    };
+  }
+
+  // Carrega todas as linhas da folha com avos > 0 (quem tem direito a algo).
+  const { data: linhas, error: errLinhas } = await supabase
+    .from("decimo_terceiro_linhas")
+    .select(
+      "id, colaborador_id, avos, primeira_parcela, segunda_parcela, desconto_inss, desconto_irrf, snapshot_valor_recibo",
+    )
+    .eq("folha_id", folhaId)
+    .eq("tenant_id", tenantId)
+    .gt("avos", 0);
+  if (errLinhas) {
+    return {
+      ok: false,
+      message: `Falha ao carregar linhas da folha: ${errLinhas.message}`,
+    };
+  }
+  if (!linhas || linhas.length === 0) {
+    return { ok: false, message: "Nenhuma linha com direito a 13º nesta folha." };
+  }
+
+  const tipo =
+    numeroParcela === 1
+      ? "decimo_terceiro_1a_parcela"
+      : "decimo_terceiro_2a_parcela";
+  const competenciaMes = numeroParcela === 1 ? 11 : 12;
+  const agora = new Date().toISOString();
+
+  // Monta as linhas pra folhas_pagamento. salario_base = valor efetivo pago
+  // ao colaborador na parcela (1a = primeira_parcela; 2a = segunda_parcela
+  // menos INSS e IRRF, pros CLT; PJ fica sem desconto).
+  const linhasFolhaPagamento = (linhas as LinhaParaFechamento[]).map((l) => {
+    const salarioBase =
+      numeroParcela === 1
+        ? Number(l.primeira_parcela)
+        : Number(l.segunda_parcela) -
+          Number(l.desconto_inss) -
+          Number(l.desconto_irrf);
+    return {
+      tenant_id: tenantId,
+      colaborador_id: l.colaborador_id,
+      competencia_ano: folha.ano,
+      competencia_mes: competenciaMes,
+      salario_base: salarioBase,
+      status: "enviada",
+      tipo,
+      origem: "california",
+      enviada_em: agora,
+      enviada_por: session.profile.id,
+      data_pagamento_prevista: `${folha.ano}-${String(competenciaMes).padStart(2, "0")}-${numeroParcela === 1 ? "30" : "20"}`,
+      decimo_terceiro_linha_id: l.id,
+      created_by: session.profile.id,
+    };
+  });
+
+  const { error: errInsert } = await supabase
+    .from("folhas_pagamento")
+    .insert(linhasFolhaPagamento);
+  if (errInsert) {
+    return {
+      ok: false,
+      message: `Falha ao enviar ao financeiro: ${errInsert.message}`,
+    };
+  }
+
+  // Atualiza status da folha
+  const novoStatus =
+    numeroParcela === 1 ? "fechada_parcial_1" : "fechada_parcial_2";
+  const { error: errStatus } = await supabase
+    .from("decimo_terceiro_folhas")
+    .update({ status: novoStatus })
+    .eq("id", folhaId)
+    .eq("tenant_id", tenantId);
+  if (errStatus) {
+    return {
+      ok: false,
+      message: `Linhas enviadas, mas falha ao atualizar status: ${errStatus.message}`,
+    };
+  }
+
+  await logAuditEvent({
+    acao:
+      numeroParcela === 1
+        ? "decimo_terceiro.parcela_1a.fechada"
+        : "decimo_terceiro.parcela_2a.fechada",
+    tenantId,
+    entidadeTipo: "decimo_terceiro_folha",
+    entidadeId: folhaId,
+    metadata: {
+      ano: folha.ano,
+      total_linhas_geradas: linhasFolhaPagamento.length,
+      competencia_mes: competenciaMes,
+    },
+  });
+
+  revalidatePath(`/rh/decimo-terceiro/${folha.ano}`);
+  revalidatePath("/financeiro/contas-a-pagar");
+
+  return { ok: true, total_linhas_geradas: linhasFolhaPagamento.length };
+}

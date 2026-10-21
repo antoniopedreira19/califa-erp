@@ -470,6 +470,9 @@ export type AuditAction =
   | "decimo_terceiro.folha.recalculada"
   | "decimo_terceiro.folha.exportada"
   | "decimo_terceiro.linha.editada"
+  // Fase A da integração com Folha de Pagamento (21/10/2026).
+  | "decimo_terceiro.parcela_1a.fechada"
+  | "decimo_terceiro.parcela_2a.fechada"
   | "acao_negada";
 
 export interface AuditPayload {
