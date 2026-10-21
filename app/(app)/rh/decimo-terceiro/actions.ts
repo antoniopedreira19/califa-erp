@@ -408,44 +408,53 @@ export async function recalcularFolhaDecimoTerceiro(
     (colabsAtuais ?? []).map((c) => [c.id, c.data_admissao]),
   );
 
-  let total = 0;
-  for (const l of linhas) {
-    const salarioVigente =
-      salPorColab.get(l.colaborador_id) ?? l.snapshot_salario;
-    const admissaoAtual =
-      admissaoPorColab.get(l.colaborador_id) ?? l.snapshot_data_admissao;
-    const salarioNum = Number(salarioVigente);
-    const calc = calcularLinhaDecimoTerceiro({
-      salario: salarioNum,
-      dataAdmissao: new Date(`${admissaoAtual}T00:00:00Z`),
-      ano: folha.ano,
-      tipoContratacao: l.snapshot_tipo_contratacao as TipoContratacao,
-      totalAdiantado: Number(l.total_adiantado),
-    });
-    const obsAuto =
-      calc.avos === 0 ? "Admitido após 15/12 — sem direito a avos" : null;
-    const { error: errUpd } = await supabase
-      .from("decimo_terceiro_linhas")
-      .update({
-        snapshot_salario: salarioNum,
-        snapshot_data_admissao: admissaoAtual,
-        avos: calc.avos,
-        primeira_parcela: calc.primeiraParcela,
-        segunda_parcela: calc.segundaParcela,
-        desconto_inss: calc.descontoInss,
-        desconto_irrf: calc.descontoIrrf,
-        total_bruto: calc.totalBruto,
-        total_liquido: calc.totalLiquido,
-        obs: obsAuto,
-        updated_by: session.profile.id,
-      })
-      .eq("id", l.id)
-      .eq("tenant_id", tenantId);
-    if (errUpd) {
-      return { ok: false, message: `Falha ao recalcular: ${errUpd.message}` };
-    }
-    total += 1;
+  // Dispara os updates em paralelo (um por linha). Supabase JS não tem
+  // bulk update com valores diferentes por linha; Promise.all vira ~2s
+  // com 200 colaboradores em vez de 10-20s sequenciais.
+  const resultados = await Promise.all(
+    linhas.map(async (l) => {
+      const salarioVigente =
+        salPorColab.get(l.colaborador_id) ?? l.snapshot_salario;
+      const admissaoAtual =
+        admissaoPorColab.get(l.colaborador_id) ?? l.snapshot_data_admissao;
+      const salarioNum = Number(salarioVigente);
+      const calc = calcularLinhaDecimoTerceiro({
+        salario: salarioNum,
+        dataAdmissao: new Date(`${admissaoAtual}T00:00:00Z`),
+        ano: folha.ano,
+        tipoContratacao: l.snapshot_tipo_contratacao as TipoContratacao,
+        totalAdiantado: Number(l.total_adiantado),
+      });
+      const obsAuto =
+        calc.avos === 0 ? "Admitido após 15/12 — sem direito a avos" : null;
+      return supabase
+        .from("decimo_terceiro_linhas")
+        .update({
+          snapshot_salario: salarioNum,
+          snapshot_data_admissao: admissaoAtual,
+          avos: calc.avos,
+          primeira_parcela: calc.primeiraParcela,
+          segunda_parcela: calc.segundaParcela,
+          desconto_inss: calc.descontoInss,
+          desconto_irrf: calc.descontoIrrf,
+          total_bruto: calc.totalBruto,
+          total_liquido: calc.totalLiquido,
+          obs: obsAuto,
+          updated_by: session.profile.id,
+        })
+        .eq("id", l.id)
+        .eq("tenant_id", tenantId);
+    }),
+  );
+
+  const primeiroErro = resultados.find((r) => r.error);
+  if (primeiroErro?.error) {
+    return {
+      ok: false,
+      message: `Falha ao recalcular: ${primeiroErro.error.message}`,
+    };
   }
+  const total = linhas.length;
 
   await supabase
     .from("decimo_terceiro_folhas")
