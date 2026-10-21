@@ -45,8 +45,12 @@ export const permissoes = {
    * contratacao. Isolado do RH no inicio (Fases 1-4); integracao com
    * folha/colaboradores vem depois. Freelancer (role) nao ve o modulo:
    * ele acessa via link publico quando for a vez dele.
+   *
+   * GP e produtor ocultos por ora (21/10/2026): o modulo ainda nao tem
+   * fluxo de solicitacao de contratacao pela producao, entao sumiu da
+   * sidebar deles ate essa parte entrar.
    */
-  "sidebar.freelancers":         ["administrador", "rh", "financeiro", "gerente_producao", "produtor"],
+  "sidebar.freelancers":         ["administrador", "rh", "financeiro"],
 
   // ==================================================================
   // Chave "Meus/Todos" nas listas (Projetos, Orcamentos, Jobs)
