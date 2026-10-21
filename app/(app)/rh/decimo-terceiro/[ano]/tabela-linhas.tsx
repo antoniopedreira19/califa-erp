@@ -351,11 +351,6 @@ export function TabelaLinhas({ linhas, podeEditar }: Props) {
                     <td className="px-4 py-3">
                       <div className="font-medium text-foreground">
                         {l.nome}
-                        {ehHibrido && (
-                          <span className="ml-2 inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
-                            híbrido
-                          </span>
-                        )}
                         {l.teve_reajuste_no_ano && (
                           <span
                             title="Teve mudança de salário no ano — considere ajustar via Editar linha pra aplicar retroativo."

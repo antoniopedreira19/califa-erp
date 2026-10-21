@@ -570,42 +570,16 @@ export async function recalcularFolhaDecimoTerceiro(
         reciboRaw != null && Number(reciboRaw) > 0 ? Number(reciboRaw) : null;
       const totalAdiantado = adiantadoPorColab.get(l.colaborador_id) ?? 0;
 
-      // Se o colaborador foi desligado DENTRO do ano, 13º proporcional
-      // foi pela rescisão. Zera a linha com obs explicativa, e marca
-      // editado_manualmente pra não ser rebuscada em recalcs futuros.
+      // Se o colaborador foi desligado DENTRO do ano, remove a linha da
+      // folha. O 13º proporcional dele saiu pela Rescisão (módulo
+      // /rh/rescisoes), então não deve aparecer na folha anual.
       const dataEnc = encerramentoPorColab.get(l.colaborador_id);
       const desligadoNoAno =
         dataEnc != null && dataEnc <= fimDoAno;
       if (desligadoNoAno) {
-        const dataBr = dataEnc.split("-").reverse().join("/");
         return supabase
           .from("decimo_terceiro_linhas")
-          .update({
-            snapshot_salario: salarioNum,
-            snapshot_data_admissao: admissaoAtual,
-            avos: 0,
-            total_adiantado: totalAdiantado,
-            primeira_parcela: 0,
-            segunda_parcela: 0,
-            desconto_inss: 0,
-            desconto_irrf: 0,
-            total_bruto: 0,
-            total_liquido: 0,
-            parte_clt_primeira_parcela: null,
-            parte_clt_segunda_parcela: null,
-            parte_clt_desconto_inss: null,
-            parte_clt_desconto_irrf: null,
-            parte_clt_total_liquido: null,
-            parte_pj_primeira_parcela: null,
-            parte_pj_segunda_parcela: null,
-            parte_pj_total_liquido: null,
-            salario_editado: 0,
-            avos_editado: 0,
-            editado_manualmente: true,
-            obs: `Desligado em ${dataBr} — 13º proporcional pago na rescisão`,
-            teve_reajuste_no_ano: reajusteNoAnoSet.has(l.colaborador_id),
-            updated_by: session.profile.id,
-          })
+          .delete()
           .eq("id", l.id)
           .eq("tenant_id", tenantId);
       }

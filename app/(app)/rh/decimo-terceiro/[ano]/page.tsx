@@ -118,6 +118,12 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
     empresa: EmpresaEmbed;
   }
 
+  function primeiroEUltimoNome(nome: string): string {
+    const partes = nome.trim().split(/\s+/);
+    if (partes.length <= 1) return nome;
+    return `${partes[0]} ${partes[partes.length - 1]}`;
+  }
+
   const linhas: LinhaRow[] = ((linhasRaw ?? []) as LinhaRaw[]).map((l) => {
     const empresa = Array.isArray(l.empresa) ? l.empresa[0] : l.empresa;
     const parteClt =
@@ -142,7 +148,7 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
         : null;
     return {
       id: l.id,
-      nome: l.snapshot_nome,
+      nome: primeiroEUltimoNome(l.snapshot_nome),
       empresa: empresa?.nome_fantasia ?? null,
       tipo_contratacao: l.snapshot_tipo_contratacao,
       data_admissao: l.snapshot_data_admissao,
