@@ -4734,6 +4734,72 @@ export interface ColaboradorFeriasLancamento {
 }
 
 
+// ---------- 13º Salário · Parte 1 (fundação, 21/10/2026) ----------
+// Folha anual de 13º com snapshot do cadastro e campos calculados.
+// Migration 20261021000001_decimo_terceiro_fundacao.sql. Enum nasce com
+// apenas 'rascunho'; partes 3+ adicionam 'fechada_parcial_1',
+// 'fechada_parcial_2' e 'concluida'.
+
+export type DecimoTerceiroFolhaStatus = "rascunho";
+
+/** Folha de 13º do ano. Uma por (tenant, ano). Guarda só o cabeçalho;
+ *  as linhas por colaborador ficam em DecimoTerceiroLinha. */
+export interface DecimoTerceiroFolha {
+  id: string;
+  tenant_id: string;
+  ano: number;
+  status: DecimoTerceiroFolhaStatus;
+  criada_em: string;
+  criada_por: string | null;
+  /** Timestamp da última rodada de recálculo. NULL até o 1º recálculo. */
+  recalculada_em: string | null;
+  recalculada_por: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Linha da folha de 13º — uma por colaborador. Snapshot do cadastro no
+ *  momento da criação da folha, campos calculados pela lib pura e
+ *  overrides manuais quando o RH edita linha a linha. */
+export interface DecimoTerceiroLinha {
+  id: string;
+  tenant_id: string;
+  folha_id: string;
+  colaborador_id: string;
+
+  // Snapshot (puxado do cadastro na criação; não muda sozinho depois)
+  snapshot_nome: string;
+  snapshot_cpf: string | null;
+  snapshot_tipo_contratacao: TipoContratacao;
+  snapshot_funcao: string;
+  snapshot_data_admissao: string;
+  snapshot_salario: string;
+  snapshot_empresa_id: string | null;
+
+  // Calculados
+  avos: number;
+  total_adiantado: string;
+  primeira_parcela: string;
+  segunda_parcela: string;
+  desconto_inss: string;
+  desconto_irrf: string;
+  total_bruto: string;
+  total_liquido: string;
+
+  // Override manual
+  editado_manualmente: boolean;
+  salario_editado: string | null;
+  avos_editado: number | null;
+  obs: string | null;
+
+  // Audit
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+}
+
+
 // ---------- Módulo fiscal · entrega 1 (02/10/2026) ----------
 // Cadastro de impostos (tabelas fiscal_*) e os dados que o Faturar, a
 // aprovação da PP e o fornecedor passam a registrar. Migration
