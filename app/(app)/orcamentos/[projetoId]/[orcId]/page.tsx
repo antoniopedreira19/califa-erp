@@ -368,7 +368,7 @@ export default async function OrcamentoDetailPage({
     // Só as primeiras cidades, e as mesmas para os dois consumidores desta
     // tela: o editor do orçamento e o combobox do modal de abertura. O
     // cadastro comporta o Brasil inteiro — o resto vem do servidor a cada
-    // digitação (`buscarCidades`, mesmo limite).
+    // digitação (`/api/cidades/busca`, mesmo limite).
     listarCidadesIniciais(session.activeTenant.id),
     // Só quem tem o papel Produtor (13/10/2026).
     listarProdutoresAtivos(session.activeTenant.id),

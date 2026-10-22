@@ -4,33 +4,6 @@ import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { createClient } from "@/lib/supabase/server";
-import { listarCidades, buscarSugestoesHibridas } from "@/lib/data/cidades";
-import type { CidadeSugestao } from "@/lib/data/cidades";
-
-/**
- * Busca de cidades do combobox do orçamento.
- *
- * Devolve o que ESTÁ no cadastro local do tenant + sugestões do IBGE que
- * ainda não foram cadastradas (com marcador `origem='ibge'`). Ao escolher
- * uma sugestão, o combobox chama `criarCidadeDoIBGE` pra materializá-la
- * no cadastro. Sem termo, mostra só o cadastro local (LIMITE_CIDADES).
- */
-export async function buscarCidades(
-  termo: string,
-): Promise<CidadeSugestao[]> {
-  const session = await requireSession();
-  const q = termo.trim();
-  if (q.length === 0) {
-    const locais = await listarCidades(session.activeTenant.id);
-    return locais.map((c) => ({
-      origem: "local" as const,
-      id: c.id,
-      nome: c.nome,
-      uf: c.uf,
-    }));
-  }
-  return buscarSugestoesHibridas(session.activeTenant.id, q);
-}
 
 type CriarResult =
   | { ok: true; id: string; nome: string; uf: string | null }
