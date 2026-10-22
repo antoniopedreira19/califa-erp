@@ -4,6 +4,7 @@
 // (`PlanilhasDoProjeto`) já é client.
 
 import * as React from "react";
+import { acimaDoOrcado } from "@/lib/calculos/limites-orcamento";
 import Link from "next/link";
 import { Calculator } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -312,6 +313,7 @@ export function ProjetoTotaisCard({
                   className={cn(
                     "whitespace-nowrap p-3 text-right font-mono text-[13px]",
                     PLANEJADO.celulaTotal,
+                    acimaDoOrcado(j.planejado.bruto, j.orcado) && "text-california-red",
                   )}
                 >
                   {j.planejado.bruto > 0
@@ -380,6 +382,7 @@ export function ProjetoTotaisCard({
                 className={cn(
                   "whitespace-nowrap p-3 text-right font-mono text-[13px] font-bold",
                   PLANEJADO.subtotalValor,
+                  acimaDoOrcado(somaDosJobs.planejado.bruto, totalOrcado) && "text-california-red",
                 )}
               >
                 {totalPlanejado > 0 ? formatCurrency(totalPlanejado, moeda) : "—"}

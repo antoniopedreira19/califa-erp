@@ -5728,3 +5728,21 @@ aplicada na hora combinada com a frente do Antonio, junto da
   Resultado geral com fundo/rótulos verdes e só o percentual vermelho,
   realizado em `rgb(220, 38, 38)` nas vistas Bruto e Líquido. Prints da
   revisão de 22/10 capturados. Nenhum dado operacional alterado.
+
+
+## Planejado excedente em todas as planilhas — 22/10/2026
+
+- O total planejado fica vermelho ao ultrapassar o orçado nas linhas,
+  subtotais de grupo e totais comparáveis. A mesma regra cobre Jobs,
+  leitura do financeiro, histórico e visões agregadas de Jobs/Orçamentos,
+  além da referência do planejado no formulário da PP.
+- Comparação sobre o bruto, antes do BV; a vista Líquido preserva o alerta.
+  Igualdade e valores dentro do orçado mantêm o verde.
+- Sem alterar cálculo ou permissão. Os tons alternativos do alerta e dos
+  totais normais do realizado estão apenas no protótipo para escolha.
+- **Conferência:** 40 testes existentes passaram. No build de produção
+  local, navegador autenticado como GP de teste: Item 1 de Jobs e da
+  visão agregada com R$ 20.000 planejados para R$ 10.000 orçados exibe
+  apenas o total planejado vermelho; orçado azul e valores dentro do
+  limite verdes. Bruto/Líquido preservam o alerta; print capturado.
+  Sem alteração de dados operacionais.

@@ -16,8 +16,11 @@ versão e Planilha Interna do job.
   Sem planejado, Resultado geral continua nulo (travessão), e só essa
   ausência não cria uma restrição nova. As demais travas de aprovação
   continuam valendo, inclusive para administrador.
-- No orçamento, o **total planejado do item** fica vermelho quando excede o orçado
-  (revisão de 22/10/2026); o orçado mantém o azul. O
+- O **total planejado** fica vermelho quando excede seu orçado em todas
+  as planilhas comparativas (Orçamentos, Jobs, financeiro, histórico e
+  visões agregadas), incluindo grupos, totais e a referência na PP
+  (revisão de 22/10/2026). A comparação usa o bruto antes do BV nas duas
+  vistas; o orçado mantém o azul. O
   percentual do Resultado geral fica vermelho tanto no cabeçalho quanto
   em Totais, inclusive quando ainda positivo, mas inferior a 20%. O card
   de Resultado geral conserva fundo, borda e rótulos verdes; só o número

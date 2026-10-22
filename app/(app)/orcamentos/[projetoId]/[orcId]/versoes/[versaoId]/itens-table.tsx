@@ -1706,7 +1706,7 @@ export function ItensTable({
                         )}
                       >
                         <div className="flex flex-col items-end">
-                          <span className="font-mono text-[13px] font-bold leading-[1.2]">
+                          <span className={cn("font-mono text-[13px] font-bold leading-[1.2]", acimaDoOrcado(sub.planejado.bruto, subOrcado) && "text-california-red")}>
                             {formatCurrency(subPlanejado, moeda)}
                           </span>
                           {/* A soma dos BVs de todos os itens do grupo. */}
@@ -2236,6 +2236,7 @@ export function ItensTable({
                   className={cn(
                     "px-3 py-2 text-right whitespace-nowrap",
                     PLANEJADO.subtotalValor,
+                    acimaDoOrcado(totaisDaPlanilha.planejado.bruto, totalOrcado) && "text-california-red",
                   )}
                 >
                   <div className="flex flex-col items-end">

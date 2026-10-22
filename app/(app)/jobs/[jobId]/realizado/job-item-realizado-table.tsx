@@ -1450,7 +1450,7 @@ export function JobItemRealizadoTable({
                       )}
                     >
                       <div className="flex flex-col items-end">
-                        <span className="font-mono text-[13px] font-bold leading-[1.2]">
+                        <span className={cn("font-mono text-[13px] font-bold leading-[1.2]", acimaDoOrcado(sub.planejado.bruto, sub.orcado) && "text-california-red")}>
                           {formatCurrency(subPlanejado, moeda)}
                         </span>
                         {visao === "liquido" && (
@@ -1833,6 +1833,8 @@ export function JobItemRealizadoTable({
                         {celulaOrcado("planQuantidade", "quantidade_planejada", PLANEJADO.celulaMeio)}
                         {celulaOrcado("planDiasMeses", "dias_meses_planejado", PLANEJADO.celulaMeio)}
                         <CelulaTotalComBv
+                          acimaDoOrcado={acimaDoOrcado(blocos.planejado.bruto, Number(item.total_orcado))}
+                          corAlerta="text-california-red"
                           bloco={blocos.planejado}
                           visao={visao}
                           moeda={moeda}
@@ -2057,7 +2059,7 @@ export function JobItemRealizadoTable({
                 )}
               >
                 <div className="flex flex-col items-end">
-                  <span className="font-mono text-[13px] font-bold">
+                  <span className={cn("font-mono text-[13px] font-bold", acimaDoOrcado(totais.planejado.bruto, totais.orcado) && "text-california-red")}>
                     {formatCurrency(valorNaVisao(totais.planejado, visao), moeda)}
                   </span>
                   {/* A soma dos BVs de todos os itens da planilha — foi o
@@ -2805,6 +2807,7 @@ function CelulaLeitura({
  *  torna a dedução auditável sem abrir o formulário do BV. */
 function CelulaTotalComBv({
   acimaDoOrcado: excedido = false,
+  corAlerta = "text-red-600",
   bloco,
   visao,
   moeda,
@@ -2815,6 +2818,7 @@ function CelulaTotalComBv({
   moldura,
 }: {
   acimaDoOrcado?: boolean;
+  corAlerta?: string;
   bloco: ValoresDoBloco;
   visao: VisaoBv;
   moeda: string;
@@ -2836,7 +2840,7 @@ function CelulaTotalComBv({
           className={cn(
             "font-mono text-xs font-semibold leading-[1.2]",
             bloco.bruto <= 0 && "text-muted-foreground",
-            excedido && "text-red-600",
+            excedido && corAlerta,
           )}
         >
           {bloco.bruto > 0 ? formatCurrency(valor, moeda) : "—"}

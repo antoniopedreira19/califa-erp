@@ -1,5 +1,6 @@
 "use client";
 
+import { acimaDoOrcado } from "@/lib/calculos/limites-orcamento";
 import type { CategoriaModeloPlanilha } from "@/lib/types";
 
 import * as React from "react";
@@ -298,6 +299,7 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
                       className={cn(
                         "whitespace-nowrap p-3 text-right font-mono text-[13px]",
                         PLANEJADO.celulaTotal,
+                        acimaDoOrcado(l.planejado, l.orcado) && "text-california-red",
                       )}
                     >
                       {semPlanejado ? "—" : formatCurrency(l.planejado, moeda)}
@@ -354,6 +356,7 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
                 className={cn(
                   "whitespace-nowrap p-3 text-right font-mono text-[13px] font-bold",
                   PLANEJADO.subtotalValor,
+                  acimaDoOrcado(totalPlanejado, totalOrcado) && "text-california-red",
                 )}
               >
                 {totalPlanejado > 0 ? formatCurrency(totalPlanejado, moeda) : "—"}

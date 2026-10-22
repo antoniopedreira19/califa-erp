@@ -1678,7 +1678,7 @@ export function GerarPPDrawer({
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Planejado do item</p>
-                  <p className="font-mono font-semibold">
+                  <p className={cn("font-mono font-semibold", acimaDoOrcado(valorPlanejado, valorOrcado) && "text-california-red")}>
                     {formatCurrency(valorPlanejado, "BRL")}
                   </p>
                   <p className="font-mono text-[11px] text-muted-foreground">

@@ -116,8 +116,10 @@ As planilhas de orçamento e de job são lidas em blocos verticais, não coluna 
 
 A rentabilidade fica em neutro de propósito: ela não é um bloco de entrada, é o que sobra entre dois outros. O grafite diz isso sem competir com os três. **O valor é sempre grafite, positivo ou negativo** — o sinal já está no número, e verde ali brigaria com o PLANEJADO. Isso vale só dentro de planilha e Totais; os painéis "Resultado operacional" e "Resultado geral" seguem verde/vermelho, porque não são coluna de planilha.
 
-**Exceções de limite (21/10/2026, decisão 204):** na planilha de orçamento,
-o total **planejado do item** fica vermelho quando excede seu orçado; o
+**Exceções de limite (21/10/2026, decisão 204):**
+o total **planejado** fica vermelho quando excede seu orçado em todas as
+planilhas comparativas (Orçamentos, Jobs, financeiro, histórico e visões
+agregadas), inclusive subtotais e totais, além da referência na PP; o
 total orçado mantém o azul (revisão de 22/10/2026).
 No job, o total **realizado do item** fica vermelho quando o acumulado
 bruto (antes do BV, descontadas as devoluções aprovadas) excede o orçado.

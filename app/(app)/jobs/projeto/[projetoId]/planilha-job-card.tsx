@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { ArrowRight, ChevronRight } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
+import { acimaDoOrcado } from "@/lib/calculos/limites-orcamento";
 import { calcularRentabilidade } from "@/lib/calculos/versao-totais";
 import {
   rotuloColunaTotal,
@@ -67,6 +68,7 @@ function TotalComBv({
   cor,
   corRotulo,
   tamanho = "text-xs",
+  excedeOrcado = false,
 }: {
   bloco: ValoresDoBloco;
   visao: VisaoBv;
@@ -75,11 +77,12 @@ function TotalComBv({
   cor: string;
   corRotulo: string;
   tamanho?: string;
+  excedeOrcado?: boolean;
 }) {
   return (
     <td className={cn("whitespace-nowrap px-3 py-2.5 text-right", className)}>
       <div className="flex flex-col items-end">
-        <span className={cn("font-mono font-semibold", tamanho)}>
+        <span className={cn("font-mono font-semibold", tamanho, excedeOrcado && "text-california-red")}>
           {moedaOuTraco(valorNaVisao(bloco, visao), moeda)}
         </span>
         {visao === "liquido" && bloco.bruto > 0 && (
@@ -217,6 +220,7 @@ export function PlanilhaJobCard({
               className={cn(
                 "mt-[3px] whitespace-nowrap font-mono text-[13px] font-bold",
                 PLANEJADO.texto,
+                acimaDoOrcado(job.planejado.bruto, job.orcado) && "text-california-red",
               )}
             >
               {moedaOuTraco(valorNaVisao(job.planejado, visao), moeda)}
@@ -455,6 +459,7 @@ export function PlanilhaJobCard({
                       </td>
                       <TotalComBv
                         bloco={g.planejado}
+                        excedeOrcado={acimaDoOrcado(g.planejado.bruto, g.orcado)}
                         visao={visao}
                         moeda={moeda}
                         className={PLANEJADO.grupoValor}
@@ -591,6 +596,7 @@ export function PlanilhaJobCard({
                           </td>
                           <TotalComBv
                             bloco={it.planejado}
+                            excedeOrcado={acimaDoOrcado(it.planejado.bruto, it.orcTotal)}
                             visao={visao}
                             moeda={moeda}
                             className={PLANEJADO.celulaTotal}
@@ -672,6 +678,7 @@ export function PlanilhaJobCard({
                   className={cn(
                     "whitespace-nowrap px-3 py-3 text-right font-mono text-[13px] font-bold",
                     PLANEJADO.subtotalValor,
+                    acimaDoOrcado(job.planejado.bruto, job.orcado) && "text-california-red",
                   )}
                 >
                   {moedaOuTraco(valorNaVisao(job.planejado, visao), moeda)}
