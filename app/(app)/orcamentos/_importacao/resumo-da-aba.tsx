@@ -11,7 +11,7 @@ import type {
   SemBlocoDeMes,
 } from "@/lib/importacao/tipos-da-importacao";
 import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
-import { ORCADO, PLANEJADO, RENTAB_VALOR } from "@/app/(app)/_planilha/blocos";
+import { ORCADO, PLANEJADO, RENTAB_VALOR, NUMEROS_PLANILHA } from "@/app/(app)/_planilha/blocos";
 
 /**
  * O resumo da aba escolhida (decisão 110, design 1C com os totais na lista
@@ -290,10 +290,10 @@ export function ResumoDaAba({
                   <td className="py-2.5 pr-3 text-right text-xs tabular-nums text-muted-foreground">
                     {g.itens_count}
                   </td>
-                  <td className={cn("py-2.5 pr-3 text-right font-mono text-xs", ORCADO.texto)}>
+                  <td className={cn("py-2.5 pr-3 text-right font-mono text-xs", NUMEROS_PLANILHA.total)}>
                     {formatCurrency(g.total_bruto, "BRL")}
                   </td>
-                  <td className={cn("py-2.5 pr-3 text-right font-mono text-xs", plan > 0 ? PLANEJADO.texto : "text-muted-foreground/60")}>
+                  <td className={cn("py-2.5 pr-3 text-right font-mono text-xs", plan > 0 ? NUMEROS_PLANILHA.total : "text-muted-foreground/60")}>
                     {plan > 0 ? formatCurrency(plan, "BRL") : "—"}
                   </td>
                   <td className={cn("py-2.5 pr-3 text-right font-mono text-xs", plan > 0 ? RENTAB_VALOR : "text-muted-foreground/60")}>
@@ -312,10 +312,10 @@ export function ResumoDaAba({
                 Total · {preview.grupos.length} {preview.grupos.length === 1 ? "grupo" : "grupos"}
               </td>
               <td className="py-3 pr-3 text-right text-xs tabular-nums">{totalItens}</td>
-              <td className={cn("py-3 pr-3 text-right font-mono text-[13px]", ORCADO.texto)}>
+              <td className={cn("py-3 pr-3 text-right font-mono text-[13px]", NUMEROS_PLANILHA.total)}>
                 {formatCurrency(totalOrcado, "BRL")}
               </td>
-              <td className={cn("py-3 pr-3 text-right font-mono text-[13px]", totalPlanejado > 0 ? PLANEJADO.texto : "text-muted-foreground/60")}>
+              <td className={cn("py-3 pr-3 text-right font-mono text-[13px]", totalPlanejado > 0 ? NUMEROS_PLANILHA.total : "text-muted-foreground/60")}>
                 {totalPlanejado > 0 ? formatCurrency(totalPlanejado, "BRL") : "—"}
               </td>
               <td className={cn("py-3 pr-3 text-right font-mono text-[13px]", totalPlanejado > 0 ? RENTAB_VALOR : "text-muted-foreground/60")}>

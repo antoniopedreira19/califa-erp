@@ -39,6 +39,7 @@ import {
   LARGURA_MINIMA_JOBS_PROJETO,
 } from "@/app/(app)/_planilha/grade-jobs-projeto";
 import {
+  NUMEROS_PLANILHA,
   ORCADO,
   PLANEJADO,
   REALIZADO,
@@ -313,7 +314,7 @@ export function ProjetoTotaisCard({
                   className={cn(
                     "whitespace-nowrap p-3 text-right font-mono text-[13px]",
                     PLANEJADO.celulaTotal,
-                    acimaDoOrcado(j.planejado.bruto, j.orcado) && "text-california-red",
+                    acimaDoOrcado(j.planejado.bruto, j.orcado) && NUMEROS_PLANILHA.excedente,
                   )}
                 >
                   {j.planejado.bruto > 0
@@ -338,6 +339,7 @@ export function ProjetoTotaisCard({
                   className={cn(
                     "whitespace-nowrap p-3 text-right font-mono text-[13px]",
                     REALIZADO.celulaTotal,
+                    acimaDoOrcado(j.realizado.bruto, j.orcado) && NUMEROS_PLANILHA.excedente,
                   )}
                 >
                   {j.realizado.bruto > 0
@@ -382,7 +384,7 @@ export function ProjetoTotaisCard({
                 className={cn(
                   "whitespace-nowrap p-3 text-right font-mono text-[13px] font-bold",
                   PLANEJADO.subtotalValor,
-                  acimaDoOrcado(somaDosJobs.planejado.bruto, totalOrcado) && "text-california-red",
+                  acimaDoOrcado(somaDosJobs.planejado.bruto, totalOrcado) && NUMEROS_PLANILHA.excedente,
                 )}
               >
                 {totalPlanejado > 0 ? formatCurrency(totalPlanejado, moeda) : "—"}
@@ -405,6 +407,7 @@ export function ProjetoTotaisCard({
                 className={cn(
                   "whitespace-nowrap p-3 text-right font-mono text-[13px] font-bold",
                   REALIZADO.subtotalValor,
+                  acimaDoOrcado(somaDosJobs.realizado.bruto, totalOrcado) && NUMEROS_PLANILHA.excedente,
                 )}
               >
                 {temRealizado ? formatCurrency(totalRealizado, moeda) : "—"}

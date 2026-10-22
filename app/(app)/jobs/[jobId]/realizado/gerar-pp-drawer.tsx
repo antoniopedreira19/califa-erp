@@ -1,5 +1,7 @@
 "use client";
 
+import { NUMEROS_PLANILHA } from "@/app/(app)/_planilha/blocos";
+
 /**
  * O formulário da PP (decisão 153, 07/10/2026): ele salva a PP A EMITIR.
  *
@@ -1678,7 +1680,7 @@ export function GerarPPDrawer({
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Planejado do item</p>
-                  <p className={cn("font-mono font-semibold", acimaDoOrcado(valorPlanejado, valorOrcado) && "text-california-red")}>
+                  <p className={cn("font-mono font-semibold", acimaDoOrcado(valorPlanejado, valorOrcado) && NUMEROS_PLANILHA.excedente)}>
                     {formatCurrency(valorPlanejado, "BRL")}
                   </p>
                   <p className="font-mono text-[11px] text-muted-foreground">

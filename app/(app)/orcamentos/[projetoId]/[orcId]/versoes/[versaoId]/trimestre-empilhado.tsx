@@ -13,7 +13,7 @@ import * as React from "react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
-import { ORCADO, PLANEJADO } from "@/app/(app)/_planilha/blocos";
+import { NUMEROS_PLANILHA } from "@/app/(app)/_planilha/blocos";
 import { BotaoRecolherTodos } from "@/app/(app)/_planilha/recolher-grupos";
 
 export interface MesDoTrimestre {
@@ -99,10 +99,10 @@ export function TrimestreEmpilhado({
                 </span>
               </button>
               <div className="grid flex-none grid-cols-[140px_140px_140px_72px] gap-6">
-                <Metrica rotulo="Faturamento" className={ORCADO.texto}>
+                <Metrica rotulo="Faturamento" className={NUMEROS_PLANILHA.total}>
                   {formatCurrency(m.faturamento, moeda)}
                 </Metrica>
-                <Metrica rotulo="Custo planejado" className={PLANEJADO.texto}>
+                <Metrica rotulo="Custo planejado" className={NUMEROS_PLANILHA.total}>
                   {formatCurrency(m.custoPlanejado, moeda)}
                 </Metrica>
                 <Metrica rotulo="Resultado op.">

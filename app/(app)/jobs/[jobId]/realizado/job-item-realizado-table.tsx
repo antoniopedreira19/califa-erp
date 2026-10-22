@@ -81,6 +81,7 @@ import {
 import { RentabilidadeNoVao } from "@/app/(app)/_planilha/rentabilidade-inline";
 import { SubLinhaBv } from "@/app/(app)/_planilha/chave-bruto-liquido";
 import {
+  NUMEROS_PLANILHA,
   ORCADO,
   PLANEJADO,
   REALIZADO,
@@ -1450,15 +1451,15 @@ export function JobItemRealizadoTable({
                       )}
                     >
                       <div className="flex flex-col items-end">
-                        <span className={cn("font-mono text-[13px] font-bold leading-[1.2]", acimaDoOrcado(sub.planejado.bruto, sub.orcado) && "text-california-red")}>
+                        <span className={cn("font-mono text-[13px] font-bold leading-[1.2]", acimaDoOrcado(sub.planejado.bruto, sub.orcado) && NUMEROS_PLANILHA.excedente)}>
                           {formatCurrency(subPlanejado, moeda)}
                         </span>
                         {visao === "liquido" && (
                           <SubLinhaBv
                             deducao={sub.planejado.deducaoBv}
                             formatar={fmt}
-                            cor={PLANEJADO.texto}
-                            corRotulo={PLANEJADO.textoSuave}
+                            cor={NUMEROS_PLANILHA.detalhe}
+                            corRotulo={NUMEROS_PLANILHA.detalhe}
                           />
                         )}
                       </div>
@@ -1494,7 +1495,7 @@ export function JobItemRealizadoTable({
                       )}
                     >
                       <div className="flex flex-col items-end">
-                        <span className="font-mono text-[13px] font-bold leading-[1.2]">
+                        <span className={cn("font-mono text-[13px] font-bold leading-[1.2]", acimaDoOrcado(sub.realizado.bruto, sub.orcado) && NUMEROS_PLANILHA.excedente)}>
                           {sub.realizado.bruto > 0
                             ? formatCurrency(subRealizado, moeda)
                             : "—"}
@@ -1503,8 +1504,8 @@ export function JobItemRealizadoTable({
                           <SubLinhaBv
                             deducao={sub.realizado.deducaoBv}
                             formatar={fmt}
-                            cor={REALIZADO.texto}
-                            corRotulo={REALIZADO.textoSuave}
+                            cor={NUMEROS_PLANILHA.detalhe}
+                            corRotulo={NUMEROS_PLANILHA.detalhe}
                           />
                         )}
                       </div>
@@ -1834,7 +1835,7 @@ export function JobItemRealizadoTable({
                         {celulaOrcado("planDiasMeses", "dias_meses_planejado", PLANEJADO.celulaMeio)}
                         <CelulaTotalComBv
                           acimaDoOrcado={acimaDoOrcado(blocos.planejado.bruto, Number(item.total_orcado))}
-                          corAlerta="text-california-red"
+                          corAlerta={NUMEROS_PLANILHA.excedente}
                           bloco={blocos.planejado}
                           visao={visao}
                           moeda={moeda}
@@ -1844,8 +1845,8 @@ export function JobItemRealizadoTable({
                             rentabPlanejadaVisivel && PLANEJADO.celulaMeio,
                             PLANEJADO.celulaTotal,
                           )}
-                          cor={PLANEJADO.texto}
-                          corRotulo={PLANEJADO.textoSuave}
+                          cor={NUMEROS_PLANILHA.detalhe}
+                          corRotulo={NUMEROS_PLANILHA.detalhe}
                           nav={nav("total_planejado")}
                           moldura={moldura("total_planejado")}
                         />
@@ -1907,8 +1908,8 @@ export function JobItemRealizadoTable({
                             rentabRealizadaVisivel && REALIZADO.celulaMeio,
                             REALIZADO.celulaTotal,
                           )}
-                          cor={REALIZADO.texto}
-                          corRotulo={REALIZADO.textoSuave}
+                          cor={NUMEROS_PLANILHA.detalhe}
+                          corRotulo={NUMEROS_PLANILHA.detalhe}
                           nav={nav("total_realizado")}
                           moldura={moldura("total_realizado")}
                         />
@@ -2059,7 +2060,7 @@ export function JobItemRealizadoTable({
                 )}
               >
                 <div className="flex flex-col items-end">
-                  <span className={cn("font-mono text-[13px] font-bold", acimaDoOrcado(totais.planejado.bruto, totais.orcado) && "text-california-red")}>
+                  <span className={cn("font-mono text-[13px] font-bold", acimaDoOrcado(totais.planejado.bruto, totais.orcado) && NUMEROS_PLANILHA.excedente)}>
                     {formatCurrency(valorNaVisao(totais.planejado, visao), moeda)}
                   </span>
                   {/* A soma dos BVs de todos os itens da planilha — foi o
@@ -2069,8 +2070,8 @@ export function JobItemRealizadoTable({
                     <SubLinhaBv
                       deducao={totais.planejado.deducaoBv}
                       formatar={fmt}
-                      cor={PLANEJADO.texto}
-                      corRotulo={PLANEJADO.textoSuave}
+                      cor={NUMEROS_PLANILHA.detalhe}
+                      corRotulo={NUMEROS_PLANILHA.detalhe}
                     />
                   )}
                 </div>
@@ -2106,7 +2107,7 @@ export function JobItemRealizadoTable({
                 )}
               >
                 <div className="flex flex-col items-end">
-                  <span className="font-mono text-[13px] font-bold">
+                  <span className={cn("font-mono text-[13px] font-bold", acimaDoOrcado(totais.realizado.bruto, totais.orcado) && NUMEROS_PLANILHA.excedente)}>
                     {totais.realizado.bruto > 0
                       ? formatCurrency(valorNaVisao(totais.realizado, visao), moeda)
                       : "—"}
@@ -2115,8 +2116,8 @@ export function JobItemRealizadoTable({
                     <SubLinhaBv
                       deducao={totais.realizado.deducaoBv}
                       formatar={fmt}
-                      cor={REALIZADO.texto}
-                      corRotulo={REALIZADO.textoSuave}
+                      cor={NUMEROS_PLANILHA.detalhe}
+                      corRotulo={NUMEROS_PLANILHA.detalhe}
                     />
                   )}
                 </div>
@@ -2807,7 +2808,7 @@ function CelulaLeitura({
  *  torna a dedução auditável sem abrir o formulário do BV. */
 function CelulaTotalComBv({
   acimaDoOrcado: excedido = false,
-  corAlerta = "text-red-600",
+  corAlerta = NUMEROS_PLANILHA.excedente,
   bloco,
   visao,
   moeda,

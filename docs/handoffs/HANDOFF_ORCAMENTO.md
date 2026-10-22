@@ -5775,3 +5775,26 @@ aplicada na hora combinada com a frente do Antonio, junto da
   apenas o total planejado vermelho; orçado azul e valores dentro do
   limite verdes. Bruto/Líquido preservam o alerta; print capturado.
   Sem alteração de dados operacionais.
+
+
+## Paleta “Grafite e cinza” aprovada — 22/10/2026
+
+- Opção 3 do protótipo completo: totais de Orçado/Planejado/Realizado
+  grafite (`#292929`), unitário/QT/D/M cinza (`#606060`); subtotal e total
+  geral seguem a mesma regra. Fundos, bordas e cabeçalhos preservados.
+- Fonte única `NUMEROS_PLANILHA` em `_planilha/blocos.ts`, compartilhada
+  pelas planilhas individuais, agregadas, financeiro/histórico e BV.
+  Prévias de importação também usam totais neutros.
+- Totais de custo excedentes preservam o vermelho vibrante com comparação
+  sobre o bruto, mesmo na vista Líquido. Sublinha de BV cinza.
+- Sem mudar cálculo, permissão, consulta, navegação, grade ou campos da PP.
+  Estados especiais de errata/save e painéis de resultado preservados.
+- **Verificação:** 41 testes de limites, composição do resultado,
+  Mídia Off e prestação de verba passaram; build/lint/tipos aprovados
+  (`NODE_OPTIONS=--max-old-space-size=8192`; permanece somente o aviso
+  anterior de ARIA no `multi-select`). Navegador com build de produção e
+  GP de teste: planilhas individuais de Jobs/Orçamentos, visão agregada
+  de Jobs e mini-planilha do BV. Confirmados `rgb(41, 41, 41)` nos totais,
+  `rgb(96, 96, 96)` em unitário/QT/D/M e `rgb(220, 38, 38)` nos totais
+  excedentes, preservando fundos. Bruto/Líquido e BV conferidos, prints
+  capturados. Nenhum dado operacional alterado.

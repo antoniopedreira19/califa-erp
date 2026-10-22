@@ -20,7 +20,7 @@ versão e Planilha Interna do job.
   as planilhas comparativas (Orçamentos, Jobs, financeiro, histórico e
   visões agregadas), incluindo grupos, totais e a referência na PP
   (revisão de 22/10/2026). A comparação usa o bruto antes do BV nas duas
-  vistas; o orçado mantém o azul. O
+  vistas; o orçado mantém o grafite da paleta numérica aprovada. O
   percentual do Resultado geral fica vermelho tanto no cabeçalho quanto
   em Totais, inclusive quando ainda positivo, mas inferior a 20%. O card
   de Resultado geral conserva fundo, borda e rótulos verdes; só o número
@@ -143,3 +143,17 @@ Mídia Off. Não há mudança de cálculo nem de permissão. Conferido como GP d
 teste: TES-P001/26-12 (Interno) mostra 0,0% em `rgb(4, 120, 87)` no
 cabeçalho e em Totais; TES-P001/26-03 v2 (comum) segue em
 `rgb(231, 75, 86)` com 10,9%. Prints capturados.
+
+## Paleta aprovada “Grafite e cinza” — 22/10/2026
+
+Após comparar o protótipo completo, o usuário aprovou a opção 3:
+Orçado, Planejado e Realizado usam totais grafite (`#292929`) e
+unitário/QT/D/M cinza (`#606060`), incluindo as referências da planilha
+no BV e as visões agregadas. Fundos, bordas e cabeçalhos conservam as
+cores de cada bloco. O total de custo excedente continua vermelho
+vibrante (`text-red-600`), também nos consolidados. A comparação continua
+sobre o bruto antes do BV. Sublinha de BV cinza; estados especiais de
+errata/save, regras de aprovação e resultados permanecem sem alteração.
+
+`NUMEROS_PLANILHA` em `_planilha/blocos.ts` é a fonte única dos tons.
+Alteração apenas de apresentação, sem consultas ou migrations novas.

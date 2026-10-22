@@ -1,7 +1,8 @@
 /** Paleta dos blocos das planilhas — Orçamento e Job, individuais e agregadas.
  *
- *  Uma cor por bloco, a mesma em todo o produto: ORÇADO azul, PLANEJADO
- *  verde, REALIZADO laranja. RENTABILIDADE fica em grafite de propósito —
+ *  Fundos e cabeçalhos identificam o bloco: ORÇADO azul, PLANEJADO
+ *  verde, REALIZADO laranja. Números seguem NUMEROS_PLANILHA (22/10/2026).
+ *  RENTABILIDADE fica em grafite de propósito —
  *  não é um bloco de entrada, é o resultado da conta, e o neutro diz isso
  *  sem competir com os outros três.
  *
@@ -23,7 +24,7 @@ export interface Bloco {
   celulaAbre: string;
   /** Linha de item: células do meio. */
   celulaMeio: string;
-  /** Linha de item: célula de Total, com o valor na cor do bloco. */
+  /** Linha de item: célula de Total, com o valor em grafite. */
   celulaTotal: string;
   /** Célula vazia que cobre as colunas de detalhe nos cards de Totais. */
   celulaVazia: string;
@@ -37,13 +38,21 @@ export interface Bloco {
   grupoVazio: string;
   /** Linha do GRUPO: célula do valor (subtotal do agrupamento). */
   grupoValor: string;
-  /** Cor do bloco para rótulos e valores fora da tabela. */
+  /** Cor do bloco para rótulos e destaques semânticos fora da tabela. */
   texto: string;
   /** Variação suave, para rótulos pequenos. */
   textoSuave: string;
   /** Borda de abertura, para faixas de resumo fora da tabela. */
   bordaAbre: string;
 }
+
+/** Paleta numérica aprovada em 22/10/2026 ("Grafite e cinza").
+ *  Fundos, cabeçalhos e rótulos continuam identificando cada bloco. */
+export const NUMEROS_PLANILHA = {
+  total: "text-[#292929]",
+  detalhe: "text-[#606060]",
+  excedente: "text-red-600",
+} as const;
 
 /** Azul — o que foi vendido ao cliente. */
 export const ORCADO: Bloco = {
@@ -54,16 +63,16 @@ export const ORCADO: Bloco = {
   cabecalhoMeio: "text-[#5a76a8] bg-[#f5f9ff] border-r border-r-[#dfeafb]",
   cabecalhoFim: "text-[#5a76a8] bg-[#f5f9ff]",
   celulaAbre:
-    "bg-[#f7fbff] border-l-2 border-l-[#cfe0f7] border-r border-r-[#e6eff9]",
-  celulaMeio: "bg-[#f7fbff] border-r border-r-[#e6eff9]",
-  celulaTotal: "bg-[#f7fbff] text-[#1e4fa3]",
+    `bg-[#f7fbff] border-l-2 border-l-[#cfe0f7] border-r border-r-[#e6eff9] ${NUMEROS_PLANILHA.detalhe}`,
+  celulaMeio: `bg-[#f7fbff] border-r border-r-[#e6eff9] ${NUMEROS_PLANILHA.detalhe}`,
+  celulaTotal: `bg-[#f7fbff] ${NUMEROS_PLANILHA.total}`,
   celulaVazia: "bg-[#f7fbff] border-l-2 border-l-[#cfe0f7]",
   subtotalVazio:
     "bg-[#e8f0fd] border-l-2 border-l-[#b9d1f4] border-t-2 border-t-[#2f6fdb]",
-  subtotalValor: "bg-[#e8f0fd] border-t-2 border-t-[#2f6fdb] text-[#1e4fa3]",
+  subtotalValor: `bg-[#e8f0fd] border-t-2 border-t-[#2f6fdb] ${NUMEROS_PLANILHA.total}`,
   grupoVazio:
     "bg-[#e8f0fd] border-l-2 border-l-[#b9d1f4] border-y border-y-[#cfe0f7]",
-  grupoValor: "bg-[#e8f0fd] border-y border-y-[#cfe0f7] text-[#1e4fa3]",
+  grupoValor: `bg-[#e8f0fd] border-y border-y-[#cfe0f7] ${NUMEROS_PLANILHA.total}`,
   texto: "text-[#1e4fa3]",
   textoSuave: "text-[#5a76a8]",
   bordaAbre: "border-l-2 border-l-[#b9d1f4]",
@@ -78,16 +87,16 @@ export const PLANEJADO: Bloco = {
   cabecalhoMeio: "text-[#3f8a70] bg-[#f3fdf8] border-r border-r-[#dcf5e8]",
   cabecalhoFim: "text-[#3f8a70] bg-[#f3fdf8]",
   celulaAbre:
-    "bg-[#f6fefa] border-l-2 border-l-[#bdecd6] border-r border-r-[#e4f7ed]",
-  celulaMeio: "bg-[#f6fefa] border-r border-r-[#e4f7ed]",
-  celulaTotal: "bg-[#f6fefa] text-[#047857]",
+    `bg-[#f6fefa] border-l-2 border-l-[#bdecd6] border-r border-r-[#e4f7ed] ${NUMEROS_PLANILHA.detalhe}`,
+  celulaMeio: `bg-[#f6fefa] border-r border-r-[#e4f7ed] ${NUMEROS_PLANILHA.detalhe}`,
+  celulaTotal: `bg-[#f6fefa] ${NUMEROS_PLANILHA.total}`,
   celulaVazia: "bg-[#f6fefa] border-l-2 border-l-[#bdecd6]",
   subtotalVazio:
     "bg-[#ecfdf5] border-l-2 border-l-[#a7f3d0] border-t-2 border-t-[#059669]",
-  subtotalValor: "bg-[#ecfdf5] border-t-2 border-t-[#059669] text-[#047857]",
+  subtotalValor: `bg-[#ecfdf5] border-t-2 border-t-[#059669] ${NUMEROS_PLANILHA.total}`,
   grupoVazio:
     "bg-[#ecfdf5] border-l-2 border-l-[#a7f3d0] border-y border-y-[#bdecd6]",
-  grupoValor: "bg-[#ecfdf5] border-y border-y-[#bdecd6] text-[#047857]",
+  grupoValor: `bg-[#ecfdf5] border-y border-y-[#bdecd6] ${NUMEROS_PLANILHA.total}`,
   texto: "text-[#047857]",
   textoSuave: "text-[#3f8a70]",
   bordaAbre: "border-l-2 border-l-[#a7f3d0]",
@@ -108,16 +117,16 @@ export const REALIZADO: Bloco = {
   cabecalhoMeio: "text-[#c2410c] bg-[#fff7ed] border-r border-r-[#fbd8b8]",
   cabecalhoFim: "text-[#c2410c] bg-[#fff7ed]",
   celulaAbre:
-    "bg-[#fffaf5] border-l-2 border-l-[#f9c296] border-r border-r-[#fbe4d2]",
-  celulaMeio: "bg-[#fffaf5] border-r border-r-[#fbe4d2]",
-  celulaTotal: "bg-[#fffaf5] text-[#c2410c]",
+    `bg-[#fffaf5] border-l-2 border-l-[#f9c296] border-r border-r-[#fbe4d2] ${NUMEROS_PLANILHA.detalhe}`,
+  celulaMeio: `bg-[#fffaf5] border-r border-r-[#fbe4d2] ${NUMEROS_PLANILHA.detalhe}`,
+  celulaTotal: `bg-[#fffaf5] ${NUMEROS_PLANILHA.total}`,
   celulaVazia: "bg-[#fffaf5] border-l-2 border-l-[#f9c296]",
   subtotalVazio:
     "bg-[#ffedd5] border-l-2 border-l-[#f9c296] border-t-2 border-t-[#ea580c]",
-  subtotalValor: "bg-[#ffedd5] border-t-2 border-t-[#ea580c] text-[#c2410c]",
+  subtotalValor: `bg-[#ffedd5] border-t-2 border-t-[#ea580c] ${NUMEROS_PLANILHA.total}`,
   grupoVazio:
     "bg-[#ffedd5] border-l-2 border-l-[#f9c296] border-y border-y-[#f9c296]",
-  grupoValor: "bg-[#ffedd5] border-y border-y-[#f9c296] text-[#c2410c]",
+  grupoValor: `bg-[#ffedd5] border-y border-y-[#f9c296] ${NUMEROS_PLANILHA.total}`,
   texto: "text-[#c2410c]",
   textoSuave: "text-[#9a5a33]",
   bordaAbre: "border-l-2 border-l-[#f9c296]",
@@ -316,13 +325,13 @@ export const ERRATA = {
   celulaEditavel: "bg-[#eff6ff]",
   /** O input dentro da célula do Orçado. */
   input:
-    "w-full min-w-0 rounded-md border border-[#9dc0ee] bg-white px-1.5 py-1 text-right font-mono text-[11.5px] font-semibold text-[#1e4fa3] outline-none focus:border-[#2f6fdb] focus:ring-1 focus:ring-[#2f6fdb]/30",
+    `w-full min-w-0 rounded-md border border-[#9dc0ee] bg-white px-1.5 py-1 text-right font-mono text-[11.5px] font-semibold ${NUMEROS_PLANILHA.detalhe} outline-none focus:border-[#2f6fdb] focus:ring-1 focus:ring-[#2f6fdb]/30`,
   /** Célula do bloco Planejado enquanto ela aceita digitação — o mesmo
    *  tratamento do Orçado, na cor do PLANEJADO (decisão 054). */
   celulaEditavelPlanejado: "bg-[#e6faf0]",
   /** O input dentro da célula do Planejado. */
   inputPlanejado:
-    "w-full min-w-0 rounded-md border border-[#8fd9b8] bg-white px-1.5 py-1 text-right font-mono text-[11.5px] font-semibold text-[#047857] outline-none focus:border-[#059669] focus:ring-1 focus:ring-[#059669]/30",
+    `w-full min-w-0 rounded-md border border-[#8fd9b8] bg-white px-1.5 py-1 text-right font-mono text-[11.5px] font-semibold ${NUMEROS_PLANILHA.detalhe} outline-none focus:border-[#059669] focus:ring-1 focus:ring-[#059669]/30`,
   /** Input do nome, na linha recém-criada. */
   inputNome:
     "w-full min-w-0 rounded-md border border-border bg-white px-2 py-1 text-xs text-foreground outline-none focus:border-california-red focus:ring-1 focus:ring-california-red/25",
