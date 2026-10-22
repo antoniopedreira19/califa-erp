@@ -458,6 +458,9 @@ export default async function OrcamentoDetailPage({
       : null;
 
   const orcamentoCategoriaNome: string | null = orcamentoRaw.categoria?.nome ?? null;
+  // Serviço antes da categoria no cabeçalho (22/10/2026): diz de cara se o
+  // orçamento é Interno ou de que serviço é.
+  const orcamentoServicoNome: string | null = orcamentoRaw.servico?.nome ?? null;
   const clienteNome: string | null = projetoRaw.cliente?.nome_fantasia ?? null;
   // Honorários de toda versão nova sai daqui — o drawer só exibe, travado.
   const honorariosCliente = Number(
@@ -959,6 +962,15 @@ export default async function OrcamentoDetailPage({
                 <span>
                   <span className="text-foreground/60">Campanha:</span>{" "}
                   <span className="text-foreground font-medium">{projetoRaw.campanha}</span>
+                </span>
+              </>
+            )}
+            {orcamentoServicoNome && (
+              <>
+                <span aria-hidden className="text-border">·</span>
+                <span>
+                  <span className="text-foreground/60">Serviço:</span>{" "}
+                  <span className="text-foreground font-medium">{orcamentoServicoNome}</span>
                 </span>
               </>
             )}

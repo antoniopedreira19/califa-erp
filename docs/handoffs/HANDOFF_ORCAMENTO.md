@@ -5747,6 +5747,18 @@ aplicada na hora combinada com a frente do Antonio, junto da
   [decisão 204](../decisions/204-administrador-nas-excecoes-do-orcamento-e-da-pp.md).
 
 
+## Serviço no cabeçalho do orçamento — 22/10/2026
+
+- A linha de dados do cabeçalho da versão mostra **"Serviço:"** logo antes
+  de "Categoria:" (pedido do Tiago), para que se veja de cara se o orçamento
+  é Interno ou de qual serviço é. Vem do embed `servico` que a página já
+  lia; aparece só quando o orçamento tem serviço. O cabeçalho do job já
+  mostrava o serviço na ficha.
+- **Conferência:** como GP de teste, TES-P001/26-12 mostra "Serviço:
+  Interno · Categoria: Evento" e TES-P001/26-03 mostra "Serviço: Ativação ·
+  Categoria: Internacional". Tipos e lint limpos; print capturado.
+
+
 ## Planejado excedente em todas as planilhas — 22/10/2026
 
 - O total planejado fica vermelho ao ultrapassar o orçado nas linhas,
