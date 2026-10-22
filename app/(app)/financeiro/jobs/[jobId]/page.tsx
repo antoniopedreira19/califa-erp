@@ -794,6 +794,7 @@ export default async function JobNoFinanceiroPage({
             )}
             <JobRealizadoSection
               // Tela do financeiro: só leitura, não gera nem envia PP.
+              podeGerarAcimaDoOrcado={false}
               papelEnviaPP={false}
               papelCorrigeNf={pode(session.activeRole, "jobs.corrigir_nf_pp")}
               confirmarSaidaParaOrcamento

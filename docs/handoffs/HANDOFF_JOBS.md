@@ -6238,3 +6238,40 @@ Protótipo aprovado em 17/10. Regra completa na decisão 192.
   Regras e conferência na decisão 123 §6. No código, só um comentário em
   `enviar-faturamento-dialog.tsx`.
 - **Na tela, nada muda.**
+
+## ⚠️ Nota de 2026-10-21 (3) — administrador na geração/edição acima do orçado (decisão 204)
+
+- **Regra aprovada:** a trava fica na geração e edição da PP. Usa o
+  acumulado do item (todas as PPs não canceladas menos devoluções
+  aprovadas), antes do BV, somando a nova PP ou substituindo o valor antigo
+  na edição. Igualdade libera. Somente administrador excede; a chave de
+  envio do produtor não concede essa permissão. Salvar PP a emitir continua
+  permitido. O envio preserva seus papéis e a confirmação do planejado.
+- **Formulário:** só acrescenta Orçado do item ao cartão inicial. Mantém
+  Planejado com o trio e Em PPs emitidas com a prévia e ícones de alerta
+  (triângulo âmbar para planejado; escudo vermelho para orçado). O aviso sob
+  o total contém somente ícone e título, sem cálculo ou explicação. Campos,
+  ordem e rodapé restantes preservados conforme o protótipo aprovado.
+  Gerar PP/Salvar alterações bloqueados para não admin acima do orçado.
+- **Planilha:** total realizado excedente vermelho em Bruto e Líquido.
+- **Proteção:** actions auditam a recusa; gatilhos recalculam sob trava da
+  âncora, incluindo geração/edição concorrentes. Migrations `20261021850001`
+  e `20261021850002` aplicadas e conferidas pelo MCP, sem backfill.
+- Regras e verificação na [decisão 204](../decisions/204-administrador-nas-excecoes-do-orcamento-e-da-pp.md).
+
+- **Conferência no navegador (21/10/2026):** build de produção local,
+  sessão de GP de teste. Avisos âmbar/vermelho, rascunho acima do orçado,
+  recusa do servidor pela revisão, geração de PP dentro do limite, edição
+  até o valor exato do orçado, bloqueio de um centavo excedente e segunda PP
+  de R$ 0,01 sobre acumulado no limite. Mesma trava pela aba PPs. Realizado
+  excedente vermelho em Bruto/Líquido; versão com Resultado geral 18,6% e
+  item excedente com valores vermelhos e aprovação desabilitada. PP criada
+  somente para conferir foi cancelada, sem envio ao financeiro; realizado
+  do item retornou a zero. Exceções de administrador conferidas nos testes
+  automatizados e SQL isolado, sem sessão administrativa de produção.
+
+- Build final repetido após integrar `a40e1e4d` (feedback de validação do
+  formulário). No navegador, 2.000 + 8.000,01 bloqueia em orçado de 10.000;
+  2.000 + 8.000 libera, mantendo o aviso de planejado. “Salvar” disponível.
+  40 testes automatizados e 22 cenários SQL aprovados; lint/typecheck/build
+  passaram, com apenas o aviso anterior de ARIA no `multi-select`.

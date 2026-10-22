@@ -28,10 +28,12 @@
  */
 
 import * as React from "react";
+import { acimaDoOrcado } from "@/lib/calculos/limites-orcamento";
 import { useRouter } from "next/navigation";
 import {
   X,
   AlertTriangle,
+  ShieldAlert,
   Columns2,
   Lock,
   Pencil,
@@ -204,8 +206,10 @@ interface Props {
   defaultEmpresaId: string;
   itemDescricao: string;
   /** PLANEJADO do item — a referência da PP desde 02/09/2026 (era o
-   *  orçado). É contra ele que "Em PPs emitidas" acende em vermelho. */
+   *  orçado). Continua sendo referência do alerta de planejado. */
   valorPlanejado: number;
+  valorOrcado: number;
+  podeGerarAcimaDoOrcado: boolean;
   /** Decomposição do planejado — R$ Unit. × QT × D/M, para o cartão
    *  mostrar de onde os três campos vêm. São referência apenas: os
    *  campos da PP nascem vazios (decisão do Tiago, 01/09/2026). */
@@ -215,8 +219,8 @@ interface Props {
   /** O que o item já tem em PPs — todas menos as canceladas, a gerada
    *  inclusive (decisão 074). Na GERAÇÃO a prévia do cartão soma esta PP
    *  por cima; na EDIÇÃO ela já está aqui dentro e o valor antigo é
-   *  descontado antes. Sem teto: passar do planejado não impede gerar —
-   *  muda quem pode enviar. */
+   *  descontado antes. Devoluções aprovadas já são abatidas. Passar do
+   *  orçado exige administrador; passar só do planejado mantém o envio. */
   emPPsEmitidas: number;
   /** PP a emitir sendo editada. Null = uma nova. */
   aEmitirEditando: PPAEmitir | null;
@@ -368,6 +372,8 @@ export function GerarPPDrawer({
   defaultEmpresaId,
   itemDescricao,
   valorPlanejado,
+  valorOrcado,
+  podeGerarAcimaDoOrcado,
   unitarioPlanejado,
   quantidadePlanejada,
   dmPlanejado,
@@ -878,7 +884,11 @@ export function GerarPPDrawer({
   // base (decisão 153): ela só conta no item quando for gerada. A PP gerada
   // em edição já está, e o valor dela sai antes (decisão 173).
   const previaEmPPs = Math.round((emPPsEmitidas - valorAntesDaEdicao + valorPP) * 100) / 100;
-  const passaPlanejado = valorPP > 0 && passaDoPlanejado(previaEmPPs, valorPlanejado);
+  const passaPlanejado = passaDoPlanejado(previaEmPPs, valorPlanejado);
+  const passaOrcado = acimaDoOrcado(previaEmPPs, valorOrcado);
+  const bloqueioLimite = passaOrcado && !podeGerarAcimaDoOrcado
+    ? "Somente um administrador pode gerar ou editar esta PP."
+    : null;
 
   const numeroDeParcelas = Math.max(parcelas.length, 1);
 
@@ -1009,6 +1019,10 @@ export function GerarPPDrawer({
     // Decisão 173: a PP gerada em edição tem um botão só, e ele abre a
     // revisão antes de gravar — as mesmas portas do "Gerar PP".
     if (editandoGerada) {
+      if (bloqueioLimite) {
+        setErro(bloqueioLimite);
+        return;
+      }
       if (travaDaAbertura) {
         setErro(travaDaAbertura);
         return;
@@ -1022,6 +1036,10 @@ export function GerarPPDrawer({
       return;
     }
     const gerar = submitter?.getAttribute("data-acao") === "gerar";
+    if (gerar && bloqueioLimite) {
+      setErro(bloqueioLimite);
+      return;
+    }
     if (gerar && travaDaAbertura) {
       setErro(travaDaAbertura);
       return;
@@ -1653,11 +1671,11 @@ export function GerarPPDrawer({
             <div className="rounded-lg border border-border bg-muted/30 p-3">
               <p className="text-xs text-muted-foreground">Item</p>
               <p className="font-medium">{itemDescricao}</p>
-              {/* Duas colunas, como no design de 02/09/2026: a referência
-                  do item virou o PLANEJADO (era o orçado), e o "Máximo
-                  aceito" deu lugar à prévia de "Em PPs emitidas" com esta
-                  PP — sem teto, ela só avisa quando passa do planejado. */}
-              <div className="mt-2 grid grid-cols-2 gap-3">
+              <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Orçado do item</p>
+                  <p className="font-mono font-semibold">{formatCurrency(valorOrcado, "BRL")}</p>
+                </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Planejado do item</p>
                   <p className="font-mono font-semibold">
@@ -1673,11 +1691,16 @@ export function GerarPPDrawer({
                   <p className="text-xs text-muted-foreground">Em PPs emitidas</p>
                   <p
                     className={cn(
-                      "font-mono font-semibold",
-                      passaPlanejado && "text-california-red",
+                      "flex items-center gap-1.5 font-mono font-semibold",
+                      (passaPlanejado || passaOrcado) && "text-california-red",
                     )}
                   >
                     {formatCurrency(previaEmPPs, "BRL")}
+                    {passaOrcado ? (
+                      <span title="Acima do orçado"><ShieldAlert aria-label="Acima do orçado" className="h-3.5 w-3.5 text-california-red" /></span>
+                    ) : passaPlanejado ? (
+                      <span title="Acima do planejado"><AlertTriangle aria-label="Acima do planejado" className="h-3.5 w-3.5 text-amber-700" /></span>
+                    ) : null}
                   </p>
                   <p className="text-[11px] text-muted-foreground">
                     com esta PP · sem teto por PP
@@ -1800,16 +1823,11 @@ export function GerarPPDrawer({
                   </span>
                 </div>
 
-                {/* O aviso mora aqui, ao vivo. Não barra: passar do
-                    planejado muda quem pode ENVIAR, não se dá para gerar. */}
-                {passaPlanejado && (
-                  <div className="flex items-start gap-2 rounded-lg border border-amber-300/70 bg-amber-50 px-3 py-2.5">
-                    <AlertTriangle className="mt-px h-3.5 w-3.5 flex-none text-amber-700" />
-                    <span className="text-[11px] leading-relaxed text-amber-900">
-                      Com esta PP o item passa do planejado. Ela é gerada do
-                      mesmo jeito — o <strong>envio ao financeiro</strong>{" "}
-                      pedirá confirmação do responsável do job ou de um
-                      administrador.
+                {(passaOrcado || passaPlanejado) && (
+                  <div role="status" className={cn("flex items-center gap-2 rounded-lg border px-3 py-2.5", passaOrcado ? "border-california-red/30 bg-california-red/5 text-california-red" : "border-amber-300/70 bg-amber-50 text-amber-900")}>
+                    {passaOrcado ? <ShieldAlert className="h-3.5 w-3.5 flex-none" /> : <AlertTriangle className="h-3.5 w-3.5 flex-none text-amber-700" />}
+                    <span className="text-[11px] font-semibold leading-relaxed">
+                      {passaOrcado ? "O acumulado deste item ultrapassa o orçado" : "O acumulado está acima do planejado"}
                     </span>
                   </div>
                 )}
@@ -2302,11 +2320,12 @@ export function GerarPPDrawer({
                   pending ||
                   !ppId ||
                   travaDaAbertura !== null ||
+                  bloqueioLimite !== null ||
                   cadastroIncompleto ||
                   anexos.some((a) => a.status === "uploading") ||
                   faltaQuemRecebe
                 }
-                title={travaDaAbertura ?? travaDoCadastro ?? undefined}
+                title={travaDaAbertura ?? travaDoCadastro ?? bloqueioLimite ?? undefined}
                 className="rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red-hover disabled:opacity-50"
               >
                 Salvar alterações
@@ -2357,11 +2376,12 @@ export function GerarPPDrawer({
                   pending ||
                   !ppId ||
                   travaDaAbertura !== null ||
+                  bloqueioLimite !== null ||
                   cadastroIncompleto ||
                   anexos.some((a) => a.status === "uploading") ||
                   faltaQuemRecebe
                 }
-                title={travaDaAbertura ?? travaDoCadastro ?? undefined}
+                title={travaDaAbertura ?? travaDoCadastro ?? bloqueioLimite ?? undefined}
                 className={cn(
                   "rounded-lg px-4 py-2 text-sm font-semibold",
                   travaDaAbertura

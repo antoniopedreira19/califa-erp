@@ -58,6 +58,7 @@ export async function lerPlanilhaEmLeitura(jobId: string): Promise<ResultadoDaPl
     ok: true,
     props: {
       papelEnviaPP: false,
+      podeGerarAcimaDoOrcado: false,
       papelCorrigeNf: false,
       confirmarSaidaParaOrcamento: true,
       edicaoDoFinanceiro: null,

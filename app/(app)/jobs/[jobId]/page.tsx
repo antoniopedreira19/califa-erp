@@ -513,6 +513,7 @@ export default async function JobDetailPage({
             podeMexerNoSave={podeMexerNoSave && !comPedido}
             podeExportarInterna={podeExportarInterna}
             podeGerarPP={podeGerarPP && !comPedido}
+            podeGerarAcimaDoOrcado={session.activeRole === "administrador"}
             papelEnviaPP={papelEnviaPP && !comPedido}
             papelCorrigeNf={papelCorrigeNf}
             ppsQuePossoPrestarContas={ppsQuePossoPrestarContas}
@@ -562,6 +563,7 @@ export default async function JobDetailPage({
             edicaoDaPP={
               podeGerarPP && !comPedido
                 ? {
+                    podeGerarAcimaDoOrcado: session.activeRole === "administrador",
                     jobId: job.id,
                     jobEmpresaId: job.empresa_id ?? "",
                     fornecedores,
@@ -583,6 +585,8 @@ export default async function JobDetailPage({
                                 realizado.id,
                                 {
                                   nome: it.item,
+                                  orcado: Number(it.total_orcado ?? 0),
+                                  realizado: Number(realizado.total_realizado ?? 0),
                                   planejado: Number(it.total_planejado ?? 0),
                                   unitario: Number(it.valor_unitario_planejado ?? 0),
                                   quantidade: Number(it.quantidade_planejada ?? 0),

@@ -159,6 +159,7 @@ export function PlanilhaConferencia({
       <div className="rounded-2xl border border-border bg-card shadow-soft">
         <JobItemRealizadoTable
           // Tela do financeiro: só leitura, não gera nem envia PP.
+          podeGerarAcimaDoOrcado={false}
           papelEnviaPP={false}
           papelCorrigeNf={false}
           jobId={jobId}

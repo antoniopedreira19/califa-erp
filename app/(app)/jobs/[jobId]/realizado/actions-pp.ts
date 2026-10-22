@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { bloqueioGeracaoPPPorLimite } from "@/lib/calculos/limites-orcamento";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
@@ -837,6 +838,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
          *  referência da PP desde 02/09/2026 (era o orçado). Vem da cópia,
          *  e não da versão aprovada, porque é a cópia que a errata altera. */
         total_planejado: number;
+        total_realizado: number;
         total_orcado: number;
         quantidade_orcada: number;
         /** Tipo de custo NA CÓPIA do job — a errata pode tê-lo trocado, e
@@ -884,7 +886,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
 
   const { data: ancora, error: itemErr } = await supabase
     .from("jobs_itens_realizado")
-    .select("id, tenant_id, job_id, item_id, job_item_orcado_id")
+    .select("id, tenant_id, job_id, item_id, job_item_orcado_id, total_realizado")
     .eq("id", itemRealizadoId)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
@@ -937,6 +939,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
     item_nome: ((orcado as any).item as string) ?? "Item",
     total_planejado: Number((orcado as any).total_planejado ?? 0),
     total_orcado: Number(orcado.total_orcado ?? 0),
+    total_realizado: Number(ancora.total_realizado ?? 0),
     quantidade_orcada: Number(orcado.quantidade_orcada ?? 0),
     tipo_custo: (orcado as any).tipo_custo as TipoCusto,
     em_save: (orcado as any).em_save === true,
@@ -1686,8 +1689,8 @@ async function finalizarPedidoCompraImpl(
   // ---- Valor da PP ----
   // O valor é o produto do trio que o GP digitou: R$ Unit. × QT × D/M. É
   // recalculado aqui de propósito — o cliente manda os três fatores, nunca
-  // o total. Nada limita o valor na geração (02/09/2026): o teto por PP
-  // saiu, e passar do planejado só muda quem pode enviar. A quantidade
+  // o total. A exceção do acumulado acima do orçado exige administrador
+  // na geração (decisão 204); passar só do planejado mantém o envio. A quantidade
   // nunca limitou: 4 diárias a R$ 2.500 cabem num item de 2 a R$ 5.000.
   const valor = valorDaPPPorUnidade(
     d.valor_unitario,
@@ -1699,6 +1702,20 @@ async function finalizarPedidoCompraImpl(
       ok: false,
       message: "R$ Unit., QT e D/M inválidos: o valor da PP ficaria zerado.",
     };
+  }
+
+  const bloqueioOrcado = bloqueioGeracaoPPPorLimite(
+    session.activeRole,
+    Math.round((item.total_realizado + valor) * 100) / 100,
+    item.total_orcado,
+  );
+  if (bloqueioOrcado) {
+    await logAuditEvent({
+      acao: "acao_negada", tenantId: session.activeTenant.id,
+      entidadeTipo: "pedido_compra", entidadeId: pp_id,
+      metadata: { acao_tentada: "pedido_compra.gerada", motivo: "realizado_acima_do_orcado", realizado: item.total_realizado, valor, orcado: item.total_orcado },
+    });
+    return { ok: false, message: bloqueioOrcado };
   }
 
   // Só para o registro de auditoria: o envio refaz esta conta na hora.
@@ -3191,7 +3208,6 @@ export async function enviarPedidoCompraAoFinanceiro(
   const barradoNoEnvio = await barrarEnvioPeloPapel(gate.session, ppRow.id, gate.job);
   if (barradoNoEnvio) return barradoNoEnvio;
   const { item, job } = gate;
-
   const bloqueioEnvio = await barrarEnvioDePP(
     supabase,
     session.activeTenant.id,
@@ -4858,6 +4874,20 @@ async function editarPPGeradaImpl(
   if (valor <= 0) {
     return { ok: false, message: "R$ Unit., QT e D/M inválidos: o valor da PP ficaria zerado." };
   }
+  const bloqueioOrcado = bloqueioGeracaoPPPorLimite(
+    session.activeRole,
+    Math.round((item.total_realizado + valor - Number(ppRow.valor)) * 100) / 100,
+    item.total_orcado,
+  );
+  if (bloqueioOrcado) {
+    await logAuditEvent({
+      acao: "acao_negada", tenantId: session.activeTenant.id,
+      entidadeTipo: "pedido_compra", entidadeId: ppId,
+      metadata: { acao_tentada: "pedido_compra.editada", motivo: "realizado_acima_do_orcado", realizado: item.total_realizado, valor, orcado: item.total_orcado },
+    });
+    return { ok: false, message: bloqueioOrcado };
+  }
+
   if (!parcelasFecham(d.parcelas.map((p) => p.valor), valor)) {
     return {
       ok: false,

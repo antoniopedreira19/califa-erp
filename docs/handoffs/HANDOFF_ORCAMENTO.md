@@ -5681,3 +5681,33 @@ aplicada na hora combinada com a frente do Antonio, junto da
   TES-P001/26-19 (v1 em rascunho), "Aprovar versão" → "Sim, aprovar versão"
   mostrou a mensagem nova no pop-up; a versão continuou em rascunho e a
   auditoria registrou o `acao_negada` de `orcamentos.aprovar`.
+
+## ⚠️ Nota de 2026-10-21 — Exceções da aprovação exigem administrador (decisão 204)
+
+- **Aprovar versão:** se qualquer item tem planejado maior que o orçado,
+  ou se o **Resultado geral da versão inteira** é inferior a 20%, só o
+  administrador aprova. O GP continua aprovando as demais versões.
+  Exatamente 20% é permitido; sem planejado, o resultado continua
+  travessão. As demais travas também se aplicam ao administrador.
+- **Tela:** o total **orçado do item** fica vermelho quando excedido pelo
+  planejado; a rentabilidade do cabeçalho e o Resultado geral em Totais
+  ficam vermelhos abaixo de 20%, inclusive positivos. A barra de aprovação
+  mostra o motivo e desabilita o botão para quem não é administrador.
+- **Servidor e banco:** a action relê itens e parâmetros e usa os mesmos
+  fechamentos da tela. Gatilhada no banco pela migration
+  `20261021850001_limites_na_aprovacao_e_no_envio_da_pp.sql`, aplicada via
+  MCP e conferida. Nacional/mensal, internacional e Mídia Off cobertos;
+  nenhum dado existente foi reescrito. Tentativa negada entra na auditoria.
+- Regras, arquivos e verificações na
+  [decisão 204](../decisions/204-administrador-nas-excecoes-do-orcamento-e-da-pp.md).
+
+- **Conferência no navegador (21/10/2026):** build de produção local,
+  sessão de GP de teste. Avisos âmbar/vermelho, rascunho acima do orçado,
+  recusa do servidor pela revisão, geração de PP dentro do limite, edição
+  até o valor exato do orçado, bloqueio de um centavo excedente e segunda PP
+  de R$ 0,01 sobre acumulado no limite. Mesma trava pela aba PPs. Realizado
+  excedente vermelho em Bruto/Líquido; versão com Resultado geral 18,6% e
+  item excedente com valores vermelhos e aprovação desabilitada. PP criada
+  somente para conferir foi cancelada, sem envio ao financeiro; realizado
+  do item retornou a zero. Exceções de administrador conferidas nos testes
+  automatizados e SQL isolado, sem sessão administrativa de produção.

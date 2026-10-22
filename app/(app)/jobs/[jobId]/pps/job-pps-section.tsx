@@ -127,6 +127,7 @@ interface Props {
 
 /** O que o formulário da PP precisa e a aba não tinha (decisão 173). */
 export interface EdicaoDaPPNaAba {
+  podeGerarAcimaDoOrcado: boolean;
   jobId: string;
   jobEmpresaId: string;
   fornecedores: Array<{ id: string; nome: string; razao_social: string | null; cpf_cnpj?: string | null }>;
@@ -138,7 +139,7 @@ export interface EdicaoDaPPNaAba {
    *  conta dele, e se o item já está marcado como "todas as PPs geradas". */
   itens: Record<
     string,
-    { nome: string; planejado: number; unitario: number; quantidade: number; diasMeses: number; concluido: boolean }
+    { nome: string; orcado: number; realizado: number; planejado: number; unitario: number; quantidade: number; diasMeses: number; concluido: boolean }
   >;
   /** As PPs a emitir que reemitem uma rejeitada (revisão da 153,
    *  19/10/2026): o "Reemitir PP" da aba abre o formulário nelas, e a
@@ -1373,11 +1374,13 @@ export function JobPPsSection({
             podeEditarFornecedor={edicaoDaPP.podeEditarFornecedor}
             defaultEmpresaId={edicaoDaPP.jobEmpresaId}
             itemDescricao={item?.nome ?? ppEditando?.item_nome ?? ""}
+            valorOrcado={item?.orcado ?? 0}
+            podeGerarAcimaDoOrcado={edicaoDaPP.podeGerarAcimaDoOrcado}
             valorPlanejado={item?.planejado ?? planejadoPorItem[itemRealizadoId] ?? 0}
             unitarioPlanejado={item?.unitario ?? 0}
             quantidadePlanejada={item?.quantidade ?? 0}
             dmPlanejado={item?.diasMeses ?? 0}
-            emPPsEmitidas={emPPsDoItem(itemRealizadoId)}
+            emPPsEmitidas={item?.realizado ?? emPPsDoItem(itemRealizadoId)}
             aEmitirEditando={aEmitirEditando}
             ppGeradaEditando={ppEditando}
             itemConcluido={item?.concluido ?? false}

@@ -5,6 +5,7 @@ import { Ban, ChevronDown, Lock, Plus, Trash2, Undo2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn, formatCurrency } from "@/lib/utils";
+import { acimaDoOrcado } from "@/lib/calculos/limites-orcamento";
 import { calcularRentabilidade } from "@/lib/calculos/versao-totais";
 import type {
   ChaveBvNoDialog,
@@ -176,6 +177,7 @@ interface Props {
    *  ele o painel do item fecha o envio com o motivo, e o "Ver PP" só
    *  cancela a PP ainda não enviada. */
   papelEnviaPP: boolean;
+  podeGerarAcimaDoOrcado: boolean;
   /** Corrige a NF da PP em avaliação sem aprovar (`jobs.corrigir_nf_pp`,
    *  revisão da decisão 152): o botão no painel do item. */
   papelCorrigeNf: boolean;
@@ -708,6 +710,7 @@ export function JobItemRealizadoTable({
   podeAcoes,
   podeGerarPP = false,
   papelEnviaPP,
+  podeGerarAcimaDoOrcado,
   papelCorrigeNf,
   podeCadastrarFornecedor = false,
   podeEditarFornecedor = false,
@@ -1894,6 +1897,7 @@ export function JobItemRealizadoTable({
                           moldura={moldura("dias_meses_realizado")}
                         />
                         <CelulaTotalComBv
+                          acimaDoOrcado={acimaDoOrcado(blocos.realizado.bruto, Number(item.total_orcado))}
                           bloco={blocos.realizado}
                           visao={visao}
                           moeda={moeda}
@@ -2579,10 +2583,12 @@ export function JobItemRealizadoTable({
               defaultEmpresaId={jobEmpresaId}
               itemDescricao={itemAtual?.item ?? ""}
               valorPlanejado={planejadoAtual}
+              valorOrcado={Number(itemAtual?.total_orcado ?? 0)}
+              podeGerarAcimaDoOrcado={podeGerarAcimaDoOrcado}
               unitarioPlanejado={unitarioPlanejado}
               quantidadePlanejada={quantidadePlanejada}
               dmPlanejado={dmPlanejado}
-              emPPsEmitidas={emPPs}
+              emPPsEmitidas={Number(realizadoAtual?.total_realizado ?? emPPs)}
               aEmitirEditando={aEmitirEditando}
               ppGeradaEditando={ppGeradaEditando}
               itemConcluido={itemConcluido}
@@ -2798,6 +2804,7 @@ function CelulaLeitura({
  *  descontado E a sub-linha que diz de quanto foi o desconto — é ela que
  *  torna a dedução auditável sem abrir o formulário do BV. */
 function CelulaTotalComBv({
+  acimaDoOrcado: excedido = false,
   bloco,
   visao,
   moeda,
@@ -2807,6 +2814,7 @@ function CelulaTotalComBv({
   nav,
   moldura,
 }: {
+  acimaDoOrcado?: boolean;
   bloco: ValoresDoBloco;
   visao: VisaoBv;
   moeda: string;
@@ -2828,6 +2836,7 @@ function CelulaTotalComBv({
           className={cn(
             "font-mono text-xs font-semibold leading-[1.2]",
             bloco.bruto <= 0 && "text-muted-foreground",
+            excedido && "text-california-red",
           )}
         >
           {bloco.bruto > 0 ? formatCurrency(valor, moeda) : "—"}

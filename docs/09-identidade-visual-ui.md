@@ -116,6 +116,19 @@ As planilhas de orçamento e de job são lidas em blocos verticais, não coluna 
 
 A rentabilidade fica em neutro de propósito: ela não é um bloco de entrada, é o que sobra entre dois outros. O grafite diz isso sem competir com os três. **O valor é sempre grafite, positivo ou negativo** — o sinal já está no número, e verde ali brigaria com o PLANEJADO. Isso vale só dentro de planilha e Totais; os painéis "Resultado operacional" e "Resultado geral" seguem verde/vermelho, porque não são coluna de planilha.
 
+**Exceções de limite (21/10/2026, decisão 204):** na planilha de orçamento,
+o total **orçado do item** fica vermelho quando seu planejado o excede.
+No job, o total **realizado do item** fica vermelho quando o acumulado
+bruto (antes do BV, descontadas as devoluções aprovadas) excede o orçado.
+O destaque permanece nas vistas Bruto e Líquido. O **Resultado geral**
+do orçamento, no cabeçalho e no card de Totais, fica vermelho abaixo de
+20%; exatamente 20% mantém o verde. As colunas de rentabilidade da grade
+continuam grafite. No formulário da PP, o cartão inicial preserva Em PPs
+emitidas e Planejado e acrescenta Orçado. A prévia tem triângulo âmbar acima
+do planejado ou escudo vermelho acima do orçado (precedência). Sob o total,
+o aviso contém somente ícone e título, sem texto explicativo ou cálculo.
+Fonte das comparações: `lib/calculos/limites-orcamento.ts`.
+
 **Fonte única:** `app/(app)/_planilha/blocos.ts`. Cada bloco exporta o conjunto pronto de classes (`faixa`, `cabecalhoAbre/Meio/Fim`, `celulaAbre/Meio/Total/Vazia`, `subtotalVazio/Valor`, `texto`, `textoSuave`, `bordaAbre`).
 
 **Proibido:** escrever hex de bloco direto no JSX. Antes de 2026-08-11 as mesmas cores estavam repetidas em 8 arquivos e **já haviam divergido** entre si — a tela da versão e a agregada usavam tons diferentes para o mesmo bloco.

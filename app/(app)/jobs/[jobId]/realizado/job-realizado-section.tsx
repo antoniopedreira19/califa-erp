@@ -261,6 +261,7 @@ interface Props {
    *  Obrigatório: é ele que tira do produtor o "Enviar" e o cancelamento
    *  de PP já enviada. Repassado à tabela. */
   papelEnviaPP: boolean;
+  podeGerarAcimaDoOrcado: boolean;
   /** Corrige a NF da PP em avaliação sem aprovar (`jobs.corrigir_nf_pp`,
    *  revisão da decisão 152). Repassado à tabela e ao painel do item. */
   papelCorrigeNf: boolean;
@@ -516,6 +517,7 @@ export function JobRealizadoSection({ comHistorico, ...props }: Props) {
       podeMexerNoSave={false}
       podeGerarPP={false}
       papelEnviaPP={false}
+      podeGerarAcimaDoOrcado={false}
       papelCorrigeNf={false}
       podeCadastrarFornecedor={false}
       podeEditarFornecedor={false}
@@ -554,6 +556,7 @@ function PlanilhaDoJob({
   podeExportarInterna = false,
   podeGerarPP = false,
   papelEnviaPP,
+  podeGerarAcimaDoOrcado,
   papelCorrigeNf,
   podeCadastrarFornecedor = false,
   podeEditarFornecedor = false,
@@ -1322,6 +1325,7 @@ function PlanilhaDoJob({
           podeAcoes={podeAcoes}
           podeGerarPP={podeGerarPP}
           papelEnviaPP={papelEnviaPP}
+          podeGerarAcimaDoOrcado={podeGerarAcimaDoOrcado}
           papelCorrigeNf={papelCorrigeNf}
           podeCadastrarFornecedor={podeCadastrarFornecedor}
           podeEditarFornecedor={podeEditarFornecedor}

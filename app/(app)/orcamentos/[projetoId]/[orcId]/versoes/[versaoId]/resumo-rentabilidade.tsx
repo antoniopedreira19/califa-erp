@@ -1,3 +1,4 @@
+import { rentabilidadeAbaixoDoMinimo } from "@/lib/calculos/limites-orcamento";
 import { cn, formatCurrency } from "@/lib/utils";
 
 interface Props {
@@ -67,7 +68,7 @@ export function ResumoRentabilidade({
           <span
             className={cn(
               "font-mono text-base font-bold",
-              resultadoGeral >= 0 ? "text-emerald-700" : "text-california-red",
+              !rentabilidadeAbaixoDoMinimo(resultadoGeral) ? "text-emerald-700" : "text-california-red",
             )}
           >
             {`${resultadoGeral.toFixed(1).replace(".", ",")}%`}

@@ -1,5 +1,7 @@
 "use client";
 
+import { rentabilidadeAbaixoDoMinimo } from "@/lib/calculos/limites-orcamento";
+
 // Client por causa do liga-desliga das colunas de save no fechamento. O
 // único consumidor (`PlanilhaVersao`) já é client; a diretiva aqui é para
 // a regra ficar explícita se alguém renderizar este card de um server
@@ -449,7 +451,7 @@ export function TotaisCard({
               "mt-2.5 rounded-xl border p-4",
               resultadoGeral === null
                 ? "border-border bg-muted/30"
-                : resultadoGeral >= 0
+                : !rentabilidadeAbaixoDoMinimo(resultadoGeral)
                   ? "border-emerald-200 bg-emerald-50"
                   : "border-rose-200 bg-rose-50",
             )}
@@ -461,7 +463,7 @@ export function TotaisCard({
                     "text-sm font-semibold",
                     resultadoGeral === null
                       ? "text-muted-foreground"
-                      : resultadoGeral >= 0
+                      : !rentabilidadeAbaixoDoMinimo(resultadoGeral)
                         ? "text-emerald-800"
                         : "text-california-red",
                   )}
@@ -473,7 +475,7 @@ export function TotaisCard({
                     "mt-0.5 text-[11.5px]",
                     resultadoGeral === null
                       ? "text-muted-foreground"
-                      : resultadoGeral >= 0
+                      : !rentabilidadeAbaixoDoMinimo(resultadoGeral)
                         ? "text-emerald-700"
                         : "text-california-red",
                   )}
@@ -488,7 +490,7 @@ export function TotaisCard({
                   "whitespace-nowrap font-mono text-[26px] font-bold leading-none",
                   resultadoGeral === null
                     ? "text-muted-foreground"
-                    : resultadoGeral >= 0
+                    : !rentabilidadeAbaixoDoMinimo(resultadoGeral)
                       ? "text-emerald-700"
                       : "text-california-red",
                 )}

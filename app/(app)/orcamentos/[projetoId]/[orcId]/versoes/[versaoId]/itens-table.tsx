@@ -1,5 +1,7 @@
 "use client";
 
+import { acimaDoOrcado } from "@/lib/calculos/limites-orcamento";
+
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Lock, Plus, Trash2, X } from "lucide-react";
@@ -1992,7 +1994,7 @@ export function ItensTable({
                                   selecao={selecao}
                                   linhaId={item.id}
                                   coluna="total_orcado"
-                                  className={cn("font-mono font-semibold", ORCADO.celulaTotal)}
+                                  className={cn("font-mono font-semibold", ORCADO.celulaTotal, acimaDoOrcado(totais.planejado, totais.orcado) && "text-california-red")}
                                 >
                                   {formatCurrency(totais.orcado, moeda)}
                                 </CelulaCalculada>
@@ -2951,7 +2953,7 @@ function LinhaDraft({
             selecao={selecao}
             linhaId={DRAFT_ID}
             coluna="total_orcado"
-            className={cn("font-mono font-semibold", ORCADO.celulaTotal)}
+            className={cn("font-mono font-semibold", ORCADO.celulaTotal, acimaDoOrcado(totalPlanejado, totalOrcado) && "text-california-red")}
           >
             {formatCurrency(totalOrcado, moeda)}
           </CelulaCalculada>

@@ -8,6 +8,7 @@ import { FileStack, FolderTree, Lock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
+import { acimaDoOrcado, bloqueioAprovacaoPorLimites } from "@/lib/calculos/limites-orcamento";
 import { listarGpsParaOrcamento, listarProdutoresAtivos } from "@/lib/data/members";
 import type { GpParaEscolha } from "@/lib/gps-para-escolha";
 import { listarCidadesIniciais, type CidadeOpcao } from "@/lib/data/cidades";
@@ -1676,6 +1677,11 @@ function VersaoSelecionada({
           cancelado depois da abertura também não (decisão 163). */}
       {!arquivado && !jobCancelado && (
       <FluxoAbertura
+        bloqueioLimites={bloqueioAprovacaoPorLimites(
+          session.activeRole,
+          itens.some((i) => acimaDoOrcado(i.total_planejado, i.total_orcado)),
+          resultadoGeral,
+        )}
         versaoId={versao.id}
         versaoLabel={`v${versao.numero_versao}`}
         versaoStatus={versao.status}

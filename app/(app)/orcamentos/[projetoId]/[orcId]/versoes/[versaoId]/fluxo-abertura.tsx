@@ -92,6 +92,7 @@ interface Props {
   /** Itens com total orçado > 0 — linha começada e vazia não conta. Item
    *  com orçado zerado não bloqueia (revisão da decisão 011, 01/10/2026). */
   qtdItensComValor: number;
+  bloqueioLimites: string | null;
   /** Alíquota gravada na versão, para checar se saiu do seletor. */
   percentualImposto: number;
   /** Câmbio da versão internacional — aprovar exige todos os campos
@@ -197,6 +198,7 @@ export function FluxoAbertura({
   qtdGrupos,
   qtdItens,
   qtdItensComValor,
+  bloqueioLimites,
   percentualImposto,
   cambioInternacional,
   mesesSemItens,
@@ -244,7 +246,7 @@ export function FluxoAbertura({
   );
   // Mesma função que a server action usa: o title do botão explica exatamente
   // o motivo pelo qual o servidor recusaria.
-  const bloqueio = bloqueioAprovacaoVersao({
+  const bloqueio = bloqueioLimites ?? bloqueioAprovacaoVersao({
     parServicoCategoria,
     percentualImposto,
     cambioInternacional,

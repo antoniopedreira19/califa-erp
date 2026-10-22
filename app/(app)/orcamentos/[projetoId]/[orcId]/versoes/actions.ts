@@ -35,7 +35,14 @@ import type {
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
 } from "@/lib/types";
-import { aceitaBV } from "@/lib/calculos/versao-totais";
+import {
+  aceitaBV,
+  calcularTotaisVersao,
+  calcularResultadoOperacional,
+} from "@/lib/calculos/versao-totais";
+import { fechamentoDosItens, parametrosDaVersao } from "@/lib/calculos/midia-off";
+import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
+import { acimaDoOrcado, bloqueioAprovacaoPorLimites } from "@/lib/calculos/limites-orcamento";
 import {
   gruposNaOrdemDaTela,
   moverNaLista,
@@ -1741,7 +1748,7 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
   const { data: versao, error: errVer } = await supabase
     .from("versoes_orcamento")
     .select(
-      "id, status, orcamento_id, tenant_id, percentual_imposto, moeda_estrangeira, cambio_compra, cambio_cotacao, cambio_venda, cambio_data",
+      "id, status, orcamento_id, tenant_id, percentual_imposto, percentual_honorarios, percentual_int_taxes, int_transaction_costs, base_honorarios, percentual_veiculo, moeda_estrangeira, cambio_compra, cambio_cotacao, cambio_venda, cambio_data",
     )
     .eq("id", versaoId)
     .eq("tenant_id", session.activeTenant.id)
@@ -1751,6 +1758,11 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
       orcamento_id: string;
       tenant_id: string;
       percentual_imposto: number;
+      percentual_honorarios: number;
+      percentual_int_taxes: number | null;
+      int_transaction_costs: number | null;
+      base_honorarios: string | null;
+      percentual_veiculo: number | null;
       moeda_estrangeira: string | null;
       cambio_compra: number | string | null;
       cambio_cotacao: number | string | null;
@@ -1803,22 +1815,10 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
   //    unitário × quantidade × dias). Aprovar assim travaria a versão e
   //    abriria job com orçado zerado.
   const [
-    { count: itensCount },
-    { count: comValorCount },
     consumosRes,
+    itensLimitesRes,
   ] =
     await Promise.all([
-      supabase
-        .from("versoes_orcamento_itens")
-        .select("id", { count: "exact", head: true })
-        .eq("versao_orcamento_id", versaoId)
-        .eq("tenant_id", session.activeTenant.id),
-      supabase
-        .from("versoes_orcamento_itens")
-        .select("id", { count: "exact", head: true })
-        .eq("versao_orcamento_id", versaoId)
-        .eq("tenant_id", session.activeTenant.id)
-        .gt("total_orcado", 0),
       // Item com orçado zerado NÃO bloqueia desde 01/10/2026 (revisão da
       // decisão 011): é o item da casa, mostrado ao cliente sem cobrança.
       // O consumo de save da versão (decisão 099): a aprovação passa a
@@ -1830,6 +1830,11 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
         .eq("tenant_id", session.activeTenant.id)
         .eq("item.versao_orcamento_id", versaoId)
         .is("substituido_em", null),
+      supabase
+        .from("versoes_orcamento_itens")
+        .select("tipo_custo, total_orcado, total_planejado, em_save, save_consumido")
+        .eq("versao_orcamento_id", versaoId)
+        .eq("tenant_id", session.activeTenant.id),
     ]);
 
   // Modelo mensal (decisão 078) e Mídia Off (decisão 147): todo mês da
@@ -1869,6 +1874,10 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
     return { ok: false, message: "Não foi possível conferir os veículos das linhas." };
   }
 
+  if (itensLimitesRes.error) {
+    return { ok: false, message: "Não foi possível conferir os limites da versão. Tente novamente." };
+  }
+
   // Alíquota escolhida + item com valor. Mesma função do botão "Aprovar
   // versão", para a tela e o servidor nunca discordarem do motivo.
   const bloqueio = bloqueioAprovacaoVersao({
@@ -1885,14 +1894,50 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
             data: versao.cambio_data,
           }
         : null,
-    qtdItens: itensCount ?? 0,
-    qtdItensComValor: comValorCount ?? 0,
+    qtdItens: itensLimitesRes.data?.length ?? 0,
+    qtdItensComValor: itensLimitesRes.data?.filter((i) => Number(i.total_orcado) > 0).length ?? 0,
     mesesSemItens: mesesVazios,
     linhasSemVeiculo: semVeiculo ? (semVeiculo.count ?? 0) : null,
   });
 
   if (bloqueio) {
     return { ok: false, message: bloqueio };
+  }
+
+  const itensLimites = itensLimitesRes.data ?? [];
+  const planilha = configDaPlanilha(modeloDaVersao, {
+    percentual_int_taxes: Number(versao.percentual_int_taxes ?? 0),
+    int_transaction_costs: Number(versao.int_transaction_costs ?? 0),
+    moeda_estrangeira: versao.moeda_estrangeira,
+    cambio_compra: versao.cambio_compra === null ? null : Number(versao.cambio_compra),
+  });
+  const totaisLimites = calcularTotaisVersao(
+    itensLimites,
+    Number(versao.percentual_honorarios),
+    Number(versao.percentual_imposto),
+    planilha.internacional,
+  );
+  const resultadoGeral = modeloDaVersao === "midia_off"
+    ? fechamentoDosItens(itensLimites, parametrosDaVersao(versao)).resultadoGeral
+    : calcularResultadoOperacional(
+        totaisLimites.valorJob,
+        totaisLimites.deducoesDoResultado,
+        itensLimites.reduce((s, i) => s + Number(i.total_planejado ?? 0), 0),
+      ).resultadoGeral;
+  const bloqueioLimites = bloqueioAprovacaoPorLimites(
+    session.activeRole,
+    itensLimites.some((i) => acimaDoOrcado(Number(i.total_planejado), Number(i.total_orcado))),
+    resultadoGeral,
+  );
+  if (bloqueioLimites) {
+    await logAuditEvent({
+      acao: "acao_negada",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "versao_orcamento",
+      entidadeId: versaoId,
+      metadata: { acao_tentada: "orcamentos.aprovar", motivo: "limites_do_orcamento", resultado_geral: resultadoGeral },
+    });
+    return { ok: false, message: bloqueioLimites };
   }
 
   // 3a. O consumo de save da versão cabe no saldo APROVADO de cada origem
@@ -1950,7 +1995,7 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
     // conferência acima e este UPDATE.
     return {
       ok: false,
-      message: /save/i.test(errUpdVer.message)
+      message: /save|Só o administrador/i.test(errUpdVer.message)
         ? errUpdVer.message
         : "Não foi possível aprovar a versão.",
     };
