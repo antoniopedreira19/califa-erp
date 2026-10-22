@@ -6339,3 +6339,19 @@ Protótipo aprovado em 17/10. Regra completa na decisão 192.
   nada muda no envio. Nasceu do relato da GP do ANI-1001/26 (19/10), que
   não era bug — ver a nota de 22/10 na
   [decisão 174](../decisions/174-equipe-do-job-e-envio-de-pp-pelo-produtor.md).
+
+## ⚠️ Nota de 2026-10-22 — o envio pela aba Pedidos de Produção vale para toda PP gerada (revisão da decisão 160)
+
+- O avião da trilha da aba Pedidos de Produção só aparecia na PP gerada com
+  algum arquivo anexado (decisão 160 §4). Agora aparece em toda PP gerada,
+  para quem envia, como o "Enviar ao financeiro" do painel do item: a nota
+  entra no próprio pop-up. Relato do Tiago na PP-00355 (AMB-1041/26), gerada
+  sem arquivo.
+- A exigência da NF não mudou: o servidor recusa o envio sem nota.
+- **Verificação:** no TES-1025/26, a PP-00266 (gerada, 0 anexos) passou a
+  mostrar o avião ao lado do lápis e do cancelar; o pop-up abriu com
+  "Anexar arquivos" e, ao enviar sem arquivo, recusou com "Anexe a nota
+  fiscal do fornecedor." — a PP seguiu `gerada`, sem `enviada_financeiro_em`
+  e sem anexo no banco. Ver
+  [decisão 160](../decisions/160-pp-pronta-para-envio-e-envio-pela-aba.md).
+

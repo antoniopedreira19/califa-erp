@@ -1,7 +1,7 @@
 # 160 — A PP fica "Pronta para envio", e o GP a envia pela aba Pedidos de Produção
 
 **Data:** 2026-10-09
-**Status:** aceita e implementada (09/10/2026).
+**Status:** aceita e implementada (09/10/2026); §4 revisto em 22/10/2026 (o envio da aba vale para toda PP gerada, com ou sem arquivo).
 **Quem decidiu:** Tiago, de 08 a 09/10/2026, sobre o protótipo "Envio pela aba PPs" (5 versões), depois do relato de um GP que "não conseguia enviar uma PP gerada por um produtor".
 **Completa:** a [136](136-qualquer-gp-age-e-o-autor-fica-registrado.md) (o produtor gera, só o GP e o administrador enviam), a [152](152-nf-do-fornecedor-com-cadastro-proprio.md) (os documentos do fornecedor entram no envio) e a [153](153-pp-a-emitir.md) (a PP gerada não se edita). A [159](159-errata-pronta-para-envio.md) fez o mesmo desenho para a errata, com o mesmo nome.
 **Migration:** `20261009100001_pp_pronta_para_envio.sql`.
@@ -31,9 +31,11 @@ na Planilha Interna, e nada avisava o GP de que havia PP esperando por ele.
    a NF ao lado da PP ("Verificar"), corrige se precisar e envia. O GP também
    envia PP que ninguém preparou, preenchendo ele mesmo.
 4. **O botão de envio da aba só aparece para quem envia** (GP e
-   administrador) e **só na PP gerada com algum arquivo anexado** — com ou
-   sem tipo; quando o arquivo vem marcado como NF, os dados chegam
-   preenchidos e se corrigem no pop-up. A verba de produção sai sem nota.
+   administrador) e **em toda PP gerada** — a nota se anexa no próprio
+   pop-up, como no painel do item; quando o arquivo já veio marcado como NF,
+   os dados chegam preenchidos e se corrigem no pop-up. A verba de produção
+   sai sem nota. ⚠️ Até 22/10/2026 o botão só aparecia na PP gerada com
+   algum arquivo anexado; ver a nota no fim.
    Com o job na pré-abertura, a abertura em revisão (decisão 040) ou o prazo
    de envio perdido (decisão 157), o botão aparece apagado e o motivo vem no
    tooltip, nas mesmas frases do painel.
@@ -107,3 +109,19 @@ na Planilha Interna, e nada avisava o GP de que havia PP esperando por ele.
 ## Testes
 
 Ver a nota de 2026-10-09 no [HANDOFF_JOBS](../handoffs/HANDOFF_JOBS.md).
+
+## ⚠️ Revisão de 2026-10-22 — o envio da aba vale para toda PP gerada
+
+O Tiago foi enviar a PP-00355 (gerada, sem nenhum arquivo) pela aba Pedidos
+de Produção e não achou o avião: a regra do §4 o escondia na PP sem anexo.
+O painel do item, na Planilha Interna, nunca teve essa condição — o botão
+"Enviar ao financeiro" fica aceso e a nota entra no pop-up (decisão 152).
+Pedido do Tiago: enviar a PP gerada também pela aba.
+
+- O avião aparece em toda PP gerada, para quem envia, e abre o mesmo pop-up,
+  com "Anexar arquivos".
+- Nada mudou no que se exige: sem a NF (ou o boleto, ou os comprovantes do
+  reembolso), o pop-up recusa com "Anexe a nota fiscal do fornecedor." — a
+  conferência é do servidor (`faltaNosAnexosDoEnvio`).
+- As travas do tooltip seguem como eram: pré-abertura, linha alterada por
+  errata em revisão e prazo de envio perdido.

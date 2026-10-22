@@ -1048,7 +1048,7 @@ export function JobPPsSection({
 
         {/* A trilha mora fora do frame, igual "Ver PP" / "Gerar PP" da
             Planilha Interna. Desde 08/10/2026 são três colunas de ícones —
-            enviar (só o GP, PP gerada com arquivo anexado), ver o
+            enviar (só o GP, toda PP gerada), ver o
             formulário (toda PP) e cancelar (a PP que ainda dá para
             cancelar) —; "Prestar contas" fica na coluna do cancelar, e o
             "Reemitir PP" da rejeitada entre o formulário e ele. */}
@@ -1071,14 +1071,11 @@ export function JobPPsSection({
               editable &&
               podeCancelarPP(pp.status) &&
               (papelEnviaPP || pp.status === "gerada");
-            // O envio é do GP (decisão 136) e precisa de arquivo anexado
-            // (pedido do Tiago, 08/10/2026: qualquer arquivo; o tipo e os
-            // dados da NF se conferem no pop-up). A verba sai sem nota.
-            const enviar =
-              editable &&
-              papelEnviaPP &&
-              pp.status === "gerada" &&
-              (pp.verba_producao || (pp.anexos ?? []).length > 0);
+            // O envio é do GP (decisão 136), em toda PP gerada. Até
+            // 22/10/2026 só aparecia com arquivo anexado (decisão 160 §4);
+            // agora a nota entra no pop-up, como no painel do item (decisão
+            // 152), e o servidor segue exigindo a NF. A verba sai sem nota.
+            const enviar = editable && papelEnviaPP && pp.status === "gerada";
             const trava = enviar ? travaDoEnvio(pp) : null;
             const enviarEl = enviar && (
               <Tooltip>
