@@ -36,6 +36,7 @@ import {
   ROTULO_DO_FILTRO,
   SeloDaFila,
 } from "./fila-celulas";
+import { resumoDosDesvios } from "@/lib/calculos/excecao-fechamento";
 
 export interface FilaLinha extends JobNaFila {
   /** "há 2 horas" — calculado no server para não divergir na hidratação. */
@@ -282,6 +283,8 @@ export function FilaAbertura({
               // Decisão 162: a errata só reorganizou a planilha.
               l.revisao?.soOrganizacao ? (
                 <SeloDaFila tipo="reorganizada" dica="Nenhum valor alterado · itens reorganizados" />
+              ) : l.excecao_fechamento ? (
+                <SeloDaFila tipo="excecao" dica={resumoDosDesvios(l.excecao_fechamento.taxas)} />
               ) : null
             }
           />

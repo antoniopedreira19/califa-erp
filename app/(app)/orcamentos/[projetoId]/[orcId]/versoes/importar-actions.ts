@@ -544,6 +544,7 @@ export async function confirmarImportacao(
       // Sem a permissão de editar impostos, Impostos BR e int. taxes vêm da
       // vigente (decisão do Tiago, 14/09/2026). Sem isso a versão nasceria
       // com o imposto em branco e quem importou não conseguiria aprovar.
+      // A exceção no fechamento da vigente não vem junto (decisão 206).
       ...(check.modelo === "internacional" &&
       !pode(session.activeRole, "orcamentos.editar_impostos")
         ? await impostosDaVersaoVigente(orcamentoId, tenantId)

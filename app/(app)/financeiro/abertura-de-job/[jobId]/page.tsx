@@ -28,6 +28,7 @@ import { AberturaForm } from "./abertura-form";
 import { lerFaturamentoMensalPeloJob } from "@/lib/data/faturamento-mensal";
 import { lerFechamentoMidiaDoJob } from "@/lib/data/midia-do-job";
 import { impostoDoJob } from "../imposto-previsto";
+import { FaixaExcecaoNaAbertura } from "@/app/(app)/_planilha/excecao-no-fechamento";
 import { JobFinanceiroTabs } from "../../jobs/[jobId]/job-financeiro-tabs";
 import { abaDaUrl } from "../../jobs/[jobId]/abas";
 import {
@@ -320,6 +321,14 @@ export default async function AbrirJobNoFinanceiroPage({
           competência e as previsões de recebimento e de custos.
         </p>
       </div>
+
+      {/* A exceção no fechamento da versão aprovada (decisão 206). */}
+      {job.excecao_fechamento && (
+        <FaixaExcecaoNaAbertura
+          excecao={job.excecao_fechamento.excecao}
+          taxas={job.excecao_fechamento.taxas}
+        />
+      )}
 
       <JobFinanceiroTabs
         abaInicial={abaDaUrl(searchParams?.aba) ?? "abertura"}

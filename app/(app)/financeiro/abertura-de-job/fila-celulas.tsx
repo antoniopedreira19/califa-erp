@@ -17,7 +17,7 @@
  */
 
 import * as React from "react";
-import { Ban, ClipboardCheck, FilePenLine, ListRestart, PiggyBank } from "lucide-react";
+import { Ban, ClipboardCheck, FilePenLine, ListRestart, PiggyBank, ShieldAlert } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -209,6 +209,13 @@ const SELO = {
   cancelamento: {
     rotulo: "Pedido de cancelamento",
     icone: Ban,
+    classes: "border-amber-300 bg-amber-50 text-amber-800",
+  },
+  // Decisão 206: o fechamento do internacional fora do padrão, por exceção
+  // do administrador. A dica traz as taxas.
+  excecao: {
+    rotulo: "Exceção no fechamento",
+    icone: ShieldAlert,
     classes: "border-amber-300 bg-amber-50 text-amber-800",
   },
   reorganizada: {

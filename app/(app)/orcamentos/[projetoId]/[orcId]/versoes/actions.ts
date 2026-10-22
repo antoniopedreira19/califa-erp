@@ -9,7 +9,6 @@ import { pode } from "@/lib/permissoes";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { honorariosDoOrcamento } from "@/lib/data/clientes";
 import { modeloPlanilhaDoOrcamento } from "@/lib/data/modelo-planilha";
-import { impostosDaVersaoVigente } from "@/lib/data/impostos-da-vigente";
 import {
   copiarMesesEntreVersoes,
   criarMesesDoPeriodo,
@@ -19,7 +18,6 @@ import { bloqueioAprovacaoVersao, versaoSchema } from "@/lib/validations/versoes
 import { erroDoParDoOrcamento } from "@/lib/data/par-servico-categoria";
 import {
   ALIQUOTA_IMPOSTO_PADRAO,
-  PERCENTUAL_INT_TAXES_PADRAO,
   aliquotaParaValor,
 } from "@/lib/impostos";
 import {
@@ -50,6 +48,16 @@ import {
   ordensAlteradas,
 } from "@/lib/calculos/ordem-itens";
 import { formatCurrency } from "@/lib/utils";
+import {
+  FECHAMENTO_PADRAO,
+  compraDaCotacao,
+  cotacaoValida,
+  desviosDoPadrao,
+  erroDasTaxas,
+  foraDoPadrao,
+  vendaDaCotacao,
+  type TaxasDoFechamento,
+} from "@/lib/calculos/excecao-fechamento";
 
 export type ActionResult =
   | { ok: true; id?: string }
@@ -287,15 +295,10 @@ export async function criarVersao(
     session.activeTenant.id,
   );
 
-  // Sem a permissão de editar impostos, a versão nova de um internacional
-  // herda Impostos BR e int. taxes da vigente (decisão do Tiago,
-  // 14/09/2026) — o que veio do formulário é ignorado.
-  const impostosTravados =
-    modelo === "internacional" &&
-    !pode(session.activeRole, "orcamentos.editar_impostos")
-      ? await impostosDaVersaoVigente(orcamentoId, session.activeTenant.id)
-      : null;
-
+  // Versão nova de internacional nasce no fechamento padrão (decisão 206,
+  // que substitui a herança da vigente de 14/09/2026): a exceção é da
+  // versão em que o administrador a registrou e não passa adiante. O que
+  // veio do formulário é ignorado; o gatilho do banco confere de novo.
   const { data, error } = await supabase
     .from("versoes_orcamento")
     .insert({
@@ -304,10 +307,11 @@ export async function criarVersao(
       ...(modelo === "internacional"
         ? {
             moeda_estrangeira: "USD",
-            percentual_int_taxes: PERCENTUAL_INT_TAXES_PADRAO,
+            percentual_int_taxes: FECHAMENTO_PADRAO.intTaxes,
+            percentual_imposto: FECHAMENTO_PADRAO.imposto,
+            int_transaction_costs: FECHAMENTO_PADRAO.itc,
           }
         : {}),
-      ...(impostosTravados ?? {}),
       tenant_id: session.activeTenant.id,
       orcamento_id: orcamentoId,
       numero_versao: numero,
@@ -363,7 +367,9 @@ export async function atualizarVersao(
 
   const { data: atual } = await supabase
     .from("versoes_orcamento")
-    .select("orcamento_id, status, percentual_honorarios, percentual_imposto, percentual_int_taxes, percentual_veiculo, base_honorarios")
+    .select(
+      "orcamento_id, status, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, percentual_veiculo, base_honorarios, moeda_estrangeira, cambio_cotacao, cambio_compra, cambio_venda, cambio_data",
+    )
     .eq("id", versaoId)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<{
@@ -372,8 +378,14 @@ export async function atualizarVersao(
       percentual_honorarios: number;
       percentual_imposto: number | string;
       percentual_int_taxes: number | string;
+      int_transaction_costs: number | string;
       percentual_veiculo: number | string;
       base_honorarios: string;
+      moeda_estrangeira: string | null;
+      cambio_cotacao: number | string | null;
+      cambio_compra: number | string | null;
+      cambio_venda: number | string | null;
+      cambio_data: string | null;
     }>();
 
   if (!atual) return { ok: false, message: "Versão não encontrada." };
@@ -403,32 +415,51 @@ export async function atualizarVersao(
   }
   if (!honorariosMudou) delete updates.percentual_honorarios;
 
-  // Internacional (decisão do Tiago, 14/09/2026): Impostos BR e int. taxes
-  // mudam o valor cobrado do cliente e seguem a mesma trava do fee. No
-  // nacional o imposto continua com quem edita a versão.
+  // Internacional (decisão 206, 22/10/2026): int. taxes, impostos BR e
+  // custo de transação ficam no padrão e só mudam pela exceção do
+  // administrador (`definirExcecaoDoFechamento`) — o "Editar" não os envia,
+  // e um POST direto que os mude é recusado aqui e de novo no banco.
   const modeloDaVersao = await modeloPlanilhaDoOrcamento(
     atual.orcamento_id,
     session.activeTenant.id,
   );
   if (modeloDaVersao === "internacional") {
-    const impostoMudou =
-      typeof updates.percentual_imposto === "number" &&
-      Math.abs(Number(atual.percentual_imposto) - updates.percentual_imposto) > 1e-6;
-    const intTaxesMudou =
-      typeof updates.percentual_int_taxes === "number" &&
-      Math.abs(Number(atual.percentual_int_taxes) - updates.percentual_int_taxes) > 1e-6;
+    const mudou = (campo: string, atualValor: number | string) =>
+      typeof updates[campo] === "number" &&
+      Math.abs(Number(atualValor) - (updates[campo] as number)) > 1e-6;
     if (
-      (impostoMudou || intTaxesMudou) &&
-      !pode(session.activeRole, "orcamentos.editar_impostos")
+      mudou("percentual_imposto", atual.percentual_imposto) ||
+      mudou("percentual_int_taxes", atual.percentual_int_taxes) ||
+      mudou("int_transaction_costs", atual.int_transaction_costs)
     ) {
       return {
         ok: false,
         message:
-          "Só administrador ou gerente de projeto altera os Impostos BR e as int. taxes da versão internacional.",
+          "No orçamento internacional, int. taxes, impostos BR e custo de transação só mudam pela exceção no fechamento, que o administrador registra no botão “Exceção”.",
       };
     }
-    if (!impostoMudou) delete updates.percentual_imposto;
-    if (!intTaxesMudou) delete updates.percentual_int_taxes;
+    delete updates.percentual_imposto;
+    delete updates.percentual_int_taxes;
+    delete updates.int_transaction_costs;
+
+    // Câmbio (decisão 206): compra e venda saem da cotação (−0,20 e +0,20);
+    // o que vier delas no formulário é ignorado.
+    delete updates.cambio_compra;
+    delete updates.cambio_venda;
+    if (typeof updates.cambio_cotacao === "number") {
+      const cotacao = updates.cambio_cotacao;
+      if (!cotacaoValida(cotacao)) {
+        return {
+          ok: false,
+          message: "A cotação precisa ser maior que 0,20: compra e venda saem dela (−0,20 e +0,20).",
+        };
+      }
+      updates.cambio_compra = compraDaCotacao(cotacao);
+      updates.cambio_venda = vendaDaCotacao(cotacao);
+    }
+  } else {
+    delete updates.percentual_int_taxes;
+    delete updates.int_transaction_costs;
   }
 
   // Mídia Off (decisão 147): a base dos honorários e a parte do veículo
@@ -466,14 +497,32 @@ export async function atualizarVersao(
     return { ok: false, message: mapVersaoDbError(error.message) };
   }
 
+  // O antes e o depois de cada parâmetro que mudou (decisão 206). Antes
+  // a auditoria só dizia que a versão foi editada: foi assim que o 0% de
+  // int. taxes do SOF-P002/26-01 não teve como ser rastreado.
+  const anterior = atual as unknown as Record<string, unknown>;
+  const alteracoes = Object.fromEntries(
+    Object.entries(updates)
+      .filter(([campo, para]) => {
+        const de = anterior[campo];
+        if (typeof para === "number") return de === null || de === undefined || Math.abs(Number(de) - para) > 1e-9;
+        return (de ?? null) !== (para ?? null);
+      })
+      .map(([campo, para]) => {
+        const de = anterior[campo];
+        return [campo, { de: typeof para === "number" && de !== null && de !== undefined ? Number(de) : de ?? null, para }];
+      }),
+  );
+
   await logAuditEvent({
     acao: "versao_orcamento.editada",
     tenantId: session.activeTenant.id,
     entidadeTipo: "versao_orcamento",
     entidadeId: versaoId,
     metadata:
-      honorariosMudou || "percentual_veiculo" in updates || "base_honorarios" in updates
+      honorariosMudou || "percentual_veiculo" in updates || "base_honorarios" in updates || Object.keys(alteracoes).length > 0
         ? {
+            ...(Object.keys(alteracoes).length > 0 ? { alteracoes } : {}),
             ...(honorariosMudou
               ? {
                   campo: "percentual_honorarios",
@@ -501,6 +550,191 @@ export async function atualizarVersao(
   const projetoIdAtual = orcAtual?.projeto_id;
 
   revalidatePath(`/orcamentos/${projetoIdAtual}/${atual.orcamento_id}`);
+  return { ok: true, id: versaoId };
+}
+
+// ============================================================
+// EXCEÇÃO NO FECHAMENTO DO INTERNACIONAL (decisão 206)
+// ============================================================
+
+/** A versão que a exceção lê e grava. */
+async function versaoParaExcecao(versaoId: string, tenantId: string) {
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("versoes_orcamento")
+    .select(
+      "id, orcamento_id, status, percentual_int_taxes, percentual_imposto, int_transaction_costs, excecao_fechamento_motivo",
+    )
+    .eq("id", versaoId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{
+      id: string;
+      orcamento_id: string;
+      status: string;
+      percentual_int_taxes: number | string;
+      percentual_imposto: number | string;
+      int_transaction_costs: number | string;
+      excecao_fechamento_motivo: string | null;
+    }>();
+  return data;
+}
+
+function taxasDaLinha(v: {
+  percentual_int_taxes: number | string;
+  percentual_imposto: number | string;
+  int_transaction_costs: number | string;
+}): TaxasDoFechamento {
+  return {
+    intTaxes: Number(v.percentual_int_taxes ?? 0),
+    imposto: Number(v.percentual_imposto ?? 0),
+    itc: Number(v.int_transaction_costs ?? 0),
+  };
+}
+
+/** A recusa do gatilho chega em pt-BR; o resto vira a mensagem genérica. */
+function mensagemDaExcecao(erro: { code?: string; message: string }): string {
+  return erro.code === "42501" ? erro.message : mapVersaoDbError(erro.message);
+}
+
+async function revalidarOrcamento(orcamentoId: string, tenantId: string) {
+  const supabase = createClient();
+  const { data: orc } = await supabase
+    .from("orcamentos")
+    .select("projeto_id")
+    .eq("id", orcamentoId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{ projeto_id: string }>();
+  if (orc) revalidatePath(`/orcamentos/${orc.projeto_id}/${orcamentoId}`);
+}
+
+/**
+ * Registra (ou troca) a exceção no fechamento de UMA versão internacional:
+ * int. taxes, impostos BR e custo de transação fora do padrão, com motivo.
+ * Só o administrador; o gatilho `versao_fechamento_internacional_no_padrao`
+ * confere de novo. A versão nova não herda a exceção.
+ */
+export async function definirExcecaoDoFechamento(
+  versaoId: string,
+  input: { intTaxes: number; imposto: number; itc: number; motivo: string },
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.excecao_fechamento");
+  if (!gate.ok) {
+    return { ...gate, message: "Só o administrador registra a exceção no fechamento." };
+  }
+
+  const versao = await versaoParaExcecao(versaoId, session.activeTenant.id);
+  if (!versao) return { ok: false, message: "Versão não encontrada." };
+  if (versao.status === "aprovada" || versao.status === "cancelada") {
+    return { ok: false, message: "Versão aprovada ou cancelada não pode ser alterada." };
+  }
+  const modelo = await modeloPlanilhaDoOrcamento(versao.orcamento_id, session.activeTenant.id);
+  if (modelo !== "internacional") {
+    return { ok: false, message: "A exceção no fechamento só existe no orçamento internacional." };
+  }
+
+  const taxas: TaxasDoFechamento = {
+    intTaxes: Number(input.intTaxes),
+    imposto: Number(input.imposto),
+    itc: Math.round(Number(input.itc) * 100) / 100,
+  };
+  const erroTaxas = erroDasTaxas(taxas);
+  if (erroTaxas) return { ok: false, message: erroTaxas };
+  if (!foraDoPadrao(taxas)) {
+    return {
+      ok: false,
+      message: "Os três valores estão no padrão: não há exceção a registrar. Para voltar ao padrão, use “Voltar ao padrão”.",
+    };
+  }
+  const motivo = (input.motivo ?? "").trim();
+  if (motivo === "") return { ok: false, message: "Escreva o motivo da exceção." };
+  if (motivo.length > 500) return { ok: false, message: "O motivo pode ter até 500 caracteres." };
+
+  const antes = taxasDaLinha(versao);
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("versoes_orcamento")
+    .update({
+      percentual_int_taxes: taxas.intTaxes,
+      percentual_imposto: taxas.imposto,
+      int_transaction_costs: taxas.itc,
+      excecao_fechamento_motivo: motivo,
+      excecao_fechamento_por: session.profile.id,
+      excecao_fechamento_em: new Date().toISOString(),
+    })
+    .eq("id", versaoId)
+    .eq("tenant_id", session.activeTenant.id);
+  if (error) {
+    console.error("[versoes.excecao]", error.message);
+    return { ok: false, message: mensagemDaExcecao(error) };
+  }
+
+  await logAuditEvent({
+    acao: "versao_orcamento.excecao_fechamento",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "versao_orcamento",
+    entidadeId: versaoId,
+    metadata: {
+      orcamento_id: versao.orcamento_id,
+      de: antes,
+      para: taxas,
+      desvios: desviosDoPadrao(taxas).map((d) => d.linha),
+      motivo,
+      motivo_anterior: versao.excecao_fechamento_motivo,
+    },
+  });
+
+  await revalidarOrcamento(versao.orcamento_id, session.activeTenant.id);
+  return { ok: true, id: versaoId };
+}
+
+/** Tira a exceção: a versão volta ao fechamento padrão. Só o administrador. */
+export async function removerExcecaoDoFechamento(versaoId: string): Promise<ActionResult> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.excecao_fechamento");
+  if (!gate.ok) {
+    return { ...gate, message: "Só o administrador remove a exceção no fechamento." };
+  }
+
+  const versao = await versaoParaExcecao(versaoId, session.activeTenant.id);
+  if (!versao) return { ok: false, message: "Versão não encontrada." };
+  if (versao.status === "aprovada" || versao.status === "cancelada") {
+    return { ok: false, message: "Versão aprovada ou cancelada não pode ser alterada." };
+  }
+
+  const antes = taxasDaLinha(versao);
+  const supabase = createClient();
+  const { error } = await supabase
+    .from("versoes_orcamento")
+    .update({
+      percentual_int_taxes: FECHAMENTO_PADRAO.intTaxes,
+      percentual_imposto: FECHAMENTO_PADRAO.imposto,
+      int_transaction_costs: FECHAMENTO_PADRAO.itc,
+      excecao_fechamento_motivo: null,
+      excecao_fechamento_por: null,
+      excecao_fechamento_em: null,
+    })
+    .eq("id", versaoId)
+    .eq("tenant_id", session.activeTenant.id);
+  if (error) {
+    console.error("[versoes.excecao.remover]", error.message);
+    return { ok: false, message: mensagemDaExcecao(error) };
+  }
+
+  await logAuditEvent({
+    acao: "versao_orcamento.excecao_fechamento_removida",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "versao_orcamento",
+    entidadeId: versaoId,
+    metadata: {
+      orcamento_id: versao.orcamento_id,
+      de: antes,
+      para: FECHAMENTO_PADRAO,
+      motivo_anterior: versao.excecao_fechamento_motivo,
+    },
+  });
+
+  await revalidarOrcamento(versao.orcamento_id, session.activeTenant.id);
   return { ok: true, id: versaoId };
 }
 
@@ -548,6 +782,17 @@ export async function duplicarVersao(
     session.activeTenant.id,
   );
 
+  // A exceção no fechamento é da versão de origem (decisão 206): a cópia
+  // nasce no padrão e sem exceção. O gatilho do banco faz o mesmo com uma
+  // origem antiga fora do padrão.
+  const taxasDaCopia: TaxasDoFechamento = original.excecao_fechamento_motivo
+    ? FECHAMENTO_PADRAO
+    : {
+        intTaxes: Number(original.percentual_int_taxes ?? 0),
+        imposto: Number(original.percentual_imposto ?? 0),
+        itc: Number(original.int_transaction_costs ?? 0),
+      };
+
   const { data: nova, error } = await supabase
     .from("versoes_orcamento")
     .insert({
@@ -559,7 +804,7 @@ export async function duplicarVersao(
       moeda: original.moeda,
       taxa_cambio: original.taxa_cambio,
       percentual_honorarios: original.percentual_honorarios,
-      percentual_imposto: original.percentual_imposto,
+      percentual_imposto: taxasDaCopia.imposto,
       // Os parâmetros internacionais seguem a mesma regra dos demais na
       // duplicação: a cópia herda tudo da origem (decisão 072). Deixá-los
       // de fora faria a cópia de uma versão internacional nascer com a
@@ -569,8 +814,8 @@ export async function duplicarVersao(
       cambio_compra: original.cambio_compra,
       cambio_venda: original.cambio_venda,
       cambio_data: original.cambio_data,
-      percentual_int_taxes: original.percentual_int_taxes,
-      int_transaction_costs: original.int_transaction_costs,
+      percentual_int_taxes: taxasDaCopia.intTaxes,
+      int_transaction_costs: taxasDaCopia.itc,
       // Mídia Off (decisão 147): as condições de mídia vão junto, pela mesma
       // razão das internacionais.
       percentual_veiculo: original.percentual_veiculo,
@@ -1748,7 +1993,7 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
   const { data: versao, error: errVer } = await supabase
     .from("versoes_orcamento")
     .select(
-      "id, status, orcamento_id, tenant_id, percentual_imposto, percentual_honorarios, percentual_int_taxes, int_transaction_costs, base_honorarios, percentual_veiculo, moeda_estrangeira, cambio_compra, cambio_cotacao, cambio_venda, cambio_data",
+      "id, status, orcamento_id, tenant_id, percentual_imposto, percentual_honorarios, percentual_int_taxes, int_transaction_costs, base_honorarios, percentual_veiculo, moeda_estrangeira, cambio_compra, cambio_cotacao, cambio_venda, cambio_data, excecao_fechamento_motivo",
     )
     .eq("id", versaoId)
     .eq("tenant_id", session.activeTenant.id)
@@ -1757,6 +2002,7 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
       status: string;
       orcamento_id: string;
       tenant_id: string;
+      excecao_fechamento_motivo: string | null;
       percentual_imposto: number;
       percentual_honorarios: number;
       percentual_int_taxes: number | null;
@@ -1894,6 +2140,18 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
             cotacao: versao.cambio_cotacao,
             venda: versao.cambio_venda,
             data: versao.cambio_data,
+          }
+        : null,
+    // Fora do padrão, só com exceção do administrador (decisão 206).
+    fechamentoInternacional:
+      orc.categoria?.modelo_planilha === "internacional"
+        ? {
+            taxas: {
+              intTaxes: Number(versao.percentual_int_taxes ?? 0),
+              imposto: Number(versao.percentual_imposto ?? 0),
+              itc: Number(versao.int_transaction_costs ?? 0),
+            },
+            comExcecao: versao.excecao_fechamento_motivo !== null,
           }
         : null,
     qtdItens: itensLimitesRes.data?.length ?? 0,

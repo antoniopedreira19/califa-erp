@@ -105,6 +105,7 @@ test("aprovação: serviço Always On com categoria Extra bloqueia, com a frase 
   const base = {
     percentualImposto: 19.53,
     cambioInternacional: null,
+    fechamentoInternacional: null,
     qtdItens: 1,
     qtdItensComValor: 1,
     mesesSemItens: null,

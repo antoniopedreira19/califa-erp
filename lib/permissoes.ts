@@ -128,6 +128,10 @@ export const permissoes = {
   "orcamentos.duplicar":           ["administrador", "gerente_producao", "produtor"],
   "orcamentos.exportar":           ["administrador", "gerente_producao", "produtor"],
   "orcamentos.editar_impostos":    ["administrador", "gerente_producao"],
+  /** Exceção no fechamento do internacional (decisão 206): int. taxes,
+   *  impostos BR e custo de transação fora do padrão, com motivo, só numa
+   *  versão. O banco confere de novo (`versao_fechamento_internacional_no_padrao`). */
+  "orcamentos.excecao_fechamento": ["administrador"],
   "orcamentos.aprovar":            ["administrador", "gerente_producao"],
   /** Marcar save e consumo de save no orçamento (24/09/2026): a mesma
    *  regra do job — administrador ou GP. */

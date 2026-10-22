@@ -22,6 +22,7 @@ import type { JobStatus } from "@/lib/types";
 import {
   bloqueioAprovacaoVersao,
   type CambioParaAprovar,
+  type FechamentoParaAprovar,
 } from "@/lib/validations/versoes";
 import { aprovarVersao } from "../actions";
 import {
@@ -98,6 +99,9 @@ interface Props {
   /** Câmbio da versão internacional — aprovar exige todos os campos
    *  (decisão 072). `null` no nacional. */
   cambioInternacional: CambioParaAprovar | null;
+  /** Int. taxes, impostos BR e custo de transação do internacional, e se
+   *  há exceção (decisão 206). `null` fora dele. */
+  fechamentoInternacional: FechamentoParaAprovar | null;
   /** Modelo mensal (decisão 078): os meses sem item, que bloqueiam a
    *  aprovação. `null` fora do mensal. */
   mesesSemItens: string[] | null;
@@ -201,6 +205,7 @@ export function FluxoAbertura({
   bloqueioLimites,
   percentualImposto,
   cambioInternacional,
+  fechamentoInternacional,
   mesesSemItens,
   linhasSemVeiculo,
   parServicoCategoria,
@@ -250,6 +255,7 @@ export function FluxoAbertura({
     parServicoCategoria,
     percentualImposto,
     cambioInternacional,
+    fechamentoInternacional,
     qtdItens,
     qtdItensComValor,
     mesesSemItens,

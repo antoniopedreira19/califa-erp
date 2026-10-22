@@ -1,7 +1,7 @@
 # 072 — O orçamento internacional tem planilha própria, e quem a escolhe é a categoria
 
 **Data:** 2026-09-11
-**Status:** aceita (revista em 16/10/2026: a importação lê o planejado pelo cabeçalho e o % do FEE)
+**Status:** aceita (revista em 16/10/2026: a importação lê o planejado pelo cabeçalho e o % do FEE; revista em 22/10/2026 pela [206](206-excecao-no-fechamento-do-internacional.md): int. taxes e custo de transação só por exceção do administrador, câmbio em linha própria)
 **Contexto:** `versoes_orcamento`, `categorias_dominio`, a tela da versão
 do orçamento e `lib/calculos/versao-totais.ts`. Pedido do Tiago em
 10/09/2026, com a planilha `Modelo de planilha interna - Internacional
@@ -567,3 +567,13 @@ o passa:
   seed da "Internacional", trigger de trava, parâmetros na versão.
 - `20260911000002_internacional_moeda_estrangeira_propria.sql` — correção
   do §6: `moeda_estrangeira` e `cambio_compra` como campos próprios.
+
+
+## ⚠️ Revisão de 22/10/2026 — a exceção no fechamento (decisão 206)
+
+Int. taxes e Int. transaction costs deixaram de ser campos do "Editar" da
+versão: o fechamento padrão do internacional é fixo (18,02% · 19,53% ·
+R$ 0) e só muda por exceção do administrador, com motivo. A versão nova não
+herda mais Impostos BR e int. taxes da vigente: nasce no padrão. Moeda e
+câmbio ganharam linha própria, e compra e venda passaram a ser a cotação
+∓ 0,20. Ver [206](206-excecao-no-fechamento-do-internacional.md).

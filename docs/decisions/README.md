@@ -225,6 +225,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 203 | *Reservada para a conciliação com o banco e não usada por ela:* o número foi tomado em paralelo, e o fechamento da conciliação virou a 205 | 2026-10-21 |
 | 204 | [Administrador nas exceções da aprovação e geração/edição de PP](204-administrador-nas-excecoes-do-orcamento-e-da-pp.md) | 2026-10-21 |
 | 205 | [O fechamento da conciliação com o banco: trava o caixa da conta até reabrir, com o gatilho em `lancamentos_financeiros` (M4.2, opção B) e o reabrir com motivo (revê a 120)](205-fechamento-da-conciliacao.md) | 2026-10-21 |
+| 206 | [A exceção no fechamento do internacional, só do administrador: int. taxes, impostos BR e custo de transação travados no padrão; câmbio em linha própria, com compra e venda a ±0,20 da cotação (revê a 072 e a 096)](206-excecao-no-fechamento-do-internacional.md) | 2026-10-22 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -237,4 +238,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 206**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 207**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)

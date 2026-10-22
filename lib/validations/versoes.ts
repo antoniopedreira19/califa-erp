@@ -1,6 +1,11 @@
 import { z } from "zod";
 import { VERSAO_STATUS_EDITAVEIS } from "@/lib/types";
 import { isAliquotaConhecida } from "@/lib/impostos";
+import {
+  foraDoPadrao,
+  resumoDosDesvios,
+  type TaxasDoFechamento,
+} from "@/lib/calculos/excecao-fechamento";
 
 /**
  * Schema do header da versão. `numero_versao` NÃO entra aqui — é
@@ -70,6 +75,14 @@ export interface CambioParaAprovar {
   data: string | null;
 }
 
+/** O fechamento de uma versão internacional, como a aprovação o confere
+ *  (decisão 206). */
+export interface FechamentoParaAprovar {
+  taxas: TaxasDoFechamento;
+  /** A versão tem exceção no fechamento registrada pelo administrador. */
+  comExcecao: boolean;
+}
+
 /** "a", "a e b", "a, b e c". */
 function listaPtBr(itens: string[]): string {
   if (itens.length <= 1) return itens.join("");
@@ -88,6 +101,10 @@ export function bloqueioAprovacaoVersao(input: {
    *  nacional. Obrigatório: quem chama tem que dizer qual é o caso, e um
    *  default não pode liberar a aprovação em silêncio. */
   cambioInternacional: CambioParaAprovar | null;
+  /** Int. taxes, impostos BR e custo de transação da versão internacional,
+   *  e se há exceção registrada (decisão 206); `null` fora dele.
+   *  Obrigatório e anulável, como o câmbio. */
+  fechamentoInternacional: FechamentoParaAprovar | null;
   qtdItens: number;
   /** Itens com total_orcado > 0 — linha começada e não preenchida dá 0.
    *  Item com orçado zerado aprova desde 01/10/2026 (revisão da decisão
@@ -112,7 +129,13 @@ export function bloqueioAprovacaoVersao(input: {
     const motivo = input.parServicoCategoria;
     return `Serviço e categoria do orçamento não combinam: ${motivo.charAt(0).toLowerCase()}${motivo.slice(1)} Troque a categoria ou o serviço no "Editar" do orçamento antes de aprovar.`;
   }
-  if (!isAliquotaConhecida(input.percentualImposto)) {
+  // Internacional (decisão 206): fora do padrão, só com exceção do
+  // administrador — e com ela a alíquota fora da lista aprova.
+  const fechamento = input.fechamentoInternacional;
+  if (fechamento && !fechamento.comExcecao && foraDoPadrao(fechamento.taxas)) {
+    return `O fechamento desta versão está fora do padrão sem exceção registrada (${resumoDosDesvios(fechamento.taxas)}). O administrador registra a exceção ou volta ao padrão pelo botão "Exceção".`;
+  }
+  if (!isAliquotaConhecida(input.percentualImposto) && !fechamento?.comExcecao) {
     return 'Escolha a alíquota de impostos da versão antes de aprovar. Use o botão "Editar" da versão.';
   }
   // Internacional (decisão 072, 14/09/2026, pedido do Tiago): o câmbio
@@ -131,7 +154,7 @@ export function bloqueioAprovacaoVersao(input: {
       !positivo(c.venda) ? "venda" : null,
     ].filter((f): f is string => f !== null);
     if (faltando.length > 0) {
-      return `Preencha o câmbio da versão antes de aprovar — falta ${listaPtBr(faltando)}. Use o botão "Editar" da versão.`;
+      return `Preencha o câmbio da versão antes de aprovar — falta ${listaPtBr(faltando)}. Use o botão "Editar câmbio" da versão.`;
     }
   }
   if (input.qtdItens === 0) {

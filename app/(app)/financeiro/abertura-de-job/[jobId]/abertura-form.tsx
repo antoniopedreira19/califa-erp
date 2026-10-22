@@ -120,6 +120,7 @@ import { useVoltar } from "@/components/voltar/botao-voltar";
 import { useProtegerSaida } from "@/components/voltar/estado";
 import { nomeDaPagina } from "@/lib/voltar";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ExcecaoNaConfirmacao } from "@/app/(app)/_planilha/excecao-no-fechamento";
 
 interface CategoriaOption {
   id: string;
@@ -3686,6 +3687,11 @@ export function AberturaForm({
               </span>
             </div>
           </div>
+
+          {/* A exceção no fechamento da versão aprovada (decisão 206). */}
+          {job.excecao_fechamento && (
+            <ExcecaoNaConfirmacao taxas={job.excecao_fechamento.taxas} />
+          )}
 
           <div className="flex items-center justify-end gap-2.5">
             <button

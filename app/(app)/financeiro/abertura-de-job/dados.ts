@@ -4,6 +4,11 @@ import {
   tipoGeraDesembolso,
 } from "@/lib/calculos/versao-totais";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
+import {
+  foraDoPadrao,
+  type ExcecaoDoFechamento,
+  type TaxasDoFechamento,
+} from "@/lib/calculos/excecao-fechamento";
 import type {
   CategoriaModeloPlanilha,
   MudancaDeEstrutura,
@@ -152,6 +157,11 @@ export interface JobNaFila {
    * conferência só existe antes de abrir.
    */
   saves: SaveDaConferencia[];
+  /** A exceção no fechamento da versão aprovada do internacional (decisão
+   *  206): a fila põe o selo e a abertura, a faixa. `null` no padrão e fora
+   *  do internacional. Obrigatório: é o aviso que o financeiro não pode
+   *  deixar de ver. */
+  excecao_fechamento: { excecao: ExcecaoDoFechamento; taxas: TaxasDoFechamento } | null;
 }
 
 /**
@@ -347,7 +357,12 @@ const SELECT_JOB_FILA =
   // desde 02/09/2026 (categoria e servico).
   "orcamento:orcamentos(nome, categoria_id, servico_id, " +
   "categoria:categorias_dominio!categoria_id(nome, modelo_planilha), " +
-  "servico:categorias_dominio!servico_id(nome, investimento_interno))";
+  "servico:categorias_dominio!servico_id(nome, investimento_interno)), " +
+  // A exceção no fechamento da versão aprovada (decisão 206).
+  "versao_excecao:versoes_orcamento!jobs_versao_orcamento_aprovada_id_fkey(" +
+  "percentual_int_taxes, percentual_imposto, int_transaction_costs, " +
+  "excecao_fechamento_motivo, excecao_fechamento_em, " +
+  "excecao_por:profiles!excecao_fechamento_por(nome))";
 
 /**
  * Soma o orçado e o planejado da planilha interna de vários jobs numa
@@ -491,6 +506,27 @@ function montarJobNaFila(
     contatos: contatos ?? [],
     revisao,
     saves,
+    excecao_fechamento: excecaoDaVersao(j.versao_excecao),
+  };
+}
+
+/** A exceção registrada na versão aprovada, como a fila e a abertura a
+ *  mostram. Sem motivo, ou com as taxas no padrão, não há o que avisar. */
+function excecaoDaVersao(v: any): JobNaFila["excecao_fechamento"] {
+  if (!v?.excecao_fechamento_motivo || !v.excecao_fechamento_em) return null;
+  const taxas: TaxasDoFechamento = {
+    intTaxes: Number(v.percentual_int_taxes ?? 0),
+    imposto: Number(v.percentual_imposto ?? 0),
+    itc: Number(v.int_transaction_costs ?? 0),
+  };
+  if (!foraDoPadrao(taxas)) return null;
+  return {
+    taxas,
+    excecao: {
+      motivo: v.excecao_fechamento_motivo,
+      porNome: v.excecao_por?.nome ?? null,
+      em: v.excecao_fechamento_em,
+    },
   };
 }
 

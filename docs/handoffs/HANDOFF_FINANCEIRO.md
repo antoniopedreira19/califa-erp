@@ -7982,3 +7982,18 @@ os arquivos da frente do Antonio.
   `AberturaForm` e `PopUpDaPlanilha`; a página `financeiro/jobs/[jobId]`
   lê as linhas junto da revisão. A linha do pedido de save em aprovação
   continua em âmbar, e a versão antiga do histórico não destaca a revisão.
+
+## ⚠️ Nota de 2026-10-22 (2) — a exceção no fechamento do internacional na abertura (decisão 206)
+
+- Quando a versão aprovada do job internacional tem **exceção no
+  fechamento** (int. taxes, impostos BR ou custo de transação fora do
+  padrão, registrados pelo administrador), o financeiro vê:
+  - na **fila**, o selo "Exceção no fechamento" na coluna Job (a dica traz
+    as taxas);
+  - na **conferência** que a linha abre e na página **"Abrir job no
+    financeiro"**, a faixa âmbar com cada taxa e o padrão ao lado, o motivo,
+    quem e quando;
+  - no pop-up **"Abrir … no financeiro?"**, a linha da exceção.
+- Dado: `JobNaFila.excecao_fechamento`, lido no `SELECT_JOB_FILA` pelo embed
+  `versao_excecao:versoes_orcamento!jobs_versao_orcamento_aprovada_id_fkey(…, excecao_por:profiles!excecao_fechamento_por(nome))`.
+- Conferido com o TES-1031/26 (teste, não aberto; envio cancelado depois).

@@ -1,6 +1,7 @@
 "use client";
 
 import { rentabilidadeAbaixoDoMinimo } from "@/lib/calculos/limites-orcamento";
+import type { LinhaDoFechamento } from "@/lib/calculos/excecao-fechamento";
 
 // Client por causa do liga-desliga das colunas de save no fechamento. O
 // único consumidor (`PlanilhaVersao`) já é client; a diretiva aqui é para
@@ -71,11 +72,15 @@ interface Props {
   /** Serviço Interno (decisão 105): fora do mínimo de 20% da decisão 204,
    *  o Resultado geral não acende o vermelho. */
   interno: boolean;
+  /** As linhas da cadeia internacional fora do padrão por exceção
+   *  (decisão 206). Vazio fora dela. */
+  linhasEmExcecao: LinhaDoFechamento[];
 }
 
 export function TotaisCard({
   itens,
   interno,
+  linhasEmExcecao,
   bvsPorItem,
   visao,
   percentualHonorarios,
@@ -330,6 +335,7 @@ export function TotaisCard({
               percentualHonorarios={percentualHonorarios}
               percentualIntTaxes={internacional.percentualIntTaxes}
               percentualImposto={percentualImposto}
+              linhasEmExcecao={linhasEmExcecao}
             />
           )}
         </div>
@@ -379,7 +385,9 @@ export function TotaisCard({
                   "whitespace-nowrap font-mono text-base font-bold",
                   resultadoOperacional === null
                     ? "text-muted-foreground"
-                    : corRentabilidade(resultadoOperacional),
+                    : !interno && rentabilidadeAbaixoDoMinimo(resultadoGeral)
+                      ? "text-california-red"
+                      : corRentabilidade(resultadoOperacional),
                 )}
               >
                 {resultadoOperacional === null

@@ -32,6 +32,11 @@ export type AuditAction =
   | "projeto.reativado"
   | "versao_orcamento.criada"
   | "versao_orcamento.editada"
+  // Exceção no fechamento do internacional (decisão 206): o administrador
+  // registra ou remove int. taxes, impostos BR e custo de transação fora do
+  // padrão, com o antes, o depois e o motivo.
+  | "versao_orcamento.excecao_fechamento"
+  | "versao_orcamento.excecao_fechamento_removida"
   | "versao_orcamento.importada"
   // Importação que SUBSTITUI o conteúdo de uma versão existente, apagando
   // grupos, itens e os BVs deles. Separada de `importada` de propósito: a

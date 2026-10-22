@@ -466,6 +466,12 @@ export interface VersaoOrcamento {
   cambio_venda: number | null;
   /** Data da cotação registrada em `cambio_cotacao`. */
   cambio_data: string | null;
+  /** Exceção no fechamento do internacional (decisão 206): por que esta
+   *  versão sai do padrão (int. taxes 18,02%, impostos BR 19,53%, sem custo
+   *  de transação). Nulo = versão no padrão. Só o administrador grava. */
+  excecao_fechamento_motivo: string | null;
+  excecao_fechamento_por: string | null;
+  excecao_fechamento_em: string | null;
   /** Orçamento de save INTEIRO (decisão 154, que revê a 028 §10): todas as
    *  linhas geram save e a linha nova já nasce em save. Liga e desliga só
    *  pelo menu "Save" (`versao_save_gerar_tudo` / `versao_save_retirar_tudo`);

@@ -233,6 +233,7 @@ export function PlanilhaMensal({
         internacional={planilha.internacional}
         moedaEstrangeira={planilha.moedaEstrangeira}
         interno={interno}
+        linhasEmExcecao={[]}
         mes={{ id: d.mes.id, nome: nomeDoMes(d.mes.mes) }}
         semTotais={opcoes.semTotais}
         tituloTotais={`Totais de ${nomeDoMes(d.mes.mes)}`}
@@ -370,6 +371,7 @@ export function PlanilhaMensal({
               internacional={planilha.internacional}
               moedaEstrangeira={planilha.moedaEstrangeira}
               interno={interno}
+              linhasEmExcecao={[]}
               titulo="Totais do trimestre"
               subtitulo="Orçado × Planejado · soma dos meses."
             />

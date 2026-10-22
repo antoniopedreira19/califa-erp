@@ -321,6 +321,9 @@ export function JobTotaisCard({
               percentualHonorarios={percentualHonorarios}
               percentualIntTaxes={internacional.percentualIntTaxes}
               percentualImposto={percentualImposto}
+              // A exceção no fechamento aparece no orçamento e na abertura
+              // (decisão 206); a planilha do job fica sem a marca.
+              linhasEmExcecao={[]}
             />
           )}
         </div>

@@ -3,6 +3,7 @@ import { escolherVersaoVigente } from "@/lib/calculos/versao-vigente";
 import {
   ALIQUOTA_IMPOSTO_PADRAO,
   PERCENTUAL_INT_TAXES_PADRAO,
+  isAliquotaConhecida,
 } from "@/lib/impostos";
 
 /**
@@ -11,9 +12,10 @@ import {
  *
  * É o que uma versão nova de orçamento internacional recebe quando quem a
  * cria não tem `orcamentos.editar_impostos` (decisão do Tiago,
- * 14/09/2026): os dois percentuais mudam o valor cobrado do cliente e
- * seguem a mesma trava do fee. Herdar da vigente, e não dos padrões,
- * preserva um valor que um administrador já tenha ajustado.
+ * 14/09/2026). Desde a decisão 206 (22/10/2026) o fechamento fora do padrão
+ * é exceção da versão em que o administrador a registrou, e não passa
+ * adiante: int. taxes vêm sempre do padrão, e a alíquota da vigente só
+ * vale quando é uma da lista. O gatilho do banco faz o mesmo no insert.
  */
 export async function impostosDaVersaoVigente(
   orcamentoId: string,
@@ -52,8 +54,9 @@ export async function impostosDaVersaoVigente(
       percentual_int_taxes: PERCENTUAL_INT_TAXES_PADRAO,
     };
   }
+  const imposto = Number(vigente.percentual_imposto);
   return {
-    percentual_imposto: Number(vigente.percentual_imposto),
-    percentual_int_taxes: Number(vigente.percentual_int_taxes),
+    percentual_imposto: isAliquotaConhecida(imposto) ? imposto : ALIQUOTA_IMPOSTO_PADRAO,
+    percentual_int_taxes: PERCENTUAL_INT_TAXES_PADRAO,
   };
 }

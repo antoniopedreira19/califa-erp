@@ -9,6 +9,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
 import { acimaDoOrcado, bloqueioAprovacaoPorLimites } from "@/lib/calculos/limites-orcamento";
+import { desviosDoPadrao, type LinhaDoFechamento } from "@/lib/calculos/excecao-fechamento";
 import { listarGpsParaOrcamento, listarProdutoresAtivos } from "@/lib/data/members";
 import type { GpParaEscolha } from "@/lib/gps-para-escolha";
 import { listarCidadesIniciais, type CidadeOpcao } from "@/lib/data/cidades";
@@ -586,7 +587,7 @@ export default async function OrcamentoDetailPage({
   const modeloDoOrcamento: CategoriaModeloPlanilha =
     orcamentoRaw?.categoria?.modelo_planilha ?? "nacional";
   const midiaOff = modeloDoOrcamento === "midia_off";
-  const [gruposRes, itensRes, bvsRes, agregadoRes, contatosRes, mesesRes, reenvioRes, ppsRes, veiculosRes, usoRes] = await Promise.all([
+  const [gruposRes, itensRes, bvsRes, agregadoRes, contatosRes, mesesRes, reenvioRes, ppsRes, veiculosRes, usoRes, excecaoPorRes] = await Promise.all([
     versaoAtiva
       ? supabase
           .from("versoes_orcamento_grupos")
@@ -696,7 +697,16 @@ export default async function OrcamentoDetailPage({
           .eq("tenant_id", session.activeTenant.id)
           .returns<{ fornecedor_id: string; meio: string }[]>()
       : Promise.resolve({ data: [], error: null }),
+    // Quem registrou a exceção no fechamento do internacional (decisão 206).
+    versaoAtiva?.excecao_fechamento_por
+      ? supabase
+          .from("profiles")
+          .select("nome")
+          .eq("id", versaoAtiva.excecao_fechamento_por)
+          .maybeSingle<{ nome: string }>()
+      : Promise.resolve({ data: null, error: null }),
   ]);
+  if (excecaoPorRes.error) console.error("[versao.excecao_por]", excecaoPorRes.error.message);
 
   if (ppsRes.error) console.error("[versao.pps_do_job]", (ppsRes.error as any).message);
   if (veiculosRes.error) console.error("[versao.veiculos]", (veiculosRes.error as any).message);
@@ -1093,6 +1103,7 @@ export default async function OrcamentoDetailPage({
           parServicoCategoria={parServicoCategoria}
           ppsQueTravam={ppsQueTravam}
           veiculos={veiculos}
+          excecaoPorNome={excecaoPorRes.data?.nome ?? null}
         />
       ) : (
         <SemVersoes
@@ -1159,6 +1170,7 @@ function VersaoSelecionada({
   parServicoCategoria,
   ppsQueTravam,
   veiculos,
+  excecaoPorNome,
 }: {
   params: { projetoId: string; orcId: string };
   session: Awaited<ReturnType<typeof requireSession>>;
@@ -1222,6 +1234,8 @@ function VersaoSelecionada({
   ppsQueTravam: PPQueTravaOEnvio[];
   /** Mídia Off (decisão 147): os veículos do cadastro; vazio nos demais. */
   veiculos: VeiculoDaLista[];
+  /** Quem registrou a exceção no fechamento (decisão 206); nulo sem ela. */
+  excecaoPorNome: string | null;
 }) {
   // Orçamento de serviço Interno (decisão 105): tipo F · Interno travado,
   // planejado igual ao orçado e sem save.
@@ -1295,6 +1309,16 @@ function VersaoSelecionada({
     Number(versao.percentual_imposto),
     planilha.internacional,
   );
+  // As linhas da cadeia fora do padrão por exceção do administrador
+  // (decisão 206): o card de Totais as marca.
+  const linhasEmExcecao: LinhaDoFechamento[] =
+    planilha.internacional && versao.excecao_fechamento_motivo
+      ? desviosDoPadrao({
+          intTaxes: planilha.internacional.percentualIntTaxes,
+          imposto: Number(versao.percentual_imposto),
+          itc: planilha.internacional.intTransactionCosts,
+        }).map((d) => d.linha)
+      : [];
   // Mídia Off (decisão 147): a conta é a da mídia — veículo + honorários,
   // o imposto de dentro dos honorários. O total gravado é o negociado.
   const midiaOff = planilha.modeloPlanilha === "midia_off";
@@ -1499,6 +1523,20 @@ function VersaoSelecionada({
                   }
                 : null
             }
+            // Exceção no fechamento do internacional (decisão 206).
+            excecao={
+              planilha.modeloPlanilha === "internacional" &&
+              versao.excecao_fechamento_motivo &&
+              versao.excecao_fechamento_em
+                ? {
+                    motivo: versao.excecao_fechamento_motivo,
+                    porNome: excecaoPorNome,
+                    em: versao.excecao_fechamento_em,
+                  }
+                : null
+            }
+            podeRegistrarExcecao={pode(session.activeRole, "orcamentos.excecao_fechamento")}
+            itensDoFechamento={itens}
           />
           {pode(session.activeRole, "orcamentos.aprovar") && !arquivado && !jobCancelado && (
             <AprovacaoActions
@@ -1680,6 +1718,7 @@ function VersaoSelecionada({
           internacional={planilha.internacional}
           moedaEstrangeira={planilha.moedaEstrangeira}
           interno={interno}
+          linhasEmExcecao={linhasEmExcecao}
         />
       </div>
       </>
@@ -1719,6 +1758,18 @@ function VersaoSelecionada({
                 cotacao: versao.cambio_cotacao,
                 venda: versao.cambio_venda,
                 data: versao.cambio_data,
+              }
+            : null
+        }
+        fechamentoInternacional={
+          planilha.modeloPlanilha === "internacional"
+            ? {
+                taxas: {
+                  intTaxes: Number(versao.percentual_int_taxes ?? 0),
+                  imposto: Number(versao.percentual_imposto ?? 0),
+                  itc: Number(versao.int_transaction_costs ?? 0),
+                },
+                comExcecao: versao.excecao_fechamento_motivo !== null,
               }
             : null
         }

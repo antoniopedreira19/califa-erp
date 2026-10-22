@@ -48,7 +48,10 @@ export function ResumoRentabilidade({
           <span
             className={cn(
               "font-mono text-base font-bold",
-              resultadoOperacional >= 0
+              // Abaixo do mínimo de 20% da decisão 204, o valor também fica
+              // vermelho, como a rentabilidade ao lado (22/10/2026).
+              resultadoOperacional >= 0 &&
+                (interno || !rentabilidadeAbaixoDoMinimo(resultadoGeral))
                 ? "text-emerald-700"
                 : "text-california-red",
             )}

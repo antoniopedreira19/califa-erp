@@ -5798,3 +5798,36 @@ aplicada na hora combinada com a frente do Antonio, junto da
   `rgb(96, 96, 96)` em unitário/QT/D/M e `rgb(220, 38, 38)` nos totais
   excedentes, preservando fundos. Bruto/Líquido e BV conferidos, prints
   capturados. Nenhum dado operacional alterado.
+
+
+## Exceção no fechamento do internacional — 22/10/2026 (decisão 206)
+
+Caso do SOF-P002/26-01: a planilha da produção fechava em R$ 309.011,95
+(sem IR retido no exterior, ISS abatido, taxa cambial fixa e fee de 13%) e o
+sistema em R$ 314.064,17. Protótipo aprovado pelo Tiago (forma A, aviso A).
+
+- **Linha de parâmetros do internacional:** Fee · Int. taxes · Impostos BR ·
+  Int. transaction costs (sempre à vista, padrão R$ 0,00). No "Editar" as
+  três taxas ficam **travadas para todos**; só o fee se edita ali.
+- **Botão "Exceção"**, só para o administrador: pop-up com as três linhas,
+  o padrão do sistema ao lado, motivo obrigatório, faturamento previsto
+  simulado e conferência opcional com o invoicing da planilha; "Voltar ao
+  padrão" remove. Com exceção, a linha mostra os valores em âmbar e o selo
+  "Exceção no fechamento" (dica: taxas, motivo, quem e quando), e a cadeia
+  dos Totais marca as linhas com "exceção".
+- **Aprovação:** fora do padrão sem exceção é barrada; com exceção, 17,03%
+  aprova.
+- **Versão nova não herda a exceção** (criar, duplicar, importar, planilha do
+  projeto): nasce em 18,02% · 19,53% · R$ 0. O gatilho do banco confere.
+- **Câmbio em linha própria** com "Editar câmbio": moeda numa lista com
+  busca (24 moedas ISO), data e cotação; **compra e venda = cotação ∓ 0,20**,
+  calculadas na tela e no servidor. "Cotação: 5,0022 (02/06/2026)".
+- **Resultado operacional vermelho abaixo de 20%** no cabeçalho e nos Totais
+  (Interno fora).
+- **Auditoria:** `versao_orcamento.editada` grava o antes e o depois de cada
+  parâmetro; a exceção tem ações próprias.
+- **Conferência:** no TES-P001/26-03 (internacional), como administrador:
+  câmbio, exceção, aprovação com 17,03%, envio, fila, conferência e abertura
+  do TES-1031/26 (não aberto; envio cancelado e versão de volta ao padrão).
+  Gatilho testado numa transação desfeita como GP e administrador. Testes,
+  tsc, lint e build limpos.
