@@ -6330,3 +6330,12 @@ Protótipo aprovado em 17/10. Regra completa na decisão 192.
   `rgb(96, 96, 96)` em unitário/QT/D/M e `rgb(220, 38, 38)` nos totais
   excedentes, preservando fundos. Bruto/Líquido e BV conferidos, prints
   capturados. Nenhum dado operacional alterado.
+
+## ⚠️ Nota de 2026-10-22 — Aviso das PPs já prontas ao ligar a chave do produtor (decisão 174)
+
+- Ao ligar "Envia PPs ao financeiro" no pop-up "Equipe", o job que já tem
+  PP "pronta para envio" mostra sob a chave que ela segue na fila do GP e
+  que o Produtor Responsável, com a chave, também pode enviá-la. Só aviso:
+  nada muda no envio. Nasceu do relato da GP do ANI-1001/26 (19/10), que
+  não era bug — ver a nota de 22/10 na
+  [decisão 174](../decisions/174-equipe-do-job-e-envio-de-pp-pelo-produtor.md).

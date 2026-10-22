@@ -162,6 +162,42 @@ function Chave({
   );
 }
 
+/** Ligar a chave não tira da fila do GP a PP que o produtor já deixou
+ *  "pronta para envio" — foi o que confundiu a GP no ANI-1001/26
+ *  (22/10/2026). O aviso aparece só enquanto a chave está sendo ligada. */
+function AvisoDePPsProntas({
+  codigos,
+  className,
+}: {
+  codigos: string[];
+  className?: string;
+}) {
+  if (codigos.length === 0) return null;
+  const lista =
+    codigos.length === 1
+      ? `A ${codigos[0]}`
+      : codigos.length <= 3
+        ? `${codigos.slice(0, -1).join(", ")} e ${codigos[codigos.length - 1]}`
+        : `${codigos.slice(0, 2).join(", ")} e mais ${codigos.length - 2}`;
+  const uma = codigos.length === 1;
+  return (
+    <p className={cn("text-[11.5px] leading-snug text-muted-foreground", className)}>
+      {lista}, já {uma ? "pronta" : "prontas"}, {uma ? "segue" : "seguem"} na
+      fila do GP. Com a chave, o Produtor Responsável também pode{" "}
+      {uma ? "enviá-la" : "enviá-las"}.
+    </p>
+  );
+}
+
+/** A chave está sendo ligada agora, para o produtor que vai ficar no job. */
+function ligandoAChave(
+  j: JobNaEquipe,
+  envia: Record<string, boolean>,
+  trocas: TrocasDoRascunho,
+): boolean {
+  return (envia[j.id] ?? false) && (!j.produtorEnviaPP || !!trocas[j.id]?.produtor);
+}
+
 function Cadeado() {
   return (
     <Tooltip>
@@ -662,6 +698,9 @@ function ConteudoDaEquipe({
                         Volta desligada para o novo produtor.
                       </p>
                     )}
+                    {ligandoAChave(job, envia, trocas) && (
+                      <AvisoDePPsProntas codigos={job.ppsProntas} />
+                    )}
                   </div>
                 ) : null}
               </Responsavel>
@@ -754,6 +793,12 @@ function ConteudoDaEquipe({
                           </span>
                         )}
                       </span>
+                      {ligandoAChave(j, envia, trocas) && (
+                        <AvisoDePPsProntas
+                          codigos={j.ppsProntas}
+                          className="col-span-full -mt-2 text-right"
+                        />
+                      )}
                     </div>
                   );
                 })}
