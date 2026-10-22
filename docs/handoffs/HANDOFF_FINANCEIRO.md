@@ -7964,3 +7964,21 @@ os arquivos da frente do Antonio.
   - "Cancelar o job ESC-1001/26?" mostrou "Empresa · Agência California".
     Só aberto e fechado: o pedido continua pendente.
   - tsc, lint e build limpos.
+
+## ⚠️ Nota de 2026-10-22 (1) — as linhas da errata com borda vermelha na revisão da abertura (revisão da decisão 185)
+
+- **O quê:** com o job em revisão depois de uma errata, a planilha do job no
+  financeiro mostra as linhas que a errata mudou com uma borda vermelha de
+  2px em volta da linha inteira, sem fundo — a mesma do design do módulo
+  Suprimentos. Vale na aba Planilha Interna e no pop-up do "Visualizar
+  planilha interna" do formulário em revisão. Do protótipo de 17/10, o
+  Tiago escolheu só o destaque: sem faixa, sem selo e sem lista na faixa da
+  revisão.
+- **Quais linhas:** as de `linhasAlteradasNaRevisao` (decisão 185) — as
+  mesmas que travam o envio de PP. Alterada, nova e cancelada; a errata que
+  só reorganiza não destaca nada. Registrada a revisão, o destaque some.
+- **Código:** token `ERRATA.linhaEmRevisao` (`_planilha/blocos.ts`); prop
+  `linhasDaRevisao` em `JobRealizadoSection`, `JobItemRealizadoTable`,
+  `AberturaForm` e `PopUpDaPlanilha`; a página `financeiro/jobs/[jobId]`
+  lê as linhas junto da revisão. A linha do pedido de save em aprovação
+  continua em âmbar, e a versão antiga do histórico não destaca a revisão.

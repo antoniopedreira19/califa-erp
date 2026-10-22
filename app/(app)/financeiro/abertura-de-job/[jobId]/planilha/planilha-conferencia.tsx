@@ -205,6 +205,7 @@ export function PlanilhaConferencia({
           // Na pré-abertura não há pedido de save a aprovar: nada em
           // destaque (decisão 099).
           destacarItens={[]}
+          linhasDaRevisao={[]}
         />
       </div>
 

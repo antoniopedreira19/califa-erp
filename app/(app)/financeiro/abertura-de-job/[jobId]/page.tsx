@@ -328,6 +328,8 @@ export default async function AbrirJobNoFinanceiroPage({
         abertura={
           <AberturaForm
             job={job}
+            // Job na fila: ainda não há revisão, nem linha de errata.
+            linhasDaRevisao={[]}
             categorias={categoriasDoModelo}
             servicos={servicosDoLado(servicosRes.data ?? [], job)}
             projetos={projetos}
@@ -470,6 +472,7 @@ export default async function AbrirJobNoFinanceiroPage({
             saldosDeSave={[]}
             clienteNome={detalhe.clienteNome}
             destacarItens={[]}
+            linhasDaRevisao={[]}
             job={{
               id: jobDoDetalhe.id,
               codigo: jobDoDetalhe.codigo,

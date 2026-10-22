@@ -365,6 +365,14 @@ export const ERRATA = {
    *  enquanto o modo está LIGADO. */
   botaoAtivo:
     "inline-flex items-center gap-1.5 rounded-lg border border-california-red bg-california-red/[0.07] px-3 py-1.5 text-xs font-bold text-[#b83b45] shadow-[inset_0_1px_2px_rgba(231,75,86,0.18)]",
+  /** A linha que uma errata ainda não revisada mudou, na planilha do job
+   *  no financeiro (revisão da decisão 185, 19/10/2026): borda vermelha de
+   *  2px em volta da linha inteira, sem fundo — a mesma do design do
+   *  módulo Suprimentos ("ver a linha de onde a PP a emitir saiu", 09/10).
+   *  Por sombra interna nas células: em tabela `border-collapse` a borda
+   *  do `<tr>` não aparece. Vai no `<tr>`. */
+  linhaEmRevisao:
+    "[&>td]:shadow-[inset_0_2px_0_#E74B56,inset_0_-2px_0_#E74B56] [&>td:first-child]:shadow-[inset_2px_0_0_#E74B56,inset_0_2px_0_#E74B56,inset_0_-2px_0_#E74B56] [&>td:last-child]:shadow-[inset_-2px_0_0_#E74B56,inset_0_2px_0_#E74B56,inset_0_-2px_0_#E74B56]",
 } as const;
 
 /** HISTÓRICO — a versão antiga da Planilha Interna (decisão 186,

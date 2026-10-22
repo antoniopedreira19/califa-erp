@@ -23,7 +23,7 @@ import type { JobRealizadoSection } from "@/app/(app)/jobs/[jobId]/realizado/job
 /** As props da planilha, menos as que o pop-up decide no navegador. */
 export type PlanilhaEmLeitura = Omit<
   ComponentProps<typeof JobRealizadoSection>,
-  "destacarItens" | "resultadoInicial"
+  "destacarItens" | "linhasDaRevisao" | "resultadoInicial"
 >;
 
 export type ResultadoDaPlanilha =

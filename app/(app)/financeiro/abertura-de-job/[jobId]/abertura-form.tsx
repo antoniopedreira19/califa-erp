@@ -338,6 +338,11 @@ interface Props {
   fotos?: FotoDaAbertura[];
   /** A errata que devolveu o job ao mural — só no modo `revisao`. */
   revisao?: RevisaoDeErrata | null;
+  /** As linhas que as erratas da revisão mudaram (decisão 185): o
+   *  "Visualizar planilha interna" abre com elas em borda vermelha
+   *  (revisão da 185, 19/10/2026). `[]` fora da revisão. Obrigatória: quem
+   *  não destaca manda `[]`. */
+  linhasDaRevisao: string[];
   /**
    * Aprovação de save (decisão 099): o pedido que esta revisão aprova.
    * Vem com o modo `revisao`; a faixa do topo vira "Aprovação de save ·
@@ -484,6 +489,7 @@ export function AberturaForm({
   abertoPorNome,
   fotos = [],
   revisao = null,
+  linhasDaRevisao,
   aprovacaoSave,
   saves,
 }: Props) {
@@ -3303,6 +3309,7 @@ export function AberturaForm({
             <AtalhoDaPlanilhaInterna
               job={job}
               destacarItens={aprovacaoSave?.linhaId ? [aprovacaoSave.linhaId] : []}
+              linhasDaRevisao={linhasDaRevisao}
             />
             {/* A planilha do job de origem do consumo, logo abaixo da
                 planilha interna e no mesmo tipo de botão (decisão 155). */}
@@ -4530,14 +4537,18 @@ function SavesDesteJob({
 
 /** O atalho "Visualizar planilha interna": abre a planilha deste job num
  *  pop-up, em leitura, como os da origem (Tiago, 07/10/2026). Na aprovação
- *  de um save (decisão 099), a linha do pedido vem em destaque. A aba
- *  Planilha Interna continua no topo, e é nela que se edita. */
+ *  de um save (decisão 099), a linha do pedido vem em destaque; na revisão
+ *  depois de uma errata, as linhas que ela mudou vêm com a borda vermelha
+ *  (revisão da decisão 185). A aba Planilha Interna continua no topo, e é
+ *  nela que se edita. */
 function AtalhoDaPlanilhaInterna({
   job,
   destacarItens,
+  linhasDaRevisao,
 }: {
   job: { id: string; codigo: string; nome: string };
   destacarItens: string[];
+  linhasDaRevisao: string[];
 }) {
   const [aberto, setAberto] = React.useState(false);
   return (
@@ -4556,6 +4567,7 @@ function AtalhoDaPlanilhaInterna({
         codigo={job.codigo}
         descricao={`${job.nome} · em leitura — as linhas com save aparecem com o ícone de save. Para editar, use a aba Planilha Interna.`}
         destacarItens={destacarItens}
+        linhasDaRevisao={linhasDaRevisao}
       />
     </>
   );

@@ -1,7 +1,9 @@
 # 185 — A errata em revisão trava o envio de PP só na linha que ela alterou (revê a 040)
 
 **Data:** 2026-10-16
-**Status:** aceita e implementada em 16/10/2026.
+**Status:** aceita e implementada em 16/10/2026. Revista em 19/10/2026:
+as linhas da revisão aparecem com borda vermelha na planilha do financeiro
+(seção "As linhas em destaque na revisão").
 **Quem decidiu:** Tiago, em 16/10/2026, com a recomendação que acompanhava
 a pergunta.
 **Revê:** [040](040-errata-nao-toca-linha-com-pp-e-trava-o-envio-de-pp.md)
@@ -63,6 +65,42 @@ pela 185, só as 3 da linha nova.
 
 A frase da tela: "A errata alterou esta linha e a abertura está em revisão
 no financeiro: o envio das PPs dela volta quando a revisão for salva."
+
+## As linhas em destaque na revisão (19/10/2026)
+
+> "Quero que ao abrir os casos de erratas para fazer a revisão da
+> abertura, ao clicar em visualizar planilha ou irmos à aba de 'planilha
+> interna', a(s) linha(s) onde a errata foi feita fique(m) destacada(s)."
+
+Do protótipo de 17/10/2026, o Tiago ficou com a forma mais simples: **só
+destacar a linha**, com a **borda vermelha** do design do módulo
+Suprimentos (a linha de onde a PP a emitir saiu). Sem faixa de texto, sem
+selo e sem a lista de conferência na faixa da revisão, que estavam nas
+duas propostas do protótipo.
+
+- **Quais linhas:** as mesmas desta decisão, pela mesma função
+  (`linhasAlteradasNaRevisao`): o que está destacado é o que está com o
+  envio de PP travado. Alterada, nova e cancelada; a errata que só
+  reorganiza não destaca nada. O destaque some quando a revisão é
+  registrada, porque a janela fecha.
+- **Onde:** na página do job no financeiro — a aba Planilha Interna e o
+  pop-up do "Visualizar planilha interna" do formulário em revisão. A
+  produção, a fila da abertura e as planilhas de outros jobs não destacam.
+- **Forma:** `ERRATA.linhaEmRevisao` (`_planilha/blocos.ts`): 2px de
+  `#E74B56` em volta da linha inteira, por sombra interna nas células, sem
+  fundo. A linha que também está em `destacarItens` (a do pedido de save em
+  aprovação, ou a da versão antiga do histórico) fica com aquele destaque;
+  a versão antiga do histórico não destaca as linhas da revisão.
+- **Código:** a prop `linhasDaRevisao` (obrigatória) em
+  `JobRealizadoSection`, `JobItemRealizadoTable` e `AberturaForm`;
+  opcional no `PopUpDaPlanilha`, como o `destacarItens`. A página
+  `financeiro/jobs/[jobId]` lê as linhas junto da revisão
+  (`Promise.all`); leitura que falha só tira o destaque.
+- **Conferido em 22/10/2026** (dev do worktree, como administrador, sem
+  gravar nada): no TES-1025/26, em revisão, a aba Planilha Interna e o
+  pop-up do "Visualizar planilha interna" mostram com a borda vermelha
+  exatamente o Item 3, o Item 6 (cancelado) e o "Item novo da errata" —
+  as três linhas da errata de 15/10 — e nenhuma outra das 18.
 
 ## Efeito colateral aceito
 

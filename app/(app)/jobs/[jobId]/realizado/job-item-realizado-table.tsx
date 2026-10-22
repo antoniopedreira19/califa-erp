@@ -247,6 +247,11 @@ interface Props {
    *  ou, na versão antiga do histórico (decisão 186), o vermelho da errata.
    *  Default: o do save. */
   destaque?: "save" | "historico";
+  /** As linhas que uma errata ainda não revisada mudou (decisão 185), com
+   *  a borda vermelha da revisão da abertura (revisão da 185, 19/10/2026).
+   *  Só a planilha do job no financeiro manda; as outras telas mandam `[]`.
+   *  A linha que também está em `destacarItens` fica com aquele destaque. */
+  linhasDaRevisao: string[];
   /** Histórico (decisão 186): o selo da linha que mudou na versão antiga,
    *  ao lado do nome do item. Ausente fora do histórico. */
   seloDaLinha?: (itemId: string) => React.ReactNode;
@@ -740,6 +745,7 @@ export function JobItemRealizadoTable({
   abrirSaveSoComSave,
   destacarItens,
   destaque = "save",
+  linhasDaRevisao,
   seloDaLinha,
   errata,
   podeEditarLinhas = true,
@@ -1619,10 +1625,12 @@ export function JobItemRealizadoTable({
                             classesDaLinhaComSave(
                               savePorItem?.[item.id] ?? SAVE_VAZIO,
                             ),
-                          destacarItens.includes(item.id) &&
-                            (destaque === "historico"
+                          destacarItens.includes(item.id)
+                            ? destaque === "historico"
                               ? HISTORICO.linhaQueMudou
-                              : SAVE.linhaEmAprovacao),
+                              : SAVE.linhaEmAprovacao
+                            : linhasDaRevisao.includes(item.id) &&
+                                ERRATA.linhaEmRevisao,
                         )}
                       >
                         {saveVisivel && (

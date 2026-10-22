@@ -465,6 +465,7 @@ export default async function JobDetailPage({
             // O destaque é da planilha do financeiro, na aprovação de save
             // (decisão 099): a produção não destaca linha nenhuma.
             destacarItens={[]}
+            linhasDaRevisao={[]}
             job={{
               id: job.id,
               codigo: job.codigo,

@@ -312,6 +312,12 @@ interface Props {
    *  financeiro abre a partir da aprovação (decisão 099, 22/09/2026).
    *  Obrigatória: quem não destaca manda `[]`. */
   destacarItens: string[];
+  /** As linhas que uma errata ainda não revisada mudou (decisão 185), com
+   *  a borda vermelha da revisão da abertura (revisão da 185, 19/10/2026):
+   *  o financeiro vê onde a errata mexeu ao reconferir a abertura. Só a
+   *  planilha do job no financeiro manda; obrigatória pelo motivo de
+   *  `destacarItens`. */
+  linhasDaRevisao: string[];
   /** Exportar a planilha interna do job (decisão 088). Quem vê a tela
    *  exporta; o freelancer, que só tem a visão restrita, não. */
   podeExportarInterna?: boolean;
@@ -513,6 +519,8 @@ export function JobRealizadoSection({ comHistorico, ...props }: Props) {
       savePorItem={SEM_SAVES}
       linhasComEnvioTravado={SEM_LINHAS}
       destacarItens={destacar ? [...mudancaPorLinha.keys()] : SEM_LINHAS}
+      // A versão antiga não é a que a revisão confere.
+      linhasDaRevisao={SEM_LINHAS}
       podeAcoes={false}
       podeMexerNoSave={false}
       podeGerarPP={false}
@@ -577,6 +585,7 @@ function PlanilhaDoJob({
   saldosDeSave,
   clienteNome,
   destacarItens,
+  linhasDaRevisao,
   modeloPlanilha,
   meses = SEM_MESES,
   mesPedido,
@@ -1356,6 +1365,7 @@ function PlanilhaDoJob({
           abrirSaveSoComSave={modoDoSave === null}
           destacarItens={destacarItens}
           destaque={vendoAntiga ? "historico" : "save"}
+          linhasDaRevisao={linhasDaRevisao}
           seloDaLinha={historico?.antiga?.selo}
           errata={
             (modoFinanceiro ? podeEditarOrcado : podeErrata) && !mesFechado
