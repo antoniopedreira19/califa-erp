@@ -51,7 +51,7 @@ título que o banco já mostrava pago, com outra data.
    casos vêm antes deles (`alertasDoExtrato`, `motor-da-conta.ts`). Vale para
    todos os lançamentos que a linha do Extrato junta (a baixa e os juros, as
    partes da guia).
-6. O cadeado do período fechado entra com o fechamento (fase 4, decisão 203).
+6. O cadeado do período fechado entra com o fechamento (fase 4, decisão 205).
 
 ### A aba Títulos: o sinal "faixa + ícone"
 

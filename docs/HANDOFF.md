@@ -100,6 +100,7 @@ Ordem: mais recente primeiro. Cada linha aponta para um arquivo em `docs/handoff
 
 | Data | Entrega | Handoff |
 |---|---|---|
+| 2026-10-21 | Conciliação com o banco (task 029, fases 1 a 4): planilhas de títulos, popup de baixa e cartão, importação do OFX e Conciliação automática, marcas do banco no Extrato, fechamento que trava o caixa (decisões 195 a 202 e 205) | [2026-10-21-conciliacao-com-o-banco-retrospectiva.md](handoffs/2026-10-21-conciliacao-com-o-banco-retrospectiva.md) |
 | 2026-10-21 | Vazamento de PII — fase 2: RLS fechada em freelancers/contratos/NF-anexos + buckets, guard-rail de pre-commit, ADR 203. GitHub público ficou pra decisão. | [2026-10-21-vazamento-pii-fase-2.md](handoffs/2026-10-21-vazamento-pii-fase-2.md) |
 | 2026-10-19 | Módulo Freelancers — fases 1 a 4 (cadastro, contrato+DOCX, solicitação com chat realtime, dashboard rico, distrato, histórico, export) + fundação da migração legados | [2026-10-19-modulo-freelancers-fases-1-a-4.md](handoffs/2026-10-19-modulo-freelancers-fases-1-a-4.md) |
 | 2026-10-09 | Aviso de versão nova em todas as telas + consulta de CNPJ com reserva (CNPJ.ws) no cadastro de fornecedor | [2026-10-09-aviso-de-versao-e-cnpj-reserva.md](handoffs/2026-10-09-aviso-de-versao-e-cnpj-reserva.md) |

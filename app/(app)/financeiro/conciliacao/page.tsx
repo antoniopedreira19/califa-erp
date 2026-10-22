@@ -31,6 +31,8 @@ import { AbaTitulos } from "./aba-titulos";
 import { AbaBanco } from "./aba-banco";
 import { carregarTitulosDaConciliacao } from "./titulos-dados";
 import { carregarBancoDaConciliacao } from "./banco-dados";
+import { carregarFechamentoDaConciliacao } from "./fechamento-dados";
+import { FaixaDoFechamento } from "./fechamento";
 import { alertasDoExtrato } from "./motor-da-conta";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { fimDoMes, somaDias, type ItemDaFatura } from "@/lib/financeiro/planilha-de-titulos";
@@ -108,7 +110,7 @@ export default async function ConciliacaoPage({
   const dataDe = searchParams.de ?? `${hojeBr.slice(0, 8)}01`;
   const dataAte = searchParams.ate ?? fimDoMes(hojeBr);
 
-  const [{ data: contas }, dadosTitulos, saldoDeHoje, dadosBanco] = await Promise.all([
+  const [{ data: contas }, dadosTitulos, saldoDeHoje, dadosBanco, fechamento] = await Promise.all([
     supabase
       .from("contas_bancarias")
       .select("*")
@@ -143,6 +145,14 @@ export default async function ConciliacaoPage({
       contaId,
       dataDe,
       dataAte,
+    }),
+    // O fechamento da conciliação (decisão 205): a faixa das três abas, o
+    // cadeado do Extrato e, na Conciliação automática, as condições do botão
+    // de fechar.
+    carregarFechamentoDaConciliacao(supabase, {
+      tenantId: session.activeTenant.id,
+      contaId,
+      comCondicoes: aba === "banco",
     }),
   ]);
 
@@ -264,7 +274,11 @@ export default async function ConciliacaoPage({
         // Sem o ⚠, o Extrato continua de pé; a Conciliação automática avisa.
         console.error("[conciliacao.alertas]", e);
       }
-      marcasDoBanco = { conciliados: (conciliadosRes.data ?? []).map((r) => r.id), alertas };
+      marcasDoBanco = {
+        conciliados: (conciliadosRes.data ?? []).map((r) => r.id),
+        alertas,
+        fechadoAte: fechamento.ativo?.ate ?? null,
+      };
     }
   }
   const lancamentosQueNaoBatem = marcasDoBanco
@@ -272,6 +286,7 @@ export default async function ConciliacaoPage({
     : 0;
 
   const saldoFinal = saldoAnterior + creditos - debitos;
+  const contaAberta = listaContas.find((c) => c.id === contaId);
 
   // A baixa de um imposto devolve o id de UM dos lançamentos dela para o
   // `&highlight=`; na tela, a guia é uma linha só, com o id de outro.
@@ -299,6 +314,15 @@ export default async function ConciliacaoPage({
       />
 
       {contaId && (
+        <FaixaDoFechamento
+          contaId={contaId}
+          contaNome={contaAberta?.nome ?? "Conta"}
+          bancoNome={contaAberta?.banco ?? ""}
+          fechamento={fechamento}
+        />
+      )}
+
+      {contaId && (
         <AbasDaConta
           aba={aba}
           totalTitulos={
@@ -311,12 +335,12 @@ export default async function ConciliacaoPage({
           }
         >
           {aba === "banco" && dadosTitulos ? (
-            <AbaBanco banco={dadosBanco} dados={dadosTitulos} contaId={contaId} />
+            <AbaBanco banco={dadosBanco} dados={dadosTitulos} contaId={contaId} fechamento={fechamento} />
           ) : dadosTitulos ? (
             <AbaTitulos
               dados={dadosTitulos}
               contaId={contaId}
-              nomeDaConta={listaContas.find((c) => c.id === contaId)?.nome ?? "Conta"}
+              nomeDaConta={contaAberta?.nome ?? "Conta"}
               saldoHoje={saldoDeHoje}
               dataDe={dataDe}
               dataAte={dataAte}

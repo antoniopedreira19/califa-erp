@@ -1,9 +1,10 @@
 ## Task 029 — Conciliação com o banco (títulos, baixa, cartão, OFX e fechamento)
 
-> **Status (21/10/2026):** fases 1, 2 e 3 no `main` (decisões 195 a 202).
-> Falta a fase 4 (fechamento, decisão 203, com o M4.2 a perguntar), a folha
-> agrupada no Extrato (D2, opções A/B na decisão 202, aguarda o Tiago), o
-> handoff retrospectivo e mover esta task para `tasks/done/`.
+> **Status (21/10/2026): concluída.** As quatro fases no `main` (decisões 195
+> a 202 e 205; a 205 nasceu como 203, número tomado em paralelo por outra
+> frente): a fase 4 com o M4.2 na opção B do Tiago, e a folha no Extrato (D2)
+> decidida e feita na decisão 202. Handoff retrospectivo:
+> `docs/handoffs/2026-10-21-conciliacao-com-o-banco-retrospectiva.md`.
 >
 > **Especificação completa:** `docs/handoffs/2026-10-21-conciliacao-com-o-banco/README.md`.
 > **Protótipo** (referência visual e de comportamento): `docs/handoffs/2026-10-21-conciliacao-com-o-banco/prototipo/conciliacao-banco.html`.
@@ -40,9 +41,9 @@ número livre era 195 em 21/10/2026, e deve ser reservado antes.
 
 ## Critérios
 
-- [ ] Cada fase: typecheck, lint, build e os testes `node --test` limpos.
-- [ ] Cada fase: conferida no navegador contra o protótipo.
-- [ ] Migrations no ciclo do `docs/FLUXO-BANCO.md`; os itens **[CONFIRMAR]** perguntados ao Tiago antes de aplicar.
-- [ ] `lib/types.ts` atualizado junto de cada migration, com a divergência de `LancamentoFinanceiro` corrigida.
-- [ ] Handoff retrospectivo em `docs/handoffs/` e linha no índice `docs/HANDOFF.md`.
-- [ ] Task movida para `tasks/done/`.
+- [x] Cada fase: typecheck, lint, build e os testes `node --test` limpos.
+- [x] Cada fase: conferida no navegador contra o protótipo.
+- [x] Migrations no ciclo do `docs/FLUXO-BANCO.md`; os itens **[CONFIRMAR]** perguntados ao Tiago antes de aplicar.
+- [x] `lib/types.ts` atualizado junto de cada migration, com a divergência de `LancamentoFinanceiro` corrigida.
+- [x] Handoff retrospectivo em `docs/handoffs/` e linha no índice `docs/HANDOFF.md`.
+- [x] Task movida para `tasks/done/`.

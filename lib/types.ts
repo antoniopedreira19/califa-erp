@@ -3721,6 +3721,37 @@ export interface ExtratoRegra {
   created_at: string;
 }
 
+/** O fechamento da conciliação de uma conta (`conciliacao_fechamentos`,
+ *  decisão 205). Um ativo por conta: com ele, o caixa da conta até `ate`
+ *  não muda até reabrir. As linhas inativas são o histórico — as reabertas
+ *  (com o motivo) e as que um fechamento mais adiante substituiu. */
+export interface ConciliacaoFechamento {
+  id: string;
+  tenant_id: string;
+  conta_bancaria_id: string;
+  ate: string;
+  fechado_em: string;
+  fechado_por: string;
+  reaberto_em: string | null;
+  reaberto_por: string | null;
+  motivo_reabertura: string | null;
+  ativo: boolean;
+}
+
+/** As condições do fechamento (`condicoes_do_fechamento`, decisão 205):
+ *  até onde dá para fechar — o último dia completo dos extratos — e, nesse
+ *  dia, as linhas do banco pendentes, os lançamentos sem linha do banco e os
+ *  dois saldos. `ate` nulo: nenhum extrato importado. */
+export interface CondicoesDoFechamento {
+  ate: string | null;
+  linhas_pendentes?: number;
+  sem_linha?: number;
+  /** Nulo quando o extrato não informou o saldo. */
+  saldo_banco?: number | null;
+  saldo_sistema?: number;
+  diferenca?: number | null;
+}
+
 // ---------- Task 008: contas a receber (faturamento) ----------
 
 /** Origem da NOTA. Continua com três valores: a nota é do job, do BV ou

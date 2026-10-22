@@ -69,6 +69,7 @@ import {
   type UltimaRetencao,
 } from "@/components/financeiro/valor-da-baixa";
 import { NoFiscalDoRecebimento, useFiscalDaNota } from "@/components/financeiro/no-fiscal";
+import { AvisoDoPeriodoFechado, erroDoPeriodoFechado, usePeriodoFechado } from "@/components/financeiro/periodo-fechado";
 
 export type EstiloDoResumo = "mono" | "mono_negrito" | "mono_pequeno" | "negrito";
 
@@ -257,6 +258,8 @@ function FormularioDaBaixa({
   // Módulo fiscal (entrega 2): a nota do título, para o bloco "No fiscal",
   // lida ao abrir (à parte: o diálogo não espera por ela).
   const fiscal = useFiscalDaNota(alvo.notaId);
+  // O fechamento da conciliação (decisão 205).
+  const fechadoAte = usePeriodoFechado(contaId, pagoEm);
 
   /**
    * Toda conta ativa entra, de qualquer empresa (decisão de 29/08/2026):
@@ -282,6 +285,11 @@ function FormularioDaBaixa({
 
   function handleSubmit() {
     setErroLocal(null);
+    // O período fechado vem antes de tudo (protótipo, `confirmar`).
+    if (fechadoAte) {
+      setErroLocal(erroDoPeriodoFechado(fechadoAte));
+      return;
+    }
     if (!pagoEm || !contaId || !tipoId || !subtipoId) {
       setErroLocal(
         "Informe a data do recebimento, a conta bancária que recebeu e o centro de custo.",
@@ -333,6 +341,9 @@ function FormularioDaBaixa({
           O recebimento soma {formatCurrency(v.liquido, "BRL")} e a linha do banco é de{" "}
           {formatCurrency(linhaDoBanco.valor, "BRL")}. Ele só concilia quando os dois baterem.
         </div>
+      )}
+      {fechadoAte && (
+        <AvisoDoPeriodoFechado ate={fechadoAte} contaNome={contas.find((c) => c.id === contaId)?.nome ?? null} />
       )}
       {dataDiferenteDoBanco && linhaDoBanco && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-900">

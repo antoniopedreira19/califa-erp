@@ -4,6 +4,8 @@
 **Decidido por:** Tiago
 **Migration:** `20260929200001_cancelar_e_estornar_baixa.sql`
 **Protótipo aprovado:** seção 5 de https://claude.ai/artifact/AXDeLzhBNzNWyvao8S9gZ7 (versão 4)
+**Revista pela 205 (21/10/2026):** o cancelar e o estorno passaram a ter o
+limite do fechamento da conciliação da conta.
 
 ---
 
@@ -30,7 +32,7 @@ Nas palavras do Tiago:
 | O que é **estornar**? (D11 a) | Uma **transação nova**, com data, conta e valor escolhidos na hora. A baixa fica como está e o título continua pago. No receber é **receita negativa** (sai dinheiro, no centro de custo do recebimento); no pagar, **despesa negativa**. |
 | Cancelar vale para quais baixas? (D17.3) | **Todas, sem exceção**: título a receber, parcela de PP, conta avulsa e recorrência, parcela de desembolso, estorno de verba e fatura de cartão. |
 | E o cartão? (resposta de 28/09) | Cancelar desfaz o último passo e mantém o fluxo de hoje. Pagamento de fatura cancelado devolve a fatura para **Fechada**, como se não tivesse sido paga. Item de cartão em fatura **aberta** sai da fatura; em fatura fechada ou paga, a regra continua: reabra a fatura antes. |
-| Até quando se cancela? | **Sem limite de data**, até existir o processo de conciliação que marca um período como conferido (pendência registrada). |
+| Até quando se cancela? | ~~**Sem limite de data**, até existir o processo de conciliação que marca um período como conferido (pendência registrada).~~ **Revisto pela 205 (21/10/2026):** até o fechamento da conciliação da conta. Baixa com data até o dia fechado não se cancela, e estorno com data até lá não entra: "Período fechado até dd/mm: reabra a conciliação para mudar esse lançamento." Depois do fechamento, vale como antes. |
 | Pagou a mais? (D13 a) | Dá-se baixa pelo valor do título e a diferença vira recebimento avulso (entrega 2); a devolução é o estorno dele. |
 
 **O que o protótipo aprovado fixa, e a implementação segue:**
@@ -98,8 +100,10 @@ continua `*_baixa` (vivo), em vez de virar `*_baixa_estornada`.
 
 ## 6. Pendências
 
-- Processo de conciliação que trava um período como conferido — até ele
-  existir, cancelar vale sem limite de data.
+- ~~Processo de conciliação que trava um período como conferido — até ele
+  existir, cancelar vale sem limite de data.~~ Resolvida pela decisão 205
+  (21/10/2026): o fechamento da conciliação trava o cancelamento e o estorno
+  com data até o dia fechado, até reabrir.
 - Retenção de impostos e baixa parcial (entrega 3) vão acrescentar
   informação ao cartão da baixa; o cancelamento já apaga tudo o que
   estiver pendurado no lançamento.

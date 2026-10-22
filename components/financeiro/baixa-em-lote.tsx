@@ -81,6 +81,7 @@ import {
 } from "@/app/(app)/financeiro/actions-baixa-em-lote";
 import { AnexoCompacto, descartarAnexoImposto, nomeDoAnexo } from "@/components/financeiro/anexo-de-imposto";
 import { NoFiscalDoLote } from "@/components/financeiro/no-fiscal";
+import { AvisoDoPeriodoFechado, erroDoPeriodoFechado, usePeriodoFechado } from "@/components/financeiro/periodo-fechado";
 
 // ---------------------------------------------------------------------------
 // O título, no formato do lote
@@ -587,6 +588,8 @@ function FormularioDoLote({
     pagar.length > 0 && !podeCartao ? (pagar.find((t) => t.semCartao !== null)?.semCartao ?? null) : null;
   const noCartao = podeCartao && forma === "cartao_credito";
   const cartaoEscolhido = noCartao ? cartoes.find((c) => c.id === cartaoId) ?? null : null;
+  // O fechamento da conciliação (decisão 205): no cartão nada sai da conta.
+  const fechadoAte = usePeriodoFechado(noCartao ? null : conta, data);
   const cartaoDaFatura = cartaoEscolhido
     ? {
         id: cartaoEscolhido.id,
@@ -710,6 +713,11 @@ function FormularioDoLote({
   const entradas = r2(receber.reduce((s, t) => s + t.aberto, 0));
 
   function confirmar() {
+    // O período fechado vem antes de tudo (protótipo, `confirmar`).
+    if (fechadoAte) {
+      setErro(erroDoPeriodoFechado(fechadoAte));
+      return;
+    }
     if (buscandoRetencoes) {
       setErro("Aguarde: buscando as retenções informadas na aprovação das PPs.");
       return;
@@ -877,6 +885,8 @@ function FormularioDoLote({
           <span>{erro}</span>
         </div>
       )}
+
+      {fechadoAte && <AvisoDoPeriodoFechado ate={fechadoAte} contaNome={contaEscolhida?.nome ?? null} />}
 
       <div className="space-y-4">
         <div className={cn("grid gap-3", pagar.length ? "grid-cols-3" : "grid-cols-2")}>

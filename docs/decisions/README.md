@@ -222,8 +222,9 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 200 | [As ações da Conciliação automática: conciliar, baixar pelo lote com os dados do banco, conferir pela baixa real, corrigir a baixa, regras, saiu e voltou, ignorar e desfazer; a data do banco em tudo](200-acoes-da-conciliacao-automatica.md) | 2026-10-21 |
 | 201 | [O que se resolve sozinho na importação do extrato: a baixa feita à mão que bate, o título certo, a remessa e a regra; cada linha avaliada uma vez](201-o-que-se-resolve-sozinho-na-importacao.md) | 2026-10-21 |
 | 202 | [As marcas do banco no Extrato (✓, ⚠, ○, a faixa e o contador), o sinal na aba Títulos, e a folha e a remessa linha a linha (revê a 199)](202-marcas-do-banco-no-extrato-e-nos-titulos.md) | 2026-10-21 |
-| 203 | *Reservada* — conciliação com o banco (task 029, fase 4): o fechamento da conciliação, que trava até reabrir | 2026-10-21 |
+| 203 | *Reservada para a conciliação com o banco e não usada por ela:* o número foi tomado em paralelo, e o fechamento da conciliação virou a 205 | 2026-10-21 |
 | 204 | [Administrador nas exceções da aprovação e geração/edição de PP](204-administrador-nas-excecoes-do-orcamento-e-da-pp.md) | 2026-10-21 |
+| 205 | [O fechamento da conciliação com o banco: trava o caixa da conta até reabrir, com o gatilho em `lancamentos_financeiros` (M4.2, opção B) e o reabrir com motivo (revê a 120)](205-fechamento-da-conciliacao.md) | 2026-10-21 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -236,4 +237,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 205**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 206**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
