@@ -49,17 +49,29 @@ export function CidadeCombobox({
   const [buscando, setBuscando] = React.useState(false);
   const [criando, setCriando] = React.useState<string | null>(null);
   const [erroCriacao, setErroCriacao] = React.useState<string | null>(null);
+  const [erroBusca, setErroBusca] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) return;
     setErroCriacao(null);
+    setErroBusca(false);
     let cancelado = false;
     setBuscando(true);
+    // Sem o catch, uma falha da server action deixava "Buscando…" na tela
+    // para sempre: o setBuscando(false) nunca rodava.
     const t = setTimeout(async () => {
-      const res = await buscarCidades(termo);
-      if (cancelado) return;
-      setOpcoes(res);
-      setBuscando(false);
+      try {
+        const res = await buscarCidades(termo);
+        if (cancelado) return;
+        setOpcoes(res);
+      } catch (err) {
+        if (cancelado) return;
+        console.error("[cidade-combobox.buscar]", err);
+        setOpcoes([]);
+        setErroBusca(true);
+      } finally {
+        if (!cancelado) setBuscando(false);
+      }
     }, 250);
     return () => {
       cancelado = true;
@@ -140,6 +152,10 @@ export function CidadeCombobox({
         <div className="mt-1.5 max-h-64 overflow-y-auto">
           {buscando ? (
             <p className="px-2.5 py-3 text-xs text-muted-foreground">Buscando…</p>
+          ) : erroBusca ? (
+            <p className="px-2.5 py-3 text-xs text-california-red">
+              Não foi possível buscar as cidades. Digite de novo para tentar outra vez.
+            </p>
           ) : opcoes.length === 0 ? (
             <div className="px-2.5 py-3 space-y-1">
               <p className="text-xs text-muted-foreground">

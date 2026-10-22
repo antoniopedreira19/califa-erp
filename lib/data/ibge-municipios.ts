@@ -15,6 +15,10 @@ const IBGE_URL =
   "https://servicodados.ibge.gov.br/api/v1/localidades/municipios";
 
 const TTL_MS = 24 * 60 * 60 * 1000; // 24h
+const IBGE_TIMEOUT_MS = 4_000;
+// Depois de uma falha, as buscas seguintes nem tentam o IBGE por esse
+// tempo: sem isso, cada letra digitada esperava o IBGE desistir de novo.
+const PAUSA_APOS_FALHA_MS = 5 * 60 * 1000;
 
 export interface MunicipioIBGE {
   /** Código IBGE de 7 dígitos, chave estável na base oficial. */
@@ -30,9 +34,10 @@ interface CacheState {
   data: MunicipioIBGE[] | null;
   loadedAt: number;
   pending: Promise<MunicipioIBGE[]> | null;
+  falhouEm: number;
 }
 
-const cache: CacheState = { data: null, loadedAt: 0, pending: null };
+const cache: CacheState = { data: null, loadedAt: 0, pending: null, falhouEm: 0 };
 
 // Formato bruto que a API do IBGE devolve — só o que a gente usa.
 interface RawIBGE {
@@ -56,6 +61,10 @@ async function fetchIBGE(): Promise<MunicipioIBGE[]> {
   const res = await fetch(IBGE_URL, {
     // Cache do runtime do Next não precisa cachear — já cacheamos no módulo.
     cache: "no-store",
+    // Sem limite, a busca inteira (inclusive as cidades do cadastro local)
+    // esperava os 10 s do connect timeout do Node quando o IBGE não
+    // atendia a Vercel — visto em 22/10/2026.
+    signal: AbortSignal.timeout(IBGE_TIMEOUT_MS),
   });
   if (!res.ok) {
     throw new Error(`IBGE ${res.status}: ${res.statusText}`);
@@ -80,6 +89,11 @@ async function getMunicipios(): Promise<MunicipioIBGE[]> {
   const agora = Date.now();
   if (cache.data && agora - cache.loadedAt < TTL_MS) return cache.data;
   if (cache.pending) return cache.pending;
+  if (agora - cache.falhouEm < PAUSA_APOS_FALHA_MS) {
+    // Cache vencido ainda serve melhor que nada enquanto o IBGE está fora.
+    if (cache.data) return cache.data;
+    throw new Error("IBGE indisponível na última tentativa; aguardando a pausa.");
+  }
 
   cache.pending = fetchIBGE()
     .then((data) => {
@@ -90,6 +104,7 @@ async function getMunicipios(): Promise<MunicipioIBGE[]> {
     })
     .catch((err) => {
       cache.pending = null;
+      cache.falhouEm = Date.now();
       throw err;
     });
 
