@@ -132,3 +132,14 @@ foi mantida pelo Tiago.
   barra com "há item com planejado acima do orçado e o resultado geral está
   em 10,9%, abaixo do mínimo de 20%". Print capturado. Nenhum dado
   alterado.
+
+**Complemento do mesmo dia (pedido do Tiago):** no serviço Interno, o
+Resultado geral **não fica vermelho** abaixo de 20%, nem no cabeçalho da
+versão (`ResumoRentabilidade`) nem em Totais (`TotaisCard`, inclusive no
+total do mensal). Fica no verde normal. Os dois componentes recebem
+`interno` como prop obrigatória. Na visão agregada, o cabeçalho só deixa de
+ficar vermelho quando todos os orçamentos do projeto são Internos e não há
+Mídia Off. Não há mudança de cálculo nem de permissão. Conferido como GP de
+teste: TES-P001/26-12 (Interno) mostra 0,0% em `rgb(4, 120, 87)` no
+cabeçalho e em Totais; TES-P001/26-03 v2 (comum) segue em
+`rgb(231, 75, 86)` com 10,9%. Prints capturados.

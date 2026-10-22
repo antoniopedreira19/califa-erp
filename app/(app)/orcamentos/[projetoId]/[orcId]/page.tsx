@@ -1506,6 +1506,7 @@ function VersaoSelecionada({
           resultadoOperacional={resultadoOperacional}
           resultadoGeral={resultadoGeral}
           moeda={versao.moeda}
+          interno={interno}
         />
       </div>
 

@@ -369,6 +369,7 @@ export function PlanilhaMensal({
               modeloPlanilha={planilha.modeloPlanilha}
               internacional={planilha.internacional}
               moedaEstrangeira={planilha.moedaEstrangeira}
+              interno={interno}
               titulo="Totais do trimestre"
               subtitulo="Orçado × Planejado · soma dos meses."
             />

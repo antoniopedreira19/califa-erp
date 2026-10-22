@@ -10,6 +10,9 @@ interface Props {
   /** Resultado operacional ÷ valor do job. `null` = planejado não lançado. */
   resultadoGeral: number | null;
   moeda: string;
+  /** Serviço Interno (decisão 105): o resultado é sempre 0% e fica fora do
+   *  mínimo de 20% da decisão 204, então não acende o vermelho. */
+  interno: boolean;
 }
 
 /**
@@ -26,6 +29,7 @@ export function ResumoRentabilidade({
   resultadoOperacional,
   resultadoGeral,
   moeda,
+  interno,
 }: Props) {
   return (
     <div className="flex divide-x divide-border rounded-xl border border-border bg-card shadow-soft">
@@ -68,7 +72,7 @@ export function ResumoRentabilidade({
           <span
             className={cn(
               "font-mono text-base font-bold",
-              !rentabilidadeAbaixoDoMinimo(resultadoGeral) ? "text-emerald-700" : "text-california-red",
+              interno || !rentabilidadeAbaixoDoMinimo(resultadoGeral) ? "text-emerald-700" : "text-california-red",
             )}
           >
             {`${resultadoGeral.toFixed(1).replace(".", ",")}%`}

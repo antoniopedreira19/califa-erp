@@ -299,6 +299,7 @@ export function PlanilhaVersao({
           modeloPlanilha={modeloPlanilha}
           internacional={internacional}
           moedaEstrangeira={moedaEstrangeira}
+          interno={interno}
           titulo={tituloTotais}
           subtitulo={subtituloTotais}
         />

@@ -68,10 +68,14 @@ interface Props {
   titulo?: string;
   /** Linha de apoio sob o título. */
   subtitulo?: string;
+  /** Serviço Interno (decisão 105): fora do mínimo de 20% da decisão 204,
+   *  o Resultado geral não acende o vermelho. */
+  interno: boolean;
 }
 
 export function TotaisCard({
   itens,
+  interno,
   bvsPorItem,
   visao,
   percentualHonorarios,
@@ -484,7 +488,7 @@ export function TotaisCard({
                   "whitespace-nowrap font-mono text-[26px] font-bold leading-none",
                   resultadoGeral === null
                     ? "text-muted-foreground"
-                    : !rentabilidadeAbaixoDoMinimo(resultadoGeral)
+                    : interno || !rentabilidadeAbaixoDoMinimo(resultadoGeral)
                       ? "text-emerald-700"
                       : "text-california-red",
                 )}

@@ -5739,6 +5739,8 @@ aplicada na hora combinada com a frente do Antonio, junto da
 - O motivo de bloqueio mostra o resultado: "o resultado geral está em
   8,6%, abaixo do mínimo de 20%". Vale para a barra, o botão, a action e o
   gatilho.
+- No Interno, o Resultado geral do cabeçalho e de Totais não fica vermelho
+  abaixo de 20% (fica verde). Na agregada, só quando todo o projeto é Interno.
 - Origem: a v1 do GOO-P005/26-01 recebeu a mensagem genérica porque o
   gatilho de 21/10 entrou no banco antes do deploy do código que traduz a
   recusa. Detalhes na revisão de 22/10 da
