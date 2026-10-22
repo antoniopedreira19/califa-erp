@@ -1788,7 +1788,8 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
     // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
     // `servico_id` e `categoria_id`: o par serviço × categoria aprova só
     // quando combina (revisão da decisão 149, 07/10/2026).
-    .select("status, projeto_id, servico_id, categoria_id, categoria:categorias_dominio!categoria_id(modelo_planilha)")
+    // `servico` traz a marca do Interno, que fica fora da decisão 204.
+    .select("status, projeto_id, servico_id, categoria_id, categoria:categorias_dominio!categoria_id(modelo_planilha), servico:categorias_dominio!servico_id(investimento_interno)")
     .eq("id", versao.orcamento_id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<{
@@ -1797,6 +1798,7 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
       servico_id: string | null;
       categoria_id: string | null;
       categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
+      servico: { investimento_interno: boolean } | null;
     }>();
 
   if (!orc) {
@@ -1928,6 +1930,7 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
     session.activeRole,
     itensLimites.some((i) => acimaDoOrcado(Number(i.total_planejado), Number(i.total_orcado))),
     resultadoGeral,
+    orc.servico?.investimento_interno === true,
   );
   if (bloqueioLimites) {
     await logAuditEvent({

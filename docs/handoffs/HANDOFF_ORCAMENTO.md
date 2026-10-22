@@ -5730,6 +5730,21 @@ aplicada na hora combinada com a frente do Antonio, junto da
   revisão de 22/10 capturados. Nenhum dado operacional alterado.
 
 
+## Interno fora da decisão 204 e motivo com o percentual — 22/10/2026
+
+- O **serviço Interno** (decisão 105) não passa pelos limites da aprovação.
+  Lá o resultado geral é sempre 0%, e a regra barrava todo Interno de GP.
+  Tela, action e gatilho leem a mesma marca (`investimento_interno` do
+  serviço). Migration `20261022850001_interno_fora_dos_limites_da_aprovacao.sql`.
+- O motivo de bloqueio mostra o resultado: "o resultado geral está em
+  8,6%, abaixo do mínimo de 20%". Vale para a barra, o botão, a action e o
+  gatilho.
+- Origem: a v1 do GOO-P005/26-01 recebeu a mensagem genérica porque o
+  gatilho de 21/10 entrou no banco antes do deploy do código que traduz a
+  recusa. Detalhes na revisão de 22/10 da
+  [decisão 204](../decisions/204-administrador-nas-excecoes-do-orcamento-e-da-pp.md).
+
+
 ## Planejado excedente em todas as planilhas — 22/10/2026
 
 - O total planejado fica vermelho ao ultrapassar o orçado nas linhas,

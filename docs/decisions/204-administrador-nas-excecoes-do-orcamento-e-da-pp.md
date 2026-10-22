@@ -96,3 +96,39 @@ ou alteração de PPs/aprovações existentes.
   somente para conferir foi cancelada, sem envio ao financeiro; realizado
   do item retornou a zero. Exceções de administrador conferidas nos testes
   automatizados e SQL isolado, sem sessão administrativa de produção.
+
+## Revisão de 22/10/2026 — Interno fora da regra e motivo com o percentual
+
+**Origem:** a produção não conseguiu aprovar a v1 do Q4 RESPONSABILITY
+(GOO-P005/26-01) e recebeu só "Não foi possível aprovar a versão.". O
+resultado geral era de 8,6% (itens B, planejado igual ao orçado, 12% de
+honorários). O gatilho entrou no banco às 17:31 de 21/10 e o código que
+traduz a recusa só foi publicado às 23:48. Nesse intervalo, a action antiga
+não conhecia a frase do gatilho e trocou o erro pelo texto genérico. A regra
+foi mantida pelo Tiago.
+
+- **Serviço Interno (decisão 105) fica fora da regra inteira.** Com F ·
+  Interno, sem honorários e planejado acompanhando o orçado, o resultado
+  geral do Interno é sempre 0%. Sem a exceção, nenhum GP aprovaria um
+  orçamento Interno. A marca é a da 105: `investimento_interno` no serviço
+  do orçamento. `bloqueioAprovacaoPorLimites` recebe `interno` como
+  parâmetro obrigatório; a página e `aprovarVersao` o passam, e o gatilho
+  consulta `orcamento_de_investimento_interno`.
+- **O motivo diz o percentual**, com uma casa decimal, no formato do
+  cabeçalho: "o resultado geral está em 8,6%, abaixo do mínimo de 20%". A
+  mesma frase aparece na barra de aprovação, no `title` do botão, na recusa
+  da action e na recusa do gatilho.
+- Migration `20261022850001_interno_fora_dos_limites_da_aprovacao.sql`,
+  aplicada pelo MCP. Ela só troca o corpo da função; o gatilho e as
+  revogações de execução continuam os da `20261021850001`. Sem backfill.
+
+**Verificação:**
+- 8 testes de limites, incluindo o Interno com resultado 0 e negativo e o
+  texto com o percentual. Tipos e lint limpos.
+- Gatilho como GP de teste, em bloco que sempre desfaz: Q4 RESPONSABILITY
+  recusado com "8,6%"; a versão Interna HIT-P002/26-01 passou. Depois do
+  teste, as duas continuam em rascunho.
+- Navegador como GP de teste no TES-P001/26-03 v2: botão desabilitado e
+  barra com "há item com planejado acima do orçado e o resultado geral está
+  em 10,9%, abaixo do mínimo de 20%". Print capturado. Nenhum dado
+  alterado.

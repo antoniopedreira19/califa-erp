@@ -1681,6 +1681,7 @@ function VersaoSelecionada({
           session.activeRole,
           itens.some((i) => acimaDoOrcado(i.total_planejado, i.total_orcado)),
           resultadoGeral,
+          interno,
         )}
         versaoId={versao.id}
         versaoLabel={`v${versao.numero_versao}`}

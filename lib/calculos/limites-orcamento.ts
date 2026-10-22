@@ -10,15 +10,24 @@ export function rentabilidadeAbaixoDoMinimo(resultadoGeral: number | null): bool
   return resultadoGeral !== null && resultadoGeral < 20 - 1e-9;
 }
 
+/**
+ * Decisão 204. O serviço Interno (decisão 105) fica fora: só tem F · Interno,
+ * sem honorários, e o planejado acompanha o orçado, então o resultado geral
+ * é sempre 0% e a regra barraria todo orçamento Interno (22/10/2026).
+ */
 export function bloqueioAprovacaoPorLimites(
   papel: AppRole,
   temItemAcimaDoOrcado: boolean,
   resultadoGeral: number | null,
+  interno: boolean,
 ): string | null {
-  if (papel === "administrador") return null;
+  if (papel === "administrador" || interno) return null;
   const motivos: string[] = [];
   if (temItemAcimaDoOrcado) motivos.push("há item com planejado acima do orçado");
-  if (rentabilidadeAbaixoDoMinimo(resultadoGeral)) motivos.push("o resultado geral está abaixo de 20%");
+  if (rentabilidadeAbaixoDoMinimo(resultadoGeral)) {
+    // Mesmo formato do Resultado geral no cabeçalho da versão.
+    motivos.push(`o resultado geral está em ${resultadoGeral!.toFixed(1).replace(".", ",")}%, abaixo do mínimo de 20%`);
+  }
   return motivos.length
     ? `Só o administrador pode aprovar esta versão: ${motivos.join(" e ")}. Peça a aprovação ao administrador.`
     : null;

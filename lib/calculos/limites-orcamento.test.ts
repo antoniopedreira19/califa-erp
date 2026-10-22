@@ -10,18 +10,18 @@ test("planejado maior que o orçado exige administrador mesmo com margem alta", 
   const itens = [{ orcado: 100, planejado: 101 }, { orcado: 900, planejado: 100 }];
   const excedeu = itens.some((i) => acimaDoOrcado(i.planejado, i.orcado));
   for (const papel of papeis) {
-    assert.equal(bloqueioAprovacaoPorLimites(papel, excedeu, 70) === null, papel === "administrador");
+    assert.equal(bloqueioAprovacaoPorLimites(papel, excedeu, 70, false) === null, papel === "administrador");
   }
 });
 
 test("resultado positivo abaixo de 20% exige administrador; 20% exatos liberam", () => {
   for (const margem of [19.99, 0, -10]) {
     for (const papel of papeis) {
-      assert.equal(bloqueioAprovacaoPorLimites(papel, false, margem) === null, papel === "administrador");
+      assert.equal(bloqueioAprovacaoPorLimites(papel, false, margem, false) === null, papel === "administrador");
     }
   }
-  assert.equal(bloqueioAprovacaoPorLimites("gerente_producao", false, 20), null);
-  assert.equal(bloqueioAprovacaoPorLimites("gerente_producao", false, null), null);
+  assert.equal(bloqueioAprovacaoPorLimites("gerente_producao", false, 20, false), null);
+  assert.equal(bloqueioAprovacaoPorLimites("gerente_producao", false, null, false), null);
   assert.equal(rentabilidadeAbaixoDoMinimo(19.999), true);
   assert.equal(rentabilidadeAbaixoDoMinimo(20 - Number.EPSILON), false);
 });
@@ -54,9 +54,17 @@ test("devolução aprovada reduz o realizado; rejeitada conta até cancelar", ()
 });
 
 test("os dois motivos da aprovação aparecem juntos", () => {
-  const motivo = bloqueioAprovacaoPorLimites("gerente_producao", true, 19);
+  const motivo = bloqueioAprovacaoPorLimites("gerente_producao", true, 8.6214, false);
   assert.match(motivo!, /planejado acima do orçado/);
-  assert.match(motivo!, /resultado geral está abaixo de 20%/);
+  assert.match(motivo!, /resultado geral está em 8,6%, abaixo do mínimo de 20%/);
+});
+
+test("serviço Interno não passa pela regra, nem com resultado zero", () => {
+  for (const papel of papeis) {
+    assert.equal(bloqueioAprovacaoPorLimites(papel, false, 0, true), null);
+    assert.equal(bloqueioAprovacaoPorLimites(papel, true, -5, true), null);
+  }
+  assert.ok(bloqueioAprovacaoPorLimites("gerente_producao", false, 0, false));
 });
 
 
