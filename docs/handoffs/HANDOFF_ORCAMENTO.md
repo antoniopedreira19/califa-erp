@@ -5711,3 +5711,20 @@ aplicada na hora combinada com a frente do Antonio, junto da
   somente para conferir foi cancelada, sem envio ao financeiro; realizado
   do item retornou a zero. Exceções de administrador conferidas nos testes
   automatizados e SQL isolado, sem sessão administrativa de produção.
+
+
+## Revisão visual — 22/10/2026 (decisão 204)
+
+- Correção do pedido: o destaque vermelho vai no **total planejado** do
+  item acima do orçado, incluindo a linha nova; o orçado conserva o azul.
+  A comparação continua sobre o bruto, com destaque nas duas vistas.
+- Resultado geral em Totais (inclusive Mídia Off): fundo, borda e rótulos
+  mantêm o verde do planejado. Somente o percentual abaixo de 20% fica
+  vermelho; sem resultado permanece neutro.
+- Ajuste somente de apresentação; cálculos e permissões preservados.
+- **Conferência:** build de produção, lint e tipos aprovados (apenas o
+  aviso de ARIA anterior no `multi-select`); 40 testes existentes passaram.
+  No navegador com GP de teste, orçado azul e planejado excedente vermelho,
+  Resultado geral com fundo/rótulos verdes e só o percentual vermelho,
+  realizado em `rgb(220, 38, 38)` nas vistas Bruto e Líquido. Prints da
+  revisão de 22/10 capturados. Nenhum dado operacional alterado.

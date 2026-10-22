@@ -6275,3 +6275,17 @@ Protótipo aprovado em 17/10. Regra completa na decisão 192.
   2.000 + 8.000 libera, mantendo o aviso de planejado. “Salvar” disponível.
   40 testes automatizados e 22 cenários SQL aprovados; lint/typecheck/build
   passaram, com apenas o aviso anterior de ARIA no `multi-select`.
+
+
+## Revisão visual — 22/10/2026 (decisão 204)
+
+- Total realizado excedente passa de vermelho da marca para vermelho
+  vibrante `text-red-600` (#dc2626), em Bruto e Líquido, para aumentar o
+  contraste. A comparação continua sobre o acumulado bruto do item.
+- Demais cores, formulário da PP, cálculos e permissões preservados.
+- **Conferência:** build de produção, lint e tipos aprovados (apenas o
+  aviso de ARIA anterior no `multi-select`); 40 testes existentes passaram.
+  No navegador com GP de teste, orçado azul e planejado excedente vermelho,
+  Resultado geral com fundo/rótulos verdes e só o percentual vermelho,
+  realizado em `rgb(220, 38, 38)` nas vistas Bruto e Líquido. Prints da
+  revisão de 22/10 capturados. Nenhum dado operacional alterado.

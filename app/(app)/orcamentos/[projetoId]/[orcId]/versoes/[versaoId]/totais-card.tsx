@@ -451,9 +451,7 @@ export function TotaisCard({
               "mt-2.5 rounded-xl border p-4",
               resultadoGeral === null
                 ? "border-border bg-muted/30"
-                : !rentabilidadeAbaixoDoMinimo(resultadoGeral)
-                  ? "border-emerald-200 bg-emerald-50"
-                  : "border-rose-200 bg-rose-50",
+                : "border-emerald-200 bg-emerald-50",
             )}
           >
             <div className="flex items-baseline justify-between gap-3">
@@ -463,9 +461,7 @@ export function TotaisCard({
                     "text-sm font-semibold",
                     resultadoGeral === null
                       ? "text-muted-foreground"
-                      : !rentabilidadeAbaixoDoMinimo(resultadoGeral)
-                        ? "text-emerald-800"
-                        : "text-california-red",
+                      : "text-emerald-800",
                   )}
                 >
                   Resultado geral
@@ -475,9 +471,7 @@ export function TotaisCard({
                     "mt-0.5 text-[11.5px]",
                     resultadoGeral === null
                       ? "text-muted-foreground"
-                      : !rentabilidadeAbaixoDoMinimo(resultadoGeral)
-                        ? "text-emerald-700"
-                        : "text-california-red",
+                      : "text-emerald-700",
                   )}
                 >
                   {resultadoGeral === null

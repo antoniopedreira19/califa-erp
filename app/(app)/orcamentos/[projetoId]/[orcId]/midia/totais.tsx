@@ -99,9 +99,7 @@ export function TotaisMidia({
               "mt-2.5 rounded-xl border p-4",
               !temResultado
                 ? "border-border bg-muted/30"
-                : !rentabilidadeAbaixoDoMinimo(f.resultadoGeral)
-                  ? "border-emerald-200 bg-emerald-50"
-                  : "border-rose-200 bg-rose-50",
+                : "border-emerald-200 bg-emerald-50",
             )}
           >
             <div className="flex items-baseline justify-between gap-3">
@@ -109,7 +107,7 @@ export function TotaisMidia({
                 <p
                   className={cn(
                     "text-sm font-semibold",
-                    !temResultado ? "text-muted-foreground" : !rentabilidadeAbaixoDoMinimo(f.resultadoGeral) ? "text-emerald-800" : "text-california-red",
+                    !temResultado ? "text-muted-foreground" : "text-emerald-800",
                   )}
                 >
                   Resultado geral
@@ -117,7 +115,7 @@ export function TotaisMidia({
                 <p
                   className={cn(
                     "mt-0.5 text-[11.5px]",
-                    !temResultado ? "text-muted-foreground" : !rentabilidadeAbaixoDoMinimo(f.resultadoGeral) ? "text-emerald-700" : "text-california-red",
+                    !temResultado ? "text-muted-foreground" : "text-emerald-700",
                   )}
                 >
                   {temResultado ? "Resultado operacional ÷ valor do job" : "Preencha as linhas para ver o resultado."}

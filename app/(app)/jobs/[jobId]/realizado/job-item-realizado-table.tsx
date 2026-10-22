@@ -2836,7 +2836,7 @@ function CelulaTotalComBv({
           className={cn(
             "font-mono text-xs font-semibold leading-[1.2]",
             bloco.bruto <= 0 && "text-muted-foreground",
-            excedido && "text-california-red",
+            excedido && "text-red-600",
           )}
         >
           {bloco.bruto > 0 ? formatCurrency(valor, moeda) : "—"}

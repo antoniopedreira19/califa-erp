@@ -1994,7 +1994,7 @@ export function ItensTable({
                                   selecao={selecao}
                                   linhaId={item.id}
                                   coluna="total_orcado"
-                                  className={cn("font-mono font-semibold", ORCADO.celulaTotal, acimaDoOrcado(totais.planejado, totais.orcado) && "text-california-red")}
+                                  className={cn("font-mono font-semibold", ORCADO.celulaTotal)}
                                 >
                                   {formatCurrency(totais.orcado, moeda)}
                                 </CelulaCalculada>
@@ -2083,7 +2083,10 @@ export function ItensTable({
                               className={PLANEJADO.celulaTotal}
                             >
                               <div className="flex flex-col items-end">
-                                <span className="font-mono text-xs font-semibold leading-[1.2]">
+                                <span className={cn(
+                                  "font-mono text-xs font-semibold leading-[1.2]",
+                                  acimaDoOrcado(totais.planejado, totais.orcado) && "text-california-red",
+                                )}>
                                   {formatCurrency(planejadoNaVisao, moeda)}
                                 </span>
                                 {visao === "liquido" && (
@@ -2953,7 +2956,7 @@ function LinhaDraft({
             selecao={selecao}
             linhaId={DRAFT_ID}
             coluna="total_orcado"
-            className={cn("font-mono font-semibold", ORCADO.celulaTotal, acimaDoOrcado(totalPlanejado, totalOrcado) && "text-california-red")}
+            className={cn("font-mono font-semibold", ORCADO.celulaTotal)}
           >
             {formatCurrency(totalOrcado, moeda)}
           </CelulaCalculada>
@@ -2998,7 +3001,7 @@ function LinhaDraft({
         selecao={selecao}
         linhaId={DRAFT_ID}
         coluna="total_planejado"
-        className={cn("font-mono font-semibold", PLANEJADO.celulaTotal)}
+        className={cn("font-mono font-semibold", PLANEJADO.celulaTotal, acimaDoOrcado(totalPlanejado, totalOrcado) && "text-california-red")}
       >
         {formatCurrency(totalPlanejado, moeda)}
       </CelulaCalculada>

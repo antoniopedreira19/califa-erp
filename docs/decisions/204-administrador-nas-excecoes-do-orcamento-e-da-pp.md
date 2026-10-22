@@ -16,9 +16,12 @@ versão e Planilha Interna do job.
   Sem planejado, Resultado geral continua nulo (travessão), e só essa
   ausência não cria uma restrição nova. As demais travas de aprovação
   continuam valendo, inclusive para administrador.
-- No orçamento, o **total orçado do item** excedido fica vermelho. O
+- No orçamento, o **total planejado do item** fica vermelho quando excede o orçado
+  (revisão de 22/10/2026); o orçado mantém o azul. O
   percentual do Resultado geral fica vermelho tanto no cabeçalho quanto
-  em Totais, inclusive quando ainda positivo, mas inferior a 20%.
+  em Totais, inclusive quando ainda positivo, mas inferior a 20%. O card
+  de Resultado geral conserva fundo, borda e rótulos verdes; só o número
+  fica vermelho. O estado sem resultado continua neutro.
 - Gerar ou editar uma PP cujo **realizado acumulado do item ultrapasse o
   orçado** exige administrador. Orçado de 100, outras PPs de 60 e nova PP
   de 41 resultam em 101, mesmo sem exceder isoladamente. Igualdade libera.
@@ -27,7 +30,7 @@ versão e Planilha Interna do job.
   soma a candidata; na edição substitui seu valor anterior, sem duplicar.
   Rascunhos em `pedidos_compra_a_emitir` ficam fora. “Salvar” continua disponível para
   revisão posterior pelo administrador. O total realizado do item fica
-  vermelho nas vistas Bruto e Líquido quando excede o orçado.
+  vermelho vibrante (`text-red-600`) nas vistas Bruto e Líquido quando excede o orçado.
 - A chave do Produtor Responsável (174) não libera essa exceção. O envio
   posterior segue os papéis atuais, preservando a confirmação acima do
   planejado (039). Refazer uma rejeitada passa novamente pela geração.

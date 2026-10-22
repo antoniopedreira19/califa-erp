@@ -117,12 +117,16 @@ As planilhas de orçamento e de job são lidas em blocos verticais, não coluna 
 A rentabilidade fica em neutro de propósito: ela não é um bloco de entrada, é o que sobra entre dois outros. O grafite diz isso sem competir com os três. **O valor é sempre grafite, positivo ou negativo** — o sinal já está no número, e verde ali brigaria com o PLANEJADO. Isso vale só dentro de planilha e Totais; os painéis "Resultado operacional" e "Resultado geral" seguem verde/vermelho, porque não são coluna de planilha.
 
 **Exceções de limite (21/10/2026, decisão 204):** na planilha de orçamento,
-o total **orçado do item** fica vermelho quando seu planejado o excede.
+o total **planejado do item** fica vermelho quando excede seu orçado; o
+total orçado mantém o azul (revisão de 22/10/2026).
 No job, o total **realizado do item** fica vermelho quando o acumulado
 bruto (antes do BV, descontadas as devoluções aprovadas) excede o orçado.
-O destaque permanece nas vistas Bruto e Líquido. O **Resultado geral**
+O destaque usa vermelho vibrante (`text-red-600`) nas vistas Bruto e
+Líquido. O **Resultado geral**
 do orçamento, no cabeçalho e no card de Totais, fica vermelho abaixo de
-20%; exatamente 20% mantém o verde. As colunas de rentabilidade da grade
+20%; exatamente 20% mantém o verde. No card de Totais, fundo, borda e
+rótulos conservam o verde do planejado; somente o percentual fica
+vermelho. Sem resultado, o estado neutro permanece. As colunas de rentabilidade da grade
 continuam grafite. No formulário da PP, o cartão inicial preserva Em PPs
 emitidas e Planejado e acrescenta Orçado. A prévia tem triângulo âmbar acima
 do planejado ou escudo vermelho acima do orçado (precedência). Sob o total,
