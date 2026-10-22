@@ -6354,4 +6354,7 @@ Protótipo aprovado em 17/10. Regra completa na decisão 192.
   fiscal do fornecedor." — a PP seguiu `gerada`, sem `enviada_financeiro_em`
   e sem anexo no banco. Ver
   [decisão 160](../decisions/160-pp-pronta-para-envio-e-envio-pela-aba.md).
+- ⚠️ **Ordem dos ícones (2026-10-22).** Na PP gerada, a trilha passou a ser
+  lápis → avião → cancelar (antes o avião vinha primeiro). Conferido na
+  PP-00355: botões na ordem "Editar", "Enviar ao financeiro", "Cancelar".
 

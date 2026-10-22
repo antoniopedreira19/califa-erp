@@ -1228,9 +1228,10 @@ export function JobPPsSection({
               >
                 {/* Só o que vale nesta linha, um colado no outro (pedido do
                     Tiago, 08/10/2026): sem lugar vazio quando a PP não pode
-                    ser enviada. */}
-                {enviarEl}
+                    ser enviada. O lápis vem antes do avião (Tiago,
+                    22/10/2026): primeiro se acerta a PP, depois se envia. */}
                 {editarEl}
+                {enviarEl}
                 {formularioEl}
                 {prestarEl}
                 {refazerEl}

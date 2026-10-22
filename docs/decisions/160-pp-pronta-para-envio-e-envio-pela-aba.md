@@ -125,3 +125,8 @@ Pedido do Tiago: enviar a PP gerada também pela aba.
   conferência é do servidor (`faltaNosAnexosDoEnvio`).
 - As travas do tooltip seguem como eram: pré-abertura, linha alterada por
   errata em revisão e prazo de envio perdido.
+
+⚠️ **Ordem dos ícones (2026-10-22).** Na PP gerada, o lápis (editar) vem
+antes do avião (enviar): primeiro se acerta a PP, depois se envia. A trilha
+fica lápis → avião → cancelar. Pedido do Tiago, ao ver o avião na PP-00355.
+
