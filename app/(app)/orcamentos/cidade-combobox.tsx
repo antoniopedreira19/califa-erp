@@ -76,9 +76,24 @@ export function CidadeCombobox({
       .map(cidadeOptionParaSugestao);
   }, [iniciais, criadas, termoLimpo]);
 
-  const respostaAtual =
-    resultado && resultado.termo === termoLimpo ? resultado.opcoes : null;
-  const opcoes = respostaAtual ?? locaisFiltradas;
+  // A resposta do servidor SOMA à lista local, nunca a substitui: o
+  // `ilike` do banco diferencia acento ("sao se" não acha "São
+  // Sebastião") e o IBGE esconde o que já está cadastrado — trocando uma
+  // lista pela outra, a cidade cadastrada aparecia e sumia.
+  const opcoes = React.useMemo(() => {
+    if (!resultado || resultado.termo !== termoLimpo) return locaisFiltradas;
+    const ids = new Set(
+      locaisFiltradas.map((s) => (s.origem === "local" ? s.id : "")),
+    );
+    const locaisDoServidor = resultado.opcoes.filter(
+      (s) => s.origem === "local" && !ids.has(s.id),
+    );
+    const ibge = resultado.opcoes.filter((s) => s.origem === "ibge");
+    const locais = [...locaisFiltradas, ...locaisDoServidor].sort((a, b) =>
+      a.nome.localeCompare(b.nome, "pt-BR"),
+    );
+    return [...locais, ...ibge];
+  }, [resultado, termoLimpo, locaisFiltradas]);
 
   React.useEffect(() => {
     if (!open) return;

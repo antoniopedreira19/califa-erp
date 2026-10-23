@@ -2318,6 +2318,33 @@ página `force-dynamic`.
 no navegador **pendente** — entra na etapa final, junto com as demais
 telas.
 
+⚠️ **"Buscando…" que não acabava (2026-10-22).** Desde ~16/10 o IBGE não
+atende a Vercel. Cada busca de 2+ letras esperava os 10 s do connect
+timeout antes de devolver até as cidades cadastradas, e como `buscarCidades`
+era server action — e server actions da mesma aba rodam em fila —, cada
+letra digitada entrava atrás da anterior: na tela, "Buscando…" para
+sempre (visto ao buscar "salva" com Salvador já cadastrado). O que mudou:
+
+- O combobox filtra as `iniciais` no próprio navegador (sem acento e sem
+  caixa) e mostra as cidades cadastradas **na hora**; a resposta do
+  servidor **soma** a essa lista (o `ilike` do banco diferencia acento:
+  "sao se" não acha "São Sebastião").
+- A busca saiu da server action para `GET /api/cidades/busca`, abortada
+  quando o termo muda. `buscarCidades` foi removida.
+- `lib/data/ibge-municipios.ts`: limite de 4 s no `fetch` e, depois de uma
+  falha, 5 min sem tentar o IBGE de novo.
+- Erro na busca vira uma linha "Não foi possível procurar outras cidades"
+  abaixo da lista local, em vez de travar.
+
+Continua pendente: enquanto o IBGE não atender a Vercel, cidade **nova**
+não aparece como sugestão (só pelo `/cadastros/cidades`). Saída possível:
+guardar a lista dos 5.570 municípios no próprio repositório.
+
+**Verificação:** logado, em `localhost:3271`, no formulário de novo
+orçamento do TES-P001/26 — "sao se", "florian", "natal" mostram a cadastrada
+em 60 ms e completam com o IBGE sem a cadastrada sumir; com a rota forçada
+a falhar, Salvador fica e aparece o aviso.
+
 ---
 
 ## ⚠️ 2026-08-24 — A planilha virou uma tabela só (design "Grupos Unificados")
