@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Ban, ChevronDown, Lock, Plus, Trash2, Undo2, X } from "lucide-react";
+import { Ban, ChevronDown, ChevronRight, Lock, Plus, Trash2, Undo2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -20,7 +20,7 @@ import type {
 } from "@/lib/types";
 import type { TomadorDaNf } from "./anexos-da-pp";
 import { TEXTO_LINHA_ALTERADA_EM_REVISAO, textoAguardaAbertura } from "./pp-a-emitir-ui";
-import { nomeContraparteBRPP, situacaoDaVerba } from "@/lib/types";
+import { nomeContraparteBRPP, ppStatusLabel, situacaoDaVerba } from "@/lib/types";
 import { CalhaLinha } from "./calha-linha";
 import {
   NomeDoGrupoNaErrata,
@@ -196,6 +196,10 @@ interface Props {
    *  mudou: o envio das PPs delas fica fechado até a revisão da abertura
    *  ser salva (decisões 040 e 185). As outras enviam normalmente. */
   linhasComEnvioTravado?: string[];
+  /** "Exibir › PPs abertas em todas as linhas" (decisão 208): cada linha
+   *  com PP já abre com as sublinhas das PPs. A seta ao lado do nome abre
+   *  ou fecha um item só. */
+  ppsNasLinhas?: boolean;
   // PP rail — várias PPs por item desde 17/08/2026 (PPs parciais).
   ppsPorItemId: Map<string, PedidoCompraNaLista[]>;
   /** Decisão 153: as PPs a emitir de cada item, fora do realizado. */
@@ -309,6 +313,8 @@ interface Props {
  *  chamada a `upsertItemRealizado`: não há mais o que gravar a partir
  *  desta tabela. Mexer no realizado agora é emitir ou cancelar PP. */
 const ALTURA_LINHA = "h-[34px]";
+/** A sublinha da PP (decisão 208) é mais baixa que a do item. */
+const ALTURA_SUBLINHA_PP = "h-[28px]";
 
 /** Por que a linha não entra na errata — o mesmo texto do servidor
  *  (`barrarLinhaComPPNoFinanceiro`), para a tela não prometer o que a
@@ -723,6 +729,7 @@ export function JobItemRealizadoTable({
   podeConfirmarBv,
   preAbertura,
   linhasComEnvioTravado = [],
+  ppsNasLinhas = false,
   ppsPorItemId,
   aEmitirPorItemId,
   statusDoJob,
@@ -872,8 +879,22 @@ export function JobItemRealizadoTable({
         .join("|"),
     [grupos, estaAberto],
   );
+  // A linha com PP abre em sublinhas, uma por PP (decisão 208). A seta abre
+  // ou fecha UM item e vale até o "Exibir" mudar, que zera as escolhas. Na
+  // errata e no "Editar orçado" do financeiro as PPs ficam fechadas: ali a
+  // linha está sendo reescrita, e a errata arrasta linhas.
+  const [ppsAbertasNaLinha, setPpsAbertasNaLinha] = React.useState<Record<string, boolean>>({});
+  React.useEffect(() => setPpsAbertasNaLinha({}), [ppsNasLinhas]);
+  const ppsAbertasAqui = (itemId: string) =>
+    !editando && (ppsAbertasNaLinha[itemId] ?? ppsNasLinhas);
+  // As sublinhas empurram as linhas de baixo: a calha precisa remedir.
+  const assinaturaDasPPs = `${editando}:${ppsNasLinhas}:${Object.entries(ppsAbertasNaLinha)
+    .map(([id, aberta]) => `${id}${aberta ? "+" : "-"}`)
+    .join(",")}`;
   const posicoesCalha = usePosicoesDaCalha(wrapperRef, [
     assinaturaDasLinhas,
+    assinaturaDasPPs,
+    ppsPorItemId,
     visao,
     podeAcoes,
     preAbertura,
@@ -1550,6 +1571,12 @@ export function JobItemRealizadoTable({
                   {abertoAqui && grupo.itens.map((item) => {
                     const blocos = blocosPorItem.get(item.id) ?? BLOCO_VAZIO;
                     const realizadoDoItem = realizadosMap.get(item.id);
+                    // As PPs da linha (decisão 208): as mesmas que somam o
+                    // realizado — toda PP não cancelada, a gerada inclusive.
+                    const ppsDaLinha = (ppsPorItemId.get(realizadoDoItem?.id ?? "") ?? []).filter(
+                      (pp) => pp.status !== "cancelada",
+                    );
+                    const ppsAbertas = ppsDaLinha.length > 0 && ppsAbertasAqui(item.id);
                     // A quebra do realizado espelha o orçado só em `A`/`D`
                     // COM o job aberto. Na pré-abertura ela vem da linha
                     // de realizado, que está zerada — e zero vira
@@ -1605,8 +1632,8 @@ export function JobItemRealizadoTable({
                     );
 
                     return (
+                      <React.Fragment key={item.id}>
                       <tr
-                        key={item.id}
                         data-calha={`i:${item.id}`}
                         // Na errata toda linha muda de lugar — a cancelada,
                         // a vermelha e a que tem PP no financeiro também:
@@ -1687,6 +1714,32 @@ export function JobItemRealizadoTable({
                             }
                           >
                             <div className="flex min-w-0 items-center gap-1.5">
+                              {/* A seta da linha com PP (decisão 208): fica no
+                                  recuo à esquerda do nome, onde a alça da
+                                  errata mora — e na errata ela some. */}
+                              {!editando && ppsDaLinha.length > 0 && (
+                                <button
+                                  type="button"
+                                  aria-expanded={ppsAbertas}
+                                  aria-label={`${ppsAbertas ? "Fechar" : "Abrir"} as PPs de ${item.item || "o item"}`}
+                                  title={`${ppsAbertas ? "Fechar" : "Abrir"} ${
+                                    ppsDaLinha.length === 1 ? "a PP" : `as ${ppsDaLinha.length} PPs`
+                                  } desta linha`}
+                                  // A célula seleciona no mousedown: a seta
+                                  // não pode virar seleção.
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPpsAbertasNaLinha((m) => ({ ...m, [item.id]: !ppsAbertas }));
+                                  }}
+                                  className="-ml-[24px] flex h-5 w-5 flex-none items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                                >
+                                  <ChevronRight
+                                    className={cn("h-3.5 w-3.5 transition-transform motion-reduce:transition-none", ppsAbertas && "rotate-90")}
+                                  />
+                                </button>
+                              )}
                               {editando && motivoDaTrava && (
                                 <Lock
                                   className="h-3 w-3 flex-none text-muted-foreground"
@@ -1937,6 +1990,24 @@ export function JobItemRealizadoTable({
                           />
                         )}
                       </tr>
+                      {ppsAbertas && (
+                        <SublinhasDasPPs
+                          pps={ppsDaLinha}
+                          moeda={moeda}
+                          colunas={colunas}
+                          // O painel das PPs é o da calha: só onde ela o
+                          // oferece. No financeiro a sublinha é só leitura.
+                          onAbrirPainel={
+                            podeGerarPP &&
+                            realizadoDoItem &&
+                            !item.em_save &&
+                            tipoGeraDesembolso(item.tipo_custo)
+                              ? () => abrirPainel(realizadoDoItem.id)
+                              : null
+                          }
+                        />
+                      )}
+                      </React.Fragment>
                     );
                   })}
 
@@ -2768,6 +2839,119 @@ export function JobItemRealizadoTable({
           </button>
         </div>
       )}
+    </>
+  );
+}
+
+/**
+ * As PPs de uma linha, uma por sublinha (decisão 208), como a planilha
+ * exportada (decisão 088): código, situação e serviço no rótulo, e
+ * R$ Unit. · QT · D/M · Total no Realizado. Quem recebe (fornecedor ou
+ * titular da verba) fica no painel do item — pedido do Tiago, 22/10/2026.
+ *
+ * É a quebra que a linha perde com duas PPs ou mais: aí o realizado do item
+ * guarda só o total (`recalcular_realizado_do_item`). As células seguem as
+ * mesmas colunas da linha do item, então a grade não desalinha.
+ */
+function SublinhasDasPPs({
+  pps,
+  moeda,
+  colunas,
+  onAbrirPainel,
+}: {
+  pps: PedidoCompraNaLista[];
+  moeda: string;
+  colunas: ColunasJobVisiveis;
+  /** Nulo onde a calha não abre o painel (financeiro): só leitura. */
+  onAbrirPainel: (() => void) | null;
+}) {
+  const vazia = (classe: string) => <td className={classe} />;
+  const numero = (v: number, emMoeda = false) =>
+    v > 0 ? (emMoeda ? formatCurrency(v, moeda) : v.toLocaleString("pt-BR")) : "—";
+  const valor = (texto: string) => (
+    <span className={cn("font-mono text-[11px] italic", NUMEROS_PLANILHA.detalhe)}>{texto}</span>
+  );
+  const celulaDoValor = "px-3 align-middle whitespace-nowrap text-right";
+  return (
+    <>
+      {pps.map((pp) => {
+        const rotulo = `${pp.codigo} · ${ppStatusLabel(pp.status)}${pp.servico ? ` — ${pp.servico}` : ""}`;
+        return (
+          <tr
+            key={pp.id}
+            onClick={onAbrirPainel ?? undefined}
+            className={cn(
+              ALTURA_SUBLINHA_PP,
+              "border-b border-dashed border-border/80",
+              onAbrirPainel && "cursor-pointer hover:[&>td]:bg-muted/50",
+            )}
+          >
+            {colunas.save && vazia(GRADE_NEUTRA)}
+            <td
+              colSpan={3}
+              title={rotulo}
+              className={cn("max-w-0 px-3 pl-[30px] align-middle text-[11.5px] italic text-muted-foreground", GRADE_NEUTRA)}
+            >
+              <div className="flex min-w-0 items-baseline gap-1.5">
+                <span aria-hidden className="flex-none not-italic text-muted-foreground/70">
+                  ↳
+                </span>
+                <span className="truncate">
+                  <span className="font-mono text-[11px] not-italic text-foreground/70">{pp.codigo}</span>
+                  {" · "}
+                  {ppStatusLabel(pp.status)}
+                  {pp.servico ? ` — ${pp.servico}` : null}
+                </span>
+              </div>
+            </td>
+            {colunas.orcado && (
+              <>
+                {vazia(ORCADO.celulaAbre)}
+                {vazia(ORCADO.celulaMeio)}
+                {vazia(ORCADO.celulaMeio)}
+                {colunas.moedaEstrangeira && vazia(ORCADO.celulaMeio)}
+                {vazia(ORCADO.celulaTotal)}
+              </>
+            )}
+            {vazia(PLANEJADO.celulaAbre)}
+            {vazia(PLANEJADO.celulaMeio)}
+            {vazia(PLANEJADO.celulaMeio)}
+            {vazia(cn(colunas.rentabPlanejada && PLANEJADO.celulaMeio, PLANEJADO.celulaTotal))}
+            {/* A rentabilidade mora dentro do bloco que a gera, com as
+                classes dele — como em `CelulasRentabilidade`. */}
+            {colunas.rentabPlanejada && (
+              <>
+                {vazia(PLANEJADO.celulaMeio)}
+                {vazia(PLANEJADO.celulaTotal)}
+              </>
+            )}
+            <td className={cn(REALIZADO.celulaAbre, celulaDoValor)}>
+              {valor(numero(Number(pp.valor_unitario ?? 0), true))}
+            </td>
+            <td className={cn(REALIZADO.celulaMeio, celulaDoValor)}>
+              {valor(numero(Number(pp.quantidade ?? 0)))}
+            </td>
+            <td className={cn(REALIZADO.celulaMeio, celulaDoValor)}>
+              {valor(numero(Number(pp.dias_meses ?? 0)))}
+            </td>
+            <td
+              className={cn(
+                colunas.rentabRealizada && REALIZADO.celulaMeio,
+                REALIZADO.celulaTotal,
+                celulaDoValor,
+              )}
+            >
+              {valor(formatCurrency(Number(pp.valor ?? 0), moeda))}
+            </td>
+            {colunas.rentabRealizada && (
+              <>
+                {vazia(REALIZADO.celulaMeio)}
+                {vazia(REALIZADO.celulaTotal)}
+              </>
+            )}
+          </tr>
+        );
+      })}
     </>
   );
 }

@@ -8027,3 +8027,13 @@ os arquivos da frente do Antonio.
 - **Fica para depois:** o relatório Rentabilidade de Jobs ainda usa outra
   conta (ver decisão 207, "Fora desta decisão").
 
+## ⚠️ Nota de 2026-10-23 (2) — a planilha do job no financeiro abre as PPs de cada linha (decisão 208)
+
+- Na aba Planilha Interna de `/financeiro/jobs/[jobId]` (a mesma seção da
+  produção), toda linha com PP tem a seta que abre as PPs embaixo dela, uma
+  por sublinha: "↳ PP-00214 · Pago — serviço", com R$ Unit., QT, D/M e
+  Total no Realizado. "Exibir › PPs abertas em todas as linhas" abre todas.
+- No financeiro a sublinha é só leitura (não há o painel de PPs da
+  produção). No "Editar orçado" as PPs ficam fechadas.
+- **Conferido** no TES-1014/26; ver
+  [decisão 208](../decisions/208-pps-em-sublinhas-na-planilha-interna.md).

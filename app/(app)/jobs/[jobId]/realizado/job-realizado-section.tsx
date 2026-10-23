@@ -878,6 +878,14 @@ function PlanilhaDoJob({
   // quem corrige ver o que já saiu.
   const [canceladasVisiveis, setCanceladasVisiveis] = React.useState(true);
   const temCancelada = itens.some((i) => i.cancelada_em);
+  // A linha com PP abre em sublinhas, uma por PP (decisão 208): a seta ao
+  // lado do nome abre um item; o "Exibir" abre todos. Nasce fechado, como a
+  // planilha de sempre.
+  const [ppsNasLinhas, setPpsNasLinhas] = React.useState(false);
+  const temPP = React.useMemo(
+    () => [...ppsPorItemId.values()].some((pps) => pps.some((pp) => pp.status !== "cancelada")),
+    [ppsPorItemId],
+  );
   // A errata exige job aberto, a porta de `AlterarOrcadoButton`, e fecha
   // com o envio para faturamento. O financeiro chega aqui com `podeAcoes`
   // falso e não faz errata: desde a decisão 115 (28/09/2026) ele edita os
@@ -1321,6 +1329,7 @@ function PlanilhaDoJob({
       <div className="rounded-2xl border border-border bg-card shadow-soft">
         <JobItemRealizadoTable
           jobId={job.id}
+          ppsNasLinhas={ppsNasLinhas}
           grupos={gruposDoTrecho}
           rotuloTotal={rotuloTotal}
           realizadosMap={realizadosMap}
@@ -1592,6 +1601,29 @@ function PlanilhaDoJob({
                         },
                       ],
                       dica: "A linha cancelada por errata fica zerada no orçado e no planejado.",
+                    },
+                  ]
+                : []),
+              // Decisão 208: as PPs embaixo de cada linha, como na planilha
+              // exportada. Na errata a linha está sendo reescrita: fechadas.
+              ...(temPP
+                ? [
+                    {
+                      titulo: "PPs",
+                      itens: [
+                        {
+                          chave: "pps_nas_linhas",
+                          rotulo: "PPs abertas em todas as linhas",
+                          visivel: ppsNasLinhas && !errata.ativo,
+                          onAlternar: errata.ativo
+                            ? undefined
+                            : () => setPpsNasLinhas((v) => !v),
+                          dica: errata.ativo
+                            ? "Na errata as PPs ficam fechadas."
+                            : undefined,
+                        },
+                      ],
+                      dica: "Cada PP numa linha abaixo do item, como na planilha exportada. A seta ao lado do nome abre um item só.",
                     },
                   ]
                 : []),

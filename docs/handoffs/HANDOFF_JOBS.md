@@ -6358,3 +6358,18 @@ Protótipo aprovado em 17/10. Regra completa na decisão 192.
   lápis → avião → cancelar (antes o avião vinha primeiro). Conferido na
   PP-00355: botões na ordem "Editar", "Enviar ao financeiro", "Cancelar".
 
+## ⚠️ Nota de 2026-10-23 — a linha da Planilha Interna abre em sublinhas, uma por PP (decisão 208)
+
+- Toda linha com PP ganha uma seta ao lado do nome; ela abre as PPs embaixo
+  da linha, uma por sublinha, como a planilha exportada: "↳ PP-00214 · Pago
+  — serviço", sem fornecedor nem titular, com R$ Unit., QT, D/M e Total no
+  Realizado. Com duas PPs ou mais a linha mostra só o total; a sublinha
+  devolve o detalhe de cada gasto.
+- "Exibir › PPs abertas em todas as linhas" abre todas. Clicar na sublinha
+  abre o painel do item (o mesmo da trilha). Na errata as PPs ficam
+  fechadas.
+- Responde ao caso da verba do ANI-1001/26: várias PPs na linha da verba,
+  sem errata, e cada gasto visível na planilha.
+- **Conferido** no TES-1014/26 (8 PPs em 4 linhas), com Save e as duas
+  rentabilidades ligadas. Ver
+  [decisão 208](../decisions/208-pps-em-sublinhas-na-planilha-interna.md).
