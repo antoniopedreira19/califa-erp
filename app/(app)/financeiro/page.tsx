@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Landmark, Clock, ArrowRight, FileText, Receipt, Scale, TrendingUp, Wallet, BookOpen, FolderKanban, type LucideIcon } from "lucide-react";
+import { Landmark, Clock, ArrowRight, FileText, Receipt, Scale, TrendingUp, Wallet, BookOpen, FolderKanban, PieChart, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
@@ -61,6 +61,14 @@ export default async function CentralFinanceiraPage() {
           title="Abertura de Job"
           description="Confira os jobs enviados pela produção e complete o registro financeiro para abri-los."
           count={aguardandoCount ?? 0}
+        />
+        {/* Ao lado da Abertura (decisão 207): a mesma lista de jobs, com a
+            Rentabilidade de cada um. Sem contagem — não é fila. */}
+        <FinanceiroCard
+          href="/financeiro/resultado-de-job"
+          icon={PieChart}
+          title="Resultado de Job"
+          description="Acompanhar valor, faturamento e rentabilidade de cada job aberto no financeiro."
         />
         <FinanceiroCard
           href="/financeiro/contas-a-pagar"

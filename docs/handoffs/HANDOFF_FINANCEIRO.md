@@ -7997,3 +7997,33 @@ os arquivos da frente do Antonio.
 - Dado: `JobNaFila.excecao_fechamento`, lido no `SELECT_JOB_FILA` pelo embed
   `versao_excecao:versoes_orcamento!jobs_versao_orcamento_aprovada_id_fkey(…, excecao_por:profiles!excecao_fechamento_por(nome))`.
 - Conferido com o TES-1031/26 (teste, não aberto; envio cancelado depois).
+
+## ⚠️ Nota de 2026-10-23 (1) — Resultado de Job, e as colunas novas de Visualizar Jobs (decisão 207)
+
+- **Central Financeira:** cartão novo **Resultado de Job**, o segundo da
+  grade, ao lado de Abertura de Job (de Contas a Pagar em diante, todos
+  descem uma casa). Rota `/financeiro/resultado-de-job`, sem abas: a lista
+  de jobs do financeiro.
+- **As duas listas** (Resultado de Job e a aba Visualizar Jobs da Abertura)
+  terminam em **Valor do Job · Faturamento · Rentabilidade**. Saíram
+  Recebimentos e Custos — da tabela, da faixa do projeto, da linha de
+  totais e do Excel. O Faturamento perdeu o selo da esteira (os chips de
+  cima continuam filtrando pela situação) e mantém o número da NF.
+- **Rentabilidade = a do job:** valor do job − impostos − custo planejado,
+  na conta do financeiro, em R$ (grafite) e em % do valor do job. É o
+  número do registro da abertura e do "Resultado Op. (Planejado)" do
+  cabeçalho do job. Conta em lote em `lib/data/rentabilidade-dos-jobs.ts`,
+  com as mesmas funções da página; o par R$ e % em `rentabilidadeDoJob`
+  (`lib/calculos/abertura-do-job.ts`), que o formulário da abertura passou
+  a usar.
+- `JobAberto` ganhou `rentabilidade` e `rentabilidade_pct` (nulos sem a
+  conta). `JobsAbertosList` recebe `tela: "abertura" | "resultado"`: cada
+  tela guarda os próprios filtros dos títulos, tem o seu texto de lista
+  vazia e o seu nome de arquivo do Excel. `notas-de-caixa.ts` foi apagado
+  (só servia às colunas que saíram).
+- Conferido logado em 23/10/2026: nove jobs (nacional, save, faturado em
+  parte, Mídia Off, mensal, zerado) com a Rentabilidade igual à da página
+  do job, ao centavo e no %.
+- **Fica para depois:** o relatório Rentabilidade de Jobs ainda usa outra
+  conta (ver decisão 207, "Fora desta decisão").
+

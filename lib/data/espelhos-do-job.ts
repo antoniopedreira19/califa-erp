@@ -96,6 +96,81 @@ export type TotaisParaRpc = EspelhosDoJob & { saves_por_mes?: SaveDoMesEnviado[]
 
 const dinheiro = (n: number) => Number(n.toFixed(2));
 
+/** O que os espelhos leem de `jobs`: a versão aprovada (percentuais e
+ *  cadeia internacional) e o modelo da planilha. A lista de jobs do
+ *  financeiro lê o MESMO select, em lote (`lib/data/rentabilidade-dos-jobs`). */
+export const SELECT_JOB_DOS_ESPELHOS =
+  // ⚠️ Dicas de FK obrigatórias: há duas FKs entre jobs e
+  // versoes_orcamento, e duas entre versoes_orcamento e orcamentos.
+  "id, versao_orcamento_aprovada_id, versao:versoes_orcamento!jobs_versao_orcamento_aprovada_id_fkey(percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, percentual_veiculo, base_honorarios), orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))";
+
+/** As colunas de `jobs_itens_orcado` que a conta dos espelhos usa. */
+export const SELECT_ITENS_DOS_ESPELHOS =
+  "id, item, grupo_id, tipo_custo, total_orcado, valor_unitario_orcado, em_save, save_consumido";
+
+/** Uma linha de `jobs` lida com `SELECT_JOB_DOS_ESPELHOS`. */
+export interface JobDosEspelhos {
+  id: string;
+  versao_orcamento_aprovada_id: string | null;
+  versao: {
+    percentual_honorarios: number;
+    percentual_imposto: number;
+    percentual_int_taxes: number;
+    int_transaction_costs: number;
+    moeda_estrangeira: string | null;
+    cambio_compra: number | null;
+    percentual_veiculo: number | string | null;
+    base_honorarios: string | null;
+  } | null;
+  orcamento: { categoria: { modelo_planilha: CategoriaModeloPlanilha } | null } | null;
+}
+
+/**
+ * Monta a base dos espelhos a partir do que já foi lido — a parte pura de
+ * `lerBaseDosEspelhos`, para quem lê muitos jobs de uma vez fechar a MESMA
+ * conta. Sai sem os meses do mensal (`mensal: null`).
+ */
+export function montarBaseDosEspelhos(
+  job: JobDosEspelhos,
+  itens: ReadonlyArray<Record<string, any>>,
+  pedidos: PedidoParaFinanceiro[],
+): BaseDosEspelhos {
+  const planilha = configDaPlanilha(
+    job.orcamento?.categoria?.modelo_planilha,
+    job.versao ?? {
+      percentual_int_taxes: 0,
+      int_transaction_costs: 0,
+      moeda_estrangeira: null,
+      cambio_compra: null,
+    },
+  );
+
+  const midia =
+    planilha.modeloPlanilha === "midia_off" && job.versao
+      ? parametrosDaVersao(job.versao)
+      : null;
+
+  return {
+    itens: itens.map((i) => ({
+      id: i.id,
+      item: i.item,
+      grupo_id: i.grupo_id ?? null,
+      tipo_custo: i.tipo_custo as TipoCusto,
+      total_orcado: Number(i.total_orcado ?? 0),
+      valor_unitario_orcado: Number(i.valor_unitario_orcado ?? 0),
+      em_save: i.em_save === true,
+      save_consumido: Number(i.save_consumido ?? 0),
+    })),
+    pedidos,
+    percentualHonorarios: Number(job.versao?.percentual_honorarios ?? 0),
+    percentualImposto: Number(job.versao?.percentual_imposto ?? 0),
+    internacional: planilha.internacional,
+    modeloPlanilha: planilha.modeloPlanilha,
+    midia,
+    mensal: null,
+  };
+}
+
 export async function lerBaseDosEspelhos(
   supabase: SupabaseClient,
   tenantId: string,
@@ -108,33 +183,13 @@ export async function lerBaseDosEspelhos(
   const [jobRes, itensRes, pedidosRes] = await Promise.all([
     supabase
       .from("jobs")
-      .select(
-        // ⚠️ Dicas de FK obrigatórias: há duas FKs entre jobs e
-        // versoes_orcamento, e duas entre versoes_orcamento e orcamentos.
-        "id, versao_orcamento_aprovada_id, versao:versoes_orcamento!jobs_versao_orcamento_aprovada_id_fkey(percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, percentual_veiculo, base_honorarios), orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
-      )
+      .select(SELECT_JOB_DOS_ESPELHOS)
       .eq("id", jobId)
       .eq("tenant_id", tenantId)
-      .maybeSingle<{
-        id: string;
-        versao_orcamento_aprovada_id: string | null;
-        versao: {
-          percentual_honorarios: number;
-          percentual_imposto: number;
-          percentual_int_taxes: number;
-          int_transaction_costs: number;
-          moeda_estrangeira: string | null;
-          cambio_compra: number | null;
-          percentual_veiculo: number | string | null;
-          base_honorarios: string | null;
-        } | null;
-        orcamento: { categoria: { modelo_planilha: CategoriaModeloPlanilha } | null } | null;
-      }>(),
+      .maybeSingle<JobDosEspelhos>(),
     supabase
       .from("jobs_itens_orcado")
-      .select(
-        "id, item, grupo_id, tipo_custo, total_orcado, valor_unitario_orcado, em_save, save_consumido",
-      )
+      .select(SELECT_ITENS_DOS_ESPELHOS)
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId),
     pedidosParaFinanceiroDoJob(supabase, tenantId, jobId).then(
@@ -157,20 +212,8 @@ export async function lerBaseDosEspelhos(
   }
   const pedidos: PedidoParaFinanceiro[] = pedidosRes.p;
 
-  const planilha = configDaPlanilha(
-    job.orcamento?.categoria?.modelo_planilha,
-    job.versao ?? {
-      percentual_int_taxes: 0,
-      int_transaction_costs: 0,
-      moeda_estrangeira: null,
-      cambio_compra: null,
-    },
-  );
-
-  const midia =
-    planilha.modeloPlanilha === "midia_off" && job.versao
-      ? parametrosDaVersao(job.versao)
-      : null;
+  const base = montarBaseDosEspelhos(job, itensRes.data as any[], pedidos);
+  const midia = base.midia;
 
   // Modelo mensal: os meses, o mês de cada agrupamento e os meses já
   // enviados — só para a parte de save dos meses enviados (`totaisParaRpc`).
@@ -179,7 +222,7 @@ export async function lerBaseDosEspelhos(
   let mensal: MesesDoEspelho | null = null;
   if (
     opcoes.comMeses !== false &&
-    (planilha.modeloPlanilha === "mensal" || midia) &&
+    (base.modeloPlanilha === "mensal" || midia) &&
     job.versao_orcamento_aprovada_id
   ) {
     const versaoId = job.versao_orcamento_aprovada_id;
@@ -212,28 +255,7 @@ export async function lerBaseDosEspelhos(
     };
   }
 
-  return {
-    ok: true,
-    base: {
-      itens: (itensRes.data as any[]).map((i) => ({
-        id: i.id,
-        item: i.item,
-        grupo_id: i.grupo_id ?? null,
-        tipo_custo: i.tipo_custo as TipoCusto,
-        total_orcado: Number(i.total_orcado ?? 0),
-        valor_unitario_orcado: Number(i.valor_unitario_orcado ?? 0),
-        em_save: i.em_save === true,
-        save_consumido: Number(i.save_consumido ?? 0),
-      })),
-      pedidos,
-      percentualHonorarios: Number(job.versao?.percentual_honorarios ?? 0),
-      percentualImposto: Number(job.versao?.percentual_imposto ?? 0),
-      internacional: planilha.internacional,
-      modeloPlanilha: planilha.modeloPlanilha,
-      midia,
-      mensal,
-    },
-  };
+  return { ok: true, base: { ...base, mensal } };
 }
 
 /**

@@ -115,6 +115,7 @@ import type {
 import { IconeSave } from "../icone-save";
 import { BotaoDaPlanilha, PopUpDaPlanilha } from "./planilha-em-leitura";
 import { formatDiaBr } from "@/lib/formatar-data-hora";
+import { rentabilidadeDoJob } from "@/lib/calculos/abertura-do-job";
 import type { ContaBancariaOpcao } from "@/lib/data/contas-bancarias";
 import { useVoltar } from "@/components/voltar/botao-voltar";
 import { useProtegerSaida } from "@/components/voltar/estado";
@@ -960,11 +961,9 @@ export function AberturaForm({
   // faturamento − custo previsto − impostos da nota —, e o job pago com
   // saldo de save de outro job, sem nada a faturar, saía com rentabilidade
   // negativa igual ao custo inteiro.
-  const margem = emCentavos(
-    rentabilidade.valorJob - rentabilidade.deducoes - rentabilidade.custoPlanejado,
-  );
-  const margemPct =
-    rentabilidade.valorJob > 0 ? (margem / rentabilidade.valorJob) * 100 : 0;
+  // A conta mora em `rentabilidadeDoJob`: as listas do financeiro mostram
+  // o mesmo número (decisão 207).
+  const { valor: margem, percentual: margemPct } = rentabilidadeDoJob(rentabilidade);
 
   // Contagem das linhas de cada bloco: aparece no rodapé da tabela de
   // previsões e no resumo do registro, na lateral.

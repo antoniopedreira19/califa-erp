@@ -138,3 +138,24 @@ export function orcadoDaLinhaNaAbertura(
 function centavos(v: number): number {
   return Math.round(Number(v) * 100);
 }
+
+/**
+ * A RENTABILIDADE do job: valor do job − impostos − custo planejado, em R$ e
+ * em % do valor do job (Tiago, 07/10/2026 — o resultado operacional
+ * planejado da planilha interna, na conta do financeiro).
+ *
+ * Uma conta só para o registro da abertura e para as listas do financeiro
+ * ("Visualizar Jobs" e "Resultado de Job", decisão 207): "não podemos ter
+ * rentabilidade se referindo a coisas diferentes em um mesmo sistema"
+ * (Tiago, 23/10/2026). Quem chama monta as três entradas com os números do
+ * financeiro (`totaisDoFinanceiro`) e o planejado que os pedidos de gerar
+ * save ainda aguardando zeraram.
+ */
+export function rentabilidadeDoJob(e: {
+  valorJob: number;
+  deducoes: number;
+  custoPlanejado: number;
+}): { valor: number; percentual: number } {
+  const valor = Math.round((e.valorJob - e.deducoes - e.custoPlanejado) * 100) / 100;
+  return { valor, percentual: e.valorJob > 0 ? (valor / e.valorJob) * 100 : 0 };
+}

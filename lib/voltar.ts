@@ -246,6 +246,7 @@ const NOMES: Array<[RegExp, string | ((url: string) => string)]> = [
   [/^\/financeiro\/desembolsos$/, "Desembolsos"],
   [new RegExp(`^/financeiro/desembolsos/${ID}$`), "o desembolso"],
   [/^\/financeiro\/fluxo-caixa$/, "Fluxo de Caixa"],
+  [/^\/financeiro\/resultado-de-job$/, "Resultado de Job"],
   [new RegExp(`^/financeiro/jobs/${ID}$`), "o job"],
   [new RegExp(`^/financeiro/projetos/${ID}$`), "Visão agregada"],
 
