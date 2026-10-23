@@ -273,15 +273,6 @@ export function ProjetoForm({
     [produtosDoCliente],
   );
 
-  /** Sigla do cliente escolhido, quando a troca vai mudar o código do
-   *  projeto (edição, cliente diferente e sigla diferente da do código). */
-  const siglaNova = React.useMemo(() => {
-    if (!projeto || !clienteId || clienteId === projeto.cliente_id) return null;
-    const sigla = clientesLocais.find((c) => c.id === clienteId)?.codigo_curto;
-    if (!sigla || projeto.codigo.startsWith(`${sigla}-`)) return null;
-    return sigla;
-  }, [projeto, clienteId, clientesLocais]);
-
   function handleClienteChange(novoClienteId: string) {
     setClienteId(novoClienteId);
     if (novoClienteId !== clienteId) setProdutoIds([]);
@@ -390,23 +381,12 @@ export function ProjetoForm({
             onAbrirMarcasResolvido={() => setAbrirMarcasDoCliente(false)}
             onMarcaCriada={absorverMarca}
           />
-          {/* Decisão 122: o cliente trava na primeira aprovação; antes
-              dela, trocar leva o código do projeto e dos orçamentos para
-              a sigla do cliente novo. */}
-          {clienteTravado ? (
+          {/* Decisão 122: o cliente trava na primeira aprovação. Desde a
+              decisão 210 a troca não muda o código do projeto. */}
+          {clienteTravado && (
             <p className="text-xs text-muted-foreground">
               O cliente não muda depois que um orçamento do projeto é aprovado.
             </p>
-          ) : (
-            siglaNova && (
-              <p className="text-xs text-muted-foreground">
-                Ao salvar, o projeto ganha um código novo com a sigla{" "}
-                <span className="font-mono font-semibold text-foreground">
-                  {siglaNova}
-                </span>
-                , e os orçamentos acompanham.
-              </p>
-            )
           )}
         </Field>
 

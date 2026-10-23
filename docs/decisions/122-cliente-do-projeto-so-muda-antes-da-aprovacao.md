@@ -114,3 +114,10 @@ Testado como GP, pela tela, no TES-P003/26:
 financeiro (revisão da decisão 114, item 6). O dado continua em
 `codigo_anterior` e na busca. O "Código anterior" da ficha do job
 (`JOB-NNNN`) ficou.
+
+⚠️ **A troca de cliente não troca mais o código (2026-10-23).** Desde a
+decisão 210 o código do projeto não leva a sigla (`P-NNNN/AA`), então a
+troca de cliente muda só o cliente e a marca. Saíram a recuperação do
+"código que o projeto já teve", o aviso no formulário e o parâmetro do
+código em `trocar_cliente_do_projeto`. O registro de códigos usados segue
+como base do gerador.

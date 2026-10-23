@@ -229,7 +229,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 207 | [Resultado de Job na Central Financeira; Visualizar Jobs e Resultado de Job com Valor do Job, Faturamento sem selo e a Rentabilidade do próprio job (valor do job − impostos − custo planejado)](207-resultado-de-job.md) | 2026-10-23 |
 | 208 | [A linha da Planilha Interna abre em sublinhas, uma por PP (job e financeiro)](208-pps-em-sublinhas-na-planilha-interna.md) | 2026-10-23 |
 | 209 | [A PP no cartão corporativo: quarto tipo de PP, sem fornecedor, com plataforma e link da compra; parcelas da fatura e aprovação só no cartão; envio sem nota](209-pp-no-cartao-corporativo.md) | 2026-10-23 |
-| 210 | *Reservada* — o código do projeto sem a sigla do cliente (outra sessão, ainda não publicada) | 2026-10-23 |
+| 210 | [O código do projeto perde a sigla do cliente: P-NNNN/AA na produção, F-NNNN/AA no financeiro, pela ordem de criação](210-codigo-do-projeto-sem-sigla.md) | 2026-10-23 |
 | 211 | [Importação do histórico da planilha financeira: como ler a planilha e o corte em 01/10/2026](211-importacao-do-historico-da-planilha-financeira.md) | 2026-10-25 |
 | 212 | [O tipo da chave PIX e o tipo de conta no cadastro do freela: PIX e conta sempre à vista, e o tipo gravado vence a dedução da 193](212-tipo-do-pix-e-da-conta-no-cadastro-do-freela.md) | 2026-10-26 |
 

@@ -1,6 +1,6 @@
 /**
- * Testes do código de projeto — decisão 114 (P na produção, F no
- * financeiro).
+ * Testes do código de projeto — decisão 210 ("P-0001/26" na produção,
+ * "F-0001/26" no financeiro, sem a sigla do cliente).
  *
  * Rode com:  node --import tsx --test lib/codigos/projetos.test.ts
  */
@@ -11,80 +11,58 @@ import assert from "node:assert/strict";
 import {
   LETRA_DO_PROJETO,
   LETRA_DO_PROJETO_FINANCEIRO,
+  anoDoCodigoDeProjeto,
   proximoCodigoDeProjeto,
 } from "./projetos";
 
-const base = { codigoCurto: "AMB", ano: "26" };
-
-test("o primeiro projeto da sigla é o P001, e o do financeiro o F001", () => {
+test("o primeiro projeto do ano é o P-0001, e o do financeiro o F-0001", () => {
   assert.equal(
-    proximoCodigoDeProjeto({ ...base, letra: LETRA_DO_PROJETO, qtdDoCliente: 0, codigosDaSigla: [] }),
-    "AMB-P001/26",
+    proximoCodigoDeProjeto({ letra: LETRA_DO_PROJETO, ano: "26", codigosUsados: [] }),
+    "P-0001/26",
   );
+  assert.equal(
+    proximoCodigoDeProjeto({ letra: LETRA_DO_PROJETO_FINANCEIRO, ano: "26", codigosUsados: [] }),
+    "F-0001/26",
+  );
+});
+
+test("o seguinte é o maior já usado + 1, mesmo com buraco no meio", () => {
   assert.equal(
     proximoCodigoDeProjeto({
-      ...base,
-      letra: LETRA_DO_PROJETO_FINANCEIRO,
-      qtdDoCliente: 0,
-      codigosDaSigla: [],
+      letra: "P",
+      ano: "26",
+      // O P-0007 está no registro de usados: projeto apagado não devolve o número.
+      codigosUsados: ["P-0001/26", "P-0004/26", "P-0007/26"],
     }),
-    "AMB-F001/26",
+    "P-0008/26",
   );
 });
 
-test("o seguinte é o maior entre a contagem do cliente + 1 e o maior da sigla + 1", () => {
-  const codigosDaSigla = ["AMB-P004/26", "AMB-P010/26"];
-  assert.equal(
-    proximoCodigoDeProjeto({ ...base, letra: "P", qtdDoCliente: 3, codigosDaSigla }),
-    "AMB-P011/26",
-  );
-  assert.equal(
-    proximoCodigoDeProjeto({ ...base, letra: "P", qtdDoCliente: 12, codigosDaSigla }),
-    "AMB-P013/26",
-  );
-});
-
-test("o código de antes da troca (zero no lugar da letra) conta: o número não se repete", () => {
-  assert.equal(
-    proximoCodigoDeProjeto({ ...base, letra: "P", qtdDoCliente: 0, codigosDaSigla: ["AMB-0006/26"] }),
-    "AMB-P007/26",
-  );
-});
-
-test("a letra do outro cadastro, código de job, outra sigla e outro ano não contam", () => {
-  const codigosDaSigla = [
-    "AMB-F009/26", // projeto do financeiro
+test("a outra letra, outro ano, o formato antigo e código de job não contam", () => {
+  const codigosUsados = [
+    "F-0009/26", // projeto do financeiro
+    "P-0020/25", // outro ano
+    "AMB-P030/26", // projeto antes da 210
     "AMB-1006/26", // job
-    "AMB-P020/25", // outro ano
-    "AMBX-P030/26", // outra sigla
   ];
   assert.equal(
-    proximoCodigoDeProjeto({ ...base, letra: "P", qtdDoCliente: 0, codigosDaSigla }),
-    "AMB-P001/26",
+    proximoCodigoDeProjeto({ letra: "P", ano: "26", codigosUsados }),
+    "P-0001/26",
   );
   assert.equal(
-    proximoCodigoDeProjeto({
-      ...base,
-      letra: "F",
-      qtdDoCliente: 0,
-      codigosDaSigla: ["AMB-P009/26", "AMB-F004/26"],
-    }),
-    "AMB-F005/26",
+    proximoCodigoDeProjeto({ letra: "F", ano: "26", codigosUsados }),
+    "F-0010/26",
   );
 });
 
-test("número que saiu da sigla não volta: o registro de códigos usados conta (decisão 122)", () => {
-  // TES tinha P001..P003; o P003 trocou de cliente (virou TET-P001/26). O
-  // cliente Teste fica com 2 projetos, mas o P003 está no registro de
-  // códigos usados, que o gerador lê junto: o próximo é o P004.
+test("passa de 9999 sem cortar o número", () => {
   assert.equal(
-    proximoCodigoDeProjeto({
-      codigoCurto: "TES",
-      ano: "26",
-      letra: "P",
-      qtdDoCliente: 2,
-      codigosDaSigla: ["TES-P001/26", "TES-P002/26", "TES-P003/26"],
-    }),
-    "TES-P004/26",
+    proximoCodigoDeProjeto({ letra: "P", ano: "26", codigosUsados: ["P-9999/26"] }),
+    "P-10000/26",
   );
+});
+
+test("o ano é o de hoje, pelo texto da data", () => {
+  assert.equal(anoDoCodigoDeProjeto("2027-01-01"), "27");
+  assert.equal(anoDoCodigoDeProjeto("2026-12-31"), "26");
 });

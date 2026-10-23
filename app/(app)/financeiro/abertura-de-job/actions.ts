@@ -43,7 +43,6 @@ import {
 } from "./aprovacao-save";
 import type { SaveAprovacaoMomento, SaveAprovacaoTipo } from "@/lib/types";
 import type { EspelhosDoJob } from "@/lib/data/espelhos-do-job";
-import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 
 export type ActionResult =
   | {
@@ -595,7 +594,6 @@ export async function abrirJobNoFinanceiro(
         profileId: session.profile.id,
         // Conferido em `conferirProjetoEContas`: projeto novo exige cliente.
         clienteId: job.projeto?.cliente_id ?? "",
-        dataInicio: job.data_inicio_prevista,
         nome: parsed.data.projeto_financeiro_novo,
       })
     : null;
@@ -1151,8 +1149,8 @@ function ehNomeRepetido(error: { code?: string; message?: string } | null) {
  *
  * O código é gerado pelo sistema e o cliente vem do projeto de produção
  * do job — nenhum dos dois é escolha de quem preenche. O ano do código
- * sai do início do job, e não de hoje: job que começa em janeiro e é
- * aberto em dezembro pertence ao ano de execução.
+ * é o da criação do projeto (decisão 210, 23/10/2026); até então era o do
+ * início do job.
  *
  * Quem chama desfaz com `desfazerProjetoNovo` se o update do job falhar.
  */
@@ -1162,22 +1160,12 @@ async function criarProjetoDoJob(
     tenantId: string;
     profileId: string;
     clienteId: string;
-    dataInicio: string | null;
     nome: string;
   },
 ): Promise<{ ok: true; id: string; codigo: string } | { ok: false; message: string }> {
-  // Hoje em Brasília: em UTC, um projeto criado em 31/12 depois das 21h
-  // sairia com o ano seguinte no código.
-  const dataBase = args.dataInicio ?? hojeEmSaoPauloIso();
-
   let codigo: string;
   try {
-    codigo = await gerarCodigoProjetoFinanceiro(
-      supabase,
-      args.tenantId,
-      args.clienteId,
-      dataBase,
-    );
+    codigo = await gerarCodigoProjetoFinanceiro(supabase, args.tenantId);
   } catch (e) {
     return {
       ok: false,
@@ -1803,7 +1791,6 @@ export async function editarRegistroDaAbertura(
         tenantId: session.activeTenant.id,
         profileId: session.profile.id,
         clienteId: job.projeto?.cliente_id ?? "",
-        dataInicio: job.data_inicio_prevista ?? null,
         nome: parsed.data.projeto_financeiro_novo,
       })
     : null;
