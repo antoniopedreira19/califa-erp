@@ -228,6 +228,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 206 | [A exceção no fechamento do internacional, só do administrador: int. taxes, impostos BR e custo de transação travados no padrão; câmbio em linha própria, com compra e venda a ±0,20 da cotação (revê a 072 e a 096)](206-excecao-no-fechamento-do-internacional.md) | 2026-10-22 |
 | 207 | [Resultado de Job na Central Financeira; Visualizar Jobs e Resultado de Job com Valor do Job, Faturamento sem selo e a Rentabilidade do próprio job (valor do job − impostos − custo planejado)](207-resultado-de-job.md) | 2026-10-23 |
 | 208 | [A linha da Planilha Interna abre em sublinhas, uma por PP (job e financeiro)](208-pps-em-sublinhas-na-planilha-interna.md) | 2026-10-23 |
+| 209 | [A PP no cartão corporativo: quarto tipo de PP, sem fornecedor, com plataforma e link da compra; parcelas da fatura e aprovação só no cartão; envio sem nota](209-pp-no-cartao-corporativo.md) | 2026-10-23 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -240,4 +241,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 209**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 210**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)

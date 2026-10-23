@@ -25,6 +25,7 @@ import {
   type VersaoOrcamento,
   type VersaoOrcamentoGrupo,
   type VersaoOrcamentoItem,
+  nomeDoCartaoCorporativo,
 } from "@/lib/types";
 import type { CategoriaModeloPlanilha } from "@/lib/types";
 import {
@@ -664,7 +665,7 @@ export default async function OrcamentoDetailPage({
     job?.status === "rejeitado_financeiro" || job?.status === "aguardando_abertura"
       ? supabase
           .from("pedidos_compra")
-          .select("id, codigo, valor, fornecedor:fornecedores(nome)")
+          .select("id, codigo, valor, cartao_corporativo, cartao_plataforma, fornecedor:fornecedores(nome)")
           .eq("job_id", job.id)
           .eq("tenant_id", session.activeTenant.id)
           .neq("status", "cancelada")
@@ -674,6 +675,8 @@ export default async function OrcamentoDetailPage({
               id: string;
               codigo: string;
               valor: number | string | null;
+              cartao_corporativo: boolean;
+              cartao_plataforma: string | null;
               fornecedor: { nome: string } | null;
             }[]
           >()
@@ -725,7 +728,10 @@ export default async function OrcamentoDetailPage({
   const ppsQueTravam: PPQueTravaOEnvio[] = (ppsRes.data ?? []).map((pp) => ({
     id: pp.id,
     codigo: pp.codigo,
-    fornecedorNome: pp.fornecedor?.nome ?? "— fornecedor não informado",
+    // Decisão 209: o cartão corporativo não tem fornecedor.
+    fornecedorNome: pp.cartao_corporativo
+      ? nomeDoCartaoCorporativo(pp.cartao_plataforma)
+      : (pp.fornecedor?.nome ?? "— fornecedor não informado"),
     valor: Number(pp.valor ?? 0),
   }));
 

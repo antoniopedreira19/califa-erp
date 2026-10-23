@@ -199,8 +199,13 @@ interface Dados {
    *  não enviada sem o selo. */
   selo: SeloDaPP | null;
   empresa: Empresa;
-  /** Null quando `pp.verba_producao === true` — não há fornecedor. */
+  /** Null quando `pp.verba_producao === true` — não há fornecedor — e na
+   *  PP do cartão corporativo (decisão 209). */
   fornecedor: Fornecedor | null;
+  /** Decisão 209: a PP que o financeiro paga no cartão de crédito da
+   *  empresa. Sem fornecedor: o documento troca o bloco dele pela
+   *  plataforma e pelo link da compra. Ausente nos scripts antigos. */
+  cartaoCorporativo?: { plataforma: string; link: string } | null;
   /** Nome de quem recebe a verba (o titular, ou o responsável da verba de
    *  produção anterior à decisão 171). Obrigatório quando `pp.verba_producao === true`. */
   responsavelVerbaNome?: string | null;
@@ -310,6 +315,8 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
   // com a linha "Natureza".
   const tipoVerba: TipoVerba | null = pp.verba_producao === true ? (pp.tipo_verba ?? "producao") : null;
   const isVerba = tipoVerba !== null && !fornecedor;
+  // Decisão 209: a compra no cartão corporativo, sem fornecedor.
+  const cartao = !isVerba && !fornecedor ? (dados.cartaoCorporativo ?? null) : null;
   // Decisão 171: as três verbas têm titular. Sem titular, é a verba de
   // produção de antes — e o documento refeito sai como foi gerado.
   const verbaAntiga = tipoVerba !== null && !pp.verba_titular_tipo;
@@ -331,7 +338,9 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
   // é quem recebe a verba; nas demais, o fornecedor externo.
   const nomeContraparte = isVerba
     ? (responsavelVerbaNome ?? "")
-    : (fornecedor?.razao_social ?? fornecedor?.nome ?? "");
+    : cartao
+      ? cartao.plataforma
+      : (fornecedor?.razao_social ?? fornecedor?.nome ?? "");
 
   const enderecoEmpresa = [
     empresa.logradouro,
@@ -447,7 +456,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
             stack: [
               lv("Cliente", cliente.nome_fantasia),
               lv(
-                isVerba ? rotuloQuemRecebe : "Fornecedor",
+                isVerba ? rotuloQuemRecebe : cartao ? "Cartão corporativo" : "Fornecedor",
                 nomeContraparte,
               ),
               lv("Marca", job.produto ?? ""),
@@ -678,7 +687,39 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
   // conta nem PIX no RH — e no freela, que não tem —, o bloco não sai.
   const titularTemPagamento =
     !!pagamentoDoTitular && (!!pagamentoDoTitular.conta || !!pagamentoDoTitular.pix_chave);
-  const bancariosBloco: Content[] = isVerba
+  // Decisão 209: no cartão corporativo, onde comprar e quem paga.
+  const cartaoBloco: Content[] = cartao
+    ? [
+        secaoHeader("PAGAMENTO NO CARTÃO CORPORATIVO"),
+        {
+          table: {
+            widths: ["18%", "*"],
+            body: [
+              [
+                { text: "Plataforma:", bold: true, fontSize: 8 },
+                { text: cartao.plataforma, fontSize: 8 },
+              ],
+              [
+                { text: "Link da compra:", bold: true, fontSize: 8 },
+                { text: cartao.link, fontSize: 8 },
+              ],
+              [
+                { text: "Pagamento:", bold: true, fontSize: 8 },
+                {
+                  text: "No cartão de crédito da empresa, pelo financeiro. As parcelas são as da fatura do cartão.",
+                  fontSize: 8,
+                },
+              ],
+            ],
+          },
+          layout: BORDA,
+          margin: [0, 0, 0, 0],
+        } as Content,
+      ]
+    : [];
+  const bancariosBloco: Content[] = cartao
+    ? cartaoBloco
+    : isVerba
     ? titularTemPagamento && pagamentoDoTitular
       ? [
           secaoHeader(
@@ -933,7 +974,10 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
       widths: ["50%", "50%"],
       body: [
         [
-          {
+          // Decisão 209: no cartão corporativo não há fornecedor para assinar.
+          cartao
+            ? { text: "", fontSize: 8 }
+            : {
             stack: [
               {
                 text: "Concordamos com as condições do presente pedido, inclusive as Notas Importantes",
@@ -1022,16 +1066,22 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     ...bancariosBloco,
     ...parcelasBloco,
     valorBlock,
-    secaoHeader(
-      isVerba
-        ? reembolso
-          ? "DADOS DO TITULAR DO REEMBOLSO"
-          : verbaAntiga
-          ? "DADOS DO RESPONSÁVEL"
-          : "DADOS DO TITULAR DA VERBA"
-        : "DADOS DO FORNECEDOR",
-    ),
-    contraparteTable,
+    // Decisão 209: o cartão corporativo não tem fornecedor — a plataforma
+    // já saiu no bloco do pagamento.
+    ...(cartao
+      ? []
+      : [
+          secaoHeader(
+            isVerba
+              ? reembolso
+                ? "DADOS DO TITULAR DO REEMBOLSO"
+                : verbaAntiga
+                ? "DADOS DO RESPONSÁVEL"
+                : "DADOS DO TITULAR DA VERBA"
+              : "DADOS DO FORNECEDOR",
+          ),
+          contraparteTable,
+        ]),
     { text: "", margin: [0, 6, 0, 0] }, // espaço antes das assinaturas
     assinaturasTable,
   ];

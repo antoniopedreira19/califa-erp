@@ -3,7 +3,7 @@ import {
   contatosDeCobrancaDoJob,
   type ContatoCobranca,
 } from "@/lib/data/contatos-cobranca";
-import { nomeDoJobNoFinanceiro, type PPStatus } from "@/lib/types";
+import { nomeDoCartaoCorporativo, nomeDoJobNoFinanceiro, type PPStatus } from "@/lib/types";
 import { realizadoBrutoDoItem } from "@/lib/calculos/bv-planilha";
 
 /** Uma data da curva de desembolso, como foi gravada na abertura. */
@@ -124,7 +124,7 @@ export async function carregarJobNoFinanceiro(
     // (decisão 113).
     supabase
       .from("pedidos_compra")
-      .select("id, codigo, valor, status, fornecedor:fornecedores(nome)")
+      .select("id, codigo, valor, status, cartao_corporativo, cartao_plataforma, fornecedor:fornecedores(nome)")
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId)
       .neq("status", "gerada")
@@ -259,7 +259,8 @@ export async function carregarJobNoFinanceiro(
     pps: (ppsRes.data ?? []).map((p: any) => ({
       id: p.id,
       codigo: p.codigo,
-      fornecedor_nome: p.fornecedor?.nome ?? null,
+      // Decisão 209: o cartão corporativo não tem fornecedor.
+      fornecedor_nome: p.cartao_corporativo ? nomeDoCartaoCorporativo(p.cartao_plataforma) : (p.fornecedor?.nome ?? null),
       valor: Number(p.valor ?? 0),
       status: p.status as PPStatus,
     })),

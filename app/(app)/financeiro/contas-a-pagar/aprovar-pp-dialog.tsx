@@ -170,6 +170,9 @@ interface PPParaAprovar {
   registroDeOutraPP: Record<string, RegistroDaNota | null>;
   /** Módulo fiscal: a última PP aprovada com retenção do mesmo fornecedor. */
   ultimaRetencao: UltimaRetencao | null;
+  /** Decisão 209: a PP do cartão corporativo — sem fornecedor, só se paga
+   *  no cartão de crédito: a forma vem marcada e não muda. */
+  cartaoCorporativo: boolean;
 }
 
 function formatDate(iso: string | null): string {
@@ -300,9 +303,11 @@ export function AprovarPPDialog({
   React.useEffect(() => {
     if (!open) return;
     setDataPagamento("");
-    setFormaPagamento("");
+    // Decisão 209: o cartão corporativo já abre no cartão de crédito, com o
+    // tipo em Custo Operacional, como a escolha manual faria.
+    setFormaPagamento(pp?.cartaoCorporativo ? "cartao_credito" : "");
     setCartaoId("");
-    setTipoId("");
+    setTipoId(pp?.cartaoCorporativo ? custoOperacionalId : "");
     setSubtipoId("");
     setForaAprovado(false);
     setFaltaForaAprovado(false);
@@ -653,7 +658,7 @@ export function AprovarPPDialog({
                     Radix não aceita item de valor vazio — daí o rótulo DECIDIR. */}
                 <Select
                   value={formaPagamento === "" ? DECIDIR : formaPagamento}
-                  disabled={pending}
+                  disabled={pending || pp.cartaoCorporativo}
                   onValueChange={(x) => {
                     const nova = x === DECIDIR ? "" : x;
                     setFormaPagamento(nova);
@@ -676,6 +681,11 @@ export function AprovarPPDialog({
                     <SelectItem value="cartao_credito">Cartão de Crédito</SelectItem>
                   </SelectContent>
                 </Select>
+                {pp.cartaoCorporativo && (
+                  <p className="text-[11px] text-muted-foreground">
+                    Cartão corporativo: a compra só se paga no cartão de crédito da empresa.
+                  </p>
+                )}
 
                 {noCartao ? (
                   <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">

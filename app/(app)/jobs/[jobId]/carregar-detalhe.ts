@@ -426,7 +426,7 @@ export async function carregarDetalheDoJob(
       .from("pedidos_compra_a_emitir")
       .select(
         "id, job_id, item_realizado_id, empresa_id, verba_producao, fornecedor_id, responsavel_verba_id, " +
-          "tipo_verba, verba_titular_tipo, verba_titular_nome, " +
+          "tipo_verba, verba_titular_tipo, verba_titular_nome, cartao_corporativo, cartao_plataforma, " +
           "servico, valor, dados, ultima_pp_do_item, pp_id, created_at, updated_at, " +
           "criada:profiles!criada_por(nome), refaz:pedidos_compra!refaz_pp_id(id, codigo, motivo_rejeicao), " +
           "anexos:pedidos_compra_a_emitir_anexos(id, arquivo_path, arquivo_nome_original, arquivo_tamanho_bytes, arquivo_mimetype, " +
@@ -694,6 +694,8 @@ export async function carregarDetalheDoJob(
       tipo_verba: r.verba_producao === true ? (r.tipo_verba ?? "producao") : null,
       verba_titular_tipo: r.verba_titular_tipo ?? null,
       verba_titular_nome: r.verba_titular_nome ?? null,
+      cartao_corporativo: r.cartao_corporativo === true,
+      cartao_plataforma: r.cartao_plataforma ?? null,
       servico: r.servico,
       valor: Number(r.valor ?? 0),
       dados: r.dados,

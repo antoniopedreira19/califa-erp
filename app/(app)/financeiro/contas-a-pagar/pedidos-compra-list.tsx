@@ -149,6 +149,13 @@ export interface PPRow {
    */
   plano_conta_tipo_id: string | null;
   plano_conta_subtipo_id: string | null;
+  /** Decisão 209: a PP do cartão corporativo — sem fornecedor
+   *  (`fornecedor_id` vazio), com a plataforma e o link da compra. O
+   *  `fornecedor_nome` já vem "Cartão corporativo — plataforma".
+   *  Obrigatórios pelo mesmo motivo do histórico acima. */
+  cartao_corporativo: boolean;
+  cartao_plataforma: string | null;
+  cartao_link: string | null;
   /** Verdadeiro quando a PP é de verba (produção, alimentação ou transporte). */
   verba_producao: boolean;
   /** Decisão 164: o tipo da verba; null fora da verba. Obrigatório, como os

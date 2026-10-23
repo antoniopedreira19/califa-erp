@@ -8037,3 +8037,18 @@ os arquivos da frente do Antonio.
   produção). No "Editar orçado" as PPs ficam fechadas.
 - **Conferido** no TES-1014/26; ver
   [decisão 208](../decisions/208-pps-em-sublinhas-na-planilha-interna.md).
+
+## ⚠️ Nota de 2026-10-23 (3) — a PP no cartão corporativo (decisão 209)
+
+- A PP do cartão corporativo não tem fornecedor: lista de PPs, títulos e
+  aprovação mostram "Cartão corporativo — {plataforma}"; o dossiê mostra a
+  plataforma e o link da compra (abre em aba nova) e "Cartão corporativo: a
+  PP vai sem nota" no lugar do documento anexo.
+- Aprovar: "Como vai ser pago" abre em **Cartão de Crédito**, travado, com o
+  tipo em Custo Operacional; o financeiro escolhe o cartão e o subtipo. O
+  servidor recusa outra forma, e a CHECK `pp_cartao_corporativo_aprovada`
+  repete a regra (a intenção é gravada antes da RPC de aprovação).
+- Sem retenção nem nota: anexar a NF depois, pelo financeiro, é fase futura.
+- **Conferido** com a PP-00397 (TES-1001/26) aprovada no cartão "ZZ Teste
+  Empresa Teste", com o título em Títulos a Pagar. Ver
+  [decisão 209](../decisions/209-pp-no-cartao-corporativo.md).

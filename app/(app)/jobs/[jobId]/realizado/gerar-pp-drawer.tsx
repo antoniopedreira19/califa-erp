@@ -165,6 +165,12 @@ import {
   quartaMarcada,
 } from "./prazo-e-urgencia-pp";
 import { EnvioAte, useFeriadosNacionais } from "./prazo-de-envio-pp";
+import {
+  CARTAO_VAZIO,
+  CartaoCorporativoField,
+  problemaDoCartao,
+  type CartaoCorporativoEstado,
+} from "./cartao-corporativo-field";
 import { NovoFornecedorDialog } from "@/app/(app)/fornecedores/novo-fornecedor-dialog";
 import type { FornecedorResumo } from "@/app/(app)/fornecedores/actions";
 import {
@@ -280,6 +286,8 @@ function ppGeradaComoAEmitir(pp: PedidoCompraNaLista): PPAEmitir {
     tipo_verba: pp.tipo_verba,
     verba_titular_tipo: pp.verba_titular_tipo,
     verba_titular_nome: pp.verba_titular_nome,
+    cartao_corporativo: pp.cartao_corporativo === true,
+    cartao_plataforma: pp.cartao_plataforma,
     servico: pp.servico,
     valor: Number(pp.valor),
     dados: {
@@ -302,6 +310,10 @@ function ppGeradaComoAEmitir(pp: PedidoCompraNaLista): PPAEmitir {
       verba_titular_id: pp.verba_colaborador_id ?? pp.verba_freela_id ?? null,
       reembolso_tipo: pp.reembolso_tipo,
       deslocamentos: pp.reembolso_deslocamentos,
+      // Decisão 209.
+      cartao_corporativo: pp.cartao_corporativo
+        ? { plataforma: pp.cartao_plataforma ?? "", link: pp.cartao_link ?? "" }
+        : null,
       pagamento_fora_do_cadastro: fora
         ? {
             meio: fora.meio,
@@ -437,8 +449,13 @@ export function GerarPPDrawer({
   /** "Terceiro (fornecedor)": a verba vai para um fornecedor, com o
    *  pagamento do fornecedor (não é o padrão). */
   const [titularTerceiro, setTitularTerceiro] = React.useState(false);
+  /** Decisão 209: a PP do cartão corporativo — sem fornecedor, com a
+   *  plataforma e o link da compra no lugar dele. */
+  const [cartao, setCartao] = React.useState(false);
+  const [cartaoDados, setCartaoDados] = React.useState<CartaoCorporativoEstado>(CARTAO_VAZIO);
+  const [faltaCartao, setFaltaCartao] = React.useState(false);
   /** A PP paga um fornecedor: a PP comum e a verba de um terceiro. */
-  const usaFornecedor = !verbaProducao || titularTerceiro;
+  const usaFornecedor = (!verbaProducao || titularTerceiro) && !cartao;
   /** A lista de colaboradores e freelas, pedida na primeira verba. */
   const [pessoas, setPessoas] = React.useState<PessoaParaVerba[] | null>(null);
   const pedindoPessoas = React.useRef(false);
@@ -607,6 +624,13 @@ export function GerarPPDrawer({
   const [parcelas, setParcelas] = React.useState<ParcelaLocal[]>([]);
   /** "Mais de 6…" escolhido: o número passa a ser digitado (7 a 24). */
   const [maisDeSeis, setMaisDeSeis] = React.useState(false);
+  // Decisão 209: no cartão as parcelas são as da fatura, que o financeiro
+  // define — a PP sai com uma só.
+  React.useEffect(() => {
+    if (!cartao) return;
+    setParcelas([]);
+    setMaisDeSeis(false);
+  }, [cartao]);
   const [parcelasTexto, setParcelasTexto] = React.useState("7");
   /** Prazo gravado da PP em edição: a data anterior à regra das janelas
    *  pode continuar como está (decisão 077, pergunta 6a). */
@@ -731,6 +755,14 @@ export function GerarPPDrawer({
         d.verba_titular_tipo === "colaborador" || d.verba_titular_tipo === "freela" ? (d.verba_titular_id ?? "") : "",
       );
       setFornecedorId(d.fornecedor_id ?? "");
+      // Decisão 209: o cartão volta com a plataforma e o link.
+      setCartao(!!d.cartao_corporativo);
+      setCartaoDados(
+        d.cartao_corporativo
+          ? { plataforma: d.cartao_corporativo.plataforma, link: d.cartao_corporativo.link }
+          : CARTAO_VAZIO,
+      );
+      setFaltaCartao(false);
       setPagamento(
         estadoDoPagamento(
           d.pagamento_fora_do_cadastro ? { ...d.pagamento_fora_do_cadastro, banco_nome: null } : null,
@@ -806,6 +838,9 @@ export function GerarPPDrawer({
     setTitularTerceiro(false);
     setFornecedorId("");
     setPagamento(PAGAMENTO_PELO_CADASTRO);
+    setCartao(false);
+    setCartaoDados(CARTAO_VAZIO);
+    setFaltaCartao(false);
     setPagTitular(PAGAMENTO_DO_TITULAR_VAZIO);
     setFaltaPagTitular(false);
     setEmpresaId(defaultEmpresaId);
@@ -1105,6 +1140,14 @@ export function GerarPPDrawer({
       refUltimaPP.current?.scrollIntoView({ block: "center" });
       return false;
     }
+    if (cartao) {
+      const problema = problemaDoCartao(cartaoDados);
+      if (problema) {
+        setFaltaCartao(true);
+        setErro(problema);
+        return false;
+      }
+    }
     if (usaFornecedor && !fornecedorId) {
       setErro("Escolha um fornecedor.");
       return false;
@@ -1235,9 +1278,13 @@ export function GerarPPDrawer({
           ? {
               ...dadosBase,
               verba_producao: false as const,
-              fornecedor_id: fornecedorId,
+              fornecedor_id: cartao ? null : fornecedorId,
               responsavel_verba_id: null,
-              pagamento_fora_do_cadastro: pagamentoParaEnvio(pagamento),
+              pagamento_fora_do_cadastro: cartao ? null : pagamentoParaEnvio(pagamento),
+              // Decisão 209.
+              cartao_corporativo: cartao
+                ? { plataforma: cartaoDados.plataforma.trim(), link: cartaoDados.link.trim() }
+                : null,
             }
           : titularTerceiro
             ? {
@@ -1406,7 +1453,7 @@ export function GerarPPDrawer({
         })();
 
   /** Falta escolher quem recebe: o fornecedor ou o titular. */
-  const faltaQuemRecebe = verbaProducao && !titularTerceiro ? !titularId : !fornecedorId;
+  const faltaQuemRecebe = cartao ? false : verbaProducao && !titularTerceiro ? !titularId : !fornecedorId;
   // O motivo precisa aparecer mesmo sem submit: um botão disabled não
   // dispara validação, e a escolha do pagamento pode estar fora da tela.
   const pendenciaParaSalvar = faltaQuemRecebe
@@ -1722,7 +1769,28 @@ export function GerarPPDrawer({
               <TipoDaPPField
                 tipo={tipoVerba}
                 reembolsoTipo={reembolsoTipo}
+                cartao={cartao}
+                onCartao={() => {
+                  // Decisão 209: o cartão não tem fornecedor nem titular.
+                  setCartao(true);
+                  setFornecedorId("");
+                  setTitularId("");
+                  setTitularOrigem(null);
+                  setTitularTerceiro(false);
+                  setPagamento(PAGAMENTO_PELO_CADASTRO);
+                  setFaltaPagamento(false);
+                  if (tipoVerba !== null) {
+                    setTipoVerba(null);
+                    setReembolsoTipo(null);
+                    if (!urgente) tirarAQuartaDoPrazo();
+                  }
+                }}
                 onChange={(t, r) => {
+                  if (cartao) {
+                    setCartao(false);
+                    setCartaoDados(CARTAO_VAZIO);
+                    setFaltaCartao(false);
+                  }
                   if (t === tipoVerba && r === reembolsoTipo) return;
                   if (t !== tipoVerba) {
                     setFornecedorId("");
@@ -1888,7 +1956,14 @@ export function GerarPPDrawer({
 
               {/* Fornecedor (modo normal) ou Titular da verba (modo verba,
                   as três desde a decisão 171) */}
-              {verbaProducao && !titularTerceiro ? (
+              {cartao ? (
+                <CartaoCorporativoField
+                  valor={cartaoDados}
+                  onChange={setCartaoDados}
+                  destacarFalta={faltaCartao}
+                  disabled={pending}
+                />
+              ) : verbaProducao && !titularTerceiro ? (
                 <div>
                   <TitularDaVerbaField
                     rotulo={reembolso ? "Titular do reembolso *" : undefined}
@@ -1971,6 +2046,14 @@ export function GerarPPDrawer({
                     </p>
                   )}
                 </div>
+                {cartao ? (
+                  <div>
+                    <span className="text-xs font-medium">Parcelas</span>
+                    <p className="flex h-11 items-center text-[12.5px] text-muted-foreground">
+                      Na fatura do cartão, pelo financeiro.
+                    </p>
+                  </div>
+                ) : (
                 <div>
                   <span className="text-xs font-medium">Parcelas</span>
                   <div
@@ -2054,6 +2137,7 @@ export function GerarPPDrawer({
                     </p>
                   )}
                 </div>
+                )}
               </div>
               <AvisoPrazoForaDaJanela
                 prazo={prazoPagamento}
@@ -2130,6 +2214,8 @@ export function GerarPPDrawer({
                     : "Comprovantes da despesa (obrigatórios para o envio ao financeiro)"
                   : tipoVerba
                   ? `Anexos (não exigidos na ${rotuloDaVerbaMinusculo(tipoVerba)})`
+                  : cartao
+                  ? "Anexos (não exigidos no cartão corporativo)"
                   : "Anexos (obrigatórios para o envio ao financeiro)"}
               </h3>
               {tipoVerba && !reembolso ? (

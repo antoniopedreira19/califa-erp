@@ -2532,6 +2532,8 @@ export function JobItemRealizadoTable({
                   tipo_verba: pp.tipo_verba,
                   verba_titular_nome: pp.verba_titular_nome,
                   fornecedor: pp.fornecedor_id ? { nome: nomeDoFornecedor(fornecedores, pp.fornecedor_id) } : null,
+                  cartao_corporativo: pp.cartao_corporativo,
+                  cartao_plataforma: pp.cartao_plataforma,
                   responsavel: pp.responsavel,
                 }) || nomeDoFornecedor(fornecedores, pp.fornecedor_id ?? ""),
                 valorUnitario: Number(pp.valor_unitario ?? 0),
@@ -2558,6 +2560,7 @@ export function JobItemRealizadoTable({
                 prontaParaEnvioEm: pp.pronta_para_envio_em,
                 prontaParaEnvioPorNome: pp.pronta_para_envio_por_nome,
                 pagaPorBoleto: pp.pagamento_fora_do_cadastro?.meio === "boleto",
+                cartaoCorporativo: pp.cartao_corporativo === true,
               }))}
               aEmitir={aEmitirDoItem}
               statusDoJob={statusDoJob}
@@ -2726,6 +2729,8 @@ export function JobItemRealizadoTable({
                           }
                         : null,
                       responsavel: ppVendo.responsavel,
+                      cartao_corporativo: ppVendo.cartao_corporativo,
+                      cartao_plataforma: ppVendo.cartao_plataforma,
                     }) ||
                     nomeDoFornecedor(fornecedores, ppVendo.fornecedor_id ?? "")
                   : ""

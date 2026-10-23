@@ -6373,3 +6373,19 @@ Protótipo aprovado em 17/10. Regra completa na decisão 192.
 - **Conferido** no TES-1014/26 (8 PPs em 4 linhas), com Save e as duas
   rentabilidades ligadas. Ver
   [decisão 208](../decisions/208-pps-em-sublinhas-na-planilha-interna.md).
+
+## ⚠️ Nota de 2026-10-23 (2) — a PP no cartão corporativo (decisão 209)
+
+- Quarto tipo de PP em "Fornecedor & Empresa": **Cartão corporativo**, ao
+  lado de Normal, Verba e Reembolso. Sem fornecedor: no lugar do campo, a
+  **Plataforma** e o **Link da compra**, lado a lado e obrigatórios
+  (`cartao-corporativo-field.tsx`, régua em
+  `lib/validations/cartao-corporativo.ts`).
+- Parcelas: "Na fatura do cartão, pelo financeiro" (a PP sai com uma). O
+  prazo segue as janelas. Anexos opcionais, sem o tipo "Nota fiscal".
+- A revisão mostra a plataforma e o link; o envio ao financeiro não pede
+  documento; o painel e a aba de PPs dizem "Cartão corporativo —
+  {plataforma}". O PDF troca os dados bancários e o bloco do fornecedor
+  pelo bloco "PAGAMENTO NO CARTÃO CORPORATIVO".
+- **Conferido** no TES-1001/26: PP-00397 gerada, enviada e aprovada. Ver
+  [decisão 209](../decisions/209-pp-no-cartao-corporativo.md).

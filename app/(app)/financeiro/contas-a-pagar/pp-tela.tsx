@@ -544,7 +544,9 @@ export function PPTela(
                   texto={
                     ehPrestacao
                       ? "Sem gasto: a produção devolve a verba inteira."
-                      : "A produção não enviou documento nesta PP."
+                      : pp?.cartao_corporativo
+                        ? "Cartão corporativo: a PP vai sem nota."
+                        : "A produção não enviou documento nesta PP."
                   }
                 />
               ) : urlAnexo ? (
@@ -726,6 +728,7 @@ export function PPTela(
               nfs: nfsDaTela,
               registroDeOutraPP,
               ultimaRetencao: financeiro.fiscal.ultimasRetencoes[pp.fornecedor_id] ?? null,
+              cartaoCorporativo: pp.cartao_corporativo,
             }}
             cadastro={financeiro.fiscal.cadastro}
             cartoes={financeiro.cartoes}

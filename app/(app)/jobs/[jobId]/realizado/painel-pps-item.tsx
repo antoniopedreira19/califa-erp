@@ -81,6 +81,7 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { PPStatusChip } from "../pps/pp-status-chip";
 import {
+  nomeDoCartaoCorporativo,
   podeCancelarPP,
   type AnexoDaPPNaLista,
   type DevolucaoDaVerba,
@@ -187,6 +188,9 @@ export interface PPDoItem {
   /** Decisão 161: paga por boleto — o envio exige o boleto e a nota.
    *  Obrigatório pelo mesmo motivo do trio. */
   pagaPorBoleto: boolean;
+  /** Decisão 209: a PP do cartão corporativo vai sem nota. Obrigatório
+   *  pelo mesmo motivo do trio. */
+  cartaoCorporativo: boolean;
 }
 
 interface Props {
@@ -337,7 +341,9 @@ export function PainelPPsItem({
   const hoje = hojeEmSaoPauloIso();
   // Decisão 164: na alimentação e no transporte, o titular guardado na PP.
   const contraparte = (a: PPAEmitir) =>
-    !a.verba_producao
+    a.cartao_corporativo
+      ? nomeDoCartaoCorporativo(a.cartao_plataforma)
+      : !a.verba_producao
       ? nomeDoFornecedor(a.fornecedor_id)
       : a.verba_titular_nome
         ? a.verba_titular_nome
@@ -645,6 +651,7 @@ export function PainelPPsItem({
                     prontaParaEnvioEm: null,
                     prontaParaEnvioPorNome: null,
                     pagaPorBoleto: a.dados.pagamento_fora_do_cadastro?.meio === "boleto",
+                    cartaoCorporativo: a.cartao_corporativo,
                   }}
                   moeda={moeda}
                   codigo={<SeloPPAEmitir refaz={a.refaz?.codigo ?? null} />}
@@ -709,7 +716,8 @@ export function PainelPPsItem({
                 Aguardando envio · {pendentes.length}
               </span>
               {pendentes.map((pp) => {
-                const semNF = !pp.verbaProducao && !pp.temAnexo;
+                // Decisão 209: o cartão corporativo vai sem nota.
+                const semNF = !pp.verbaProducao && !pp.cartaoCorporativo && !pp.temAnexo;
                 // Perdeu a data-limite de envio (decisão 157): só sai depois
                 // do "Atualizar vencimento".
                 const prazoPerdido = prazoDeEnvioPerdido(pp, hoje, feriados);
@@ -1112,6 +1120,7 @@ export function PainelPPsItem({
                 reembolsoTipo: enviando.reembolsoTipo,
                 anexos: enviando.anexos,
                 pagaPorBoleto: enviando.pagaPorBoleto,
+                cartaoCorporativo: enviando.cartaoCorporativo,
               } satisfies PPParaEnviar
             }
             onOpenChange={(o) => !o && setEnviando(null)}

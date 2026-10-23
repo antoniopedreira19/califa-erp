@@ -22,7 +22,7 @@
 import * as React from "react";
 import { Combobox, COMBOBOX_COMO_SELECT, type ComboboxItem } from "@/components/ui/combobox";
 import { cn } from "@/lib/utils";
-import type { TipoVerba } from "@/lib/types";
+import { ROTULO_CARTAO_CORPORATIVO, type TipoVerba } from "@/lib/types";
 import { REEMBOLSO_TIPOS, type ReembolsoTipo } from "@/lib/calculos/reembolso";
 import type { PessoaParaVerba } from "@/lib/data/pessoas-para-verba";
 
@@ -114,21 +114,28 @@ function Segmento<T extends string>({
 export function TipoDaPPField({
   tipo,
   reembolsoTipo,
+  cartao,
   onChange,
+  onCartao,
   disabled,
 }: {
   tipo: TipoVerba | null;
   reembolsoTipo: ReembolsoTipo | null;
+  /** Decisão 209: a PP é do cartão corporativo (com `tipo` nulo). */
+  cartao: boolean;
+  /** Sair do cartão é escolher outro tipo: `onChange` avisa o pai. */
   onChange: (tipo: TipoVerba | null, reembolsoTipo: ReembolsoTipo | null) => void;
+  onCartao: () => void;
   disabled?: boolean;
 }) {
   const reembolso = tipo === "reembolso";
   const verba = tipo !== null && !reembolso;
-  const atual = reembolso ? "reembolso" : verba ? "verba" : "normal";
-  const opcoes: Array<["normal" | "verba" | "reembolso", string]> = [
+  const atual = cartao ? "cartao" : reembolso ? "reembolso" : verba ? "verba" : "normal";
+  const opcoes: Array<["normal" | "verba" | "reembolso" | "cartao", string]> = [
     ["normal", "Normal"],
     ["verba", "Verba"],
     ["reembolso", "Reembolso"],
+    ["cartao", ROTULO_CARTAO_CORPORATIVO],
   ];
   return (
     <div role="radiogroup" aria-label="Tipo da PP" className="flex flex-col gap-1">
@@ -140,7 +147,8 @@ export function TipoDaPPField({
             disabled={disabled}
             onClick={() => {
               if (v === atual) return;
-              if (v === "normal") onChange(null, null);
+              if (v === "cartao") onCartao();
+              else if (v === "normal") onChange(null, null);
               else if (v === "verba") onChange("producao", null);
               else onChange("reembolso", "despesas");
             }}

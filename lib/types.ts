@@ -2035,6 +2035,13 @@ export interface PedidoCompra {
    *  só vira aprovada com ela (CHECK `pp_fora_do_cadastro_aprovado`). */
   pagamento_fora_do_cadastro_aprovado_por: string | null;
   pagamento_fora_do_cadastro_aprovado_em: string | null;
+  /** Decisão 209: a PP que o financeiro paga no cartão de crédito da
+   *  empresa. Sem fornecedor (`fornecedor_id` nulo): a plataforma e o link
+   *  da compra no lugar dele. CHECKs `pp_cartao_corporativo` e
+   *  `pp_cartao_corporativo_aprovada`. */
+  cartao_corporativo: boolean;
+  cartao_plataforma: string | null;
+  cartao_link: string | null;
   // Verba (subtipo de PP — adiantamento com prestação de contas). Desde a
   // decisão 164 o booleano vale para os três tipos de verba.
   verba_producao: boolean;
@@ -2903,6 +2910,9 @@ export interface DadosDaPPAEmitir {
    *  cadastro (ficha do RH ou PIX do cadastro de freelas). A revisão lê
    *  daqui. Ausente na PP a emitir salva antes. */
   titular_paga_pelo_cadastro?: boolean | null;
+  /** Decisão 209: a plataforma e o link do cartão corporativo. Null fora
+   *  dele; ausente na PP a emitir salva antes. */
+  cartao_corporativo?: { plataforma: string; link: string } | null;
   /** Decisão 127, no formato do envio (`pagamentoParaEnvio`). */
   pagamento_fora_do_cadastro: {
     meio: MeioForaDoCadastro;
@@ -2969,6 +2979,9 @@ export interface PPAEmitir {
   tipo_verba: TipoVerba | null;
   verba_titular_tipo: TitularDaVerbaTipo | null;
   verba_titular_nome: string | null;
+  /** Decisão 209 (as colunas da tabela). */
+  cartao_corporativo: boolean;
+  cartao_plataforma: string | null;
   servico: string;
   valor: number;
   dados: DadosDaPPAEmitir;
@@ -3274,8 +3287,9 @@ export interface PPVerbaPrestacaoAnexo {
  *
  * Quando é verba, o "fornecedor" é quem recebe a verba, e o rótulo vira
  * "Verba de Produção — {Nome do responsável}" (ou "Verba de Alimentação —
- * {titular}", decisão 164). Nas PPs normais, retorna a razão social ou o
- * nome do fornecedor.
+ * {titular}", decisão 164). No cartão corporativo (decisão 209), que não
+ * tem fornecedor, "Cartão corporativo — {plataforma}". Nas PPs normais,
+ * retorna a razão social ou o nome do fornecedor.
  *
  * Centraliza a decisão para garantir que qualquer lista de PP exiba o
  * mesmo texto — sem divergência entre contas-a-pagar, chat e painel.
@@ -3286,13 +3300,27 @@ export function nomeContraparteBRPP(pp: {
   verba_titular_nome?: string | null;
   fornecedor?: { nome?: string | null; razao_social?: string | null } | null;
   responsavel?: { nome?: string | null } | null;
+  /** Decisão 209. Toda consulta de PP que usa este nome precisa trazer as
+   *  duas colunas — sem elas, o cartão sai com o nome vazio. */
+  cartao_corporativo?: boolean | null;
+  cartao_plataforma?: string | null;
 }): string {
   const tipo = tipoDaVerba(pp);
   if (tipo) {
     const nome = nomeDeQuemRecebeAVerba(pp) ?? "sem titular";
     return `${rotuloDaVerba(tipo)} — ${nome}`;
   }
+  if (pp.cartao_corporativo) return nomeDoCartaoCorporativo(pp.cartao_plataforma);
   return pp.fornecedor?.razao_social ?? pp.fornecedor?.nome ?? "";
+}
+
+/** Decisão 209: o nome do quarto tipo de PP, na tela e no PDF. */
+export const ROTULO_CARTAO_CORPORATIVO = "Cartão corporativo";
+
+/** Decisão 209: "Cartão corporativo — Mercado Livre", no lugar do fornecedor. */
+export function nomeDoCartaoCorporativo(plataforma: string | null | undefined): string {
+  const p = (plataforma ?? "").trim();
+  return p ? `${ROTULO_CARTAO_CORPORATIVO} — ${p}` : ROTULO_CARTAO_CORPORATIVO;
 }
 
 export const PP_ANEXO_MIMETYPES_ACEITOS = [

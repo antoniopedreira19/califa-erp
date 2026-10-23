@@ -158,7 +158,7 @@ export async function carregarThreadPPs(
     supabase
       .from("pedidos_compra")
       .select(
-        "id, codigo, status, servico, valor, fornecedor_id, verba_producao, tipo_verba, verba_titular_nome, " +
+        "id, codigo, status, servico, valor, fornecedor_id, verba_producao, tipo_verba, verba_titular_nome, cartao_corporativo, cartao_plataforma, " +
           "prazo_pagamento, enviada_financeiro_em, created_at, updated_at, " +
           "fornecedor:fornecedores(id, nome, razao_social), " +
           "emitido:profiles!emitida_por(nome), " +
@@ -203,6 +203,8 @@ export async function carregarThreadPPs(
       verba_producao: pp.verba_producao,
       tipo_verba: pp.tipo_verba ?? null,
       verba_titular_nome: pp.verba_titular_nome ?? null,
+      cartao_corporativo: pp.cartao_corporativo === true,
+      cartao_plataforma: pp.cartao_plataforma ?? null,
       prazo_pagamento: pp.prazo_pagamento,
       enviada_financeiro_em: pp.enviada_financeiro_em,
       created_at: pp.created_at,
