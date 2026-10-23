@@ -43,7 +43,10 @@ for f in $FILES; do
   # Normaliza multi-linha em espaco pra regex pegar policies compridas.
   CONTENT=$(tr '\n' ' ' < "$f" | tr -s ' ')
 
-  echo "$CONTENT" | grep -oiE 'create policy [^;]+;' | while read -r POLICY; do
+  # `|| true` evita pipefail quando a migration nao tem CREATE POLICY
+  # (ex: migrations so de funcoes/grants/indices). Sem isso, grep retorna
+  # 1 por "no match" e `set -o pipefail` derruba o hook inteiro.
+  echo "$CONTENT" | { grep -oiE 'create policy [^;]+;' || true; } | while read -r POLICY; do
     echo "$POLICY" | grep -qiE 'for (select|all)' || continue
     echo "$POLICY" | grep -qiE "$SENSIVEIS_REGEX" || continue
     echo "$POLICY" | grep -qi 'is_tenant_member' || continue
