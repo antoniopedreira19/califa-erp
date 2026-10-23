@@ -2336,9 +2336,24 @@ sempre (visto ao buscar "salva" com Salvador já cadastrado). O que mudou:
 - Erro na busca vira uma linha "Não foi possível procurar outras cidades"
   abaixo da lista local, em vez de travar.
 
-Continua pendente: enquanto o IBGE não atender a Vercel, cidade **nova**
-não aparece como sugestão (só pelo `/cadastros/cidades`). Saída possível:
-guardar a lista dos 5.570 municípios no próprio repositório.
+~~Continua pendente: enquanto o IBGE não atender a Vercel, cidade **nova**
+não aparece como sugestão.~~ ✅ Resolvido no mesmo dia, abaixo.
+
+⚠️ **A lista do IBGE mora no repositório (2026-10-22).** A busca não chama
+mais a API: lê `lib/data/municipios-ibge.json` (5.571 municípios, 184 KB,
+`[codigo, nome, uf]` por linha), carregado por `import()` dinâmico só na
+primeira busca de cada instância (~40 ms; as seguintes, < 1 ms). As páginas
+que importam `lib/data/cidades.ts` não carregam o arquivo. Atualizar quando
+o IBGE criar município: `node scripts/atualizar-municipios-ibge.mjs` e
+commitar o diff. Efeitos colaterais:
+
+- **Boa Esperança do Norte/MT** passou a aparecer: a API não traz a
+  microrregião dele e a leitura antiga o descartava; o script pega a UF
+  pela região imediata.
+- `criarCidadeDoIBGE` grava o nome e a UF **oficiais** do código, conferidos
+  na lista, em vez dos que o navegador mandava; código fora da lista é
+  recusado.
+- Saíram o limite de 4 s e a pausa de 5 min do IBGE: não há mais rede.
 
 **Verificação:** logado, em `localhost:3271`, no formulário de novo
 orçamento do TES-P001/26 — "sao se", "florian", "natal" mostram a cadastrada
