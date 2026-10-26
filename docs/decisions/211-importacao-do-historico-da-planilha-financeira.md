@@ -4,10 +4,10 @@
 **Status:** aceita. E1 (extração), E2 (padronização, com o de-para aprovado)
 e E3 (validação, com as DREs e as abas Gerencial) implementadas em
 25/10/2026. A Copa sem lançamento e o rateio do TD foram decididos no mesmo
-dia. A1 (as tabelas de histórico, com a do rateio, e a tela de carga)
-implementada e conferida em 26/10/2026, com as tabelas ainda vazias.
-Próxima entrega: A2 (a primeira carga, com as contas Fundo Fixo California e
-BB Americas criadas antes).
+dia. A1 (as tabelas de histórico, com a do rateio, e a tela de carga) e A2
+(a primeira carga, de 01/01/2023 a 30/06/2026, com as contas Fundo Fixo
+California e BB Americas criadas antes) feitas e conferidas em 26/10/2026.
+Próxima entrega: A3 (o histórico na Conciliação).
 **Quem decidiu:** Tiago, no plano "Importação do histórico financeiro"
 (página privada de 25/10/2026), com as respostas D1, D2 e D3 dadas no mesmo
 dia: "Aprovo D1, D2 e D3 como você recomendou".
@@ -296,10 +296,43 @@ da planilha, só contagens.
   arredondamento da planilha. A A3 parte do saldo de abertura e soma os
   movimentos.
 
+## Conferido em 26/10/2026 (A2)
+
+- **As contas novas**, criadas pela tela de cadastro, como as outras: saldo
+  inicial 0 em 01/10/2026, porque o saldo de 30/09 entra na virada (B3), e
+  empresa contábil California.
+  - **Fundo Fixo California:** tipo caixa, com "Fundo fixo" no lugar do banco.
+  - **BB Americas:** conta corrente do Banco do Brasil Americas. A planilha a
+    soma na DRE da California e na da CMH, e as duas são do CNPJ da
+    California.
+- **A carga:** a 1ª carga entrou pela tela em 44 segundos, pela sessão do
+  Tiago: 56.713 movimentos (soma −3.445.279,56) em 11 contas, 3.222 notas
+  (soma 306.317.111,97), 3.586 jobs, 40 linhas de rateio e 331 saldos. As
+  somas e as contagens são as do pacote, conferidas pelo banco ao concluir.
+- **Mês a mês, igual ao pacote:** o movimento de cada conta em cada mês (312
+  grupos) e o faturamento de cada aba em cada mês (122 grupos) saem do banco
+  iguais aos do pacote, conferidos por soma de verificação.
+- **Ligações com o cadastro:** toda ligação que o pacote propõe virou id —
+  nos movimentos, 55.610 com empresa e plano de contas e 45.494 com
+  regional; nos jobs, 2.961 clientes, 2.102 marcas, 3.567 serviços, 3.257
+  regionais e os 80 jobs que existem no sistema.
+- **Frações de centavo:** 1.358 linhas da planilha guardam frações de
+  centavo (como 9.333,333333, um terço de 28 mil). O histórico guarda
+  centavos, como o banco. O saldo de 30/06/2026 sai igual ao da planilha em 8
+  das 11 contas. Na California Santander fica R$ 2,33 abaixo, e esse é
+  exatamente o efeito das frações. Na Santander GoCrazy e na Paypal a
+  diferença é de alguns centavos. É também por isso que o movimento mensal
+  difere da E3 em centavos (no máximo R$ 0,11) em 59 dos 325 meses.
+- **Rateio:** o custo fixo geral TD do 1T 2026 refeito do banco, com a tabela
+  de rateio, dá −389.081,82; a planilha mostra −389.199,82. A diferença é
+  R$ 118,02 pagos em julho com competência 1T 2026, que entram com a carga do
+  3T, e 2 centavos de arredondamento. O relatório por competência de 2026 só
+  fica completo com o 3T carregado.
+
 ## O que fica para depois
 
-- A2: a primeira carga, com a criação das contas Fundo Fixo California e BB
-  Americas antes.
+- A3: o histórico de cada conta na Conciliação, com saldo contínuo até o
+  saldo inicial do sistema.
 - A4: como o relatório por regional trata o que a planilha não rateia pelo
   percentual do ano (imobilizado, 4T 2022 e 2023, PL, crédito em linha de
   custo).

@@ -8074,3 +8074,22 @@ os arquivos da frente do Antonio.
   entrou, foi refeita e desfeita, e uma carga recusada no meio foi
   descartada. As tabelas estão vazias; a primeira carga é a A2. Ver
   [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
+## ⚠️ Nota de 2026-10-26 (2) — a primeira carga do histórico da planilha (decisão 211, A2)
+
+- Duas contas novas em Cadastros › Contas bancárias, com saldo inicial 0 em
+  01/10/2026 e empresa contábil California; o saldo de 30/09 entra na
+  virada:
+  - **Fundo Fixo California:** tipo caixa.
+  - **BB Americas:** conta corrente do Banco do Brasil Americas, em dólar na
+    vida real. O extrato OFX dela não vai bater com o histórico, que está em
+    reais.
+- A 1ª carga (01/01/2023 a 30/06/2026) está ativa: 56.713 movimentos em 11
+  contas, 3.222 notas, 3.586 jobs, o rateio e os saldos. Ela ainda não aparece
+  em tela nenhuma além da lista de cargas: a Conciliação é a A3, os relatórios
+  são a A4.
+- **Conferido:** contagens, somas e o movimento de cada conta mês a mês são
+  os do pacote. O saldo de 30/06 bate com o da planilha em 8 das 11 contas;
+  nas outras três, a diferença são as frações de centavo que a planilha guarda
+  (R$ 2,33 na California Santander). Ver
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
