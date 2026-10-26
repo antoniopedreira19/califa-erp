@@ -8162,3 +8162,22 @@ os arquivos da frente do Antonio.
   dois testes novos; `comSaldoPrevisto` recebe o `hoje`. Contas a Receber,
   que usa `ordenarLinhas`, não muda. Ver a "Revisão de 26/10/2026" da
   [decisão 195](../decisions/195-planilhas-de-titulos-e-extrato-nas-mesmas-colunas.md).
+
+## ⚠️ Nota de 2026-10-26 (7) — o resultado por regional do histórico em Relatórios (decisão 211, A4)
+
+- **Onde:** Relatórios › "Resultado por regional do histórico"
+  (`/relatorios/regional-historico`), cartão só para admin e financeiro.
+  Empresa (California ou CCH), ano e período (ano ou trimestre) pela URL; as
+  linhas das abas Gerencial × as regionais, "Sem regional" e o Total.
+- **Regra (Tiago, 26/10/2026):** o lançamento com regional entra na regional
+  dele, o TD se rateia pelo percentual do ano da planilha e o resto fica sem
+  regional; a coluna Total é a DRE do histórico. As exceções da planilha (o TD
+  ÷4) ficam documentadas e não se reproduzem. O rateio de cada ano aparece na
+  tela, com a célula de origem.
+- **Código:** `lib/historico-financeiro/regional.ts` (com testes) e a função
+  `historico_regional` (migrations `20261026100005` a `20261026100007`). As
+  peças de filtro dos dois relatórios do histórico estão em
+  `app/(app)/relatorios/_historico/filtros.tsx`.
+- **Conferência:** `scripts/historico-financeiro/conferir-regional.ts`. A
+  California de 2023 a 2025 bate com as abas Gerencial, menos as exceções. Ver
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).

@@ -19,7 +19,7 @@ tmp/historico-planilha/
     bruto/                 E1: um CSV por aba + manifesto.json
     padronizado/           E2: movimentos, previsões, notas, jobs, pendências, propostas/
     validacao/             E3: relatorios.csv, saldos.csv, faturamento.csv, resumo.json;
-                           A4: dre.csv (e dre-padronizado*.csv)
+                           A4: dre.csv e regional.csv (e as variantes do padronizado)
     revisao-e2.xlsx        pendências e de-para para revisar
     cargas/                A1: os pacotes de carga (.json) para a tela
 ```
@@ -37,6 +37,7 @@ npx tsx scripts/historico-financeiro/validar.ts "$V"
 npx tsx scripts/historico-financeiro/revisao.ts "$V"
 npx tsx scripts/historico-financeiro/empacotar.ts "$V" --carga "1ª carga"
 npx tsx scripts/historico-financeiro/conferir-dre.ts "$V"
+npx tsx scripts/historico-financeiro/conferir-regional.ts "$V" --padronizado --com-previsoes
 ```
 
 Uma carga pequena, para testar a tela, sai com `--nome`, o período e as
@@ -102,9 +103,16 @@ marcas, plano de contas, serviços, regionais, contas e os jobs abertos. O
   `--de` e `--ate`), e com `--com-previsoes` soma também as previsões, como a
   planilha. Quando uma linha difere, o terminal mostra de quais contas veio o
   valor.
+- **Resultado por regional, `conferir-regional.ts`:** monta o resultado por
+  regional como a tela monta (`lib/historico-financeiro/regional.ts`) e
+  compara, trimestre a trimestre e regional a regional, com as células das
+  abas Gerencial em que a planilha segue a mesma fonte (o custo fixo e o
+  pessoal da regional e do TD, o imobilizado e o PL); marca à parte os
+  trimestres em que a planilha divide o TD por 4. As opções de fonte das duas
+  conferências estão em `movimentos-para-conferir.ts`.
 
 ## Testes
 
 ```bash
-node --import tsx --test lib/historico-financeiro/extracao.test.ts lib/historico-financeiro/regras.test.ts lib/historico-financeiro/formulas.test.ts lib/historico-financeiro/pacote.test.ts lib/historico-financeiro/dre.test.ts
+node --import tsx --test lib/historico-financeiro/extracao.test.ts lib/historico-financeiro/regras.test.ts lib/historico-financeiro/formulas.test.ts lib/historico-financeiro/pacote.test.ts lib/historico-financeiro/dre.test.ts lib/historico-financeiro/regional.test.ts
 ```

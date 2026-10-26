@@ -1,4 +1,3 @@
-import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ScrollText } from "lucide-react";
@@ -9,7 +8,7 @@ import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { formatDiaBr } from "@/lib/formatar-data-hora";
 import { montarDre, type EmpresaDaDre } from "@/lib/historico-financeiro/dre";
-import { cn } from "@/lib/utils";
+import { Aviso, Filtro, Filtros, Opcao, anosEntre, fimDoTrimestre } from "../_historico/filtros";
 import { carregarSomasDaDre } from "./dados";
 import { TabelaDre } from "./tabela-dre";
 
@@ -70,7 +69,7 @@ export default async function DreDoHistoricoPage({ searchParams }: Props) {
         </Aviso>
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-x-8 gap-y-3 rounded-2xl border border-border bg-card p-4 shadow-soft">
+          <Filtros>
             <Filtro rotulo="Empresa">
               {EMPRESAS.map((e) => (
                 <Opcao key={e.slug} href={href(e.slug, noHistorico ? ano : anos[anos.length - 1])} ativa={e.slug === slug}>
@@ -85,7 +84,7 @@ export default async function DreDoHistoricoPage({ searchParams }: Props) {
                 </Opcao>
               ))}
             </Filtro>
-          </div>
+          </Filtros>
 
           {noHistorico ? (
             <ConteudoDoAno
@@ -116,8 +115,7 @@ function ConteudoDoAno({
   cobertura: { de: string; ate: string };
   linhas: ReturnType<typeof montarDre>;
 }) {
-  const fimDoTrimestre = (t: number) => `${ano}-${["03-31", "06-30", "09-30", "12-31"][t]}`;
-  const depoisDoHistorico = [0, 1, 2, 3].map((t) => fimDoTrimestre(t) > cobertura.ate) as [boolean, boolean, boolean, boolean];
+  const depoisDoHistorico = [1, 2, 3, 4].map((t) => fimDoTrimestre(ano, t) > cobertura.ate) as [boolean, boolean, boolean, boolean];
   const fim = formatDiaBr(cobertura.ate);
   return (
     <section className="space-y-3" aria-label={`DRE ${empresa} ${ano}`}>
@@ -138,44 +136,4 @@ function ConteudoDoAno({
       </div>
     </section>
   );
-}
-
-function Filtro({ rotulo, children }: { rotulo: string; children: ReactNode }) {
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <span className="text-[11px] uppercase text-muted-foreground">{rotulo}</span>
-      {children}
-    </div>
-  );
-}
-
-function Opcao({ href, ativa, children }: { href: string; ativa: boolean; children: ReactNode }) {
-  return (
-    <Link
-      href={href}
-      prefetch={false}
-      aria-current={ativa ? "page" : undefined}
-      className={cn(
-        "rounded-full border px-3 py-1.5 text-sm transition-colors",
-        ativa
-          ? "border-california-red bg-california-red text-white"
-          : "border-border text-foreground hover:border-california-red/40 hover:text-california-red",
-      )}
-    >
-      {children}
-    </Link>
-  );
-}
-
-function Aviso({ children }: { children: ReactNode }) {
-  return (
-    <div className="rounded-2xl border border-border bg-card p-10 text-center text-sm text-muted-foreground">{children}</div>
-  );
-}
-
-/** Os anos de `de` a `ate`. */
-function anosEntre(de: string, ate: string): number[] {
-  const anos: number[] = [];
-  for (let a = Number(de.slice(0, 4)); a <= Number(ate.slice(0, 4)); a++) anos.push(a);
-  return anos;
 }

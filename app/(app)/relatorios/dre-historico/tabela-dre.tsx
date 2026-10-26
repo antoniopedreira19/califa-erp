@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import { Valor } from "../_historico/filtros";
 import type { LinhaDaDre } from "@/lib/historico-financeiro/dre";
 
 /**
@@ -62,9 +63,4 @@ export function TabelaDre({
       </table>
     </div>
   );
-}
-
-function Valor({ valor }: { valor: number }) {
-  if (valor === 0) return <span className="text-muted-foreground">—</span>;
-  return <>{valor.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</>;
 }

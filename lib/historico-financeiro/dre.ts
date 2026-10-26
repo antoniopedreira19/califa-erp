@@ -43,7 +43,8 @@ export type AgregadoPorGrupo = { sigla: string; grupo: string; trimestre: number
 /** A soma de crédito e débito por chave da coluna Jobs ("CMH", "HIT FIT"), trimestre e conta (a aba), num ano. */
 export type AgregadoPorJobs = { prefixo: string; trimestre: number; aba: string; credito: number; debito: number };
 
-type Regra = "credito-debito" | "debito-credito" | "credito" | "-debito" | "-(debito-credito)";
+/** Como a linha lê o crédito e o débito da planilha. */
+export type Regra = "credito-debito" | "debito-credito" | "credito" | "-debito" | "-(debito-credito)";
 
 type ItemDoModelo =
   | {
@@ -177,7 +178,7 @@ export type LinhaDaDre = {
 const centavos = (n: number) => Math.round(n * 100);
 const deCentavos = (c: number) => c / 100;
 
-function aplicar(regra: Regra, credito: number, debito: number): number {
+export function aplicar(regra: Regra, credito: number, debito: number): number {
   if (regra === "credito-debito") return credito - debito;
   if (regra === "debito-credito") return debito - credito;
   if (regra === "credito") return credito;
@@ -185,7 +186,7 @@ function aplicar(regra: Regra, credito: number, debito: number): number {
   return -(debito - credito);
 }
 
-const TEXTO_DA_REGRA: Record<Regra, string> = {
+export const TEXTO_DA_REGRA: Record<Regra, string> = {
   "credito-debito": "crédito − débito",
   "debito-credito": "débito − crédito",
   credito: "o crédito",

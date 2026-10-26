@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, ArrowRight, TrendingUp, FileText, ScrollText, type LucideIcon } from "lucide-react";
+import { BarChart3, ArrowRight, TrendingUp, FileText, ScrollText, MapPinned, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -33,12 +33,20 @@ export default async function RelatoriosPage() {
           description="Valor contratado × valor faturado por job, com saldo e status (Não Faturado, Parcial, Faturado)."
         />
         {veHistorico && (
-          <RelatorioCard
-            href="/relatorios/dre-historico"
-            icon={ScrollText}
-            title="DRE do histórico"
-            description="DRE por competência de cada empresa, trimestre a trimestre, refeita dos lançamentos da planilha financeira."
-          />
+          <>
+            <RelatorioCard
+              href="/relatorios/dre-historico"
+              icon={ScrollText}
+              title="DRE do histórico"
+              description="DRE por competência de cada empresa, trimestre a trimestre, refeita dos lançamentos da planilha financeira."
+            />
+            <RelatorioCard
+              href="/relatorios/regional-historico"
+              icon={MapPinned}
+              title="Resultado por regional do histórico"
+              description="As linhas das abas Gerencial por regional, com o TD rateado pelo percentual de cada ano."
+            />
+          </>
         )}
       </div>
     </div>

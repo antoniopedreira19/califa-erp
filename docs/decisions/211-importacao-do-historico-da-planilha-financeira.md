@@ -7,9 +7,10 @@ e E3 (validação, com as DREs e as abas Gerencial) implementadas em
 dia. A1 (as tabelas de histórico, com a do rateio, e a tela de carga) e A2
 (a primeira carga, de 01/01/2023 a 30/06/2026, com as contas Fundo Fixo
 California e BB Americas criadas antes) feitas e conferidas em 26/10/2026,
-A3 (o histórico de cada conta no Extrato da Conciliação) e a primeira entrega
-da A4 (a DRE do histórico em Relatórios) no mesmo dia. Próxima entrega: o
-relatório por regional, com o rateio (A4).
+A3 (o histórico de cada conta no Extrato da Conciliação) e duas entregas da
+A4 (a DRE do histórico e o resultado por regional, em Relatórios) no mesmo
+dia. Próxima entrega: a rentabilidade e o faturamento dos jobs do histórico
+(A4).
 **Quem decidiu:** Tiago, no plano "Importação do histórico financeiro"
 (página privada de 25/10/2026), com as respostas D1, D2 e D3 dadas no mesmo
 dia: "Aprovo D1, D2 e D3 como você recomendou".
@@ -118,7 +119,27 @@ abaixo vieram das fórmulas dela, conferidas contra a aba DRE.
 
 As fórmulas das abas Gerencial mostram critérios que a tabela acima não
 descreve. A A1 cria a tabela com trimestre e grupo opcionais, para caber cada
-um deles. Como cada um entra no relatório se decide na A4:
+um deles.
+
+**Decidido (Tiago, 26/10/2026):** o relatório por regional rateia todo o TD
+pelo percentual do ano, o da planilha (tabela acima), numa regra só. As
+exceções abaixo ficam documentadas e não se reproduzem. Os percentuais de
+cada ano ficam à vista, e os dos anos fechados continuam como a planilha os
+registra; revisá-los fica para o futuro, sem perder o registro da planilha.
+
+Medidas célula a célula (as 873 células com TD das abas Gerencial de 2023 a
+2026, cada multiplicador comparado com a tabela), de 2023 a 2025 as exceções
+só trocam custo entre regionais:
+
+| Ano | O que a planilha faz | Na planilha, contra o percentual do ano |
+|---|---|---|
+| 2023 | 4T: custo fixo, pessoal e PL do TD ÷4 | NO paga R$ 59.281,02 a mais; SP, o mesmo a menos |
+| 2024 | nada fora da tabela | — |
+| 2025 | 3T e 4T: imobilizado do TD ÷4; 4T: PL ÷4 | NO paga R$ 22.593,76 a mais; SP, o mesmo a menos |
+| 2025, CMH | 4T: o PL do TD inteiro na Doca | a Doca paga R$ 26.250,00 a mais, e as regionais somam R$ 26.250,00 além do total |
+
+A soma só do débito não muda nada de 2023 a 2025: não há crédito do TD nas
+linhas de custo. As exceções, como a planilha as escreveu:
 
 - **Imobilizado:** o TD se divide em partes iguais entre as regionais (÷4 na
   California; ÷4 ou ÷2 na CMH) na maior parte dos trimestres de 2023 a 2026.
@@ -289,6 +310,45 @@ não existem: a tela não deixa carregar enquanto elas não forem criadas (A2).
   no histórico, apareceriam duas vezes quando histórico e sistema se
   juntarem. Em 2025, por isso, a receita da California fica R$ 2,12 milhões
   abaixo da planilha e o lucro líquido, R$ 1,81 milhão.
+
+### O resultado por regional em Relatórios (A4, 26/10/2026)
+
+- **Onde:** Relatórios › "Resultado por regional do histórico"
+  (`/relatorios/regional-historico`), cartão só para admin e financeiro.
+  Escolhe-se a empresa (Agência California ou CCH, as que têm rateio), o ano e
+  o período (o ano inteiro ou um trimestre).
+- **As linhas são as das abas Gerencial:** faturamento, imposto e custo
+  operacional (resultado operacional); gastos fixos da regional (custo fixo e
+  pessoal); gastos fixos gerais (o custo fixo e o pessoal do TD rateados, e o
+  marketing, a administrativa, a comercial e a trabalhista); juros e
+  empréstimos; a perda da FitDance (lucro líquido); imobilizado, participação
+  nos lucros e receita financeira (lucro após investimento). Na CCH, também o
+  investimento da Doca e a Makkna.
+- **Uma regra só (Tiago, 26/10/2026):** o lançamento com regional entra na
+  regional dele; o TD se rateia pelo percentual do ano da planilha (no 4T
+  2024, o imobilizado e o PL pela linha 147, que a tabela registra); o que não
+  tem regional fica em "Sem regional". A coluna Total é a DRE do histórico: o
+  lucro após investimento é o lucro líquido dela (mais a perda da FitDance, na
+  California). A regional que o cadastro do sistema não tem entra pelo código
+  da planilha ("URB", a Urbia da CMH); o código de outra empresa (o "NE" num
+  lançamento da CMH) fica sem regional.
+- **Onde as abas Gerencial fogem da regra, o relatório não as segue:** o
+  resultado dos jobs por regional só aparece no bloco do 4T e sai das abas Res.
+  Jobs, cujos totais o histórico não guarda (item 9): aqui o faturamento, o
+  imposto e o custo vêm da regional de cada lançamento. A despesa
+  administrativa e a comercial vêm ora pela regional, ora pelo total da DRE
+  vezes o percentual; a perda e os juros, pelo total da DRE vezes o
+  percentual. Aqui, todos pela regional de cada lançamento e o TD pelo
+  percentual: a perda de 2024 não tem regional e fica em "Sem regional".
+- **O imposto quase não tem regional:** em 2025, R$ 4,46 milhões do imposto da
+  California ficam em "Sem regional".
+- **O rateio de cada ano fica à vista:** o do ano em cima da tabela, com a
+  célula da planilha de onde veio, e o de todos os anos ao abrir. Revisar fica
+  para o futuro, sem perder o registro da planilha.
+- A leitura é a função `historico_regional` (migration
+  `20261026100005_historico_regional.sql`; a 100006 e a 100007 a reaplicaram
+  com a coluna Jobs lida uma vez e com o código da planilha), que confere admin
+  e financeiro uma vez e leva 0,13 s.
 
 ## O pipeline (E1, E2 e E3)
 
@@ -478,10 +538,38 @@ planilha (saída em `validacao/dre*.csv`).
   tabela rola dentro da própria caixa. Typecheck, lint, build e os 10 testes
   de `dre.test.ts` limpos.
 
+## Conferido em 26/10/2026 (A4, resultado por regional)
+
+`scripts/historico-financeiro/conferir-regional.ts` compara, trimestre a
+trimestre e regional a regional, as linhas em que a planilha e o histórico
+seguem a mesma fonte (o custo fixo e o pessoal da regional e do TD, o
+imobilizado e o PL) com as células das abas Gerencial.
+
+- **California, 2023 a 2025:** com tudo o que a planilha tem, todas as
+  células batem ou diferem em centavos (as frações de centavo), menos as das
+  exceções já medidas (o TD ÷4).
+- **CMH:** 2025 bate, menos duas células com R$ 73,75 cada: a planilha usa a
+  coluna "Doc." da aba BB Go Crazy como regional da CMH, e três tarifas TD do
+  1T (R$ 147,50) ficaram no histórico como documento, sem regional. Em 2023,
+  no 1T e no 2T, a planilha não separa a regional e rateia todo o custo fixo e
+  o pessoal; em 2024, o bloco do 1T lê o 2T, e o do 2T lê 2023.
+- **2026:** a coluna BH da CMH soma por uma coluna que só existe em 2026 e que
+  o histórico não guarda como regional (R$ 96.140,46 de pessoal por
+  trimestre, em "Sem regional"); o imobilizado da CMH no 2T sai zerado na
+  planilha; o resto é o que falta carregar e os espaços sobrando que a E3 já
+  apontava.
+- **A tela confere com o cálculo:** a California de 2025 (o ano) igual ao
+  script até o centavo, com cada linha somando o total da DRE; a CCH de 2023
+  com a Urbia; o 4T 2024 com as linhas próprias da linha 147. A função
+  devolve nulo para um produtor. No celular, a tabela rola dentro da caixa.
+  Typecheck, lint, build e os 63 testes da pasta limpos.
+
 ## O que fica para depois
-- A4: como o relatório por regional trata o que a planilha não rateia pelo
-  percentual do ano (imobilizado, 4T 2022 e 2023, PL, crédito em linha de
-  custo).
+- A4: a rentabilidade e o faturamento dos jobs do histórico.
+- Revisar o rateio de um ano, mantendo o registro da planilha dos anos
+  fechados. O RH tem a própria tabela de rateio
+  (`empresas_rateios_regionais`, do Antonio), com percentuais diferentes dos
+  da planilha em 2023, 2024 e 2026: um lugar só se decide com ele.
 - A5: o pacote do 3T não fecha na versão de 25/10/2026 — duas linhas da Conta
   California BB têm a coluna "Ano Comp." com 26 caracteres, e o contrato do
   pacote aceita 20.
