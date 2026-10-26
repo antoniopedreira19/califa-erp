@@ -32,7 +32,10 @@ export const rateioSchema = z
 
 /**
  * Refinement compartilhado: cartão de crédito exige cartao_credito_id e
- * data_prevista_pagamento futura; outras formas proíbem cartao_credito_id.
+ * data_prevista_pagamento futura; outras formas exigem a
+ * data_prevista_pagamento (revisão da 082, 26/10/2026) e proíbem
+ * cartao_credito_id. No cartão a data pode vir vazia: o gatilho
+ * `avulsa_entra_na_fatura` a preenche com o vencimento da fatura (093).
  * Extraído como função para reusar em criar e editar sem duplicar o body.
  */
 function aplicarRefinementFormaPagamento<
@@ -60,12 +63,23 @@ function aplicarRefinementFormaPagamento<
         });
       }
     }
-  } else if (data.cartao_credito_id) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Cartão só pode ser informado quando a forma é cartão de crédito.",
-      path: ["cartao_credito_id"],
-    });
+  } else {
+    // Sem data, o título não tem dia: ia para o fim da lista e caía em
+    // "hoje" na Conciliação › Títulos (revisão da 195, 26/10/2026).
+    if (!data.data_prevista_pagamento) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Informe a data prevista de pagamento.",
+        path: ["data_prevista_pagamento"],
+      });
+    }
+    if (data.cartao_credito_id) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Cartão só pode ser informado quando a forma é cartão de crédito.",
+        path: ["cartao_credito_id"],
+      });
+    }
   }
 }
 

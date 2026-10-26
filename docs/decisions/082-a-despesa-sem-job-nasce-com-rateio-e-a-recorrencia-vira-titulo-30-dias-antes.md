@@ -1,7 +1,9 @@
 # 082 — A despesa sem job nasce com o rateio, e a recorrência vira título 30 dias antes
 
 **Data:** 2026-09-15
-**Status:** aceita
+**Status:** aceita. ⚠️ **Revista em 26/10/2026:** o pagamento avulso
+também nasce com a data prevista de pagamento — "Revisão de 26/10/2026",
+no fim deste documento.
 **Contexto:** contas a pagar — conta avulsa, recorrência e desembolso — e
 a `vw_fluxo_caixa`. Continua a [069](069-a-regional-do-job-e-a-fonte.md).
 
@@ -123,3 +125,48 @@ da abertura. No fluxo por job o rótulo antigo continua certo.
 - `supabase/migrations/20260915210003_despesa_sem_job_e_rateio_obrigatorio.sql`
 - `supabase/migrations/20260915210004_permissoes_das_funcoes_da_recorrencia.sql`
 - `docs/handoffs/HANDOFF_FINANCEIRO.md`, seção do `regional_id`
+
+## Revisão de 26/10/2026 — o pagamento avulso nasce com a data prevista de pagamento
+
+**O que levou a isso:** a "Data prevista de pagamento" do Pagamento avulso
+era opcional ("Selecione a data (opcional)"), ao criar e ao editar — dava
+até para apagar a data depois. A avulsa nasce aprovada e vai direto para
+Títulos a Pagar e para a aba Títulos da Conciliação; sem data, ela não
+tinha dia, ia para o fim da lista e a faixa "Hoje" aparecia duas vezes
+(revisão de 26/10/2026 da
+[195](195-planilhas-de-titulos-e-extrato-nas-mesmas-colunas.md)). Em
+26/10/2026 eram duas: a AV-00003 e a AV-00004, testes da remessa
+Santander.
+
+**A regra (Tiago, 26/10/2026):** a data prevista de pagamento é
+obrigatória no Pagamento avulso, ao criar e ao editar, na tela e na
+validação do servidor, sem vir preenchida: quem lança escolhe. A data
+segue como era: nasce como vencimento e como data prevista de pagamento ao
+mesmo tempo ([016](016-titulos-a-pagar-e-baixa-por-parcela.md)), e o lápis
+repactua a de pagamento.
+
+- **No cartão nada muda:** a data não se escolhe, vem do vencimento da
+  fatura em que a compra cai (gatilho `avulsa_entra_na_fatura`, decisão
+  [093](093-o-item-entra-na-fatura-na-confirmacao-do-pagamento.md)).
+- **Aberto da Conciliação automática** (linha do extrato do banco sem
+  título), o formulário continua vindo com a data da linha do banco.
+- **Os outros caminhos já tinham data:** recebimento avulso, transferência
+  e rendimento a exigem no formulário; recorrência, folha e 13º nascem com
+  ela; PP e desembolso a recebem na aprovação, que a exige.
+- **A AV-00003 e a AV-00004** continuam sem data até o Tiago decidir o que
+  fazer com elas: dar baixa, se foram pagas (estão também nas remessas 25
+  e 32), ou cancelar. Editá-las agora pede a data.
+- **A trava no banco** — recusar avulsa a pagar sem data — fica para
+  depois de resolvidas as duas.
+
+**No código:** `aplicarRefinementFormaPagamento` em
+`lib/validations/conta-avulsa.ts` (criar e editar), com o teste
+`conta-avulsa.test.ts`; o rótulo "Data prevista de pagamento *" e o
+"Selecione a data" em `conta-avulsa-drawer.tsx`.
+
+**Conferido (26/10/2026, navegador, sem gravar nada):** "Editar" da
+AV-00003 sem data recusado, com "Informe a data prevista de pagamento."
+embaixo do campo; `criarContaAvulsa` chamada direto do console sem data
+recusada pelo servidor, e com data seguindo até a checagem seguinte
+(subtipo inexistente de propósito, nada criado); "Nova conta avulsa" com o
+campo vazio e o asterisco.

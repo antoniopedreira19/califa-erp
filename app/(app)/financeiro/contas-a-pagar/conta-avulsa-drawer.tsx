@@ -657,7 +657,9 @@ export function ContaAvulsaDrawer(props: Props) {
             </div>
 
             {/* Data prevista de pagamento — no cartão ela não se escolhe:
-                sai do vencimento da fatura em que a compra cair. */}
+                sai do vencimento da fatura em que a compra cair. Nas outras
+                formas é obrigatória, sem vir preenchida (revisão da 082,
+                26/10/2026). */}
             {formaPagamento === "cartao_credito" ? (
               <div className="space-y-2">
                 <Label htmlFor="data_compra">Data da compra *</Label>
@@ -707,12 +709,12 @@ export function ContaAvulsaDrawer(props: Props) {
               </div>
             ) : (
             <div className="space-y-2">
-              <Label>Data prevista de pagamento</Label>
+              <Label>Data prevista de pagamento *</Label>
               <DatePicker
                 key={isEditar ? (conta?.id ?? "criar") : `criar-${aberturas}`}
                 name="data_prevista_pagamento_hidden"
                 defaultValue={dataPrevista}
-                placeholder="Selecione a data (opcional)"
+                placeholder="Selecione a data"
                 onDateChange={(d) => {
                   if (!d) {
                     setDataPrevista("");

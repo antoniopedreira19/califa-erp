@@ -8210,3 +8210,21 @@ os arquivos da frente do Antonio.
   `codigosDoLancamento` em `lib/historico-financeiro/regional.ts` (só a coluna
   Reg, não a divisão dos jobs) e o de-para de regionais, para as próximas
   cargas.
+
+## ⚠️ Nota de 2026-10-26 (9) — a data prevista de pagamento obrigatória no Pagamento avulso (revisão da decisão 082)
+
+- **O quê:** no Pagamento avulso (Contas a Pagar e "Novo lançamento" da
+  Conciliação), a "Data prevista de pagamento" passou a ser obrigatória ao
+  criar e ao editar: rótulo com asterisco, sem vir preenchida, e o servidor
+  recusa sem ela ("Informe a data prevista de pagamento."). No cartão nada
+  muda (a data vem da fatura), e aberto da Conciliação automática o
+  formulário segue vindo com a data da linha do banco.
+- **Por quê:** era o único caminho de um título a pagar ficar sem data (nota
+  6 deste dia). As outras origens nascem com data ou a recebem na aprovação.
+- **Pendente:** a AV-00003 e a AV-00004 (testes da remessa Santander, R$ 0,05)
+  seguem sem data e entram em toda remessa nova — já estão nas remessas
+  reais 25 e 32. O Tiago decide se dá baixa ou cancela; depois, a trava no
+  banco.
+- **Código:** `lib/validations/conta-avulsa.ts`, com teste novo, e
+  `conta-avulsa-drawer.tsx`. Ver a "Revisão de 26/10/2026" da
+  [decisão 082](../decisions/082-a-despesa-sem-job-nasce-com-rateio-e-a-recorrencia-vira-titulo-30-dias-antes.md).

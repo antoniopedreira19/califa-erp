@@ -191,6 +191,10 @@ negativa". **Escolhida a A.**
   ordem continua a da data prevista.
 - Fica como estava: o filtro de vencimento conta pelo vencimento do
   documento, e o sem data, que não tem vencimento, só aparece em "Todos".
+- A origem foi fechada no mesmo dia: o pagamento avulso, único caminho de
+  um título a pagar sem data, passou a exigi-la (revisão de 26/10/2026 da
+  [082](082-a-despesa-sem-job-nasce-com-rateio-e-a-recorrencia-vira-titulo-30-dias-antes.md)).
+  A regra acima fica como rede de segurança.
 
 **No código:** `ordenarPorDia` em `lib/financeiro/planilha-de-titulos.ts`
 (a ordem da planilha e, por cima, a `dataEfetiva`, com `sort` estável);
