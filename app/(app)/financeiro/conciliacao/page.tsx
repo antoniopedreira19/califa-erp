@@ -317,11 +317,7 @@ export default async function ConciliacaoPage({
         icon={Receipt}
       />
 
-      {/* A `key` remonta o filtro quando o período muda por link (os atalhos do
-          histórico, decisão 211) ou pelo voltar do navegador: as datas dele
-          são `defaultValue` e ficariam no período anterior. */}
       <FiltrosConta
-        key={`${contaId}|${dataDe}|${dataAte}`}
         contas={listaContas}
         contaAtual={contaId ?? undefined}
         dataDe={dataDe}

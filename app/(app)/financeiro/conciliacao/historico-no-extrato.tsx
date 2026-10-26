@@ -92,7 +92,7 @@ export function HistoricoNoExtrato({
       {historico.total > linhas.length && (
         <p className="text-xs text-muted-foreground">
           Aparecem as primeiras {numero(linhas.length)} das {numero(historico.total)} linhas do período; os cartões valem para
-          todas. Escolha um período menor para ver o resto.
+          todas. Vá mês a mês pelas setas do filtro para ver o resto.
         </p>
       )}
       {semCargaDepois && (

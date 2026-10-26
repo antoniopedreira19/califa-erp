@@ -233,6 +233,11 @@ não existem: a tela não deixa carregar enquanto elas não forem criadas (A2).
   sistema embaixo.
 - **Período sem histórico** numa conta que tem: uma faixa diz o que a planilha
   cobre, com atalhos para o primeiro e o último mês.
+- **Mês a mês:** as setas ‹ › do filtro de período andam um mês inteiro a
+  partir do mês do "De", e "Mês atual" volta ao padrão. As datas do filtro
+  seguem a URL: acompanham os atalhos e o voltar do navegador. O mês é a
+  unidade de navegação e o limite de 3.000 linhas fica como proteção, sem
+  paginação (Tiago, 26/10/2026, combinado com o Antonio, dono do filtro).
 - **Limite:** até 3.000 linhas por vez (um mês da conta principal tem perto
   de 1.700); os cartões valem para o período inteiro.
 - A leitura é a função `historico_extrato_da_conta` (migration
@@ -372,9 +377,10 @@ da planilha, só contagens.
   carga termina em 30/06 e a do saldo inicial de 01/08; os lançamentos de
   agosto vêm embaixo.
 - **Antes do histórico** (BB GoCrazy em 2023): a faixa com os atalhos.
-- **Filtro de período:** as datas dele não acompanhavam a mudança de período
-  por link (eram `defaultValue`); a página agora o remonta quando o período
-  muda.
+- **Filtro de período:** as setas levaram de outubro a junho de 2026 mês a
+  mês, até o histórico. O voltar do navegador e os atalhos do histórico deixam
+  as datas certas. A data escolhida no calendário aparece na hora. O seletor de
+  data sem `value` (o do cadastro de conta) segue como antes.
 - As abas Títulos e Conciliação automática não leem o histórico e seguem como
   estavam.
 

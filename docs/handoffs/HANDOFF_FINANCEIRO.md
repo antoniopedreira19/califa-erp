@@ -8110,3 +8110,16 @@ os arquivos da frente do Antonio.
   2026), no Fundo Fixo California (maio de 2025, igual ao saldo da planilha)
   e na BB GoCrazy antes do histórico. Ver
   [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
+## ⚠️ Nota de 2026-10-26 (4) — o filtro de período da Conciliação anda mês a mês (decisão 211, A3)
+
+- **Datas pela URL:** as datas "De" e "Até" do filtro seguem a URL e
+  acompanham os atalhos e o voltar do navegador. O `DatePicker` ganhou um
+  `value` opcional, controlado; sem ele, os outros usos seguem como estavam.
+- **Setas e "Mês atual":** as setas ‹ › andam um mês inteiro a partir do mês
+  do "De", e "Mês atual" volta ao padrão.
+- **O histórico:** o mês é a unidade de navegação, e o limite de 3.000 linhas
+  fica como proteção, sem paginação.
+- O filtro é do Antonio: os ajustes foram aprovados pelo Tiago, combinados com
+  ele, em 26/10/2026. Ver
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).

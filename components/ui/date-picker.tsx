@@ -28,6 +28,11 @@ export interface DatePickerProps {
   id?: string;
   /** Valor inicial em ISO "YYYY-MM-DD" ou vazio. */
   defaultValue?: string;
+  /** Valor controlado em ISO "YYYY-MM-DD" ou vazio: com ele, o campo mostra
+   *  sempre o que o pai manda, e a escolha só chega pela `onDateChange`. Uso:
+   *  o filtro de período da Conciliação, que segue a URL (26/10/2026). Sem
+   *  ele, o campo guarda a data sozinho, como sempre. */
+  value?: string;
   placeholder?: string;
   required?: boolean;
   disabled?: boolean;
@@ -76,6 +81,7 @@ export function DatePicker({
   name,
   id,
   defaultValue,
+  value,
   placeholder = "Selecione a data",
   required,
   disabled,
@@ -89,12 +95,14 @@ export function DatePicker({
   diasMarcados,
   legenda,
 }: DatePickerProps) {
-  const [date, setDate] = React.useState<Date | null>(() => parseIsoDate(defaultValue));
+  const controlado = value !== undefined;
+  const [interna, setInterna] = React.useState<Date | null>(() => parseIsoDate(defaultValue));
+  const date = controlado ? parseIsoDate(value) : interna;
   const [open, setOpen] = React.useState(false);
 
   function handleSelect(selected: Date | undefined) {
     const next = selected ?? null;
-    setDate(next);
+    if (!controlado) setInterna(next);
     onDateChange?.(next);
     if (next) setOpen(false);
   }
@@ -102,7 +110,7 @@ export function DatePicker({
   function handleClear(e: React.MouseEvent) {
     e.preventDefault();
     e.stopPropagation();
-    setDate(null);
+    if (!controlado) setInterna(null);
     onDateChange?.(null);
   }
 
