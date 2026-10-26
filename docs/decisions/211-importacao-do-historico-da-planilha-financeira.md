@@ -284,6 +284,11 @@ não existem: a tela não deixa carregar enquanto elas não forem criadas (A2).
   entrar, o que foi recebido ou pago depois de 30/06/2026. A tela diz isso
   embaixo da tabela e marca com * os trimestres que terminam depois do fim do
   histórico.
+- **Só o realizado (Tiago, 26/10/2026):** a DRE do histórico fica sem as
+  previsões. Elas entram no sistema na virada do 4T (Trilha B), como títulos;
+  no histórico, apareceriam duas vezes quando histórico e sistema se
+  juntarem. Em 2025, por isso, a receita da California fica R$ 2,12 milhões
+  abaixo da planilha e o lucro líquido, R$ 1,81 milhão.
 
 ## O pipeline (E1, E2 e E3)
 
@@ -474,10 +479,6 @@ planilha (saída em `validacao/dre*.csv`).
   de `dre.test.ts` limpos.
 
 ## O que fica para depois
-- **As previsões na DRE do histórico (aguarda o Tiago):** a DRE da planilha
-  soma as previsões; o histórico não as tem (D3: elas viram títulos na virada
-  do 4T). Em 2025, a receita da California fica R$ 2,12 milhões abaixo da
-  planilha e o lucro líquido, R$ 1,81 milhão.
 - A4: como o relatório por regional trata o que a planilha não rateia pelo
   percentual do ano (imobilizado, 4T 2022 e 2023, PL, crédito em linha de
   custo).

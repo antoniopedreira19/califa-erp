@@ -8137,9 +8137,9 @@ os arquivos da frente do Antonio.
   imobilizado em todas.
 - **Banco:** função `historico_dre` (migrations `20261026100003` e
   `20261026100004`), SECURITY DEFINER com a trava de admin e financeiro, 0,2 s.
-- **Não tem as previsões** que a DRE da planilha soma; em 2025 a receita da
-  California fica R$ 2,12 milhões abaixo da planilha por isso. A decisão de
-  trazê-las aguarda o Tiago.
+- **Só o realizado (Tiago, 26/10/2026):** sem as previsões que a DRE da
+  planilha soma; elas entram no sistema na virada do 4T (Trilha B). Em 2025,
+  por isso, a receita da California fica R$ 2,12 milhões abaixo da planilha.
 - **Conferência:** `scripts/historico-financeiro/conferir-dre.ts`. Com tudo o
   que a planilha tem, 2023 a 2025 batem, menos quatro células explicadas pela
   própria planilha. Ver
