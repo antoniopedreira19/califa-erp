@@ -6404,5 +6404,9 @@ Protótipo aprovado em 17/10. Regra completa na decisão 192.
   deduz como na 193. O telefone passa a ir automático.
 - **Para a PP:** nada muda no formulário da PP. Um freela passa a ir
   automático assim que o RH escolhe o tipo da chave dele no editar.
-- **Pendente:** o RH escolher o tipo dos 13 (o editar mostra o aviso). Ver
+- **Chaves antigas:** as 45 chaves que não se deduziam ganharam o tipo pelo
+  banco (`20261026500002`), cada uma com uma só leitura (CNPJ ou CPF do
+  próprio freela, ou celular que não forma CPF válido). Dos 64 freelas
+  ativos, os 59 com PIX vão automáticos (eram 46); os 5 sem PIX digitam na
+  PP. Ver
   [decisão 212](../decisions/212-tipo-do-pix-e-da-conta-no-cadastro-do-freela.md).

@@ -8,7 +8,8 @@ de conta" do protótipo de 22/10
 do módulo do Antonio; o acerto com ele ficou com o Tiago.
 **Completa:** a [193](193-conta-ou-pix-do-titular-da-verba.md) — o freela
 cuja chave PIX não dizia o tipo.
-**Migration:** `20261026500001_tipo_do_pix_e_da_conta_do_freela.sql`.
+**Migrations:** `20261026500001_tipo_do_pix_e_da_conta_do_freela.sql` e
+`20261026500002_tipo_do_pix_das_chaves_ja_cadastradas.sql`.
 
 ## O problema
 
@@ -61,17 +62,26 @@ existia.
   `freelancers_pix_tipo_com_chave` (tipo só com chave).
 - Os 136 freelas cujo tipo já se deduzia ganharam o tipo pela regra da 193
   (só coluna vazia; nenhuma chave reescrita; o "atualizado em" não mudou).
-  Os 46 freelas ativos que já iam automáticos continuam indo.
-- **Fica com o RH:** escolher o tipo da chave dos 13 freelas ativos que não
-  se deduzem. Enquanto não escolher, a PP deles pede o PIX na tela, como
-  antes.
+- **As outras 45 chaves também ganharam o tipo** (a `…500002`, pedido do
+  Tiago no mesmo dia, para o RH não ter trabalho retroativo). Cada uma tinha
+  uma só leitura, conferida contra o próprio cadastro: 7 CNPJ (o CNPJ do
+  freela, com texto junto da chave), 4 CPF (o CPF do freela, válido, com
+  texto junto) e 34 telefones (DDD + 9 + 8 números que não formam CPF
+  válido; 31 são o celular do cadastro, os 3 que não batem são de freelas
+  encerrados). Uma chave que fosse CPF válido e celular ao mesmo tempo, sem
+  ser o CPF da pessoa, ficaria sem tipo — não havia nenhuma.
+- **Resultado:** nenhuma chave sem tipo; dos 64 freelas ativos, os 59 com
+  PIX vão automáticos para a PP de verba (eram 46). Os outros 5 não têm PIX
+  no cadastro e digitam o pagamento na PP.
 
 ## Conferência
 
 - No banco, num bloco desfeito no fim: o tipo gravado pelo link; a chave de
   telefone indo automática com o tipo; um dos 13 indo automático depois de
   receber o tipo CPF; tipo sem chave recusado pelo CHECK. O retrato da 193
-  (quem vai automático) não mudou com a migration.
+  (quem vai automático) não mudou com a primeira migration; a segunda foi
+  testada no mesmo tipo de bloco antes de aplicar (46 → 59 automáticos,
+  nenhuma chave sem tipo) e conferida depois.
 - Na tela, sem gravar: o editar de um dos 13 com o aviso e a máscara ao
   escolher o tipo; o passo 3 do diálogo bloqueando "Informe a chave PIX" e o
   telefone fixo ("A chave de telefone é um celular…"). Testes do schema para
