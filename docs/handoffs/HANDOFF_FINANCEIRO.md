@@ -8199,9 +8199,12 @@ os arquivos da frente do Antonio.
   A 1ª carga foi refeita pela tela com o pacote novo.
 - **Pacote:** a tabela de jobs tem duas colunas a mais: o pacote antigo não
   passa mais na tela (gere de novo pelo `empacotar.ts`).
-- **Aguarda o Tiago:** o job que a planilha não divide (a Copa no 2T 2026 e
-  três jobs da CCH no 1T 2026) fica na regional do lançamento; a planilha o
-  deixa fora da DRE regional.
+- **Projetos proprietários (Tiago, 26/10/2026):** a Copa (jobs com "COPA" na
+  coluna REGIONAL da Res. Jobs 2026) e os projetos da CCH ("CMH" na Res. Jobs
+  CMH 2026) saem das linhas de cima e entram num bloco abaixo do resultado,
+  somados só no lucro após investimento, como no Fechamento: a Copa metade NE
+  e metade SP, os da CCH na Doca. Migration `20261026100010`; a divisão fica em
+  `EMPRESAS_DO_REGIONAL.projetos`. Projeto novo precisa entrar lá.
 - **Conferência:** `conferir-regional.ts --fechamento`. De 2023 a 2025, as duas
   empresas batem com a DRE regional do Fechamento, menos os trimestres em que a
   planilha faz o benefício job a job e a CCH de 2023. Ver

@@ -7,7 +7,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { formatDiaBr } from "@/lib/formatar-data-hora";
-import { montarRegional, type EmpresaDoRegional } from "@/lib/historico-financeiro/regional";
+import { descricaoDosProjetos, montarRegional, type EmpresaDoRegional } from "@/lib/historico-financeiro/regional";
 import { Aviso, Filtro, Filtros, Opcao, anosEntre, fimDoTrimestre } from "../_historico/filtros";
 import { carregarSomasDoRegional } from "./dados";
 import { RateioDaEmpresa, TabelaRegional } from "./tabela-regional";
@@ -151,6 +151,13 @@ function ConteudoDoPeriodo({
           do ano da planilha; o que não tem regional fica em &quot;Sem regional&quot;. A coluna Total fecha com a DRE do
           histórico na última linha. Não entram as previsões.
         </p>
+        {resultado.temProjetos && (
+          <p>
+            Os projetos proprietários — {descricaoDosProjetos(empresa)} — ficam fora das linhas de cima e entram no bloco
+            abaixo do resultado, somados só no lucro após investimento, como no Fechamento. O benefício deles é a parte do
+            trimestre que cabe ao faturamento dos projetos.
+          </p>
+        )}
         {resultado.faturamentoSemDivisao !== 0 && (
           <p>
             {reais(resultado.faturamentoSemDivisao)} do faturamento não tem divisão de job na planilha (lançamento sem job, ou

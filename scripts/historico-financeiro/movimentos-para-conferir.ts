@@ -50,17 +50,23 @@ function codigoDaPlanilha(texto: string | null | undefined): string | null {
   return t === "" ? null : t;
 }
 
-/** A divisão do job entre as regionais ("NE:0.25;SP:0.75", como o pacote leva) e a alíquota teórica. */
-export type JobParaConferir = { rateio: string | null; taxa: number | null };
+/** A divisão do job entre as regionais ("NE:0.25;SP:0.75", como o pacote leva), a alíquota teórica e a coluna REGIONAL ("COPA", "CMH"). */
+export type JobParaConferir = { rateio: string | null; taxa: number | null; regional: string | null };
 
 /** Os movimentos e os jobs do pacote de uma carga (o que foi gravado no banco). */
 async function doPacote(arquivo: string): Promise<{ movimentos: MovimentoParaConferir[]; jobs: Map<string, JobParaConferir> }> {
   const lido = lerPacote(await readFile(arquivo, "utf8"));
   if (!lido.ok) throw new Error(lido.message);
   const tj = lido.pacote.tabelas.jobs;
-  const [iChave, iRateio, iTaxa] = ["chave", "rateio_regional", "imposto_teorico_percentual"].map((nome) => tj.colunas.indexOf(nome));
+  const [iChave, iRateio, iTaxa, iRegional] = ["chave", "rateio_regional", "imposto_teorico_percentual", "regional_planilha"].map((nome) =>
+    tj.colunas.indexOf(nome),
+  );
+  const texto = (v: unknown) => (v === null || v === undefined ? null : String(v));
   const jobs = new Map(
-    tj.linhas.map((r) => [String(r[iChave]), { rateio: r[iRateio] === null ? null : String(r[iRateio]), taxa: r[iTaxa] === null ? null : Number(r[iTaxa]) }]),
+    tj.linhas.map((r) => [
+      String(r[iChave]),
+      { rateio: texto(r[iRateio]), taxa: r[iTaxa] === null ? null : Number(r[iTaxa]), regional: texto(r[iRegional]) },
+    ]),
   );
   const mov = lido.pacote.tabelas.movimentos;
   const k = (nome: string) => mov.colunas.indexOf(nome);
@@ -87,8 +93,12 @@ async function doPacote(arquivo: string): Promise<{ movimentos: MovimentoParaCon
 /** Os jobs do padronizado: a divisão e a alíquota de cada um. */
 async function jobsDoPadronizado(arquivo: string): Promise<Map<string, JobParaConferir>> {
   const [cab, ...linhas] = lerCsv(await readFile(arquivo, "utf8"));
-  const [iId, iRateio, iTaxa] = ["id", "rateio_regional", "imposto_teorico_percentual"].map((nome) => cab.indexOf(nome));
-  return new Map(linhas.map((r) => [r[iId], { rateio: r[iRateio] || null, taxa: r[iTaxa] ? Number(r[iTaxa]) : null }]));
+  const [iId, iRateio, iTaxa, iRegional] = ["id", "rateio_regional", "imposto_teorico_percentual", "regional_planilha"].map((nome) =>
+    cab.indexOf(nome),
+  );
+  return new Map(
+    linhas.map((r) => [r[iId], { rateio: r[iRateio] || null, taxa: r[iTaxa] ? Number(r[iTaxa]) : null, regional: r[iRegional] || null }]),
+  );
 }
 
 /** Os movimentos de um CSV do padronizado, de todas as contas da carga, no período. */

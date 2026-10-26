@@ -29,8 +29,9 @@ type Numero = number | string;
 type Resposta = {
   cobertura: { de: string; ate: string } | null;
   rateio?: (Omit<PercentualDoRateio, "percentual"> & { percentual: Numero })[];
-  grupos?: (Omit<AgregadoRegional, "peloJob" | "credito" | "debito" | "teorico"> & {
+  grupos?: (Omit<AgregadoRegional, "peloJob" | "regionalDoJob" | "credito" | "debito" | "teorico"> & {
     pelo_job: boolean;
+    regional_do_job: string | null;
     credito: Numero;
     debito: Numero;
     teorico: Numero;
@@ -62,6 +63,7 @@ export async function carregarSomasDoRegional(supabase: Supabase, tenantId: stri
       regional: g.regional,
       todas: g.todas,
       peloJob: g.pelo_job,
+      regionalDoJob: g.regional_do_job,
       credito: Number(g.credito),
       debito: Number(g.debito),
       teorico: Number(g.teorico),

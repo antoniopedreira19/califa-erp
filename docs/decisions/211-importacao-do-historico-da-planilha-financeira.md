@@ -326,14 +326,16 @@ não existem: a tela não deixa carregar enquanto elas não forem criadas (A2).
   gastos fixos gerais (o custo fixo e o pessoal do TD rateados, e o marketing,
   a administrativa, a comercial e a trabalhista); juros e empréstimos; a perda
   da FitDance (lucro líquido); o benefício tributário do ISS e do PERSE e a
-  receita financeira (resultado após o benefício); imobilizado e participação
-  nos lucros (lucro após investimento). Na CCH, também o investimento da Doca
-  e a Makkna.
+  receita financeira (resultado após o benefício); imobilizado, participação
+  nos lucros e o bloco dos projetos proprietários (lucro após investimento).
+  Na CCH, também o investimento da Doca e a Makkna.
 - **Uma regra só (Tiago, 26/10/2026):**
   - o faturamento e o custo operacional do job se dividem pelas partes dele
     (abaixo); o imposto é o teórico, com a mesma divisão;
+  - os projetos proprietários (a Copa e os projetos da CCH) saem dessas linhas
+    e entram num bloco abaixo do resultado, como no Fechamento (abaixo);
   - o benefício do ISS e do PERSE se rateia, trimestre a trimestre, pelo
-    faturamento de cada regional;
+    faturamento de cada regional e dos projetos;
   - os demais lançamentos entram na regional deles; o TD se rateia pelo
     percentual do ano da planilha (no 4T 2024, o imobilizado e o PL pela linha
     147, que a tabela registra); o que não tem regional fica em "Sem regional".
@@ -359,8 +361,9 @@ não existem: a tela não deixa carregar enquanto elas não forem criadas (A2).
   para o futuro, sem perder o registro da planilha.
 - A leitura é a função `historico_regional` (migrations
   `20261026100005_historico_regional.sql`, reaplicada pela 100006 e pela
-  100007, e `20261026100008_historico_regional_pelos_jobs.sql`, reaplicada
-  pela 100009). Ela confere admin e financeiro uma vez e leva 0,18 s num ano.
+  100007; `20261026100008_historico_regional_pelos_jobs.sql`, reaplicada
+  pela 100009; e `20261026100010_historico_regional_projetos_proprietarios.sql`).
+  Ela confere admin e financeiro uma vez e leva cerca de 0,2 s num ano.
 
 #### A divisão pelos jobs e o benefício (A4, revisão de 26/10/2026)
 
@@ -408,16 +411,48 @@ célula):
   cada regional no trimestre, inclusive "Sem regional". Sem faturamento no
   trimestre, o benefício fica em "Sem regional". O ano é a soma dos
   trimestres, como a planilha.
-- **O job que a planilha não divide fica na regional do lançamento,** como a
-  regra da Copa desta decisão (os lançamentos da Copa trazem a regional de
-  verdade). A tela diz quanto do faturamento ficou assim. De 2023 a 2025 não
-  há nenhum; na 1ª carga, só a Copa no 2T 2026 (custo de R$ 7.652.740,59, em
-  NE, SP e NO, e faturamento de R$ 643.942,46, em SP e NE) e três jobs da CCH
-  no 1T 2026 (custo de R$ 1.172.449,99 e faturamento de R$ 502.981,70, quase
-  tudo na Doca). A aba Res. Jobs CMH 2026 tem seis jobs sem divisão, todos com
-  "CMH" na regional e o RATEIO % zerado; os outros três só têm lançamento
-  depois de 30/06. A planilha os deixa fora da DRE regional. **Aguarda a
-  confirmação do Tiago.**
+- **O job que a planilha não divide e não é projeto proprietário fica na
+  regional do lançamento,** como a regra da Copa desta decisão. A tela diz
+  quanto do faturamento ficou assim. Na 1ª carga não há nenhum: os jobs sem
+  divisão são os projetos proprietários (abaixo).
+
+#### Os projetos proprietários (A4, 26/10/2026)
+
+**Decidido (Tiago, 26/10/2026):** "Siga o Fechamento: tire os projetos
+proprietários (a Copa e os da CCH) das linhas de cima e mostre-os num bloco
+abaixo do resultado, com a Copa metade NE e metade SP e os da CCH na Doca,
+somados só no lucro após investimento." O motivo, como o Tiago ouviu da
+equipe: com eles nas linhas de cima, a rentabilidade dos outros jobs fica
+mascarada.
+
+**Onde está no Fechamento:**
+
+| Aba | Linhas | O que faz |
+|---|---|---|
+| DRE Califa + CCH + Hit + Vet (bloco de 2026, da linha 127) | 182 a 186; 187; 194 a 197 | "Projeto Proprietários" (receita, impostos, custo operacional e benefício dos projetos), puxado das abas regionais; o lucro líquido após investimentos (linha 179 + 181 + 182); o resultado de cada projeto da CCH no 1T 2026. As notas de N194 a P201 tratam a Copa Arena N1 como projeto proprietário. O faturamento da linha 133 já vem sem os projetos. |
+| DRE Califa Regional (bloco de 2026, da linha 252) | 299 a 303; 304 | "Resultado Proprietários": as fórmulas de K300 a K302 e M300 a M302 somam os jobs com "COPA" na coluna AC (REGIONAL) da Res. Jobs 2026, no 2T, e dividem por 2 (NE e SP); o benefício (I303, R$ 1.520.000,00) está digitado. |
+| DRE CMH Regional (bloco de 2026, da linha 206) | 249 a 253; 254 | "Projetos": as fórmulas de E250 a E252 somam os jobs com "CMH" na coluna AC da Res. Jobs CMH 2026, no 1T, tudo na coluna E (a Doca); o benefício fica em zero. |
+
+**O que o histórico faz:**
+
+- O projeto proprietário é o job sem divisão com "COPA" (na California) ou
+  "CMH" (na CCH) na coluna REGIONAL das abas Res. Jobs. Na 1ª carga são os 25
+  jobs da Copa (projeto Arena N1) e os seis da aba Res. Jobs CMH 2026 (Palco
+  Arara, Academy, Festival de Gastronomia, Programa Youtube Capitão e os dois
+  do M&M - Depois do Like). A função devolve esse texto
+  (`regional_do_job`); a regra e a divisão ficam em
+  `lib/historico-financeiro/regional.ts` (`EMPRESAS_DO_REGIONAL`, `projetos`).
+- O faturamento, o imposto teórico e o custo operacional dos projetos saem das
+  linhas de cima e entram no bloco "Projetos proprietários", abaixo da
+  participação nos lucros: a Copa metade no NE e metade no SP, os da CCH na
+  Doca. O bloco entra só no lucro após investimento, que continua fechando com
+  a DRE do histórico. Sem projeto no período, o bloco não aparece.
+- O benefício do trimestre se rateia pelo faturamento das regionais e dos
+  projetos; a parte dos projetos vai para "Benefício tributário dos projetos".
+  O imposto e o benefício, com os dos projetos, fecham o imposto pago no
+  centavo (a linha do benefício da operação leva o centavo que sobra).
+- Projeto novo (outra marca na coluna REGIONAL, ou outra divisão) precisa
+  entrar em `projetos`, com a divisão que o Fechamento usar.
 
 **Onde a planilha não segue a regra (documentado, não se reproduz):**
 
@@ -428,6 +463,8 @@ célula):
 | CCH, 1T e 2T 2023 | Faturamento, imposto, custo e benefício todos na Agency, sem olhar a divisão dos jobs |
 | CCH, 3T 2023 | O benefício job a job |
 | CCH, 4T 2023 | O custo tributário que a DRE da planilha lança no crédito (R$ 58.426,48, uma das quatro células da E3) e dois jobs da Doca sem o imposto teórico (R$ 484,35) |
+| California, 2T 2026, projetos | O imposto teórico da Copa digitado: na linha 85 da Res. Jobs 2026, R$ 777.334,87 ("777312.87+22") em vez de 19,53% de R$ 15.715.411,29, e o mesmo valor na linha 91, sem receita (R$ 1.514.550,08 a menos); o benefício da Copa digitado (R$ 1.520.000,00), e por isso o benefício das regionais também difere |
+| CCH, 1T 2026, projetos | O imposto real dos projetos (a coluna IMPOSTO, R$ 61.906,05), e não o teórico, e o benefício deles em zero; o benefício das regionais é o teórico delas menos todo o imposto pago, e a aba conta o imposto dos projetos duas vezes (a DRE consolidada, não: a linha 184 fica em zero no 1T) |
 
 ## O pipeline (E1, E2 e E3)
 
@@ -671,6 +708,16 @@ Fechamento. A soma dos movimentos repete a da função do banco.
   movimentos por job antes, com a mesma resposta nas 1.774 linhas de 2023 a
   2026.
 - Typecheck, lint e os 68 testes da pasta limpos.
+- **Projetos proprietários** (mesmo dia): de 2023 a 2025 nada muda (não há
+  projeto). Em 2026, com as previsões, o faturamento, o imposto e o custo das
+  regionais e o faturamento e o custo dos projetos batem com o Fechamento no
+  1T e no 2T, nas duas empresas; diferem só o imposto e o benefício digitados
+  da tabela acima, e o benefício do 1T, pelo custo tributário que a DRE da
+  planilha conta R$ 10.250,24 a menos. Na tela, a California do 2T 2026, a CCH
+  do 1T 2026, a California de 2025 e a CCH de 2024 batem linha a linha com o
+  cálculo do script, e a última linha fecha com a DRE do histórico em todos os
+  trimestres de 2023 a 2026 (a diferença do 1T 2024 é a perda da FitDance, que
+  o relatório soma e a DRE põe depois do lucro). 72 testes.
 - **"NE" e "SP" da CMH na Doca e na Agency** (mesmo dia): de 2023 a 2025 a
   conferência com a DRE regional do Fechamento não muda. Saem de "Sem
   regional" R$ 122.952,46 de pessoal da CMH marcados SP no 1T 2023 (vão para a
@@ -681,9 +728,10 @@ Fechamento. A soma dos movimentos repete a da função do banco.
   põe na Agency. 69 testes.
 
 ## O que fica para depois
-- A4: os jobs que a planilha não divide (a Copa no 2T 2026 e três jobs da CCH
-  no 1T 2026) ficam na regional do lançamento; a planilha os deixa fora da DRE
-  regional. Aguarda a confirmação do Tiago.
+- A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas
+  85 e 91 da Res. Jobs 2026; R$ 1.520.000,00 de benefício): o histórico segue a
+  alíquota e o faturamento. Quando a carga do 3T trouxer a receita da Copa,
+  vale confirmar com o Tiago se o imposto da Copa deve seguir o digitado.
 - A4: a rentabilidade e o faturamento dos jobs do histórico.
 - Revisar o rateio de um ano, mantendo o registro da planilha dos anos
   fechados. O RH tem a própria tabela de rateio

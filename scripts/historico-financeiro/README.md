@@ -116,8 +116,9 @@ marcas, plano de contas, serviços, regionais, contas e os jobs abertos. O
   trimestres em que a planilha divide o TD por 4. Com `--fechamento`, compara
   também o faturamento, o imposto teórico, o custo operacional e o benefício
   de cada regional com a DRE regional do Fechamento (as abas "DRE Califa
-  Regional" e "DRE CMH Regional"); a soma divide o REC e o CO pelos jobs como
-  a função do banco. As opções de fonte das duas conferências estão em
+  Regional" e "DRE CMH Regional"), e as linhas do bloco dos projetos
+  proprietários; a soma divide o REC e o CO pelos jobs e marca os projetos
+  como a função do banco. As opções de fonte das duas conferências estão em
   `movimentos-para-conferir.ts`, que traz também os jobs da mesma fonte.
 
 ## Testes
