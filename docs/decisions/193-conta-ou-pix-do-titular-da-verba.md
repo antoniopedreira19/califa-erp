@@ -92,11 +92,18 @@ cadastro de fornecedor feito no mesmo dia.
   a ação `pagamentoDigitadoDaPP` devolve só o digitado.
 - A prévia do PDF mostra o pagamento digitado; o do cadastro só sai na PP
   gravada.
+- **Conferido na tela em 26/10/2026**, no TES-1025/26 (projeto P-0006/26),
+  com um freela sem PIX no cadastro: o reembolso travou sem o pagamento
+  ("Informe o PIX ou a conta do titular do reembolso.") e saiu com o PIX
+  digitado (PP-00568); recusada pelo financeiro, o "Editar e Reemitir PP"
+  voltou com o PIX preenchido, foi trocado para conta, e a PP-00569 saiu
+  com a conta no banco e no PDF. As duas foram canceladas no fim.
 
 ## Fora daqui
 
 - As 10 PPs de freela enviadas antes desta decisão seguem sem conta: o
   financeiro resolve caso a caso ou pede a reemissão.
 - Remessa (CNAB) continua só para fornecedor.
-- O cadastro de freelas guardar o tipo do PIX e o tipo de conta (módulo de
-  Freelancers, outra frente) poria mais freelas no automático.
+- O cadastro de freelas guardar o tipo do PIX e o tipo de conta: feito pela
+  [212](212-tipo-do-pix-e-da-conta-no-cadastro-do-freela.md) em 26/10/2026 —
+  59 dos 64 freelas ativos passaram a ir automáticos.
