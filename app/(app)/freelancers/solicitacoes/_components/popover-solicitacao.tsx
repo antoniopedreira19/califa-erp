@@ -1,39 +1,34 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from "@/components/ui/dialog";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  CheckCircle2,
-  XCircle,
-  Ban,
-  Copy,
   Check,
-  ArrowRight,
+  X,
   Loader2,
-  AlertCircle,
-  Mail,
   Calendar,
-  MapPin,
-  User,
   Briefcase,
+  Wallet,
+  MapPin,
+  MessageSquare,
+  ArrowLeft,
+  Copy,
+  ExternalLink,
+  Ban,
   FileText,
-  Clock,
+  MessagesSquare,
 } from "lucide-react";
 import { cn, formatCpf, formatCurrency } from "@/lib/utils";
 import type {
   FreelancerSolicitacao,
   FreelancerSolicitacaoStatus,
 } from "@/lib/types";
-import { ChipStatusSolicitacao } from "./chip-status-solicitacao";
+import {
+  ChipStatusSolicitacao,
+  STATUS_SOLICITACAO,
+} from "./chip-status-solicitacao";
 import { ChatSolicitacao } from "./chat-solicitacao";
 import {
   aprovarSolicitacao,
@@ -55,6 +50,9 @@ interface Props {
   activeRole: string;
   userId: string;
   publicOrigin: string;
+  /** Snapshot da contagem de nao-lidas recebida ao abrir. Zera ao visitar
+   *  a aba Mensagens (o chat marca lidas no servidor). */
+  naoLidas?: number;
 }
 
 const APROVADORES = new Set(["administrador", "rh", "financeiro"]);
@@ -66,27 +64,64 @@ export function PopoverSolicitacao({
   activeRole,
   userId,
   publicOrigin,
+  naoLidas = 0,
 }: Props) {
   const router = useRouter();
-  const [pending, startTransition] = React.useTransition();
-  const [erro, setErro] = React.useState<string | null>(null);
+  const [aba, setAba] = React.useState<"detalhes" | "mensagens">("detalhes");
+  const [badge, setBadge] = React.useState(naoLidas);
   const [modoRejeicao, setModoRejeicao] = React.useState(false);
   const [motivo, setMotivo] = React.useState("");
+  const [acaoEmCurso, startTransition] = React.useTransition();
+  const [erro, setErro] = React.useState<string | null>(null);
   const [copiado, setCopiado] = React.useState(false);
 
-  // Resetar estado quando trocar de solicitação
+  // Reseta estado ao trocar de solicitacao ou reabrir
   React.useEffect(() => {
-    setModoRejeicao(false);
-    setMotivo("");
-    setErro(null);
-    setCopiado(false);
-  }, [s?.id]);
+    if (open) {
+      setAba("detalhes");
+      setBadge(naoLidas);
+      setModoRejeicao(false);
+      setMotivo("");
+      setErro(null);
+      setCopiado(false);
+    }
+  }, [open, s?.id, naoLidas]);
 
-  if (!s) return null;
+  // Escape fecha
+  React.useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onOpenChange(false);
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onOpenChange]);
+
+  // Lock de scroll do body enquanto aberto
+  React.useEffect(() => {
+    if (!open) return;
+    const original = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = original;
+    };
+  }, [open]);
+
+  if (!open || !s) return null;
+  if (typeof document === "undefined") return null;
 
   const isAprovador = APROVADORES.has(activeRole);
   const isSolicitante = s.solicitante_id === userId;
   const linkPublico = `${publicOrigin}/form/freelancer-solicitacao/${s.token}`;
+
+  const mostraAprovar = isAprovador && s.status === "pendente";
+  const mostraCancelarComoSolicitante =
+    s.status === "pendente" && isSolicitante && !isAprovador;
+  const mostraCancelarAprovada =
+    s.status === "aprovada" && (isAprovador || isSolicitante);
+  // Copiar link so faz sentido quando o freela precisa preencher o form publico.
+  const mostraCopiarLink = s.status === "aprovada" && !s.freelancer_id;
+  const mostraAbrirPerfil = s.status === "cadastrada" && s.freelancer_id;
 
   function aprovar() {
     setErro(null);
@@ -133,332 +168,387 @@ export function PopoverSolicitacao({
       setCopiado(true);
       setTimeout(() => setCopiado(false), 2000);
     } catch {
-      setErro("Não foi possível copiar — copie manualmente abaixo");
+      setErro("Nao foi possivel copiar — copie manualmente");
     }
   }
 
-  const diasAteExpirar = s.expira_em
-    ? Math.max(
-        0,
-        Math.ceil(
-          (new Date(s.expira_em).getTime() - Date.now()) /
-            (1000 * 60 * 60 * 24),
-        ),
-      )
-    : null;
-  const expirado =
-    s.status === "aprovada" && diasAteExpirar !== null && diasAteExpirar === 0;
+  const prazoTexto = s.data_termino
+    ? `${formatDate(s.data_inicio)} → ${formatDate(s.data_termino)}`
+    : s.data_inicio
+      ? `A partir de ${formatDate(s.data_inicio)}`
+      : "—";
 
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-center justify-between gap-3 pr-6">
-            <DialogTitle className="min-w-0 truncate">
-              {s.nome_freela}
-            </DialogTitle>
-            <ChipStatusSolicitacao
-              status={s.status as FreelancerSolicitacaoStatus}
-            />
+  const valorTexto = `${formatCurrency(Number(s.valor))} / ${
+    s.tipo === "mensal" ? "mês" : s.tipo === "diarias" ? "diária" : "período"
+  }`;
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm p-4"
+      onClick={() => onOpenChange(false)}
+    >
+      <div
+        className="w-full max-w-2xl rounded-2xl bg-white shadow-elevated overflow-hidden flex flex-col h-[85vh]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header fixo (status + nome + CPF) */}
+        <div className="px-5 py-4 border-b border-border bg-muted/20 shrink-0">
+          <ChipStatusSolicitacao
+            status={s.status as FreelancerSolicitacaoStatus}
+          />
+          <h3 className="text-lg font-bold text-foreground mt-2">
+            {s.nome_freela}
+          </h3>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {s.freelancer_id
+              ? s.cpf_freela
+                ? `CPF ${formatCpf(s.cpf_freela)} · freela já cadastrado`
+                : "Freela já cadastrado"
+              : s.cpf_freela
+                ? `CPF ${formatCpf(s.cpf_freela)}`
+                : "CPF: a ser preenchido pelo freela"}
+          </p>
+        </div>
+
+        {/* Tabs */}
+        <div className="flex border-b border-border bg-white shrink-0">
+          <TabButton
+            ativo={aba === "detalhes"}
+            onClick={() => setAba("detalhes")}
+            icone={<FileText className="h-3.5 w-3.5" />}
+            label="Detalhes"
+          />
+          <TabButton
+            ativo={aba === "mensagens"}
+            onClick={() => {
+              setAba("mensagens");
+              setBadge(0);
+            }}
+            icone={<MessagesSquare className="h-3.5 w-3.5" />}
+            label="Mensagens"
+            badge={badge > 0 ? badge : undefined}
+          />
+        </div>
+
+        {aba === "mensagens" ? (
+          <div className="flex-1 min-h-0 flex flex-col">
+            <ChatSolicitacao solicitacaoId={s.id} userId={userId} />
           </div>
-          <DialogDescription>
-            Solicitação de contratação criada por {s.solicitante_nome ?? "—"} em{" "}
-            {formatarDataBR(s.created_at)}.
-          </DialogDescription>
-        </DialogHeader>
+        ) : (
+          <div className="p-5 space-y-3 flex-1 overflow-y-auto">
+            {erro && (
+              <div className="rounded-lg border border-california-red/30 bg-california-red/5 p-3">
+                <p className="text-xs text-california-red font-medium">
+                  {erro}
+                </p>
+              </div>
+            )}
 
-        {erro && (
-          <div className="rounded-lg border border-california-red/30 bg-california-red/5 p-3 flex items-start gap-2">
-            <AlertCircle className="h-4 w-4 text-california-red shrink-0 mt-0.5" />
-            <p className="text-xs text-california-red font-medium">{erro}</p>
+            <Detalhe
+              icone={<Briefcase className="h-3.5 w-3.5" />}
+              label="Job"
+              valor={
+                s.job_codigo
+                  ? `${s.job_codigo} · ${s.job_nome ?? s.nome_job ?? ""}`
+                  : (s.job_nome ?? s.nome_job ?? "—")
+              }
+            />
+            {s.cargo && <Detalhe label="Cargo" valor={s.cargo} />}
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
+                Tipo
+              </p>
+              {(() => {
+                // Infere pelo cadastro antigo quando nao tem campo tipo_solicitacao
+                const tipoLabel = s.freelancer_id ? "Renovação" : "Contratação";
+                const corClasse = s.freelancer_id
+                  ? "bg-violet-50 text-violet-700 border-violet-500/30"
+                  : "bg-sky-50 text-sky-700 border-sky-500/30";
+                return (
+                  <span
+                    className={cn(
+                      "mt-1 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider",
+                      corClasse,
+                    )}
+                  >
+                    {tipoLabel}
+                  </span>
+                );
+              })()}
+            </div>
+            <Detalhe
+              icone={<Wallet className="h-3.5 w-3.5" />}
+              label="Valor"
+              valor={valorTexto}
+            />
+            <Detalhe
+              icone={<Calendar className="h-3.5 w-3.5" />}
+              label="Prazo"
+              valor={prazoTexto}
+            />
+            {s.cidade && (
+              <Detalhe
+                icone={<MapPin className="h-3.5 w-3.5" />}
+                label="Cidade"
+                valor={s.cidade}
+              />
+            )}
+            {s.observacoes && (
+              <Detalhe
+                icone={<MessageSquare className="h-3.5 w-3.5" />}
+                label="Observações"
+                valor={s.observacoes}
+              />
+            )}
+
+            {s.status === "rejeitada" && s.rejeicao_motivo && (
+              <div className="rounded-lg border border-california-red/30 bg-california-red/5 p-3 mt-2">
+                <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-california-red">
+                  Motivo da rejeição
+                </p>
+                <p className="text-sm text-foreground mt-1 whitespace-pre-wrap">
+                  {s.rejeicao_motivo}
+                </p>
+              </div>
+            )}
+
+            {s.status === "aprovada" && s.expira_em && (
+              <p className="text-[10px] text-muted-foreground">
+                Link válido até{" "}
+                <span className="font-semibold text-foreground">
+                  {formatDate(s.expira_em.slice(0, 10))}
+                </span>
+              </p>
+            )}
+
+            <div className="pt-2 border-t border-border">
+              <p className="text-[10px] text-muted-foreground">
+                Solicitado{" "}
+                {s.solicitante_nome && (
+                  <>
+                    por{" "}
+                    <span className="font-semibold text-foreground">
+                      {s.solicitante_nome}
+                    </span>{" "}
+                  </>
+                )}
+                {diasAtras(s.created_at)}
+              </p>
+            </div>
           </div>
         )}
 
-        {/* Blocos de info */}
-        <div className="space-y-5 divide-y divide-border">
-          <BlocoInfo icon={User} titulo="Freelancer proposto">
-            <Linha rotulo="Nome" valor={s.nome_freela} />
-            <Linha
-              rotulo="CPF"
-              valor={s.cpf_freela ? formatCpf(s.cpf_freela) : "Não informado"}
-            />
-          </BlocoInfo>
-
-          <BlocoInfo icon={Briefcase} titulo="Job e condições">
-            <Linha
-              rotulo="Job"
-              valor={
-                s.job_codigo
-                  ? `${s.job_codigo} · ${s.job_nome ?? ""}`
-                  : s.job_nome ?? "—"
-              }
-            />
-            {s.cargo && <Linha rotulo="Cargo" valor={s.cargo} />}
-            <Linha
-              rotulo="Valor"
-              valor={`${formatCurrency(Number(s.valor))} · ${s.tipo}`}
-            />
-            {(s.data_inicio || s.data_termino) && (
-              <Linha
-                rotulo="Período"
-                valor={`${
-                  s.data_inicio ? formatarDataBR(s.data_inicio) : "—"
-                } → ${s.data_termino ? formatarDataBR(s.data_termino) : "em aberto"}`}
-              />
-            )}
-            {s.cidade && <Linha rotulo="Cidade" valor={s.cidade} />}
-          </BlocoInfo>
-
-          <BlocoInfo icon={Mail} titulo="Solicitante">
-            <Linha rotulo="Nome" valor={s.solicitante_nome ?? "—"} />
-            {s.solicitante_email && (
-              <Linha rotulo="Email" valor={s.solicitante_email} />
-            )}
-          </BlocoInfo>
-
-          {s.observacoes && (
-            <BlocoInfo icon={FileText} titulo="Observações">
-              <p className="text-sm text-foreground whitespace-pre-wrap">
-                {s.observacoes}
-              </p>
-            </BlocoInfo>
-          )}
-
-          {s.status === "aprovada" && (
-            <BlocoInfo
-              icon={Clock}
-              titulo={expirado ? "Link expirado" : "Link do freelancer"}
-            >
-              <p className="text-xs text-muted-foreground">
-                Compartilhe este link com o freelancer para que ele preencha os
-                dados pessoais e crie o contrato.
-                {diasAteExpirar !== null && !expirado && (
-                  <>
-                    {" "}
-                    O link expira em <strong>{diasAteExpirar} dia(s)</strong>.
-                  </>
-                )}
-              </p>
-              <div className="flex items-center gap-2 mt-2">
-                <code className="flex-1 min-w-0 truncate text-[11px] bg-muted/50 rounded px-2 py-1.5 border border-border">
-                  {linkPublico}
-                </code>
-                <button
-                  type="button"
-                  onClick={copiarLink}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-all",
-                    copiado
-                      ? "bg-emerald-50 text-emerald-700 border border-emerald-300"
-                      : "bg-white text-foreground border border-border hover:border-california-red/40",
-                  )}
-                >
-                  {copiado ? (
-                    <Check className="h-3.5 w-3.5" />
-                  ) : (
-                    <Copy className="h-3.5 w-3.5" />
-                  )}
-                  {copiado ? "Copiado" : "Copiar"}
-                </button>
-              </div>
-            </BlocoInfo>
-          )}
-
-          {s.status === "cadastrada" && s.freelancer_id && (
-            <BlocoInfo icon={CheckCircle2} titulo="Cadastro criado">
-              <p className="text-xs text-muted-foreground">
-                O freelancer preencheu os dados e o contrato foi criado.
-              </p>
-              <Link
-                href={`/freelancers/${s.freelancer_id}`}
-                prefetch={false}
-                className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-california-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-california-red-hover transition-colors"
-              >
-                Abrir perfil do freelancer
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </BlocoInfo>
-          )}
-
-          {s.status === "rejeitada" && (
-            <BlocoInfo icon={XCircle} titulo="Rejeição">
-              <Linha
-                rotulo="Motivo"
-                valor={s.rejeicao_motivo ?? "Sem motivo registrado"}
-              />
-              {s.rejeitado_em && (
-                <Linha
-                  rotulo="Quando"
-                  valor={formatarDataBR(s.rejeitado_em)}
-                />
-              )}
-            </BlocoInfo>
-          )}
-
-          {s.status === "cancelada" && (
-            <BlocoInfo icon={Ban} titulo="Cancelamento">
-              {s.cancelado_em && (
-                <Linha
-                  rotulo="Quando"
-                  valor={formatarDataBR(s.cancelado_em)}
-                />
-              )}
-            </BlocoInfo>
-          )}
-
-          <ChatSolicitacao solicitacaoId={s.id} userId={userId} />
-        </div>
-
-        {/* Modo rejeição inline */}
-        {modoRejeicao && (
-          <div className="mt-4 space-y-2 rounded-lg border border-california-red/30 bg-california-red/5 p-4">
-            <label className="text-xs font-semibold text-foreground">
+        {/* Footer de acoes - modo rejeicao substitui */}
+        {modoRejeicao ? (
+          <div className="p-5 border-t border-border space-y-3 bg-california-red/[0.03] shrink-0">
+            <label className="text-[11px] font-bold uppercase tracking-[0.1em] text-california-red">
               Motivo da rejeição
             </label>
-            <Textarea
+            <textarea
+              autoFocus
               value={motivo}
               onChange={(e) => setMotivo(e.target.value)}
+              placeholder="Explique por que esta solicitação não pode seguir..."
               rows={3}
               maxLength={500}
-              placeholder="Explique brevemente para o solicitante"
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-california-red/30"
             />
-            <div className="flex items-center justify-end gap-2">
+            <div className="flex gap-2">
               <button
                 type="button"
+                disabled={acaoEmCurso}
                 onClick={() => {
                   setModoRejeicao(false);
                   setMotivo("");
+                  setErro(null);
                 }}
-                disabled={pending}
-                className="text-xs text-muted-foreground hover:text-foreground"
+                className="inline-flex items-center gap-1 rounded-lg border border-border text-foreground text-xs font-semibold px-3 py-2 hover:bg-muted/40 disabled:opacity-60"
               >
-                Cancelar
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Voltar
               </button>
               <button
                 type="button"
+                disabled={acaoEmCurso || !motivo.trim()}
                 onClick={rejeitar}
-                disabled={pending}
-                className="inline-flex items-center gap-1.5 rounded-md bg-california-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-california-red-hover disabled:opacity-50 transition-colors"
+                className="flex-1 inline-flex items-center justify-center gap-1 rounded-lg bg-california-red text-white text-xs font-semibold px-3 py-2 hover:bg-california-red-hover transition-colors disabled:opacity-60"
               >
-                {pending ? (
+                {acaoEmCurso ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <XCircle className="h-3.5 w-3.5" />
+                  <X className="h-3.5 w-3.5" />
                 )}
                 Confirmar rejeição
               </button>
             </div>
           </div>
-        )}
-
-        {/* Rodapé com ações */}
-        {!modoRejeicao && (
-          <div className="mt-4 flex items-center justify-end gap-2 border-t border-border pt-4">
-            {s.status === "pendente" && isSolicitante && !isAprovador && (
-              <button
-                type="button"
-                onClick={cancelar}
-                disabled={pending}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground hover:border-california-red/40 hover:text-california-red transition-all"
-              >
-                {pending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Ban className="h-3.5 w-3.5" />
-                )}
-                Cancelar solicitação
-              </button>
-            )}
-            {s.status === "pendente" && isAprovador && (
+        ) : (
+          <div className="p-5 border-t border-border bg-muted/10 flex items-center gap-2 flex-wrap shrink-0">
+            {mostraAprovar && (
               <>
                 <button
                   type="button"
+                  disabled={acaoEmCurso}
                   onClick={() => setModoRejeicao(true)}
-                  disabled={pending}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground hover:border-california-red/40 hover:text-california-red transition-all"
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg border border-california-red/40 text-california-red text-xs font-semibold px-3 py-2.5 hover:bg-california-red/10 transition-colors disabled:opacity-60"
                 >
-                  <XCircle className="h-3.5 w-3.5" />
+                  <X className="h-3.5 w-3.5" />
                   Rejeitar
                 </button>
                 <button
                   type="button"
+                  disabled={acaoEmCurso}
                   onClick={aprovar}
-                  disabled={pending}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-california-red-hover disabled:opacity-50 transition-colors"
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold px-3 py-2.5 hover:bg-emerald-700 transition-colors disabled:opacity-60"
                 >
-                  {pending ? (
+                  {acaoEmCurso ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
-                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <Check className="h-3.5 w-3.5" />
                   )}
                   Aprovar
                 </button>
               </>
             )}
-            {s.status === "aprovada" && (isAprovador || isSolicitante) && (
+
+            {!mostraAprovar &&
+              (mostraCancelarComoSolicitante || mostraCancelarAprovada) && (
+                <button
+                  type="button"
+                  disabled={acaoEmCurso}
+                  onClick={cancelar}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/40 text-california-red text-xs font-semibold px-3 py-2 hover:bg-california-red/10 transition-colors disabled:opacity-60"
+                >
+                  {acaoEmCurso ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <Ban className="h-3.5 w-3.5" />
+                  )}
+                  {mostraCancelarAprovada
+                    ? "Cancelar"
+                    : "Cancelar solicitação"}
+                </button>
+              )}
+
+            {!mostraAprovar && mostraCopiarLink && (
               <button
                 type="button"
-                onClick={cancelar}
-                disabled={pending}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground hover:border-california-red/40 hover:text-california-red transition-all"
+                onClick={copiarLink}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 text-white text-xs font-semibold px-3 py-2.5 hover:bg-emerald-700 transition-colors"
               >
-                {pending ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                {copiado ? (
+                  <Check className="h-3.5 w-3.5" />
                 ) : (
-                  <Ban className="h-3.5 w-3.5" />
+                  <Copy className="h-3.5 w-3.5" />
                 )}
-                Cancelar
+                {copiado ? "Copiado" : "Copiar link do freela"}
               </button>
             )}
+
+            {!mostraAprovar && mostraAbrirPerfil && s.freelancer_id && (
+              <Link
+                href={`/freelancers/${s.freelancer_id}`}
+                onClick={() => onOpenChange(false)}
+                className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-california-red text-white text-xs font-semibold px-3 py-2.5 hover:bg-california-red-hover transition-colors"
+              >
+                <ExternalLink className="h-3.5 w-3.5" />
+                Abrir perfil do freela
+              </Link>
+            )}
+
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              className="rounded-lg border border-border text-foreground text-xs font-semibold px-3 py-2 hover:bg-muted/40 ml-auto"
+            >
+              Fechar
+            </button>
           </div>
         )}
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>,
+    document.body,
   );
 }
 
-function BlocoInfo({
-  icon: Icon,
-  titulo,
-  children,
+function Detalhe({
+  icone,
+  label,
+  valor,
 }: {
-  icon: React.ElementType;
-  titulo: string;
-  children: React.ReactNode;
+  icone?: React.ReactNode;
+  label: string;
+  valor: string;
 }) {
   return (
-    <div className="pt-5 first:pt-0 space-y-2">
-      <div className="flex items-center gap-2">
-        <div className="flex h-6 w-6 items-center justify-center rounded-md bg-california-red/10 text-california-red">
-          <Icon className="h-3 w-3" />
-        </div>
-        <h4 className="text-xs font-bold uppercase tracking-[0.08em] text-foreground">
-          {titulo}
-        </h4>
-      </div>
-      <div className="space-y-1.5 pl-8">{children}</div>
-    </div>
-  );
-}
-
-function Linha({ rotulo, valor }: { rotulo: string; valor: React.ReactNode }) {
-  return (
-    <div className="flex items-baseline gap-3">
-      <dt className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground min-w-[80px] shrink-0">
-        {rotulo}
-      </dt>
-      <dd className="text-sm text-foreground flex-1 min-w-0 break-words">
+    <div>
+      <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground flex items-center gap-1">
+        {icone}
+        {label}
+      </p>
+      <p className="text-sm text-foreground mt-0.5 whitespace-pre-wrap">
         {valor}
-      </dd>
+      </p>
     </div>
   );
 }
 
-function formatarDataBR(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleDateString("pt-BR", {
+function TabButton({
+  ativo,
+  onClick,
+  icone,
+  label,
+  badge,
+}: {
+  ativo: boolean;
+  onClick: () => void;
+  icone: React.ReactNode;
+  label: string;
+  badge?: number;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        "flex-1 flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-semibold transition-colors border-b-2",
+        ativo
+          ? "border-california-red text-foreground"
+          : "border-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30",
+      )}
+    >
+      {icone}
+      {label}
+      {badge !== undefined && badge > 0 && (
+        <span className="tabular-nums rounded-full bg-california-red px-1.5 py-0.5 text-[9px] leading-none font-bold text-white">
+          {badge}
+        </span>
+      )}
+    </button>
+  );
+}
+
+function formatDate(iso: string | null): string {
+  if (!iso) return "—";
+  // Isola o dia pra evitar deslocamento por timezone (iso vem como "2026-10-20"
+  // ou com hora; T00:00:00 normaliza pra meia-noite local).
+  const dia = iso.length >= 10 ? iso.slice(0, 10) : iso;
+  return new Date(dia + "T00:00:00").toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
   });
 }
+
+function diasAtras(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const dias = Math.floor(diff / (1000 * 60 * 60 * 24));
+  if (dias <= 0) return "hoje";
+  if (dias === 1) return "ontem";
+  return `há ${dias} dias`;
+}
+
+// Guard-rail: silencia warning do STATUS_SOLICITACAO nao usado (chip ja carrega
+// os labels internamente). Mantido no import pra consistencia com os outros
+// consumidores da familia.
+void STATUS_SOLICITACAO;

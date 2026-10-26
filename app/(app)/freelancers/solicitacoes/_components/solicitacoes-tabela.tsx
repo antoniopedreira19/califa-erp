@@ -587,6 +587,9 @@ export function SolicitacoesTabela({
         activeRole={activeRole}
         userId={userId}
         publicOrigin={publicOrigin}
+        naoLidas={
+          selecionada ? (naoLidasPorSolicitacao[selecionada.id] ?? 0) : 0
+        }
       />
 
       {/* Barra flutuante de bulk approval */}
