@@ -102,10 +102,11 @@ export async function carregarNovidades(
       .limit(50),
 
     // 5. Solicitações concluídas (status=cadastrada, falta PDF)
+    // nome_job é fallback pros registros migrados do RH antigo (job_id null).
     supabase
       .from("freelancer_solicitacoes")
       .select(
-        "id, freelancer_id, nome_freela, cargo, updated_at, job:jobs(nome), solicitante:profiles!solicitante_id(nome)",
+        "id, freelancer_id, nome_freela, cargo, updated_at, nome_job, job:jobs(nome), solicitante:profiles!solicitante_id(nome)",
       )
       .eq("tenant_id", tenantId)
       .eq("status", "cadastrada")
@@ -247,7 +248,7 @@ export async function carregarNovidades(
     solicitacao_id: s.id,
     freelancer_id: s.freelancer_id,
     freelancer_nome: s.nome_freela,
-    nome_job: s.job?.nome ?? "—",
+    nome_job: s.job?.nome ?? s.nome_job ?? "—",
     cargo: s.cargo,
     solicitante_nome: s.solicitante?.nome ?? null,
     atualizado_em: s.updated_at,

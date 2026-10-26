@@ -144,21 +144,26 @@ function FreelancerRow({
         </Link>
       </td>
       <td className="px-3 py-2.5">
-        {f.job_nome ? (
-          <span
-            className="text-[11px] text-foreground font-medium truncate block max-w-[160px]"
-            title={f.job_nome}
-          >
-            {f.job_codigo && (
-              <span className="text-muted-foreground tabular-nums mr-1">
-                {f.job_codigo}
-              </span>
-            )}
-            {f.job_nome}
-          </span>
-        ) : (
-          <span className="text-muted-foreground">—</span>
-        )}
+        {(() => {
+          // Fallback pro texto preservado dos contratos migrados do RH antigo
+          // (job_id null, mas `nome_job` traz o nome como texto).
+          const nomeExibir = f.job_nome ?? f.nome_job;
+          return nomeExibir ? (
+            <span
+              className="text-[11px] text-foreground font-medium truncate block max-w-[160px]"
+              title={nomeExibir}
+            >
+              {f.job_codigo && (
+                <span className="text-muted-foreground tabular-nums mr-1">
+                  {f.job_codigo}
+                </span>
+              )}
+              {nomeExibir}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          );
+        })()}
       </td>
       <td className="px-3 py-2.5">
         <span
