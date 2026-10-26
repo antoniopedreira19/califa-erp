@@ -19,7 +19,8 @@ tmp/historico-planilha/
     bruto/                 E1: um CSV por aba + manifesto.json
     padronizado/           E2: movimentos, previsões, notas, jobs, pendências, propostas/
     validacao/             E3: relatorios.csv, saldos.csv, faturamento.csv, resumo.json;
-                           A4: dre.csv, regional.csv e regional-fechamento.csv
+                           A4: dre.csv, regional.csv, regional-fechamento.csv e
+                           rentabilidade.csv
                            (e as variantes do padronizado)
     revisao-e2.xlsx        pendências e de-para para revisar
     cargas/                A1: os pacotes de carga (.json) para a tela
@@ -38,6 +39,7 @@ npx tsx scripts/historico-financeiro/validar.ts "$V"
 npx tsx scripts/historico-financeiro/revisao.ts "$V"
 npx tsx scripts/historico-financeiro/empacotar.ts "$V" --carga "1ª carga"
 npx tsx scripts/historico-financeiro/conferir-dre.ts "$V"
+npx tsx scripts/historico-financeiro/conferir-rentabilidade.ts "$V" --padronizado --com-previsoes
 npx tsx scripts/historico-financeiro/conferir-regional.ts "$V" --padronizado --com-previsoes \
   --fechamento "$T/fechamento-2026-10-26/origem.xlsx"
 ```
@@ -69,8 +71,9 @@ marcas, plano de contas, serviços, regionais, contas e os jobs abertos. O
   - `notas.csv` (com a classe: job, distribuição de lucro ou sem job) e
     `jobs.csv` (com `fora_do_resultado`: a Copa sem lançamento; e, desde a
     A4, a divisão do job entre as regionais, `rateio_regional`, do grupo
-    "RATEIO %", e a alíquota teórica, `imposto_teorico_percentual`, da coluna
-    "Imp Real %");
+    "RATEIO %", a alíquota teórica, `imposto_teorico_percentual`, da coluna
+    "Imp Real %", e o percentual de fee, `fee_percentual`, da coluna logo
+    depois de "FEE LÍQUIDO");
   - `pendencias.csv` — o que não fecha na primeira carga;
   - `propostas/` — de-para proposto, com a forma como foi achado (igual,
     parecido, ambíguo, sem par);
@@ -118,8 +121,14 @@ marcas, plano de contas, serviços, regionais, contas e os jobs abertos. O
   de cada regional com a DRE regional do Fechamento (as abas "DRE Califa
   Regional" e "DRE CMH Regional"), e as linhas do bloco dos projetos
   proprietários; a soma divide o REC e o CO pelos jobs e marca os projetos
-  como a função do banco. As opções de fonte das duas conferências estão em
-  `movimentos-para-conferir.ts`, que traz também os jobs da mesma fonte.
+  como a função do banco.
+- **Rentabilidade dos jobs, `conferir-rentabilidade.ts`:** refaz, job a job,
+  as colunas TOTAL RECEITA, IMPOSTO, TOTAL CO, RESULTADO, FEE LÍQUIDO e
+  RENTABILIDADE das abas Res. Jobs (`lib/historico-financeiro/rentabilidade.ts`)
+  e compara com a linha do job na aba mais nova dele. Com `--com-previsoes`,
+  o imposto conta também as notas a emitir, como a planilha.
+- As opções de fonte das conferências estão em `movimentos-para-conferir.ts`,
+  que traz também os jobs e os impostos das notas da mesma fonte.
 
 ## Testes
 

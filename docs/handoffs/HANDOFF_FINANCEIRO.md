@@ -8237,6 +8237,31 @@ os arquivos da frente do Antonio.
 - **Código:** `lib/validations/conta-avulsa.ts`, com teste novo, e
   `conta-avulsa-drawer.tsx`. Ver a "Revisão de 26/10/2026" da
   [decisão 082](../decisions/082-a-despesa-sem-job-nasce-com-rateio-e-a-recorrencia-vira-titulo-30-dias-antes.md).
+## ⚠️ Nota de 2026-10-26 (10) — a rentabilidade dos jobs do histórico em Relatórios (decisão 211, A4)
+
+- **Onde:** Relatórios › "Rentabilidade dos jobs do histórico"
+  (`/relatorios/rentabilidade-historico`), cartão só para admin e financeiro.
+  Empresa, ano, período (o ano ou a coluna T) e visão (cliente, marca ou job)
+  pela URL.
+- **Regra (Tiago, 26/10/2026):** as duas contas das abas Res. Jobs. O resultado
+  é a receita do job (Tipo REC) menos o imposto das notas emitidas e o custo
+  (Tipo CO); a rentabilidade é o resultado menos o fee líquido, que a planilha
+  separa por dentro da receita menos o imposto, pelo percentual de cada job
+  (12% na California, 15% na CCH). A coluna se chama "Fee (planilha)": não é o
+  honorário orçado. Vale só para o histórico; os jobs novos seguem os
+  honorários das planilhas internas.
+- **Banco:** `historico_jobs.fee_percentual`, o índice
+  `idx_historico_movimentos_job` e a função `historico_rentabilidade_jobs`
+  (migration `20261026100011`). A 1ª carga foi refeita pela tela com o fee de
+  cada job; a recarga levou também o de-para da CMH (Reg "NE" = Doca, "SP" =
+  Agency).
+- **Código e conferência:** `lib/historico-financeiro/rentabilidade.ts` (com
+  testes) e `scripts/historico-financeiro/conferir-rentabilidade.ts`. De 2023 a
+  2025, a California bate com as abas Res. Jobs em quase todos os jobs; as
+  exceções da planilha (os investimentos da CCH listados como jobs, as fórmulas
+  da CCH de 2025 e 2026 e da Hitlab) estão na
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
 ## Código do projeto do financeiro sem a sigla — 23/10/2026 (decisão 210)
 
 Aplicada em 26/10/2026 (migration `20261023950001`, destrutiva, na hora

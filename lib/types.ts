@@ -3956,6 +3956,8 @@ export interface HistoricoJob {
   rateio_regional: Record<string, number> | null;
   /** A alíquota teórica do job ("Imp Real %"), em fração. */
   imposto_teorico_percentual: number | null;
+  /** O percentual de fee do job na planilha (a coluna depois de "FEE LÍQUIDO"), em fração. */
+  fee_percentual: number | null;
   created_at: string;
 }
 

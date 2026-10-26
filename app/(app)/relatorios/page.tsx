@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, ArrowRight, TrendingUp, FileText, ScrollText, MapPinned, type LucideIcon } from "lucide-react";
+import { BarChart3, ArrowRight, TrendingUp, FileText, ScrollText, MapPinned, BadgePercent, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -45,6 +45,12 @@ export default async function RelatoriosPage() {
               icon={MapPinned}
               title="Resultado por regional do histórico"
               description="A DRE regional da planilha, com o faturamento e o custo divididos pelos jobs e o TD pelo percentual de cada ano."
+            />
+            <RelatorioCard
+              href="/relatorios/rentabilidade-historico"
+              icon={BadgePercent}
+              title="Rentabilidade dos jobs do histórico"
+              description="Resultado e rentabilidade depois do fee de cada job das abas Res. Jobs, por cliente, marca ou job."
             />
           </>
         )}

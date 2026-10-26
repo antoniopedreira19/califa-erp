@@ -68,7 +68,7 @@ export const COLUNAS_DO_PACOTE: Record<TabelaDoPacote, readonly ColunaDoPacote[]
     t("servico", 120), t("servico_planilha", 120), t("gp", 120), d("data_inicio"), t("regional", 60), B("regional_todas"),
     t("regional_planilha", 60), t("regional_por", 40), t("marcador", 40), t("status_planilha", 120),
     t("codigo_antigo", 60), t("job_codigo", 40), t("fora_do_resultado", 120), t("outras_abas", 500),
-    { ...t("rateio_regional", 200), padrao: PARTES_DO_JOB }, n("imposto_teorico_percentual"),
+    { ...t("rateio_regional", 200), padrao: PARTES_DO_JOB }, n("imposto_teorico_percentual"), n("fee_percentual"),
   ],
   rateio: [I("ano"), i("trimestre"), T("empresa", 120), t("grupo", 40), T("regional", 60), N("percentual"), T("origem", 200)],
   saldos: [T("conta", 120), D("mes"), n("saldo_planilha"), n("movimento"), B("abertura")],

@@ -50,22 +50,37 @@ function codigoDaPlanilha(texto: string | null | undefined): string | null {
   return t === "" ? null : t;
 }
 
-/** A divisão do job entre as regionais ("NE:0.25;SP:0.75", como o pacote leva), a alíquota teórica e a coluna REGIONAL ("COPA", "CMH"). */
-export type JobParaConferir = { rateio: string | null; taxa: number | null; regional: string | null };
+/**
+ * A divisão do job entre as regionais ("NE:0.25;SP:0.75", como o pacote leva),
+ * a alíquota teórica, a coluna REGIONAL ("COPA", "CMH"), o percentual de fee e
+ * a linha do job na aba Res. Jobs.
+ */
+export type JobParaConferir = {
+  rateio: string | null;
+  taxa: number | null;
+  regional: string | null;
+  fee: number | null;
+  aba: string;
+  linha: number;
+};
 
 /** Os movimentos e os jobs do pacote de uma carga (o que foi gravado no banco). */
 async function doPacote(arquivo: string): Promise<{ movimentos: MovimentoParaConferir[]; jobs: Map<string, JobParaConferir> }> {
   const lido = lerPacote(await readFile(arquivo, "utf8"));
   if (!lido.ok) throw new Error(lido.message);
   const tj = lido.pacote.tabelas.jobs;
-  const [iChave, iRateio, iTaxa, iRegional] = ["chave", "rateio_regional", "imposto_teorico_percentual", "regional_planilha"].map((nome) =>
-    tj.colunas.indexOf(nome),
-  );
+  const [iChave, iRateio, iTaxa, iRegional, iFee, iAbaDoJob, iLinhaDoJob] = [
+    "chave", "rateio_regional", "imposto_teorico_percentual", "regional_planilha", "fee_percentual", "aba", "linha",
+  ].map((nome) => tj.colunas.indexOf(nome));
   const texto = (v: unknown) => (v === null || v === undefined ? null : String(v));
+  const numero = (v: unknown) => (v === null || v === undefined ? null : Number(v));
   const jobs = new Map(
     tj.linhas.map((r) => [
       String(r[iChave]),
-      { rateio: texto(r[iRateio]), taxa: r[iTaxa] === null ? null : Number(r[iTaxa]), regional: texto(r[iRegional]) },
+      {
+        rateio: texto(r[iRateio]), taxa: numero(r[iTaxa]), regional: texto(r[iRegional]), fee: numero(r[iFee]),
+        aba: String(r[iAbaDoJob]), linha: Number(r[iLinhaDoJob]),
+      },
     ]),
   );
   const mov = lido.pacote.tabelas.movimentos;
@@ -90,15 +105,48 @@ async function doPacote(arquivo: string): Promise<{ movimentos: MovimentoParaCon
   return { movimentos, jobs };
 }
 
-/** Os jobs do padronizado: a divisão e a alíquota de cada um. */
+/** Os jobs do padronizado: a divisão, a alíquota, o fee e a linha de cada um. */
 async function jobsDoPadronizado(arquivo: string): Promise<Map<string, JobParaConferir>> {
   const [cab, ...linhas] = lerCsv(await readFile(arquivo, "utf8"));
-  const [iId, iRateio, iTaxa, iRegional] = ["id", "rateio_regional", "imposto_teorico_percentual", "regional_planilha"].map((nome) =>
-    cab.indexOf(nome),
-  );
+  const [iId, iRateio, iTaxa, iRegional, iFee, iAba, iLinha] = [
+    "id", "rateio_regional", "imposto_teorico_percentual", "regional_planilha", "fee_percentual", "aba", "linha",
+  ].map((nome) => cab.indexOf(nome));
   return new Map(
-    linhas.map((r) => [r[iId], { rateio: r[iRateio] || null, taxa: r[iTaxa] ? Number(r[iTaxa]) : null, regional: r[iRegional] || null }]),
+    linhas.map((r) => [
+      r[iId],
+      {
+        rateio: r[iRateio] || null, taxa: r[iTaxa] ? Number(r[iTaxa]) : null, regional: r[iRegional] || null,
+        fee: r[iFee] ? Number(r[iFee]) : null, aba: r[iAba], linha: Number(r[iLinha]),
+      },
+    ]),
   );
+}
+
+/**
+ * Os impostos das notas emitidas de cada job, da mesma fonte dos movimentos:
+ * as notas do pacote (o período da carga) ou todas as do padronizado. Com
+ * `--com-previsoes`, também as notas a emitir ("PREVISÃO" na coluna NF), que a
+ * coluna IMPOSTO das abas Res. Jobs soma.
+ */
+export async function lerImpostosDasNotas(versao: string, opcoes: readonly string[]): Promise<Map<string, number>> {
+  const impostos = new Map<string, number>();
+  const somar = (job: string | null, valor: number) => {
+    if (job) impostos.set(job, (impostos.get(job) ?? 0) + valor);
+  };
+  if (!opcoes.includes("--padronizado")) {
+    const i = opcoes.indexOf("--carga");
+    const lido = lerPacote(await readFile(join(versao, i >= 0 ? opcoes[i + 1] : "cargas/1a-carga.json"), "utf8"));
+    if (!lido.ok) throw new Error(lido.message);
+    const tn = lido.pacote.tabelas.notas;
+    const [iJob, iSituacao, iImpostos] = ["job_chave", "situacao", "total_impostos"].map((nome) => tn.colunas.indexOf(nome));
+    for (const r of tn.linhas) if (r[iSituacao] === "emitida") somar(r[iJob] === null ? null : String(r[iJob]), emCentavos(Number(r[iImpostos] ?? 0)));
+    return impostos;
+  }
+  const [cab, ...linhas] = lerCsv(await readFile(join(versao, "padronizado", "notas.csv"), "utf8"));
+  const [iJob, iSituacao, iImpostos] = ["job_id", "situacao", "total_impostos"].map((nome) => cab.indexOf(nome));
+  const situacoes = opcoes.includes("--com-previsoes") ? ["emitida", "previsão"] : ["emitida"];
+  for (const r of linhas) if (situacoes.includes(r[iSituacao])) somar(r[iJob] || null, emCentavos(Number(r[iImpostos] || 0)));
+  return impostos;
 }
 
 /** Os movimentos de um CSV do padronizado, de todas as contas da carga, no período. */

@@ -466,6 +466,61 @@ mascarada.
 | California, 2T 2026, projetos | O imposto teórico da Copa digitado: na linha 85 da Res. Jobs 2026, R$ 777.334,87 ("777312.87+22") em vez de 19,53% de R$ 15.715.411,29, e o mesmo valor na linha 91, sem receita (R$ 1.514.550,08 a menos); o benefício da Copa digitado (R$ 1.520.000,00), e por isso o benefício das regionais também difere |
 | CCH, 1T 2026, projetos | O imposto real dos projetos (a coluna IMPOSTO, R$ 61.906,05), e não o teórico, e o benefício deles em zero; o benefício das regionais é o teórico delas menos todo o imposto pago, e a aba conta o imposto dos projetos duas vezes (a DRE consolidada, não: a linha 184 fica em zero no 1T) |
 
+### A rentabilidade dos jobs em Relatórios (A4, 26/10/2026)
+
+**Decidido (Tiago, 26/10/2026, na sessão bifurcada):** "Vamos fazer os dois
+[...] faremos assim com esses dados historicos que estamos importando, com os
+novos jobs continuaremos utilizando os dados de suas respectivas planilhas
+internas." O relatório mostra as duas contas das abas Res. Jobs:
+
+| Coluna | Na aba Res. Jobs | No histórico |
+|---|---|---|
+| Receita | TOTAL RECEITA: o que o job recebeu nas contas | Tipo REC do job, crédito − débito |
+| Imposto | IMPOSTO: os impostos das notas do job | as notas emitidas do job |
+| Custo | TOTAL CO | Tipo CO do job, débito − crédito |
+| Resultado | RESULTADO = receita − imposto − custo | igual; é o Result. Op da Rentabilidade de Jobs |
+| Fee (planilha) | FEE LÍQUIDO = (receita − imposto) × fee ÷ (1 + fee) | igual, com o percentual de cada job |
+| Rentabilidade | RENTABILIDADE = resultado − fee líquido | igual |
+| Período | a aba do ano e a coluna T | o ano e o trimestre do job |
+
+- **Onde:** Relatórios › "Rentabilidade dos jobs do histórico"
+  (`/relatorios/rentabilidade-historico`), cartão só para admin e
+  financeiro. Escolhe-se a empresa (Agência California, CCH, Hitlab ou
+  Ventura), o ano, o período (o ano ou um trimestre, pela coluna T) e a
+  visão (cliente, marca ou job). O cliente e a marca são os do cadastro
+  quando o de-para achou; senão, o texto da planilha. O job sem cliente ou sem
+  marca entra num grupo próprio, para o total ser o mesmo nas três visões.
+- **O fee é o da planilha, por dentro:** ela supõe que a receita menos o
+  imposto já traz o fee e o separa com o percentual de cada job, que a carga
+  traz da coluna logo depois de "FEE LÍQUIDO" (`historico_jobs.fee_percentual`):
+  12% na California e na Go Crazy, 15% na CCH, na Hitlab e na Ventura, e 13% em
+  alguns jobs de 2021 a 2023. Não é o honorário orçado: as planilhas internas
+  somam o honorário por fora (custo de 100 com 12% dá 112), e a planilha
+  financeira aplica o fee sobre toda a receita líquida, que pode incluir margem.
+  Na tela, a coluna se chama "Fee (planilha)", com essa dica. Vale só para o
+  histórico.
+- **Cada job soma tudo o que é dele no histórico, em qualquer data,** como as
+  colunas das abas Res. Jobs. O job que aparece em mais de uma aba fica na mais
+  nova (a do ano em que a planilha o lista por último). Só o realizado: as
+  previsões e as notas a emitir, que a planilha soma, não entram.
+- **O custo do job é o Tipo CO,** como na DRE. A aba Res. Jobs CMH lista também
+  investimentos como se fossem jobs e soma os débitos deles como custo: sete
+  linhas de 2023 e 2024 com Tipo CMH DOC (R$ 2.201.119,99, o Investimento
+  Doca) e CMH MK (R$ 344.768,28, a Makkna). No histórico eles ficam com custo
+  zero no relatório dos jobs, e o valor aparece na DRE como "Investimento Doca"
+  e "Makkna".
+- **Onde as abas fogem da regra (documentado, não se reproduz):** a CCH de 2025
+  calcula o resultado sem o imposto e o fee sobre a receita contada duas vezes
+  (a soma das contas mais o TOTAL RECEITA); a CCH de 2026 também conta a
+  receita duas vezes no fee; as abas da Hitlab fazem o resultado só com
+  algumas contas, e não com o TOTAL RECEITA e o TOTAL CO; e duas linhas da
+  California estão em branco (a rentabilidade da linha 30 de 2024; o fee e a
+  rentabilidade da linha 457 de 2025).
+- A leitura é a função `historico_rentabilidade_jobs` (migration
+  `20261026100011_historico_rentabilidade_dos_jobs.sql`), que confere admin e
+  financeiro uma vez. A conta fica em
+  `lib/historico-financeiro/rentabilidade.ts`.
+
 ## O pipeline (E1, E2 e E3)
 
 Código em `lib/historico-financeiro/` (regras puras, com teste) e
@@ -727,12 +782,33 @@ Fechamento. A soma dos movimentos repete a da função do banco.
   Agency R$ 7.000,00 de pessoal da CMH marcados SP no 4T 2026; o histórico os
   põe na Agency. 69 testes.
 
+## Conferido em 26/10/2026 (A4, rentabilidade dos jobs)
+
+`scripts/historico-financeiro/conferir-rentabilidade.ts` compara, job a job,
+as seis colunas de cada linha das abas Res. Jobs (a da aba mais nova do job)
+com a conta do histórico. Com o padronizado, as previsões e as notas a emitir
+(a mesma base da planilha), de 2023 a 2025:
+
+| Aba | Receita | Imposto | Custo | Resultado | Rentabilidade |
+|---|---|---|---|---|---|
+| California 2023 | 364/364 | 362/364 | 364/364 | 362/364 | 362/364 |
+| California 2024 | 450/450 | 450/450 | 450/450 | 450/450 | 449/450 |
+| California 2025 | 588/588 | 585/588 | 587/588 | 585/588 | 584/588 |
+| Go Crazy 2024 e 2025 | 63/63 | 61/63 | 63/63 | 61/63 | 61/63 |
+| CCH 2023 e 2024 | 261/261 | 256/261 | 254/261 | 249/261 | 249/261 |
+
+Os jobs que diferem são os da lista acima: as notas que o histórico liga ao job
+e a planilha não soma (nome diferente), os investimentos da CCH e as linhas em
+branco. A CCH de 2025 bate na receita (108/108), no imposto (98) e no custo
+(108), e não no resultado, pela fórmula dela. "Batem" inclui os centavos das
+frações da planilha.
+
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas
   85 e 91 da Res. Jobs 2026; R$ 1.520.000,00 de benefício): o histórico segue a
   alíquota e o faturamento. Quando a carga do 3T trouxer a receita da Copa,
   vale confirmar com o Tiago se o imposto da Copa deve seguir o digitado.
-- A4: a rentabilidade e o faturamento dos jobs do histórico.
+- A4: o faturamento dos jobs do histórico.
 - Revisar o rateio de um ano, mantendo o registro da planilha dos anos
   fechados. O RH tem a própria tabela de rateio
   (`empresas_rateios_regionais`, do Antonio), com percentuais diferentes dos

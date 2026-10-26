@@ -147,13 +147,16 @@ type Job = {
   rateio: string;
   /** A alíquota teórica do job (a coluna "Imp Real %"), em fração. */
   impostoTeorico: string;
+  /** O percentual de fee do job (a coluna logo depois de "FEE LÍQUIDO"), em fração. */
+  fee: string;
   outrasAbas: string[];
 };
 
 /**
- * As colunas da divisão do job entre as regionais: o grupo "RATEIO %" da linha
- * de títulos (do título até o próximo) com o código de cada regional na linha
- * do cabeçalho, e a coluna "Imp Real %". As abas sem o grupo não dividem.
+ * As colunas dos dados de cada job que não são totais: o grupo "RATEIO %" da
+ * linha de títulos (do título até o próximo) com o código de cada regional na
+ * linha do cabeçalho, a coluna "Imp Real %" e o percentual de fee, na coluna
+ * sem título logo depois de "FEE LÍQUIDO". As abas sem o grupo não dividem.
  */
 function colunasDoRateio(titulos: readonly string[], cabecalho: readonly string[]) {
   const inicio = titulos.findIndex((v, i) => i > 0 && normalizarTexto(v) === "RATEIO");
@@ -165,7 +168,12 @@ function colunasDoRateio(titulos: readonly string[], cabecalho: readonly string[
       if (codigo) regionais.push([i, codigo]);
     }
   }
-  return { regionais, impostoTeorico: cabecalho.findIndex((v, i) => i > 0 && normalizarTexto(v) === "IMP REAL") };
+  const feeLiquido = cabecalho.findIndex((v, i) => i > 0 && normalizarTexto(v) === "FEE LIQUIDO");
+  return {
+    regionais,
+    impostoTeorico: cabecalho.findIndex((v, i) => i > 0 && normalizarTexto(v) === "IMP REAL"),
+    fee: feeLiquido > 0 ? feeLiquido + 1 : -1,
+  };
 }
 
 function lerJobs(abasDeResultado: { nome: string; papel: AbaDeResultado; linhas: Linhas }[]): Job[] {
@@ -187,6 +195,8 @@ function lerJobs(abasDeResultado: { nome: string; papel: AbaDeResultado; linhas:
       const codigoAntigo = ehCodigoAntigo(c("codigo_antigo")) ? c("codigo_antigo") : ehCodigoAntigo(c("status")) ? c("status") : "";
       const partes = doRateio.regionais.map(([i, codigo]) => [codigo, lerNumero(l[i] ?? "")] as const);
       const impostoTeorico = doRateio.impostoTeorico > 0 ? (l[doRateio.impostoTeorico] ?? "").trim() : "";
+      const fee = doRateio.fee > 0 ? (l[doRateio.fee] ?? "").trim() : "";
+      const feeLido = lerNumero(fee);
       const id = `${papel.coluna}:${normalizarTexto(nome)}`;
       const job: Job = {
         id,
@@ -212,6 +222,7 @@ function lerJobs(abasDeResultado: { nome: string; papel: AbaDeResultado; linhas:
         imposto: c("imposto"),
         rateio: partes.filter(([, p]) => p).map(([codigo, p]) => `${codigo}:${p}`).join(";"),
         impostoTeorico: lerNumero(impostoTeorico) === null ? "" : impostoTeorico,
+        fee: feeLido === null || feeLido <= 0 || feeLido >= 1 ? "" : fee,
         outrasAbas: [],
       };
       const ja = porId.get(id);
@@ -234,6 +245,8 @@ function lerJobs(abasDeResultado: { nome: string; papel: AbaDeResultado; linhas:
         pendencia({ tipo: "Rateio do job não soma 100%", aba, linha: l[0], encontrado: job.rateio, detalhe: `Job "${nome}"` });
       if (impostoTeorico && lerNumero(impostoTeorico) === null)
         pendencia({ tipo: "Imp Real % não numérico", aba, linha: l[0], encontrado: impostoTeorico, detalhe: `Job "${nome}"` });
+      if (fee && (feeLido === null || feeLido <= 0 || feeLido >= 1))
+        pendencia({ tipo: "Fee fora de 0% a 100%", aba, linha: l[0], encontrado: fee, detalhe: `Job "${nome}"` });
     }
   }
   return [...porId.values()];
@@ -717,7 +730,7 @@ async function main() {
       "id", "nome", "empresa", "aba_da_planilha", "aba", "ano", "linha", "trimestre", "projeto", "cliente", "marca", "servico", "gp", "data_inicio",
       "regional_planilha", "marcador", "status", "codigo_antigo", "job_sistema", "cliente_sistema", "marca_sistema", "servico_sistema", "regional",
       "regional_por", "fora_do_resultado", "outras_abas", "planilha_receita", "planilha_custo", "planilha_imposto",
-      "rateio_regional", "imposto_teorico_percentual",
+      "rateio_regional", "imposto_teorico_percentual", "fee_percentual",
     ],
     jobs.map((j) => {
       const pc = proporCliente(j.cliente, retrato.clientes);
@@ -731,7 +744,7 @@ async function main() {
         j.id, j.nome, j.empresa, j.empresaDaAba, j.aba, j.ano, j.linha, j.trimestre, j.projeto, j.cliente, j.marca, j.servico, j.gp, j.dataInicio,
         j.regional, normalizarTexto(j.regional) === "COPA" ? "Copa" : "", j.status, j.codigoAntigo, jobsDoSistema.get(normalizarTexto(j.nome)) ?? "",
         cliente, marca, servico, regional, por, foraDoResultado(j), j.outrasAbas.join(" "), j.receita, j.custo, j.imposto,
-        j.rateio, j.impostoTeorico,
+        j.rateio, j.impostoTeorico, j.fee,
       ];
     }),
   );
