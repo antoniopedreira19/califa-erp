@@ -213,7 +213,7 @@ const COLUNAS_DO_MOVIMENTO = [
   "classe", "empresa", "sigla_planilha", "grupo", "cod", "competencia_trimestre", "competencia_ano",
   "plano_tipo", "plano_subtipo", "regional_planilha", "regional", "regional_todas",
   "job_id", "job_nome", "job_achado_em", "coluna_jobs", "coluna_evento", "tipo_planilha",
-  "descricao", "fornecedor", "parcela", "documento", "observacao", "contrapartida", "dre_extra", "ano_comp",
+  "descricao", "fornecedor", "parcela", "documento", "observacao", "contrapartida", "dre_extra", "ano_comp", "coluna_reg", "coluna_reg_cmh",
 ] as const;
 
 type Movimento = Record<(typeof COLUNAS_DO_MOVIMENTO)[number], string>;
@@ -443,6 +443,9 @@ async function main() {
         contrapartida: tipo.classe === "transferencia" ? tipo.contrapartida : "",
         dre_extra: c("dre_extra"),
         ano_comp: c("ano_comp"),
+        // As colunas Reg e CMH Reg como vieram: as abas Gerencial (relatório por regional) somam por elas.
+        coluna_reg: c("reg"),
+        coluna_reg_cmh: c("reg_cmh"),
       };
       if (futura) {
         contar("previsão (data futura)");
@@ -648,6 +651,9 @@ async function main() {
     lista.push(m.regional);
     regionaisDoJob.set(m.job_id, lista);
   }
+  const jobsComLancamento = new Set([...movimentos, ...previsoes].map((m) => m.job_id).filter(Boolean));
+  /** Job da Copa sem nenhum lançamento: cancelado, sai dos relatórios de resultado (Tiago, 25/10/2026). */
+  const foraDoResultado = (j: Job) => (normalizarTexto(j.regional) === "COPA" && !jobsComLancamento.has(j.id) ? "Copa sem lançamento" : "");
   const regionalDoJob = (j: Job) => {
     // "TD" é o job de todas as regionais, em rateio: não se escolhe uma.
     if (normalizarTexto(j.regional) === "TD") return { regional: "", por: "todas (rateio)" };
@@ -677,7 +683,7 @@ async function main() {
     [
       "id", "nome", "empresa", "aba_da_planilha", "aba", "ano", "linha", "trimestre", "projeto", "cliente", "marca", "servico", "gp", "data_inicio",
       "regional_planilha", "marcador", "status", "codigo_antigo", "job_sistema", "cliente_sistema", "marca_sistema", "servico_sistema", "regional",
-      "regional_por", "outras_abas", "planilha_receita", "planilha_custo", "planilha_imposto",
+      "regional_por", "fora_do_resultado", "outras_abas", "planilha_receita", "planilha_custo", "planilha_imposto",
     ],
     jobs.map((j) => {
       const pc = proporCliente(j.cliente, retrato.clientes);
@@ -690,7 +696,7 @@ async function main() {
       return [
         j.id, j.nome, j.empresa, j.empresaDaAba, j.aba, j.ano, j.linha, j.trimestre, j.projeto, j.cliente, j.marca, j.servico, j.gp, j.dataInicio,
         j.regional, normalizarTexto(j.regional) === "COPA" ? "Copa" : "", j.status, j.codigoAntigo, jobsDoSistema.get(normalizarTexto(j.nome)) ?? "",
-        cliente, marca, servico, regional, por, j.outrasAbas.join(" "), j.receita, j.custo, j.imposto,
+        cliente, marca, servico, regional, por, foraDoResultado(j), j.outrasAbas.join(" "), j.receita, j.custo, j.imposto,
       ];
     }),
   );

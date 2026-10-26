@@ -2,8 +2,10 @@
 
 **Data:** 2026-10-25
 **Status:** aceita. E1 (extração), E2 (padronização, com o de-para aprovado)
-e E3 (validação) implementadas em 25/10/2026, sem nada gravado no banco.
-Próxima entrega: A1 (tabelas de histórico e tela de importação).
+e E3 (validação, com as DREs e as abas Gerencial) implementadas em
+25/10/2026, sem nada gravado no banco. A Copa sem lançamento e o rateio do TD
+foram decididos no mesmo dia. Próxima entrega: A1 (tabelas de histórico,
+com a do rateio, e tela de importação).
 **Quem decidiu:** Tiago, no plano "Importação do histórico financeiro"
 (página privada de 25/10/2026), com as respostas D1, D2 e D3 dadas no mesmo
 dia: "Aprovo D1, D2 e D3 como você recomendou".
@@ -59,6 +61,8 @@ abaixo vieram das fórmulas dela, conferidas contra a aba DRE.
 10. **A DRE da Doca soma pela coluna "DRE EXTRA"** ("DOC CO 1T 2023"), e não
     pelo Tipo. O padronizado guarda essa coluna e a "Ano Comp.".
 11. **Regional "TD"** é o job ou o lançamento de todas as regionais, em rateio.
+12. **Nas contas XP, a regional fica na coluna "Int."**, e não na "Reg". As
+    abas Gerencial somam o TD da XP California por ela.
 
 ### Respostas de 25/10/2026, à noite
 
@@ -79,6 +83,53 @@ abaixo vieram das fórmulas dela, conferidas contra a aba DRE.
   planilha a lança em reais convertidos ("Saldo em dólar: U$ …" na
   descrição): o histórico fica em reais, como a planilha, e o extrato OFX dessa
   conta, que vem em dólar, não vai bater com ele.
+
+### Copa sem lançamento e rateio do TD (25/10/2026)
+
+- **Os 4 jobs da Copa sem nenhum lançamento** (linhas 338, 343, 460 e 464 da
+  aba Res. Jobs 2026, todos com status CANCELADO) são cancelados e saem dos
+  relatórios de resultado. O padronizado os marca em `fora_do_resultado`.
+- **O lançamento TD fica sem regional, com a marca "todas".** A DRE não rateia.
+  O rateio entra só no relatório por regional e replica as abas Gerencial da
+  planilha. Os percentuais ficam numa tabela de histórico própria
+  (`historico_rateio_regional`, criada na A1), por ano e por empresa, com a
+  origem de cada linha.
+- **Percentuais, conferidos nas células da planilha:**
+
+  | Ano | California (NE / NO / SP / RJ / SS) | Fonte | CCH (AGE / DOC / URB) | Fonte |
+  |---|---|---|---|---|
+  | 2022 | 26,5 / 26,5 / 27 / 20 / — | Gerencial 22, linha 127 | — | — |
+  | 2023 | 25 / 20 / 30 / 25 / — | Gerencial 23, linha 131 | 25 / 50 / 25 | Gerencial 23 CMH, linha 143 |
+  | 2024 | 30 / 15 / 40 / 15 / —; na linha 147, 25 / 20 / 30 / 25 | Gerencial 24, linhas 135 e 147 | 25 / 50 / 25 | Gerencial 24 CMH, linha 185 |
+  | 2025 | 25 / 20 / 30 / 25 / — | Gerencial 25, linha 224 | 50 / 50 / 0 | Gerencial 25 CMH, linha 245 |
+  | 2026 | 15 / 15 / 40 / 25 / 5 | Gerencial 26, linha 133 | 50 / 50 / — | Gerencial 26, Q133:R133 |
+
+  A regional BH nunca recebe rateio. Hitlab e Ventura não têm rateio. A
+  terceira regional da CMH é URB (Urbia). A tabela "HISTÓRICO" da Gerencial 26
+  não vale: os anos dela estão deslocados.
+- **Conferência:** o CUSTO FIXO GERAL do 1T 2026 (−389.199,82, dos quais NE
+  −58.379,97) sai igual da planilha, do bruto e do padronizado (E3).
+
+#### Onde a planilha não usa o percentual do ano
+
+As fórmulas das abas Gerencial mostram critérios que a tabela acima não
+descreve. A A1 cria a tabela com trimestre e grupo opcionais, para caber cada
+um deles. Como cada um entra no relatório se decide na A4:
+
+- **Imobilizado:** o TD se divide em partes iguais entre as regionais (÷4 na
+  California; ÷4 ou ÷2 na CMH) na maior parte dos trimestres de 2023 a 2026.
+  O percentual do ano só aparece em alguns trimestres.
+- **4T 2022 e 4T 2023:** custo fixo e pessoal TD divididos por 4, e não pelo
+  percentual do ano.
+- **Lucro (PL):** no 4T 2023 e no 4T 2025, dividido por 4. Algumas fórmulas de
+  PL da CMH multiplicam por uma célula vazia e dão zero (Gerencial 26 no 2T
+  2026 e Gerencial 25 CMH).
+- **Percentual de outra coluna:** 8 células multiplicam pelo percentual de
+  outra regional. Seis valem zero. As outras duas, H147 e I147 da Gerencial 25
+  CMH, somam −1.231,28.
+- **Crédito em linha de custo:** as Gerencial somam só o débito, e a DRE
+  desconta o crédito. No custo fixo TD do 1T 2026, a diferença é de 8.009,45.
+  Com o critério da planilha, a soma das regionais não fecha com a DRE.
 
 ### D1 — Empresas
 
@@ -139,13 +190,16 @@ Código em `lib/historico-financeiro/` (regras puras, com teste) e
   pasta do de-para aprovado; a padronização usa essa pasta quando ela é
   passada como terceiro argumento.
 - **E3 — validação** (`validar.ts`): refaz cada SUMIFS das abas DRE, DRE CMH,
-  DRE HIT, DRE Ventura e DRE Doca sobre o bruto e sobre o padronizado
-  (`lib/historico-financeiro/formulas.ts`, com o critério como o Google
-  Sheets aplica: sem diferença de maiúscula, com curinga, espaço contando,
-  célula vazia valendo zero) e compara com o valor da planilha; confere o
-  movimento e o saldo de cada conta mês a mês e o faturamento por aba e mês.
-  Diferença entre o bruto e o padronizado só passa se for explicada: conta
-  fora (D2), linha separada pela padronização ou espaço sobrando no texto.
+  DRE HIT, DRE Ventura, DRE Doca e das Gerencial sobre o bruto e sobre o
+  padronizado (`lib/historico-financeiro/formulas.ts`, com o critério como o
+  Google Sheets aplica: sem diferença de maiúscula, com curinga, espaço
+  contando, célula vazia valendo zero) e compara com o valor da planilha. No
+  rateio, a soma do TD vezes o percentual da célula da aba também se refaz. As
+  linhas de receita das Gerencial somam as abas de resultado e ficam fora (regra
+  9). A E3 também confere o movimento e o saldo de cada conta mês a mês e o
+  faturamento por aba e mês. Diferença entre o bruto e o padronizado só passa
+  se for explicada: conta fora (D2), linha separada pela padronização ou espaço
+  sobrando no texto.
 
 A planilha tem dado pessoal. Planilha, CSVs e revisão ficam em
 `tmp/historico-planilha/`, fora do git; o código e esta decisão não têm dado
@@ -166,12 +220,18 @@ da planilha, só contagens.
   da noite, sobram 20 pendências na primeira carga: 12 notas cujo job não está
   em nenhuma aba de resultado, 3 lançamentos de job antigo, 2 datas inválidas,
   2 jobs repetidos com dados diferentes e 1 Tipo sem grupo.
-- **E3, DRE de 2023 a 2026:** 8.710 células com SUMIFS. 8.685 batem nas três
+- **E3, DRE de 2023 a 2026:** 8.808 células com SUMIFS. 8.783 batem nas três
   fontes (planilha, bruto e padronizado). 3 diferem no padronizado por linhas
   que a padronização separou (a data "0204" do Fundo Fixo e um lançamento de
   valor que não fecha), 6 por espaço sobrando no Tipo ou no Jobs — a DRE da
   planilha deixa esses lançamentos de fora e o histórico os soma —, e 16 são
   fórmulas quebradas (`#REF!`) na própria DRE da CMH.
+- **E3, Gerencial de 2023 a 2026:** 1.954 células com SUMIFS. 1.783 batem nas
+  três fontes, rateio incluído. 166 somam as abas de resultado (receita por
+  job) e ficam fora. 4 somam outra célula da aba (o imobilizado do 1T 2025) e
+  não se refazem. 1 difere por espaço sobrando no Tipo. Foi a Gerencial que
+  mostrou a regional das contas XP na coluna "Int." (regra 12), que a
+  padronização não lia.
 - **E3, saldos e faturamento:** de janeiro de 2023 a setembro de 2026, nenhum
   mês de nenhuma conta tem movimento diferente entre planilha e padronizado, o
   saldo da planilha encadeia mês a mês com o movimento padronizado, e nenhum
@@ -179,8 +239,12 @@ da planilha, só contagens.
 
 ## O que fica para depois
 
-- A1 e A2: as tabelas de histórico, a tela de importação e a primeira carga
-  (com a criação das contas Fundo Fixo California e BB Americas).
+- A1 e A2: as tabelas de histórico (com a do rateio), a tela de importação e
+  a primeira carga (com a criação das contas Fundo Fixo California e BB
+  Americas).
+- A4: como o relatório por regional trata o que a planilha não rateia pelo
+  percentual do ano (imobilizado, 4T 2022 e 2023, PL, crédito em linha de
+  custo).
 - As 20 pendências: as de data e de nome de job se corrigem na planilha e
   entram na versão do 3T.
 - A trilha do 4T no sistema: os jobs do 4T que só estão na planilha, as notas de

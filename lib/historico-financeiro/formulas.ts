@@ -4,10 +4,12 @@
  *
  * As DREs da planilha são somas e subtrações de SUMIFS sobre as abas das
  * contas ("SUMIFS('Conta California BB'!$C:$C,'Conta California BB'!$J:$J,C612)
- * - SUMIFS(…$B:$B…)"). A validação refaz cada uma sobre os dados da extração
- * (E1) e sobre os padronizados (E2). Fórmula com qualquer outra coisa (SUM,
- * multiplicação, outra célula usada como valor) volta `null` e conta como
- * "não verificável".
+ * - SUMIFS(…$B:$B…)"). As abas Gerencial fazem o mesmo por regional e, no
+ * rateio, multiplicam a soma dos lançamentos "TD" pelo percentual da regional,
+ * que mora numa célula da própria aba ("-(SUMIFS(…,\"TD\"))*E133"). A
+ * validação refaz cada uma sobre os dados da extração (E1) e sobre os
+ * padronizados (E2). Fórmula com qualquer outra coisa (SUM, outra função,
+ * célula somada como valor) volta `null` e conta como "não verificável".
  *
  * O critério segue o Google Sheets: texto sem diferença de maiúscula, com os
  * curingas * e ?; número; e comparação (">=01/01/2023"), com data no formato
@@ -19,7 +21,9 @@ export type Intervalo = { aba: string | null; coluna: number; linhaDe: number | 
 export type Criterio = { tipo: "celula"; ref: string } | { tipo: "texto"; valor: string } | { tipo: "numero"; valor: number };
 export type No =
   | { tipo: "numero"; valor: number }
+  | { tipo: "celula"; ref: string }
   | { tipo: "soma"; partes: { sinal: 1 | -1; no: No }[] }
+  | { tipo: "produto"; partes: { divide: boolean; no: No }[] }
   | { tipo: "somase"; soma: Intervalo; criterios: { intervalo: Intervalo; criterio: Criterio }[] };
 
 type Token =
@@ -108,7 +112,10 @@ function intervalo(t: Token & { t: "ref" }): Intervalo | null {
   return { aba: t.aba, coluna: de.coluna, linhaDe: de.linha, linhaAte: ate.linha };
 }
 
-/** Texto da fórmula → árvore, ou `null` se ela usa algo além de números, +, −, parênteses e SUMIFS. */
+/**
+ * Texto da fórmula → árvore, ou `null` se ela usa algo além de números, +, −,
+ * ×, ÷, parênteses, SUMIFS e célula da própria aba como fator depois de × ou ÷.
+ */
 export function lerFormula(formula: string): No | null {
   const ts = tokens(formula);
   if (!ts) return null;
@@ -170,6 +177,30 @@ export function lerFormula(formula: string): No | null {
     return null;
   };
 
+  // A célula só entra como fator depois de × ou ÷ (o percentual do rateio). Somada, ela traria
+  // para a conta o valor que a própria planilha calculou, e a fórmula bateria consigo mesma.
+  const termo = (): No | null => {
+    const primeiro = primario();
+    if (!primeiro) return null;
+    const partes: { divide: boolean; no: No }[] = [{ divide: false, no: primeiro }];
+    while (simbolo("*") || simbolo("/")) {
+      const divide = simbolo("/");
+      p++;
+      const t = ts[p];
+      let no: No | null;
+      if (t?.t === "ref") {
+        if (t.aba !== null || t.ate !== null) return null;
+        p++;
+        no = { tipo: "celula", ref: t.de.replace(/\$/g, "").toUpperCase() };
+      } else {
+        no = primario();
+      }
+      if (!no) return null;
+      partes.push({ divide, no });
+    }
+    return partes.length === 1 ? primeiro : { tipo: "produto", partes };
+  };
+
   const expressao = (): No | null => {
     const partes: { sinal: 1 | -1; no: No }[] = [];
     do {
@@ -178,7 +209,7 @@ export function lerFormula(formula: string): No | null {
         if (simbolo("-")) sinal = sinal === 1 ? -1 : 1;
         p++;
       }
-      const no = primario();
+      const no = termo();
       if (!no) return null;
       partes.push({ sinal, no });
     } while (simbolo("+") || simbolo("-"));
@@ -290,17 +321,32 @@ const dentro = (linha: number, i: Intervalo) => (i.linhaDe === null || linha >= 
 
 /**
  * Valor da árvore sobre uma fonte. `valorDaCelula` dá o valor das células da
- * própria aba da fórmula usadas como critério (o C611 de "REC 1T 2026").
- * Volta `null` quando a fonte não tem a aba ou a coluna.
+ * própria aba da fórmula usadas como critério (o C611 de "REC 1T 2026") ou
+ * como fator (o percentual do rateio). Volta `null` quando a fonte não tem a
+ * aba ou a coluna, quando o fator é texto e na divisão por zero.
  */
 export function avaliar(no: No, fonte: Fonte, valorDaCelula: (ref: string) => string, abaDaFormula: string): number | null {
   if (no.tipo === "numero") return no.valor;
+  if (no.tipo === "celula") {
+    const texto = valorDaCelula(no.ref).trim();
+    if (texto === "") return 0;
+    return ehNumero(texto) ? Number(texto) : null;
+  }
   if (no.tipo === "soma") {
     let total = 0;
     for (const parte of no.partes) {
       const valor = avaliar(parte.no, fonte, valorDaCelula, abaDaFormula);
       if (valor === null) return null;
       total += parte.sinal * valor;
+    }
+    return total;
+  }
+  if (no.tipo === "produto") {
+    let total = 1;
+    for (const parte of no.partes) {
+      const valor = avaliar(parte.no, fonte, valorDaCelula, abaDaFormula);
+      if (valor === null || (parte.divide && valor === 0)) return null;
+      total = parte.divide ? total / valor : total * valor;
     }
     return total;
   }
@@ -328,9 +374,16 @@ export function avaliar(no: No, fonte: Fonte, valorDaCelula: (ref: string) => st
   return total;
 }
 
+/** As colunas, aba por aba, que os SUMIFS da árvore leem: a somada e as dos critérios. */
+export function colunasDaFormula(no: No, abaDaFormula: string): { aba: string; coluna: number }[] {
+  if (no.tipo === "numero" || no.tipo === "celula") return [];
+  if (no.tipo === "soma" || no.tipo === "produto") return no.partes.flatMap((p) => colunasDaFormula(p.no, abaDaFormula));
+  return [no.soma, ...no.criterios.map((c) => c.intervalo)].map((i) => ({ aba: i.aba ?? abaDaFormula, coluna: i.coluna }));
+}
+
 /** As abas que a árvore soma. */
 export function abasDaFormula(no: No, abaDaFormula: string): string[] {
-  if (no.tipo === "numero") return [];
-  if (no.tipo === "soma") return [...new Set(no.partes.flatMap((p) => abasDaFormula(p.no, abaDaFormula)))];
+  if (no.tipo === "numero" || no.tipo === "celula") return [];
+  if (no.tipo === "soma" || no.tipo === "produto") return [...new Set(no.partes.flatMap((p) => abasDaFormula(p.no, abaDaFormula)))];
   return [no.soma.aba ?? abaDaFormula];
 }

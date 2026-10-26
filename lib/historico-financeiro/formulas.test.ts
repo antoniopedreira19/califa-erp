@@ -59,11 +59,29 @@ test("faixa de linhas e critério de data com curinga", () => {
   assert.equal(valor("SUMIFS('Conta Exemplo'!$B:$B,'Conta Exemplo'!$A:$A,\">=01/01/2023\")"), 1050);
 });
 
-test("fórmula que não é só SUMIFS não se avalia", () => {
+test("fórmula com outra função ou com célula somada não se avalia", () => {
   assert.equal(lerFormula("SUM(D611:M611)"), null);
   assert.equal(lerFormula("N612/N$611"), null);
   assert.equal(lerFormula("D611+R611"), null);
-  assert.equal(lerFormula("SUMIFS('Conta Exemplo'!$B:$B,'Conta Exemplo'!$J:$J,C10)*2"), null);
+  assert.equal(lerFormula("SUMIFS('Conta Exemplo'!$B:$B,'Conta Exemplo'!$J:$J,C10)+D611"), null);
+});
+
+test("rateio: a soma do TD vezes o percentual que mora numa célula da aba", () => {
+  const percentuais: Record<string, string> = { ...celulas, E133: "0.25", E134: "", E135: "vinte e cinco" };
+  const rateio = (formula: string) => {
+    const no = lerFormula(formula);
+    assert.ok(no, `fórmula não lida: ${formula}`);
+    return avaliar(no, fonte, (ref) => percentuais[ref] ?? "", "Gerencial");
+  };
+  // Débito de "CO 1T 2026": só a linha 3 (300); a 6 tem espaço sobrando.
+  assert.equal(rateio("-(SUMIFS('Conta Exemplo'!$C:$C,'Conta Exemplo'!$J:$J,\"CO 1T 2026\"))*$E$133"), -75);
+  assert.equal(rateio("SUMIFS('Conta Exemplo'!$C:$C,'Conta Exemplo'!$J:$J,\"CO 1T 2026\")/2*E133"), 37.5);
+  assert.equal(rateio("SUMIFS('Conta Exemplo'!$B:$B,'Conta Exemplo'!$J:$J,C10)*E134"), 0);
+  assert.equal(rateio("SUMIFS('Conta Exemplo'!$B:$B,'Conta Exemplo'!$J:$J,C10)*E135"), null);
+  assert.equal(rateio("SUMIFS('Conta Exemplo'!$B:$B,'Conta Exemplo'!$J:$J,C10)/E134"), null);
+  // A célula só entra depois de × ou ÷, e só da própria aba.
+  assert.equal(lerFormula("E133*SUMIFS('Conta Exemplo'!$B:$B,'Conta Exemplo'!$J:$J,C10)"), null);
+  assert.equal(lerFormula("SUMIFS('Conta Exemplo'!$B:$B,'Conta Exemplo'!$J:$J,C10)*'Outra Aba'!E133"), null);
 });
 
 test("aba que a fonte não tem, ou coluna que ela não guarda, volta nulo", () => {
@@ -77,6 +95,9 @@ test("abas somadas pela fórmula", () => {
   const no = lerFormula("SUMIFS(Paypal!$B:$B,Paypal!$J:$J,C10)-SUMIFS('Conta Exemplo'!$C:$C,'Conta Exemplo'!$J:$J,C10)");
   assert.ok(no);
   assert.deepEqual(abasDaFormula(no, "DRE"), ["Paypal", "Conta Exemplo"]);
+  const rateio = lerFormula("-(SUMIFS(Paypal!$C:$C,Paypal!$J:$J,\"CF 1T 2026\",Paypal!$L:$L,\"TD\"))*E133");
+  assert.ok(rateio);
+  assert.deepEqual(abasDaFormula(rateio, "Gerencial"), ["Paypal"]);
 });
 
 test("critérios do Google Sheets", () => {

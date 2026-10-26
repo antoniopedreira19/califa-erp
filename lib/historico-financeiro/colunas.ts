@@ -28,6 +28,8 @@ export const SINONIMOS_DA_CONTA: Readonly<Record<string, string>> = {
   "COD CONTA": "cod",
   REG: "reg",
   "REG CALIFA": "reg",
+  // Nas abas XP a regional se chama "Int.": as abas Gerencial somam o TD da XP California por ela.
+  INT: "reg",
   "CMH REG": "reg_cmh",
   "REG CMH": "reg_cmh",
   DOC: "documento",

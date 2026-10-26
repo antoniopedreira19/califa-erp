@@ -2,11 +2,13 @@
  * E3 da importação do histórico financeiro (decisão 211): confere a extração
  * (E1) e a padronização (E2) contra os números que a própria planilha mostra.
  *
- *   - DRE: cada célula das abas DRE, DRE CMH, DRE HIT, DRE Ventura e DRE Doca
- *     que é soma e subtração de SUMIFS é refeita sobre o bruto e sobre o
- *     padronizado e comparada com o valor da planilha. Quando só o padronizado
- *     difere, a diferença é conferida contra as linhas que a padronização
- *     deixou de fora (conta fora do escopo, data inválida, valor que não fecha);
+ *   - relatórios: cada célula das abas DRE (California, CMH, HIT, Ventura e
+ *     Doca) e Gerencial (o resultado por regional) que é soma e subtração de
+ *     SUMIFS é refeita sobre o bruto e sobre o padronizado e comparada com o
+ *     valor da planilha. Quando só o padronizado difere, a diferença é
+ *     conferida contra as linhas que a padronização deixou de fora (conta fora
+ *     do escopo, data inválida, valor que não fecha) e contra o espaço
+ *     sobrando no texto, que a planilha não soma;
  *   - saldos: por conta e por mês, o movimento do mês no bruto e no
  *     padronizado, e o saldo da planilha no fim do mês encadeado com o
  *     movimento padronizado;
@@ -16,7 +18,7 @@
  * Uso:
  *   npx tsx scripts/historico-financeiro/validar.ts <pasta-da-versao>
  *
- * Saída em <pasta-da-versao>/validacao/: dre.csv, saldos.csv,
+ * Saída em <pasta-da-versao>/validacao/: relatorios.csv, saldos.csv,
  * faturamento.csv e resumo.json.
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -25,15 +27,19 @@ import { PAPEL_DAS_ABAS, type AbaDeConta, type AbaDeFaturamento } from "../../li
 import { SINONIMOS_DA_CONTA, SINONIMOS_DA_NOTA, colunasPorNome } from "../../lib/historico-financeiro/colunas";
 import { BOM, lerCsv, letrasDaColuna, linhaCsv } from "../../lib/historico-financeiro/csv";
 import { lerTabelaCsv } from "../../lib/historico-financeiro/depara";
-import { Fonte, abasDaFormula, avaliar, lerFormula } from "../../lib/historico-financeiro/formulas";
+import { Fonte, abasDaFormula, avaliar, colunasDaFormula, lerFormula } from "../../lib/historico-financeiro/formulas";
 import { lerData, lerNumero, normalizarTexto } from "../../lib/historico-financeiro/regras";
 import { abrirXlsx, linhasDaAba } from "../../lib/historico-financeiro/xlsx-em-fluxo";
 import type { Manifesto } from "./extrair";
 
-const ABAS_DE_DRE = ["DRE", "DRE CMH", "DRE HIT", "DRE Ventura", "DRE Doca"];
+/** As abas de relatório refeitas: as DREs e as Gerencial (o resultado por regional, que soma pela coluna Reg). */
+const ABAS_DE_RELATORIO = [
+  "DRE", "DRE CMH", "DRE HIT", "DRE Ventura", "DRE Doca",
+  "Gerencial 22", "Gerencial 23", "Gerencial 24", "Gerencial 25", "Gerencial 26", "Gerencial 23 CMH", "Gerencial 24 CMH", "Gerencial 25 CMH",
+];
 const TOLERANCIA = 0.01;
 /** Os campos do padronizado que a validação remonta na coluna de origem. */
-const CAMPOS_REMONTADOS = ["data", "credito", "debito", "job", "evento", "tipo", "cod", "dre_extra", "ano_comp"] as const;
+const CAMPOS_REMONTADOS = ["data", "credito", "debito", "job", "evento", "tipo", "cod", "documento", "dre_extra", "ano_comp", "reg", "reg_cmh"] as const;
 const CAMPO_DO_MOVIMENTO: Record<(typeof CAMPOS_REMONTADOS)[number], string> = {
   data: "data",
   credito: "credito_planilha",
@@ -42,8 +48,11 @@ const CAMPO_DO_MOVIMENTO: Record<(typeof CAMPOS_REMONTADOS)[number], string> = {
   evento: "coluna_evento",
   tipo: "tipo_planilha",
   cod: "cod",
+  documento: "documento",
   dre_extra: "dre_extra",
   ano_comp: "ano_comp",
+  reg: "coluna_reg",
+  reg_cmh: "coluna_reg_cmh",
 };
 
 type Linhas = string[][];
@@ -98,8 +107,10 @@ async function main() {
     const comValor = new Set<number>();
     for (const l of linhasDaAba.slice(1)) l.forEach((v, i) => i > 0 && v.trim() && comValor.add(i));
     const disponiveis = new Set(CAMPOS_REMONTADOS.map((c) => colunas.get(c)).filter((c): c is number => c !== undefined));
+    // A conta fora (D2) não tem linha no padronizado: nenhuma coluna a remontar.
+    const fora = (PAPEL_DAS_ABAS[nome] as AbaDeConta).situacao === "fora";
     const ultima = Math.max(...linhasDaAba.map((l) => l.length), 30);
-    for (let i = 1; i <= ultima; i++) if (!comValor.has(i)) disponiveis.add(i);
+    for (let i = 1; i <= ultima; i++) if (fora || !comValor.has(i)) disponiveis.add(i);
     colunasDoPadronizado.set(nome, disponiveis);
   }
   for (const m of movimentos) {
@@ -125,11 +136,12 @@ async function main() {
   const fonteAparada = new Fonte(new Map([...bruto].map(([k, v]) => [k, aparar(v)])));
   const fonteExcluidasAparadas = new Fonte(new Map([...excluidas].map(([k, v]) => [k, aparar(v)])));
 
-  // ------------------------------------------------------------ DRE
+  // ------------------------------------------------------------ relatórios
   const xlsx = await abrirXlsx(join(versao, "origem.xlsx"));
+  const anoDoTexto = (texto: string) => /(?:19|20)\d\d/.exec(texto)?.[0] ?? "";
   const linhasDre: (string | number)[][] = [];
   const contagemDre: Record<string, Record<string, number>> = {};
-  for (const nomeDre of ABAS_DE_DRE) {
+  for (const nomeDre of ABAS_DE_RELATORIO) {
     const aba = xlsx.abas.find((a) => a.nome === nomeDre);
     if (!aba) continue;
     const valores = new Map<string, string>();
@@ -141,18 +153,26 @@ async function main() {
     const celula = (ref: string) => valores.get(ref) ?? "";
     for (const f of formulas) {
       const no = lerFormula(f.texto);
+      const abas = no ? abasDaFormula(no, nomeDre) : [];
       const planilha = numero(valores.get(f.ref));
+      // O critério vem de célula nas DREs ("REC 1T 2026" em C611) e escrito na fórmula nas
+      // Gerencial ("CF 1T 2026" com a regional do cabeçalho); sem ano nele, vale o da aba.
       const criterios = [...f.texto.matchAll(/,\s*\$?([A-Z]{1,3})\$?(\d+)\s*\)/g)].map((m) => celula(`${m[1]}${m[2]}`)).filter(Boolean);
-      const criterio = criterios[0] ?? "";
-      const ano = /(?:19|20)\d\d/.exec(criterio)?.[0] ?? "";
+      const literais = [...f.texto.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+      const criterio = [...new Set([...literais, ...criterios])].slice(0, 3).join(" · ");
+      const anoDaAba = /\b(\d\d)\b/.exec(nomeDre)?.[1];
+      const ano = [...criterios, ...literais].map(anoDoTexto).find(Boolean) ?? (anoDaAba ? `20${anoDaAba}` : "");
+      const papeisDeFora = abas.map((a) => PAPEL_DAS_ABAS[a]?.papel ?? "desconhecida").filter((p) => p !== "conta");
       let situacao: string;
       let vb: number | null = null;
       let vp: number | null = null;
-      let abas: string[] = [];
+      let detalhe = "";
       if (!no) {
         situacao = /#REF!/.test(f.texto) ? "fórmula quebrada na planilha (#REF!)" : "não verificável";
+      } else if (papeisDeFora.length > 0) {
+        // A receita das Gerencial soma as abas de resultado, cujos totais não se importam (regra 9).
+        situacao = papeisDeFora.every((p) => p === "resultado") ? "fora da validação: soma as abas de resultado dos jobs" : "fora da validação: soma aba que não é de conta";
       } else {
-        abas = abasDaFormula(no, nomeDre);
         vb = avaliar(no, fonteBruta, celula, nomeDre);
         vp = avaliar(no, fontePadronizada, celula, nomeDre);
         const ve = avaliar(no, fonteExcluidas, celula, nomeDre) ?? 0;
@@ -161,7 +181,11 @@ async function main() {
         if (vb === null) situacao = /#REF!/.test(f.texto) ? "fórmula quebrada na planilha (#REF!)" : "aba fora da extração";
         else if (planilha === null) situacao = "sem valor na planilha";
         else if (!igual(planilha, vb)) situacao = "difere da planilha";
-        else if (vp === null) situacao = "não verificável no padronizado";
+        else if (vp === null) {
+          situacao = "não verificável no padronizado";
+          const faltam = colunasDaFormula(no, nomeDre).filter((c) => !fontePadronizada.linhas(c.aba) || !fontePadronizada.temColuna(c.aba, c.coluna));
+          detalhe = [...new Set(faltam.map((c) => `${c.aba}!${letrasDaColuna(c.coluna)}`))].join(", ");
+        }
         else if (igual(vb, vp)) situacao = "bate";
         else if (igual(vb - vp, ve)) situacao = fora ? "difere no padronizado: conta fora (D2)" : "difere no padronizado: linhas excluídas";
         else if (igual(vpEsperado, vp)) situacao = "difere no padronizado: espaço sobrando no texto";
@@ -170,7 +194,7 @@ async function main() {
       const chave = `${nomeDre} · ${ano || "sem ano"}`;
       contagemDre[chave] ??= {};
       contagemDre[chave][situacao] = (contagemDre[chave][situacao] ?? 0) + 1;
-      linhasDre.push([nomeDre, f.ref, criterio, ano, abas.join(" + "), dinheiro(planilha), dinheiro(vb), dinheiro(vp), situacao]);
+      linhasDre.push([nomeDre, f.ref, criterio, ano, abas.join(" + "), dinheiro(planilha), dinheiro(vb), dinheiro(vp), situacao, detalhe]);
     }
   }
 
@@ -261,7 +285,7 @@ async function main() {
   // ------------------------------------------------------------ escrita
   const escrever = (arquivo: string, cabecalho: string[], linhas: (string | number)[][]) =>
     writeFile(join(saida, arquivo), BOM + [cabecalho, ...linhas].map(linhaCsv).join(""));
-  await escrever("dre.csv", ["aba_dre", "celula", "criterio", "ano", "abas_somadas", "valor_planilha", "valor_bruto", "valor_padronizado", "situacao"], linhasDre);
+  await escrever("relatorios.csv", ["aba_do_relatorio", "celula", "criterio", "ano", "abas_somadas", "valor_planilha", "valor_bruto", "valor_padronizado", "situacao", "detalhe"], linhasDre);
   await escrever(
     "saldos.csv",
     ["conta", "aba", "mes", "movimento_planilha", "movimento_padronizado", "diferenca_movimento", "saldo_planilha_fim_do_mes", "saldo_encadeado", "diferenca_saldo"],
@@ -270,20 +294,23 @@ async function main() {
   await escrever("faturamento.csv", ["aba", "mes", "notas_planilha", "total_planilha", "notas_padronizado", "total_padronizado", "das_quais_canceladas", "diferenca"], linhasFat);
 
   const situacoes: Record<string, number> = {};
-  const situacoesDaJanela: Record<string, number> = {};
+  const situacoesDaJanela: Record<string, Record<string, number>> = {};
   for (const l of linhasDre) {
     const s = String(l[8]);
     situacoes[s] = (situacoes[s] ?? 0) + 1;
-    if (["2023", "2024", "2025", "2026"].includes(String(l[3]))) situacoesDaJanela[s] = (situacoesDaJanela[s] ?? 0) + 1;
+    if (!["2023", "2024", "2025", "2026"].includes(String(l[3]))) continue;
+    const tipo = String(l[0]).startsWith("Gerencial") ? "Gerencial" : "DRE";
+    situacoesDaJanela[tipo] ??= {};
+    situacoesDaJanela[tipo][s] = (situacoesDaJanela[tipo][s] ?? 0) + 1;
   }
   const resumo = {
     versao: manifesto.origem,
-    dre: { celulas: linhasDre.length, por_situacao: situacoes, de_2023_a_2026: situacoesDaJanela, por_aba_e_ano: contagemDre },
+    relatorios: { celulas: linhasDre.length, por_situacao: situacoes, de_2023_a_2026: situacoesDaJanela, por_aba_e_ano: contagemDre },
     saldos: { meses_com_movimento_diferente_2023_a_set_2026: mesesComDiferenca, meses_com_saldo_que_nao_encadeia_2023_a_set_2026: mesesComSaldoQuebrado, saldo_da_planilha_no_fim_do_mes: saldoNoFim },
     faturamento: { meses_com_diferenca_2023_a_set_2026: mesesFatComDiferenca },
   };
   await writeFile(join(saida, "resumo.json"), JSON.stringify(resumo, null, 2) + "\n");
-  console.log(JSON.stringify({ ...resumo, versao: undefined, dre: { ...resumo.dre, por_aba_e_ano: undefined } }, null, 2));
+  console.log(JSON.stringify({ ...resumo, versao: undefined, relatorios: { ...resumo.relatorios, por_aba_e_ano: undefined } }, null, 2));
 }
 
 main().catch((erro) => {

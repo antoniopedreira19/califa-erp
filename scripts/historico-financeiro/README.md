@@ -17,7 +17,7 @@ tmp/historico-planilha/
     origem.xlsx            a planilha baixada do Google Sheets
     bruto/                 E1: um CSV por aba + manifesto.json
     padronizado/           E2: movimentos, previsões, notas, jobs, pendências, propostas/
-    validacao/             E3: dre.csv, saldos.csv, faturamento.csv, resumo.json
+    validacao/             E3: relatorios.csv, saldos.csv, faturamento.csv, resumo.json
     revisao-e2.xlsx        pendências e de-para para revisar
 ```
 
@@ -55,7 +55,8 @@ marcas, plano de contas, serviços, regionais, contas e os jobs abertos. O
     `3T 2026`, `anterior a 2023`, `depois do corte`); o crédito e o débito
     originais vão junto, com sinal, e as colunas "DRE EXTRA" e "Ano Comp.";
   - `previsoes.csv` — linhas com data depois da exportação;
-  - `notas.csv` (com a classe: job, distribuição de lucro ou sem job) e `jobs.csv`;
+  - `notas.csv` (com a classe: job, distribuição de lucro ou sem job) e
+    `jobs.csv` (com `fora_do_resultado`: a Copa sem lançamento);
   - `pendencias.csv` — o que não fecha na primeira carga;
   - `propostas/` — de-para proposto, com a forma como foi achado (igual,
     parecido, ambíguo, sem par);
@@ -64,11 +65,14 @@ marcas, plano de contas, serviços, regionais, contas e os jobs abertos. O
   aprovada (vale o igual, o parecido, o achado pela sigla ou pela marca e o
   geral; o ambíguo e o sem par ficam como texto). Para mudar uma decisão,
   edite o CSV da pasta.
-- **E3, `validar.ts`:** refaz cada SUMIFS das abas de DRE sobre o bruto e sobre
-  o padronizado e compara com a planilha; confere movimento e saldo das contas
-  mês a mês e o faturamento por mês. O `resumo.json` da validação traz as
-  contagens por situação e o saldo da planilha no fim de 12/2025, 06/2026 e
-  09/2026 por conta.
+- **E3, `validar.ts`:** refaz cada SUMIFS das abas DRE e Gerencial (com o
+  rateio: a soma do TD vezes o percentual da célula) sobre o bruto e sobre o
+  padronizado e compara com a planilha; confere movimento e saldo das contas
+  mês a mês e o faturamento por mês. No `relatorios.csv`, a coluna `detalhe`
+  diz qual coluna faltou quando a célula não se refaz no padronizado. O
+  `resumo.json` da validação traz as contagens por situação (DRE e Gerencial
+  separadas) e o saldo da planilha no fim de 12/2025, 06/2026 e 09/2026 por
+  conta.
 - **Revisão, `revisao.ts`:** junta pendências e propostas num .xlsx com a
   coluna "Sua decisão". Amarelo pede conferência; cinza é cliente ou marca sem
   cadastro, que fica como texto no histórico.
