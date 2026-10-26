@@ -326,12 +326,7 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
 
   let codigo: string;
   try {
-    codigo = await gerarCodigoProjeto(
-      supabase,
-      session.activeTenant.id,
-      parsed.data.cliente_id,
-      parsed.data.data_inicio_prevista,
-    );
+    codigo = await gerarCodigoProjeto(supabase, session.activeTenant.id);
   } catch (e) {
     return { ok: false, message: (e as Error).message };
   }
@@ -389,48 +384,19 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
   redirect(`/orcamentos/${data.id}`);
 }
 
-/** O código no formato atual ("SIGLA-P001/AA") que ESTE projeto já teve na
- *  sigla e no ano, pelo registro de códigos usados — ou `null`. Desde a
- *  decisão 126 (29/09/2026) o registro só tem esse formato: os códigos de
- *  antes da 114 ("SIGLA-0001/AA") passaram a "SIGLA-P001/AA", mesmo número
- *  e mesmo projeto. */
-async function codigoQueOProjetoJaTeve(
-  supabase: ReturnType<typeof createClient>,
-  tenantId: string,
-  projetoId: string,
-  sigla: string,
-  ano: string,
-): Promise<string | null> {
-  const { data } = await supabase
-    .from("codigos_de_projeto_usados")
-    .select("codigo")
-    .eq("tenant_id", tenantId)
-    .eq("projeto_id", projetoId)
-    .like("codigo", `${sigla}-P%/${ano}`);
-  const escapada = sigla.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const formato = new RegExp(`^${escapada}-P\\d{3,}/${ano}$`);
-  return (
-    ((data ?? []) as { codigo: string }[])
-      .map((r) => r.codigo)
-      .find((c) => formato.test(c)) ?? null
-  );
-}
-
 /**
- * Troca o cliente do projeto e os códigos que carregam a sigla dele
- * (decisão 122). O código novo sai do mesmo gerador do cadastro; se a sigla
- * do cliente novo for a mesma do código atual, o código fica.
+ * Troca o cliente do projeto (decisão 122). Desde a decisão 210
+ * (23/10/2026) o código do projeto não leva a sigla do cliente, então a
+ * troca não mexe em código nenhum — nem no do projeto, nem no dos
+ * orçamentos.
  */
 async function trocarClienteDoProjeto(
   supabase: ReturnType<typeof createClient>,
   session: Awaited<ReturnType<typeof requireSession>>,
   args: {
     projetoId: string;
-    codigoAtual: string;
-    clienteAnteriorId: string;
     clienteId: string;
     produtoId: string;
-    dataInicio: string;
   },
 ): Promise<ActionResult> {
   const tenantId = session.activeTenant.id;
@@ -449,96 +415,14 @@ async function trocarClienteDoProjeto(
     };
   }
 
-  const { data: cliente } = await supabase
-    .from("clientes")
-    .select("codigo_curto")
-    .eq("id", args.clienteId)
-    .eq("tenant_id", tenantId)
-    .maybeSingle<{ codigo_curto: string | null }>();
-  if (!cliente?.codigo_curto) {
-    return {
-      ok: false,
-      message: "Cliente sem código curto — preencha no cadastro do cliente.",
-      fieldErrors: { cliente_id: ["Cliente sem código curto."] },
-    };
-  }
-
-  let codigo = args.codigoAtual;
-  if (!args.codigoAtual.startsWith(`${cliente.codigo_curto}-`)) {
-    // O projeto que volta a uma sigla em que já esteve recupera o próprio
-    // número: ele não é de outro projeto, e gastar um novo a cada ida e
-    // volta só abriria buracos. Número de OUTRO projeto nunca volta — o
-    // gerador pula tudo o que está em `codigos_de_projeto_usados`.
-    const proprio = await codigoQueOProjetoJaTeve(
-      supabase,
-      tenantId,
-      args.projetoId,
-      cliente.codigo_curto,
-      args.dataInicio.slice(2, 4),
-    );
-    try {
-      codigo =
-        proprio ??
-        (await gerarCodigoProjeto(
-          supabase,
-          tenantId,
-          args.clienteId,
-          args.dataInicio,
-        ));
-    } catch (e) {
-      return {
-        ok: false,
-        message: e instanceof Error ? e.message : "Falha ao gerar o código do projeto.",
-      };
-    }
-  }
-
-  const { data, error } = await supabase.rpc("trocar_cliente_do_projeto", {
+  const { error } = await supabase.rpc("trocar_cliente_do_projeto", {
     p_projeto_id: args.projetoId,
     p_cliente_id: args.clienteId,
     p_produto_id: args.produtoId,
-    p_codigo: codigo,
   });
   if (error) {
     console.error("[projetos.trocarCliente]", error.message);
     return { ok: false, message: mapDbError(error.message) };
-  }
-
-  const resultado = data as {
-    codigo_anterior: string;
-    codigo: string;
-    orcamentos: { id: string; codigo: string }[];
-  };
-  if (resultado.codigo !== resultado.codigo_anterior) {
-    await logAuditEvent({
-      acao: "projeto.codigo_trocado",
-      tenantId,
-      entidadeTipo: "projeto",
-      entidadeId: args.projetoId,
-      metadata: {
-        codigo_anterior: resultado.codigo_anterior,
-        codigo: resultado.codigo,
-        cliente_anterior_id: args.clienteAnteriorId,
-        cliente_id: args.clienteId,
-        motivo: "troca de cliente",
-        decisao: "122",
-      },
-    });
-    for (const o of resultado.orcamentos) {
-      await logAuditEvent({
-        acao: "orcamento.codigo_trocado",
-        tenantId,
-        entidadeTipo: "orcamento",
-        entidadeId: o.id,
-        metadata: {
-          codigo_anterior:
-            resultado.codigo_anterior + o.codigo.slice(resultado.codigo.length),
-          codigo: o.codigo,
-          motivo: "troca de cliente do projeto",
-          decisao: "122",
-        },
-      });
-    }
   }
   return { ok: true, id: args.projetoId };
 }
@@ -566,10 +450,10 @@ export async function atualizarProjeto(
   // nele. O banco recusa também; aqui a mensagem chega inteira.
   const { data: atual } = await supabase
     .from("projetos")
-    .select("status, cliente_id, codigo")
+    .select("status, cliente_id")
     .eq("id", id)
     .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ status: string; cliente_id: string; codigo: string }>();
+    .maybeSingle<{ status: string; cliente_id: string }>();
   if (!atual) return { ok: false, message: "Projeto não encontrado." };
   if (atual.status === "arquivado") {
     return {
@@ -609,19 +493,15 @@ export async function atualizarProjeto(
     produto_id: check.marcaDoJobId,
   };
 
-  // Decisão 122: o cliente só muda antes de algum orçamento ser aprovado,
-  // e a troca leva os códigos junto — o projeto ganha o código da sigla
-  // nova e cada orçamento acompanha o prefixo. Vai numa transação só
-  // (`trocar_cliente_do_projeto`) e ANTES do resto: se ela falhar, nada
-  // mudou. O banco recusa a troca depois da aprovação também.
+  // Decisão 122: o cliente só muda antes de algum orçamento ser aprovado.
+  // A troca vai ANTES do resto: se ela falhar, nada mudou. O banco recusa
+  // a troca depois da aprovação também. Desde a decisão 210 o código do
+  // projeto não carrega a sigla e fica como está.
   if (campos.cliente_id !== atual.cliente_id) {
     const troca = await trocarClienteDoProjeto(supabase, session, {
       projetoId: id,
-      codigoAtual: atual.codigo,
-      clienteAnteriorId: atual.cliente_id,
       clienteId: campos.cliente_id,
       produtoId: check.marcaDoJobId,
-      dataInicio: campos.data_inicio_prevista,
     });
     if (!troca.ok) return troca;
   }

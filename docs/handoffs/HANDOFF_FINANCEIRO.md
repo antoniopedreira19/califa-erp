@@ -8228,3 +8228,12 @@ os arquivos da frente do Antonio.
 - **Código:** `lib/validations/conta-avulsa.ts`, com teste novo, e
   `conta-avulsa-drawer.tsx`. Ver a "Revisão de 26/10/2026" da
   [decisão 082](../decisions/082-a-despesa-sem-job-nasce-com-rateio-e-a-recorrencia-vira-titulo-30-dias-antes.md).
+## Código do projeto do financeiro sem a sigla — 23/10/2026 (decisão 210)
+
+⚠️ Aguardando a hora combinada com a frente do Antonio (migration
+`20261023950001`, destrutiva). O projeto do financeiro passa a `F-NNNN/AA`
+(`AMB-F004/26` → `F-0001/26`), pela ordem de criação; ano = o da criação do
+projeto, não mais o do início do job. Os rótulos da foto da abertura trocam
+o código (141 de 143; os 2 de projeto apagado ficam). Novo registro
+`codigos_de_projeto_financeiro_usados`: o número de projeto apagado sem job
+não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.

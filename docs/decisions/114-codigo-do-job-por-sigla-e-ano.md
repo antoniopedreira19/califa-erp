@@ -177,3 +177,10 @@ dos códigos de antes desta decisão. Desde então:
 
 A auditoria segue com os códigos da época, e esta decisão também, como
 registro. Ver a decisão 126.
+
+## 8. Revisão de 23/10/2026: o projeto perde a sigla (decisão 210)
+
+⚠️ **O código do projeto saiu do formato da §2.1 (2026-10-23).** O projeto
+da produção passa a `P-NNNN/AA` e o do financeiro a `F-NNNN/AA`, sem a
+sigla do cliente, por letra e ano da criação. O código do job continua como
+está nesta decisão. Ver a decisão 210.

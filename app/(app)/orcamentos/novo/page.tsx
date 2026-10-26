@@ -68,7 +68,7 @@ export default async function NovoProjetoPage() {
         <h1 className="mt-3 text-3xl font-bold tracking-tight">Novo projeto</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           O código do projeto é gerado automaticamente no formato{" "}
-          <span className="font-mono">CLI-NNNN/AA</span>.
+          <span className="font-mono">P-NNNN/AA</span>.
         </p>
       </div>
 
