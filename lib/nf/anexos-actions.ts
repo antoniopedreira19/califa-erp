@@ -142,6 +142,10 @@ export async function anexarNfColaborador(input: {
 
   const nowIso = new Date().toISOString();
 
+  // TODO(Task 3 do plano 2026-10-26-quadro-nf-colaborador): o índice único
+  // (tenant_id, colaborador_id, competencia_ano, competencia_mes) foi convertido
+  // pra não-único na migration 20261026700001. Este upsert vai falhar até Task 3
+  // generalizar o action pra usar (escopo_tipo, escopo_id).
   const { data: anexo, error: upsertError } = await supabase
     .from("colaboradores_nf_anexos")
     .upsert(
