@@ -8228,7 +8228,12 @@ os arquivos da frente do Antonio.
   data) entravam em toda remessa nova — estavam até nas remessas reais 25 e
   32. Não foram pagas: excluídas pela tela em 26/10/2026, com a autorização
   do Tiago (avulsa não tem "cancelar"). Os itens das remessas ficam como
-  histórico. Falta só a trava no banco, que espera o OK dele.
+  histórico.
+- **Trava no banco (Tiago, 26/10/2026):** o CHECK
+  `chk_avulsa_a_pagar_tem_data` em `contas_avulsas` recusa a avulsa a pagar
+  fora do cartão sem data (migration `20261026700001`). Testado em
+  transação desfeita: sem data recusada, com data aceita, apagar a data
+  recusado.
 - **Código:** `lib/validations/conta-avulsa.ts`, com teste novo, e
   `conta-avulsa-drawer.tsx`. Ver a "Revisão de 26/10/2026" da
   [decisão 082](../decisions/082-a-despesa-sem-job-nasce-com-rateio-e-a-recorrencia-vira-titulo-30-dias-antes.md).
