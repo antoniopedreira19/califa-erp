@@ -231,6 +231,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 209 | [A PP no cartão corporativo: quarto tipo de PP, sem fornecedor, com plataforma e link da compra; parcelas da fatura e aprovação só no cartão; envio sem nota](209-pp-no-cartao-corporativo.md) | 2026-10-23 |
 | 210 | *Reservada* — o código do projeto sem a sigla do cliente (outra sessão, ainda não publicada) | 2026-10-23 |
 | 211 | [Importação do histórico da planilha financeira: como ler a planilha e o corte em 01/10/2026](211-importacao-do-historico-da-planilha-financeira.md) | 2026-10-25 |
+| 212 | [O tipo da chave PIX e o tipo de conta no cadastro do freela: PIX e conta sempre à vista, e o tipo gravado vence a dedução da 193](212-tipo-do-pix-e-da-conta-no-cadastro-do-freela.md) | 2026-10-26 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -243,4 +244,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 212**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 213**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)

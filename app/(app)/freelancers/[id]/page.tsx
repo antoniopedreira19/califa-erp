@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import type { Freelancer, FreelancerContrato } from "@/lib/types";
+import type { Freelancer, FreelancerContrato, TipoContaBancariaFornecedor } from "@/lib/types";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { HeroFreelancer } from "../_components/hero-freelancer";
 import { AbasPerfil } from "../_components/abas-perfil";
@@ -16,6 +16,13 @@ import { BlocoInfo, Linha } from "../_components/bloco-info";
 import { ContratosDoFreelancer } from "../contratos/_components/contratos-do-freelancer";
 import { HistoricoContratoTimeline } from "../_components/historico-contrato-timeline";
 import { formatCnpj, formatCep, formatTelefone } from "@/lib/utils";
+import { PIX_TIPOS } from "@/lib/pix";
+
+const TIPO_CONTA_ROTULO: Record<TipoContaBancariaFornecedor, string> = {
+  corrente: "Conta corrente",
+  poupanca: "Conta poupança",
+  pagamento: "Conta de pagamento",
+};
 
 export const dynamic = "force-dynamic";
 
@@ -164,6 +171,16 @@ export default async function FreelancerPerfilPage({
             <Linha rotulo="Agência" valor={freelancer.agencia} />
           )}
           {freelancer.conta && <Linha rotulo="Conta" valor={freelancer.conta} />}
+          {/* Decisão 212 */}
+          {freelancer.tipo_conta && (
+            <Linha rotulo="Tipo de conta" valor={TIPO_CONTA_ROTULO[freelancer.tipo_conta]} />
+          )}
+          {freelancer.pix_tipo && (
+            <Linha
+              rotulo="Tipo da chave"
+              valor={PIX_TIPOS.find((t) => t.valor === freelancer.pix_tipo)?.rotulo ?? freelancer.pix_tipo}
+            />
+          )}
           {freelancer.pix_chave && (
             <Linha rotulo="Chave PIX" valor={freelancer.pix_chave} />
           )}

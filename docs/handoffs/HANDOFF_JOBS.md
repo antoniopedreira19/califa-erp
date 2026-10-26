@@ -6389,3 +6389,20 @@ Protótipo aprovado em 17/10. Regra completa na decisão 192.
   pelo bloco "PAGAMENTO NO CARTÃO CORPORATIVO".
 - **Conferido** no TES-1001/26: PP-00397 gerada, enviada e aprovada. Ver
   [decisão 209](../decisions/209-pp-no-cartao-corporativo.md).
+
+## ⚠️ Nota de 2026-10-26 — o tipo da chave PIX no cadastro do freela (decisão 212)
+
+- **Por quê:** completa a 193. A PP de verba ou reembolso do freela leva o
+  PIX do cadastro sozinha quando o tipo da chave se sabe; o cadastro não
+  guardava o tipo, e 13 freelas ativos ainda digitavam o PIX na PP.
+- **O que mudou:** `freelancers.pix_tipo` e `freelancers.tipo_conta`
+  (migration `20261026500001_tipo_do_pix_e_da_conta_do_freela.sql`), e a
+  seção Pagamento do cadastro do freela (editar, novo, diálogo de 5 passos e
+  link) com PIX e conta sempre à vista
+  (`freelancers/_components/pagamento-do-freelancer.tsx`).
+  `pix_do_cadastro_do_freelancer` usa o tipo gravado quando há; sem ele,
+  deduz como na 193. O telefone passa a ir automático.
+- **Para a PP:** nada muda no formulário da PP. Um freela passa a ir
+  automático assim que o RH escolhe o tipo da chave dele no editar.
+- **Pendente:** o RH escolher o tipo dos 13 (o editar mostra o aviso). Ver
+  [decisão 212](../decisions/212-tipo-do-pix-e-da-conta-no-cadastro-do-freela.md).

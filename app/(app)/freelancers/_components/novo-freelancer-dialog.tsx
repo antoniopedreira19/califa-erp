@@ -40,6 +40,7 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { cn, isValidCpf, onlyDigits } from "@/lib/utils";
+import { PIX_TIPOS, problemaDaChavePix } from "@/lib/pix";
 import {
   CIDADES,
   COR_RACA,
@@ -147,7 +148,10 @@ export function NovoFreelancerDialog({
   const [banco, setBanco] = React.useState("");
   const [agencia, setAgencia] = React.useState("");
   const [conta, setConta] = React.useState("");
+  // Decisão 212: o tipo de conta e o tipo da chave PIX.
+  const [tipoConta, setTipoConta] = React.useState("");
   const [pixChave, setPixChave] = React.useState("");
+  const [pixTipo, setPixTipo] = React.useState("");
 
   // Step 4 — Diversidade
   const [corRaca, setCorRaca] = React.useState("");
@@ -242,6 +246,13 @@ export function NovoFreelancerDialog({
         return "Razão Social obrigatória quando CNPJ é preenchido";
       if (!banco.trim() || !agencia.trim() || !conta.trim())
         return "Dados bancários (banco, agência, conta) são obrigatórios";
+      // Decisão 212: a chave PIX vai com o tipo, no formato que o banco aceita.
+      if (pixChave.trim() && !pixTipo) return "Escolha o tipo da chave PIX";
+      if (pixTipo && !pixChave.trim()) return "Informe a chave PIX";
+      if (pixTipo && pixChave.trim()) {
+        const problema = problemaDaChavePix(pixTipo, pixChave);
+        if (problema) return problema;
+      }
     }
     if (n === 5) {
       if (!jobId) return "Selecione um job";
@@ -298,7 +309,9 @@ export function NovoFreelancerDialog({
     fd.set("banco", banco);
     fd.set("agencia", agencia);
     fd.set("conta", conta);
+    fd.set("tipo_conta", tipoConta);
     fd.set("pix_chave", pixChave);
+    fd.set("pix_tipo", pixTipo);
     fd.set("cor_raca", resolveOutro(corRaca, corRacaOutro));
     fd.set(
       "identidade_genero",
@@ -440,8 +453,12 @@ export function NovoFreelancerDialog({
                 setAgencia={setAgencia}
                 conta={conta}
                 setConta={setConta}
+                tipoConta={tipoConta}
+                setTipoConta={setTipoConta}
                 pixChave={pixChave}
                 setPixChave={setPixChave}
+                pixTipo={pixTipo}
+                setPixTipo={setPixTipo}
                 pending={pending}
               />
             )}
@@ -828,8 +845,12 @@ function Step3Pagamento({
   setAgencia,
   conta,
   setConta,
+  tipoConta,
+  setTipoConta,
   pixChave,
   setPixChave,
+  pixTipo,
+  setPixTipo,
   pending,
 }: any) {
   const inputFileRef = React.useRef<HTMLInputElement>(null);
@@ -917,7 +938,7 @@ function Step3Pagamento({
             disabled={pending}
           />
         </Campo>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-3 gap-3">
           <Campo rotulo="Agência *">
             <Input
               value={agencia}
@@ -934,6 +955,19 @@ function Step3Pagamento({
               disabled={pending}
             />
           </Campo>
+          {/* Decisão 212 */}
+          <Campo rotulo="Tipo de conta">
+            <Select value={tipoConta || undefined} onValueChange={setTipoConta} disabled={pending}>
+              <SelectTrigger aria-label="Tipo de conta">
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="corrente">Conta corrente</SelectItem>
+                <SelectItem value="poupanca">Conta poupança</SelectItem>
+                <SelectItem value="pagamento">Conta de pagamento</SelectItem>
+              </SelectContent>
+            </Select>
+          </Campo>
         </div>
       </section>
 
@@ -942,14 +976,52 @@ function Step3Pagamento({
         <h3 className="text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
           PIX (opcional)
         </h3>
-        <Campo rotulo="Chave PIX">
-          <Input
-            value={pixChave}
-            onChange={(e) => setPixChave(e.target.value)}
-            placeholder="CPF, email, telefone ou chave aleatória"
-            disabled={pending}
-          />
-        </Campo>
+        {/* Decisão 212: a chave pede o tipo, e a máscara segue o tipo. */}
+        <div className="grid grid-cols-[170px_1fr] gap-3">
+          <Campo rotulo="Tipo de chave">
+            <Select
+              value={pixTipo || undefined}
+              onValueChange={(v) => {
+                setPixTipo(v);
+                setPixChave("");
+              }}
+              disabled={pending}
+            >
+              <SelectTrigger aria-label="Tipo de chave PIX">
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
+              <SelectContent>
+                {PIX_TIPOS.map((t) => (
+                  <SelectItem key={t.valor} value={t.valor}>
+                    {t.rotulo}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Campo>
+          <Campo rotulo="Chave PIX">
+            {pixTipo === "cpf" || pixTipo === "cnpj" || pixTipo === "telefone" ? (
+              <MaskedInput
+                key={pixTipo}
+                mask={pixTipo}
+                aria-label="Chave PIX"
+                defaultValue={pixChave}
+                onDigitsChange={setPixChave}
+                disabled={pending}
+              />
+            ) : (
+              <Input
+                key={pixTipo || "sem-tipo"}
+                aria-label="Chave PIX"
+                value={pixChave}
+                onChange={(e) => setPixChave(e.target.value)}
+                placeholder={pixTipo === "email" ? "chave@exemplo.com.br" : pixTipo ? "Cole a chave aleatória" : "Escolha o tipo antes"}
+                disabled={pending || !pixTipo}
+                className={cn(pixTipo === "aleatoria" && "font-mono")}
+              />
+            )}
+          </Campo>
+        </div>
       </section>
     </div>
   );

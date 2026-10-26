@@ -230,7 +230,10 @@ export async function criarFreelancerCompleto(
           banco: dadosFreela.banco ?? undefined,
           agencia: dadosFreela.agencia ?? undefined,
           conta: dadosFreela.conta ?? undefined,
+          tipo_conta: dadosFreela.tipo_conta ?? undefined,
           pix_chave: dadosFreela.pix_chave ?? undefined,
+          // Decisão 212: a chave nova vem com o tipo dela.
+          pix_tipo: dadosFreela.pix_chave ? (dadosFreela.pix_tipo ?? null) : undefined,
           updated_by: session.profile.id,
         })
         .eq("id", freelancer_id);

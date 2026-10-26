@@ -5848,7 +5848,12 @@ export interface Freelancer {
   banco: string | null;
   agencia: string | null;
   conta: string | null;
+  /** Decisão 212: corrente, poupança ou pagamento. Nulo = não informado. */
+  tipo_conta: TipoContaBancariaFornecedor | null;
   pix_chave: string | null;
+  /** Decisão 212: o tipo da chave. Com ele, a PP de verba do freela leva o
+   *  PIX do cadastro automaticamente (decisão 193). Nulo = não informado. */
+  pix_tipo: PixTipoChave | null;
 
   // Diversidade / saúde (opcional)
   cor_raca: string | null;
