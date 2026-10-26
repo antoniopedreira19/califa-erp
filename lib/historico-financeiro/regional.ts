@@ -28,18 +28,27 @@ export type EmpresaDoRegional = "Agência California" | "CCH";
 
 /**
  * As empresas com rateio, a sigla do Tipo e as regionais na ordem das abas
- * Gerencial, com os códigos da planilha que não são o nome no sistema (a
- * coluna Reg e a divisão dos jobs; a Urbia não é regional do sistema). O
- * código de outra empresa (o "NE" num lançamento da CMH) fica sem regional.
+ * Gerencial, com os códigos da planilha que não são o nome no sistema: os da
+ * coluna Reg e da divisão dos jobs (a Urbia não é regional do sistema), e os
+ * que só a coluna Reg usa — nas linhas da CMH, "NE" é a Doca e "SP" é a Agency
+ * (Tiago, 26/10/2026). Outro código de outra empresa (o "RJ" numa linha da
+ * CMH, ou o "NE" da divisão de um job da California) fica sem regional.
  */
 export const EMPRESAS_DO_REGIONAL: readonly {
   empresa: EmpresaDoRegional;
   sigla: string;
   regionais: readonly string[];
   codigos: Readonly<Record<string, string>>;
+  codigosDoLancamento: Readonly<Record<string, string>>;
 }[] = [
-  { empresa: "Agência California", sigla: "", regionais: ["NE", "NO", "SP", "RJ", "SS", "BH"], codigos: { BH: "BH" } },
-  { empresa: "CCH", sigla: "CMH", regionais: ["Agency", "Doca", "Urbia"], codigos: { AGE: "Agency", DOC: "Doca", URB: "Urbia" } },
+  { empresa: "Agência California", sigla: "", regionais: ["NE", "NO", "SP", "RJ", "SS", "BH"], codigos: { BH: "BH" }, codigosDoLancamento: {} },
+  {
+    empresa: "CCH",
+    sigla: "CMH",
+    regionais: ["Agency", "Doca", "Urbia"],
+    codigos: { AGE: "Agency", DOC: "Doca", URB: "Urbia" },
+    codigosDoLancamento: { NE: "Doca", SP: "Agency" },
+  },
 ];
 
 /** A soma de crédito e débito por sigla, grupo, trimestre de competência, conta (a aba) e regional, num ano. */
@@ -220,10 +229,17 @@ export function montarRegional(
   porJobs: readonly AgregadoRegionalJobs[],
   rateio: readonly PercentualDoRateio[],
 ): ResultadoPorRegional {
-  const { sigla, regionais: ordem, codigos } = EMPRESAS_DO_REGIONAL.find((e) => e.empresa === empresa)!;
-  /** A regional da empresa, pelo nome ou pelo código da planilha; outra coisa fica sem regional. */
-  const daEmpresa = (regional: string | null) =>
-    regional === null ? null : ordem.includes(regional) ? regional : codigos[regional.toUpperCase()] ?? null;
+  const { sigla, regionais: ordem, codigos, codigosDoLancamento } = EMPRESAS_DO_REGIONAL.find((e) => e.empresa === empresa)!;
+  /**
+   * A regional da empresa, pelo nome ou pelo código da planilha (os só da
+   * coluna Reg, fora da divisão dos jobs); outra coisa fica sem regional.
+   */
+  const daEmpresa = (a: { regional: string | null; peloJob?: boolean }) => {
+    if (a.regional === null) return null;
+    if (ordem.includes(a.regional)) return a.regional;
+    const codigo = a.regional.toUpperCase();
+    return codigos[codigo] ?? (a.peloJob ? undefined : codigosDoLancamento[codigo]) ?? null;
+  };
   const deOutraEmpresa = new Set(
     Object.entries(CONTAS_PROPRIAS).flatMap(([dona, abas]) => (dona === empresa ? [] : abas ?? [])),
   );
@@ -242,7 +258,7 @@ export function montarRegional(
   // As regionais da tela: as da empresa com lançamento ou com percentual no ano, na ordem da aba.
   const comLancamento = new Set(
     [...daSigla, ...dosJobs].flatMap((a) => {
-      const r = daEmpresa(a.regional);
+      const r = daEmpresa(a);
       return r ? [r] : [];
     }),
   );
@@ -252,7 +268,13 @@ export function montarRegional(
   type Exatos = { regionais: number[]; semRegional: number };
   const vazio = (): Exatos => ({ regionais: colunas.map(() => 0), semRegional: 0 });
   /** Um valor na regional dele, o TD pelo percentual do trimestre e grupo, e o resto em "Sem regional". */
-  const alocar = (destino: Exatos, a: { regional: string | null; todas: boolean; trimestre: number }, grupo: string, v: number, parte: Parte) => {
+  const alocar = (
+    destino: Exatos,
+    a: { regional: string | null; todas: boolean; trimestre: number; peloJob?: boolean },
+    grupo: string,
+    v: number,
+    parte: Parte,
+  ) => {
     if (a.todas) {
       if (parte === "regional") return;
       const p = percentuais(a.trimestre, grupo);
@@ -266,7 +288,7 @@ export function montarRegional(
       destino.semRegional += v * (1 - rateado);
     } else {
       if (parte === "td") return;
-      const regional = daEmpresa(a.regional);
+      const regional = daEmpresa(a);
       const i = regional ? colunas.indexOf(regional) : -1;
       if (i >= 0) destino.regionais[i] += v;
       else destino.semRegional += v;

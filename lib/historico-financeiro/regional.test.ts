@@ -212,7 +212,7 @@ test("o arredondamento não perde o total", () => {
 test("o código da planilha vale quando o sistema não tem a regional, e o de outra empresa fica sem regional", () => {
   const somas = [
     g("CF", 1, "URB", 0, 30, { sigla: "CMH" }),
-    g("CF", 1, "NE", 0, 70, { sigla: "CMH" }),
+    g("CF", 1, "RJ", 0, 70, { sigla: "CMH" }),
     g("CF", 1, "Doca", 0, 10, { sigla: "CMH" }),
   ];
   const r = montarRegional("CCH", 2023, null, somas, [], []);
@@ -221,4 +221,18 @@ test("o código da planilha vale quando o sistema não tem a regional, e o de ou
   assert.equal(linha(r, "CFR").semRegional, -70);
   const california = montarRegional("Agência California", 2025, null, [g("DA", 1, "N", 0, 5), g("DA", 1, "SSA", 0, 6)], [], RATEIO_2025);
   assert.equal(linha(california, "DA").semRegional, -11);
+});
+
+test("nas linhas da CMH, NE é a Doca e SP é a Agency; na divisão de um job, não", () => {
+  const somas = [
+    g("CF", 1, "NE", 0, 70, { sigla: "CMH" }),
+    g("CF", 1, "SP", 0, 5, { sigla: "CMH" }),
+    g("CF", 1, "Doca", 0, 10, { sigla: "CMH" }),
+    // A divisão de um job da California numa linha da CMH: o "NE" é a regional da California.
+    job("CO", 1, "NE", 0, 40, 0, { sigla: "CMH" }),
+  ];
+  const r = montarRegional("CCH", 2026, null, somas, [], []);
+  assert.deepEqual(r.colunas, ["Agency", "Doca"]);
+  assert.deepEqual(linha(r, "CFR").regionais, [-5, -80]);
+  assert.equal(linha(r, "CO").semRegional, -40);
 });

@@ -344,8 +344,11 @@ não existem: a tela não deixa carregar enquanto elas não forem criadas (A2).
   operacional. O resultado operacional e o lucro líquido das regionais usam o
   imposto teórico, como a planilha. A regional que o cadastro do sistema não
   tem entra pelo código da planilha ("URB", a Urbia da CMH; "AGE" e "DOC" na
-  divisão dos jobs); o código de outra empresa (o "NE" num lançamento da CMH)
-  fica sem regional.
+  divisão dos jobs). **Nas linhas da CMH, a coluna Reg usa "NE" para a Doca e
+  "SP" para a Agency** (Tiago, 26/10/2026); o relatório lê assim, e o de-para
+  já liga as duas para as próximas cargas. Outro código de outra empresa (o
+  "RJ" numa linha da CMH, ou o "NE" da divisão de um job da California) fica
+  sem regional.
 - **Onde as abas Gerencial fogem da regra, o relatório não as segue:** a
   despesa administrativa e a comercial vêm ora pela regional, ora pelo total
   da DRE vezes o percentual; a perda e os juros, pelo total da DRE vezes o
@@ -385,8 +388,13 @@ célula):
   Regional", o faturamento de cada regional no trimestre, na maior parte dos
   trimestres; em alguns, job a job (a parte de cada regional no imposto real
   e no teórico de cada job).
-- O job que a planilha não divide fica fora da DRE regional: as regionais
-  somam menos que a DRE.
+- O job que a planilha não divide fica fora da DRE regional, e a soma das
+  regionais não fecha com a DRE consolidada: no 2T 2026, as regionais da
+  California somam R$ 24,1 milhões de faturamento e R$ 33,5 milhões de custo a
+  menos que a DRE (a Copa, com as previsões); na CCH, no 1T 2026, R$ 0,51
+  milhão e R$ 1,26 milhão. De 2023 a 2025 todo job com lançamento tem divisão,
+  e as somas fecham. No histórico, nada fica de fora: o que não tem regional
+  vai para "Sem regional", e a soma das colunas fecha sempre com a DRE.
 
 **O que o histórico faz:**
 
@@ -404,10 +412,12 @@ célula):
   regra da Copa desta decisão (os lançamentos da Copa trazem a regional de
   verdade). A tela diz quanto do faturamento ficou assim. De 2023 a 2025 não
   há nenhum; na 1ª carga, só a Copa no 2T 2026 (custo de R$ 7.652.740,59, em
-  NE, SP e NO, e faturamento de R$ 643.942,46, em SP e NE) e seis jobs da CCH
-  no 1T 2026 (custo de R$ 1.172.449,99 e faturamento de R$ 502.981,70, a
-  maior parte na Doca e em "Sem regional"). A planilha os deixa fora da DRE
-  regional. **Aguarda a confirmação do Tiago.**
+  NE, SP e NO, e faturamento de R$ 643.942,46, em SP e NE) e três jobs da CCH
+  no 1T 2026 (custo de R$ 1.172.449,99 e faturamento de R$ 502.981,70, quase
+  tudo na Doca). A aba Res. Jobs CMH 2026 tem seis jobs sem divisão, todos com
+  "CMH" na regional e o RATEIO % zerado; os outros três só têm lançamento
+  depois de 30/06. A planilha os deixa fora da DRE regional. **Aguarda a
+  confirmação do Tiago.**
 
 **Onde a planilha não segue a regra (documentado, não se reproduz):**
 
@@ -645,7 +655,7 @@ Fechamento. A soma dos movimentos repete a da função do banco.
   as 17 restantes são as do benefício job a job (2T 2024, 2T a 4T 2025).
 - **CCH, 2024 e 2025:** 68 batem e 12 em centavos. Em 2023, 18 batem e uma
   em centavos; as 21 restantes são as da tabela acima.
-- **2026:** a Copa e os seis jobs da CCH na regional do lançamento, o custo
+- **2026:** a Copa e os três jobs da CCH na regional do lançamento, o custo
   tributário do 1T que a DRE da planilha conta R$ 10.250,24 a menos, e o que
   o Fechamento traz depois da exportação de 25/10.
 - **A carga:** refeita pela tela com o pacote novo (56.713 movimentos, 3.222
@@ -661,9 +671,17 @@ Fechamento. A soma dos movimentos repete a da função do banco.
   movimentos por job antes, com a mesma resposta nas 1.774 linhas de 2023 a
   2026.
 - Typecheck, lint e os 68 testes da pasta limpos.
+- **"NE" e "SP" da CMH na Doca e na Agency** (mesmo dia): de 2023 a 2025 a
+  conferência com a DRE regional do Fechamento não muda. Saem de "Sem
+  regional" R$ 122.952,46 de pessoal da CMH marcados SP no 1T 2023 (vão para a
+  Agency; nesse trimestre a Gerencial 23 CMH não separa a regional), R$ 65,40
+  de despesa administrativa de 2024 (Doca) e, em 2026, o faturamento do
+  Festival de Gastronomia (R$ 484.481,70, Doca). A Gerencial 26 deixa fora da
+  Agency R$ 7.000,00 de pessoal da CMH marcados SP no 4T 2026; o histórico os
+  põe na Agency. 69 testes.
 
 ## O que fica para depois
-- A4: os jobs que a planilha não divide (a Copa no 2T 2026 e seis jobs da CCH
+- A4: os jobs que a planilha não divide (a Copa no 2T 2026 e três jobs da CCH
   no 1T 2026) ficam na regional do lançamento; a planilha os deixa fora da DRE
   regional. Aguarda a confirmação do Tiago.
 - A4: a rentabilidade e o faturamento dos jobs do histórico.
