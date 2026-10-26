@@ -2,11 +2,10 @@
  * Testes unitários para a lógica central de `anexarNfPorEscopo` e
  * `removerNfPorEscopo`.
  *
- * Estratégia: em vez de mockar o módulo inteiro (o que exige top-level await /
- * ESM), testamos as funções puras de resolução de escopo e as regras de
- * ownership diretamente via funções exportadas do módulo de helpers.
- * A lógica de upsert/storage é coberta por testes de integração de cenário
- * (simulados com objetos fake passados diretamente).
+ * Estratégia:
+ * - Funções puras exportadas do módulo real (`validarAcessoAnexo`,
+ *   `resolverEscopo`) são testadas com DI leve (fake Supabase client).
+ * - Helpers auxiliares (path, arquivo, escopo) são testados inline.
  *
  * Framework: node:test + tsx (sem top-level await — CJS compatível).
  */
@@ -15,6 +14,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { escopoParaFkTabela } from "./anexos-escopo";
 import type { NfAnexoEscopo } from "./anexos-escopo";
+import { validarAcessoAnexo, resolverEscopo } from "./anexos-validators";
+import type { SupabaseQueryClient } from "./anexos-validators";
 
 // ---------------------------------------------------------------------------
 // Testes de escopoParaFkTabela (puro, sem dependência externa)
@@ -277,4 +278,87 @@ test("path no bucket: escopos diferentes geram paths diferentes", () => {
   const p1 = pathNoBucketPorEscopo("t", "c", "decimo_terceiro_p1", "uuid-x");
   const p2 = pathNoBucketPorEscopo("t", "c", "decimo_terceiro_p2", "uuid-x");
   assert.notEqual(p1, p2);
+});
+
+// ---------------------------------------------------------------------------
+// Testes com código real da action (DI: validarAcessoAnexo + resolverEscopo)
+// ---------------------------------------------------------------------------
+
+// validarAcessoAnexo — função pura exportada que `podeMexerNaNf` delega
+
+test("validarAcessoAnexo: recusa escopo_id de outro colaborador (user_id diferente)", () => {
+  const resultado = validarAcessoAnexo({
+    temAlcada: false,
+    userIdSessao: "user-sessao",
+    userIdColaborador: "user-outro", // outro colaborador
+  });
+  assert.equal(resultado.ok, false);
+  assert.ok("message" in resultado);
+  assert.equal(resultado.message, "Não é o colaborador dono desse escopo.");
+});
+
+test("validarAcessoAnexo: aceita quando user_id da sessão bate com o colaborador", () => {
+  const resultado = validarAcessoAnexo({
+    temAlcada: false,
+    userIdSessao: "user-dono",
+    userIdColaborador: "user-dono",
+  });
+  assert.equal(resultado.ok, true);
+});
+
+test("validarAcessoAnexo: aceita com alçada rh.nf.anexar_qualquer mesmo sendo outro colaborador", () => {
+  const resultado = validarAcessoAnexo({
+    temAlcada: true,
+    userIdSessao: "user-rh",
+    userIdColaborador: "user-outro",
+  });
+  assert.equal(resultado.ok, true);
+});
+
+test("validarAcessoAnexo: recusa quando user_id do colaborador é null (sem vínculo de auth)", () => {
+  const resultado = validarAcessoAnexo({
+    temAlcada: false,
+    userIdSessao: "user-sessao",
+    userIdColaborador: null,
+  });
+  assert.equal(resultado.ok, false);
+  assert.ok("message" in resultado);
+  assert.equal(resultado.message, "Não é o colaborador dono desse escopo.");
+});
+
+// resolverEscopo com fake Supabase client (DI)
+
+/**
+ * Monta um fake Supabase client que retorna `maybeSingle()` com o dado
+ * fornecido. Satisfaz a interface `SupabaseQueryClient` sem importar o módulo
+ * server do Supabase.
+ */
+function fakeSbClient(data: Record<string, unknown> | null): SupabaseQueryClient {
+  const chain = {
+    select: () => chain,
+    eq: () => chain,
+    maybeSingle: async () => ({ data }),
+  };
+  return {
+    from: () => chain,
+  } as unknown as SupabaseQueryClient;
+}
+
+test("resolverEscopo: folha_mensal retorna colaboradorId correto com fake client", async () => {
+  const sb = fakeSbClient({
+    colaborador_id: "colab-uuid",
+    competencia_ano: 2026,
+    competencia_mes: 10,
+  });
+  const r = await resolverEscopo(sb, "tenant-1", "folha_mensal", "folha-uuid");
+  assert.ok(r);
+  assert.equal(r.colaboradorId, "colab-uuid");
+  assert.equal(r.competenciaAno, 2026);
+  assert.equal(r.competenciaMes, 10);
+});
+
+test("resolverEscopo: folha_mensal retorna null quando escopo_id não existe no banco", async () => {
+  const sb = fakeSbClient(null);
+  const r = await resolverEscopo(sb, "tenant-1", "folha_mensal", "nao-existe");
+  assert.equal(r, null);
 });

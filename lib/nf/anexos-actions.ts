@@ -7,8 +7,11 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { pode } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
 import { janelaDaNf } from "@/lib/folha/janela-pagamento";
-import { escopoParaFkTabela } from "@/lib/nf/anexos-escopo";
 import type { NfAnexoEscopo } from "@/lib/nf/anexos-escopo";
+// escopoParaFkTabela não é usada aqui — os resolvers em anexos-validators.ts
+// encapsulam a complexidade. O helper continua disponível para consumers
+// externos via "@/lib/nf/anexos-escopo".
+import { resolverEscopo, validarAcessoAnexo } from "@/lib/nf/anexos-validators";
 import type { JanelaPagamento } from "@/lib/types";
 
 type ActionResult<T = Record<string, unknown>> =
@@ -26,7 +29,7 @@ async function podeMexerNaNf(
   session: Awaited<ReturnType<typeof requireSession>>,
   colaboradorId: string,
 ): Promise<boolean> {
-  if (pode(session.activeRole, "rh.nf.anexar_qualquer")) return true;
+  const temAlcada = pode(session.activeRole, "rh.nf.anexar_qualquer");
 
   const supabase = createClient();
   const { data } = await supabase
@@ -35,7 +38,12 @@ async function podeMexerNaNf(
     .eq("id", colaboradorId)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
-  return !!data?.user_id && data.user_id === session.profile.id;
+
+  return validarAcessoAnexo({
+    temAlcada,
+    userIdSessao: session.profile.id,
+    userIdColaborador: data?.user_id ?? null,
+  }).ok;
 }
 
 function pathNoBucketPorEscopo(
@@ -55,109 +63,6 @@ function pathNoBucket(
   mes: number,
 ): string {
   return `${tenantId}/${colaboradorId}/${ano}-${String(mes).padStart(2, "0")}.pdf`;
-}
-
-// ---------------------------------------------------------------------------
-// Helpers: resolver colaborador_id e competencia a partir do escopoId
-// ---------------------------------------------------------------------------
-
-interface EscopoResolvido {
-  colaboradorId: string;
-  competenciaAno: number;
-  competenciaMes: number;
-}
-
-/**
- * Para folha mensal: busca colaborador_id, competencia_ano, competencia_mes
- * diretamente na linha da folha.
- */
-async function resolverFolhaMensal(
-  supabase: ReturnType<typeof createClient>,
-  tenantId: string,
-  escopoId: string,
-): Promise<EscopoResolvido | null> {
-  const { data } = await supabase
-    .from("folhas_pagamento")
-    .select("colaborador_id, competencia_ano, competencia_mes")
-    .eq("id", escopoId)
-    .eq("tenant_id", tenantId)
-    .maybeSingle();
-  if (!data) return null;
-  return {
-    colaboradorId: data.colaborador_id,
-    competenciaAno: data.competencia_ano,
-    competenciaMes: data.competencia_mes,
-  };
-}
-
-/**
- * Para férias (usufruto ou abono): busca colaborador_id e deriva competencia
- * do data_inicio do lançamento.
- */
-async function resolverFeriasLancamento(
-  supabase: ReturnType<typeof createClient>,
-  tenantId: string,
-  escopoId: string,
-): Promise<EscopoResolvido | null> {
-  const { data } = await supabase
-    .from("colaboradores_ferias_lancamentos")
-    .select("colaborador_id, data_inicio")
-    .eq("id", escopoId)
-    .eq("tenant_id", tenantId)
-    .maybeSingle();
-  if (!data) return null;
-  const d = new Date(data.data_inicio);
-  return {
-    colaboradorId: data.colaborador_id,
-    competenciaAno: d.getUTCFullYear(),
-    competenciaMes: d.getUTCMonth() + 1,
-  };
-}
-
-/**
- * Para 13° (P1 ou P2): busca colaborador_id via decimo_terceiro_linhas +
- * join com folhas_decimo_terceiro para pegar o ano. Mês = 11 (P1) ou 12 (P2)
- * por convenção.
- */
-async function resolverDecimoTerceiroLinha(
-  supabase: ReturnType<typeof createClient>,
-  tenantId: string,
-  escopoId: string,
-  escopo: "decimo_terceiro_p1" | "decimo_terceiro_p2",
-): Promise<EscopoResolvido | null> {
-  const { data } = await supabase
-    .from("decimo_terceiro_linhas")
-    .select("colaborador_id, folha_id, folhas_decimo_terceiro!inner(ano)")
-    .eq("id", escopoId)
-    .eq("tenant_id", tenantId)
-    .maybeSingle();
-  if (!data) return null;
-  // TypeScript não infere o join corretamente via string select; cast para any.
-  const folha = (data as any).folhas_decimo_terceiro as { ano: number } | null;
-  if (!folha) return null;
-  return {
-    colaboradorId: data.colaborador_id,
-    competenciaAno: folha.ano,
-    competenciaMes: escopo === "decimo_terceiro_p1" ? 11 : 12,
-  };
-}
-
-async function resolverEscopo(
-  supabase: ReturnType<typeof createClient>,
-  tenantId: string,
-  escopoTipo: NfAnexoEscopo,
-  escopoId: string,
-): Promise<EscopoResolvido | null> {
-  switch (escopoTipo) {
-    case "folha_mensal":
-      return resolverFolhaMensal(supabase, tenantId, escopoId);
-    case "ferias_usufruto":
-    case "ferias_abono":
-      return resolverFeriasLancamento(supabase, tenantId, escopoId);
-    case "decimo_terceiro_p1":
-    case "decimo_terceiro_p2":
-      return resolverDecimoTerceiroLinha(supabase, tenantId, escopoId, escopoTipo);
-  }
 }
 
 // ---------------------------------------------------------------------------
