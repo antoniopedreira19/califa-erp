@@ -8093,3 +8093,20 @@ os arquivos da frente do Antonio.
   nas outras três, a diferença são as frações de centavo que a planilha guarda
   (R$ 2,33 na California Santander). Ver
   [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
+## ⚠️ Nota de 2026-10-26 (3) — o histórico da planilha no Extrato da Conciliação (decisão 211, A3)
+
+- Antes de a conta começar no sistema (a data do saldo inicial dela), o
+  Extrato mostra o histórico da planilha numa seção própria, só para leitura.
+  Ela usa a mesma grade e os mesmos quatro cartões, e o saldo parte da
+  abertura da carga. O ⓘ diz a aba e a linha da planilha.
+- Período todo antes do início: só o histórico. Período que atravessa: o
+  histórico, uma nota com o saldo em que ele termina e o saldo inicial do
+  sistema, e os lançamentos do sistema embaixo. Período sem histórico numa
+  conta que tem: uma faixa com atalhos para o primeiro e o último mês.
+- O filtro de período agora acompanha a mudança de período por link e pelo
+  voltar do navegador (antes ficava na data anterior).
+- **Conferido** na California Santander (março de 2024 e junho a agosto de
+  2026), no Fundo Fixo California (maio de 2025, igual ao saldo da planilha)
+  e na BB GoCrazy antes do histórico. Ver
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).

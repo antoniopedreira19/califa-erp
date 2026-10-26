@@ -33,6 +33,8 @@ import { carregarTitulosDaConciliacao } from "./titulos-dados";
 import { carregarBancoDaConciliacao } from "./banco-dados";
 import { carregarFechamentoDaConciliacao } from "./fechamento-dados";
 import { FaixaDoFechamento } from "./fechamento";
+import { carregarHistoricoDoExtrato } from "./historico-dados";
+import { AvisoDoHistorico, HistoricoNoExtrato } from "./historico-no-extrato";
 import { alertasDoExtrato } from "./motor-da-conta";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { fimDoMes, somaDias, type ItemDaFatura } from "@/lib/financeiro/planilha-de-titulos";
@@ -110,7 +112,7 @@ export default async function ConciliacaoPage({
   const dataDe = searchParams.de ?? `${hojeBr.slice(0, 8)}01`;
   const dataAte = searchParams.ate ?? fimDoMes(hojeBr);
 
-  const [{ data: contas }, dadosTitulos, saldoDeHoje, dadosBanco, fechamento] = await Promise.all([
+  const [{ data: contas }, dadosTitulos, saldoDeHoje, dadosBanco, fechamento, historico] = await Promise.all([
     supabase
       .from("contas_bancarias")
       .select("*")
@@ -154,6 +156,11 @@ export default async function ConciliacaoPage({
       contaId,
       comCondicoes: aba === "banco",
     }),
+    // O histórico da planilha antes de a conta começar no sistema (decisão
+    // 211, A3): só no Extrato.
+    aba === "extrato"
+      ? carregarHistoricoDoExtrato(supabase, { contaId, dataDe, dataAte })
+      : Promise.resolve(null),
   ]);
 
   const listaContas = contas ?? [];
@@ -287,6 +294,10 @@ export default async function ConciliacaoPage({
 
   const saldoFinal = saldoAnterior + creditos - debitos;
   const contaAberta = listaContas.find((c) => c.id === contaId);
+  // O período todo antes de a conta começar no sistema é só histórico: os
+  // cartões do sistema diriam o saldo inicial e "nenhum lançamento".
+  const periodoNoHistorico = historico?.periodo ?? null;
+  const mostrarSistema = !historico || !periodoNoHistorico || dataAte >= historico.corte || linhas.length > 0;
 
   // A baixa de um imposto devolve o id de UM dos lançamentos dela para o
   // `&highlight=`; na tela, a guia é uma linha só, com o id de outro.
@@ -306,7 +317,11 @@ export default async function ConciliacaoPage({
         icon={Receipt}
       />
 
+      {/* A `key` remonta o filtro quando o período muda por link (os atalhos do
+          histórico, decisão 211) ou pelo voltar do navegador: as datas dele
+          são `defaultValue` e ficariam no período anterior. */}
       <FiltrosConta
+        key={`${contaId}|${dataDe}|${dataAte}`}
         contas={listaContas}
         contaAtual={contaId ?? undefined}
         dataDe={dataDe}
@@ -348,52 +363,64 @@ export default async function ConciliacaoPage({
             />
           ) : (
             <>
-              {lancamentosQueNaoBatem > 0 && (
-                <div className="flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs text-red-900">
-                  <AlertTriangle className="h-4 w-4 shrink-0 text-california-red" />
-                  <span className="flex-1">
-                    <strong>
-                      {lancamentosQueNaoBatem === 1
-                        ? "1 lançamento não bate"
-                        : `${lancamentosQueNaoBatem} lançamentos não batem`}
-                    </strong>{" "}
-                    com o extrato do banco importado: {lancamentosQueNaoBatem === 1 ? "está marcado" : "estão marcados"} com
-                    ⚠ na coluna Banco. A conciliação não fecha até a correção.
-                  </span>
-                  <Link
-                    href={`/financeiro/conciliacao?conta=${contaId}&aba=banco`}
-                    prefetch={false}
-                    className="rounded-lg bg-california-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-california-red-hover"
-                  >
-                    Corrigir na Conciliação automática
-                  </Link>
-                </div>
+              {historico && <AvisoDoHistorico historico={historico} contaId={contaId} />}
+              {historico && periodoNoHistorico && (
+                <HistoricoNoExtrato
+                  historico={{ ...historico, periodo: periodoNoHistorico }}
+                  saldoInicial={Number(contaAberta?.saldo_inicial ?? 0)}
+                  continuaNoSistema={mostrarSistema}
+                />
               )}
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <SaldoCard label="Saldo anterior" valor={saldoAnterior} muted />
-                <SaldoCard
-                  label="Créditos no período"
-                  valor={creditos}
-                  tone="entrada"
-                />
-                <SaldoCard
-                  label="Débitos no período"
-                  valor={debitos}
-                  tone="saida"
-                />
-                <SaldoCard label="Saldo final" valor={saldoFinal} destaque />
-              </div>
+              {mostrarSistema && (
+                <>
+                  {lancamentosQueNaoBatem > 0 && (
+                    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs text-red-900">
+                      <AlertTriangle className="h-4 w-4 shrink-0 text-california-red" />
+                      <span className="flex-1">
+                        <strong>
+                          {lancamentosQueNaoBatem === 1
+                            ? "1 lançamento não bate"
+                            : `${lancamentosQueNaoBatem} lançamentos não batem`}
+                        </strong>{" "}
+                        com o extrato do banco importado: {lancamentosQueNaoBatem === 1 ? "está marcado" : "estão marcados"} com
+                        ⚠ na coluna Banco. A conciliação não fecha até a correção.
+                      </span>
+                      <Link
+                        href={`/financeiro/conciliacao?conta=${contaId}&aba=banco`}
+                        prefetch={false}
+                        className="rounded-lg bg-california-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-california-red-hover"
+                      >
+                        Corrigir na Conciliação automática
+                      </Link>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    <SaldoCard label="Saldo anterior" valor={saldoAnterior} muted />
+                    <SaldoCard
+                      label="Créditos no período"
+                      valor={creditos}
+                      tone="entrada"
+                    />
+                    <SaldoCard
+                      label="Débitos no período"
+                      valor={debitos}
+                      tone="saida"
+                    />
+                    <SaldoCard label="Saldo final" valor={saldoFinal} destaque />
+                  </div>
 
-              <ConciliacaoList
-                linhas={linhas}
-                highlight={highlight}
-                itensDasFaturas={itensDasFaturas}
-                detalhesImposto={detalhesImposto}
-                jurosDasBaixas={jurosDasBaixas}
-                contexto={`${contaId}|${dataDe}|${dataAte}`}
-                contaId={contaId}
-                banco={marcasDoBanco}
-              />
+                  <ConciliacaoList
+                    linhas={linhas}
+                    highlight={highlight}
+                    itensDasFaturas={itensDasFaturas}
+                    detalhesImposto={detalhesImposto}
+                    jurosDasBaixas={jurosDasBaixas}
+                    contexto={`${contaId}|${dataDe}|${dataAte}`}
+                    contaId={contaId}
+                    banco={marcasDoBanco}
+                  />
+                </>
+              )}
             </>
           )}
         </AbasDaConta>

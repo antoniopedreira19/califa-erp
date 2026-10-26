@@ -6,8 +6,9 @@ e E3 (validação, com as DREs e as abas Gerencial) implementadas em
 25/10/2026. A Copa sem lançamento e o rateio do TD foram decididos no mesmo
 dia. A1 (as tabelas de histórico, com a do rateio, e a tela de carga) e A2
 (a primeira carga, de 01/01/2023 a 30/06/2026, com as contas Fundo Fixo
-California e BB Americas criadas antes) feitas e conferidas em 26/10/2026.
-Próxima entrega: A3 (o histórico na Conciliação).
+California e BB Americas criadas antes) feitas e conferidas em 26/10/2026, e
+A3 (o histórico de cada conta no Extrato da Conciliação) no mesmo dia.
+Próxima entrega: A4 (os relatórios com o histórico).
 **Quem decidiu:** Tiago, no plano "Importação do histórico financeiro"
 (página privada de 25/10/2026), com as respostas D1, D2 e D3 dadas no mesmo
 dia: "Aprovo D1, D2 e D3 como você recomendou".
@@ -211,6 +212,33 @@ O pacote da primeira carga (versão de 25/10/2026) tem 56.713 movimentos (soma
 em 25 MB. Ele traz as contas Fundo Fixo California e BB Americas, que ainda
 não existem: a tela não deixa carregar enquanto elas não forem criadas (A2).
 
+### O histórico no Extrato da Conciliação (A3, 26/10/2026)
+
+- **O corte é o início da conta no sistema**, a data do saldo inicial dela.
+  Antes dele, o Extrato mostra o histórico da planilha (cargas ativas); a
+  partir dele, os lançamentos do sistema, como sempre. Hoje as contas começam
+  entre 01/08 e 01/10/2026. Quando a virada (B3) puser o saldo inicial em
+  01/10, o histórico vai até 30/09, como manda a D3.
+- **Uma seção própria, acima do Extrato do sistema**, na mesma grade (Data ·
+  Crédito · Débito · Saldo · Descrição · Fornecedor · Job · Centro de Custo ·
+  TRI · Empresa · REG) e com os mesmos quatro cartões, só para leitura. O
+  saldo parte da abertura da carga mais antiga e soma os movimentos.
+  - **TRI:** o trimestre de competência que a planilha anotou, com o ano
+    quando ele é outro: "T4/23" numa linha paga em 2024.
+  - **ⓘ:** a aba e a linha da planilha, o Tipo e o Cod.
+- **Período todo antes do corte:** só a seção do histórico; os cartões do
+  sistema diriam o saldo inicial e "nenhum lançamento".
+- **Período que atravessa o corte:** o histórico até a véspera, uma nota com o
+  saldo em que ele termina e o saldo inicial do sistema, e os lançamentos do
+  sistema embaixo.
+- **Período sem histórico** numa conta que tem: uma faixa diz o que a planilha
+  cobre, com atalhos para o primeiro e o último mês.
+- **Limite:** até 3.000 linhas por vez (um mês da conta principal tem perto
+  de 1.700); os cartões valem para o período inteiro.
+- A leitura é a função `historico_extrato_da_conta` (migration
+  `20261026100002_historico_no_extrato.sql`), que confere admin e financeiro
+  uma vez; pela RLS, a soma do saldo conferiria linha a linha.
+
 ## O pipeline (E1, E2 e E3)
 
 Código em `lib/historico-financeiro/` (regras puras, com teste) e
@@ -329,10 +357,28 @@ da planilha, só contagens.
   3T, e 2 centavos de arredondamento. O relatório por competência de 2026 só
   fica completo com o 3T carregado.
 
-## O que fica para depois
+## Conferido em 26/10/2026 (A3)
 
-- A3: o histórico de cada conta na Conciliação, com saldo contínuo até o
-  saldo inicial do sistema.
+- **California Santander, março de 2024:** os cartões (saldo anterior
+  154.514,54, créditos 6.587.639,25, débitos 4.283.324,54, saldo final
+  2.458.829,25) são os da função, e o saldo da última das 1.273 linhas é o
+  saldo final. A planilha mostra 154.515,25 e 2.458.830,07: a diferença são as
+  frações de centavo (A2).
+- **Fundo Fixo California, maio de 2025:** saldo anterior 6.350,33 e final
+  7.385,50, iguais aos da planilha no fim de abril e de maio.
+- **Junho de 2026:** 1.708 linhas e saldo final 123.667,81. A consulta leva
+  0,19 s no servidor.
+- **De junho a agosto de 2026:** o histórico vai até 31/07, com a nota de que a
+  carga termina em 30/06 e a do saldo inicial de 01/08; os lançamentos de
+  agosto vêm embaixo.
+- **Antes do histórico** (BB GoCrazy em 2023): a faixa com os atalhos.
+- **Filtro de período:** as datas dele não acompanhavam a mudança de período
+  por link (eram `defaultValue`); a página agora o remonta quando o período
+  muda.
+- As abas Títulos e Conciliação automática não leem o histórico e seguem como
+  estavam.
+
+## O que fica para depois
 - A4: como o relatório por regional trata o que a planilha não rateia pelo
   percentual do ano (imobilizado, 4T 2022 e 2023, PL, crédito em linha de
   custo).
