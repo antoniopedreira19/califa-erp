@@ -7,7 +7,7 @@ import {
   Dialog,
   DialogHeader,
   DialogTitle,
-  DrawerContent,
+  DialogContent,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
@@ -139,7 +139,9 @@ export function OrcamentoEditorDrawer({
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DrawerContent>
+        {/* Pop-up centralizado, como o "Novo orçamento de job" da visão
+            agregada — não mais o painel lateral (Tiago, 26/10/2026). */}
+        <DialogContent className="flex max-h-[88vh] max-w-3xl flex-col gap-0 overflow-hidden p-0">
           <DialogHeader className="border-b border-border px-6 py-4">
             <DialogTitle>Editar orçamento</DialogTitle>
           </DialogHeader>
@@ -203,7 +205,7 @@ export function OrcamentoEditorDrawer({
               )}
             </div>
           </div>
-        </DrawerContent>
+        </DialogContent>
       </Dialog>
 
       <ConfirmDialog

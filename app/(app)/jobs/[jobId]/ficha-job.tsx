@@ -10,6 +10,8 @@ import {
 } from "@/lib/types";
 import type { JobCompetencia, JobStatus, JobStatusExibido } from "@/lib/types";
 import type { ContatoCobranca } from "@/lib/data/contatos-cobranca";
+import type { ApresentacaoDoProjeto } from "@/lib/apresentacoes-do-projeto";
+import { ApresentacoesDaFicha } from "@/components/apresentacoes-do-projeto";
 
 /** "17/08/2026" a partir de um `date` ou de um `timestamptz` do banco. */
 function formatData(iso: string | null): string {
@@ -94,6 +96,8 @@ export interface ProjetoDaFicha {
   clienteNome: string | null;
   dataInicio: string | null;
   dataFim: string | null;
+  /** As apresentações mostradas ao cliente (decisão 213). */
+  apresentacoes: ApresentacaoDoProjeto[];
 }
 
 export interface JobIrmao {
@@ -319,9 +323,15 @@ export function FichaJob({
                 {projeto.nome}
               </Campo>
               <Campo rotulo="Cliente">{projeto.clienteNome ?? "—"}</Campo>
-              <Campo rotulo="Período do projeto" mono ultimo>
+              <Campo rotulo="Período do projeto" mono>
                 {formatPeriodo(projeto.dataInicio, projeto.dataFim)}
               </Campo>
+              {/* As apresentações do projeto (decisão 213): cada uma abre
+                  numa aba nova. */}
+              <div className="px-[26px] pb-3 pt-[9px]">
+                <p className="text-[11px] text-muted-foreground">Apresentação</p>
+                <ApresentacoesDaFicha apresentacoes={projeto.apresentacoes} />
+              </div>
 
               <div className="flex items-baseline justify-between gap-3 border-t border-border px-[26px] pb-2 pt-3">
                 <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">

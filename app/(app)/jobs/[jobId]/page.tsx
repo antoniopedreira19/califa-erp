@@ -388,6 +388,7 @@ export default async function JobDetailPage({
                 clienteNome: raw.projeto?.cliente?.nome_fantasia ?? null,
                 dataInicio: raw.projeto?.data_inicio_prevista ?? null,
                 dataFim: raw.projeto?.data_fim_prevista ?? null,
+                apresentacoes: detalhe.apresentacoesDoProjeto,
               }}
               jobsDoProjeto={
                 comPedido

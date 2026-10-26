@@ -690,6 +690,7 @@ export default async function JobNoFinanceiroPage({
                   detalhe.raw.projeto?.cliente?.nome_fantasia ?? null,
                 dataInicio: detalhe.raw.projeto?.data_inicio_prevista ?? null,
                 dataFim: detalhe.raw.projeto?.data_fim_prevista ?? null,
+                apresentacoes: detalhe.apresentacoesDoProjeto,
               }}
               // Os mesmos da faixa acima (decisão 113): só o que passou pela
               // abertura — o job na fila, o devolvido e o cancelado não

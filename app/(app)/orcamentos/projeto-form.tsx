@@ -35,6 +35,11 @@ import {
   type ActionResult,
 } from "./actions";
 import { ConfirmTrocaEmpresaDialog } from "@/components/ui/confirm-troca-empresa-dialog";
+import {
+  CampoApresentacao,
+  useApresentacoesDoProjeto,
+} from "@/components/apresentacoes-do-projeto";
+import type { ApresentacaoDoProjeto } from "@/lib/apresentacoes-do-projeto";
 
 /** Produto do cadastro do cliente. Vem com `cliente_id` porque a lista
  *  chega inteira e é filtrada no cliente conforme a seleção. */
@@ -70,6 +75,8 @@ interface Props {
   /** Acréscimos manuais à Equipe já gravados (papel `equipe`). Os
    *  automáticos NÃO vêm aqui: são derivados na hora. */
   equipeSelecionada?: string[];
+  /** As apresentações já gravadas no projeto (decisão 213). */
+  apresentacoes?: ApresentacaoDoProjeto[];
   /** Quem já é produtor de algum orçamento do projeto — e, desde a decisão
    *  174, o GP e o Produtor Responsáveis de cada job vivo. Entra na Equipe
    *  travado, junto do criador e dos GPs. Vazio na criação — o projeto
@@ -105,6 +112,7 @@ export function ProjetoForm({
   responsaveisSelecionados,
   marcasSelecionadas,
   equipeSelecionada,
+  apresentacoes,
   produtoresDosOrcamentos,
   criadorId,
   podeCadastrarCliente = false,
@@ -123,6 +131,9 @@ export function ProjetoForm({
     projeto?.empresa_id ?? empresaPrincipalId ?? "",
   );
   const [dialogTrocaEmpresa, setDialogTrocaEmpresa] = React.useState(false);
+  // As apresentações (decisão 213): sobem ao escolher; a lista vai no
+  // campo oculto `apresentacoes`.
+  const campoApresentacao = useApresentacoesDoProjeto(apresentacoes ?? []);
   const [empresaPendente, setEmpresaPendente] = React.useState<string>("");
   const [clienteId, setClienteId] = React.useState(projeto?.cliente_id ?? "");
   // Marcas do projeto — uma ou mais (decisão 133). Sem vínculo gravado
@@ -305,12 +316,21 @@ export function ProjetoForm({
     for (const id of responsavelIds) formData.append("responsavel_ids", id);
     for (const id of regionalIds) formData.append("regional_ids", id);
 
+    if (campoApresentacao.enviando.length > 0) {
+      setError("Espere as apresentações terminarem de subir.");
+      return;
+    }
+    // Daqui em diante os arquivos que subiram são do projeto: a criação
+    // redireciona e desmontaria o campo com eles na lista de soltos.
+    const anexos = campoApresentacao.gravando();
+
     startTransition(async () => {
       const res: ActionResult = isEdit
         ? await atualizarProjeto(projeto!.id, formData)
         : await criarProjeto(formData);
 
       if (!res.ok) {
+        anexos.naoGravou();
         setError(res.message);
         if (res.fieldErrors) setFieldErrors(res.fieldErrors);
         return;
@@ -563,6 +583,13 @@ export function ProjetoForm({
             responsáveis de cada job entram automaticamente e não podem ser
             removidos.
           </p>
+        </Field>
+
+        {/* As apresentações mostradas ao cliente (decisão 213): opcionais,
+            quantas forem, ao lado da Equipe. Abrem no card PROJETO da
+            ficha de cada job. */}
+        <Field label="Apresentação" name="apresentacoes" opcional errors={fieldErrors}>
+          <CampoApresentacao campo={campoApresentacao} disabled={pending} />
         </Field>
 
         <div className="md:col-span-2">

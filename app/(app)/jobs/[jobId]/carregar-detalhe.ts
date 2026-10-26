@@ -81,6 +81,7 @@ import {
 } from "@/lib/calculos/faturamento-por-mes";
 import type { EtapasDaFicha } from "./ficha-job";
 import { formatarCnpj } from "@/lib/fiscal/cadastro";
+import { listarApresentacoesDoProjeto } from "@/lib/data/apresentacoes-do-projeto";
 import { tomadoresPadrao } from "@/lib/fiscal/nf-da-pp";
 import { cnpjPadraoDaPP } from "@/lib/fiscal/cnpj-da-pp";
 import type { AnexoDaPPNaLista, PPAEmitir } from "@/lib/types";
@@ -201,6 +202,7 @@ export async function carregarDetalheDoJob(
     meiosDaVersaoRes,
     veiculosRes,
     ultimoRegistroRes,
+    apresentacoesDoProjeto,
   ] = await Promise.all([
     // Os agrupamentos do JOB (decisão 162): a cópia dos da versão, com o
     // que as erratas renomearam, criaram e tiraram. O removido não aparece.
@@ -494,6 +496,8 @@ export async function carregarDetalheDoJob(
     raw.abertura_em_revisao === true
       ? ultimoRegistroDaAbertura(supabase, session.activeTenant.id, raw.id)
       : Promise.resolve({ data: null, error: null }),
+    // As apresentações do projeto, no card PROJETO da ficha (decisão 213).
+    listarApresentacoesDoProjeto(supabase, session.activeTenant.id, raw.projeto_id),
   ]);
 
   if (mesesRes.error) console.error("[job.meses]", mesesRes.error.message);
@@ -1723,6 +1727,7 @@ export async function carregarDetalheDoJob(
         ?.servico?.investimento_interno === true,
     portaisDoCliente,
     jobsDoProjeto,
+    apresentacoesDoProjeto,
     abertoPorNome,
     etapasDoJob,
     competencias,

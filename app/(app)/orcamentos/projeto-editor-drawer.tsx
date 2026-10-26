@@ -20,6 +20,7 @@ import type {
 } from "@/lib/types";
 import { ProjetoForm, type ProdutoOption } from "./projeto-form";
 import { arquivarProjeto, reativarProjeto } from "./actions";
+import type { ApresentacaoDoProjeto } from "@/lib/apresentacoes-do-projeto";
 
 interface Props {
   projeto: Projeto;
@@ -37,6 +38,8 @@ interface Props {
   marcasSelecionadas: string[];
   /** Acréscimos manuais à Equipe já gravados (papel `equipe`). */
   equipeSelecionada?: string[];
+  /** As apresentações gravadas no projeto (decisão 213). */
+  apresentacoes?: ApresentacaoDoProjeto[];
   /** Produtores dos orçamentos do projeto — entram na Equipe travados. */
   produtoresDosOrcamentos?: string[];
   /** Decisão 122: o projeto já tem orçamento aprovado ou job, e o
@@ -60,6 +63,7 @@ export function ProjetoEditorDrawer({
   responsaveisSelecionados,
   marcasSelecionadas,
   equipeSelecionada,
+  apresentacoes,
   produtoresDosOrcamentos,
   clienteTravado,
   podeCadastrarCliente,
@@ -175,6 +179,7 @@ export function ProjetoEditorDrawer({
             responsaveisSelecionados={responsaveisSelecionados}
             marcasSelecionadas={marcasSelecionadas}
             equipeSelecionada={equipeSelecionada}
+            apresentacoes={apresentacoes}
             produtoresDosOrcamentos={produtoresDosOrcamentos}
             criadorId={projeto.created_by ?? undefined}
             rodapeEsquerda={statusEArquivar}

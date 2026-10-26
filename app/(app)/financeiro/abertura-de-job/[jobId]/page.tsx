@@ -423,6 +423,7 @@ export default async function AbrirJobNoFinanceiroPage({
                 clienteNome: detalhe.raw.projeto?.cliente?.nome_fantasia ?? null,
                 dataInicio: detalhe.raw.projeto?.data_inicio_prevista ?? null,
                 dataFim: detalhe.raw.projeto?.data_fim_prevista ?? null,
+                apresentacoes: detalhe.apresentacoesDoProjeto,
               }}
               jobsDoProjeto={jobsDoProjeto}
               jobAtualId={job.id}

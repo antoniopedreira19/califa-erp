@@ -29,6 +29,7 @@ import { projetoStatusLabel } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ProjetoEditorDrawer } from "../projeto-editor-drawer";
+import { listarApresentacoesDoProjeto } from "@/lib/data/apresentacoes-do-projeto";
 import type { ProdutoOption } from "../projeto-form";
 import { OrcamentosList, type OrcamentoRow } from "./orcamentos-list";
 import { ImportarOrcamentosDrawer } from "../_selecao/importar-orcamentos-drawer";
@@ -63,7 +64,7 @@ export default async function ProjetoDetailPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [projRes, orcsRes, clientesRes, responsaveis, gps, regionaisRes, categoriasProjRes, empresas, produtosRes, vinculosRegRes, vinculosRespRes, vinculosMarcasRes] = await Promise.all([
+  const [projRes, orcsRes, clientesRes, responsaveis, gps, regionaisRes, categoriasProjRes, empresas, produtosRes, vinculosRegRes, vinculosRespRes, vinculosMarcasRes, apresentacoes] = await Promise.all([
     supabase
       .from("projetos")
       .select(
@@ -134,6 +135,8 @@ export default async function ProjetoDetailPage({
       .select("produto_id, produto:cliente_produtos(id, nome, codigo)")
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id),
+    // As apresentações do projeto, para o "Editar projeto" (decisão 213).
+    listarApresentacoesDoProjeto(supabase, session.activeTenant.id, params.projetoId),
   ]);
 
   if (projRes.error) console.error("[projeto.detail]", projRes.error.message);
@@ -525,6 +528,7 @@ export default async function ProjetoDetailPage({
               responsaveisSelecionados={responsaveisDoProjeto.map((r) => r.id)}
               marcasSelecionadas={marcasDoProjeto.map((m) => m.id)}
               equipeSelecionada={equipeManualDoProjeto}
+              apresentacoes={apresentacoes}
               produtoresDosOrcamentos={Array.from(
                 new Set([...produtoresDosOrcamentos, ...responsaveisDosJobs]),
               )}

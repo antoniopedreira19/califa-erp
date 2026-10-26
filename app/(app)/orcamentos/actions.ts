@@ -10,6 +10,8 @@ import { projetoSchema } from "@/lib/validations/projetos";
 import { gerarCodigoProjeto } from "@/lib/codigos/projetos";
 import { marcaDoJob } from "@/lib/marcas-do-projeto";
 import { FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA } from "@/lib/types";
+import { lerApresentacoesDoForm } from "@/lib/apresentacoes-do-projeto";
+import { sincronizarApresentacoes } from "@/lib/data/apresentacoes-do-projeto";
 
 export type ActionResult =
   | { ok: true; id?: string }
@@ -366,6 +368,18 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
   );
   if (!vinculos.ok) return vinculos;
 
+  // As apresentações (decisão 213): os arquivos já subiram; aqui entram
+  // as linhas.
+  const apresentacoes = lerApresentacoesDoForm(formData.get("apresentacoes"));
+  const anexos = await sincronizarApresentacoes(
+    supabase,
+    session.activeTenant.id,
+    data.id,
+    session.profile.id,
+    apresentacoes,
+  );
+  if (!anexos.ok) return anexos;
+
   await logAuditEvent({
     acao: "projeto.criado",
     tenantId: session.activeTenant.id,
@@ -377,6 +391,7 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
       cliente_id: parsed.data.cliente_id,
       marcas: produto_ids,
       marca_do_job: check.marcaDoJobId,
+      apresentacoes: apresentacoes?.length ?? 0,
     },
   });
 
@@ -530,6 +545,16 @@ export async function atualizarProjeto(
   );
   if (!vinculos.ok) return vinculos;
 
+  const apresentacoes = lerApresentacoesDoForm(formData.get("apresentacoes"));
+  const anexos = await sincronizarApresentacoes(
+    supabase,
+    session.activeTenant.id,
+    id,
+    session.profile.id,
+    apresentacoes,
+  );
+  if (!anexos.ok) return anexos;
+
   await logAuditEvent({
     acao: "projeto.atualizado",
     tenantId: session.activeTenant.id,
@@ -537,7 +562,11 @@ export async function atualizarProjeto(
     entidadeId: id,
     // As marcas e a marca que o job leva (decisão 133): é o que muda o
     // que chega ao financeiro na abertura.
-    metadata: { marcas: produto_ids, marca_do_job: check.marcaDoJobId },
+    metadata: {
+      marcas: produto_ids,
+      marca_do_job: check.marcaDoJobId,
+      apresentacoes: apresentacoes?.length ?? null,
+    },
   });
 
   revalidatePath("/orcamentos");

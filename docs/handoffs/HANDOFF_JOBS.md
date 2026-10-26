@@ -6435,3 +6435,11 @@ Protótipo aprovado em 17/10. Regra completa na decisão 192.
   foram emitidos.
 - Conferido montando o PDF com dados fictícios (titular com poupança,
   fornecedor com conta de pagamento e sem tipo).
+
+## ⚠️ Nota de 2026-10-26 (3) — As apresentações do projeto na ficha do job (decisão 213)
+
+O card PROJETO da aba "Informações do Job" ganha "Apresentação", depois do
+período do projeto: os arquivos anexados no formulário do projeto. Cada
+nome abre o arquivo numa aba nova; sem nenhum, "Nenhuma anexada". Vale nas
+três telas da ficha (Jobs, Financeiro › Jobs e Abertura de Job), lido em
+`carregarDetalheDoJob` junto das outras consultas.

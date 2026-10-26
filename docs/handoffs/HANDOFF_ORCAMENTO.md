@@ -5894,3 +5894,20 @@ Antonio, e publicada em seguida (`d413ac31`).
   todo orçamento com o prefixo do projeto). Testes do gerador, tsc, lint e
   build no worktree; banco conferido depois da troca (ver a decisão 210,
   §6).
+
+## Apresentações do projeto e "Editar orçamento" em pop-up — 26/10/2026 (decisão 213)
+
+Primeira entrega do protótipo aprovado em 26/10
+(https://claude.ai/artifact/UxASwkRtQgA4GzFEinYTtQ).
+
+- **Campo "Apresentação"** no formulário do projeto, opcional, ao lado da
+  Equipe: PDF, PowerPoint ou Keynote, até 50 MB cada, quantos forem.
+  Escolher sobe na hora; o que subiu e não foi salvo sai do bucket. Tirar
+  um arquivo já gravado e salvar apaga o arquivo. Ver a decisão 213.
+- **"Editar orçamento" virou pop-up centralizado**, no desenho do "Novo
+  orçamento", em vez do painel lateral. Campos, rodapé (status, Arquivar,
+  Excluir) e regras não mudaram.
+- **Conferência:** no P-0006/26, como administrador: anexar um PDF e um
+  `.xlsx` (recusado com o motivo), salvar (linha e arquivo no bucket),
+  anexar outro e fechar sem salvar (saiu do bucket), abrir pela ficha do
+  job. "Editar" do `P-0006/26-33` abre o pop-up. tsc e lint limpos.
