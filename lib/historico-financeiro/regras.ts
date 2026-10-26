@@ -266,6 +266,30 @@ export function regionalDaLinha(empresa: string, reg: string, regCmh: string): {
   return { regional: null, todas: false };
 }
 
+/**
+ * Nota de distribuição de lucro (Tiago, 25/10/2026): a Obs. "DL", ou, nas
+ * abas da Go Crazy e da Hitlab, a nota sem cliente que traz o nome do sócio
+ * no lugar do job. Só vale para nota que não achou job.
+ */
+export function ehDistribuicaoDeLucro(obs: string, cliente: string, colunaDoJob: string, abaComNotasDeSocio: boolean): boolean {
+  if (normalizarTexto(obs) === "DL") return true;
+  return abaComNotasDeSocio && cliente.trim() === "" && colunaDoJob.trim() !== "";
+}
+
+/** "CANCELADA" no lugar do job marca a nota cancelada. */
+export function notaCancelada(colunaDoJob: string): boolean {
+  return normalizarTexto(colunaDoJob) === "CANCELADA";
+}
+
+/** A regional que mais aparece nos lançamentos de um job; vazia quando não há nenhuma. */
+export function regionalMaisFrequente(regionais: readonly string[]): string {
+  const contagem = new Map<string, number>();
+  for (const r of regionais) if (r) contagem.set(r, (contagem.get(r) ?? 0) + 1);
+  let melhor = "";
+  for (const [r, n] of contagem) if (n > (contagem.get(melhor) ?? 0)) melhor = r;
+  return melhor;
+}
+
 /** Código de job do sistema antigo ("AMB-0306/25"). */
 export function ehCodigoAntigo(texto: string): boolean {
   return /^[A-Z0-9]{2,4}-\d{4}\/\d{2}$/.test(texto.trim());

@@ -107,4 +107,15 @@ test("linha: texto compartilhado, número, data, erro de fórmula, fórmula de t
     6: "x & y",
     10: "CO 1T 2026",
   });
+  assert.deepEqual(Object.fromEntries(linha.textosDasFormulas), { 2: "460+219.7", 5: "SUM(#REF!)", 6: "A1&B1" });
+});
+
+test("fórmula compartilhada: a primeira traz o texto, as seguintes não", () => {
+  const contexto = { textos: [], estiloEhData: [false] };
+  const xml =
+    '<row r="3"><c r="D3"><f t="shared" ref="D3:D5" si="1">D2+B3-C3</f><v>150</v></c>' +
+    '<c r="E3"><f t="shared" si="1"/><v>10</v></c></row>';
+  const linha = celulasDaLinha(xml, contexto);
+  assert.equal(linha.formulas, 2);
+  assert.deepEqual(Object.fromEntries(linha.textosDasFormulas), { 4: "D2+B3-C3" });
 });

@@ -20,15 +20,7 @@ import { createReadStream } from "node:fs";
 import { mkdir, stat, writeFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { BOM, letrasDaColuna, linhaCsv } from "../../lib/historico-financeiro/csv";
-import {
-  abasDoWorkbook,
-  estilosDeData,
-  lerDiretorioDoZip,
-  linhasDaAba,
-  textoDaEntrada,
-  textosCompartilhados,
-  type ContextoDasCelulas,
-} from "../../lib/historico-financeiro/xlsx-em-fluxo";
+import { abrirXlsx, linhasDaAba } from "../../lib/historico-financeiro/xlsx-em-fluxo";
 
 type AbaNoManifesto = {
   ordem: number;
@@ -74,29 +66,15 @@ async function main() {
   const pastaBruto = join(resolve(pastaArg), "bruto");
   await mkdir(pastaBruto, { recursive: true });
 
-  const entradas = await lerDiretorioDoZip(arquivo);
-  const exigir = (nome: string) => {
-    const entrada = entradas.get(nome);
-    if (!entrada) throw new Error(`O .xlsx não tem ${nome}.`);
-    return entrada;
-  };
-  const workbook = exigir("xl/workbook.xml");
-  const abas = abasDoWorkbook(
-    await textoDaEntrada(arquivo, workbook),
-    await textoDaEntrada(arquivo, exigir("xl/_rels/workbook.xml.rels")),
-  );
-  const compartilhados = entradas.get("xl/sharedStrings.xml");
-  const contexto: ContextoDasCelulas = {
-    textos: compartilhados ? textosCompartilhados(await textoDaEntrada(arquivo, compartilhados)) : [],
-    estiloEhData: estilosDeData(await textoDaEntrada(arquivo, exigir("xl/styles.xml"))),
-  };
+  const xlsx = await abrirXlsx(arquivo);
+  const { abas, contexto } = xlsx;
 
   const manifesto: Manifesto = {
     origem: {
       arquivo: basename(arquivo),
       tamanho: (await stat(arquivo)).size,
       sha256: await sha256(arquivo),
-      exportado_em: workbook.modificadoEm,
+      exportado_em: xlsx.entrada("xl/workbook.xml").modificadoEm,
     },
     extraido_em: new Date().toISOString(),
     abas: [],
@@ -108,7 +86,7 @@ async function main() {
     let colunas = 0;
     let formulas = 0;
     const erros: Record<string, number> = {};
-    for await (const linha of linhasDaAba(arquivo, exigir(aba.entrada), contexto)) {
+    for await (const linha of linhasDaAba(arquivo, xlsx.entrada(aba.entrada), contexto)) {
       formulas += linha.formulas;
       if (linha.celulas.size === 0) continue;
       const ultima = Math.max(...linha.celulas.keys());

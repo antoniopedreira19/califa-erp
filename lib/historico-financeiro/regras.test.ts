@@ -11,16 +11,19 @@ import {
   chaveDeNome,
   colunaDoJob,
   ehCodigoAntigo,
+  ehDistribuicaoDeLucro,
   empresaDaSigla,
   lerCompetencia,
   lerData,
   lerTipo,
   lerValor,
+  notaCancelada,
   pareceJob,
   proporCliente,
   proporMarca,
   proporServico,
   regionalDaLinha,
+  regionalMaisFrequente,
   type ClienteDoSistema,
 } from "./regras";
 
@@ -98,6 +101,17 @@ test("regional: Reg da California, CMH Reg da CCH, regional única de Hitlab e V
   assert.deepEqual(regionalDaLinha("CCH", "DOC", ""), { regional: "Doca", todas: false });
   assert.deepEqual(regionalDaLinha("Hitlab", "NE", ""), { regional: "Hitlab", todas: false });
   assert.deepEqual(regionalDaLinha("FitDance", "NE", ""), { regional: null, todas: false });
+});
+
+test("nota de distribuição de lucro, nota cancelada e regional pelos lançamentos", () => {
+  assert.equal(ehDistribuicaoDeLucro("DL", "Cliente X", "SOCIO 002 EXEMPLO", false), true);
+  assert.equal(ehDistribuicaoDeLucro("", "", "SOCIO 001 EXEMPLO", true), true);
+  assert.equal(ehDistribuicaoDeLucro("", "", "SOCIO 001 EXEMPLO", false), false);
+  assert.equal(ehDistribuicaoDeLucro("", "Cliente X", "Job sem par", true), false);
+  assert.equal(notaCancelada(" Cancelada "), true);
+  assert.equal(notaCancelada("Marca X - Evento 1T 2026"), false);
+  assert.equal(regionalMaisFrequente(["SP", "NE", "SP", ""]), "SP");
+  assert.equal(regionalMaisFrequente(["", ""]), "");
 });
 
 test("código do sistema antigo", () => {

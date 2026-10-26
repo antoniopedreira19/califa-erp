@@ -1,4 +1,4 @@
-# Histórico financeiro — extração e padronização da planilha
+# Histórico financeiro — extração, padronização e validação da planilha
 
 Importação do histórico da planilha "Fin. Conta Califórnia" (Google Sheets),
 decisão 211. Aqui ficam as etapas que rodam fora do sistema; a carga no banco é
@@ -12,24 +12,32 @@ Nada com dado da planilha vai para o git. A pasta de trabalho é
 ```
 tmp/historico-planilha/
   sistema/                 retrato do sistema para o de-para (só nomes)
+  depara/                  de-para aprovado: vale para todas as versões
   versoes/AAAA-MM-DD/
     origem.xlsx            a planilha baixada do Google Sheets
     bruto/                 E1: um CSV por aba + manifesto.json
     padronizado/           E2: movimentos, previsões, notas, jobs, pendências, propostas/
+    validacao/             E3: dre.csv, saldos.csv, faturamento.csv, resumo.json
     revisao-e2.xlsx        pendências e de-para para revisar
 ```
 
 ## Como rodar
 
 ```bash
-V=tmp/historico-planilha/versoes/2026-10-25
+T=tmp/historico-planilha
+V=$T/versoes/2026-10-25
 npx tsx scripts/historico-financeiro/extrair.ts "$V/origem.xlsx" "$V"
-npx tsx scripts/historico-financeiro/padronizar.ts "$V" tmp/historico-planilha/sistema
+npx tsx scripts/historico-financeiro/padronizar.ts "$V" "$T/sistema"
+npx tsx scripts/historico-financeiro/aprovar-depara.ts "$V" "$T/depara"
+npx tsx scripts/historico-financeiro/padronizar.ts "$V" "$T/sistema" "$T/depara"
+npx tsx scripts/historico-financeiro/validar.ts "$V"
 npx tsx scripts/historico-financeiro/revisao.ts "$V"
 ```
 
 Cada etapa leva segundos. Uma versão nova da planilha (o 3T fechado, por
-exemplo) é outra pasta em `versoes/`, com os mesmos três comandos.
+exemplo) é outra pasta em `versoes/`, com os mesmos comandos. A aprovação do
+de-para só acrescenta os textos novos daquela versão; o que já está na pasta
+`depara/` continua valendo.
 
 O retrato do sistema (`sistema/*.txt`) sai do banco pelo MCP: clientes com as
 marcas, plano de contas, serviços, regionais, contas e os jobs abertos. O
@@ -45,13 +53,22 @@ marcas, plano de contas, serviços, regionais, contas e os jobs abertos. O
   (Tipo, valor, data, empresa, regional, job) e escreve:
   - `movimentos.csv` — linhas realizadas das contas, com a carga (`1ª carga`,
     `3T 2026`, `anterior a 2023`, `depois do corte`); o crédito e o débito
-    originais vão junto, com sinal;
+    originais vão junto, com sinal, e as colunas "DRE EXTRA" e "Ano Comp.";
   - `previsoes.csv` — linhas com data depois da exportação;
-  - `notas.csv`, `jobs.csv`;
+  - `notas.csv` (com a classe: job, distribuição de lucro ou sem job) e `jobs.csv`;
   - `pendencias.csv` — o que não fecha na primeira carga;
   - `propostas/` — de-para proposto, com a forma como foi achado (igual,
     parecido, ambíguo, sem par);
   - `resumo.json` — contagens por aba, carga e pendência.
+- **De-para, `aprovar-depara.ts`:** leva as propostas para `depara/` pela regra
+  aprovada (vale o igual, o parecido, o achado pela sigla ou pela marca e o
+  geral; o ambíguo e o sem par ficam como texto). Para mudar uma decisão,
+  edite o CSV da pasta.
+- **E3, `validar.ts`:** refaz cada SUMIFS das abas de DRE sobre o bruto e sobre
+  o padronizado e compara com a planilha; confere movimento e saldo das contas
+  mês a mês e o faturamento por mês. O `resumo.json` da validação traz as
+  contagens por situação e o saldo da planilha no fim de 12/2025, 06/2026 e
+  09/2026 por conta.
 - **Revisão, `revisao.ts`:** junta pendências e propostas num .xlsx com a
   coluna "Sua decisão". Amarelo pede conferência; cinza é cliente ou marca sem
   cadastro, que fica como texto no histórico.
@@ -59,5 +76,5 @@ marcas, plano de contas, serviços, regionais, contas e os jobs abertos. O
 ## Testes
 
 ```bash
-node --import tsx --test lib/historico-financeiro/extracao.test.ts lib/historico-financeiro/regras.test.ts
+node --import tsx --test lib/historico-financeiro/extracao.test.ts lib/historico-financeiro/regras.test.ts lib/historico-financeiro/formulas.test.ts
 ```

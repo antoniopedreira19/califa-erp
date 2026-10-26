@@ -1,9 +1,9 @@
 # 211 — Importação do histórico da planilha financeira: como ler a planilha e o corte em 01/10/2026
 
 **Data:** 2026-10-25
-**Status:** aceita. E1 (extração) e E2 (padronização) implementadas em
-25/10/2026, sem nada gravado no banco. A revisão da E2 (pendências e
-de-para) está com o Tiago.
+**Status:** aceita. E1 (extração), E2 (padronização, com o de-para aprovado)
+e E3 (validação) implementadas em 25/10/2026, sem nada gravado no banco.
+Próxima entrega: A1 (tabelas de histórico e tela de importação).
 **Quem decidiu:** Tiago, no plano "Importação do histórico financeiro"
 (página privada de 25/10/2026), com as respostas D1, D2 e D3 dadas no mesmo
 dia: "Aprovo D1, D2 e D3 como você recomendou".
@@ -56,6 +56,29 @@ abaixo vieram das fórmulas dela, conferidas contra a aba DRE.
    na aba de 2026; há `#REF!` nas despesas das contas Go Crazy na aba da CMH; a
    aba da Ventura copia as fórmulas da Hitlab). A rentabilidade se recalcula a
    partir dos lançamentos.
+10. **A DRE da Doca soma pela coluna "DRE EXTRA"** ("DOC CO 1T 2023"), e não
+    pelo Tipo. O padronizado guarda essa coluna e a "Ano Comp.".
+11. **Regional "TD"** é o job ou o lançamento de todas as regionais, em rateio.
+
+### Respostas de 25/10/2026, à noite
+
+- **De-para:** as propostas valem como estão. O que veio igual, parecido, pela
+  sigla, pela marca ou geral fica; o ambíguo e o sem par ficam como texto no
+  histórico. O de-para aprovado mora em `tmp/historico-planilha/depara/` e
+  vale para as próximas versões da planilha: a aprovação só acrescenta textos
+  novos, e uma decisão se muda editando o CSV.
+- **"COPA"** na regional das abas de resultado é um marcador dos projetos da
+  Copa para os relatórios. Os lançamentos desses jobs trazem a regional de
+  verdade, e a DRE usa a do lançamento. O job ganha o marcador "Copa" e a
+  regional que mais aparece nos seus lançamentos.
+- **Notas de distribuição de lucro:** a Obs. "DL" e, nas abas de faturamento da
+  Go Crazy e da Hitlab, a nota sem cliente com o nome do sócio no lugar do job.
+  Ficam na empresa do CNPJ emissor, fora da receita de job. "CANCELADA" no
+  lugar do job é nota cancelada.
+- **BB Americas:** criar a conta no sistema, na carga (A2). Ela é em dólar e a
+  planilha a lança em reais convertidos ("Saldo em dólar: U$ …" na
+  descrição): o histórico fica em reais, como a planilha, e o extrato OFX dessa
+  conta, que vem em dólar, não vai bater com ele.
 
 ### D1 — Empresas
 
@@ -97,7 +120,7 @@ no sistema (conta, empresa, regional, plano de contas, cliente, marca e, quando
 houver, o job) e guarda o texto original da planilha. Cliente e marca sem
 cadastro ficam como texto: o histórico não cria cadastro.
 
-## O pipeline (E1 e E2)
+## O pipeline (E1, E2 e E3)
 
 Código em `lib/historico-financeiro/` (regras puras, com teste) e
 `scripts/historico-financeiro/` (como rodar está no `README.md` da pasta).
@@ -112,6 +135,17 @@ Código em `lib/historico-financeiro/` (regras puras, com teste) e
   regional).
 - **Revisão** (`revisao.ts`): um .xlsx com uma aba por assunto e a coluna "Sua
   decisão"; vazia, vale a proposta.
+- **Aprovação do de-para** (`aprovar-depara.ts`): leva as propostas para a
+  pasta do de-para aprovado; a padronização usa essa pasta quando ela é
+  passada como terceiro argumento.
+- **E3 — validação** (`validar.ts`): refaz cada SUMIFS das abas DRE, DRE CMH,
+  DRE HIT, DRE Ventura e DRE Doca sobre o bruto e sobre o padronizado
+  (`lib/historico-financeiro/formulas.ts`, com o critério como o Google
+  Sheets aplica: sem diferença de maiúscula, com curinga, espaço contando,
+  célula vazia valendo zero) e compara com o valor da planilha; confere o
+  movimento e o saldo de cada conta mês a mês e o faturamento por aba e mês.
+  Diferença entre o bruto e o padronizado só passa se for explicada: conta
+  fora (D2), linha separada pela padronização ou espaço sobrando no texto.
 
 A planilha tem dado pessoal. Planilha, CSVs e revisão ficam em
 `tmp/historico-planilha/`, fora do git; o código e esta decisão não têm dado
@@ -128,14 +162,26 @@ da planilha, só contagens.
   de job da primeira carga, só 3 ficaram sem job.
 - **Contagens:** cerca de 110 mil movimentos realizados (56,7 mil na primeira
   carga), 3 mil previsões, 6,8 mil notas (3,2 mil emitidas na primeira carga),
-  3,6 mil jobs nas abas de 2021 a 2027 e 76 pendências na primeira carga.
+  3,6 mil jobs nas abas de 2021 a 2027. Com o de-para aprovado e as respostas
+  da noite, sobram 20 pendências na primeira carga: 12 notas cujo job não está
+  em nenhuma aba de resultado, 3 lançamentos de job antigo, 2 datas inválidas,
+  2 jobs repetidos com dados diferentes e 1 Tipo sem grupo.
+- **E3, DRE de 2023 a 2026:** 8.710 células com SUMIFS. 8.685 batem nas três
+  fontes (planilha, bruto e padronizado). 3 diferem no padronizado por linhas
+  que a padronização separou (a data "0204" do Fundo Fixo e um lançamento de
+  valor que não fecha), 6 por espaço sobrando no Tipo ou no Jobs — a DRE da
+  planilha deixa esses lançamentos de fora e o histórico os soma —, e 16 são
+  fórmulas quebradas (`#REF!`) na própria DRE da CMH.
+- **E3, saldos e faturamento:** de janeiro de 2023 a setembro de 2026, nenhum
+  mês de nenhuma conta tem movimento diferente entre planilha e padronizado, o
+  saldo da planilha encadeia mês a mês com o movimento padronizado, e nenhum
+  mês de faturamento difere.
 
 ## O que fica para depois
 
-- A revisão da E2 pelo Tiago: pendências, de-para e duas perguntas que só ele
-  responde (a regional "COPA" dos jobs da Copa Arena e as notas sem job com a
-  Obs. "DL").
-- E3: a validação completa contra a DRE, o faturamento e os saldos.
-- A1 e A2: as tabelas de histórico, a tela de importação e a primeira carga.
+- A1 e A2: as tabelas de histórico, a tela de importação e a primeira carga
+  (com a criação das contas Fundo Fixo California e BB Americas).
+- As 20 pendências: as de data e de nome de job se corrigem na planilha e
+  entram na versão do 3T.
 - A trilha do 4T no sistema: os jobs do 4T que só estão na planilha, as notas de
   outubro, a virada de 30/09 e a conciliação de outubro pelo OFX.

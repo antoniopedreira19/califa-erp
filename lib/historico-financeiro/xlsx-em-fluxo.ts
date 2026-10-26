@@ -47,6 +47,12 @@ export type LinhaBruta = {
   /** Coluna (1 = A) → valor como a planilha mostrava. Só células com valor. */
   celulas: Map<number, string>;
   formulas: number;
+  /**
+   * Coluna → texto da fórmula, quando a célula a traz escrita (a fórmula
+   * comum e a primeira de uma fórmula compartilhada; as seguintes vêm sem
+   * texto e ficam de fora). Usado pela validação (E3).
+   */
+  textosDasFormulas: Map<number, string>;
 };
 
 const ASSINATURA_FIM = Buffer.from([0x50, 0x4b, 0x05, 0x06]);
@@ -241,17 +247,50 @@ function valorDaCelula(atributos: string, corpo: string, contexto: ContextoDasCe
 export function celulasDaLinha(xmlDaLinha: string, contexto: ContextoDasCelulas): LinhaBruta {
   const numero = Number(/^<row\b[^>]*?\sr="(\d+)"/.exec(xmlDaLinha)?.[1] ?? 0);
   const celulas = new Map<number, string>();
+  const textosDasFormulas = new Map<number, string>();
   let formulas = 0;
   for (const m of xmlDaLinha.matchAll(/<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g)) {
     const corpo = m[2] ?? "";
-    if (corpo.includes("<f")) formulas++;
-    const valor = valorDaCelula(m[1], corpo, contexto);
-    if (valor === null || valor === "") continue;
     const ref = atributo(m[1], "r");
     const coluna = ref ? indiceDaColuna(ref) : celulas.size + 1;
+    if (corpo.includes("<f")) {
+      formulas++;
+      const texto = /<f\b[^>]*>([\s\S]*?)<\/f>/.exec(corpo)?.[1];
+      if (texto) textosDasFormulas.set(coluna, decodificarXml(texto));
+    }
+    const valor = valorDaCelula(m[1], corpo, contexto);
+    if (valor === null || valor === "") continue;
     celulas.set(coluna, valor);
   }
-  return { numero, celulas, formulas };
+  return { numero, celulas, formulas, textosDasFormulas };
+}
+
+export type Xlsx = {
+  caminho: string;
+  abas: AbaDoArquivo[];
+  contexto: ContextoDasCelulas;
+  /** A entrada do zip pelo nome; erro se o arquivo não a tem. */
+  entrada: (nome: string) => EntradaZip;
+};
+
+/** Abre o .xlsx: as abas, os textos compartilhados e os estilos de data. */
+export async function abrirXlsx(caminho: string): Promise<Xlsx> {
+  const entradas = await lerDiretorioDoZip(caminho);
+  const entrada = (nome: string) => {
+    const e = entradas.get(nome);
+    if (!e) throw new Error(`O .xlsx não tem ${nome}.`);
+    return e;
+  };
+  const abas = abasDoWorkbook(
+    await textoDaEntrada(caminho, entrada("xl/workbook.xml")),
+    await textoDaEntrada(caminho, entrada("xl/_rels/workbook.xml.rels")),
+  );
+  const compartilhados = entradas.get("xl/sharedStrings.xml");
+  const contexto: ContextoDasCelulas = {
+    textos: compartilhados ? textosCompartilhados(await textoDaEntrada(caminho, compartilhados)) : [],
+    estiloEhData: estilosDeData(await textoDaEntrada(caminho, entrada("xl/styles.xml"))),
+  };
+  return { caminho, abas, contexto, entrada };
 }
 
 /** As linhas de uma aba, em fluxo, sem carregar o XML inteiro. */

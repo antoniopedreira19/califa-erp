@@ -4,7 +4,11 @@
  * jobs num formato único, a lista de pendências e as propostas de de-para.
  *
  * Uso:
- *   npx tsx scripts/historico-financeiro/padronizar.ts <pasta-da-versao> <pasta-do-retrato-do-sistema>
+ *   npx tsx scripts/historico-financeiro/padronizar.ts <pasta-da-versao> <pasta-do-retrato-do-sistema> [<pasta-do-de-para>]
+ *
+ * Com a pasta do de-para aprovado (`aprovar-depara.ts`), os valores do
+ * sistema (subtipo do plano, cliente, marca, serviço, regional) saem dela;
+ * o que ela ainda não tem sai da proposta e é contado no resumo.
  *
  * Saída em <pasta-da-versao>/padronizado/:
  *   - movimentos.csv  — linhas das contas já realizadas (até a data da exportação),
@@ -14,7 +18,7 @@
  *   - jobs.csv        — os jobs das abas de resultado de 2021 em diante;
  *   - pendencias.csv  — o que não fecha, só da primeira carga (2023 a 30/06/2026);
  *   - propostas/*.csv — de-para proposto de plano de contas, cliente, marca,
- *                       serviço e regional, para aprovação;
+ *                       serviço e regional (de 2023 até o corte), para aprovação;
  *   - resumo.json     — contagens por aba e por pendência.
  *
  * As regras estão em `lib/historico-financeiro/regras.ts`, com teste. Nada
@@ -33,7 +37,18 @@ import {
   type AbaDeResultado,
   type Carga,
 } from "../../lib/historico-financeiro/abas";
+import { SINONIMOS_DA_CONTA, SINONIMOS_DA_NOTA, SINONIMOS_DO_RESULTADO, celula, colunasPorNome } from "../../lib/historico-financeiro/colunas";
 import { BOM, lerCsv, linhaCsv } from "../../lib/historico-financeiro/csv";
+import {
+  chaveDaMarca,
+  chaveDaRegional,
+  chaveDoCliente,
+  chaveDoPlano,
+  chaveDoServico,
+  lerDePara,
+  valorAprovado,
+  type DePara,
+} from "../../lib/historico-financeiro/depara";
 import {
   GRUPOS_DE_JOB,
   GRUPO_SEM_TIPO_PROPOSTO,
@@ -42,6 +57,7 @@ import {
   chaveDeNome,
   colunaDoJob,
   ehCodigoAntigo,
+  ehDistribuicaoDeLucro,
   empresaDaSigla,
   inicioDoResumo,
   lerCompetencia,
@@ -51,11 +67,13 @@ import {
   lerTipo,
   lerValor,
   normalizarTexto,
+  notaCancelada,
   pareceJob,
   proporCliente,
   proporMarca,
   proporServico,
   regionalDaLinha,
+  regionalMaisFrequente,
   type ClienteDoSistema,
   type Proposta,
 } from "../../lib/historico-financeiro/regras";
@@ -70,19 +88,6 @@ async function lerAba(pastaBruto: string, manifesto: Manifesto, nome: string): P
   if (!aba) throw new Error(`A aba "${nome}" não está no manifesto.`);
   return lerCsv(await readFile(join(pastaBruto, aba.arquivo), "utf8")).slice(1);
 }
-
-/** Cabeçalho da aba → coluna do CSV de cada campo, pela primeira ocorrência do nome. */
-function colunasPorNome(cabecalho: string[], sinonimos: Readonly<Record<string, string>>): Map<string, number> {
-  const colunas = new Map<string, number>();
-  cabecalho.forEach((titulo, i) => {
-    if (i === 0) return;
-    const campo = sinonimos[normalizarTexto(titulo)];
-    if (campo && !colunas.has(campo)) colunas.set(campo, i);
-  });
-  return colunas;
-}
-
-const celula = (linha: string[], colunas: Map<string, number>, campo: string) => (linha[colunas.get(campo) ?? -1] ?? "").trim();
 
 async function lerRetrato(pasta: string) {
   const linhas = async (arquivo: string) =>
@@ -102,6 +107,7 @@ async function lerRetrato(pasta: string) {
   return { clientes, plano, regionais, jobs };
 }
 
+
 // ---------------------------------------------------------------- pendências
 
 type Pendencia = { tipo: string; aba: string; linha: string; data: string; valor: string; encontrado: string; detalhe: string };
@@ -112,28 +118,6 @@ function pendencia(p: Partial<Pendencia> & { tipo: string; aba: string }) {
 }
 
 // ---------------------------------------------------------------- jobs
-
-const SINONIMOS_DO_RESULTADO: Readonly<Record<string, string>> = {
-  T: "trimestre",
-  "JOBS UNIFICADO": "projeto",
-  CLIENTE: "cliente",
-  PRODU: "marca",
-  SERV: "servico",
-  GP: "gp",
-  "DATA START": "data_inicio",
-  "DATA ABERTURA": "data_inicio",
-  DATA: "data",
-  REGIONAL: "regional",
-  CIDADE: "regional",
-  STATUS: "status",
-  PISCILLIA: "codigo_antigo",
-  CODIGO: "codigo_antigo",
-  "TOTAL RECEITA": "receita",
-  IMPOSTO: "imposto",
-  "TOTAL IMPOSTO": "imposto",
-  "TOTAL CO": "custo",
-  "TOTAL CUSTO OP": "custo",
-};
 
 const NAO_E_LINHA_DE_JOB = new Set(["PLANILHA RESULTADO DE JOB", "DRE", "DIFERENCA AUDITORIA", "JOBS", "JOB", "TOTAL"]);
 
@@ -224,40 +208,12 @@ function lerJobs(abasDeResultado: { nome: string; papel: AbaDeResultado; linhas:
 
 // ---------------------------------------------------------------- movimentos
 
-const SINONIMOS_DA_CONTA: Readonly<Record<string, string>> = {
-  DATA: "data",
-  CREDITO: "credito",
-  DEBITO: "debito",
-  PARC: "parcela",
-  PARCELA: "parcela",
-  DESCRICAO: "descricao",
-  SERVICO: "descricao",
-  FORNECEDOR: "fornecedor",
-  JOB: "job",
-  JOBS: "job",
-  "JOB OU EVENTO": "job",
-  EVENTO: "evento",
-  CIDADE: "evento",
-  "PAIS UF CIDADE": "evento",
-  TIPO: "tipo",
-  COD: "cod",
-  "COD CONTA": "cod",
-  REG: "reg",
-  "REG CALIFA": "reg",
-  "CMH REG": "reg_cmh",
-  "REG CMH": "reg_cmh",
-  DOC: "documento",
-  DOCUMENTO: "documento",
-  OBS: "observacao",
-  OBSERVACAO: "observacao",
-};
-
 const COLUNAS_DO_MOVIMENTO = [
   "id", "digital", "aba", "linha", "conta", "conta_situacao", "carga", "data", "natureza", "valor", "credito_planilha", "debito_planilha",
   "classe", "empresa", "sigla_planilha", "grupo", "cod", "competencia_trimestre", "competencia_ano",
-  "plano_tipo_proposto", "plano_subtipo_proposto", "regional", "regional_todas",
+  "plano_tipo", "plano_subtipo", "regional_planilha", "regional", "regional_todas",
   "job_id", "job_nome", "job_achado_em", "coluna_jobs", "coluna_evento", "tipo_planilha",
-  "descricao", "fornecedor", "parcela", "documento", "observacao", "contrapartida",
+  "descricao", "fornecedor", "parcela", "documento", "observacao", "contrapartida", "dre_extra", "ano_comp",
 ] as const;
 
 type Movimento = Record<(typeof COLUNAS_DO_MOVIMENTO)[number], string>;
@@ -303,32 +259,6 @@ function criarPropostaDoPlano(plano: { tipo: string; tipoNome: string; subtipo: 
 
 // ---------------------------------------------------------------- notas
 
-const SINONIMOS_DA_NOTA: Readonly<Record<string, string>> = {
-  NF: "nf",
-  JOB: "job",
-  CLIENTE: "cliente",
-  MUNICIPIO: "municipio",
-  AP: "municipio",
-  CNAE: "cnae",
-  OBS: "obs",
-  EMISSAO: "emissao",
-  VENCIMENTO: "vencimento",
-  RECEBIMENTO: "recebimento",
-  VALOR: "valor",
-  DEDUCAO: "deducao",
-  DEDUCOES: "deducao",
-  "VALOR TRIBUTAVEL": "valor_tributavel",
-  ISS: "iss",
-  PIS: "pis",
-  COFINS: "cofins",
-  CSLL: "csll",
-  IR: "ir",
-  "AD IR": "adicional_ir",
-  RETENCOES: "retencoes",
-  "TOTAL IMPOSTOS": "total_impostos",
-  OBSERVACAO: "observacao",
-};
-
 /** A coluna Obs. das abas de faturamento diz de qual empresa gerencial é a nota. */
 const EMPRESA_DA_OBS: Readonly<Record<string, string>> = {
   CALIFA: "Agência California",
@@ -343,7 +273,7 @@ const EMPRESA_DA_OBS: Readonly<Record<string, string>> = {
 };
 
 const COLUNAS_DA_NOTA = [
-  "id", "aba", "linha", "estabelecimento", "situacao", "carga", "numero", "emissao", "competencia_trimestre", "competencia_ano",
+  "id", "aba", "linha", "estabelecimento", "situacao", "classe", "carga", "numero", "emissao", "competencia_trimestre", "competencia_ano",
   "vencimento", "recebimento", "valor", "deducao", "valor_tributavel", "iss", "pis", "cofins", "csll", "ir", "adicional_ir",
   "retencoes", "total_impostos", "empresa", "empresa_por", "job_id", "job_nome", "coluna_job", "cliente", "municipio", "cnae", "obs", "observacao",
 ] as const;
@@ -351,17 +281,30 @@ const COLUNAS_DA_NOTA = [
 // ---------------------------------------------------------------- principal
 
 async function main() {
-  const [pastaArg, retratoArg] = process.argv.slice(2);
+  const [pastaArg, retratoArg, deparaArg] = process.argv.slice(2);
   if (!pastaArg || !retratoArg) {
-    console.error("Uso: npx tsx scripts/historico-financeiro/padronizar.ts <pasta-da-versao> <pasta-do-retrato-do-sistema>");
+    console.error("Uso: npx tsx scripts/historico-financeiro/padronizar.ts <pasta-da-versao> <pasta-do-retrato-do-sistema> [<pasta-do-de-para>]");
     process.exit(1);
   }
+  const depara: DePara | null = deparaArg ? await lerDePara(resolve(deparaArg)) : null;
+  const semAprovacao: Record<keyof DePara, Set<string>> = { plano: new Set(), clientes: new Set(), marcas: new Set(), servicos: new Set(), regionais: new Set() };
+  /** O valor do sistema: o aprovado, se o texto está no de-para; senão, a proposta. */
+  const final = (tipo: keyof DePara, chave: string, proposta: string) => {
+    if (!depara) return proposta;
+    const aprovado = depara[tipo].get(chave);
+    if (aprovado !== undefined) return aprovado;
+    semAprovacao[tipo].add(chave);
+    return proposta;
+  };
   const pasta = resolve(pastaArg);
   const pastaBruto = join(pasta, "bruto");
   const saida = join(pasta, "padronizado");
   await mkdir(join(saida, "propostas"), { recursive: true });
   const manifesto: Manifesto = JSON.parse(await readFile(join(pastaBruto, "manifesto.json"), "utf8"));
   const retrato = await lerRetrato(resolve(retratoArg));
+  /** A regional, se ela existe no sistema para a empresa (a "Urbia" da CMH, por exemplo, não existe). */
+  const regionalDoSistema = (empresa: string, nome: string) =>
+    nome && retrato.regionais.some((r) => r.empresa === empresa && r.regional === nome) ? nome : "";
   const dataDaVersao = manifesto.origem.exportado_em.slice(0, 10);
   const resumo: Record<string, unknown> = { versao: manifesto.origem, data_da_versao: dataDaVersao, corte: CORTE };
 
@@ -432,6 +375,11 @@ async function main() {
       const sigla = tipo.classe === "dre" ? tipo.sigla : null;
       const empresa = tipo.classe === "dre" ? empresaDaSigla(sigla) : "";
       const { regional, todas } = empresa ? regionalDaLinha(empresa, c("reg"), c("reg_cmh")) : { regional: null, todas: false };
+      // O texto de regional que a linha traz, na coluna que vale para a empresa.
+      const regionalNaLinha = empresa === "CCH" ? c("reg_cmh") || c("reg") : empresa === "Agência California" ? c("reg") : "";
+      const regionalFinal = regionalNaLinha
+        ? final("regionais", chaveDaRegional(empresa, regionalNaLinha), regionalDoSistema(empresa, regional ?? ""))
+        : regionalDoSistema(empresa, regional ?? "");
 
       // Job: pela coluna que a planilha usa para a empresa; se não achar, pela outra.
       const preferida = colunaDoJob(sigla);
@@ -452,7 +400,8 @@ async function main() {
       }
 
       const plano = tipo.classe === "dre" ? propostaDoPlano(tipo.grupo, c("cod")) : { tipo: "", subtipo: "", como: "" };
-      const base = [a.nome, data, valor.natureza, valor.valor, normalizarTexto(c("descricao")), normalizarTexto(c("fornecedor")), c("tipo"), c("job"), c("evento")].join("|");
+      const subtipo = tipo.classe === "dre" ? final("plano", chaveDoPlano(tipo.grupo, c("cod")), plano.subtipo) : "";
+      const base =[a.nome, data, valor.natureza, valor.valor, normalizarTexto(c("descricao")), normalizarTexto(c("fornecedor")), c("tipo"), c("job"), c("evento")].join("|");
       const vez = (digitais.get(base) ?? 0) + 1;
       digitais.set(base, vez);
       const movimento: Movimento = {
@@ -475,9 +424,10 @@ async function main() {
         cod: c("cod"),
         competencia_trimestre: tipo.classe === "dre" && tipo.trimestre ? String(tipo.trimestre) : "",
         competencia_ano: tipo.classe === "dre" ? String(tipo.ano) : "",
-        plano_tipo_proposto: plano.tipo,
-        plano_subtipo_proposto: plano.subtipo,
-        regional: regional ?? "",
+        plano_tipo: subtipo ? subtipo.split(".")[0] : plano.tipo,
+        plano_subtipo: subtipo,
+        regional_planilha: regionalNaLinha,
+        regional: regionalFinal,
         regional_todas: todas ? "sim" : "",
         job_id: job?.id ?? "",
         job_nome: job?.nome ?? "",
@@ -491,6 +441,8 @@ async function main() {
         documento: c("documento"),
         observacao: c("observacao"),
         contrapartida: tipo.classe === "transferencia" ? tipo.contrapartida : "",
+        dre_extra: c("dre_extra"),
+        ano_comp: c("ano_comp"),
       };
       if (futura) {
         contar("previsão (data futura)");
@@ -499,7 +451,8 @@ async function main() {
       }
       contar(`realizado · ${carga}`);
       movimentos.push(movimento);
-      if (carga !== "1ª carga") continue;
+      // As propostas de de-para cobrem tudo o que vai ser carregado: a primeira carga e o 3T.
+      if (carga !== "1ª carga" && carga !== "3T 2026") continue;
       if (tipo.classe === "dre") {
         const chavePlano = `${tipo.grupo}|${normalizarTexto(c("cod"))}`;
         const uso = usoDoPlano.get(chavePlano) ?? { grupo: tipo.grupo, cod: c("cod"), linhas: 0, valor: 0 };
@@ -507,8 +460,6 @@ async function main() {
         uso.valor += valor.natureza === "saida" ? valor.valor : -valor.valor;
         usoDoPlano.set(chavePlano, uso);
       }
-      // O texto de regional que a linha traz, na coluna que vale para a empresa.
-      const regionalNaLinha = empresa === "CCH" ? c("reg_cmh") || c("reg") : empresa === "Agência California" ? c("reg") : "";
       if (regionalNaLinha) {
         const chave = `${empresa}|${normalizarTexto(regionalNaLinha)}`;
         const r = regionaisVistas.get(chave) ?? { empresa, valor: regionalNaLinha, ocorrencias: 0 };
@@ -570,23 +521,32 @@ async function main() {
         if (carga === "1ª carga") pendencia({ tipo: "Valor que não fecha", aba: a.nome, linha: l[0], data: emissao, encontrado: c("valor"), detalhe: `NF ${nf}` });
         continue;
       }
-      const job = indice.job.get(normalizarTexto(c("job"))) ?? indice.evento.get(normalizarTexto(c("job")));
+      const cancelada = notaCancelada(c("job"));
+      const job = cancelada ? undefined : indice.job.get(normalizarTexto(c("job"))) ?? indice.evento.get(normalizarTexto(c("job")));
+      const distribuicao = !job && !cancelada && ehDistribuicaoDeLucro(c("obs"), c("cliente"), c("job"), fat.notasDeSocio);
       const pelaObs = EMPRESA_DA_OBS[normalizarTexto(c("obs"))];
-      const empresa = job?.empresa ?? pelaObs ?? "";
-      if (emitida && carga === "1ª carga" && !empresa)
-        pendencia({ tipo: "Nota sem empresa", aba: a.nome, linha: l[0], data: emissao, valor: c("valor"), encontrado: `Obs. "${c("obs")}"`, detalhe: `NF ${nf} · job "${c("job")}" não achado` });
+      const empresa = job?.empresa ?? (distribuicao ? fat.empresa : pelaObs) ?? "";
+      const situacao = cancelada ? "cancelada" : emitida ? "emitida" : "previsão";
+      const classe = job ? "job" : distribuicao ? "distribuição de lucro" : "sem job";
+      if (situacao === "emitida" && carga === "1ª carga") {
+        if (!empresa)
+          pendencia({ tipo: "Nota sem empresa", aba: a.nome, linha: l[0], data: emissao, valor: c("valor"), encontrado: `Obs. "${c("obs")}"`, detalhe: `NF ${nf} · job "${c("job")}" não achado` });
+        if (classe === "sem job" && pareceJob(c("job")))
+          pendencia({ tipo: "Job da nota não encontrado", aba: a.nome, linha: l[0], data: emissao, valor: c("valor"), encontrado: c("job"), detalhe: `NF ${nf}` });
+      }
       const comp = lerCompetencia(colCompetencia >= 0 ? l[colCompetencia] ?? "" : "");
       const numero = (k: string) => {
         const n = lerNumero(c(k));
         return n === null || c(k) === "" ? "" : arredondar(n).toFixed(2);
       };
-      contar(emitida ? `nota emitida · ${carga}` : "previsão de faturamento");
+      contar(situacao === "previsão" ? "previsão de faturamento" : `nota ${situacao} · ${carga}`);
       notas.push({
         id: `${a.nome}:${l[0]}`,
         aba: a.nome,
         linha: l[0],
         estabelecimento: fat.estabelecimento,
-        situacao: emitida ? "emitida" : "previsão",
+        situacao,
+        classe,
         carga,
         numero: emitida ? String(Number(nf)) : "",
         emissao,
@@ -606,7 +566,7 @@ async function main() {
         retencoes: numero("retencoes"),
         total_impostos: numero("total_impostos"),
         empresa,
-        empresa_por: job ? "job" : pelaObs ? "Obs." : "",
+        empresa_por: job ? "job" : distribuicao ? "estabelecimento" : pelaObs ? "Obs." : "",
         job_id: job?.id ?? "",
         job_nome: job?.nome ?? "",
         coluna_job: c("job"),
@@ -652,6 +612,8 @@ async function main() {
   const regionalProposta = (empresa: string, valor: string) => {
     const v = normalizarTexto(valor);
     if (v === "TD") return { regional: "", como: "todas (rateio)" };
+    // "COPA" marca os jobs da Copa nos relatórios; a regional de verdade está nos lançamentos (Tiago, 25/10/2026).
+    if (v === "COPA") return { regional: "", como: "marcador: regional pelos lançamentos" };
     const nome = NOMES_DA_REGIONAL[v] ?? v;
     const alvo = retrato.regionais.find((r) => r.empresa === empresa && normalizarTexto(r.regional) === normalizarTexto(nome));
     return alvo ? { regional: alvo.regional, como: "igual" } : { regional: "", como: "sem par" };
@@ -677,11 +639,29 @@ async function main() {
       return [u.grupo, u.cod, descricoes.get(`${u.grupo}|${normalizarTexto(u.cod)}`) ?? "", u.linhas, arredondar(u.valor).toFixed(2), p.subtipo, sub ? `${sub.tipoNome} · ${sub.subtipoNome}` : "", p.como];
     });
 
-  // Pendências de cadastro na primeira carga: regional dos jobs fora da lista.
+  // Regional do job: a da planilha, quando existe no sistema; senão, a que mais
+  // aparece nos lançamentos do job (é a dos lançamentos que a DRE usa).
+  const regionaisDoJob = new Map<string, string[]>();
+  for (const m of [...movimentos, ...previsoes]) {
+    if (!m.job_id || !m.regional) continue;
+    const lista = regionaisDoJob.get(m.job_id) ?? [];
+    lista.push(m.regional);
+    regionaisDoJob.set(m.job_id, lista);
+  }
+  const regionalDoJob = (j: Job) => {
+    // "TD" é o job de todas as regionais, em rateio: não se escolhe uma.
+    if (normalizarTexto(j.regional) === "TD") return { regional: "", por: "todas (rateio)" };
+    const pelaPlanilha = j.regional ? final("regionais", chaveDaRegional(j.empresa, j.regional), regionalProposta(j.empresa, j.regional).regional) : "";
+    if (pelaPlanilha) return { regional: pelaPlanilha, por: "planilha" };
+    const pelosLancamentos = regionalMaisFrequente(regionaisDoJob.get(j.id) ?? []);
+    return { regional: pelosLancamentos, por: pelosLancamentos ? "lançamentos" : "" };
+  };
+
+  // Pendências de cadastro na primeira carga: regional do job sem par nem na planilha nem nos lançamentos.
+  // "COPA" (marcador) e "TD" (todas as regionais) não são pendência, mesmo sem regional no fim.
   for (const j of jobsDaCarga.filter((j) => j.ano >= 2023)) {
-    if (!j.regional) continue;
-    const p = regionalProposta(j.empresa, j.regional);
-    if (p.como === "sem par") pendencia({ tipo: "Regional sem par", aba: j.aba, linha: j.linha, encontrado: j.regional, detalhe: `Job "${j.nome}" (${j.empresa})` });
+    if (j.regional && !["COPA", "TD"].includes(normalizarTexto(j.regional)) && !regionalDoJob(j).regional)
+      pendencia({ tipo: "Regional sem par", aba: j.aba, linha: j.linha, encontrado: j.regional, detalhe: `Job "${j.nome}" (${j.empresa})` });
   }
 
   // Escrita
@@ -694,19 +674,28 @@ async function main() {
   await escrever("notas.csv", COLUNAS_DA_NOTA, notas.map((n) => comoLinha(COLUNAS_DA_NOTA, n)));
   await escrever(
     "jobs.csv",
-    ["id", "nome", "empresa", "aba_da_planilha", "aba", "ano", "linha", "trimestre", "projeto", "cliente", "marca", "servico", "gp", "data_inicio", "regional", "status", "codigo_antigo", "job_sistema", "cliente_proposto", "marca_proposta", "servico_proposto", "regional_proposta", "outras_abas", "planilha_receita", "planilha_custo", "planilha_imposto"],
+    [
+      "id", "nome", "empresa", "aba_da_planilha", "aba", "ano", "linha", "trimestre", "projeto", "cliente", "marca", "servico", "gp", "data_inicio",
+      "regional_planilha", "marcador", "status", "codigo_antigo", "job_sistema", "cliente_sistema", "marca_sistema", "servico_sistema", "regional",
+      "regional_por", "outras_abas", "planilha_receita", "planilha_custo", "planilha_imposto",
+    ],
     jobs.map((j) => {
       const pc = proporCliente(j.cliente, retrato.clientes);
-      const cli = clientesPorSigla.get(pc.valor);
+      const cliente = j.cliente ? final("clientes", chaveDoCliente(j.cliente), valorAprovado(pc.valor, pc.como)) : "";
+      const pm = proporMarca(j.marca, clientesPorSigla.get(cliente));
+      const marca = j.marca ? final("marcas", chaveDaMarca(j.cliente, j.marca), valorAprovado(pm.valor, pm.como)) : "";
+      const ps = proporServico(j.servico);
+      const servico = j.servico ? final("servicos", chaveDoServico(j.servico), valorAprovado(ps.valor, ps.como)) : "";
+      const { regional, por } = regionalDoJob(j);
       return [
         j.id, j.nome, j.empresa, j.empresaDaAba, j.aba, j.ano, j.linha, j.trimestre, j.projeto, j.cliente, j.marca, j.servico, j.gp, j.dataInicio,
-        j.regional, j.status, j.codigoAntigo, jobsDoSistema.get(normalizarTexto(j.nome)) ?? "", pc.valor, proporMarca(j.marca, cli).valor,
-        proporServico(j.servico).valor, regionalProposta(j.empresa, j.regional).regional, j.outrasAbas.join(" "), j.receita, j.custo, j.imposto,
+        j.regional, normalizarTexto(j.regional) === "COPA" ? "Copa" : "", j.status, j.codigoAntigo, jobsDoSistema.get(normalizarTexto(j.nome)) ?? "",
+        cliente, marca, servico, regional, por, j.outrasAbas.join(" "), j.receita, j.custo, j.imposto,
       ];
     }),
   );
   await escrever("pendencias.csv", ["tipo", "aba", "linha", "data", "valor", "encontrado", "detalhe"], pendencias.map((p) => [p.tipo, p.aba, p.linha, p.data, p.valor, p.encontrado, p.detalhe]));
-  await escrever("propostas/plano.csv", ["grupo", "cod", "descricao_na_planilha", "linhas_na_1a_carga", "saldo_saidas_menos_entradas", "subtipo_proposto", "nome_no_sistema", "como"], linhasPlano);
+  await escrever("propostas/plano.csv", ["grupo", "cod", "descricao_na_planilha", "linhas_2023_ate_o_corte", "saldo_saidas_menos_entradas", "subtipo_proposto", "nome_no_sistema", "como"], linhasPlano);
   await escrever("propostas/clientes.csv", ["cliente_na_planilha", "jobs", "sigla_proposta", "cliente_no_sistema", "como"], linhasClientes);
   await escrever("propostas/marcas.csv", ["cliente_na_planilha", "marca_na_planilha", "jobs", "cliente_proposto", "marca_proposta", "como"], linhasMarcas);
   await escrever("propostas/servicos.csv", ["servico_na_planilha", "jobs", "servico_proposto", "como"], linhasServicos);
@@ -723,7 +712,14 @@ async function main() {
     por_aba: porAba,
     jobs: { total: jobs.length, por_aba: Object.fromEntries(contarPor(jobs, (j) => j.aba)), no_sistema: jobs.filter((j) => jobsDoSistema.has(normalizarTexto(j.nome))).length },
     movimentos: { realizados: movimentos.length, previsoes: previsoes.length, por_carga: Object.fromEntries(contarPor(movimentos, (m) => m.carga)) },
-    notas: { total: notas.length, por_carga: Object.fromEntries(contarPor(notas, (n) => `${n.situacao} · ${n.carga}`)) },
+    notas: {
+      total: notas.length,
+      por_carga: Object.fromEntries(contarPor(notas, (n) => `${n.situacao} · ${n.carga}`)),
+      por_classe_na_1a_carga: Object.fromEntries(contarPor(notas.filter((n) => n.carga === "1ª carga"), (n) => `${n.situacao} · ${n.classe}`)),
+    },
+    de_para: depara
+      ? { pasta: resolve(deparaArg!), textos_sem_aprovacao: Object.fromEntries(Object.entries(semAprovacao).map(([k, v]) => [k, v.size])) }
+      : "só propostas",
     pendencias_da_1a_carga: porTipo,
     propostas: {
       plano: somaComo(linhasPlano, 7),

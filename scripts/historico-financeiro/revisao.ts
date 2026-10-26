@@ -110,7 +110,7 @@ async function main() {
     { titulo: "Grupo", campo: "grupo", largura: 12 },
     { titulo: "Cod", campo: "cod", largura: 8 },
     { titulo: "Descrição na planilha", campo: "descricao_na_planilha", largura: 34 },
-    { titulo: "Linhas (1ª carga)", campo: "linhas_na_1a_carga", largura: 16, numero: true },
+    { titulo: "Linhas (2023 até o corte)", campo: "linhas_2023_ate_o_corte", largura: 16, numero: true },
     { titulo: "Saídas − entradas (R$)", campo: "saldo_saidas_menos_entradas", largura: 20, numero: true },
     { titulo: "Subtipo proposto", campo: "subtipo_proposto", largura: 16 },
     { titulo: "Nome no sistema", campo: "nome_no_sistema", largura: 46 },

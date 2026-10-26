@@ -25,6 +25,13 @@ export type AbaDeFaturamento = {
   /** CNPJ emissor, pelo nome do estabelecimento no módulo fiscal quando ele existe. */
   estabelecimento: string;
   situacao: "importar" | "fora";
+  /** Empresa gerencial do CNPJ emissor (D1): vale para a nota que não aponta job, como a de distribuição de lucro. */
+  empresa: string;
+  /**
+   * A aba tem notas de distribuição de lucro sem a Obs. "DL": sem cliente e
+   * com o nome do sócio no lugar do job (Go Crazy e Hitlab, 25/10/2026).
+   */
+  notasDeSocio: boolean;
 };
 
 export type AbaDeResultado = {
@@ -45,6 +52,8 @@ const fat = (estabelecimento: string, situacao: AbaDeFaturamento["situacao"] = "
   papel: "faturamento",
   estabelecimento,
   situacao,
+  empresa: estabelecimento.startsWith("Hitlab") ? "Hitlab" : estabelecimento.startsWith("FitDance") ? "FitDance" : "Agência California",
+  notasDeSocio: estabelecimento.startsWith("Hitlab") || estabelecimento.startsWith("GoCrazy"),
 });
 const res = (empresaDaAba: AbaDeResultado["empresaDaAba"], ano: number): AbaDeResultado => ({
   papel: "resultado",
