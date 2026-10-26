@@ -8200,9 +8200,13 @@ os arquivos da frente do Antonio.
 - **Pacote:** a tabela de jobs tem duas colunas a mais: o pacote antigo não
   passa mais na tela (gere de novo pelo `empacotar.ts`).
 - **Aguarda o Tiago:** o job que a planilha não divide (a Copa no 2T 2026 e
-  seis jobs da CCH no 1T 2026) fica na regional do lançamento; a planilha o
+  três jobs da CCH no 1T 2026) fica na regional do lançamento; a planilha o
   deixa fora da DRE regional.
 - **Conferência:** `conferir-regional.ts --fechamento`. De 2023 a 2025, as duas
   empresas batem com a DRE regional do Fechamento, menos os trimestres em que a
   planilha faz o benefício job a job e a CCH de 2023. Ver
   [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+- **Nas linhas da CMH, "NE" é a Doca e "SP" é a Agency** (Tiago, 26/10/2026):
+  `codigosDoLancamento` em `lib/historico-financeiro/regional.ts` (só a coluna
+  Reg, não a divisão dos jobs) e o de-para de regionais, para as próximas
+  cargas.
