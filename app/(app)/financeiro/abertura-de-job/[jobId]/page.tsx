@@ -25,6 +25,7 @@ import {
   trimestreDe,
 } from "../curva";
 import { AberturaForm } from "./abertura-form";
+import { carregarOpcoesDoRegistro } from "@/lib/data/opcoes-do-registro";
 import { lerFaturamentoMensalPeloJob } from "@/lib/data/faturamento-mensal";
 import { lerFechamentoMidiaDoJob } from "@/lib/data/midia-do-job";
 import { impostoDoJob } from "../imposto-previsto";
@@ -81,7 +82,7 @@ export default async function AbrirJobNoFinanceiroPage({
   const jobDaFila = carregarJobParaAbertura(tenantId, params.jobId).then(
     async (carregado) => {
       if (!carregado) return null;
-      const [projetos, faturamentoMensal, ultimoDoProjetoRes] =
+      const [projetos, faturamentoMensal, ultimoDoProjetoRes, opcoesDoRegistro] =
         await Promise.all([
           listarProjetosFinanceiro(tenantId, carregado.job.cliente_id),
           // A Mídia Off também fatura por mês (decisão 167).
@@ -112,6 +113,13 @@ export default async function AbrirJobNoFinanceiroPage({
               nullsFirst: false,
             })
             .limit(1),
+          // Marca, empresa e regional do registro (decisão 214).
+          carregarOpcoesDoRegistro(
+            supabase,
+            tenantId,
+            carregado.job.cliente_id,
+            carregado.job.produto_id,
+          ),
         ]);
       if (ultimoDoProjetoRes.error) {
         console.error(
@@ -131,7 +139,7 @@ export default async function AbrirJobNoFinanceiroPage({
               jobCodigo: ultimo.codigo as string,
             }
           : null;
-      return { carregado, projetos, faturamentoMensal, sugestaoDeProjeto };
+      return { carregado, projetos, faturamentoMensal, sugestaoDeProjeto, opcoesDoRegistro };
     },
   );
 
@@ -194,7 +202,8 @@ export default async function AbrirJobNoFinanceiroPage({
   ]);
 
   if (!daFila || !detalhe) notFound();
-  const { carregado, projetos, faturamentoMensal, sugestaoDeProjeto } = daFila;
+  const { carregado, projetos, faturamentoMensal, sugestaoDeProjeto, opcoesDoRegistro } =
+    daFila;
 
   // Quem chegou por link antigo (ou por outra aba que já resolveu o job)
   // vai para onde o job está agora, e não para um formulário que não
@@ -343,6 +352,7 @@ export default async function AbrirJobNoFinanceiroPage({
             servicos={servicosDoLado(servicosRes.data ?? [], job)}
             projetos={projetos}
             sugestaoDeProjeto={sugestaoDeProjeto}
+            opcoesDoRegistro={opcoesDoRegistro}
             contas={contas}
             custoPrevisto={custoPrevisto}
             faturamentoPrevisto={faturamentoPrevisto}

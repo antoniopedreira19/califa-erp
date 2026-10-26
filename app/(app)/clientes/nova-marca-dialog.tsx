@@ -36,6 +36,7 @@ export function NovaMarcaDialog({
   /** Quantas marcas o cliente já tem — só para dizer qual código sai. */
   marcasExistentes = 0,
   onCriada,
+  descricao,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -43,6 +44,9 @@ export function NovaMarcaDialog({
   clienteNome: string;
   marcasExistentes?: number;
   onCriada: (marca: { id: string; nome: string; codigo: string }) => void;
+  /** A frase de baixo do título. No projeto fala do projeto; na abertura
+   *  do job, do job (decisão 214). */
+  descricao?: React.ReactNode;
 }) {
   const [nome, setNome] = React.useState("");
   const [erro, setErro] = React.useState<string | null>(null);
@@ -99,8 +103,8 @@ export function NovaMarcaDialog({
               Nova marca de {clienteNome}
             </DialogTitle>
             <DialogDescription className="mt-1 text-[12.5px] leading-snug">
-              Ela já fica escolhida no projeto. O que você digitou continua
-              lá.
+              {descricao ??
+                "Ela já fica escolhida no projeto. O que você digitou continua lá."}
             </DialogDescription>
           </div>
         </DialogHeader>

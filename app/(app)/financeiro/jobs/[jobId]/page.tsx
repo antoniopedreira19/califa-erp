@@ -27,6 +27,7 @@ import {
   faturamentoPorJob,
 } from "@/lib/data/faturamento-por-job";
 import { listarProjetosFinanceiro } from "@/lib/data/projetos-financeiro";
+import { carregarOpcoesDoRegistro } from "@/lib/data/opcoes-do-registro";
 import { listarContasBancarias } from "@/lib/data/contas-bancarias";
 import { carregarDetalheDoJob } from "@/app/(app)/jobs/[jobId]/carregar-detalhe";
 import { FichaJob } from "@/app/(app)/jobs/[jobId]/ficha-job";
@@ -275,7 +276,7 @@ export default async function JobNoFinanceiroPage({
   // painel "Dados da produção" do formulário.
   const nomeNoFinanceiro = nomeDoJobNoFinanceiro(jobNaFila);
 
-  const [projetos, irmaosRes] = await Promise.all([
+  const [projetos, irmaosRes, opcoesDoRegistro] = await Promise.all([
     listarProjetosFinanceiro(tenantId, jobNaFila.cliente_id),
     // Irmãos no projeto do FINANCEIRO — não os do projeto da produção,
     // que é outro agrupamento. Sem projeto do financeiro (job aberto
@@ -291,6 +292,8 @@ export default async function JobNoFinanceiroPage({
           // começa pela sigla do cliente, e o texto não diz mais a ordem.
           .order("created_at", { ascending: true })
       : Promise.resolve({ data: [], error: null }),
+    // Marca, empresa e regional do registro (decisão 214).
+    carregarOpcoesDoRegistro(supabase, tenantId, jobNaFila.cliente_id, jobNaFila.produto_id),
   ]);
 
   const jobsDoProjetoFinanceiro = ((irmaosRes.data ?? []) as any[]).map((j) => ({
@@ -582,6 +585,7 @@ export default async function JobNoFinanceiroPage({
         abertura={
           <AberturaForm
             job={jobNaFila}
+            opcoesDoRegistro={opcoesDoRegistro}
             modo={formularioEmRevisao ? "revisao" : "leitura"}
             fotos={fotos}
             revisao={revisao}

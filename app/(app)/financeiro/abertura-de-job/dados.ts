@@ -57,6 +57,12 @@ export interface JobNaFila {
   observacoes: string | null;
   created_at: string;
   produto: string | null;
+  /** A marca do job (`jobs.produto_id`, decisão 214): nasce com a do
+   *  projeto e o financeiro pode trocar no registro. `produto` é o nome. */
+  produto_id: string | null;
+  /** A empresa e a regional do job, que o registro também edita. */
+  empresa_id: string | null;
+  regional_id: string | null;
   cidade: string | null;
   projeto_id: string;
   projeto_codigo: string | null;
@@ -336,6 +342,9 @@ export interface TotaisPlanilhaJob {
 const SELECT_JOB_FILA =
   "id, codigo, nome, nome_financeiro, valor_total, faturamento_previsto, data_inicio_prevista, data_fim_prevista, " +
   "data_prevista_faturamento, recebimento_previsto_por_mes, observacoes, created_at, produto, cidade, projeto_id, " +
+  // Marca, empresa e regional do job, que o registro do financeiro edita
+  // (decisão 214).
+  "produto_id, empresa_id, regional_id, " +
   // Quem enviou (decisão 136). `created_by` aponta para `auth.users`, e o
   // nome dele sai em query própria; `enviado_abertura_por` aponta para
   // `profiles` e vem no embed.
@@ -455,6 +464,9 @@ function montarJobNaFila(
     observacoes: j.observacoes,
     created_at: j.created_at,
     produto: j.produto,
+    produto_id: j.produto_id ?? null,
+    empresa_id: j.empresa_id ?? null,
+    regional_id: j.regional_id ?? null,
     cidade: j.cidade,
     projeto_id: j.projeto_id,
     projeto_codigo: j.projeto?.codigo ?? null,

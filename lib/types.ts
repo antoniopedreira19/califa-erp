@@ -1499,6 +1499,11 @@ export interface FotoDaAbertura {
   contaImpostosLabel: string | null;
   categoriaNome: string | null;
   servicoNome: string | null;
+  /** Marca, empresa e regional registradas (decisão 214). Nulas nas fotos
+   *  anteriores a 26/10/2026. */
+  marcaNome: string | null;
+  empresaNome: string | null;
+  regionalNome: string | null;
   competencias: JobCompetencia[];
   curva: LinhaPrevisaoFoto[];
   recebimento: LinhaPrevisaoFoto[];

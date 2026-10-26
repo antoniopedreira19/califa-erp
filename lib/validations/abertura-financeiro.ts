@@ -196,6 +196,11 @@ const camposDaAbertura = z.object({
    * ser trocado aqui sem alterar o orçamento (decisão 055).
    */
   servico_id: z.string().uuid("Selecione o serviço do job."),
+  // Decisão 214: marca, empresa e regional do job, que o financeiro confere
+  // e pode trocar no registro. Valem para o job inteiro.
+  produto_id: z.string().uuid("Selecione a marca do job."),
+  empresa_id: z.string().uuid("Selecione a empresa do job."),
+  regional_id: z.string().uuid("Selecione a regional do job."),
   competencias: rateioCompetenciasSchema,
   curva: curvaDesembolsoSchema,
   recebimento: previsaoRecebimentoSchema,

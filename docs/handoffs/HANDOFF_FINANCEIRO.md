@@ -8276,3 +8276,25 @@ o código (152 de 154; os 2 de projeto apagado ficam). 80 projetos viraram
 `F-0001/26` … `F-0080/26`. Novo registro
 `codigos_de_projeto_financeiro_usados`: o número de projeto apagado sem job
 não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
+
+## Marca, empresa e regional no registro da abertura — 26/10/2026 (decisão 214)
+
+- **Registro no financeiro:** duas linhas novas depois de Categoria e
+  Serviço — Empresa | Regional e Cliente (travado) | Marca. Marca, empresa
+  e regional chegam com as do job; o financeiro troca na abertura e no
+  "Editar registro", e a troca vale para o job inteiro. A regional segue a
+  empresa; a marca tem o "+" para cadastrar outra do cliente.
+- **Empresa do job ≠ empresa do projeto** passa a ser possível (resposta
+  do Tiago: "Só o job"). Trocar a empresa do projeto não mexe mais em job
+  já aberto.
+- **Resumo lateral, conferência e foto do histórico** mostram marca,
+  empresa e regional.
+- **Relatórios de Rentabilidade e Faturamento** filtram pela marca do job
+  (`jobs.produto_id`), não mais pela do projeto; com o preenchimento, o
+  resultado de hoje não mudou.
+- **Conferência:** no TES-1030/26 (P-0006/26), como administrador: troca
+  para Hitlab (regional escolhida sozinha), salvar (job Hitlab com projeto
+  em Empresa Teste; foto nº 2 com os três campos), volta para Empresa Teste
+  (regional em branco até escolher "Teste"), salvar (foto nº 3). "+" da
+  marca aberto e fechado sem cadastrar. Fila do TES-1029/26 com os campos
+  preenchidos. Relatório de Rentabilidade abre normal. tsc limpo.

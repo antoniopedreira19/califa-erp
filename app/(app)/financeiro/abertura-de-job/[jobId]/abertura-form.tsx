@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   AlertCircle,
   AlertTriangle,
+  Building2,
   ArrowDownLeft,
   ArrowLeftRight,
   ArrowRight,
@@ -49,6 +50,9 @@ import {
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
+import { Combobox } from "@/components/ui/combobox";
+import { NovaMarcaDialog } from "@/app/(app)/clientes/nova-marca-dialog";
+import type { OpcoesDoRegistro } from "@/lib/data/opcoes-do-registro";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Input } from "@/components/ui/input";
 import {
@@ -363,6 +367,8 @@ interface Props {
    * prop opcional esconde a fronteira em que o dado some (CLAUDE.md).
    */
   saves: SavesDaAbertura | null;
+  /** As listas de Marca, Empresa e Regional do registro (decisão 214). */
+  opcoesDoRegistro: OpcoesDoRegistro;
 }
 
 /** O atalho "Visualizar planilha interna" — link ou botão de aba, mesma cara. */
@@ -494,6 +500,7 @@ export function AberturaForm({
   linhasDaRevisao,
   aprovacaoSave,
   saves,
+  opcoesDoRegistro,
 }: Props) {
   const router = useRouter();
   // Revisão aberta pela fila volta à fila; pela Visualizar Jobs, volta lá
@@ -590,6 +597,37 @@ export function AberturaForm({
       ? job.servico_id
       : "",
   );
+  // Marca, empresa e regional do job (decisão 214): chegam com as do job —
+  // a marca do projeto, a empresa do projeto e a regional do orçamento — e
+  // o financeiro confere e pode trocar. Valem para o job inteiro.
+  const { marcas, empresas, regionais, marcasNoCadastro } = opcoesDoRegistro;
+  const marcaDoJob = () =>
+    job.produto_id && marcas.some((m) => m.id === job.produto_id) ? job.produto_id : "";
+  const empresaDoJob = () =>
+    job.empresa_id && empresas.some((e) => e.id === job.empresa_id) ? job.empresa_id : "";
+  const regionalDoJob = () =>
+    job.regional_id &&
+    regionais.some((r) => r.id === job.regional_id && r.empresa_id === job.empresa_id)
+      ? job.regional_id
+      : "";
+  const [marcaId, setMarcaId] = React.useState(marcaDoJob);
+  // A marca criada pelo "+" entra na lista na hora: ela já está no
+  // cadastro do cliente, como no "+" do formulário de projeto.
+  const [marcasLocais, setMarcasLocais] = React.useState(marcas);
+  const [novaMarcaAberta, setNovaMarcaAberta] = React.useState(false);
+  const [empresaId, setEmpresaId] = React.useState(empresaDoJob);
+  const [regionalId, setRegionalId] = React.useState(regionalDoJob);
+  const regionaisDaEmpresa = regionais.filter((r) => r.empresa_id === empresaId);
+  function trocarEmpresa(id: string) {
+    setEmpresaId(id);
+    const daNova = regionais.filter((r) => r.empresa_id === id);
+    // Com uma regional só, ela já fica escolhida; com mais, a pessoa
+    // escolhe — a de antes era de outra empresa.
+    if (!daNova.some((r) => r.id === regionalId)) {
+      setRegionalId(daNova.length === 1 ? daNova[0].id : "");
+    }
+  }
+
   // Rateio de competência: de 1 a N linhas somando 100%. A abertura
   // começa com a competência sugerida em 100%; o job aberto, com o que
   // foi gravado.
@@ -864,6 +902,9 @@ export function AberturaForm({
     projetoOk &&
     categoriaId !== "" &&
     servicoOk &&
+    marcaId !== "" &&
+    empresaId !== "" &&
+    regionalId !== "" &&
     rateioOk &&
     curvaOk &&
     recebOk &&
@@ -876,6 +917,11 @@ export function AberturaForm({
     categorias.find((c) => c.id === categoriaId)?.nome ?? "— não informada";
   const servicoNome =
     servicos.find((s) => s.id === servicoId)?.nome ?? "— não informado";
+  const marcaNome = marcasLocais.find((m) => m.id === marcaId)?.nome ?? "— não informada";
+  const regionalNome =
+    regionais.find((r) => r.id === regionalId)?.nome ?? "— não informada";
+  const empresaNomeEscolhida =
+    empresas.find((e) => e.id === empresaId)?.nome ?? "— não informada";
   const competenciaLabel = rateioLabel(compsNumericas);
   // "3T/2026 +1": o resumo curto ao lado do rótulo do campo.
   const competenciaResumo =
@@ -991,6 +1037,14 @@ export function AberturaForm({
       ? "Selecione a categoria do job."
       : !servicoOk
         ? "Selecione o serviço do job."
+        : marcaId === ""
+          ? "Selecione a marca do job."
+        : empresaId === ""
+          ? "Selecione a empresa do job."
+        : regionalId === ""
+          ? empresaId !== empresaDoJob()
+            ? `Selecione a regional da ${empresaNomeEscolhida}.`
+            : "Selecione a regional do job."
         : !rateioValoresOk
           ? "Cada competência do rateio precisa de um percentual maior que zero."
           : !rateioFecha
@@ -1032,8 +1086,8 @@ export function AberturaForm({
                         : semDesembolso
                           ? "Tudo pronto. Este job não tem desembolso previsto pela California — abre sem curva."
                           : temRateio
-                            ? `Tudo pronto: nome, categoria, serviço, competência rateada em ${comps.length} trimestres, recebimento, custos e impostos preenchidos.`
-                            : "Tudo pronto: nome, categoria, serviço, competência, recebimento, custos e impostos preenchidos.";
+                            ? `Tudo pronto: nome, categoria, serviço, marca, empresa, regional, competência rateada em ${comps.length} trimestres, recebimento, custos e impostos preenchidos.`
+                            : "Tudo pronto: nome, categoria, serviço, marca, empresa, regional, competência, recebimento, custos e impostos preenchidos.";
 
   function atualizarCurva(id: string, patch: Partial<LinhaPrevisaoForm>) {
     setCurva((atual) =>
@@ -1304,6 +1358,9 @@ export function AberturaForm({
       conta_impostos_id: contaImpId,
       categoria_id: categoriaId,
       servico_id: servicoId,
+      produto_id: marcaId,
+      empresa_id: empresaId,
+      regional_id: regionalId,
       competencias: compsNumericas,
       curva: semDesembolso
         ? []
@@ -1486,6 +1543,10 @@ export function AberturaForm({
     setContaRecebId(job.conta_recebimento_id);
     setContaPagId(job.conta_pagamento_id);
     setContaImpId(job.conta_impostos_id);
+    setMarcasLocais(marcas);
+    setMarcaId(marcaDoJob());
+    setEmpresaId(empresaDoJob());
+    setRegionalId(regionalDoJob());
     setImpostosSoltos(impostosDoServidor());
     setDatasImposto({});
     setCategoriaId(
@@ -1581,7 +1642,7 @@ export function AberturaForm({
             Editando o registro da abertura
           </span>
           <span className="text-[12.5px] text-muted-foreground">
-            salvar reescreve serviço, categoria, projeto e competência — a
+            salvar reescreve serviço, categoria, marca, empresa, regional, projeto e competência — a
             data e o usuário da abertura não mudam
           </span>
         </div>
@@ -2018,6 +2079,183 @@ export function AberturaForm({
                     Categorias.
                   </span>
                 )}
+              </div>
+
+              {/* Empresa e regional, cliente e marca (decisão 214): duas
+                  linhas logo depois de Categoria e Serviço. O cliente não
+                  muda aqui; marca, empresa e regional chegam com as do job
+                  e o financeiro pode trocar — vale para o job inteiro,
+                  também na produção. A regional é sempre da empresa
+                  escolhida. */}
+              <div className="grid gap-4 md:col-span-2 md:grid-cols-2">
+                <div className="flex min-w-0 flex-col gap-1.5">
+                  <label
+                    htmlFor="empresa-job"
+                    className="text-[12.5px] font-semibold"
+                  >
+                    Empresa <span className="text-california-red">*</span>
+                  </label>
+                  <Select
+                    value={empresaId}
+                    onValueChange={trocarEmpresa}
+                    disabled={travado}
+                  >
+                    <SelectTrigger
+                      id="empresa-job"
+                      className={cn(
+                        "h-[42px]",
+                        !travado && empresaId === "" && "border-california-red/45",
+                      )}
+                    >
+                      <SelectValue placeholder="Selecione a empresa" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {empresas.map((e) => (
+                        <SelectItem key={e.id} value={e.id}>
+                          {e.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-[11px] text-muted-foreground">
+                    Vem da produção. A troca vale para o job todo, e a regional
+                    segue a empresa.
+                  </span>
+                </div>
+
+                <div className="flex min-w-0 flex-col gap-1.5">
+                  <label
+                    htmlFor="regional-job"
+                    className="text-[12.5px] font-semibold"
+                  >
+                    Regional <span className="text-california-red">*</span>
+                  </label>
+                  <Select
+                    value={regionalId}
+                    onValueChange={setRegionalId}
+                    disabled={travado}
+                  >
+                    <SelectTrigger
+                      id="regional-job"
+                      className={cn(
+                        "h-[42px]",
+                        !travado && regionalId === "" && "border-california-red/45",
+                      )}
+                    >
+                      <SelectValue placeholder="Selecione a regional" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {regionaisDaEmpresa.map((r) => (
+                        <SelectItem key={r.id} value={r.id}>
+                          {r.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-[11px] text-muted-foreground">
+                    {empresaId
+                      ? `Só as regionais da ${empresaNomeEscolhida}. A troca vale para o job todo, também na produção.`
+                      : "Escolha a empresa primeiro."}
+                  </span>
+                </div>
+
+                <div className="flex min-w-0 flex-col gap-1.5">
+                  <span className="text-[12.5px] font-semibold">Cliente</span>
+                  <div
+                    title="O cliente vem do orçamento e não muda aqui"
+                    className="flex h-[42px] min-w-0 items-center gap-2.5 rounded-lg border border-border bg-muted/60 px-3"
+                  >
+                    <Building2 className="h-[15px] w-[15px] shrink-0 text-[#8a8a8a]" />
+                    <span className="min-w-0 flex-1 truncate text-[13.5px] font-semibold">
+                      {job.cliente_nome ?? "—"}
+                    </span>
+                    <Lock
+                      className="h-3.5 w-3.5 shrink-0 text-[#8a8a8a]"
+                      aria-label="Travado"
+                    />
+                  </div>
+                  <span className="text-[11px] text-muted-foreground">
+                    Vem do orçamento{" "}
+                    <span className="font-medium text-foreground/80">
+                      {job.orcamento_nome ?? "—"}
+                    </span>
+                    . Não muda no financeiro.
+                  </span>
+                </div>
+
+                <div className="flex min-w-0 flex-col gap-1.5">
+                  <label
+                    htmlFor="marca-job"
+                    className="text-[12.5px] font-semibold"
+                  >
+                    Marca <span className="text-california-red">*</span>
+                  </label>
+                  {/* Escolher uma marca do cliente ou cadastrar outra pelo
+                      "+", o mesmo pop-up do campo Marcas do projeto. */}
+                  <div className="flex items-center gap-2">
+                  <div className="min-w-0 flex-1">
+                  <Combobox
+                    id="marca-job"
+                    items={marcasLocais.map((m) => ({
+                      value: m.id,
+                      label: m.nome,
+                      descricao: m.padrao ? `${m.codigo} · marca geral do cliente` : m.codigo,
+                    }))}
+                    value={marcaId || null}
+                    onChange={(v) => setMarcaId(v ?? "")}
+                    disabled={travado}
+                    placeholder="Selecione a marca"
+                    buscaPlaceholder="Buscar marca..."
+                    className={cn(
+                      "h-[42px] border-border px-3.5 text-[13.5px] font-medium",
+                      travado && "bg-muted/60 disabled:opacity-100 text-muted-foreground",
+                      !travado && marcaId === "" && "border-california-red/45",
+                    )}
+                  />
+                  </div>
+                  {!travado && (
+                    <button
+                      type="button"
+                      onClick={() => setNovaMarcaAberta(true)}
+                      title="Cadastrar marca deste cliente"
+                      aria-label="Cadastrar marca deste cliente"
+                      className="inline-flex h-[42px] w-[42px] shrink-0 items-center justify-center rounded-lg border border-border bg-white text-muted-foreground transition-colors hover:border-california-red hover:text-california-red"
+                    >
+                      <Plus className="h-[17px] w-[17px]" />
+                    </button>
+                  )}
+                  </div>
+                  {job.cliente_id && (
+                    <NovaMarcaDialog
+                      open={novaMarcaAberta}
+                      onOpenChange={setNovaMarcaAberta}
+                      clienteId={job.cliente_id}
+                      clienteNome={job.cliente_nome ?? "cliente"}
+                      marcasExistentes={
+                        marcasNoCadastro + marcasLocais.length - marcas.length
+                      }
+                      descricao="Ela já fica escolhida neste job. O resto do registro continua como está."
+                      onCriada={(m) => {
+                        setMarcasLocais((l) => [...l, { ...m, padrao: false }]);
+                        setMarcaId(m.id);
+                      }}
+                    />
+                  )}
+                  <span className="text-[11px] text-muted-foreground">
+                    {marcaId === "" && !travado ? (
+                      "Obrigatória. Escolha uma das marcas do cliente ou cadastre outra no “+”."
+                    ) : (
+                      <>
+                        Vem do orçamento{" "}
+                        <span className="font-medium text-foreground/80">
+                          {job.orcamento_nome ?? "—"}
+                        </span>
+                        . A troca vale para o job todo, também na produção.
+                      </>
+                    )}
+                  </span>
+                </div>
+
               </div>
 
               <div className="flex items-center gap-3 rounded-xl border border-border bg-muted/60 px-4 py-3">
@@ -3392,6 +3630,30 @@ export function AberturaForm({
                 {servicoNome}
               </span>
             </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[12.5px] text-muted-foreground">
+                Marca
+              </span>
+              <span className="text-right text-[12.5px] font-semibold">
+                {marcaNome}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[12.5px] text-muted-foreground">
+                Empresa
+              </span>
+              <span className="text-right text-[12.5px] font-semibold">
+                {empresaNomeEscolhida}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[12.5px] text-muted-foreground">
+                Regional
+              </span>
+              <span className="text-right text-[12.5px] font-semibold">
+                {regionalNome}
+              </span>
+            </div>
             {/* Uma linha por competência: o rateio inteiro, com o
                 percentual de cada trimestre. */}
             <div className="flex flex-col gap-1">
@@ -3608,6 +3870,10 @@ export function AberturaForm({
             <ResumoLinha rotulo="Projeto" valor={projetoResumo} />
             <ResumoLinha rotulo="Categoria" valor={categoriaNome} />
             <ResumoLinha rotulo="Serviço" valor={servicoNome} />
+            <ResumoLinha rotulo="Cliente" valor={job.cliente_nome ?? "—"} />
+            <ResumoLinha rotulo="Marca" valor={marcaNome} />
+            <ResumoLinha rotulo="Empresa" valor={empresaNomeEscolhida} />
+            <ResumoLinha rotulo="Regional" valor={regionalNome} />
             <ResumoLinha rotulo="Competência" valor={competenciaLabel} mono />
             <ResumoLinha
               rotulo="Data de abertura"

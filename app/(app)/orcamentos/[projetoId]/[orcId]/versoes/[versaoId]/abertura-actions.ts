@@ -783,6 +783,8 @@ export async function enviarJobParaAbertura(
       .update({
         nome: parsed.data.nome,
         produto: produtoRes.data.nome,
+        // A marca do job (decisão 214): nasce com a do projeto.
+        produto_id: projeto.produto_id,
         regional_id: parsed.data.regional_id,
         cidade: cidadeRes.data.nome,
         data_inicio_prevista: parsed.data.data_inicio_prevista,
@@ -872,6 +874,8 @@ export async function enviarJobParaAbertura(
       versao_orcamento_aprovada_id: versaoId,
       nome: parsed.data.nome,
       produto: produtoRes.data.nome,
+      // A marca do job (decisão 214): nasce com a do projeto.
+      produto_id: projeto.produto_id,
       regional_id: parsed.data.regional_id,
       cidade: cidadeRes.data.nome,
       data_inicio_prevista: parsed.data.data_inicio_prevista,
