@@ -5876,15 +5876,15 @@ sistema em R$ 314.064,17. Protótipo aprovado pelo Tiago (forma A, aviso A).
 
 ## Código do projeto sem a sigla do cliente — 23/10/2026 (decisão 210)
 
-⚠️ Aguardando a hora combinada com a frente do Antonio: a migration
-`20261023950001` é destrutiva e o código só sobe junto dela.
+Aplicada em 26/10/2026, ~17h10, na hora combinada com a frente do
+Antonio, e publicada em seguida (`d413ac31`).
 
 - **Formato:** projeto `P-NNNN/AA` (`AMB-P004/26` → `P-0002/26`), orçamento
   `P-NNNN/AA-NN`, projeto do financeiro `F-NNNN/AA`. Sequencial por letra e
   ano da criação; número nunca volta (registro de códigos usados, agora
   também no financeiro). Código de job não muda.
-- **Conversão:** 104 projetos, 179 orçamentos, 73 projetos do financeiro e
-  141 rótulos da abertura, pela ordem de criação; um evento
+- **Conversão (26/10):** 107 projetos, 185 orçamentos, 80 projetos do
+  financeiro e 152 rótulos da abertura, pela ordem de criação; um evento
   `*.codigo_trocado` por linha, com `decisao = '210'`. O projeto de teste
   `TES-P001/26` vira `P-0006/26`.
 - **Troca de cliente:** não troca mais o código; saiu o aviso "o projeto
@@ -5892,4 +5892,5 @@ sistema em R$ 314.064,17. Protótipo aprovado pelo Tiago (forma A, aviso A).
 - **`/orcamentos/novo`:** subtítulo `P-NNNN/AA`.
 - **Conferência:** ensaio por SELECT com o de-para inteiro (sem repetição,
   todo orçamento com o prefixo do projeto). Testes do gerador, tsc, lint e
-  build no worktree. Navegador só depois de aplicar.
+  build no worktree; banco conferido depois da troca (ver a decisão 210,
+  §6).

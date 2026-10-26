@@ -8230,10 +8230,11 @@ os arquivos da frente do Antonio.
   [decisão 082](../decisions/082-a-despesa-sem-job-nasce-com-rateio-e-a-recorrencia-vira-titulo-30-dias-antes.md).
 ## Código do projeto do financeiro sem a sigla — 23/10/2026 (decisão 210)
 
-⚠️ Aguardando a hora combinada com a frente do Antonio (migration
-`20261023950001`, destrutiva). O projeto do financeiro passa a `F-NNNN/AA`
+Aplicada em 26/10/2026 (migration `20261023950001`, destrutiva, na hora
+combinada com a frente do Antonio). O projeto do financeiro passa a `F-NNNN/AA`
 (`AMB-F004/26` → `F-0001/26`), pela ordem de criação; ano = o da criação do
 projeto, não mais o do início do job. Os rótulos da foto da abertura trocam
-o código (141 de 143; os 2 de projeto apagado ficam). Novo registro
+o código (152 de 154; os 2 de projeto apagado ficam). 80 projetos viraram
+`F-0001/26` … `F-0080/26`. Novo registro
 `codigos_de_projeto_financeiro_usados`: o número de projeto apagado sem job
 não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
