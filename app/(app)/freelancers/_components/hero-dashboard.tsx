@@ -85,8 +85,18 @@ export function HeroDashboard({
               </>
             )}
           </p>
-          {pills && (
+          {(pills || mostrarNovaSolicitacao) && (
             <div className="mt-3 flex items-center gap-2 flex-wrap">
+              {mostrarNovaSolicitacao && (
+                <Link
+                  href="/freelancers/solicitacoes"
+                  prefetch={false}
+                  className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-brand hover:bg-california-red-hover transition-colors"
+                >
+                  <Plus className="h-4 w-4" />
+                  Solicitar contratação
+                </Link>
+              )}
               {pills}
             </div>
           )}
@@ -124,16 +134,6 @@ export function HeroDashboard({
               ativos com contrato válido
             </p>
           </div>
-        )}
-        {mostrarNovaSolicitacao && (
-          <Link
-            href="/freelancers/solicitacoes"
-            prefetch={false}
-            className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-brand hover:bg-california-red-hover transition-colors shrink-0"
-          >
-            <Plus className="h-4 w-4" />
-            Nova solicitação
-          </Link>
         )}
       </div>
     </div>
