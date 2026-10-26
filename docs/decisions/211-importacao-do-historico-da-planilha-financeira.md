@@ -508,7 +508,8 @@ internas." O relatório mostra as duas contas das abas Res. Jobs:
   linhas de 2023 e 2024 com Tipo CMH DOC (R$ 2.201.119,99, o Investimento
   Doca) e CMH MK (R$ 344.768,28, a Makkna). No histórico eles ficam com custo
   zero no relatório dos jobs, e o valor aparece na DRE como "Investimento Doca"
-  e "Makkna".
+  e "Makkna". **Decidido (Tiago, 26/10/2026):** "São investimentos internos
+  mesmo, vamos fazer Fora (como está hoje), com esta na DRE."
 - **Onde as abas fogem da regra (documentado, não se reproduz):** a CCH de 2025
   calcula o resultado sem o imposto e o fee sobre a receita contada duas vezes
   (a soma das contas mais o TOTAL RECEITA); a CCH de 2026 também conta a

@@ -8255,6 +8255,10 @@ os arquivos da frente do Antonio.
   (migration `20261026100011`). A 1ª carga foi refeita pela tela com o fee de
   cada job; a recarga levou também o de-para da CMH (Reg "NE" = Doca, "SP" =
   Agency).
+- **Investimentos da CCH fora (Tiago, 26/10/2026):** as sete linhas da aba Res.
+  Jobs CMH que são investimentos (Doca, Tipo CMH DOC; Makkna, Tipo CMH MK)
+  ficam com custo zero no relatório dos jobs; o valor segue na DRE como
+  "Investimento Doca" e "Makkna". O custo do job é o Tipo CO.
 - **Código e conferência:** `lib/historico-financeiro/rentabilidade.ts` (com
   testes) e `scripts/historico-financeiro/conferir-rentabilidade.ts`. De 2023 a
   2025, a California bate com as abas Res. Jobs em quase todos os jobs; as
