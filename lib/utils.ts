@@ -40,10 +40,10 @@ export function initials(name: string | null | undefined): string {
  * neta/sobrinho/sobrinha). Mesma regra do SQL do titular de verba.
  *
  * Exemplos:
- *   "Maria Clara de Oliveira Fernandes" → "Maria Fernandes"
- *   "João da Silva Filho" → "João Silva"
- *   "Rizia Cavalcante" → "Rizia Cavalcante"
- *   "Maria" → "Maria"
+ *   "COLABORADOR 001 EXEMPLO DOS SANTOS" → "COLABORADOR SANTOS"
+ *   "COLABORADOR 002 DA SILVA FILHO" → "COLABORADOR SILVA"
+ *   "COLABORADOR 003 EXEMPLO" → "COLABORADOR EXEMPLO"
+ *   "COLABORADOR" → "COLABORADOR"
  */
 const NOME_IGNORAR = new Set([
   "DE","DA","DO","DOS","DAS","E",
@@ -182,4 +182,142 @@ export function isValidCnpj(cnpj: string): boolean {
   const dv1 = calc(d, w1);
   const dv2 = calc(d, w2);
   return dv1 === parseInt(d[12]) && dv2 === parseInt(d[13]);
+}
+
+// ---------- Datas e nomes ----------
+
+/** Formata data ISO "YYYY-MM-DD" em "dd/MM/yyyy" pt-BR. */
+export function formatDate(date: string | null | undefined): string {
+  if (!date) return "—";
+  const [y, m, d] = date.slice(0, 10).split("-");
+  if (!y || !m || !d) return "—";
+  return `${d}/${m}/${y}`;
+}
+
+/**
+ * Primeiro + último nome. Útil em listagens com espaço limitado.
+ * Ex: "COLABORADOR 001 EXEMPLO DA SILVA" vira "COLABORADOR SILVA".
+ * Entrada de uma palavra só é retornada inalterada.
+ */
+export function firstAndLastName(name: string | null | undefined): string {
+  if (!name) return "—";
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "—";
+  if (parts.length === 1) return parts[0];
+  return `${parts[0]} ${parts[parts.length - 1]}`;
+}
+
+// ---------- Duração de contrato ----------
+
+function parseYmdDate(s: string): Date {
+  const d = new Date(s + "T00:00:00");
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function mesesEDias(from: Date, to: Date): { meses: number; dias: number } {
+  let meses =
+    (to.getFullYear() - from.getFullYear()) * 12 +
+    (to.getMonth() - from.getMonth());
+  const ref = new Date(from);
+  ref.setMonth(ref.getMonth() + meses);
+  if (ref > to) {
+    meses--;
+    ref.setMonth(ref.getMonth() - 1);
+  }
+  const dias = Math.max(
+    0,
+    Math.round((to.getTime() - ref.getTime()) / (1000 * 60 * 60 * 24)),
+  );
+  return { meses, dias };
+}
+
+function formatarDuracao(meses: number, dias: number): string {
+  const parts: string[] = [];
+  if (meses > 0) parts.push(`${meses} ${meses === 1 ? "mês" : "meses"}`);
+  if (dias > 0) parts.push(`${dias} ${dias === 1 ? "dia" : "dias"}`);
+  return parts.length ? parts.join(" e ") : "hoje";
+}
+
+export interface DuracaoContrato {
+  /** Total de dias do contrato (inicio → termino) */
+  totalDias: number;
+  /** Total em "X meses e Y dias" */
+  totalLabel: string;
+  /** Dias restantes (positivo = futuro, negativo = vencido) */
+  diasRestantes: number;
+  /** Label do tempo restante ou "Vencido há X" */
+  restanteLabel: string;
+  /** % do contrato já decorrido (0-100), 0 quando não começou */
+  progresso: number;
+  /** Status do contrato */
+  status: "ativo" | "vencido" | "futuro" | "sem_data";
+}
+
+/**
+ * Calcula duração total e tempo restante de um contrato.
+ * Retorna null se faltar alguma das datas.
+ */
+export function calcularDuracaoContrato(
+  dataInicio: string | null,
+  dataTermino: string | null,
+): DuracaoContrato | null {
+  if (!dataInicio || !dataTermino) return null;
+
+  try {
+    const inicio = parseYmdDate(dataInicio);
+    const termino = parseYmdDate(dataTermino);
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+
+    if (termino < inicio) return null;
+
+    const totalDias = Math.round(
+      (termino.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24),
+    );
+    const total = mesesEDias(inicio, termino);
+    const totalLabel = formatarDuracao(total.meses, total.dias);
+
+    const diasRestantes = Math.ceil(
+      (termino.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24),
+    );
+
+    let restanteLabel: string;
+    let status: DuracaoContrato["status"];
+
+    if (hoje < inicio) {
+      const futuro = mesesEDias(hoje, inicio);
+      restanteLabel = `Começa em ${formatarDuracao(futuro.meses, futuro.dias)}`;
+      status = "futuro";
+    } else if (diasRestantes < 0) {
+      const venc = mesesEDias(termino, hoje);
+      restanteLabel = `Vencido há ${formatarDuracao(venc.meses, venc.dias)}`;
+      status = "vencido";
+    } else if (diasRestantes === 0) {
+      restanteLabel = "Vence hoje";
+      status = "ativo";
+    } else {
+      const rest = mesesEDias(hoje, termino);
+      restanteLabel = `Faltam ${formatarDuracao(rest.meses, rest.dias)}`;
+      status = "ativo";
+    }
+
+    const decorrido =
+      (hoje.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24);
+    const progresso =
+      totalDias > 0
+        ? Math.min(100, Math.max(0, Math.round((decorrido / totalDias) * 100)))
+        : 0;
+
+    return {
+      totalDias,
+      totalLabel,
+      diasRestantes,
+      restanteLabel,
+      progresso,
+      status,
+    };
+  } catch {
+    return null;
+  }
 }

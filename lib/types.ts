@@ -6090,3 +6090,47 @@ export interface FreelancerComStatus extends Freelancer {
   status_contrato: StatusContrato;
   status_calculado: StatusCalculado;
 }
+
+// ----------------------------------------------------------------------------
+// Rótulos de UI dos contratos
+// ----------------------------------------------------------------------------
+
+export const TIPO_CONTRATO_LABEL: Record<TipoFreelancerContrato, string> = {
+  mensal: "Mensal",
+  periodo: "Período",
+  diarias: "Diárias",
+};
+
+/** Rótulos pt-BR dos campos do histórico de contratos. */
+export const CAMPO_HISTORICO_LABELS: Record<string, string> = {
+  nome_job: "Nome do job",
+  cargo: "Cargo",
+  tipo: "Tipo",
+  valor: "Valor",
+  data_inicio: "Data de início",
+  data_termino: "Data de término",
+  cidade: "Cidade",
+  observacoes: "Observações",
+  status_real: "Trabalhando",
+  responsavel_id: "Responsável",
+  job_id: "Job vinculado",
+  arquivo_url: "PDF assinado",
+  minuta_url: "Minuta DOCX",
+  data_termino_original: "Data de término original",
+  distrato_data_proposta: "Distrato — data proposta",
+  distrato_motivo: "Distrato — motivo",
+  distrato_minuta_url: "Distrato — minuta",
+  distrato_arquivo_url: "Distrato — PDF assinado",
+  distrato_solicitado_por: "Distrato — solicitante",
+  distrato_solicitado_em: "Distrato — solicitado em",
+};
+
+/**
+ * Linha de histórico já enriquecida com o nome do autor e o nome do job
+ * do contrato (vindos de joins no server component).
+ */
+export interface FreelancerContratoHistoricoEntry
+  extends FreelancerContratoHistorico {
+  alterado_por_nome: string | null;
+  contrato_nome_job: string | null;
+}

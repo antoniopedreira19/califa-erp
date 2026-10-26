@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
   Mail,
@@ -5,15 +6,21 @@ import {
   CreditCard,
   Building2,
   Heart,
+  FileText,
+  Plus,
 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import type { Freelancer, FreelancerContrato, TipoContaBancariaFornecedor } from "@/lib/types";
+import type {
+  Freelancer,
+  FreelancerContrato,
+  TipoContaBancariaFornecedor,
+} from "@/lib/types";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { HeroFreelancer } from "../_components/hero-freelancer";
 import { AbasPerfil } from "../_components/abas-perfil";
 import { BlocoInfo, Linha } from "../_components/bloco-info";
-import { ContratosDoFreelancer } from "../contratos/_components/contratos-do-freelancer";
+import { ContratoCard } from "../contratos/_components/contrato-card";
 import { HistoricoContratoTimeline } from "../_components/historico-contrato-timeline";
 import { formatCnpj, formatCep, formatTelefone } from "@/lib/utils";
 import { PIX_TIPOS } from "@/lib/pix";
@@ -93,7 +100,117 @@ export default async function FreelancerPerfilPage({
       contrato_nome_job: h.contrato?.nome_job ?? null,
     }));
 
+  // Agrupa histórico por contrato pra passar ao card
+  const historicoPorContrato = new Map<
+    string,
+    typeof historico
+  >();
+  for (const h of historico) {
+    const arr = historicoPorContrato.get(h.contrato_id) ?? [];
+    arr.push(h);
+    historicoPorContrato.set(h.contrato_id, arr);
+  }
+
+  // Resolve nomes dos profiles pra mostrar quem solicitou distrato.
+  // Pega IDs únicos de responsavel_id + distrato_solicitado_por.
+  const profileIds = new Set<string>();
+  for (const c of contratos) {
+    if (c.responsavel_id) profileIds.add(c.responsavel_id);
+    if (c.distrato_solicitado_por) profileIds.add(c.distrato_solicitado_por);
+  }
+  let gpNomesPorId: Record<string, string> = {};
+  if (profileIds.size > 0) {
+    const profilesRes = await supabase
+      .from("profiles")
+      .select("id, nome")
+      .in("id", Array.from(profileIds));
+    if (profilesRes.data) {
+      for (const p of profilesRes.data as Array<{ id: string; nome: string }>) {
+        gpNomesPorId[p.id] = p.nome;
+      }
+    }
+  }
+
+  // Define o contrato "atual" (único): o primeiro que está vigente hoje.
+  const hojeISO = new Date().toISOString().slice(0, 10);
+  const idAtual = contratos.find(
+    (c) =>
+      c.status_real &&
+      c.data_inicio !== null &&
+      c.data_inicio <= hojeISO &&
+      (c.data_termino === null || c.data_termino >= hojeISO),
+  )?.id;
+
+  // Ordenação: atual > agendado (status_real + inicio no futuro) > encerrados
+  const prioridade = (c: FreelancerContrato) => {
+    if (c.id === idAtual) return 0;
+    if (c.status_real && c.data_inicio && c.data_inicio > hojeISO) return 1;
+    return 2;
+  };
+  const contratosOrdenados = [...contratos].sort((a, b) => {
+    const pa = prioridade(a);
+    const pb = prioridade(b);
+    if (pa !== pb) return pa - pb;
+    // Dentro da mesma prioridade: por data_inicio desc (nulls last)
+    const da = a.data_inicio ?? "";
+    const db = b.data_inicio ?? "";
+    return db.localeCompare(da);
+  });
+
   const podeEditar = PODE_EDITAR.has(session.activeRole);
+  const isRh = podeEditar; // administrador/rh/financeiro
+  const abaContratos = (() => {
+    if (contratosOrdenados.length === 0) {
+      return (
+        <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-10 text-center">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted/50">
+            <FileText className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <p className="text-sm font-medium text-foreground">
+            Nenhum contrato ainda
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground max-w-sm mx-auto">
+            Freelancers precisam ter contrato pra registrar valor, cargo e
+            período de trabalho em um job.
+          </p>
+          {podeEditar && (
+            <Link
+              href={`/freelancers/contratos/novo?freelancer=${freelancer.id}`}
+              prefetch={false}
+              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red-hover transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              Novo contrato
+            </Link>
+          )}
+        </div>
+      );
+    }
+    return (
+      <div className="space-y-3">
+        {contratosOrdenados.map((c) => {
+          // GP dono = responsável do contrato é o usuário atual E role é GP.
+          const isGpDoContrato =
+            c.responsavel_id === session.profile.id &&
+            (session.activeRole === "gerente_producao" ||
+              session.activeRole === "produtor");
+          const canManage = isRh || isGpDoContrato;
+          return (
+            <ContratoCard
+              key={c.id}
+              contrato={c}
+              isAtual={c.id === idAtual}
+              historico={historicoPorContrato.get(c.id) ?? []}
+              isRh={isRh}
+              canManage={canManage}
+              freelancerNome={freelancer.nome_social}
+              gpNomesPorId={gpNomesPorId}
+            />
+          );
+        })}
+      </div>
+    );
+  })();
   const temContato = !!(freelancer.email || freelancer.celular);
   const temEndereco = !!(
     freelancer.cep ||
@@ -232,13 +349,7 @@ export default async function FreelancerPerfilPage({
       <HeroFreelancer freelancer={freelancer} podeEditar={podeEditar} />
       <AbasPerfil
         dados={dadosPessoais}
-        contratos={
-          <ContratosDoFreelancer
-            freelancerId={freelancer.id}
-            contratos={contratos}
-            podeCriar={podeEditar}
-          />
-        }
+        contratos={abaContratos}
         historico={<HistoricoContratoTimeline historico={historico} />}
       />
     </div>
