@@ -709,12 +709,22 @@ function SolicitacaoRow({
   onToggleSelecao: () => void;
   onAbrir: () => void;
 }) {
-  const prazo =
-    s.data_inicio && s.data_termino
-      ? `${formatarDataCurta(s.data_inicio)} → ${formatarDataCurta(s.data_termino)}`
-      : s.data_inicio
-        ? formatarDataCurta(s.data_inicio)
-        : "—";
+  // Prazo em 3 linhas (igual AgCaliforniaRH): data inicio, seta, data termino.
+  // Com data_termino nulo, mostra "A partir de" + inicio em bloco unico.
+  const prazoNode =
+    s.data_inicio && s.data_termino ? (
+      <div className="flex flex-col items-start leading-tight text-foreground tabular-nums">
+        <span>{formatarDataLonga(s.data_inicio)}</span>
+        <span className="text-muted-foreground">→</span>
+        <span>{formatarDataLonga(s.data_termino)}</span>
+      </div>
+    ) : s.data_inicio ? (
+      <span className="text-foreground tabular-nums">
+        {formatarDataLonga(s.data_inicio)}
+      </span>
+    ) : (
+      <span className="text-muted-foreground">—</span>
+    );
 
   return (
     <tr
@@ -750,7 +760,7 @@ function SolicitacaoRow({
               {naoLidas}
             </span>
           )}
-          <p className="font-semibold text-foreground uppercase tracking-wide">
+          <p className="font-semibold text-foreground">
             {s.nome_freela}
           </p>
         </div>
@@ -787,9 +797,7 @@ function SolicitacaoRow({
         {formatCurrency(Number(s.valor))}
         <span className="text-[10px] text-muted-foreground"> /{s.tipo}</span>
       </td>
-      <td className="px-3 py-2.5 text-muted-foreground tabular-nums whitespace-nowrap">
-        {prazo}
-      </td>
+      <td className="px-3 py-2.5 align-top">{prazoNode}</td>
       <td className="px-3 py-2.5 text-foreground truncate max-w-[160px]">
         {nomeCurto(s.solicitante_nome)}
       </td>
@@ -812,11 +820,11 @@ function SolicitacaoRow({
   );
 }
 
-function formatarDataCurta(iso: string): string {
+function formatarDataLonga(iso: string): string {
   return new Date(iso + "T00:00:00").toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "2-digit",
-    year: "2-digit",
+    year: "numeric",
   });
 }
 
