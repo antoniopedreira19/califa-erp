@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
-  ArrowRight,
   Users,
   Clock,
   Eye,
@@ -90,7 +90,6 @@ export function ListaClient({ freelancers, podeEditar }: Props) {
               <Th align="center">Status</Th>
               <Th align="center">Tempo</Th>
               <Th align="center">Ação</Th>
-              <th className="w-8" />
             </tr>
           </thead>
           <tbody>
@@ -118,13 +117,17 @@ function FreelancerRow({
   podeEditar: boolean;
   valoresVisiveis: boolean;
 }) {
+  const router = useRouter();
   const href = `/freelancers/${f.id}`;
   const dias = diasAteVencimento(f.data_termino);
   const vencido = dias !== null && dias < 0;
   const tempo = f.status_real === true ? tempoDesde(f.data_inicio) : null;
 
   return (
-    <tr className="border-b border-border last:border-0 hover:bg-california-red/[0.02] transition-colors group">
+    <tr
+      onClick={() => router.push(href)}
+      className="border-b border-border last:border-0 hover:bg-california-red/[0.02] transition-colors group cursor-pointer"
+    >
       <td className="px-3 py-2.5">
         <Link
           href={href}
@@ -257,16 +260,6 @@ function FreelancerRow({
             acao={f.acao_prevista as AcaoPrevistaFreelancer | null}
           />
         )}
-      </td>
-      <td className="px-2 py-2.5 text-right">
-        <Link
-          href={href}
-          prefetch={false}
-          aria-label={`Abrir ${f.nome_social}`}
-          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:text-california-red hover:bg-california-red/10 transition-colors"
-        >
-          <ArrowRight className="h-3.5 w-3.5" />
-        </Link>
       </td>
     </tr>
   );
