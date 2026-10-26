@@ -231,7 +231,10 @@ export function AbaTitulos({
 
   // O saldo previsto sai de TODAS as linhas, antes de qualquer filtro: ele
   // não muda com o filtro, como o Saldo do Extrato.
-  const todas = React.useMemo(() => comSaldoPrevisto(linhas, saldoHoje, contaId), [linhas, saldoHoje, contaId]);
+  const todas = React.useMemo(
+    () => comSaldoPrevisto(linhas, saldoHoje, contaId, hoje),
+    [linhas, saldoHoje, contaId, hoje],
+  );
   const negativo = todas.find((l) => l.saldo < 0) ?? null;
   const saldoNoFim = todas.length ? todas[todas.length - 1].saldo : saldoHoje;
   const saem = r2(todas.filter((l) => l.efeito < 0 && dataEfetiva(l, hoje) <= fim).reduce((s, l) => s - l.efeito, 0));

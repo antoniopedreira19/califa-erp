@@ -8144,3 +8144,21 @@ os arquivos da frente do Antonio.
   que a planilha tem, 2023 a 2025 batem, menos quatro células explicadas pela
   própria planilha. Ver
   [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
+## ⚠️ Nota de 2026-10-26 (6) — a faixa de Hoje uma vez só na aba Títulos da Conciliação (revisão da decisão 195)
+
+- **O quê:** a faixa "Hoje" da Conciliação › Títulos saía duas vezes — no
+  topo, com os vencidos, e de novo no fim da lista —, e o console acusava a
+  chave repetida `2026-10-26` em `PlanilhaDeTitulos`. A causa era o título a
+  pagar sem data prevista (em 26/10, a AV-00003 e a AV-00004, testes da
+  remessa Santander, R$ 0,05 cada): a ordem o punha por último, e o
+  agrupamento por dia o contava como hoje.
+- **Regra (Tiago, 26/10/2026, opção A):** o sem data entra na faixa de Hoje,
+  como o vencido, e a lista ordena pela mesma data que agrupa. O saldo
+  previsto o desconta hoje; o saldo no fim da lista não muda. O filtro de
+  vencimento continua contando pelo vencimento do documento: o sem data só
+  aparece em "Todos".
+- **Código:** `ordenarPorDia` em `lib/financeiro/planilha-de-titulos.ts`, com
+  dois testes novos; `comSaldoPrevisto` recebe o `hoje`. Contas a Receber,
+  que usa `ordenarLinhas`, não muda. Ver a "Revisão de 26/10/2026" da
+  [decisão 195](../decisions/195-planilhas-de-titulos-e-extrato-nas-mesmas-colunas.md).
