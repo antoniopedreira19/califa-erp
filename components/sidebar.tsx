@@ -74,7 +74,7 @@ const links: NavLink[] = [
   },
   {
     href: "/rh",
-    label: "RH",
+    label: "People",
     icon: Users,
     permissao: "sidebar.rh",
   },
