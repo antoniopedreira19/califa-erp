@@ -6,7 +6,6 @@ import {
   ClipboardList,
   Search,
   X,
-  ArrowRight,
   MessageCircle,
   ChevronDown,
   ArrowUp,
@@ -559,7 +558,6 @@ export function SolicitacoesTabela({
                   >
                     Status
                   </SortTh>
-                  <th className="w-8" />
                 </tr>
               </thead>
               <tbody>
@@ -815,9 +813,6 @@ function SolicitacaoRow({
         <ChipStatusSolicitacao
           status={s.status as FreelancerSolicitacaoStatus}
         />
-      </td>
-      <td className="px-2 py-2.5 text-right">
-        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground inline-block" />
       </td>
     </tr>
   );

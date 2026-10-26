@@ -17,22 +17,17 @@ export default async function FreelancersLayout({
     redirect("/home?reason=sem_permissao_freelancers");
   }
 
-  // Badge na tab Solicitações:
-  // - aprovador: contagem de 'pendente' (fila de aprovação)
-  // - GP/produtor: contagem de 'pendente' + 'aprovada' das próprias
-  //   (coisas que ainda precisam de ação)
+  // Badge na tab Solicitações: sempre só 'pendente' (fila de aprovação). GP/produtor
+  // continua restrito às próprias solicitações pelo escopo de solicitante_id.
   const supabase = createClient();
   const isAprovador = APROVADORES.has(session.activeRole);
   let query = supabase
     .from("freelancer_solicitacoes")
     .select("*", { count: "exact", head: true })
-    .eq("tenant_id", session.activeTenant.id);
-  if (isAprovador) {
-    query = query.eq("status", "pendente");
-  } else {
-    query = query
-      .eq("solicitante_id", session.profile.id)
-      .in("status", ["pendente", "aprovada"]);
+    .eq("tenant_id", session.activeTenant.id)
+    .eq("status", "pendente");
+  if (!isAprovador) {
+    query = query.eq("solicitante_id", session.profile.id);
   }
   const { count } = await query;
   const countSolicitacoes = count ?? 0;
