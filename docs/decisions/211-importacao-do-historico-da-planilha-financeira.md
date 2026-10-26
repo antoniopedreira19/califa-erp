@@ -3,9 +3,11 @@
 **Data:** 2026-10-25
 **Status:** aceita. E1 (extração), E2 (padronização, com o de-para aprovado)
 e E3 (validação, com as DREs e as abas Gerencial) implementadas em
-25/10/2026, sem nada gravado no banco. A Copa sem lançamento e o rateio do TD
-foram decididos no mesmo dia. Próxima entrega: A1 (tabelas de histórico,
-com a do rateio, e tela de importação).
+25/10/2026. A Copa sem lançamento e o rateio do TD foram decididos no mesmo
+dia. A1 (as tabelas de histórico, com a do rateio, e a tela de carga)
+implementada e conferida em 26/10/2026, com as tabelas ainda vazias.
+Próxima entrega: A2 (a primeira carga, com as contas Fundo Fixo California e
+BB Americas criadas antes).
 **Quem decidiu:** Tiago, no plano "Importação do histórico financeiro"
 (página privada de 25/10/2026), com as respostas D1, D2 e D3 dadas no mesmo
 dia: "Aprovo D1, D2 e D3 como você recomendou".
@@ -163,13 +165,51 @@ FitDance e Bradesco FitDance ficam fora.
   inicial de cada conta passa a ser o do extrato em 30/09, e as baixas de
   agosto e setembro que já estão no sistema ficam antes dele.
 
-### Onde o histórico vai morar
+### Onde o histórico mora (A1, 26/10/2026)
 
-Em tabelas próprias de histórico, só para leitura, com a carga identificada
-por período (entrega A1, a fazer). Cada registro aponta para o que já existe
-no sistema (conta, empresa, regional, plano de contas, cliente, marca e, quando
-houver, o job) e guarda o texto original da planilha. Cliente e marca sem
-cadastro ficam como texto: o histórico não cria cadastro.
+Em seis tabelas próprias, que só admin e financeiro leem (RLS) e que só as
+funções da carga escrevem (migration `20261026100001_historico_financeiro.sql`):
+
+| Tabela | O que guarda |
+|---|---|
+| `historico_cargas` | Um registro por pacote: período, versão da planilha (dia e SHA-256), pacote (nome e SHA-256), o que ele declara (linhas e somas), o que entrou, quem carregou e a situação (carregando, ativa, substituída, desfeita, descartada). |
+| `historico_movimentos` | O extrato de cada conta, com sinal (o que entra é positivo), o crédito e o débito como a planilha mostra, a classe, o grupo da DRE, o plano de contas, a regional (TD = todas), o job do histórico e o texto da planilha, com a aba e a linha de origem. |
+| `historico_notas` | As notas emitidas e canceladas, com impostos, recebimento, o job do histórico e a classe (job, distribuição de lucro, sem job). |
+| `historico_jobs` | Os jobs das abas de resultado, com projeto, cliente, marca, serviço, regional, o marcador da Copa, o motivo de ficar fora do resultado e o job do sistema quando há. Cada carga traz todos; vale o da carga ativa mais recente. |
+| `historico_rateio_regional` | Os percentuais da tabela do rateio, por ano e empresa, com trimestre e grupo quando a planilha usa a linha só ali: a linha 147 da Gerencial 24 vale para o imobilizado e o PL do 4T 2024. |
+| `historico_saldos` | O saldo da planilha no fim de cada mês com movimento, por conta, e o de abertura (o mês antes do período). |
+
+Regras da carga, no banco:
+
+- **A conta tem de existir:** o histórico não cria conta. Empresa, regional,
+  plano de contas, cliente, marca, serviço e job se ligam quando o cadastro
+  existe e ficam só como texto quando não existe. A ligação com cadastro de
+  outro módulo usa `on delete set null`: o histórico não trava a exclusão de
+  ninguém, e o texto continua lá.
+- **O período vai até 30/09/2026 (D3).** Movimento, nota ou saldo fora do
+  período da carga é recusado.
+- **Uma carga em andamento por vez.** Carregar o mesmo período de uma carga
+  ativa a substitui, e as linhas da antiga saem. Período que cruza outra carga
+  ativa sem ser igual é recusado.
+- **Concluir confere no banco** as linhas de cada tabela e as somas dos
+  movimentos e das notas contra o que o pacote declarou. Reenviar uma parte
+  não repete linha: a chave é a aba e a linha da planilha.
+- **Auditoria:** `historico.carga_concluida`, `historico.carga_desfeita` e
+  `historico.carga_descartada`.
+
+O pacote sai de `scripts/historico-financeiro/empacotar.ts`, que junta num
+.json o que a carga leva. O contrato das colunas está em
+`lib/historico-financeiro/pacote.ts` e é o mesmo para o script, a tela e o
+servidor. A tela, em Financeiro › Cadastros › Histórico da planilha (admin e
+financeiro), lê o arquivo no navegador e mostra o período, as linhas e as
+somas. Ela avisa as contas que faltam cadastrar e a carga que vai ser
+substituída, e envia em partes de até 2.000 linhas (600 KB). A carga que fica
+incompleta (conexão que caiu, parte recusada) fica na lista para descartar.
+
+O pacote da primeira carga (versão de 25/10/2026) tem 56.713 movimentos (soma
+−3.445.279,56), 3.222 notas, 3.586 jobs, 40 linhas de rateio e 331 saldos,
+em 25 MB. Ele traz as contas Fundo Fixo California e BB Americas, que ainda
+não existem: a tela não deixa carregar enquanto elas não forem criadas (A2).
 
 ## O pipeline (E1, E2 e E3)
 
@@ -237,11 +277,29 @@ da planilha, só contagens.
   saldo da planilha encadeia mês a mês com o movimento padronizado, e nenhum
   mês de faturamento difere.
 
+## Conferido em 26/10/2026 (A1)
+
+- **Carga pequena:** a BB California de janeiro de 2023 (510 movimentos, 14
+  notas, 90 jobs, 40 linhas de rateio e 2 saldos) entrou pela tela com as
+  somas do pacote. Toda ligação que o pacote propõe virou id: nos movimentos,
+  450 com empresa e plano de contas e 279 com regional; nos jobs, 74
+  clientes, 60 marcas, 89 serviços e 67 regionais. A Urbia ficou como texto.
+- **Refeita e desfeita:** carregada de novo, substituiu a anterior, que ficou
+  sem linhas. Desfeita, as linhas saíram e o registro ficou.
+- **Recusa e descarte:** uma parte com movimento fora do período foi recusada
+  pelo banco, e a carga incompleta foi descartada pela tela.
+- **Acesso:** um usuário GP não vê as cargas e não consegue começar uma.
+- As três cargas de teste ficaram registradas (substituída, desfeita e
+  descartada), e as tabelas do histórico estão vazias.
+- O saldo da planilha no fim de janeiro de 2023 (2.837.431,76) fica 1
+  centavo abaixo do de abertura somado ao movimento (2.837.431,77): é
+  arredondamento da planilha. A A3 parte do saldo de abertura e soma os
+  movimentos.
+
 ## O que fica para depois
 
-- A1 e A2: as tabelas de histórico (com a do rateio), a tela de importação e
-  a primeira carga (com a criação das contas Fundo Fixo California e BB
-  Americas).
+- A2: a primeira carga, com a criação das contas Fundo Fixo California e BB
+  Americas antes.
 - A4: como o relatório por regional trata o que a planilha não rateia pelo
   percentual do ano (imobilizado, 4T 2022 e 2023, PL, crédito em linha de
   custo).

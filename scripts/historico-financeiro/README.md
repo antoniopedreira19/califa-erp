@@ -1,8 +1,9 @@
 # Histórico financeiro — extração, padronização e validação da planilha
 
 Importação do histórico da planilha "Fin. Conta Califórnia" (Google Sheets),
-decisão 211. Aqui ficam as etapas que rodam fora do sistema; a carga no banco é
-outra entrega.
+decisão 211. Aqui ficam as etapas que rodam fora do sistema, até o pacote de
+carga; a carga no banco é pela tela Financeiro › Cadastros › Histórico da
+planilha.
 
 ## Onde ficam os dados
 
@@ -19,6 +20,7 @@ tmp/historico-planilha/
     padronizado/           E2: movimentos, previsões, notas, jobs, pendências, propostas/
     validacao/             E3: relatorios.csv, saldos.csv, faturamento.csv, resumo.json
     revisao-e2.xlsx        pendências e de-para para revisar
+    cargas/                A1: os pacotes de carga (.json) para a tela
 ```
 
 ## Como rodar
@@ -32,7 +34,11 @@ npx tsx scripts/historico-financeiro/aprovar-depara.ts "$V" "$T/depara"
 npx tsx scripts/historico-financeiro/padronizar.ts "$V" "$T/sistema" "$T/depara"
 npx tsx scripts/historico-financeiro/validar.ts "$V"
 npx tsx scripts/historico-financeiro/revisao.ts "$V"
+npx tsx scripts/historico-financeiro/empacotar.ts "$V" --carga "1ª carga"
 ```
+
+Uma carga pequena, para testar a tela, sai com `--nome`, o período e as
+contas: `--nome "Teste" --de 2023-01-01 --ate 2023-01-31 --conta "BB California"`.
 
 Cada etapa leva segundos. Uma versão nova da planilha (o 3T fechado, por
 exemplo) é outra pasta em `versoes/`, com os mesmos comandos. A aprovação do
@@ -76,9 +82,19 @@ marcas, plano de contas, serviços, regionais, contas e os jobs abertos. O
 - **Revisão, `revisao.ts`:** junta pendências e propostas num .xlsx com a
   coluna "Sua decisão". Amarelo pede conferência; cinza é cliente ou marca sem
   cadastro, que fica como texto no histórico.
+- **Pacote, `empacotar.ts`:** junta num .json o que uma carga leva — os
+  movimentos e as notas do período, os jobs das abas de resultado, o rateio
+  lido das células das abas Gerencial e os saldos do fim de cada mês — com as
+  linhas e as somas declaradas. O contrato das colunas está em
+  `lib/historico-financeiro/pacote.ts`, o mesmo da tela e do servidor, e o
+  script confere o pacote como eles vão conferir.
+- **Carga, na tela:** Financeiro › Cadastros › Histórico da planilha (admin e
+  financeiro). Ela lê o pacote no navegador, avisa as contas que faltam
+  cadastrar e envia em partes; o banco liga os textos aos cadastros, confere
+  período, linhas e somas, e substitui a carga ativa do mesmo período.
 
 ## Testes
 
 ```bash
-node --import tsx --test lib/historico-financeiro/extracao.test.ts lib/historico-financeiro/regras.test.ts lib/historico-financeiro/formulas.test.ts
+node --import tsx --test lib/historico-financeiro/extracao.test.ts lib/historico-financeiro/regras.test.ts lib/historico-financeiro/formulas.test.ts lib/historico-financeiro/pacote.test.ts
 ```

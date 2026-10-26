@@ -3786,6 +3786,209 @@ export interface CondicoesDoFechamento {
   diferenca?: number | null;
 }
 
+// ---------- Decisão 211: o histórico da planilha financeira ----------
+
+/** carregando → ativa → substituída ou desfeita; carregando → descartada. */
+export type SituacaoDaCargaHistorico = "carregando" | "ativa" | "substituida" | "desfeita" | "descartada";
+
+export type TabelaDoHistorico = "rateio" | "saldos" | "jobs" | "notas" | "movimentos";
+
+/** Uma carga do histórico (`historico_cargas`, decisão 211, A1): um pacote
+ *  carregado pela tela Financeiro › Cadastros › Histórico da planilha. */
+export interface HistoricoCarga {
+  id: string;
+  tenant_id: string;
+  nome: string;
+  periodo_de: string;
+  periodo_ate: string;
+  /** O dia em que a planilha foi baixada. */
+  planilha_versao: string;
+  planilha_arquivo: string;
+  planilha_sha256: string;
+  pacote_arquivo: string;
+  pacote_sha256: string;
+  /** O que o pacote declara: as linhas de cada tabela e, nos movimentos e nas notas, a soma do valor. */
+  esperado: Record<TabelaDoHistorico, { linhas: number; soma?: string }>;
+  /** As linhas que estavam no banco ao concluir ou ao descartar. Vazio enquanto carrega. */
+  gravado: Partial<Record<TabelaDoHistorico, number>>;
+  situacao: SituacaoDaCargaHistorico;
+  criada_por: string;
+  created_at: string;
+  concluida_em: string | null;
+  concluida_por: string | null;
+  /** Desfeita, substituída ou descartada. */
+  encerrada_em: string | null;
+  encerrada_por: string | null;
+  substituida_por: string | null;
+}
+
+/** Um movimento do extrato de uma conta na planilha (`historico_movimentos`). */
+export interface HistoricoMovimento {
+  id: string;
+  tenant_id: string;
+  carga_id: string;
+  conta_bancaria_id: string;
+  data: string;
+  /** Com sinal: o que entra é positivo. */
+  valor: number;
+  /** O crédito e o débito como a planilha mostra, com o sinal dela. */
+  credito_planilha: number | null;
+  debito_planilha: number | null;
+  classe: "dre" | "transferencia" | "estorno" | "sem classificação";
+  empresa_id: string | null;
+  empresa_nome: string | null;
+  sigla_planilha: string | null;
+  grupo: string | null;
+  cod: string | null;
+  competencia_trimestre: number | null;
+  competencia_ano: number | null;
+  plano_conta_tipo_id: string | null;
+  plano_conta_subtipo_id: string | null;
+  plano_codigo: string | null;
+  regional_id: string | null;
+  regional_nome: string | null;
+  /** TD: de todas as regionais; só o relatório por regional rateia. */
+  regional_todas: boolean;
+  regional_planilha: string | null;
+  /** `historico_jobs.chave`. */
+  job_chave: string | null;
+  job_nome: string | null;
+  job_coluna: "job" | "evento" | null;
+  tipo_planilha: string | null;
+  descricao: string | null;
+  fornecedor: string | null;
+  parcela: string | null;
+  documento: string | null;
+  observacao: string | null;
+  contrapartida: string | null;
+  coluna_jobs: string | null;
+  coluna_evento: string | null;
+  coluna_reg: string | null;
+  coluna_reg_cmh: string | null;
+  dre_extra: string | null;
+  ano_comp: string | null;
+  aba: string;
+  linha: number;
+  digital: string;
+  created_at: string;
+}
+
+/** Uma nota fiscal da planilha (`historico_notas`). */
+export interface HistoricoNota {
+  id: string;
+  tenant_id: string;
+  carga_id: string;
+  empresa_id: string | null;
+  empresa_nome: string;
+  empresa_por: string | null;
+  estabelecimento: string;
+  numero: string;
+  situacao: "emitida" | "cancelada";
+  classe: "job" | "distribuição de lucro" | "sem job";
+  emissao: string | null;
+  competencia_trimestre: number | null;
+  competencia_ano: number | null;
+  vencimento: string | null;
+  recebimento: string | null;
+  valor: number | null;
+  deducao: number | null;
+  valor_tributavel: number | null;
+  iss: number | null;
+  pis: number | null;
+  cofins: number | null;
+  csll: number | null;
+  ir: number | null;
+  adicional_ir: number | null;
+  retencoes: number | null;
+  total_impostos: number | null;
+  job_chave: string | null;
+  job_nome: string | null;
+  coluna_job: string | null;
+  cliente: string | null;
+  municipio: string | null;
+  cnae: string | null;
+  obs: string | null;
+  observacao: string | null;
+  aba: string;
+  linha: number;
+  created_at: string;
+}
+
+/** Um job das abas de resultado da planilha (`historico_jobs`). */
+export interface HistoricoJob {
+  id: string;
+  tenant_id: string;
+  carga_id: string;
+  /** A chave que os movimentos e as notas usam ("evento:NOME DO JOB 1T 2026"). */
+  chave: string;
+  nome: string;
+  empresa_id: string | null;
+  empresa_nome: string;
+  aba: string;
+  linha: number;
+  ano: number;
+  trimestre: "1T" | "2T" | "3T" | "4T" | null;
+  projeto: string | null;
+  cliente_id: string | null;
+  cliente_planilha: string | null;
+  marca_id: string | null;
+  marca_planilha: string | null;
+  servico_id: string | null;
+  servico_planilha: string | null;
+  gp: string | null;
+  data_inicio: string | null;
+  regional_id: string | null;
+  regional_nome: string | null;
+  regional_todas: boolean;
+  regional_planilha: string | null;
+  regional_por: string | null;
+  /** "Copa": marcador, não regional. */
+  marcador: string | null;
+  status_planilha: string | null;
+  codigo_antigo: string | null;
+  /** O job do sistema, quando existe. */
+  job_id: string | null;
+  job_codigo: string | null;
+  /** O motivo de ficar fora dos relatórios de resultado ("Copa sem lançamento"). */
+  fora_do_resultado: string | null;
+  outras_abas: string | null;
+  created_at: string;
+}
+
+/** Um percentual do rateio do TD (`historico_rateio_regional`). */
+export interface HistoricoRateioRegional {
+  id: string;
+  tenant_id: string;
+  carga_id: string;
+  ano: number;
+  /** Nulo: o ano inteiro. */
+  trimestre: number | null;
+  empresa_id: string;
+  /** Nulo: todos os grupos que a planilha rateia. */
+  grupo: string | null;
+  regional_id: string | null;
+  regional_nome: string;
+  percentual: number;
+  /** "Gerencial 24, linha 135". */
+  origem: string;
+  created_at: string;
+}
+
+/** O saldo da planilha no fim de um mês, por conta (`historico_saldos`). */
+export interface HistoricoSaldo {
+  id: string;
+  tenant_id: string;
+  carga_id: string;
+  conta_bancaria_id: string;
+  /** O primeiro dia do mês. */
+  mes: string;
+  saldo_planilha: number | null;
+  /** Nulo no mês de abertura, que fica antes do período. */
+  movimento: number | null;
+  abertura: boolean;
+  created_at: string;
+}
+
 // ---------- Task 008: contas a receber (faturamento) ----------
 
 /** Origem da NOTA. Continua com três valores: a nota é do job, do BV ou

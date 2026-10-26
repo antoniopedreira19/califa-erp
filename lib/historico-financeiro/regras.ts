@@ -242,8 +242,8 @@ export function lerCompetencia(texto: string): { trimestre: number; ano: number 
   return m ? { trimestre: Number(m[1]), ano: Number(m[2]) } : null;
 }
 
-const REGIONAIS_DA_CALIFORNIA: ReadonlySet<string> = new Set(["NE", "NO", "SP", "RJ", "SS"]);
-const REGIONAIS_DA_CMH: Readonly<Record<string, string>> = { AGE: "Agency", DOC: "Doca", URB: "Urbia" };
+export const REGIONAIS_DA_CALIFORNIA: ReadonlySet<string> = new Set(["NE", "NO", "SP", "RJ", "SS"]);
+export const REGIONAIS_DA_CMH: Readonly<Record<string, string>> = { AGE: "Agency", DOC: "Doca", URB: "Urbia" };
 
 /**
  * Regional da linha: a coluna Reg vale para a California e a "CMH Reg" para

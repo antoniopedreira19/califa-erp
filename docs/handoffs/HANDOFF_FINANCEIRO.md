@@ -8052,3 +8052,25 @@ os arquivos da frente do Antonio.
 - **Conferido** com a PP-00397 (TES-1001/26) aprovada no cartão "ZZ Teste
   Empresa Teste", com o título em Títulos a Pagar. Ver
   [decisão 209](../decisions/209-pp-no-cartao-corporativo.md).
+
+## ⚠️ Nota de 2026-10-26 (1) — o histórico da planilha: as tabelas e a tela de carga (decisão 211, A1)
+
+- Seis tabelas de histórico, só de leitura para admin e financeiro e escritas
+  só pelas funções da carga: `historico_cargas`, `historico_movimentos`,
+  `historico_notas`, `historico_jobs`, `historico_rateio_regional` e
+  `historico_saldos`. Elas não tocam lançamentos, contas nem relatórios.
+- Tela nova em **Financeiro › Cadastros › Histórico da planilha**, com cartão
+  em Cadastros do Financeiro (só para admin e financeiro). Ela lê o pacote
+  (.json do script `empacotar.ts`) no navegador e mostra período, linhas e
+  somas. Ela avisa as contas que faltam cadastrar e a carga ativa do mesmo
+  período, que vai ser substituída, e envia em partes. A lista mostra as
+  cargas com a situação; a ativa se desfaz e a incompleta se descarta, e o
+  registro fica.
+- O banco liga os textos aos cadastros (a conta é obrigatória; o resto fica
+  como texto quando não tem par), recusa período depois de 30/09/2026 e
+  movimento fora do período, e confere linhas e somas ao concluir. Concluir,
+  desfazer e descartar auditam.
+- **Conferido** com uma carga pequena (BB California, janeiro de 2023):
+  entrou, foi refeita e desfeita, e uma carga recusada no meio foi
+  descartada. As tabelas estão vazias; a primeira carga é a A2. Ver
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).

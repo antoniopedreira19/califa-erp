@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Wallet, ListTree, CreditCard, FolderKanban, Scale, Car, type LucideIcon } from "lucide-react";
+import { ArrowRight, Wallet, ListTree, CreditCard, FolderKanban, Scale, Car, History, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
@@ -13,7 +13,8 @@ export default async function CadastrosFinanceiroPage() {
   const session = await requireSession();
   const supabase = createClient();
 
-  const [contasBancariasRes, tiposPlanoRes, cartoesCreditoRes, cnpjsEmissoresRes, desgasteRes] = await Promise.all([
+  const podeCarregarHistorico = session.activeRole === "administrador" || session.activeRole === "financeiro";
+  const [contasBancariasRes, tiposPlanoRes, cartoesCreditoRes, cnpjsEmissoresRes, desgasteRes, cargasHistoricoRes] = await Promise.all([
     supabase
       .from("contas_bancarias")
       .select("*", { count: "exact", head: true })
@@ -43,6 +44,14 @@ export default async function CadastrosFinanceiroPage() {
       .eq("tenant_id", session.activeTenant.id)
       .eq("chave", "reembolso_desgaste_por_km")
       .maybeSingle<{ valor: number | string }>(),
+    // As cargas ativas do histórico da planilha (decisão 211). Só admin e financeiro carregam.
+    podeCarregarHistorico
+      ? supabase
+          .from("historico_cargas")
+          .select("*", { count: "exact", head: true })
+          .eq("tenant_id", session.activeTenant.id)
+          .eq("situacao", "ativa")
+      : Promise.resolve({ count: 0, error: null }),
   ]);
 
   if (contasBancariasRes.error) console.error("[fin-cadastros.contas_bancarias]", contasBancariasRes.error.message);
@@ -50,6 +59,7 @@ export default async function CadastrosFinanceiroPage() {
   if (cartoesCreditoRes.error) console.error("[fin-cadastros.cartoes_credito]", cartoesCreditoRes.error.message);
   if (cnpjsEmissoresRes.error) console.error("[fin-cadastros.fiscal_estabelecimentos]", cnpjsEmissoresRes.error.message);
   if (desgasteRes.error) console.error("[fin-cadastros.financeiro_parametros]", desgasteRes.error.message);
+  if (cargasHistoricoRes.error) console.error("[fin-cadastros.historico_cargas]", cargasHistoricoRes.error.message);
   const desgastePorKm = desgasteRes.data ? Number(desgasteRes.data.valor) : DESGASTE_POR_KM_PADRAO;
 
   return (
@@ -100,9 +110,24 @@ export default async function CadastrosFinanceiroPage() {
           description="O desgaste do veículo por km que a PP de reembolso de veículo próprio soma ao combustível."
           resumo={`${formatCurrency(desgastePorKm, "BRL")} por km`}
         />
+        {podeCarregarHistorico && (
+          <CadastroCard
+            href="/financeiro/cadastros/historico"
+            icon={History}
+            title="Histórico da planilha"
+            description="As cargas do histórico da planilha financeira até 30/09/2026: movimentos das contas, notas, jobs, rateio e saldos."
+            resumo={resumoDasCargas(cargasHistoricoRes.count ?? 0)}
+          />
+        )}
       </div>
     </div>
   );
+}
+
+/** "1 carga ativa": carga é feminina, e o cartão diz "ativos". */
+function resumoDasCargas(ativas: number): string {
+  if (ativas === 0) return "Nenhuma carga ativa";
+  return ativas === 1 ? "1 carga ativa" : `${ativas} cargas ativas`;
 }
 
 function CadastroCard({
