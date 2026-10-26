@@ -153,11 +153,16 @@ repactua a de pagamento.
 - **Os outros caminhos já tinham data:** recebimento avulso, transferência
   e rendimento a exigem no formulário; recorrência, folha e 13º nascem com
   ela; PP e desembolso a recebem na aprovação, que a exige.
-- **A AV-00003 e a AV-00004** continuam sem data até o Tiago decidir o que
-  fazer com elas: dar baixa, se foram pagas (estão também nas remessas 25
-  e 32), ou cancelar. Editá-las agora pede a data.
-- **A trava no banco** — recusar avulsa a pagar sem data — fica para
-  depois de resolvidas as duas.
+- **A AV-00003 e a AV-00004 foram excluídas** pela tela em 26/10/2026, com
+  a autorização do Tiago: não foram pagas, e avulsa não tem status de
+  cancelada (só aprovada e baixada), então "Excluir" é o caminho. A
+  auditoria guarda as duas exclusões; os 8 itens delas nas remessas 17,
+  18, 21, 22, 25 e 32 ficam como histórico (o item aponta por
+  `origem_tipo`/`origem_id`, sem chave estrangeira, e a conciliação
+  automática pula a remessa cujo título não existe mais). Desde então,
+  nenhuma avulsa em aberto está sem data.
+- **A trava no banco** — recusar avulsa a pagar sem data — espera o OK do
+  Tiago.
 
 **No código:** `aplicarRefinementFormaPagamento` em
 `lib/validations/conta-avulsa.ts` (criar e editar), com o teste

@@ -8224,10 +8224,11 @@ os arquivos da frente do Antonio.
   formulário segue vindo com a data da linha do banco.
 - **Por quê:** era o único caminho de um título a pagar ficar sem data (nota
   6 deste dia). As outras origens nascem com data ou a recebem na aprovação.
-- **Pendente:** a AV-00003 e a AV-00004 (testes da remessa Santander, R$ 0,05)
-  seguem sem data e entram em toda remessa nova — já estão nas remessas
-  reais 25 e 32. O Tiago decide se dá baixa ou cancela; depois, a trava no
-  banco.
+- **A AV-00003 e a AV-00004** (testes da remessa Santander, R$ 0,05, sem
+  data) entravam em toda remessa nova — estavam até nas remessas reais 25 e
+  32. Não foram pagas: excluídas pela tela em 26/10/2026, com a autorização
+  do Tiago (avulsa não tem "cancelar"). Os itens das remessas ficam como
+  histórico. Falta só a trava no banco, que espera o OK dele.
 - **Código:** `lib/validations/conta-avulsa.ts`, com teste novo, e
   `conta-avulsa-drawer.tsx`. Ver a "Revisão de 26/10/2026" da
   [decisão 082](../decisions/082-a-despesa-sem-job-nasce-com-rateio-e-a-recorrencia-vira-titulo-30-dias-antes.md).
