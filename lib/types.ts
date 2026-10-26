@@ -4880,7 +4880,7 @@ export type NfPendenteQuadro = {
   tenant_id: string;
   colaborador_id: string;
   escopo_tipo: NfAnexoEscopo;
-  escopo_id: string;
+  escopo_id: string | null;
   label: string;
   competencia_ano: number | null;
   competencia_mes: number | null;
