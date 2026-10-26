@@ -5978,14 +5978,23 @@ export interface FreelancerSolicitacao {
   id: string;
   tenant_id: string;
   token: string;
-  solicitante_id: string;
+  /** Nullable desde a migração 20261026600002: solicitações legadas do RH antigo
+   *  podem vir de um perfil que não existe no ERP. */
+  solicitante_id: string | null;
 
   // Dados do freela proposto
   nome_freela: string;
   cpf_freela: string | null;
 
   // Dados do contrato pré-aprovado
-  job_id: string;
+  /** Nullable desde a migração 20261026600002: solicitações legadas apontavam
+   *  pra jobs do RH antigo que não existem aqui. Nome do job como texto fica em
+   *  `nome_job`. */
+  job_id: string | null;
+  /** Preservado da migração do RH antigo quando não há job_id FK equivalente. */
+  nome_job: string | null;
+  /** ID original no AgCaliforniaRH quando a solicitação veio por migração. */
+  legado_id: string | null;
   cargo: string | null;
   valor: number;
   tipo: TipoFreelancerContrato;

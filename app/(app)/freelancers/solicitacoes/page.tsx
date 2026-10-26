@@ -180,7 +180,9 @@ export default async function SolicitacoesPage({
       solicitante_nome: s.solicitante?.nome ?? null,
       solicitante_email: s.solicitante?.email ?? null,
       job_codigo: s.job?.codigo ?? null,
-      job_nome: s.job?.nome ?? null,
+      // Fallback pro texto preservado das solicitações legadas do RH antigo
+      // (job_id null, mas `nome_job` traz o nome como texto).
+      job_nome: s.job?.nome ?? s.nome_job ?? null,
       tipo_solicitacao,
     };
   });
