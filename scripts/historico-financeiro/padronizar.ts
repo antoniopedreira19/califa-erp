@@ -143,8 +143,30 @@ type Job = {
   receita: string;
   custo: string;
   imposto: string;
+  /** A divisão do job entre as regionais ("NE:0.25;SP:0.75"), só as partes que não são zero. */
+  rateio: string;
+  /** A alíquota teórica do job (a coluna "Imp Real %"), em fração. */
+  impostoTeorico: string;
   outrasAbas: string[];
 };
+
+/**
+ * As colunas da divisão do job entre as regionais: o grupo "RATEIO %" da linha
+ * de títulos (do título até o próximo) com o código de cada regional na linha
+ * do cabeçalho, e a coluna "Imp Real %". As abas sem o grupo não dividem.
+ */
+function colunasDoRateio(titulos: readonly string[], cabecalho: readonly string[]) {
+  const inicio = titulos.findIndex((v, i) => i > 0 && normalizarTexto(v) === "RATEIO");
+  const regionais: [number, string][] = [];
+  if (inicio > 0) {
+    for (let i = inicio; i < cabecalho.length; i++) {
+      if (i > inicio && (titulos[i] ?? "").trim()) break;
+      const codigo = normalizarTexto(cabecalho[i] ?? "");
+      if (codigo) regionais.push([i, codigo]);
+    }
+  }
+  return { regionais, impostoTeorico: cabecalho.findIndex((v, i) => i > 0 && normalizarTexto(v) === "IMP REAL") };
+}
 
 function lerJobs(abasDeResultado: { nome: string; papel: AbaDeResultado; linhas: Linhas }[]): Job[] {
   const porId = new Map<string, Job>();
@@ -153,6 +175,7 @@ function lerJobs(abasDeResultado: { nome: string; papel: AbaDeResultado; linhas:
     if (iCab < 0) continue;
     const colunas = colunasPorNome(linhas[iCab], SINONIMOS_DO_RESULTADO);
     if (!colunas.has("data_inicio") && colunas.has("data")) colunas.set("data_inicio", colunas.get("data")!);
+    const doRateio = colunasDoRateio(linhas[iCab - 1] ?? [], linhas[iCab]);
     const daPrimeiraCarga = papel.ano >= 2023 && papel.ano <= 2026;
     for (const l of linhas.slice(iCab + 1)) {
       const nome = (l[1] ?? "").trim();
@@ -162,6 +185,8 @@ function lerJobs(abasDeResultado: { nome: string; papel: AbaDeResultado; linhas:
       if (!linhaEhJob(nome, c("cliente"), c("trimestre"))) continue;
       // As abas da CMH e da Hitlab guardam o código do sistema antigo na coluna STATUS.
       const codigoAntigo = ehCodigoAntigo(c("codigo_antigo")) ? c("codigo_antigo") : ehCodigoAntigo(c("status")) ? c("status") : "";
+      const partes = doRateio.regionais.map(([i, codigo]) => [codigo, lerNumero(l[i] ?? "")] as const);
+      const impostoTeorico = doRateio.impostoTeorico > 0 ? (l[doRateio.impostoTeorico] ?? "").trim() : "";
       const id = `${papel.coluna}:${normalizarTexto(nome)}`;
       const job: Job = {
         id,
@@ -185,6 +210,8 @@ function lerJobs(abasDeResultado: { nome: string; papel: AbaDeResultado; linhas:
         receita: c("receita"),
         custo: c("custo"),
         imposto: c("imposto"),
+        rateio: partes.filter(([, p]) => p).map(([codigo, p]) => `${codigo}:${p}`).join(";"),
+        impostoTeorico: lerNumero(impostoTeorico) === null ? "" : impostoTeorico,
         outrasAbas: [],
       };
       const ja = porId.get(id);
@@ -201,6 +228,12 @@ function lerJobs(abasDeResultado: { nome: string; papel: AbaDeResultado; linhas:
       if (!daPrimeiraCarga) continue;
       if (lerNumero(job.servico) !== null && job.servico !== "")
         pendencia({ tipo: "Colunas trocadas no resultado", aba, linha: l[0], encontrado: job.servico, detalhe: `Serviço com número no job "${nome}"` });
+      // O sistema divide pela soma das partes; a pendência mostra onde a planilha não fecha 100%.
+      const soma = partes.reduce((s, [, p]) => s + (p ?? 0), 0);
+      if (partes.some(([, p]) => p === null) || (soma !== 0 && Math.abs(soma - 1) > 1e-6))
+        pendencia({ tipo: "Rateio do job não soma 100%", aba, linha: l[0], encontrado: job.rateio, detalhe: `Job "${nome}"` });
+      if (impostoTeorico && lerNumero(impostoTeorico) === null)
+        pendencia({ tipo: "Imp Real % não numérico", aba, linha: l[0], encontrado: impostoTeorico, detalhe: `Job "${nome}"` });
     }
   }
   return [...porId.values()];
@@ -684,6 +717,7 @@ async function main() {
       "id", "nome", "empresa", "aba_da_planilha", "aba", "ano", "linha", "trimestre", "projeto", "cliente", "marca", "servico", "gp", "data_inicio",
       "regional_planilha", "marcador", "status", "codigo_antigo", "job_sistema", "cliente_sistema", "marca_sistema", "servico_sistema", "regional",
       "regional_por", "fora_do_resultado", "outras_abas", "planilha_receita", "planilha_custo", "planilha_imposto",
+      "rateio_regional", "imposto_teorico_percentual",
     ],
     jobs.map((j) => {
       const pc = proporCliente(j.cliente, retrato.clientes);
@@ -697,6 +731,7 @@ async function main() {
         j.id, j.nome, j.empresa, j.empresaDaAba, j.aba, j.ano, j.linha, j.trimestre, j.projeto, j.cliente, j.marca, j.servico, j.gp, j.dataInicio,
         j.regional, normalizarTexto(j.regional) === "COPA" ? "Copa" : "", j.status, j.codigoAntigo, jobsDoSistema.get(normalizarTexto(j.nome)) ?? "",
         cliente, marca, servico, regional, por, foraDoResultado(j), j.outrasAbas.join(" "), j.receita, j.custo, j.imposto,
+        j.rateio, j.impostoTeorico,
       ];
     }),
   );

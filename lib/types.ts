@@ -3952,6 +3952,10 @@ export interface HistoricoJob {
   /** O motivo de ficar fora dos relatórios de resultado ("Copa sem lançamento"). */
   fora_do_resultado: string | null;
   outras_abas: string | null;
+  /** A parte de cada regional no job, pelo código da planilha ({ NE: 0.25, SP: 0.75 }); nulo quando a planilha não divide. */
+  rateio_regional: Record<string, number> | null;
+  /** A alíquota teórica do job ("Imp Real %"), em fração. */
+  imposto_teorico_percentual: number | null;
   created_at: string;
 }
 

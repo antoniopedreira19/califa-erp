@@ -8181,3 +8181,28 @@ os arquivos da frente do Antonio.
 - **Conferência:** `scripts/historico-financeiro/conferir-regional.ts`. A
   California de 2023 a 2025 bate com as abas Gerencial, menos as exceções. Ver
   [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
+## ⚠️ Nota de 2026-10-26 (8) — o resultado por regional pela divisão de cada job (decisão 211, A4)
+
+- **O que mudou:** o relatório "Resultado por regional do histórico" segue a
+  DRE regional da planilha (as abas "DRE Califa Regional" e "DRE CMH
+  Regional" do Fechamento). O faturamento e o custo operacional se dividem
+  pelas partes de cada job (o grupo "RATEIO %" das abas Res. Jobs); o imposto
+  é o teórico (a alíquota "Imp Real %" do job); o benefício do ISS e do PERSE
+  (o teórico menos o imposto pago, Tipo CT) entra depois do lucro líquido,
+  rateado pelo faturamento de cada regional no trimestre. A última linha
+  continua fechando com a DRE do histórico.
+- **Banco:** `historico_jobs` ganhou `rateio_regional` (jsonb) e
+  `imposto_teorico_percentual`; a carga lê os dois do pacote, e
+  `historico_regional` devolve o REC e o CO divididos (`pelo_job`) com o
+  imposto teórico (`teorico`). Migrations `20261026100008` e `20261026100009`.
+  A 1ª carga foi refeita pela tela com o pacote novo.
+- **Pacote:** a tabela de jobs tem duas colunas a mais: o pacote antigo não
+  passa mais na tela (gere de novo pelo `empacotar.ts`).
+- **Aguarda o Tiago:** o job que a planilha não divide (a Copa no 2T 2026 e
+  seis jobs da CCH no 1T 2026) fica na regional do lançamento; a planilha o
+  deixa fora da DRE regional.
+- **Conferência:** `conferir-regional.ts --fechamento`. De 2023 a 2025, as duas
+  empresas batem com a DRE regional do Fechamento, menos os trimestres em que a
+  planilha faz o benefício job a job e a CCH de 2023. Ver
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).

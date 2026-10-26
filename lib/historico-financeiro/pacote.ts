@@ -30,10 +30,12 @@ export const NOME_DA_TABELA: Record<TabelaDoPacote, string> = {
 };
 
 type TipoDaColuna = "texto" | "numero" | "inteiro" | "data" | "booleano";
-export type ColunaDoPacote = { nome: string; tipo: TipoDaColuna; obrigatoria?: true; max?: number };
+export type ColunaDoPacote = { nome: string; tipo: TipoDaColuna; obrigatoria?: true; max?: number; padrao?: RegExp };
 
 const t = (nome: string, max = 300): ColunaDoPacote => ({ nome, tipo: "texto", max });
 const T = (nome: string, max = 300): ColunaDoPacote => ({ nome, tipo: "texto", max, obrigatoria: true });
+/** A divisão do job entre as regionais: "NE:0.25;SP:0.75", o código da planilha e a parte. */
+const PARTES_DO_JOB = /^[A-Z0-9]+( [A-Z0-9]+)*:-?\d+(\.\d+)?([eE][-+]?\d+)?(;[A-Z0-9]+( [A-Z0-9]+)*:-?\d+(\.\d+)?([eE][-+]?\d+)?)*$/;
 const n = (nome: string): ColunaDoPacote => ({ nome, tipo: "numero" });
 const N = (nome: string): ColunaDoPacote => ({ nome, tipo: "numero", obrigatoria: true });
 const i = (nome: string): ColunaDoPacote => ({ nome, tipo: "inteiro" });
@@ -66,6 +68,7 @@ export const COLUNAS_DO_PACOTE: Record<TabelaDoPacote, readonly ColunaDoPacote[]
     t("servico", 120), t("servico_planilha", 120), t("gp", 120), d("data_inicio"), t("regional", 60), B("regional_todas"),
     t("regional_planilha", 60), t("regional_por", 40), t("marcador", 40), t("status_planilha", 120),
     t("codigo_antigo", 60), t("job_codigo", 40), t("fora_do_resultado", 120), t("outras_abas", 500),
+    { ...t("rateio_regional", 200), padrao: PARTES_DO_JOB }, n("imposto_teorico_percentual"),
   ],
   rateio: [I("ano"), i("trimestre"), T("empresa", 120), t("grupo", 40), T("regional", 60), N("percentual"), T("origem", 200)],
   saldos: [T("conta", 120), D("mes"), n("saldo_planilha"), n("movimento"), B("abertura")],
@@ -86,7 +89,7 @@ const DATA = /^\d{4}-\d{2}-\d{2}$/;
 
 function esquemaDaColuna(c: ColunaDoPacote): z.ZodTypeAny {
   let s: z.ZodTypeAny;
-  if (c.tipo === "texto") s = z.string().max(c.max ?? 300);
+  if (c.tipo === "texto") s = c.padrao ? z.string().max(c.max ?? 300).regex(c.padrao) : z.string().max(c.max ?? 300);
   else if (c.tipo === "numero") s = z.number().finite();
   else if (c.tipo === "inteiro") s = z.number().int();
   else if (c.tipo === "data") s = z.string().regex(DATA);

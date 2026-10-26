@@ -14,6 +14,8 @@ import { RateioDaEmpresa, TabelaRegional } from "./tabela-regional";
 
 export const dynamic = "force-dynamic";
 
+const reais = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+
 /** As empresas com rateio por regional, com o endereço de cada uma. */
 const EMPRESAS: readonly { slug: string; empresa: EmpresaDoRegional }[] = [
   { slug: "california", empresa: "Agência California" },
@@ -62,7 +64,7 @@ export default async function RegionalDoHistoricoPage({ searchParams }: Props) {
       <PageHeader
         eyebrow="RELATÓRIOS"
         title={titulo}
-        description="As linhas das abas Gerencial da planilha por regional, refeitas dos lançamentos do histórico, com o TD rateado pelo percentual do ano. Só leitura."
+        description="A DRE regional da planilha refeita dos lançamentos do histórico: o faturamento e o custo pela divisão de cada job, o imposto teórico com o benefício do ISS e do PERSE, e o TD pelo percentual do ano. Só leitura."
         icon={MapPinned}
       />
 
@@ -143,9 +145,18 @@ function ConteudoDoPeriodo({
       <TabelaRegional resultado={resultado} />
       <div className="space-y-1 text-xs text-muted-foreground">
         <p>
-          Cada lançamento entra na regional dele; o TD, pelo percentual do ano da planilha; o que não tem regional fica em
-          &quot;Sem regional&quot;. A coluna Total é a DRE do histórico. Não entram as previsões.
+          O faturamento e o custo operacional se dividem pelas partes de cada job nas abas Res. Jobs. O imposto é o teórico,
+          pela alíquota do job; o benefício do ISS e do PERSE (o teórico menos o imposto pago) entra depois do lucro, rateado
+          pelo faturamento de cada regional no trimestre. Os demais lançamentos entram na regional deles; o TD, pelo percentual
+          do ano da planilha; o que não tem regional fica em &quot;Sem regional&quot;. A coluna Total fecha com a DRE do
+          histórico na última linha. Não entram as previsões.
         </p>
+        {resultado.faturamentoSemDivisao !== 0 && (
+          <p>
+            {reais(resultado.faturamentoSemDivisao)} do faturamento não tem divisão de job na planilha (lançamento sem job, ou
+            job que as abas Res. Jobs não dividem) e ficou na regional do lançamento.
+          </p>
+        )}
         {depoisDoHistorico && <p>O período termina depois de {fim}: só o que a planilha lançou até lá.</p>}
         {String(ano) === cobertura.de.slice(0, 4) && (
           <p>

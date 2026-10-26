@@ -1,8 +1,8 @@
 /**
  * Testes do resultado por regional do histórico (decisão 211, A4): a regional
- * de cada lançamento, o TD pelo percentual do ano, o que fica sem regional, os
- * grupos e totais, e o arredondamento que não perde o total. Os valores são
- * fictícios.
+ * de cada lançamento, a divisão do job, o imposto teórico e o benefício, o TD
+ * pelo percentual do ano, o que fica sem regional, os grupos e totais, e o
+ * arredondamento que não perde o total. Os valores são fictícios.
  *
  * Rode com:  node --import tsx --test lib/historico-financeiro/regional.test.ts
  */
@@ -12,6 +12,7 @@ import { montarDre } from "./dre";
 import {
   arredondarComTotal,
   montarRegional,
+  partesDoJob,
   type AgregadoRegional,
   type AgregadoRegionalJobs,
   type PercentualDoRateio,
@@ -25,7 +26,12 @@ const g = (
   credito: number,
   debito: number,
   extra: Partial<AgregadoRegional> = {},
-): AgregadoRegional => ({ sigla: "", grupo, trimestre, aba: "Conta Exemplo", regional, todas: false, credito, debito, ...extra });
+): AgregadoRegional => ({
+  sigla: "", grupo, trimestre, aba: "Conta Exemplo", regional, todas: false, peloJob: false, credito, debito, teorico: 0, ...extra,
+});
+/** Uma parte do job: o faturamento ou o custo já dividido, com o imposto teórico no faturamento. */
+const job = (grupo: string, trimestre: number, regional: string, credito: number, debito: number, teorico = 0, extra: Partial<AgregadoRegional> = {}) =>
+  g(grupo, trimestre, regional, credito, debito, { peloJob: true, teorico, ...extra });
 const td = (grupo: string, trimestre: number, credito: number, debito: number, extra: Partial<AgregadoRegional> = {}) =>
   g(grupo, trimestre, null, credito, debito, { todas: true, ...extra });
 const rateio = (ano: number, pcts: Record<string, number>, extra: Partial<PercentualDoRateio> = {}): PercentualDoRateio[] =>
@@ -69,11 +75,72 @@ test("as linhas que somam tudo fecham com a DRE do histórico", () => {
   const daDre = (chave: string) => dre.find((l) => l.chave === chave)!.ano;
   assert.equal(linha(r, "REC").total, daDre("REC"));
   assert.equal(linha(r, "CO").total, -daDre("CO"));
-  assert.equal(linha(r, "CT").total, -daDre("CT"));
+  // Sem alíquota, o imposto teórico é zero e o benefício devolve o imposto pago com sinal trocado.
+  assert.equal(linha(r, "IMP").total + linha(r, "BEN").total, -daDre("CT"));
   assert.equal(linha(r, "DA").total, -daDre("DA"));
   assert.equal(linha(r, "RF").total, daDre("RF"));
   // O lucro após investimento é o lucro líquido da DRE (sem perda nos dados).
   assert.equal(linha(r, "LLI").total, daDre("LL"));
+});
+
+test("o faturamento e o custo do job se dividem pelas partes dele, com o imposto teórico", () => {
+  const somas = [
+    job("REC", 1, "NE", 250, 0, 48.83), job("REC", 1, "SP", 750, 0, 146.48),
+    job("CO", 1, "NE", 0, 100), job("CO", 1, "SP", 0, 300),
+    // O job que a planilha não divide fica na regional do lançamento.
+    g("REC", 1, "RJ", 500, 0, { teorico: 97.65 }),
+  ];
+  const r = montarRegional("Agência California", 2025, null, somas, [], RATEIO_2025);
+  assert.deepEqual(linha(r, "REC").regionais, [250, 0, 750, 500]);
+  assert.deepEqual(linha(r, "IMP").regionais, [-48.83, 0, -146.48, -97.65]);
+  assert.deepEqual(linha(r, "CO").regionais, [-100, 0, -300, 0]);
+  assert.deepEqual(linha(r, "RO").regionais, [101.17, 0, 303.52, 402.35]);
+  assert.match(linha(r, "REC").origem, /divisão do job/);
+});
+
+test("o benefício é o teórico menos o pago, rateado pelo faturamento de cada trimestre", () => {
+  const somas = [
+    // 1T: NE fatura 300 e SP 100; teórico 80, pago 20: benefício 60 (45 e 15).
+    job("REC", 1, "NE", 300, 0, 60), job("REC", 1, "SP", 100, 0, 20), g("CT", 1, null, 0, 20),
+    // 2T: só SP fatura; teórico 40, pago 50: benefício −10, todo em SP.
+    job("REC", 2, "SP", 200, 0, 40), g("CT", 2, null, 0, 50),
+  ];
+  const r = montarRegional("Agência California", 2025, null, somas, [], RATEIO_2025);
+  assert.deepEqual(linha(r, "BEN").regionais, [45, 0, 5, 0]);
+  assert.equal(linha(r, "BEN").semRegional, 0);
+  assert.equal(linha(r, "IMP").total + linha(r, "BEN").total, -70);
+  // No trimestre, o rateio é o do faturamento dele.
+  assert.deepEqual(linha(montarRegional("Agência California", 2025, 2, somas, [], RATEIO_2025), "BEN").regionais, [0, 0, -10, 0]);
+  // O benefício entra depois do lucro líquido, com a receita financeira.
+  const chaves = r.linhas.map((l) => l.chave);
+  assert.ok(chaves.indexOf("LL") < chaves.indexOf("BEN") && chaves.indexOf("BEN") < chaves.indexOf("RF"));
+  assert.ok(chaves.indexOf("RAB") < chaves.indexOf("IMOB"));
+});
+
+test("sem faturamento no trimestre, o benefício fica sem regional", () => {
+  const r = montarRegional("Agência California", 2025, null, [g("CT", 3, null, 0, 30)], [], RATEIO_2025);
+  assert.equal(linha(r, "BEN").semRegional, -30);
+  assert.equal(linha(r, "LLI").total, -30);
+});
+
+test("a divisão do job da CCH vem pelo código da planilha, e o código de outra empresa fica sem regional", () => {
+  const somas = [
+    job("REC", 1, "AGE", 600, 0, 0, { sigla: "CMH" }),
+    job("REC", 1, "DOC", 300, 0, 0, { sigla: "CMH" }),
+    job("REC", 1, "SN", 100, 0, 0, { sigla: "CMH" }),
+  ];
+  const r = montarRegional("CCH", 2025, null, somas, [], []);
+  assert.deepEqual(r.colunas, ["Agency", "Doca"]);
+  assert.deepEqual(linha(r, "REC").regionais, [600, 300]);
+  assert.equal(linha(r, "REC").semRegional, 100);
+});
+
+test("as partes do job se dividem pela soma, como o banco divide", () => {
+  assert.deepEqual(partesDoJob("NE:0.25;SP:0.75"), [{ codigo: "NE", parte: 0.25 }, { codigo: "SP", parte: 0.75 }]);
+  assert.deepEqual(partesDoJob("NE:25;SP:75"), [{ codigo: "NE", parte: 0.25 }, { codigo: "SP", parte: 0.75 }]);
+  assert.deepEqual(partesDoJob(null), []);
+  assert.deepEqual(partesDoJob(""), []);
+  assert.deepEqual(partesDoJob("NE:0;SP:0"), []);
 });
 
 test("a linha própria de um trimestre e grupo vale no lugar da do ano", () => {

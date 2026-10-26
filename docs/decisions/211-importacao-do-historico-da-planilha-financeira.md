@@ -62,7 +62,9 @@ abaixo vieram das fórmulas dela, conferidas contra a aba DRE.
    quebradas (o custo da Santander Go Crazy procura o trimestre em vez do job
    na aba de 2026; há `#REF!` nas despesas das contas Go Crazy na aba da CMH; a
    aba da Ventura copia as fórmulas da Hitlab). A rentabilidade se recalcula a
-   partir dos lançamentos.
+   partir dos lançamentos. Dois dados de cada job se importam, porque não são
+   totais (A4, 26/10/2026): a divisão do job entre as regionais (o grupo
+   "RATEIO %") e a alíquota teórica ("Imp Real %").
 10. **A DRE da Doca soma pela coluna "DRE EXTRA"** ("DOC CO 1T 2023"), e não
     pelo Tipo. O padronizado guarda essa coluna e a "Ano Comp.".
 11. **Regional "TD"** é o job ou o lançamento de todas as regionais, em rateio.
@@ -198,7 +200,7 @@ funções da carga escrevem (migration `20261026100001_historico_financeiro.sql`
 | `historico_cargas` | Um registro por pacote: período, versão da planilha (dia e SHA-256), pacote (nome e SHA-256), o que ele declara (linhas e somas), o que entrou, quem carregou e a situação (carregando, ativa, substituída, desfeita, descartada). |
 | `historico_movimentos` | O extrato de cada conta, com sinal (o que entra é positivo), o crédito e o débito como a planilha mostra, a classe, o grupo da DRE, o plano de contas, a regional (TD = todas), o job do histórico e o texto da planilha, com a aba e a linha de origem. |
 | `historico_notas` | As notas emitidas e canceladas, com impostos, recebimento, o job do histórico e a classe (job, distribuição de lucro, sem job). |
-| `historico_jobs` | Os jobs das abas de resultado, com projeto, cliente, marca, serviço, regional, o marcador da Copa, o motivo de ficar fora do resultado e o job do sistema quando há. Cada carga traz todos; vale o da carga ativa mais recente. |
+| `historico_jobs` | Os jobs das abas de resultado, com projeto, cliente, marca, serviço, regional, o marcador da Copa, o motivo de ficar fora do resultado, o job do sistema quando há e, desde a A4, a divisão do job entre as regionais e a alíquota teórica. Cada carga traz todos; vale o da carga ativa mais recente. |
 | `historico_rateio_regional` | Os percentuais da tabela do rateio, por ano e empresa, com trimestre e grupo quando a planilha usa a linha só ali: a linha 147 da Gerencial 24 vale para o imobilizado e o PL do 4T 2024. |
 | `historico_saldos` | O saldo da planilha no fim de cada mês com movimento, por conta, e o de abertura (o mês antes do período). |
 
@@ -317,38 +319,105 @@ não existem: a tela não deixa carregar enquanto elas não forem criadas (A2).
   (`/relatorios/regional-historico`), cartão só para admin e financeiro.
   Escolhe-se a empresa (Agência California ou CCH, as que têm rateio), o ano e
   o período (o ano inteiro ou um trimestre).
-- **As linhas são as das abas Gerencial:** faturamento, imposto e custo
-  operacional (resultado operacional); gastos fixos da regional (custo fixo e
-  pessoal); gastos fixos gerais (o custo fixo e o pessoal do TD rateados, e o
-  marketing, a administrativa, a comercial e a trabalhista); juros e
-  empréstimos; a perda da FitDance (lucro líquido); imobilizado, participação
-  nos lucros e receita financeira (lucro após investimento). Na CCH, também o
-  investimento da Doca e a Makkna.
-- **Uma regra só (Tiago, 26/10/2026):** o lançamento com regional entra na
-  regional dele; o TD se rateia pelo percentual do ano da planilha (no 4T
-  2024, o imobilizado e o PL pela linha 147, que a tabela registra); o que não
-  tem regional fica em "Sem regional". A coluna Total é a DRE do histórico: o
-  lucro após investimento é o lucro líquido dela (mais a perda da FitDance, na
-  California). A regional que o cadastro do sistema não tem entra pelo código
-  da planilha ("URB", a Urbia da CMH); o código de outra empresa (o "NE" num
-  lançamento da CMH) fica sem regional.
-- **Onde as abas Gerencial fogem da regra, o relatório não as segue:** o
-  resultado dos jobs por regional só aparece no bloco do 4T e sai das abas Res.
-  Jobs, cujos totais o histórico não guarda (item 9): aqui o faturamento, o
-  imposto e o custo vêm da regional de cada lançamento. A despesa
-  administrativa e a comercial vêm ora pela regional, ora pelo total da DRE
-  vezes o percentual; a perda e os juros, pelo total da DRE vezes o
+- **As linhas são as da DRE regional da planilha** (as abas "DRE Califa
+  Regional" e "DRE CMH Regional" do Fechamento, que somam as Res. Jobs e as
+  Gerencial): faturamento, imposto sem o benefício e custo operacional
+  (resultado operacional); gastos fixos da regional (custo fixo e pessoal);
+  gastos fixos gerais (o custo fixo e o pessoal do TD rateados, e o marketing,
+  a administrativa, a comercial e a trabalhista); juros e empréstimos; a perda
+  da FitDance (lucro líquido); o benefício tributário do ISS e do PERSE e a
+  receita financeira (resultado após o benefício); imobilizado e participação
+  nos lucros (lucro após investimento). Na CCH, também o investimento da Doca
+  e a Makkna.
+- **Uma regra só (Tiago, 26/10/2026):**
+  - o faturamento e o custo operacional do job se dividem pelas partes dele
+    (abaixo); o imposto é o teórico, com a mesma divisão;
+  - o benefício do ISS e do PERSE se rateia, trimestre a trimestre, pelo
+    faturamento de cada regional;
+  - os demais lançamentos entram na regional deles; o TD se rateia pelo
+    percentual do ano da planilha (no 4T 2024, o imobilizado e o PL pela linha
+    147, que a tabela registra); o que não tem regional fica em "Sem regional".
+
+  A coluna Total fecha com a DRE do histórico na última linha: o lucro após
+  investimento é o lucro líquido dela (mais a perda da FitDance, na
+  California), e o resultado após o benefício é o resultado líquido
+  operacional. O resultado operacional e o lucro líquido das regionais usam o
+  imposto teórico, como a planilha. A regional que o cadastro do sistema não
+  tem entra pelo código da planilha ("URB", a Urbia da CMH; "AGE" e "DOC" na
+  divisão dos jobs); o código de outra empresa (o "NE" num lançamento da CMH)
+  fica sem regional.
+- **Onde as abas Gerencial fogem da regra, o relatório não as segue:** a
+  despesa administrativa e a comercial vêm ora pela regional, ora pelo total
+  da DRE vezes o percentual; a perda e os juros, pelo total da DRE vezes o
   percentual. Aqui, todos pela regional de cada lançamento e o TD pelo
   percentual: a perda de 2024 não tem regional e fica em "Sem regional".
-- **O imposto quase não tem regional:** em 2025, R$ 4,46 milhões do imposto da
-  California ficam em "Sem regional".
 - **O rateio de cada ano fica à vista:** o do ano em cima da tabela, com a
   célula da planilha de onde veio, e o de todos os anos ao abrir. Revisar fica
   para o futuro, sem perder o registro da planilha.
-- A leitura é a função `historico_regional` (migration
-  `20261026100005_historico_regional.sql`; a 100006 e a 100007 a reaplicaram
-  com a coluna Jobs lida uma vez e com o código da planilha), que confere admin
-  e financeiro uma vez e leva 0,13 s.
+- A leitura é a função `historico_regional` (migrations
+  `20261026100005_historico_regional.sql`, reaplicada pela 100006 e pela
+  100007, e `20261026100008_historico_regional_pelos_jobs.sql`, reaplicada
+  pela 100009). Ela confere admin e financeiro uma vez e leva 0,18 s num ano.
+
+#### A divisão pelos jobs e o benefício (A4, revisão de 26/10/2026)
+
+**Decidido (Tiago, 26/10/2026):** "divida pelos jobs como a planilha: traga
+para o histórico a divisão de cada job entre as regionais (receita, imposto
+teórico e custo) e ratei o benefício ISS + PERSE pelo percentual do
+faturamento."
+
+**Como a planilha faz** (as fórmulas do Fechamento, conferidas célula a
+célula):
+
+- Cada linha das abas Res. Jobs de 2021 em diante traz a parte de cada
+  regional no job: o grupo "RATEIO %", com o código da regional embaixo (NE,
+  NO, SP, RJ na California; SS, NO, SP, RJ na Go Crazy; AGE, DOC, URB, SN na
+  CMH, na Hitlab, na Ventura e na Infloo), e a alíquota teórica, "Imp Real %"
+  (19,53% na maior parte; 0%, 1,9%, 2,3%, 5% e outras em alguns jobs). A CMH
+  de 2021 e 2022 não tem o grupo.
+- O faturamento e o custo operacional de cada regional são os lançamentos do
+  job vezes a parte dela; o "Imposto SEM PERSE", o faturamento vezes a parte e
+  a alíquota.
+- O benefício do trimestre é o imposto teórico menos o imposto real dos jobs
+  (a coluna IMPOSTO das Res. Jobs, as notas do job, mais um ajuste digitado).
+  Somado ao teórico, ele dá o custo tributário da DRE em todos os trimestres
+  de 2023 a 2026, menos o 2T 2026 (abaixo). A planilha o divide pelo "% Por
+  Regional", o faturamento de cada regional no trimestre, na maior parte dos
+  trimestres; em alguns, job a job (a parte de cada regional no imposto real
+  e no teórico de cada job).
+- O job que a planilha não divide fica fora da DRE regional: as regionais
+  somam menos que a DRE.
+
+**O que o histórico faz:**
+
+- A padronização (E2) lê o grupo e a alíquota de cada job; o pacote os leva
+  como texto ("NE:0.25;SP:0.75", só as partes que não são zero) e a carga os
+  guarda em `historico_jobs.rateio_regional` (objeto) e
+  `historico_jobs.imposto_teorico_percentual` (fração). Das 3.586 linhas de
+  job, 3.274 têm divisão e 3.153 têm alíquota; nenhuma divisão foge de 100%.
+- A função divide pela soma das partes. O benefício do trimestre é o imposto
+  teórico menos o custo tributário pago (Tipo CT), rateado pelo faturamento de
+  cada regional no trimestre, inclusive "Sem regional". Sem faturamento no
+  trimestre, o benefício fica em "Sem regional". O ano é a soma dos
+  trimestres, como a planilha.
+- **O job que a planilha não divide fica na regional do lançamento,** como a
+  regra da Copa desta decisão (os lançamentos da Copa trazem a regional de
+  verdade). A tela diz quanto do faturamento ficou assim. De 2023 a 2025 não
+  há nenhum; na 1ª carga, só a Copa no 2T 2026 (custo de R$ 7.652.740,59, em
+  NE, SP e NO, e faturamento de R$ 643.942,46, em SP e NE) e seis jobs da CCH
+  no 1T 2026 (custo de R$ 1.172.449,99 e faturamento de R$ 502.981,70, a
+  maior parte na Doca e em "Sem regional"). A planilha os deixa fora da DRE
+  regional. **Aguarda a confirmação do Tiago.**
+
+**Onde a planilha não segue a regra (documentado, não se reproduz):**
+
+| Onde | O que a planilha faz |
+|---|---|
+| California, 2T 2024, 2T a 4T 2025 e 4T 2026 | O benefício job a job, e não pelo faturamento (o total é o mesmo) |
+| California, 2T 2026 | O benefício soma o de todos os jobs do trimestre, inclusive os da Copa, que ficam fora das regionais: R$ 1,68 milhão a mais que o imposto teórico das regionais menos o custo tributário da DRE |
+| CCH, 1T e 2T 2023 | Faturamento, imposto, custo e benefício todos na Agency, sem olhar a divisão dos jobs |
+| CCH, 3T 2023 | O benefício job a job |
+| CCH, 4T 2023 | O custo tributário que a DRE da planilha lança no crédito (R$ 58.426,48, uma das quatro células da E3) e dois jobs da Doca sem o imposto teórico (R$ 484,35) |
 
 ## O pipeline (E1, E2 e E3)
 
@@ -564,7 +633,39 @@ imobilizado e o PL) com as células das abas Gerencial.
   devolve nulo para um produtor. No celular, a tabela rola dentro da caixa.
   Typecheck, lint, build e os 63 testes da pasta limpos.
 
+## Conferido em 26/10/2026 (A4, resultado por regional pelos jobs)
+
+`scripts/historico-financeiro/conferir-regional.ts --fechamento` compara, com
+o padronizado e as previsões (a mesma base da planilha), o faturamento, o
+imposto teórico, o custo operacional e o benefício de cada regional e
+trimestre com as abas "DRE Califa Regional" e "DRE CMH Regional" do
+Fechamento. A soma dos movimentos repete a da função do banco.
+
+- **California, 2023 a 2025:** 153 células batem e 54 diferem em centavos;
+  as 17 restantes são as do benefício job a job (2T 2024, 2T a 4T 2025).
+- **CCH, 2024 e 2025:** 68 batem e 12 em centavos. Em 2023, 18 batem e uma
+  em centavos; as 21 restantes são as da tabela acima.
+- **2026:** a Copa e os seis jobs da CCH na regional do lançamento, o custo
+  tributário do 1T que a DRE da planilha conta R$ 10.250,24 a menos, e o que
+  o Fechamento traz depois da exportação de 25/10.
+- **A carga:** refeita pela tela com o pacote novo (56.713 movimentos, 3.222
+  notas, 3.586 jobs, conferidos com o pacote; a carga anterior ficou
+  substituída). A tela da California de 2025 e a da CCH de 2024 batem até o
+  centavo com o cálculo do script, linha a linha; o lucro após investimento é
+  o lucro líquido da DRE do histórico (R$ 9.547.388,95 e −R$ 1.920.945,91), e
+  o imposto teórico mais o benefício é o custo tributário. O resultado do 2T
+  2026 tem só o que entrou no caixa até 30/06: R$ 35,5 milhões do faturamento
+  desse trimestre vêm na carga do 3T (A5).
+- A função leva 0,18 s no ano (0,13 s antes da divisão). A primeira versão,
+  que abria a divisão uma vez por movimento, levava 0,36 s: a 100009 soma os
+  movimentos por job antes, com a mesma resposta nas 1.774 linhas de 2023 a
+  2026.
+- Typecheck, lint e os 68 testes da pasta limpos.
+
 ## O que fica para depois
+- A4: os jobs que a planilha não divide (a Copa no 2T 2026 e seis jobs da CCH
+  no 1T 2026) ficam na regional do lançamento; a planilha os deixa fora da DRE
+  regional. Aguarda a confirmação do Tiago.
 - A4: a rentabilidade e o faturamento dos jobs do histórico.
 - Revisar o rateio de um ano, mantendo o registro da planilha dos anos
   fechados. O RH tem a própria tabela de rateio

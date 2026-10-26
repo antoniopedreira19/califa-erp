@@ -19,7 +19,8 @@ tmp/historico-planilha/
     bruto/                 E1: um CSV por aba + manifesto.json
     padronizado/           E2: movimentos, previsões, notas, jobs, pendências, propostas/
     validacao/             E3: relatorios.csv, saldos.csv, faturamento.csv, resumo.json;
-                           A4: dre.csv e regional.csv (e as variantes do padronizado)
+                           A4: dre.csv, regional.csv e regional-fechamento.csv
+                           (e as variantes do padronizado)
     revisao-e2.xlsx        pendências e de-para para revisar
     cargas/                A1: os pacotes de carga (.json) para a tela
 ```
@@ -37,7 +38,8 @@ npx tsx scripts/historico-financeiro/validar.ts "$V"
 npx tsx scripts/historico-financeiro/revisao.ts "$V"
 npx tsx scripts/historico-financeiro/empacotar.ts "$V" --carga "1ª carga"
 npx tsx scripts/historico-financeiro/conferir-dre.ts "$V"
-npx tsx scripts/historico-financeiro/conferir-regional.ts "$V" --padronizado --com-previsoes
+npx tsx scripts/historico-financeiro/conferir-regional.ts "$V" --padronizado --com-previsoes \
+  --fechamento "$T/fechamento-2026-10-26/origem.xlsx"
 ```
 
 Uma carga pequena, para testar a tela, sai com `--nome`, o período e as
@@ -65,7 +67,10 @@ marcas, plano de contas, serviços, regionais, contas e os jobs abertos. O
     originais vão junto, com sinal, e as colunas "DRE EXTRA" e "Ano Comp.";
   - `previsoes.csv` — linhas com data depois da exportação;
   - `notas.csv` (com a classe: job, distribuição de lucro ou sem job) e
-    `jobs.csv` (com `fora_do_resultado`: a Copa sem lançamento);
+    `jobs.csv` (com `fora_do_resultado`: a Copa sem lançamento; e, desde a
+    A4, a divisão do job entre as regionais, `rateio_regional`, do grupo
+    "RATEIO %", e a alíquota teórica, `imposto_teorico_percentual`, da coluna
+    "Imp Real %");
   - `pendencias.csv` — o que não fecha na primeira carga;
   - `propostas/` — de-para proposto, com a forma como foi achado (igual,
     parecido, ambíguo, sem par);
@@ -108,8 +113,12 @@ marcas, plano de contas, serviços, regionais, contas e os jobs abertos. O
   compara, trimestre a trimestre e regional a regional, com as células das
   abas Gerencial em que a planilha segue a mesma fonte (o custo fixo e o
   pessoal da regional e do TD, o imobilizado e o PL); marca à parte os
-  trimestres em que a planilha divide o TD por 4. As opções de fonte das duas
-  conferências estão em `movimentos-para-conferir.ts`.
+  trimestres em que a planilha divide o TD por 4. Com `--fechamento`, compara
+  também o faturamento, o imposto teórico, o custo operacional e o benefício
+  de cada regional com a DRE regional do Fechamento (as abas "DRE Califa
+  Regional" e "DRE CMH Regional"); a soma divide o REC e o CO pelos jobs como
+  a função do banco. As opções de fonte das duas conferências estão em
+  `movimentos-para-conferir.ts`, que traz também os jobs da mesma fonte.
 
 ## Testes
 

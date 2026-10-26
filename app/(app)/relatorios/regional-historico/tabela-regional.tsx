@@ -3,11 +3,11 @@ import type { PercentualDoRateio, ResultadoPorRegional } from "@/lib/historico-f
 import { Valor } from "../_historico/filtros";
 
 /**
- * O resultado por regional de uma empresa num período: as linhas das abas
- * Gerencial × as regionais, o que ficou sem regional e o total, que é o da
- * DRE do histórico. Os grupos (gastos fixos da regional e gerais) vêm com o
- * total em cima e as linhas deles recuadas; a dica da linha diz de onde ela
- * sai.
+ * O resultado por regional de uma empresa num período: as linhas da DRE
+ * regional da planilha × as regionais, o que ficou sem regional e o total,
+ * que fecha com a DRE do histórico na última linha. Os grupos (gastos fixos
+ * da regional e gerais) vêm com o total em cima e as linhas deles recuadas; a
+ * dica da linha diz de onde ela sai.
  */
 export function TabelaRegional({ resultado }: { resultado: ResultadoPorRegional }) {
   const { colunas, temSemRegional, linhas } = resultado;

@@ -131,6 +131,8 @@ export function linhaDeJob(j: LinhaLida): ValorDoPacote[] {
     job_codigo: texto(j.job_sistema),
     fora_do_resultado: texto(j.fora_do_resultado),
     outras_abas: texto(j.outras_abas),
+    rateio_regional: texto(j.rateio_regional),
+    imposto_teorico_percentual: numero(j.imposto_teorico_percentual),
   });
 }
 

@@ -44,7 +44,7 @@ export default async function RelatoriosPage() {
               href="/relatorios/regional-historico"
               icon={MapPinned}
               title="Resultado por regional do histórico"
-              description="As linhas das abas Gerencial por regional, com o TD rateado pelo percentual de cada ano."
+              description="A DRE regional da planilha, com o faturamento e o custo divididos pelos jobs e o TD pelo percentual de cada ano."
             />
           </>
         )}

@@ -1,8 +1,10 @@
 /**
  * As somas do resultado por regional do histórico num ano de competência
  * (decisão 211, A4): a função `historico_regional` soma os movimentos das
- * cargas ativas por Tipo e regional, e devolve a tabela de rateio de todos os
- * anos. A regra de cada linha fica em `lib/historico-financeiro/regional.ts`.
+ * cargas ativas por Tipo e regional — o faturamento e o custo operacional
+ * divididos pelas partes do job, com o imposto teórico —, e devolve a tabela
+ * de rateio de todos os anos. A regra de cada linha fica em
+ * `lib/historico-financeiro/regional.ts`.
  */
 import type { createClient } from "@/lib/supabase/server";
 import {
@@ -27,7 +29,12 @@ type Numero = number | string;
 type Resposta = {
   cobertura: { de: string; ate: string } | null;
   rateio?: (Omit<PercentualDoRateio, "percentual"> & { percentual: Numero })[];
-  grupos?: (Omit<AgregadoRegional, "credito" | "debito"> & { credito: Numero; debito: Numero })[];
+  grupos?: (Omit<AgregadoRegional, "peloJob" | "credito" | "debito" | "teorico"> & {
+    pelo_job: boolean;
+    credito: Numero;
+    debito: Numero;
+    teorico: Numero;
+  })[];
   jobs?: (Omit<AgregadoRegionalJobs, "credito" | "debito"> & { credito: Numero; debito: Numero })[];
 };
 
@@ -47,7 +54,18 @@ export async function carregarSomasDoRegional(supabase: Supabase, tenantId: stri
   return {
     cobertura: r.cobertura,
     rateio: (r.rateio ?? []).map((p) => ({ ...p, percentual: Number(p.percentual) })),
-    porGrupo: (r.grupos ?? []).map((g) => ({ ...g, credito: Number(g.credito), debito: Number(g.debito) })),
+    porGrupo: (r.grupos ?? []).map((g) => ({
+      sigla: g.sigla,
+      grupo: g.grupo,
+      trimestre: g.trimestre,
+      aba: g.aba,
+      regional: g.regional,
+      todas: g.todas,
+      peloJob: g.pelo_job,
+      credito: Number(g.credito),
+      debito: Number(g.debito),
+      teorico: Number(g.teorico),
+    })),
     porJobs: (r.jobs ?? []).map((j) => ({ ...j, credito: Number(j.credito), debito: Number(j.debito) })),
   };
 }
