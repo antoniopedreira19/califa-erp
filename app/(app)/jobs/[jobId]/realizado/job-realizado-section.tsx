@@ -394,6 +394,31 @@ const SEM_LINHAS: string[] = [];
 
 const ERRO_DO_HISTORICO = "Não foi possível carregar o histórico da planilha. Tente de novo.";
 
+/** O que a planilha de hoje é, num texto: muda quando uma errata, uma
+ *  alteração do financeiro ou um save mexem nela, e só aí. */
+function assinaturaDaPlanilha(itens: ItemPlanilhaJob[], grupos: VersaoOrcamentoGrupo[]): string {
+  return JSON.stringify([
+    itens.map((i) => [
+      i.id,
+      i.grupo_id,
+      i.ordem,
+      i.item,
+      i.tipo_custo,
+      i.linha_vermelha,
+      i.valor_unitario_orcado,
+      i.quantidade_orcada,
+      i.dias_meses_orcado,
+      i.valor_unitario_planejado,
+      i.quantidade_planejada,
+      i.dias_meses_planejado,
+      i.em_save,
+      i.save_consumido,
+      i.cancelada_em,
+    ]),
+    grupos.map((g) => [g.id, g.nome, g.ordem, g.mes_id]),
+  ]);
+}
+
 /**
  * A planilha do job com o histórico de versões (decisão 186, 17/10/2026).
  * Guarda a versão escolhida e, quando ela não é a atual, entrega à mesma
@@ -403,7 +428,7 @@ const ERRO_DO_HISTORICO = "Não foi possível carregar o histórico da planilha.
  * versões roda aqui (`montarHistorico`).
  */
 export function JobRealizadoSection({ comHistorico, ...props }: Props) {
-  const { job, versao, modeloPlanilha, itens, midia } = props;
+  const { job, versao, modeloPlanilha, itens, grupos, midia } = props;
   const [dados, setDados] = React.useState<DadosDoHistorico | null>(null);
   const [carregando, setCarregando] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
@@ -411,15 +436,19 @@ export function JobRealizadoSection({ comHistorico, ...props }: Props) {
   const [destacar, setDestacar] = React.useState(true);
   const pedido = React.useRef(0);
 
-  // A página recarregou (errata, alteração, save): o histórico lido ficou
-  // velho, e a tela volta para a planilha atual.
+  // A planilha mudou de verdade (errata, alteração, save): o histórico lido
+  // ficou velho, e a tela volta para a planilha atual. Pelo CONTEÚDO, e não
+  // pela referência: a troca de mês da régua no mensal (`?mes=`) recarrega
+  // a página e entrega uma lista nova com as mesmas linhas — e a versão
+  // escolhida tem de ficar (revisão da decisão 186, 26/10/2026).
+  const assinatura = React.useMemo(() => assinaturaDaPlanilha(itens, grupos), [itens, grupos]);
   React.useEffect(() => {
     pedido.current += 1;
     setDados(null);
     setErro(null);
     setCarregando(false);
     setChave("atual");
-  }, [itens]);
+  }, [assinatura]);
 
   const versoes = React.useMemo(() => (dados ? montarHistorico(dados) : null), [dados]);
   const internacional = React.useMemo(

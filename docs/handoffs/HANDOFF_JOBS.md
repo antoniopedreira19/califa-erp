@@ -6410,3 +6410,16 @@ Protótipo aprovado em 17/10. Regra completa na decisão 192.
   ativos, os 59 com PIX vão automáticos (eram 46); os 5 sem PIX digitam na
   PP. Ver
   [decisão 212](../decisions/212-tipo-do-pix-e-da-conta-no-cadastro-do-freela.md).
+
+## ⚠️ Nota de 2026-10-26 — Histórico: a troca de mês mantém a versão (revisão da decisão 186)
+
+- No mensal, clicar noutro mês da régua com uma versão antiga na tela voltava
+  à atual. O `JobRealizadoSection` descartava o histórico quando a lista de
+  linhas mudava de referência; a troca de mês (`?mes=`) entrega uma lista
+  nova com o mesmo conteúdo. Agora a comparação é pelo conteúdo
+  (`assinaturaDaPlanilha`): errata, alteração e save continuam descartando o
+  histórico; a troca de mês, não.
+- Conferido no TES-1002/26 (versão de 22/09 → novembro) e no TES-1025/26
+  (errata de teste do Item 4: histórico recarregado com 7 momentos).
+- Possibilidade futura registrada na 186: atalho "ver esta versão" nos cards
+  de Erratas e de Alterações do Financeiro.

@@ -1,7 +1,8 @@
 # 186 — O histórico de versões da Planilha Interna do job, na produção e no financeiro
 
 **Data:** 2026-10-17
-**Status:** aceita e implementada em 17/10/2026.
+**Status:** aceita e implementada em 17/10/2026. Revista em 26/10/2026: no
+mensal, a troca de mês mantém a versão escolhida (fim do arquivo).
 **Quem decidiu:** Tiago — pedido em 14/10/2026, protótipo aprovado em
 15/10/2026 ("Aprovado. Isso deverá ficar presente na visão do financeiro
 também"), depois da [175](175-errata-volta-a-abrir-o-planejado-e-valor-unico.md)
@@ -94,8 +95,8 @@ job de cada versão sai da mesma conta do cabeçalho (`calcularTotaisVersao`).
 - O **consumo de save** (linha paga por saldo de outro job) não se refaz: ele
   muda o faturamento, não o valor do job, e a versão antiga não mostra a
   coluna Save.
-- No **modelo mensal**, clicar num mês da régua recarrega a página e volta à
-  planilha atual (a régua navega pelo endereço).
+- ~~No **modelo mensal**, clicar num mês da régua recarrega a página e volta
+  à planilha atual.~~ Resolvido em 26/10/2026 (fim do arquivo).
 - A linha devolvida por uma "removida" sem cópia na versão aprovada entra no
   fim do agrupamento.
 
@@ -117,3 +118,36 @@ job de cada versão sai da mesma conta do cabeçalho (`calcularTotaisVersao`).
   momentos, com a régua e a errata de save); TES-1029/26 na Abertura de Job
   (envio e edição do planejado na fila).
 - `npm run test:historico-da-planilha` (11 testes), tsc e eslint limpos.
+
+## Revisão de 26/10/2026 — a troca de mês mantém a versão
+
+Pedido do Tiago ("Faça o recomendado, concordo"). No job mensal, escolher uma
+versão antiga e clicar noutro mês da régua voltava à planilha atual, e o
+histórico tinha de ser aberto de novo.
+
+**Por quê:** a régua troca de mês pelo endereço (`?mes=`); a página recarrega
+e entrega à planilha uma lista de linhas nova — com o mesmo conteúdo. O
+`JobRealizadoSection` descartava o histórico lido sempre que a lista mudava
+de referência, que é o sinal de "a planilha mudou" (errata, alteração, save).
+
+**Agora:** ele compara o CONTEÚDO (`assinaturaDaPlanilha`: id, agrupamento,
+ordem, nome, tipo, linha vermelha, orçado, planejado, save, consumo de save e
+cancelamento de cada linha; nome, ordem e mês de cada agrupamento). A troca
+de mês mantém a versão e o histórico carregado; uma errata, alteração ou save
+continua descartando-os. A versão não entrou no endereço: não precisou.
+
+**Conferido, logado:** TES-1002/26 na versão de 22/09/2026 (errata de save),
+clique em "Novembro" — a faixa da versão fica, o card vira "Totais de
+novembro", o realizado segue em branco e o "Histórico" mantém os 21
+momentos. Com o código anterior, o mesmo clique derrubava a versão (refeito
+para conferir). Depois, uma errata de teste no TES-1025/26 (planejado do
+Item 4 de R$ 8.000,00 para R$ 8.100,00): o histórico lido foi descartado e,
+reaberto, trouxe 7 momentos com a errata nova no topo.
+
+## Possibilidade futura (não pedida)
+
+- **Atalho nos cards de Erratas e de Alterações do Financeiro** (aba
+  Informações do Job): um ícone na linha da errata ou da alteração que abre a
+  Planilha Interna já naquela versão. O histórico já mostra as mesmas
+  versões; seria só o caminho mais curto. Registrado em 26/10/2026 a pedido
+  do Tiago ("Talvez possa ser feito no futuro").
