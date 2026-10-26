@@ -131,8 +131,8 @@ function FreelancerRow({
           prefetch={false}
           className="block"
         >
-          <p className="font-semibold text-foreground uppercase tracking-wide group-hover:text-california-red transition-colors leading-tight max-w-[200px] truncate" title={f.nome_completo || f.nome_social}>
-            {nomeCurto(f.nome_completo || f.nome_social)}
+          <p className="font-semibold text-foreground uppercase tracking-wide group-hover:text-california-red transition-colors leading-tight" title={f.nome_completo || f.nome_social}>
+            {f.nome_completo || f.nome_social}
           </p>
           {f.cpf ? (
             <p className="text-[10px] text-muted-foreground tabular-nums mt-0.5">
