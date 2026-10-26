@@ -18,7 +18,8 @@ tmp/historico-planilha/
     origem.xlsx            a planilha baixada do Google Sheets
     bruto/                 E1: um CSV por aba + manifesto.json
     padronizado/           E2: movimentos, previsões, notas, jobs, pendências, propostas/
-    validacao/             E3: relatorios.csv, saldos.csv, faturamento.csv, resumo.json
+    validacao/             E3: relatorios.csv, saldos.csv, faturamento.csv, resumo.json;
+                           A4: dre.csv (e dre-padronizado*.csv)
     revisao-e2.xlsx        pendências e de-para para revisar
     cargas/                A1: os pacotes de carga (.json) para a tela
 ```
@@ -35,6 +36,7 @@ npx tsx scripts/historico-financeiro/padronizar.ts "$V" "$T/sistema" "$T/depara"
 npx tsx scripts/historico-financeiro/validar.ts "$V"
 npx tsx scripts/historico-financeiro/revisao.ts "$V"
 npx tsx scripts/historico-financeiro/empacotar.ts "$V" --carga "1ª carga"
+npx tsx scripts/historico-financeiro/conferir-dre.ts "$V"
 ```
 
 Uma carga pequena, para testar a tela, sai com `--nome`, o período e as
@@ -92,9 +94,17 @@ marcas, plano de contas, serviços, regionais, contas e os jobs abertos. O
   financeiro). Ela lê o pacote no navegador, avisa as contas que faltam
   cadastrar e envia em partes; o banco liga os textos aos cadastros, confere
   período, linhas e somas, e substitui a carga ativa do mesmo período.
+- **DRE, `conferir-dre.ts`:** monta a DRE do histórico como a tela de
+  Relatórios monta (`lib/historico-financeiro/dre.ts`) e compara, linha a
+  linha e trimestre a trimestre, com o total das abas DRE da planilha. Por
+  padrão lê o pacote da 1ª carga, com cada linha em centavos como o banco
+  guarda; com `--padronizado` lê o padronizado inteiro (ou um período, com
+  `--de` e `--ate`), e com `--com-previsoes` soma também as previsões, como a
+  planilha. Quando uma linha difere, o terminal mostra de quais contas veio o
+  valor.
 
 ## Testes
 
 ```bash
-node --import tsx --test lib/historico-financeiro/extracao.test.ts lib/historico-financeiro/regras.test.ts lib/historico-financeiro/formulas.test.ts lib/historico-financeiro/pacote.test.ts
+node --import tsx --test lib/historico-financeiro/extracao.test.ts lib/historico-financeiro/regras.test.ts lib/historico-financeiro/formulas.test.ts lib/historico-financeiro/pacote.test.ts lib/historico-financeiro/dre.test.ts
 ```

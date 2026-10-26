@@ -6,9 +6,10 @@ e E3 (validação, com as DREs e as abas Gerencial) implementadas em
 25/10/2026. A Copa sem lançamento e o rateio do TD foram decididos no mesmo
 dia. A1 (as tabelas de histórico, com a do rateio, e a tela de carga) e A2
 (a primeira carga, de 01/01/2023 a 30/06/2026, com as contas Fundo Fixo
-California e BB Americas criadas antes) feitas e conferidas em 26/10/2026, e
-A3 (o histórico de cada conta no Extrato da Conciliação) no mesmo dia.
-Próxima entrega: A4 (os relatórios com o histórico).
+California e BB Americas criadas antes) feitas e conferidas em 26/10/2026,
+A3 (o histórico de cada conta no Extrato da Conciliação) e a primeira entrega
+da A4 (a DRE do histórico em Relatórios) no mesmo dia. Próxima entrega: o
+relatório por regional, com o rateio (A4).
 **Quem decidiu:** Tiago, no plano "Importação do histórico financeiro"
 (página privada de 25/10/2026), com as respostas D1, D2 e D3 dadas no mesmo
 dia: "Aprovo D1, D2 e D3 como você recomendou".
@@ -244,6 +245,46 @@ não existem: a tela não deixa carregar enquanto elas não forem criadas (A2).
   `20261026100002_historico_no_extrato.sql`), que confere admin e financeiro
   uma vez; pela RLS, a soma do saldo conferiria linha a linha.
 
+### A DRE do histórico em Relatórios (A4, 26/10/2026)
+
+- **Onde:** Relatórios › "DRE do histórico" (`/relatorios/dre-historico`), um
+  cartão como os de Rentabilidade e Faturamento de Jobs, só para admin e
+  financeiro (Tiago, 26/10/2026: os relatórios do histórico ficam no módulo de
+  Relatórios). Escolhe-se a empresa (Agência California, CCH, Hitlab ou
+  Ventura) e o ano, entre os que as cargas ativas cobrem (2023 a 2026); a
+  tabela traz as linhas da DRE da planilha, os quatro trimestres e o ano.
+- **De onde sai:** a função `historico_dre` (migrations
+  `20261026100003_historico_dre.sql` e `20261026100004`, que a reaplicou sem
+  expressão regular por linha) soma, num ano de competência, o crédito e o
+  débito da planilha por sigla do Tipo, grupo, trimestre e conta, e pela chave
+  de empréstimo da coluna Jobs ("CMH 1T 2025"). A regra de cada linha fica em
+  `lib/historico-financeiro/dre.ts`. A função confere admin e financeiro uma
+  vez e leva 0,2 s.
+- **Uma regra só por linha.** A planilha muda a fórmula de uma célula para
+  outra; aqui:
+  - **Sinal:** receita e receita financeira, crédito − débito; custo e
+    despesa, débito − crédito; juros, imobilizado, bonificação, distribuição,
+    Doca, Makkna e provisão, débito − crédito com sinal negativo; empréstimos
+    e mútuo separados como na planilha (o crédito no "(+)", o débito no
+    "(−)"); os empréstimos entre empresas e a perda da FitDance, crédito −
+    débito da chave na coluna Jobs.
+  - **Contas:** cada DRE soma todas as contas do histórico (a sigla do Tipo
+    diz de qual empresa é a linha), menos as contas próprias de outra empresa:
+    a Santander Hitlab só entra na DRE da Hitlab, como na planilha.
+  - **Ordem:** a da DRE da California desde 2024, com a bonificação depois do
+    imobilizado em todas. Na DRE da CMH, da Hitlab e da Ventura (e na da
+    California de 2023) ela vinha antes do resultado líquido operacional: só
+    esse subtotal muda; o lucro líquido e o reinvestimento, não.
+  - **Fora:** a linha "Empréstimo ao FitDance" da DRE CMH, que não tem fórmula
+    (N/A e #REF!; a chave "FIT" da coluna Jobs é a perda da California), e os
+    −40.000 digitados na fórmula da perda do 3T 2024.
+- **O que a DRE do histórico não tem:** as previsões (as linhas com data
+  depois da exportação), que a DRE da planilha soma; o que foi recebido ou
+  pago antes de 01/01/2023 com competência de 2023; e, enquanto o 3T não
+  entrar, o que foi recebido ou pago depois de 30/06/2026. A tela diz isso
+  embaixo da tabela e marca com * os trimestres que terminam depois do fim do
+  histórico.
+
 ## O pipeline (E1, E2 e E3)
 
 Código em `lib/historico-financeiro/` (regras puras, com teste) e
@@ -384,10 +425,65 @@ da planilha, só contagens.
 - As abas Títulos e Conciliação automática não leem o histórico e seguem como
   estavam.
 
+## Conferido em 26/10/2026 (A4, DRE do histórico)
+
+`scripts/historico-financeiro/conferir-dre.ts` monta a DRE como a tela monta
+e compara, linha a linha e trimestre a trimestre, com o total das abas DRE da
+planilha (saída em `validacao/dre*.csv`).
+
+- **Com tudo o que a planilha tem** (o padronizado inteiro, com as
+  previsões), 2023 a 2025 batem nas quatro empresas, menos quatro células,
+  todas explicadas pela planilha:
+  - California 2024, perda, 3T: −40.000 digitados na fórmula, sem
+    lançamento;
+  - California 2024, despesa administrativa, 4T: R$ 147,10 de uma linha do
+    Fundo Fixo que a padronização deixou de fora (E3);
+  - CMH 2023, custo tributário, 4T: a célula da Santander soma a coluna de
+    crédito em vez da de débito; o histórico conta os R$ 58.426,48;
+  - Hitlab 2024, receita financeira, 3T: a planilha só soma o crédito; o
+    histórico desconta R$ 389,63 de débito.
+  Nos subtotais, além disso, só a posição da bonificação (o resultado líquido
+  operacional da California em 2023, da CMH em 2023 e 2025 e da Hitlab em
+  2025) e o reinvestimento do ano da Hitlab, que a planilha deixa em zero.
+- **2026**, além do que falta carregar, difere pela regra em: crédito
+  negativo no custo tributário (R$ 10.250,24, que a planilha ignora);
+  créditos na distribuição de lucro (R$ 630.000 na Santander GoCrazy, que a
+  planilha ignora); a Santander GoCrazy, que a planilha deixa "n/a" no
+  empréstimo à Hitlab (na 1ª carga, R$ 1.140.710 de custo da Hitlab pago por
+  ela); o mútuo na BB GoCrazy, que a planilha não soma (±350.000, sem efeito
+  no reinvestimento); e o total do ano da CMH, que na planilha não soma os
+  trimestres. Ficam também os espaços sobrando e a linha excluída que a E3
+  já apontava.
+- **A tela hoje (1ª carga)** fica abaixo da planilha porque a carga vai de
+  01/01/2023 a 30/06/2026 e não tem as previsões. Receita e lucro líquido da
+  California, em milhões:
+
+  | Ano | Planilha | Tela (1ª carga) | Com o que está fora da janela | E com as previsões |
+  |---|---|---|---|---|
+  | 2023 | 40,81 · 6,21 | 40,16 · 5,62 | 40,73 · 6,18 | 40,81 · 6,21 |
+  | 2024 | 68,81 · 13,57 | 68,54 · 13,43 | 68,54 · 13,43 | 68,81 · 13,57 |
+  | 2025 | 89,31 · 12,20 | 86,06 · 9,55 | 87,18 · 10,39 | 89,31 · 12,20 |
+
+  Fora da janela, em 2023, é sobretudo receita recebida antes de 2023 (R$
+  0,57 milhão); em 2025, recebida no 3T de 2026 (R$ 1,06 milhão).
+- **A tela confere com o script:** todos os valores da California 2025, da
+  CCH 2023, da Hitlab 2024 e da Ventura 2026 iguais até o centavo (o script
+  arredonda cada linha em centavos, como o banco). A função devolve nulo para
+  quem não é admin nem financeiro (testada com um produtor). No celular, a
+  tabela rola dentro da própria caixa. Typecheck, lint, build e os 10 testes
+  de `dre.test.ts` limpos.
+
 ## O que fica para depois
+- **As previsões na DRE do histórico (aguarda o Tiago):** a DRE da planilha
+  soma as previsões; o histórico não as tem (D3: elas viram títulos na virada
+  do 4T). Em 2025, a receita da California fica R$ 2,12 milhões abaixo da
+  planilha e o lucro líquido, R$ 1,81 milhão.
 - A4: como o relatório por regional trata o que a planilha não rateia pelo
   percentual do ano (imobilizado, 4T 2022 e 2023, PL, crédito em linha de
   custo).
+- A5: o pacote do 3T não fecha na versão de 25/10/2026 — duas linhas da Conta
+  California BB têm a coluna "Ano Comp." com 26 caracteres, e o contrato do
+  pacote aceita 20.
 - As 20 pendências: as de data e de nome de job se corrigem na planilha e
   entram na versão do 3T.
 - A trilha do 4T no sistema: os jobs do 4T que só estão na planilha, as notas de

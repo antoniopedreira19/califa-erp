@@ -8123,3 +8123,24 @@ os arquivos da frente do Antonio.
 - O filtro é do Antonio: os ajustes foram aprovados pelo Tiago, combinados com
   ele, em 26/10/2026. Ver
   [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
+## ⚠️ Nota de 2026-10-26 (5) — a DRE do histórico em Relatórios (decisão 211, A4)
+
+- **Onde:** Relatórios › "DRE do histórico" (`/relatorios/dre-historico`),
+  cartão só para admin e financeiro. Empresa (Agência California, CCH, Hitlab,
+  Ventura) e ano (2023 a 2026) pela URL; linhas da DRE da planilha × quatro
+  trimestres e o ano.
+- **Regra:** `lib/historico-financeiro/dre.ts` (com testes). Uma regra só por
+  linha no lugar das fórmulas da planilha: receita crédito − débito; custo e
+  despesa débito − crédito; todas as contas, menos as próprias de outra
+  empresa (a Santander Hitlab só na DRE da Hitlab); bonificação depois do
+  imobilizado em todas.
+- **Banco:** função `historico_dre` (migrations `20261026100003` e
+  `20261026100004`), SECURITY DEFINER com a trava de admin e financeiro, 0,2 s.
+- **Não tem as previsões** que a DRE da planilha soma; em 2025 a receita da
+  California fica R$ 2,12 milhões abaixo da planilha por isso. A decisão de
+  trazê-las aguarda o Tiago.
+- **Conferência:** `scripts/historico-financeiro/conferir-dre.ts`. Com tudo o
+  que a planilha tem, 2023 a 2025 batem, menos quatro células explicadas pela
+  própria planilha. Ver
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
