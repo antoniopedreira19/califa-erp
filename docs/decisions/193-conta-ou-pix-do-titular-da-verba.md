@@ -98,6 +98,8 @@ cadastro de fornecedor feito no mesmo dia.
   digitado (PP-00568); recusada pelo financeiro, o "Editar e Reemitir PP"
   voltou com o PIX preenchido, foi trocado para conta, e a PP-00569 saiu
   com a conta no banco e no PDF. As duas foram canceladas no fim.
+- O "Tipo de Conta" do PDF sai por extenso ("Conta poupança") desde
+  26/10/2026; antes saía o valor gravado ("poupanca").
 
 ## Fora daqui
 

@@ -6423,3 +6423,15 @@ Protótipo aprovado em 17/10. Regra completa na decisão 192.
   (errata de teste do Item 4: histórico recarregado com 7 momentos).
 - Possibilidade futura registrada na 186: atalho "ver esta versão" nos cards
   de Erratas e de Alterações do Financeiro.
+
+## ⚠️ Nota de 2026-10-26 (2) — o tipo de conta no PDF da PP
+
+- O "Tipo de Conta" do PDF saía como o banco grava: "corrente", "poupanca"
+  (sem cedilha), "pagamento". Agora sai "Conta corrente", "Conta poupança" e
+  "Conta de pagamento" (`fmtTipoConta` em `lib/pdf/pedido-compra.ts`), no
+  bloco do titular da verba e no do fornecedor. Sem tipo, fica em branco —
+  o PDF não supõe "corrente".
+- Vale para os PDFs gerados daqui em diante; os já arquivados ficam como
+  foram emitidos.
+- Conferido montando o PDF com dados fictícios (titular com poupança,
+  fornecedor com conta de pagamento e sem tipo).

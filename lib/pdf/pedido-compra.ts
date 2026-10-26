@@ -91,6 +91,17 @@ function fmtFone(digits: string | null): string {
     return `(${d.slice(0, 2)}) ${d.slice(2, 7)}-${d.slice(7)}`;
   return digits;
 }
+// O tipo de conta como se lê, não como o banco grava ("poupanca"). Sem
+// tipo, fica em branco: o PDF não inventa "corrente".
+const ROTULO_TIPO_CONTA: Record<TipoContaBancariaFornecedor, string> = {
+  corrente: "Conta corrente",
+  poupanca: "Conta poupança",
+  pagamento: "Conta de pagamento",
+};
+function fmtTipoConta(tipo: string | null | undefined): string {
+  if (!tipo) return "";
+  return ROTULO_TIPO_CONTA[tipo as TipoContaBancariaFornecedor] ?? tipo;
+}
 
 // ===== Helpers de layout =====
 
@@ -751,7 +762,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
                     fontSize: 8,
                   },
                   { text: "Tipo de Conta:", bold: true, fontSize: 8 },
-                  { text: pagamentoDoTitular.conta ? (pagamentoDoTitular.tipo_conta ?? "") : "", fontSize: 8 },
+                  { text: pagamentoDoTitular.conta ? fmtTipoConta(pagamentoDoTitular.tipo_conta) : "", fontSize: 8 },
                 ],
                 [
                   { text: "Nome:", bold: true, fontSize: 8 },
@@ -788,7 +799,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
                 { text: "Conta:", bold: true, fontSize: 8 },
                 { text: contaCompleta, fontSize: 8 },
                 { text: "Tipo de Conta:", bold: true, fontSize: 8 },
-                { text: fornecedor?.tipo_conta ?? "", fontSize: 8 },
+                { text: fmtTipoConta(fornecedor?.tipo_conta), fontSize: 8 },
               ],
               [
                 { text: "Nome:", bold: true, fontSize: 8 },
