@@ -425,6 +425,7 @@ function StatusBadge({ status }: { status: FeriasLancamentoStatus }) {
       cls: "bg-amber-100 text-amber-900",
     },
     em_analise: { label: "Em análise", cls: "bg-sky-100 text-sky-800" },
+    aguardando_financeiro: { label: "Ag. financeiro", cls: "bg-purple-100 text-purple-800" },
     aprovado: { label: "Aprovado", cls: "bg-emerald-100 text-emerald-800" },
     reprovado: { label: "Reprovado", cls: "bg-red-100 text-red-800" },
     cancelado: { label: "Cancelado", cls: "bg-muted text-muted-foreground" },

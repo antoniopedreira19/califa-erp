@@ -4842,6 +4842,15 @@ export interface ColaboradorSalario {
   created_at: string;
 }
 
+/** Escopo ao qual a NF está vinculada.
+ *  Spec: docs/superpowers/specs/2026-10-26-quadro-nf-colaborador-design.md */
+export type NfAnexoEscopo =
+  | "folha_mensal"
+  | "ferias_usufruto"
+  | "ferias_abono"
+  | "decimo_terceiro_p1"
+  | "decimo_terceiro_p2";
+
 /** Metadado do anexo de NF por (colaborador, competência).
  *  Arquivo em Storage no bucket 'colaboradores-nf', path
  *  {tenant_id}/{colaborador_id}/{ano}-{mes}.pdf. Reenvio sobrescreve.
@@ -4859,6 +4868,8 @@ export interface ColaboradorNfAnexo {
   uploaded_at: string;
   created_at: string;
   updated_at: string;
+  escopo_tipo: NfAnexoEscopo;
+  escopo_id: string | null;
 }
 
 /** Janela de pagamento: salários (dia 03 do mês seguinte) ou
@@ -5098,10 +5109,11 @@ export type FeriasLancamentoTipo =
   | "abono_excepcional";
 
 /** Status do lançamento. Fluxo típico: pendente_aprovacao → em_analise (op.)
- *  → aprovado → concluido. Alternativas: reprovado, cancelado. */
+ *  → aguardando_financeiro → aprovado → concluido. Alternativas: reprovado, cancelado. */
 export type FeriasLancamentoStatus =
   | "pendente_aprovacao"
   | "em_analise"
+  | "aguardando_financeiro"
   | "aprovado"
   | "reprovado"
   | "cancelado"

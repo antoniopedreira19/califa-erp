@@ -92,6 +92,7 @@ function normalizarStatus(s: string | undefined): FeriasLancamentoStatus | "todo
   const valores: FeriasLancamentoStatus[] = [
     "pendente_aprovacao",
     "em_analise",
+    "aguardando_financeiro",
     "aprovado",
     "reprovado",
     "cancelado",
