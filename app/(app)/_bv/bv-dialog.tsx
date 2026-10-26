@@ -30,6 +30,7 @@ import { cn, formatCurrency, formatDocumento } from "@/lib/utils";
 import { calcularTotaisPlanejados } from "@/lib/calculos/versao-totais";
 import { bvLiquido, impostoDoBv } from "@/lib/calculos/bv-planilha";
 import {
+  NUMEROS_PLANILHA,
   ORCADO,
   PLANEJADO,
   REALIZADO,
@@ -1187,17 +1188,15 @@ function BlocoValores({
             </tr>
           </thead>
           <tbody>
-            {/* `celulaTotal` traz fundo E cor do bloco. As três primeiras
-                células devolvem a cor ao texto normal: só o Total é que
-                fala na cor do bloco, como na planilha. */}
+            {/* Mesma hierarquia da planilha: detalhes cinza e total grafite. */}
             <tr className={cn("h-9 font-mono", c.celulaTotal)}>
-              <td className="whitespace-nowrap px-3 text-foreground">
+              <td className={cn("whitespace-nowrap px-3", NUMEROS_PLANILHA.detalhe)}>
                 {formatCurrency(valorUnitario, moeda)}
               </td>
-              <td className="px-1.5 text-center text-foreground">
+              <td className={cn("px-1.5 text-center", NUMEROS_PLANILHA.detalhe)}>
                 {quantidade}
               </td>
-              <td className="px-1.5 text-center text-foreground">{diasMeses}</td>
+              <td className={cn("px-1.5 text-center", NUMEROS_PLANILHA.detalhe)}>{diasMeses}</td>
               <td className="whitespace-nowrap px-3 text-right font-bold">
                 {formatCurrency(total, moeda)}
               </td>

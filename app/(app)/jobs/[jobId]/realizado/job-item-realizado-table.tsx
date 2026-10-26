@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { Ban, ChevronDown, Lock, Plus, Trash2, Undo2, X } from "lucide-react";
+import { Ban, ChevronDown, ChevronRight, Lock, Plus, Trash2, Undo2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn, formatCurrency } from "@/lib/utils";
+import { acimaDoOrcado } from "@/lib/calculos/limites-orcamento";
 import { calcularRentabilidade } from "@/lib/calculos/versao-totais";
 import type {
   ChaveBvNoDialog,
@@ -19,7 +20,7 @@ import type {
 } from "@/lib/types";
 import type { TomadorDaNf } from "./anexos-da-pp";
 import { TEXTO_LINHA_ALTERADA_EM_REVISAO, textoAguardaAbertura } from "./pp-a-emitir-ui";
-import { nomeContraparteBRPP, situacaoDaVerba } from "@/lib/types";
+import { nomeContraparteBRPP, ppStatusLabel, situacaoDaVerba } from "@/lib/types";
 import { CalhaLinha } from "./calha-linha";
 import {
   NomeDoGrupoNaErrata,
@@ -80,6 +81,7 @@ import {
 import { RentabilidadeNoVao } from "@/app/(app)/_planilha/rentabilidade-inline";
 import { SubLinhaBv } from "@/app/(app)/_planilha/chave-bruto-liquido";
 import {
+  NUMEROS_PLANILHA,
   ORCADO,
   PLANEJADO,
   REALIZADO,
@@ -176,6 +178,7 @@ interface Props {
    *  ele o painel do item fecha o envio com o motivo, e o "Ver PP" só
    *  cancela a PP ainda não enviada. */
   papelEnviaPP: boolean;
+  podeGerarAcimaDoOrcado: boolean;
   /** Corrige a NF da PP em avaliação sem aprovar (`jobs.corrigir_nf_pp`,
    *  revisão da decisão 152): o botão no painel do item. */
   papelCorrigeNf: boolean;
@@ -193,6 +196,10 @@ interface Props {
    *  mudou: o envio das PPs delas fica fechado até a revisão da abertura
    *  ser salva (decisões 040 e 185). As outras enviam normalmente. */
   linhasComEnvioTravado?: string[];
+  /** "Exibir › PPs abertas em todas as linhas" (decisão 208): cada linha
+   *  com PP já abre com as sublinhas das PPs. A seta ao lado do nome abre
+   *  ou fecha um item só. */
+  ppsNasLinhas?: boolean;
   // PP rail — várias PPs por item desde 17/08/2026 (PPs parciais).
   ppsPorItemId: Map<string, PedidoCompraNaLista[]>;
   /** Decisão 153: as PPs a emitir de cada item, fora do realizado. */
@@ -244,6 +251,11 @@ interface Props {
    *  ou, na versão antiga do histórico (decisão 186), o vermelho da errata.
    *  Default: o do save. */
   destaque?: "save" | "historico";
+  /** As linhas que uma errata ainda não revisada mudou (decisão 185), com
+   *  a borda vermelha da revisão da abertura (revisão da 185, 19/10/2026).
+   *  Só a planilha do job no financeiro manda; as outras telas mandam `[]`.
+   *  A linha que também está em `destacarItens` fica com aquele destaque. */
+  linhasDaRevisao: string[];
   /** Histórico (decisão 186): o selo da linha que mudou na versão antiga,
    *  ao lado do nome do item. Ausente fora do histórico. */
   seloDaLinha?: (itemId: string) => React.ReactNode;
@@ -301,6 +313,8 @@ interface Props {
  *  chamada a `upsertItemRealizado`: não há mais o que gravar a partir
  *  desta tabela. Mexer no realizado agora é emitir ou cancelar PP. */
 const ALTURA_LINHA = "h-[34px]";
+/** A sublinha da PP (decisão 208) é mais baixa que a do item. */
+const ALTURA_SUBLINHA_PP = "h-[28px]";
 
 /** Por que a linha não entra na errata — o mesmo texto do servidor
  *  (`barrarLinhaComPPNoFinanceiro`), para a tela não prometer o que a
@@ -708,12 +722,14 @@ export function JobItemRealizadoTable({
   podeAcoes,
   podeGerarPP = false,
   papelEnviaPP,
+  podeGerarAcimaDoOrcado,
   papelCorrigeNf,
   podeCadastrarFornecedor = false,
   podeEditarFornecedor = false,
   podeConfirmarBv,
   preAbertura,
   linhasComEnvioTravado = [],
+  ppsNasLinhas = false,
   ppsPorItemId,
   aEmitirPorItemId,
   statusDoJob,
@@ -736,6 +752,7 @@ export function JobItemRealizadoTable({
   abrirSaveSoComSave,
   destacarItens,
   destaque = "save",
+  linhasDaRevisao,
   seloDaLinha,
   errata,
   podeEditarLinhas = true,
@@ -862,8 +879,22 @@ export function JobItemRealizadoTable({
         .join("|"),
     [grupos, estaAberto],
   );
+  // A linha com PP abre em sublinhas, uma por PP (decisão 208). A seta abre
+  // ou fecha UM item e vale até o "Exibir" mudar, que zera as escolhas. Na
+  // errata e no "Editar orçado" do financeiro as PPs ficam fechadas: ali a
+  // linha está sendo reescrita, e a errata arrasta linhas.
+  const [ppsAbertasNaLinha, setPpsAbertasNaLinha] = React.useState<Record<string, boolean>>({});
+  React.useEffect(() => setPpsAbertasNaLinha({}), [ppsNasLinhas]);
+  const ppsAbertasAqui = (itemId: string) =>
+    !editando && (ppsAbertasNaLinha[itemId] ?? ppsNasLinhas);
+  // As sublinhas empurram as linhas de baixo: a calha precisa remedir.
+  const assinaturaDasPPs = `${editando}:${ppsNasLinhas}:${Object.entries(ppsAbertasNaLinha)
+    .map(([id, aberta]) => `${id}${aberta ? "+" : "-"}`)
+    .join(",")}`;
   const posicoesCalha = usePosicoesDaCalha(wrapperRef, [
     assinaturaDasLinhas,
+    assinaturaDasPPs,
+    ppsPorItemId,
     visao,
     podeAcoes,
     preAbertura,
@@ -1447,15 +1478,15 @@ export function JobItemRealizadoTable({
                       )}
                     >
                       <div className="flex flex-col items-end">
-                        <span className="font-mono text-[13px] font-bold leading-[1.2]">
+                        <span className={cn("font-mono text-[13px] font-bold leading-[1.2]", acimaDoOrcado(sub.planejado.bruto, sub.orcado) && NUMEROS_PLANILHA.excedente)}>
                           {formatCurrency(subPlanejado, moeda)}
                         </span>
                         {visao === "liquido" && (
                           <SubLinhaBv
                             deducao={sub.planejado.deducaoBv}
                             formatar={fmt}
-                            cor={PLANEJADO.texto}
-                            corRotulo={PLANEJADO.textoSuave}
+                            cor={NUMEROS_PLANILHA.detalhe}
+                            corRotulo={NUMEROS_PLANILHA.detalhe}
                           />
                         )}
                       </div>
@@ -1491,7 +1522,7 @@ export function JobItemRealizadoTable({
                       )}
                     >
                       <div className="flex flex-col items-end">
-                        <span className="font-mono text-[13px] font-bold leading-[1.2]">
+                        <span className={cn("font-mono text-[13px] font-bold leading-[1.2]", acimaDoOrcado(sub.realizado.bruto, sub.orcado) && NUMEROS_PLANILHA.excedente)}>
                           {sub.realizado.bruto > 0
                             ? formatCurrency(subRealizado, moeda)
                             : "—"}
@@ -1500,8 +1531,8 @@ export function JobItemRealizadoTable({
                           <SubLinhaBv
                             deducao={sub.realizado.deducaoBv}
                             formatar={fmt}
-                            cor={REALIZADO.texto}
-                            corRotulo={REALIZADO.textoSuave}
+                            cor={NUMEROS_PLANILHA.detalhe}
+                            corRotulo={NUMEROS_PLANILHA.detalhe}
                           />
                         )}
                       </div>
@@ -1540,6 +1571,12 @@ export function JobItemRealizadoTable({
                   {abertoAqui && grupo.itens.map((item) => {
                     const blocos = blocosPorItem.get(item.id) ?? BLOCO_VAZIO;
                     const realizadoDoItem = realizadosMap.get(item.id);
+                    // As PPs da linha (decisão 208): as mesmas que somam o
+                    // realizado — toda PP não cancelada, a gerada inclusive.
+                    const ppsDaLinha = (ppsPorItemId.get(realizadoDoItem?.id ?? "") ?? []).filter(
+                      (pp) => pp.status !== "cancelada",
+                    );
+                    const ppsAbertas = ppsDaLinha.length > 0 && ppsAbertasAqui(item.id);
                     // A quebra do realizado espelha o orçado só em `A`/`D`
                     // COM o job aberto. Na pré-abertura ela vem da linha
                     // de realizado, que está zerada — e zero vira
@@ -1595,8 +1632,8 @@ export function JobItemRealizadoTable({
                     );
 
                     return (
+                      <React.Fragment key={item.id}>
                       <tr
-                        key={item.id}
                         data-calha={`i:${item.id}`}
                         // Na errata toda linha muda de lugar — a cancelada,
                         // a vermelha e a que tem PP no financeiro também:
@@ -1615,10 +1652,12 @@ export function JobItemRealizadoTable({
                             classesDaLinhaComSave(
                               savePorItem?.[item.id] ?? SAVE_VAZIO,
                             ),
-                          destacarItens.includes(item.id) &&
-                            (destaque === "historico"
+                          destacarItens.includes(item.id)
+                            ? destaque === "historico"
                               ? HISTORICO.linhaQueMudou
-                              : SAVE.linhaEmAprovacao),
+                              : SAVE.linhaEmAprovacao
+                            : linhasDaRevisao.includes(item.id) &&
+                                ERRATA.linhaEmRevisao,
                         )}
                       >
                         {saveVisivel && (
@@ -1675,6 +1714,32 @@ export function JobItemRealizadoTable({
                             }
                           >
                             <div className="flex min-w-0 items-center gap-1.5">
+                              {/* A seta da linha com PP (decisão 208): fica no
+                                  recuo à esquerda do nome, onde a alça da
+                                  errata mora — e na errata ela some. */}
+                              {!editando && ppsDaLinha.length > 0 && (
+                                <button
+                                  type="button"
+                                  aria-expanded={ppsAbertas}
+                                  aria-label={`${ppsAbertas ? "Fechar" : "Abrir"} as PPs de ${item.item || "o item"}`}
+                                  title={`${ppsAbertas ? "Fechar" : "Abrir"} ${
+                                    ppsDaLinha.length === 1 ? "a PP" : `as ${ppsDaLinha.length} PPs`
+                                  } desta linha`}
+                                  // A célula seleciona no mousedown: a seta
+                                  // não pode virar seleção.
+                                  onMouseDown={(e) => e.stopPropagation()}
+                                  onPointerDown={(e) => e.stopPropagation()}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPpsAbertasNaLinha((m) => ({ ...m, [item.id]: !ppsAbertas }));
+                                  }}
+                                  className="-ml-[24px] flex h-5 w-5 flex-none items-center justify-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
+                                >
+                                  <ChevronRight
+                                    className={cn("h-3.5 w-3.5 transition-transform motion-reduce:transition-none", ppsAbertas && "rotate-90")}
+                                  />
+                                </button>
+                              )}
                               {editando && motivoDaTrava && (
                                 <Lock
                                   className="h-3 w-3 flex-none text-muted-foreground"
@@ -1830,6 +1895,8 @@ export function JobItemRealizadoTable({
                         {celulaOrcado("planQuantidade", "quantidade_planejada", PLANEJADO.celulaMeio)}
                         {celulaOrcado("planDiasMeses", "dias_meses_planejado", PLANEJADO.celulaMeio)}
                         <CelulaTotalComBv
+                          acimaDoOrcado={acimaDoOrcado(blocos.planejado.bruto, Number(item.total_orcado))}
+                          corAlerta={NUMEROS_PLANILHA.excedente}
                           bloco={blocos.planejado}
                           visao={visao}
                           moeda={moeda}
@@ -1839,8 +1906,8 @@ export function JobItemRealizadoTable({
                             rentabPlanejadaVisivel && PLANEJADO.celulaMeio,
                             PLANEJADO.celulaTotal,
                           )}
-                          cor={PLANEJADO.texto}
-                          corRotulo={PLANEJADO.textoSuave}
+                          cor={NUMEROS_PLANILHA.detalhe}
+                          corRotulo={NUMEROS_PLANILHA.detalhe}
                           nav={nav("total_planejado")}
                           moldura={moldura("total_planejado")}
                         />
@@ -1894,6 +1961,7 @@ export function JobItemRealizadoTable({
                           moldura={moldura("dias_meses_realizado")}
                         />
                         <CelulaTotalComBv
+                          acimaDoOrcado={acimaDoOrcado(blocos.realizado.bruto, Number(item.total_orcado))}
                           bloco={blocos.realizado}
                           visao={visao}
                           moeda={moeda}
@@ -1901,8 +1969,8 @@ export function JobItemRealizadoTable({
                             rentabRealizadaVisivel && REALIZADO.celulaMeio,
                             REALIZADO.celulaTotal,
                           )}
-                          cor={REALIZADO.texto}
-                          corRotulo={REALIZADO.textoSuave}
+                          cor={NUMEROS_PLANILHA.detalhe}
+                          corRotulo={NUMEROS_PLANILHA.detalhe}
                           nav={nav("total_realizado")}
                           moldura={moldura("total_realizado")}
                         />
@@ -1922,6 +1990,24 @@ export function JobItemRealizadoTable({
                           />
                         )}
                       </tr>
+                      {ppsAbertas && (
+                        <SublinhasDasPPs
+                          pps={ppsDaLinha}
+                          moeda={moeda}
+                          colunas={colunas}
+                          // O painel das PPs é o da calha: só onde ela o
+                          // oferece. No financeiro a sublinha é só leitura.
+                          onAbrirPainel={
+                            podeGerarPP &&
+                            realizadoDoItem &&
+                            !item.em_save &&
+                            tipoGeraDesembolso(item.tipo_custo)
+                              ? () => abrirPainel(realizadoDoItem.id)
+                              : null
+                          }
+                        />
+                      )}
+                      </React.Fragment>
                     );
                   })}
 
@@ -2053,7 +2139,7 @@ export function JobItemRealizadoTable({
                 )}
               >
                 <div className="flex flex-col items-end">
-                  <span className="font-mono text-[13px] font-bold">
+                  <span className={cn("font-mono text-[13px] font-bold", acimaDoOrcado(totais.planejado.bruto, totais.orcado) && NUMEROS_PLANILHA.excedente)}>
                     {formatCurrency(valorNaVisao(totais.planejado, visao), moeda)}
                   </span>
                   {/* A soma dos BVs de todos os itens da planilha — foi o
@@ -2063,8 +2149,8 @@ export function JobItemRealizadoTable({
                     <SubLinhaBv
                       deducao={totais.planejado.deducaoBv}
                       formatar={fmt}
-                      cor={PLANEJADO.texto}
-                      corRotulo={PLANEJADO.textoSuave}
+                      cor={NUMEROS_PLANILHA.detalhe}
+                      corRotulo={NUMEROS_PLANILHA.detalhe}
                     />
                   )}
                 </div>
@@ -2100,7 +2186,7 @@ export function JobItemRealizadoTable({
                 )}
               >
                 <div className="flex flex-col items-end">
-                  <span className="font-mono text-[13px] font-bold">
+                  <span className={cn("font-mono text-[13px] font-bold", acimaDoOrcado(totais.realizado.bruto, totais.orcado) && NUMEROS_PLANILHA.excedente)}>
                     {totais.realizado.bruto > 0
                       ? formatCurrency(valorNaVisao(totais.realizado, visao), moeda)
                       : "—"}
@@ -2109,8 +2195,8 @@ export function JobItemRealizadoTable({
                     <SubLinhaBv
                       deducao={totais.realizado.deducaoBv}
                       formatar={fmt}
-                      cor={REALIZADO.texto}
-                      corRotulo={REALIZADO.textoSuave}
+                      cor={NUMEROS_PLANILHA.detalhe}
+                      corRotulo={NUMEROS_PLANILHA.detalhe}
                     />
                   )}
                 </div>
@@ -2446,6 +2532,8 @@ export function JobItemRealizadoTable({
                   tipo_verba: pp.tipo_verba,
                   verba_titular_nome: pp.verba_titular_nome,
                   fornecedor: pp.fornecedor_id ? { nome: nomeDoFornecedor(fornecedores, pp.fornecedor_id) } : null,
+                  cartao_corporativo: pp.cartao_corporativo,
+                  cartao_plataforma: pp.cartao_plataforma,
                   responsavel: pp.responsavel,
                 }) || nomeDoFornecedor(fornecedores, pp.fornecedor_id ?? ""),
                 valorUnitario: Number(pp.valor_unitario ?? 0),
@@ -2472,6 +2560,7 @@ export function JobItemRealizadoTable({
                 prontaParaEnvioEm: pp.pronta_para_envio_em,
                 prontaParaEnvioPorNome: pp.pronta_para_envio_por_nome,
                 pagaPorBoleto: pp.pagamento_fora_do_cadastro?.meio === "boleto",
+                cartaoCorporativo: pp.cartao_corporativo === true,
               }))}
               aEmitir={aEmitirDoItem}
               statusDoJob={statusDoJob}
@@ -2579,10 +2668,12 @@ export function JobItemRealizadoTable({
               defaultEmpresaId={jobEmpresaId}
               itemDescricao={itemAtual?.item ?? ""}
               valorPlanejado={planejadoAtual}
+              valorOrcado={Number(itemAtual?.total_orcado ?? 0)}
+              podeGerarAcimaDoOrcado={podeGerarAcimaDoOrcado}
               unitarioPlanejado={unitarioPlanejado}
               quantidadePlanejada={quantidadePlanejada}
               dmPlanejado={dmPlanejado}
-              emPPsEmitidas={emPPs}
+              emPPsEmitidas={Number(realizadoAtual?.total_realizado ?? emPPs)}
               aEmitirEditando={aEmitirEditando}
               ppGeradaEditando={ppGeradaEditando}
               itemConcluido={itemConcluido}
@@ -2638,6 +2729,8 @@ export function JobItemRealizadoTable({
                           }
                         : null,
                       responsavel: ppVendo.responsavel,
+                      cartao_corporativo: ppVendo.cartao_corporativo,
+                      cartao_plataforma: ppVendo.cartao_plataforma,
                     }) ||
                     nomeDoFornecedor(fornecedores, ppVendo.fornecedor_id ?? "")
                   : ""
@@ -2755,6 +2848,119 @@ export function JobItemRealizadoTable({
   );
 }
 
+/**
+ * As PPs de uma linha, uma por sublinha (decisão 208), como a planilha
+ * exportada (decisão 088): código, situação e serviço no rótulo, e
+ * R$ Unit. · QT · D/M · Total no Realizado. Quem recebe (fornecedor ou
+ * titular da verba) fica no painel do item — pedido do Tiago, 22/10/2026.
+ *
+ * É a quebra que a linha perde com duas PPs ou mais: aí o realizado do item
+ * guarda só o total (`recalcular_realizado_do_item`). As células seguem as
+ * mesmas colunas da linha do item, então a grade não desalinha.
+ */
+function SublinhasDasPPs({
+  pps,
+  moeda,
+  colunas,
+  onAbrirPainel,
+}: {
+  pps: PedidoCompraNaLista[];
+  moeda: string;
+  colunas: ColunasJobVisiveis;
+  /** Nulo onde a calha não abre o painel (financeiro): só leitura. */
+  onAbrirPainel: (() => void) | null;
+}) {
+  const vazia = (classe: string) => <td className={classe} />;
+  const numero = (v: number, emMoeda = false) =>
+    v > 0 ? (emMoeda ? formatCurrency(v, moeda) : v.toLocaleString("pt-BR")) : "—";
+  const valor = (texto: string) => (
+    <span className={cn("font-mono text-[11px] italic", NUMEROS_PLANILHA.detalhe)}>{texto}</span>
+  );
+  const celulaDoValor = "px-3 align-middle whitespace-nowrap text-right";
+  return (
+    <>
+      {pps.map((pp) => {
+        const rotulo = `${pp.codigo} · ${ppStatusLabel(pp.status)}${pp.servico ? ` — ${pp.servico}` : ""}`;
+        return (
+          <tr
+            key={pp.id}
+            onClick={onAbrirPainel ?? undefined}
+            className={cn(
+              ALTURA_SUBLINHA_PP,
+              "border-b border-dashed border-border/80",
+              onAbrirPainel && "cursor-pointer hover:[&>td]:bg-muted/50",
+            )}
+          >
+            {colunas.save && vazia(GRADE_NEUTRA)}
+            <td
+              colSpan={3}
+              title={rotulo}
+              className={cn("max-w-0 px-3 pl-[30px] align-middle text-[11.5px] italic text-muted-foreground", GRADE_NEUTRA)}
+            >
+              <div className="flex min-w-0 items-baseline gap-1.5">
+                <span aria-hidden className="flex-none not-italic text-muted-foreground/70">
+                  ↳
+                </span>
+                <span className="truncate">
+                  <span className="font-mono text-[11px] not-italic text-foreground/70">{pp.codigo}</span>
+                  {" · "}
+                  {ppStatusLabel(pp.status)}
+                  {pp.servico ? ` — ${pp.servico}` : null}
+                </span>
+              </div>
+            </td>
+            {colunas.orcado && (
+              <>
+                {vazia(ORCADO.celulaAbre)}
+                {vazia(ORCADO.celulaMeio)}
+                {vazia(ORCADO.celulaMeio)}
+                {colunas.moedaEstrangeira && vazia(ORCADO.celulaMeio)}
+                {vazia(ORCADO.celulaTotal)}
+              </>
+            )}
+            {vazia(PLANEJADO.celulaAbre)}
+            {vazia(PLANEJADO.celulaMeio)}
+            {vazia(PLANEJADO.celulaMeio)}
+            {vazia(cn(colunas.rentabPlanejada && PLANEJADO.celulaMeio, PLANEJADO.celulaTotal))}
+            {/* A rentabilidade mora dentro do bloco que a gera, com as
+                classes dele — como em `CelulasRentabilidade`. */}
+            {colunas.rentabPlanejada && (
+              <>
+                {vazia(PLANEJADO.celulaMeio)}
+                {vazia(PLANEJADO.celulaTotal)}
+              </>
+            )}
+            <td className={cn(REALIZADO.celulaAbre, celulaDoValor)}>
+              {valor(numero(Number(pp.valor_unitario ?? 0), true))}
+            </td>
+            <td className={cn(REALIZADO.celulaMeio, celulaDoValor)}>
+              {valor(numero(Number(pp.quantidade ?? 0)))}
+            </td>
+            <td className={cn(REALIZADO.celulaMeio, celulaDoValor)}>
+              {valor(numero(Number(pp.dias_meses ?? 0)))}
+            </td>
+            <td
+              className={cn(
+                colunas.rentabRealizada && REALIZADO.celulaMeio,
+                REALIZADO.celulaTotal,
+                celulaDoValor,
+              )}
+            >
+              {valor(formatCurrency(Number(pp.valor ?? 0), moeda))}
+            </td>
+            {colunas.rentabRealizada && (
+              <>
+                {vazia(REALIZADO.celulaMeio)}
+                {vazia(REALIZADO.celulaTotal)}
+              </>
+            )}
+          </tr>
+        );
+      })}
+    </>
+  );
+}
+
 /** Célula de leitura dos blocos Planejado e Realizado.
  *
  *  Substituiu a `CelulaRealNum`, que era um input disfarçado de célula.
@@ -2798,6 +3004,8 @@ function CelulaLeitura({
  *  descontado E a sub-linha que diz de quanto foi o desconto — é ela que
  *  torna a dedução auditável sem abrir o formulário do BV. */
 function CelulaTotalComBv({
+  acimaDoOrcado: excedido = false,
+  corAlerta = NUMEROS_PLANILHA.excedente,
   bloco,
   visao,
   moeda,
@@ -2807,6 +3015,8 @@ function CelulaTotalComBv({
   nav,
   moldura,
 }: {
+  acimaDoOrcado?: boolean;
+  corAlerta?: string;
   bloco: ValoresDoBloco;
   visao: VisaoBv;
   moeda: string;
@@ -2828,6 +3038,7 @@ function CelulaTotalComBv({
           className={cn(
             "font-mono text-xs font-semibold leading-[1.2]",
             bloco.bruto <= 0 && "text-muted-foreground",
+            excedido && corAlerta,
           )}
         >
           {bloco.bruto > 0 ? formatCurrency(valor, moeda) : "—"}

@@ -22,6 +22,7 @@ import type { JobStatus } from "@/lib/types";
 import {
   bloqueioAprovacaoVersao,
   type CambioParaAprovar,
+  type FechamentoParaAprovar,
 } from "@/lib/validations/versoes";
 import { aprovarVersao } from "../actions";
 import {
@@ -92,11 +93,15 @@ interface Props {
   /** Itens com total orçado > 0 — linha começada e vazia não conta. Item
    *  com orçado zerado não bloqueia (revisão da decisão 011, 01/10/2026). */
   qtdItensComValor: number;
+  bloqueioLimites: string | null;
   /** Alíquota gravada na versão, para checar se saiu do seletor. */
   percentualImposto: number;
   /** Câmbio da versão internacional — aprovar exige todos os campos
    *  (decisão 072). `null` no nacional. */
   cambioInternacional: CambioParaAprovar | null;
+  /** Int. taxes, impostos BR e custo de transação do internacional, e se
+   *  há exceção (decisão 206). `null` fora dele. */
+  fechamentoInternacional: FechamentoParaAprovar | null;
   /** Modelo mensal (decisão 078): os meses sem item, que bloqueiam a
    *  aprovação. `null` fora do mensal. */
   mesesSemItens: string[] | null;
@@ -197,8 +202,10 @@ export function FluxoAbertura({
   qtdGrupos,
   qtdItens,
   qtdItensComValor,
+  bloqueioLimites,
   percentualImposto,
   cambioInternacional,
+  fechamentoInternacional,
   mesesSemItens,
   linhasSemVeiculo,
   parServicoCategoria,
@@ -244,10 +251,11 @@ export function FluxoAbertura({
   );
   // Mesma função que a server action usa: o title do botão explica exatamente
   // o motivo pelo qual o servidor recusaria.
-  const bloqueio = bloqueioAprovacaoVersao({
+  const bloqueio = bloqueioLimites ?? bloqueioAprovacaoVersao({
     parServicoCategoria,
     percentualImposto,
     cambioInternacional,
+    fechamentoInternacional,
     qtdItens,
     qtdItensComValor,
     mesesSemItens,

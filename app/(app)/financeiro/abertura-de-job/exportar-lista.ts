@@ -2,14 +2,14 @@ import ExcelJS from "exceljs";
 import { jobStatusExibido, jobStatusLabel } from "@/lib/types";
 import type { JobAberto } from "./dados-abertos";
 import { SITUACAO_META } from "./situacao-faturamento";
-import { notaCusto, notaRecebimento } from "./notas-de-caixa";
 import { diaIsoBr } from "@/lib/formatar-data-hora";
 
 /**
- * "Exportar" da aba Visualizar Jobs (pedido do Tiago, 16/10/2026): a
+ * "Exportar" das listas Visualizar Jobs e Resultado de Job (pedido do Tiago,
+ * 16/10/2026; as duas telas desde a decisão 207): a
  * lista em Excel, um job por linha e cada informação numa coluna — o que
  * na tela divide a mesma célula (nome e nome da produção, código e nome
- * do projeto, valor e selo do faturamento, total e nota de caixa) sai em
+ * do projeto, valor e situação do faturamento, rentabilidade em R$ e em %) sai em
  * colunas separadas, para filtrar e somar no Excel.
  *
  * Sai o que a tela mostra: os filtros de cima e os dos títulos aplicados,
@@ -20,7 +20,7 @@ import { diaIsoBr } from "@/lib/formatar-data-hora";
  * (`docs/PERFORMANCE.md`).
  */
 
-type Tipo = "texto" | "moeda" | "data";
+type Tipo = "texto" | "moeda" | "data" | "percentual";
 
 interface Coluna {
   cabecalho: string;
@@ -65,7 +65,7 @@ const COLUNAS: Coluna[] = [
     tipo: "data",
     valor: (j) => (j.data_abertura_financeiro ? diaIsoBr(j.data_abertura_financeiro) : null),
   },
-  { cabecalho: "Valor total", largura: 17, tipo: "moeda", valor: (j) => j.valor_total },
+  { cabecalho: "Valor do Job", largura: 17, tipo: "moeda", valor: (j) => j.valor_total },
   { cabecalho: "Faturamento", largura: 17, tipo: "moeda", valor: (j) => j.valor_faturamento },
   {
     cabecalho: "Situação do faturamento",
@@ -80,16 +80,21 @@ const COLUNAS: Coluna[] = [
     tipo: "data",
     valor: (j) => j.vencimento_em_aberto,
   },
-  { cabecalho: "Recebimentos", largura: 17, tipo: "moeda", valor: (j) => j.recebimentos },
-  { cabecalho: "Recebido", largura: 17, tipo: "moeda", valor: (j) => j.recebimentos_realizado },
-  { cabecalho: "Situação dos recebimentos", largura: 22, tipo: "texto", valor: notaRecebimento },
-  { cabecalho: "Custos", largura: 17, tipo: "moeda", valor: (j) => j.custos },
-  { cabecalho: "Custos realizados", largura: 17, tipo: "moeda", valor: (j) => j.custos_realizado },
-  { cabecalho: "Situação dos custos", largura: 22, tipo: "texto", valor: notaCusto },
+  // A Rentabilidade da tela, a mesma do job (decisão 207): Recebimentos e
+  // Custos saíram da lista e do arquivo.
+  { cabecalho: "Rentabilidade", largura: 17, tipo: "moeda", valor: (j) => j.rentabilidade },
+  {
+    cabecalho: "Rentabilidade (%)",
+    largura: 15,
+    tipo: "percentual",
+    // O Excel guarda a fração: 0,276 aparece como 27,60%.
+    valor: (j) => (j.rentabilidade_pct === null ? null : j.rentabilidade_pct / 100),
+  },
 ];
 
 const FORMATO_MOEDA = '"R$" #,##0.00;-"R$" #,##0.00';
 const FORMATO_DATA = "dd/mm/yyyy";
+const FORMATO_PERCENTUAL = "0.00%";
 
 /** Coluna `date` como data do Excel. UTC: o Excel não tem fuso, e a meia-noite
  *  local viraria o dia anterior em quem abre fora de Brasília. */
@@ -122,12 +127,14 @@ function hojeNoNomeDoArquivo(): string {
 }
 
 /**
- * Monta o `.xlsx` e baixa no navegador. `filtrado` só muda o nome do
- * arquivo — quem abre depois sabe que não é a lista inteira.
+ * Monta o `.xlsx` e baixa no navegador. `nome` é o da tela ("Jobs no
+ * financeiro", "Resultado de Job"); `filtrado` só acrescenta "(filtrado)" —
+ * quem abre depois sabe que não é a lista inteira.
  */
 export async function baixarJobsEmExcel(
   linhas: JobAberto[],
   filtrado: boolean,
+  nome: string,
 ): Promise<void> {
   const wb = new ExcelJS.Workbook();
   wb.creator = "Califa ERP";
@@ -156,6 +163,7 @@ export async function baixarJobsEmExcel(
     COLUNAS.forEach((c, i) => {
       if (c.tipo === "moeda") row.getCell(i + 1).numFmt = FORMATO_MOEDA;
       if (c.tipo === "data") row.getCell(i + 1).numFmt = FORMATO_DATA;
+      if (c.tipo === "percentual") row.getCell(i + 1).numFmt = FORMATO_PERCENTUAL;
     });
   }
 
@@ -188,7 +196,7 @@ export async function baixarJobsEmExcel(
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `Jobs no financeiro${filtrado ? " (filtrado)" : ""} - ${hojeNoNomeDoArquivo()}.xlsx`;
+  a.download = `${nome}${filtrado ? " (filtrado)" : ""} - ${hojeNoNomeDoArquivo()}.xlsx`;
   document.body.appendChild(a);
   a.click();
   a.remove();

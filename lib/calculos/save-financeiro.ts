@@ -21,6 +21,7 @@
 
 import type {
   OrigemDeSave,
+  PlanejadoAntesDoSave,
   SaveAprovacaoMomento,
   SaveAprovacaoSituacao,
   SaveAprovacaoTipo,
@@ -75,4 +76,32 @@ export function itensParaOFinanceiro<T extends LinhaParaFinanceiro>(
     const antes = p.origensAntes.reduce((s, o) => s + Number(o.valor ?? 0), 0);
     return { ...i, save_consumido: antes };
   });
+}
+
+/**
+ * As linhas cujo planejado um pedido de GERAR save que aguarda já zerou:
+ * marcar save zera o planejado na hora, mas o financeiro ainda não conta o
+ * pedido (decisão 099, 24/09/2026). O planejado de antes do save volta para
+ * o resultado planejado — a página do job e a lista do financeiro somam o
+ * mesmo número.
+ */
+export function linhasComPlanejadoDevolvido(pedidos: PedidoParaFinanceiro[]): string[] {
+  return pedidos
+    .filter(
+      (p) =>
+        p.situacao === "aguardando" &&
+        p.momento === "job_aberto" &&
+        p.tipo === "gera" &&
+        p.jobItemOrcadoId !== null,
+    )
+    .map((p) => p.jobItemOrcadoId as string);
+}
+
+/** O planejado da linha antes do save: valor unitário × quantidade × dias. */
+export function planejadoAntesDoSave(antes: PlanejadoAntesDoSave | null): number {
+  return antes
+    ? Number(antes.valor_unitario ?? 0) *
+        Number(antes.quantidade ?? 0) *
+        Number(antes.dias_meses ?? 0)
+    : 0;
 }

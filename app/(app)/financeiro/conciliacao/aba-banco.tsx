@@ -23,6 +23,10 @@
  *   dela; corrigir, lançar pela regra, "saiu e voltou", ignorar e desfazer
  *   são as RPCs da conciliação. "Lançar avulso" abre o formulário de
  *   criação de sempre, preenchido com a linha.
+ * - O fechamento (decisão 205): "Fechar a conciliação até dd/mm", que só
+ *   liga com as três condições do banco, e "Reabrir o período". Com a
+ *   conciliação fechada, desfazer, corrigir e cancelar com data até lá
+ *   avisam antes de chamar (o banco recusa de qualquer jeito).
  */
 
 import * as React from "react";
@@ -91,6 +95,8 @@ import {
   type Cor,
 } from "./banco-tabela";
 import { CancelarBaixaDialog, CorrigirBaixaDialog, ProcurarTituloDialog, RegraDialog } from "./banco-dialogos";
+import { BotoesDoFechamento } from "./fechamento";
+import { mensagemDoPeriodoFechado, noPeriodoFechado, type FechamentoDaConta } from "@/lib/conciliacao/fechamento";
 
 const moeda = formatBRL;
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -132,11 +138,14 @@ export function AbaBanco({
   banco,
   dados,
   contaId,
+  fechamento,
 }: {
   banco: DadosDaAbaBanco;
   /** A leitura da aba Títulos: os títulos em aberto que o motor procura. */
   dados: DadosDaAbaTitulos;
   contaId: string;
+  /** O fechamento da conciliação da conta, com as condições (decisão 205). */
+  fechamento: FechamentoDaConta;
 }) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -220,6 +229,17 @@ export function AbaBanco({
     }
     if (r.mensagem) setAviso({ tom: "ok", texto: r.mensagem });
     depois?.();
+  }
+
+  /** Na trava do fechamento, o que tem data até lá não muda (protótipo:
+   *  `bloqueado`). O banco recusa de qualquer jeito; aqui avisa antes. */
+  function bloqueado(...datas: Array<string | null | undefined>): boolean {
+    const ate = fechamento.ativo?.ate ?? null;
+    if (ate && datas.some((d) => noPeriodoFechado(d, ate))) {
+      setAviso({ tom: "erro", texto: mensagemDoPeriodoFechado(ate) });
+      return true;
+    }
+    return false;
   }
 
   function executar(acao: () => Promise<Resultado>, depois?: () => void) {
@@ -457,12 +477,17 @@ export function AbaBanco({
     },
     procurar: (r) => setProcurando({ r, marcados: [] }),
     ignorar: (r) => executar(() => ignorarLinha(r.mov.id, null)),
-    desfazer: (r) => executar(() => desfazerNaLinha(r.mov.id)),
+    desfazer: (r) => {
+      if (bloqueado(r.mov.data)) return;
+      executar(() => desfazerNaLinha(r.mov.id));
+    },
     corrigirBaixa: (r) => {
+      if (bloqueado(r.mov.data, r.lancamento?.data)) return;
       setErroDoDialogo(null);
       setCorrigindo(r);
     },
     cancelarBaixa: (l) => {
+      if (bloqueado(l.data)) return;
       setErroDoDialogo(null);
       setCancelando(l);
     },
@@ -825,6 +850,13 @@ export function AbaBanco({
         ) : (
           pending && <span className="text-xs font-semibold text-muted-foreground">Trabalhando…</span>
         )}
+        <BotoesDoFechamento
+          contaId={contaId}
+          contaNome={banco.conta.nome}
+          bancoNome={banco.conta.banco}
+          fechamento={fechamento}
+          ocupado={pending || resolvendoSozinho}
+        />
       </div>
       {SECOES.map(([k, titulo, ajuda, cor, botao]) => {
         const linhas = secoes[k] as ResultadoDaLinha[];

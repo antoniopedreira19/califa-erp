@@ -466,6 +466,12 @@ export interface VersaoOrcamento {
   cambio_venda: number | null;
   /** Data da cotação registrada em `cambio_cotacao`. */
   cambio_data: string | null;
+  /** Exceção no fechamento do internacional (decisão 206): por que esta
+   *  versão sai do padrão (int. taxes 18,02%, impostos BR 19,53%, sem custo
+   *  de transação). Nulo = versão no padrão. Só o administrador grava. */
+  excecao_fechamento_motivo: string | null;
+  excecao_fechamento_por: string | null;
+  excecao_fechamento_em: string | null;
   /** Orçamento de save INTEIRO (decisão 154, que revê a 028 §10): todas as
    *  linhas geram save e a linha nova já nasce em save. Liga e desliga só
    *  pelo menu "Save" (`versao_save_gerar_tudo` / `versao_save_retirar_tudo`);
@@ -2029,6 +2035,13 @@ export interface PedidoCompra {
    *  só vira aprovada com ela (CHECK `pp_fora_do_cadastro_aprovado`). */
   pagamento_fora_do_cadastro_aprovado_por: string | null;
   pagamento_fora_do_cadastro_aprovado_em: string | null;
+  /** Decisão 209: a PP que o financeiro paga no cartão de crédito da
+   *  empresa. Sem fornecedor (`fornecedor_id` nulo): a plataforma e o link
+   *  da compra no lugar dele. CHECKs `pp_cartao_corporativo` e
+   *  `pp_cartao_corporativo_aprovada`. */
+  cartao_corporativo: boolean;
+  cartao_plataforma: string | null;
+  cartao_link: string | null;
   // Verba (subtipo de PP — adiantamento com prestação de contas). Desde a
   // decisão 164 o booleano vale para os três tipos de verba.
   verba_producao: boolean;
@@ -2897,6 +2910,9 @@ export interface DadosDaPPAEmitir {
    *  cadastro (ficha do RH ou PIX do cadastro de freelas). A revisão lê
    *  daqui. Ausente na PP a emitir salva antes. */
   titular_paga_pelo_cadastro?: boolean | null;
+  /** Decisão 209: a plataforma e o link do cartão corporativo. Null fora
+   *  dele; ausente na PP a emitir salva antes. */
+  cartao_corporativo?: { plataforma: string; link: string } | null;
   /** Decisão 127, no formato do envio (`pagamentoParaEnvio`). */
   pagamento_fora_do_cadastro: {
     meio: MeioForaDoCadastro;
@@ -2963,6 +2979,9 @@ export interface PPAEmitir {
   tipo_verba: TipoVerba | null;
   verba_titular_tipo: TitularDaVerbaTipo | null;
   verba_titular_nome: string | null;
+  /** Decisão 209 (as colunas da tabela). */
+  cartao_corporativo: boolean;
+  cartao_plataforma: string | null;
   servico: string;
   valor: number;
   dados: DadosDaPPAEmitir;
@@ -3268,8 +3287,9 @@ export interface PPVerbaPrestacaoAnexo {
  *
  * Quando é verba, o "fornecedor" é quem recebe a verba, e o rótulo vira
  * "Verba de Produção — {Nome do responsável}" (ou "Verba de Alimentação —
- * {titular}", decisão 164). Nas PPs normais, retorna a razão social ou o
- * nome do fornecedor.
+ * {titular}", decisão 164). No cartão corporativo (decisão 209), que não
+ * tem fornecedor, "Cartão corporativo — {plataforma}". Nas PPs normais,
+ * retorna a razão social ou o nome do fornecedor.
  *
  * Centraliza a decisão para garantir que qualquer lista de PP exiba o
  * mesmo texto — sem divergência entre contas-a-pagar, chat e painel.
@@ -3280,13 +3300,27 @@ export function nomeContraparteBRPP(pp: {
   verba_titular_nome?: string | null;
   fornecedor?: { nome?: string | null; razao_social?: string | null } | null;
   responsavel?: { nome?: string | null } | null;
+  /** Decisão 209. Toda consulta de PP que usa este nome precisa trazer as
+   *  duas colunas — sem elas, o cartão sai com o nome vazio. */
+  cartao_corporativo?: boolean | null;
+  cartao_plataforma?: string | null;
 }): string {
   const tipo = tipoDaVerba(pp);
   if (tipo) {
     const nome = nomeDeQuemRecebeAVerba(pp) ?? "sem titular";
     return `${rotuloDaVerba(tipo)} — ${nome}`;
   }
+  if (pp.cartao_corporativo) return nomeDoCartaoCorporativo(pp.cartao_plataforma);
   return pp.fornecedor?.razao_social ?? pp.fornecedor?.nome ?? "";
+}
+
+/** Decisão 209: o nome do quarto tipo de PP, na tela e no PDF. */
+export const ROTULO_CARTAO_CORPORATIVO = "Cartão corporativo";
+
+/** Decisão 209: "Cartão corporativo — Mercado Livre", no lugar do fornecedor. */
+export function nomeDoCartaoCorporativo(plataforma: string | null | undefined): string {
+  const p = (plataforma ?? "").trim();
+  return p ? `${ROTULO_CARTAO_CORPORATIVO} — ${p}` : ROTULO_CARTAO_CORPORATIVO;
 }
 
 export const PP_ANEXO_MIMETYPES_ACEITOS = [
@@ -3718,6 +3752,244 @@ export interface ExtratoRegra {
   usos: number;
   ativa: boolean;
   criada_por: string | null;
+  created_at: string;
+}
+
+/** O fechamento da conciliação de uma conta (`conciliacao_fechamentos`,
+ *  decisão 205). Um ativo por conta: com ele, o caixa da conta até `ate`
+ *  não muda até reabrir. As linhas inativas são o histórico — as reabertas
+ *  (com o motivo) e as que um fechamento mais adiante substituiu. */
+export interface ConciliacaoFechamento {
+  id: string;
+  tenant_id: string;
+  conta_bancaria_id: string;
+  ate: string;
+  fechado_em: string;
+  fechado_por: string;
+  reaberto_em: string | null;
+  reaberto_por: string | null;
+  motivo_reabertura: string | null;
+  ativo: boolean;
+}
+
+/** As condições do fechamento (`condicoes_do_fechamento`, decisão 205):
+ *  até onde dá para fechar — o último dia completo dos extratos — e, nesse
+ *  dia, as linhas do banco pendentes, os lançamentos sem linha do banco e os
+ *  dois saldos. `ate` nulo: nenhum extrato importado. */
+export interface CondicoesDoFechamento {
+  ate: string | null;
+  linhas_pendentes?: number;
+  sem_linha?: number;
+  /** Nulo quando o extrato não informou o saldo. */
+  saldo_banco?: number | null;
+  saldo_sistema?: number;
+  diferenca?: number | null;
+}
+
+// ---------- Decisão 211: o histórico da planilha financeira ----------
+
+/** carregando → ativa → substituída ou desfeita; carregando → descartada. */
+export type SituacaoDaCargaHistorico = "carregando" | "ativa" | "substituida" | "desfeita" | "descartada";
+
+export type TabelaDoHistorico = "rateio" | "saldos" | "jobs" | "notas" | "movimentos";
+
+/** Uma carga do histórico (`historico_cargas`, decisão 211, A1): um pacote
+ *  carregado pela tela Financeiro › Cadastros › Histórico da planilha. */
+export interface HistoricoCarga {
+  id: string;
+  tenant_id: string;
+  nome: string;
+  periodo_de: string;
+  periodo_ate: string;
+  /** O dia em que a planilha foi baixada. */
+  planilha_versao: string;
+  planilha_arquivo: string;
+  planilha_sha256: string;
+  pacote_arquivo: string;
+  pacote_sha256: string;
+  /** O que o pacote declara: as linhas de cada tabela e, nos movimentos e nas notas, a soma do valor. */
+  esperado: Record<TabelaDoHistorico, { linhas: number; soma?: string }>;
+  /** As linhas que estavam no banco ao concluir ou ao descartar. Vazio enquanto carrega. */
+  gravado: Partial<Record<TabelaDoHistorico, number>>;
+  situacao: SituacaoDaCargaHistorico;
+  criada_por: string;
+  created_at: string;
+  concluida_em: string | null;
+  concluida_por: string | null;
+  /** Desfeita, substituída ou descartada. */
+  encerrada_em: string | null;
+  encerrada_por: string | null;
+  substituida_por: string | null;
+}
+
+/** Um movimento do extrato de uma conta na planilha (`historico_movimentos`). */
+export interface HistoricoMovimento {
+  id: string;
+  tenant_id: string;
+  carga_id: string;
+  conta_bancaria_id: string;
+  data: string;
+  /** Com sinal: o que entra é positivo. */
+  valor: number;
+  /** O crédito e o débito como a planilha mostra, com o sinal dela. */
+  credito_planilha: number | null;
+  debito_planilha: number | null;
+  classe: "dre" | "transferencia" | "estorno" | "sem classificação";
+  empresa_id: string | null;
+  empresa_nome: string | null;
+  sigla_planilha: string | null;
+  grupo: string | null;
+  cod: string | null;
+  competencia_trimestre: number | null;
+  competencia_ano: number | null;
+  plano_conta_tipo_id: string | null;
+  plano_conta_subtipo_id: string | null;
+  plano_codigo: string | null;
+  regional_id: string | null;
+  regional_nome: string | null;
+  /** TD: de todas as regionais; só o relatório por regional rateia. */
+  regional_todas: boolean;
+  regional_planilha: string | null;
+  /** `historico_jobs.chave`. */
+  job_chave: string | null;
+  job_nome: string | null;
+  job_coluna: "job" | "evento" | null;
+  tipo_planilha: string | null;
+  descricao: string | null;
+  fornecedor: string | null;
+  parcela: string | null;
+  documento: string | null;
+  observacao: string | null;
+  contrapartida: string | null;
+  coluna_jobs: string | null;
+  coluna_evento: string | null;
+  coluna_reg: string | null;
+  coluna_reg_cmh: string | null;
+  dre_extra: string | null;
+  ano_comp: string | null;
+  aba: string;
+  linha: number;
+  digital: string;
+  created_at: string;
+}
+
+/** Uma nota fiscal da planilha (`historico_notas`). */
+export interface HistoricoNota {
+  id: string;
+  tenant_id: string;
+  carga_id: string;
+  empresa_id: string | null;
+  empresa_nome: string;
+  empresa_por: string | null;
+  estabelecimento: string;
+  numero: string;
+  situacao: "emitida" | "cancelada";
+  classe: "job" | "distribuição de lucro" | "sem job";
+  emissao: string | null;
+  competencia_trimestre: number | null;
+  competencia_ano: number | null;
+  vencimento: string | null;
+  recebimento: string | null;
+  valor: number | null;
+  deducao: number | null;
+  valor_tributavel: number | null;
+  iss: number | null;
+  pis: number | null;
+  cofins: number | null;
+  csll: number | null;
+  ir: number | null;
+  adicional_ir: number | null;
+  retencoes: number | null;
+  total_impostos: number | null;
+  job_chave: string | null;
+  job_nome: string | null;
+  coluna_job: string | null;
+  cliente: string | null;
+  municipio: string | null;
+  cnae: string | null;
+  obs: string | null;
+  observacao: string | null;
+  aba: string;
+  linha: number;
+  created_at: string;
+}
+
+/** Um job das abas de resultado da planilha (`historico_jobs`). */
+export interface HistoricoJob {
+  id: string;
+  tenant_id: string;
+  carga_id: string;
+  /** A chave que os movimentos e as notas usam ("evento:NOME DO JOB 1T 2026"). */
+  chave: string;
+  nome: string;
+  empresa_id: string | null;
+  empresa_nome: string;
+  aba: string;
+  linha: number;
+  ano: number;
+  trimestre: "1T" | "2T" | "3T" | "4T" | null;
+  projeto: string | null;
+  cliente_id: string | null;
+  cliente_planilha: string | null;
+  marca_id: string | null;
+  marca_planilha: string | null;
+  servico_id: string | null;
+  servico_planilha: string | null;
+  gp: string | null;
+  data_inicio: string | null;
+  regional_id: string | null;
+  regional_nome: string | null;
+  regional_todas: boolean;
+  regional_planilha: string | null;
+  regional_por: string | null;
+  /** "Copa": marcador, não regional. */
+  marcador: string | null;
+  status_planilha: string | null;
+  codigo_antigo: string | null;
+  /** O job do sistema, quando existe. */
+  job_id: string | null;
+  job_codigo: string | null;
+  /** O motivo de ficar fora dos relatórios de resultado ("Copa sem lançamento"). */
+  fora_do_resultado: string | null;
+  outras_abas: string | null;
+  /** A parte de cada regional no job, pelo código da planilha ({ NE: 0.25, SP: 0.75 }); nulo quando a planilha não divide. */
+  rateio_regional: Record<string, number> | null;
+  /** A alíquota teórica do job ("Imp Real %"), em fração. */
+  imposto_teorico_percentual: number | null;
+  created_at: string;
+}
+
+/** Um percentual do rateio do TD (`historico_rateio_regional`). */
+export interface HistoricoRateioRegional {
+  id: string;
+  tenant_id: string;
+  carga_id: string;
+  ano: number;
+  /** Nulo: o ano inteiro. */
+  trimestre: number | null;
+  empresa_id: string;
+  /** Nulo: todos os grupos que a planilha rateia. */
+  grupo: string | null;
+  regional_id: string | null;
+  regional_nome: string;
+  percentual: number;
+  /** "Gerencial 24, linha 135". */
+  origem: string;
+  created_at: string;
+}
+
+/** O saldo da planilha no fim de um mês, por conta (`historico_saldos`). */
+export interface HistoricoSaldo {
+  id: string;
+  tenant_id: string;
+  carga_id: string;
+  conta_bancaria_id: string;
+  /** O primeiro dia do mês. */
+  mes: string;
+  saldo_planilha: number | null;
+  /** Nulo no mês de abertura, que fica antes do período. */
+  movimento: number | null;
+  abertura: boolean;
   created_at: string;
 }
 
@@ -5580,7 +5852,12 @@ export interface Freelancer {
   banco: string | null;
   agencia: string | null;
   conta: string | null;
+  /** Decisão 212: corrente, poupança ou pagamento. Nulo = não informado. */
+  tipo_conta: TipoContaBancariaFornecedor | null;
   pix_chave: string | null;
+  /** Decisão 212: o tipo da chave. Com ele, a PP de verba do freela leva o
+   *  PIX do cadastro automaticamente (decisão 193). Nulo = não informado. */
+  pix_tipo: PixTipoChave | null;
 
   // Diversidade / saúde (opcional)
   cor_raca: string | null;

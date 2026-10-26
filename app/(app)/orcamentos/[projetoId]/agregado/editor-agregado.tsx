@@ -1126,6 +1126,14 @@ export function EditorAgregado({
             resultadoOperacional={resultadoOperacional}
             resultadoGeral={resultadoGeral}
             moeda={moedaProjeto}
+            // Projeto só com orçamentos Internos: o consolidado também é 0%.
+            interno={
+              midias.length === 0 &&
+              orcamentos.length > 0 &&
+              orcamentos.every(
+                (orc) => orc.servico_id !== null && servicosInternos.has(orc.servico_id),
+              )
+            }
           />
         </div>
 

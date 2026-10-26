@@ -126,7 +126,13 @@ leitura da nota emitida, ampliar a nota e as saídas.
   os impostos são pagos.
 - **Receita avulsa com job na rentabilidade do job:** a nota guarda o job,
   mas a rentabilidade (`vw_job_rentabilidade`, da frente do Antonio) não a
-  lê. Decidir antes de ligar.
+  lê. Decidir antes de ligar. **22/10/2026: continua pendente**, a pedido do
+  Tiago ("por enquanto, vamos manter esses casos de recebimentos avulsos como
+  pendência"). As opções levadas: A, fica como está; B, uma coluna "receita
+  avulsa" que entra só no resultado da Rentabilidade, sem mexer no relatório
+  de Faturamento (recomendada); C, direto no faturamento realizado, que faria
+  o relatório de Faturamento contar a avulsa como parte do valor do job. Até
+  19/10 nenhuma avulsa com job tinha sido emitida.
 - **Conta da receita** (plano de contas, pendência registrada em 16/10):
   receita de Job × de Save, a de Job pelo tipo de serviço; o BV vira custo
   negativo.

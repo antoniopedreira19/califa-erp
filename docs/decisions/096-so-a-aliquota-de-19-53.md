@@ -2,6 +2,7 @@
 
 **Data:** 2026-09-21
 **Decidido por:** Tiago
+**Status:** aceita; revista em 22/10/2026 pela [206](206-excecao-no-fechamento-do-internacional.md) (no internacional, outra alíquota só como exceção do administrador).
 **Migration:** nenhuma.
 
 Revê a lista da [006](006-aliquota-fixa-e-gate-de-aprovacao.md). A
@@ -43,3 +44,12 @@ aprovação exige escolher uma alíquota da lista.
 Recolocar `24.269914` no array de `lib/impostos.ts`. Não precisa de migration:
 a coluna `percentual_imposto` já é `numeric(10,6)` desde
 `20260813000002_imposto_seis_casas.sql`.
+
+
+## ⚠️ Revisão de 22/10/2026 (decisão 206)
+
+A lista continua com 19,53% só. No **internacional**, outra alíquota (o
+caso do SOF-P002/26-01: 17,03%, com o ISS abatido) existe apenas como
+**exceção no fechamento** registrada pelo administrador, e com ela a
+aprovação aceita a alíquota fora da lista. Ver
+[206](206-excecao-no-fechamento-do-internacional.md).

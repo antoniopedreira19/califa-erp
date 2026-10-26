@@ -18,6 +18,7 @@ import {
   dataEfetiva,
   efeitoNaConta,
   fimDoMes,
+  ordenarPorDia,
   rateioPonderado,
   situacaoDaData,
   siglaDaRegional,
@@ -246,13 +247,52 @@ test("o saldo previsto corre na ordem da data, com o que entra antes do que sai 
     }),
     linha({ chave: "vencido", dataPrevista: "2026-09-30", valor: { bruto: 50, estornado: 0, retencoes: [], baixado: 0, conta: 50 } }),
   ];
-  const r = comSaldoPrevisto(linhas, 1_000, CONTA);
+  const r = comSaldoPrevisto(linhas, 1_000, CONTA, HOJE);
   assert.deepEqual(
     r.map((l) => [l.chave, l.saldo]),
     [
       ["vencido", 950],
       ["entra", 1_150],
       ["sai", 650],
+    ],
+  );
+});
+
+// O título sem data prevista (a avulsa aprovada sem data) ia para o fim da
+// lista e entrava no grupo de hoje: a faixa de Hoje aparecia duas vezes
+// (revisão da 195, 26/10/2026).
+const comSemData = [
+  linha({ chave: "sem-data", dataPrevista: null, vencimento: null }),
+  linha({ chave: "futuro", dataPrevista: "2026-10-27" }),
+  linha({ chave: "hoje", dataPrevista: HOJE }),
+  linha({ chave: "vencido", dataPrevista: "2026-09-30" }),
+];
+
+test("o sem data prevista entra no dia de hoje, depois dos datados do dia, e o saldo o desconta hoje", () => {
+  assert.deepEqual(
+    ordenarPorDia(comSemData, HOJE).map((l) => l.chave),
+    ["vencido", "hoje", "sem-data", "futuro"],
+  );
+  assert.deepEqual(
+    comSaldoPrevisto(comSemData, 1_000, CONTA, HOJE).map((l) => [l.chave, l.saldo]),
+    [
+      ["vencido", 900],
+      ["hoje", 800],
+      ["sem-data", 700],
+      ["futuro", 600],
+    ],
+  );
+});
+
+test("agrupar por dia não repete o dia: o sem data prevista fica na faixa de hoje", () => {
+  assert.deepEqual(
+    agruparPorDia(comSaldoPrevisto(comSemData, 1_000, CONTA, HOJE), HOJE).map((g) => [
+      g.data,
+      g.linhas.map((l) => l.chave),
+    ]),
+    [
+      [HOJE, ["vencido", "hoje", "sem-data"]],
+      ["2026-10-27", ["futuro"]],
     ],
   );
 });

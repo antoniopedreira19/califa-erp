@@ -2,6 +2,9 @@
 
 **Data:** 2026-10-21
 **Status:** aceita e implementada em 21/10/2026 (task 029, fase 1).
+⚠️ **Revista em 26/10/2026:** o título sem data prevista entra no dia de
+hoje, e a aba Títulos ordena pela mesma data que agrupa — "Revisão de
+26/10/2026", no fim deste documento.
 **Quem decidiu:** Tiago, no protótipo "Conciliação com o banco", versão
 **Alternativa** (`docs/handoffs/2026-10-21-conciliacao-com-o-banco/`,
 seção 4.1 da especificação), e nos três pontos D1 a D3 de 21/10/2026.
@@ -145,3 +148,52 @@ colunas em lugares diferentes em cada tela.
    aba Títulos: fases 3 e 4.
 5. "Ver a baixa registrada" no ⓘ do Extrato: a conferência mora nas listas
    dos módulos, e o Extrato não tem o título dela.
+
+## Revisão de 26/10/2026 — o título sem data prevista entra no dia de hoje
+
+**O que aparecia:** na Conciliação › Títulos, a faixa "Hoje" saía duas
+vezes — no topo, com os vencidos, e de novo no fim da lista, depois do
+último dia —, e o console do navegador acusava duas faixas com a mesma
+chave (`2026-10-26`). Na Conta Teste, em 26/10/2026: Hoje com 17 títulos
+(R$ 127.663,20, saldo −R$ 45.109,60) e, depois de 07/11, outra Hoje com 2
+títulos (R$ 0,10).
+
+**A causa:** o título a pagar sem data prevista. A ordem da planilha
+(`ordenarLinhas`) põe o sem data por último; o agrupamento por dia (pela
+`dataEfetiva`) e o resto da aba — os quadros "Saem até" e "Entram até", o
+TRI — o contam como hoje. O agrupamento junta só linhas seguidas, e o dia
+de hoje nascia de novo no fim. Em 26/10/2026 eram duas avulsas aprovadas
+sem data, a AV-00003 e a AV-00004 (testes da remessa Santander de 24/09,
+R$ 0,05 cada). Não era o vencido: ele já vinha antes de hoje, porque a
+ordem é pela data prevista. A avulsa a receber sem data já nasce com a
+data de hoje na montagem de Contas a Receber.
+
+**Opções levadas ao Tiago:** (A) o sem data entra na faixa de Hoje, como o
+vencido, e a lista ordena pela mesma data que agrupa; (B) uma faixa
+própria "Sem data prevista" no fim da lista, fora do "Saem até"; (C) juntar
+as faixas do mesmo dia sem mudar a ordem — as linhas entrariam em Hoje com
+o saldo do fim da lista, e a faixa perderia o aviso "a conta fica
+negativa". **Escolhida a A.**
+
+**A regra agora:**
+
+- Na Conciliação › Títulos, a lista e o saldo previsto seguem a data em que
+  o título mexe na conta (`dataEfetiva`): o vencido e o sem data prevista
+  em hoje, o resto na data prevista. No mesmo dia fica a ordem da planilha:
+  o vencido pela data prevista, os títulos de hoje (o que entra antes do que
+  sai) e o sem data por último. Cada dia é uma faixa só.
+- O saldo previsto desconta o sem data hoje. Na Conta Teste, a faixa de
+  Hoje passou a 19 títulos (R$ 127.663,30, saldo −R$ 45.109,70); cada saldo
+  depois de hoje caiu R$ 0,10 (27/10: de R$ 23.765,14 para R$ 23.765,04); o
+  saldo no fim da lista não mudou (R$ 90.697,27). Os quadros do topo e o
+  aviso de quando a conta fica negativa ficaram iguais.
+- Contas a Receber, a outra tela que usa `ordenarLinhas`, não muda: lá a
+  ordem continua a da data prevista.
+- Fica como estava: o filtro de vencimento conta pelo vencimento do
+  documento, e o sem data, que não tem vencimento, só aparece em "Todos".
+
+**No código:** `ordenarPorDia` em `lib/financeiro/planilha-de-titulos.ts`
+(a ordem da planilha e, por cima, a `dataEfetiva`, com `sort` estável);
+`comSaldoPrevisto` recebe o `hoje` e usa essa ordem (`aba-titulos.tsx`).
+Testes novos: "o sem data prevista entra no dia de hoje…" e "agrupar por
+dia não repete o dia…".

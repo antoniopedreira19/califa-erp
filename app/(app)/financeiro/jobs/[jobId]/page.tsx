@@ -67,6 +67,7 @@ import { JobFinanceiroTabs } from "./job-financeiro-tabs";
 import { abaDaUrl } from "./abas";
 import { impostoDoJob } from "../../abertura-de-job/imposto-previsto";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
+import { linhasAlteradasNaRevisao } from "@/lib/data/linhas-da-revisao";
 
 export const dynamic = "force-dynamic";
 
@@ -379,13 +380,26 @@ export default async function JobNoFinanceiroPage({
   // A aprovação de save É uma revisão da abertura — com o job em revisão
   // (errata de save) ou não (save que veio do orçamento).
   const formularioEmRevisao = emRevisao || aprovacaoSave !== null;
-  const revisao = emRevisao
-    ? await revisaoPendenteDoJob(
-        params.jobId,
-        job.data_abertura_financeiro ?? null,
-        tenantId,
-      )
-    : null;
+  // As linhas que essas erratas mudaram vão com a borda vermelha na
+  // planilha — na aba e no pop-up do "Visualizar planilha interna"
+  // (revisão da decisão 185, 19/10/2026). A mesma regra que trava o envio
+  // de PP da linha: o que está destacado é o que está travado. Leitura que
+  // falha só tira o destaque.
+  const [revisao, linhasAlteradas] = emRevisao
+    ? await Promise.all([
+        revisaoPendenteDoJob(
+          params.jobId,
+          job.data_abertura_financeiro ?? null,
+          tenantId,
+        ),
+        linhasAlteradasNaRevisao(supabase, tenantId, {
+          id: job.id,
+          abertura_em_revisao: true,
+          data_abertura_financeiro: job.data_abertura_financeiro ?? null,
+        }),
+      ])
+    : [null, null];
+  const linhasDaRevisao = [...(linhasAlteradas ?? [])];
   const faturamentoPrevisto =
     Math.round(Number(jobNaFila.faturamento_previsto ?? 0) * 100) / 100;
 
@@ -571,6 +585,7 @@ export default async function JobNoFinanceiroPage({
             modo={formularioEmRevisao ? "revisao" : "leitura"}
             fotos={fotos}
             revisao={revisao}
+            linhasDaRevisao={linhasDaRevisao}
             aprovacaoSave={aprovacaoSave}
             categorias={(categoriasRes.data ?? []).filter(
               (c) =>
@@ -794,6 +809,7 @@ export default async function JobNoFinanceiroPage({
             )}
             <JobRealizadoSection
               // Tela do financeiro: só leitura, não gera nem envia PP.
+              podeGerarAcimaDoOrcado={false}
               papelEnviaPP={false}
               papelCorrigeNf={pode(session.activeRole, "jobs.corrigir_nf_pp")}
               confirmarSaidaParaOrcamento
@@ -812,6 +828,7 @@ export default async function JobNoFinanceiroPage({
               saldosDeSave={[]}
               clienteNome={detalhe.clienteNome}
               destacarItens={linhaEmAprovacao ? [linhaEmAprovacao] : []}
+              linhasDaRevisao={linhasDaRevisao}
               job={{
                 id: job.id,
                 codigo: job.codigo,

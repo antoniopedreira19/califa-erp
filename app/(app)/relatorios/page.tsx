@@ -1,12 +1,14 @@
 import Link from "next/link";
-import { BarChart3, ArrowRight, TrendingUp, FileText, type LucideIcon } from "lucide-react";
+import { BarChart3, ArrowRight, TrendingUp, FileText, ScrollText, MapPinned, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { PageHeader } from "@/components/ui/page-header";
 
 export const dynamic = "force-dynamic";
 
 export default async function RelatoriosPage() {
-  await requireSession();
+  const session = await requireSession();
+  // Os relatórios do histórico da planilha (decisão 211) são de admin e financeiro, como o histórico.
+  const veHistorico = session.activeRole === "administrador" || session.activeRole === "financeiro";
 
   return (
     <div className="space-y-8">
@@ -30,6 +32,22 @@ export default async function RelatoriosPage() {
           title="Faturamento de Jobs"
           description="Valor contratado × valor faturado por job, com saldo e status (Não Faturado, Parcial, Faturado)."
         />
+        {veHistorico && (
+          <>
+            <RelatorioCard
+              href="/relatorios/dre-historico"
+              icon={ScrollText}
+              title="DRE do histórico"
+              description="DRE por competência de cada empresa, trimestre a trimestre, refeita dos lançamentos da planilha financeira."
+            />
+            <RelatorioCard
+              href="/relatorios/regional-historico"
+              icon={MapPinned}
+              title="Resultado por regional do histórico"
+              description="A DRE regional da planilha, com o faturamento e o custo divididos pelos jobs e o TD pelo percentual de cada ano."
+            />
+          </>
+        )}
       </div>
     </div>
   );

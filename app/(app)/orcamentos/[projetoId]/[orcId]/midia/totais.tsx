@@ -1,3 +1,4 @@
+import { rentabilidadeAbaixoDoMinimo } from "@/lib/calculos/limites-orcamento";
 /**
  * O card de Totais da Mídia Off (decisão 147).
  *
@@ -98,9 +99,7 @@ export function TotaisMidia({
               "mt-2.5 rounded-xl border p-4",
               !temResultado
                 ? "border-border bg-muted/30"
-                : f.resultadoGeral! >= 0
-                  ? "border-emerald-200 bg-emerald-50"
-                  : "border-rose-200 bg-rose-50",
+                : "border-emerald-200 bg-emerald-50",
             )}
           >
             <div className="flex items-baseline justify-between gap-3">
@@ -108,7 +107,7 @@ export function TotaisMidia({
                 <p
                   className={cn(
                     "text-sm font-semibold",
-                    !temResultado ? "text-muted-foreground" : f.resultadoGeral! >= 0 ? "text-emerald-800" : "text-california-red",
+                    !temResultado ? "text-muted-foreground" : "text-emerald-800",
                   )}
                 >
                   Resultado geral
@@ -116,7 +115,7 @@ export function TotaisMidia({
                 <p
                   className={cn(
                     "mt-0.5 text-[11.5px]",
-                    !temResultado ? "text-muted-foreground" : f.resultadoGeral! >= 0 ? "text-emerald-700" : "text-california-red",
+                    !temResultado ? "text-muted-foreground" : "text-emerald-700",
                   )}
                 >
                   {temResultado ? "Resultado operacional ÷ valor do job" : "Preencha as linhas para ver o resultado."}
@@ -125,7 +124,7 @@ export function TotaisMidia({
               <span
                 className={cn(
                   "whitespace-nowrap font-mono text-[26px] font-bold leading-none",
-                  !temResultado ? "text-muted-foreground" : f.resultadoGeral! >= 0 ? "text-emerald-700" : "text-california-red",
+                  !temResultado ? "text-muted-foreground" : !rentabilidadeAbaixoDoMinimo(f.resultadoGeral) ? "text-emerald-700" : "text-california-red",
                 )}
               >
                 {temResultado ? pctNum(f.resultadoGeral!) : "—"}

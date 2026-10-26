@@ -15,8 +15,7 @@ import {
 import { formatCurrency, cn } from "@/lib/utils";
 import { jobStatusBadgeClasses, jobStatusExibido, jobStatusLabel } from "@/lib/types";
 import type { JobAberto } from "./dados-abertos";
-import { SITUACAO_META } from "./situacao-faturamento";
-import { notaCusto, notaRecebimento } from "./notas-de-caixa";
+import { RENTAB_VALOR } from "@/app/(app)/_planilha/blocos";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { compararCodigosDeJob } from "@/lib/codigos/jobs";
 import {
@@ -83,16 +82,6 @@ function noChip(j: JobAberto, chip: Chip): boolean {
   return j.situacao_faturamento === chip;
 }
 
-/** A ordem das situações no filtro do Faturamento: a da esteira. */
-const ORDEM_DA_SITUACAO = [
-  "sem_faturamento",
-  "aguardando_envio",
-  "enviado",
-  "faturado",
-  "inadimplente",
-  "liquidado",
-] as const;
-
 /** O projeto do FINANCEIRO, com o da produção de reserva — o mesmo da faixa. */
 function projetoDoJob(j: JobAberto): string {
   const codigo = j.projeto_financeiro_codigo ?? j.projeto_codigo ?? "";
@@ -128,40 +117,29 @@ const COLUNAS: ColunaFiltravel<JobAberto>[] = [
   { chave: "abertura", rotulo: "Abertura", tipo: "data", celula: (j) => celulaData(j.data_abertura_financeiro) },
   {
     chave: "valor",
-    rotulo: "Valor total",
+    rotulo: "Valor do Job",
     tipo: "valor",
     faixa: true,
     alinhar: "right",
     celula: (j) => celulaValor(j.valor_total, (n) => formatCurrency(n)),
   },
   {
-    // Lista das situações (o selo da célula); a ordem é pelo valor.
+    // Sem o selo da esteira (decisão 207), a coluna é só o valor: filtra
+    // por faixa. A situação continua nos chips de cima.
     chave: "faturamento",
     rotulo: "Faturamento",
     tipo: "valor",
+    faixa: true,
     alinhar: "right",
-    celula: (j) => ({
-      valor: j.situacao_faturamento,
-      rotulo: SITUACAO_META[j.situacao_faturamento].rotulo,
-      ordem: j.valor_faturamento ?? 0,
-      ordemNaLista: ORDEM_DA_SITUACAO.indexOf(j.situacao_faturamento),
-    }),
+    celula: (j) => celulaValor(j.valor_faturamento ?? 0, (n) => formatCurrency(n)),
   },
   {
-    chave: "recebimentos",
-    rotulo: "Recebimentos",
+    chave: "rentabilidade",
+    rotulo: "Rentabilidade",
     tipo: "valor",
     faixa: true,
     alinhar: "right",
-    celula: (j) => celulaValor(j.recebimentos, (n) => formatCurrency(n)),
-  },
-  {
-    chave: "custos",
-    rotulo: "Custos",
-    tipo: "valor",
-    faixa: true,
-    alinhar: "right",
-    celula: (j) => celulaValor(j.custos, (n) => formatCurrency(n)),
+    celula: (j) => celulaValor(j.rentabilidade, (n) => formatCurrency(n)),
   },
 ];
 
@@ -173,8 +151,9 @@ interface GrupoProjeto {
   cliente: string | null;
   jobs: JobAberto[];
   total: number;
-  recebimentos: number;
-  custos: number;
+  faturamento: number;
+  /** Soma das rentabilidades dos jobs do projeto; nula se nenhum tem. */
+  rentabilidade: number | null;
   aberto: boolean;
   /**
    * O grupo tem projeto do financeiro de verdade? Falso só no fallback,
@@ -183,13 +162,6 @@ interface GrupoProjeto {
    * agregada do financeiro não existe para ele.
    */
   temProjetoFinanceiro: boolean;
-}
-
-function formatDataBr(iso: string | null): string {
-  if (!iso) return "—";
-  const [ano, mes, dia] = iso.slice(0, 10).split("-");
-  if (!ano || !mes || !dia) return "—";
-  return `${dia}/${mes}/${ano}`;
 }
 
 /**
@@ -211,56 +183,51 @@ function opcoesDe(linhas: JobAberto[], campo: (j: JobAberto) => string | null) {
   return [TODOS, ...vistos.sort((a, b) => a.localeCompare(b, "pt-BR"))];
 }
 
-/** Célula de dinheiro com a nota embaixo — a mesma nas duas visões. */
-function CelulaCaixa({
-  valor,
-  nota,
-  cor,
-}: {
-  valor: number;
-  nota: string;
-  cor: string;
-}) {
+/** Soma das rentabilidades de um conjunto de jobs. Nula quando nenhum tem
+ *  a conta feita — a faixa e o total mostram travessão, e não zero. */
+function somaDasRentabilidades(jobs: JobAberto[]): number | null {
+  const comConta = jobs.filter((j) => j.rentabilidade !== null);
+  if (comConta.length === 0) return null;
+  return comConta.reduce((s, j) => s + (j.rentabilidade ?? 0), 0);
+}
+
+/** "27,60%" — a rentabilidade sobre o valor do job, com as duas casas do
+ *  registro da abertura: o mesmo número escrito do mesmo jeito. */
+function textoDoPercentual(pct: number): string {
+  return `${pct.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+}
+
+/** Faturamento sem o selo da esteira (decisão 207): o valor e, quando a
+ *  nota já saiu, o número dela. */
+function CelulaFaturamento({ j }: { j: JobAberto }) {
   return (
     <div className="flex flex-col items-end gap-px">
-      <span className={cn("whitespace-nowrap font-semibold tabular-nums", cor)}>
-        {formatCurrency(valor)}
+      <span className="whitespace-nowrap font-semibold tabular-nums">
+        {formatCurrency(j.valor_faturamento)}
       </span>
-      <span className="whitespace-nowrap text-[11px] text-muted-foreground">
-        {nota}
-      </span>
+      {j.numero_nf && (
+        <span className="font-mono text-[10.5px] text-muted-foreground">
+          NF {j.numero_nf}
+        </span>
+      )}
     </div>
   );
 }
 
-/** Faturamento: valor, selo da esteira e o dado que qualifica o selo. */
-function CelulaFaturamento({ j }: { j: JobAberto }) {
+/** Rentabilidade: a mesma do job (decisão 207), em grafite — positiva ou
+ *  negativa, como nas planilhas — e, embaixo, em % do valor do job. */
+function CelulaRentabilidade({ j }: { j: JobAberto }) {
+  if (j.rentabilidade === null) {
+    return <div className="text-right text-muted-foreground">—</div>;
+  }
   return (
-    <div className="flex flex-col items-end gap-1">
-      <span className="font-semibold tabular-nums">
-        {formatCurrency(j.valor_faturamento)}
+    <div className="flex flex-col items-end gap-px">
+      <span className={cn("whitespace-nowrap font-semibold tabular-nums", RENTAB_VALOR)}>
+        {formatCurrency(j.rentabilidade)}
       </span>
-      <span
-        className={cn(
-          "inline-flex items-center rounded-full border px-2 py-0.5 text-[10.5px] font-semibold uppercase tracking-[0.04em]",
-          SITUACAO_META[j.situacao_faturamento].classes,
-        )}
-      >
-        {SITUACAO_META[j.situacao_faturamento].rotulo}
+      <span className="whitespace-nowrap text-[11px] tabular-nums text-muted-foreground">
+        {textoDoPercentual(j.rentabilidade_pct ?? 0)}
       </span>
-      {/* Segunda linha: o dado que qualifica o selo — o número da nota,
-          ou desde quando está vencido. */}
-      {j.situacao_faturamento === "inadimplente" && j.vencimento_em_aberto ? (
-        <span className="text-[10.5px] text-california-red">
-          venceu em {formatDataBr(j.vencimento_em_aberto)}
-        </span>
-      ) : (
-        j.numero_nf && (
-          <span className="font-mono text-[10.5px] text-muted-foreground">
-            NF {j.numero_nf}
-          </span>
-        )
-      )}
     </div>
   );
 }
@@ -300,7 +267,36 @@ function NomeDoJob({ j }: { j: JobAberto }) {
   );
 }
 
-export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
+/**
+ * Em que tela a lista está. As duas mostram as mesmas colunas (decisão 207,
+ * Tiago, 23/10/2026); muda o que é da tela: onde os filtros dos títulos
+ * ficam guardados (cada tela com os seus), o texto da lista vazia e o nome
+ * do arquivo do Excel. Texto e não objeto: constante de módulo
+ * `"use client"` chega ao server component como proxy.
+ */
+export type TelaDaLista = "abertura" | "resultado";
+
+const DA_TELA: Record<TelaDaLista, { guardarEm: string; semJobs: string; arquivo: string }> = {
+  abertura: {
+    guardarEm: "abertura-visualizar-jobs",
+    semJobs: "Nenhum job aberto ainda. Abra um job na aba ao lado.",
+    arquivo: "Jobs no financeiro",
+  },
+  resultado: {
+    guardarEm: "resultado-de-job",
+    semJobs: "Nenhum job aberto no financeiro ainda.",
+    arquivo: "Resultado de Job",
+  },
+};
+
+export function JobsAbertosList({
+  linhas,
+  tela,
+}: {
+  linhas: JobAberto[];
+  tela: TelaDaLista;
+}) {
+  const daTela = DA_TELA[tela];
   const router = useRouter();
   const [busca, setBusca] = React.useState("");
   const [chip, setChip] = React.useState<Chip>("todos");
@@ -382,7 +378,7 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
     });
   }, [linhas, busca, chip, regional, gp, produto, ano]);
 
-  const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "abertura-visualizar-jobs" });
+  const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: daTela.guardarEm });
   /** Os jobs que passam em tudo — a base das DUAS visões e dos totais. */
   const visiveis = colunas.visiveis;
   const filtroAtivo = filtroDeCima || colunas.filtrando;
@@ -413,8 +409,8 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
         cliente: primeiro.cliente_nome,
         jobs,
         total: jobs.reduce((s, j) => s + (j.valor_total ?? 0), 0),
-        recebimentos: jobs.reduce((s, j) => s + j.recebimentos, 0),
-        custos: jobs.reduce((s, j) => s + j.custos, 0),
+        faturamento: jobs.reduce((s, j) => s + (j.valor_faturamento ?? 0), 0),
+        rentabilidade: somaDasRentabilidades(jobs),
         // Com filtro ativo o grupo abre sempre: fechado esconderia
         // justamente o job que o filtro encontrou.
         aberto: filtroAtivo ? true : !fechados.has(projetoId),
@@ -462,8 +458,11 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
   const totalInadimplente = soma(
     (j) => j.situacao_faturamento === "inadimplente",
   );
-  const totalRecebimentos = visiveis.reduce((s, j) => s + j.recebimentos, 0);
-  const totalCustos = visiveis.reduce((s, j) => s + j.custos, 0);
+  const totalRentabilidade = somaDasRentabilidades(visiveis);
+  // O % do total é sobre o valor dos jobs que têm a conta feita.
+  const valorComRentabilidade = visiveis
+    .filter((j) => j.rentabilidade !== null)
+    .reduce((s, j) => s + (j.valor_total ?? 0), 0);
 
   function toggleGrupo(id: string) {
     setFechados((prev) => {
@@ -502,7 +501,7 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
     try {
       const { baixarJobsEmExcel } = await import("./exportar-lista");
       const ordem = modo === "projeto" ? grupos.flatMap((g) => g.jobs) : linhasPorJob;
-      await baixarJobsEmExcel(ordem, filtroAtivo);
+      await baixarJobsEmExcel(ordem, filtroAtivo, daTela.arquivo);
     } catch (e) {
       console.error("[abertura.exportar-lista]", e);
       setErroExportar(true);
@@ -514,7 +513,7 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
   const vazio = (
     <p className="px-4 py-12 text-center text-sm text-muted-foreground">
       {linhas.length === 0
-        ? "Nenhum job aberto ainda. Abra um job na aba ao lado."
+        ? daTela.semJobs
         : "Nenhum job aberto encontrado com esses filtros."}
     </p>
   );
@@ -688,21 +687,26 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
         )}
         <span className="h-3 w-px bg-[#dcdcdc]" />
         <span>
-          Recebimentos{" "}
-          <strong className="tabular-nums text-emerald-700">
-            {formatCurrency(totalRecebimentos)}
-          </strong>
+          Rentabilidade{" "}
+          {totalRentabilidade === null ? (
+            <strong className="text-foreground">—</strong>
+          ) : (
+            <>
+              <strong className={cn("tabular-nums", RENTAB_VALOR)}>
+                {formatCurrency(totalRentabilidade)}
+              </strong>
+              {valorComRentabilidade > 0 && (
+                <span className="tabular-nums">
+                  {" "}
+                  ({textoDoPercentual((totalRentabilidade / valorComRentabilidade) * 100)})
+                </span>
+              )}
+            </>
+          )}
         </span>
         <span className="h-3 w-px bg-[#dcdcdc]" />
         <span>
-          Custos{" "}
-          <strong className="tabular-nums text-[#b3323c]">
-            {formatCurrency(totalCustos)}
-          </strong>
-        </span>
-        <span className="h-3 w-px bg-[#dcdcdc]" />
-        <span>
-          Valor total{" "}
+          Valor do Job{" "}
           <strong className="tabular-nums text-foreground">
             {formatCurrency(totalVisivel)}
           </strong>
@@ -762,8 +766,7 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
                 <th className="px-4 py-3 font-semibold">{colunas.titulo("abertura")}</th>
                 <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("valor")}</th>
                 <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("faturamento")}</th>
-                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("recebimentos")}</th>
-                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("custos")}</th>
+                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("rentabilidade")}</th>
               </tr>
             </thead>
             <tbody>
@@ -785,7 +788,7 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
                       g.aberto ? "bg-muted/90" : "bg-muted/40",
                     )}
                   >
-                    <td colSpan={11} className="p-0">
+                    <td colSpan={10} className="p-0">
                       <div className="grid grid-cols-[32px_1fr_auto_auto_auto_auto_auto] items-center gap-4 py-[11px] pl-2 pr-4">
                         <div className="flex items-center justify-center">
                           <span
@@ -818,14 +821,14 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
                           {formatCurrency(g.total)}
                         </span>
                         <RotuloDaFaixa
-                          rotulo="Recebimentos"
-                          valor={g.recebimentos}
-                          cor="text-emerald-700"
+                          rotulo="Faturamento"
+                          valor={g.faturamento}
+                          cor="text-foreground"
                         />
                         <RotuloDaFaixa
-                          rotulo="Custos"
-                          valor={g.custos}
-                          cor="text-[#b3323c]"
+                          rotulo="Rentabilidade"
+                          valor={g.rentabilidade}
+                          cor={RENTAB_VALOR}
                         />
                         {/* Tela do PRÓPRIO financeiro: o módulo não
                             encaminha para telas de outros módulos, e o
@@ -917,18 +920,7 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
                           <CelulaFaturamento j={j} />
                         </td>
                         <td className="px-4 py-3">
-                          <CelulaCaixa
-                            valor={j.recebimentos}
-                            nota={notaRecebimento(j)}
-                            cor="text-emerald-700"
-                          />
-                        </td>
-                        <td className="px-4 py-3">
-                          <CelulaCaixa
-                            valor={j.custos}
-                            nota={notaCusto(j)}
-                            cor="text-[#b3323c]"
-                          />
+                          <CelulaRentabilidade j={j} />
                         </td>
                       </tr>
                     ))}
@@ -951,8 +943,7 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
                 <th className="px-4 py-3 font-semibold">{colunas.titulo("abertura")}</th>
                 <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("valor")}</th>
                 <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("faturamento")}</th>
-                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("recebimentos")}</th>
-                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("custos")}</th>
+                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("rentabilidade")}</th>
               </tr>
             </thead>
             <tbody>
@@ -1019,18 +1010,7 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
                     <CelulaFaturamento j={j} />
                   </td>
                   <td className="px-4 py-3">
-                    <CelulaCaixa
-                      valor={j.recebimentos}
-                      nota={notaRecebimento(j)}
-                      cor="text-emerald-700"
-                    />
-                  </td>
-                  <td className="px-4 py-3">
-                    <CelulaCaixa
-                      valor={j.custos}
-                      nota={notaCusto(j)}
-                      cor="text-[#b3323c]"
-                    />
+                    <CelulaRentabilidade j={j} />
                   </td>
                 </tr>
               ))}
@@ -1044,14 +1024,15 @@ export function JobsAbertosList({ linhas }: { linhas: JobAberto[] }) {
   );
 }
 
-/** Recebimentos/Custos somados do projeto, na faixa do grupo. */
+/** Faturamento e Rentabilidade somados do projeto, na faixa do grupo. */
 function RotuloDaFaixa({
   rotulo,
   valor,
   cor,
 }: {
   rotulo: string;
-  valor: number;
+  /** Nula: nenhum job do projeto tem a conta feita — travessão. */
+  valor: number | null;
   cor: string;
 }) {
   return (
@@ -1060,7 +1041,7 @@ function RotuloDaFaixa({
         {rotulo}
       </span>
       <span className={cn("text-[12.5px] font-semibold tabular-nums", cor)}>
-        {formatCurrency(valor)}
+        {valor === null ? "—" : formatCurrency(valor)}
       </span>
     </span>
   );

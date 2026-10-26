@@ -5,7 +5,7 @@
  */
 
 import { cn, formatCurrency } from "@/lib/utils";
-import { ORCADO, VEICULACAO } from "@/app/(app)/_planilha/blocos";
+import { ORCADO, VEICULACAO, NUMEROS_PLANILHA } from "@/app/(app)/_planilha/blocos";
 import {
   contaDaLinha,
   nomeDoMesMidia,
@@ -107,7 +107,7 @@ export function ResumoDeInvestimentos({
                 })}
                 <td className="px-3 py-2.5 text-right font-mono text-[12.5px] text-muted-foreground">{brl(conta.notaVeiculo)}</td>
                 <td className="px-3 py-2.5 text-right font-mono text-[12.5px] text-muted-foreground">{brl(conta.notaAgencia)}</td>
-                <td className={cn("px-3 py-2.5 text-right font-mono text-[12.5px] font-semibold", ORCADO.texto)}>{brl(conta.total)}</td>
+                <td className={cn("px-3 py-2.5 text-right font-mono text-[12.5px] font-semibold", NUMEROS_PLANILHA.total)}>{brl(conta.total)}</td>
                 <td className="px-3 py-2.5 pr-6 text-right font-mono text-[12.5px]">
                   {geral.total > 0 ? `${((conta.total / geral.total) * 100).toFixed(1).replace(".", ",")}%` : "—"}
                 </td>
@@ -124,7 +124,7 @@ export function ResumoDeInvestimentos({
               ))}
               <td className="px-3 py-2.5 text-right font-mono text-[13px] font-bold">{brl(geral.notaVeiculo)}</td>
               <td className="px-3 py-2.5 text-right font-mono text-[13px] font-bold">{brl(geral.notaAgencia)}</td>
-              <td className={cn("px-3 py-2.5 text-right font-mono text-[13px] font-bold", ORCADO.texto)}>{brl(geral.total)}</td>
+              <td className={cn("px-3 py-2.5 text-right font-mono text-[13px] font-bold", NUMEROS_PLANILHA.total)}>{brl(geral.total)}</td>
               <td className="px-3 py-2.5 pr-6 text-right font-mono text-[13px] font-bold">100%</td>
             </tr>
           </tbody>

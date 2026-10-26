@@ -10,6 +10,7 @@ import { caixaPorJob, CAIXA_VAZIO } from "@/lib/data/caixa-por-job";
 import { servicoPorOrcamento } from "@/lib/data/servicos";
 import { jobsComCancelamentoPendente } from "@/lib/data/cancelamentos";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
+import { rentabilidadeDosJobs } from "@/lib/data/rentabilidade-dos-jobs";
 
 export type { SituacaoFaturamento };
 
@@ -114,7 +115,9 @@ export interface JobAberto {
   vencimento_em_aberto: string | null;
   /**
    * Recebimentos e custos TOTAIS do job — as duas colunas que entraram
-   * em 24/08/2026 (design "Abertura de Job - Financeiro").
+   * em 24/08/2026 (design "Abertura de Job - Financeiro"). Desde a decisão
+   * 207 (23/10/2026) elas saíram da lista e do Excel, no lugar da
+   * Rentabilidade; o Calendário de Jobs ainda soma os custos.
    *
    * O número é sempre a leitura mais atual: movimentado + título +
    * previsão em aberto, somados de `vw_fluxo_caixa` sem contar em dobro
@@ -136,6 +139,15 @@ export interface JobAberto {
   custos: number;
   custos_realizado: number;
   custos_do_previsto: boolean;
+  /**
+   * A Rentabilidade do job, em R$ e em % do valor do job — o MESMO número da
+   * página do job (decisão 207): valor do job − impostos − custo planejado,
+   * na conta do financeiro (`lib/data/rentabilidade-dos-jobs`). Nula quando
+   * a conta não pôde ser feita (job sem versão aprovada, leitura que
+   * falhou): a lista mostra travessão, e não zero.
+   */
+  rentabilidade: number | null;
+  rentabilidade_pct: number | null;
 }
 
 const SELECT_JOB_ABERTO =
@@ -203,8 +215,16 @@ export async function listarJobsDoFinanceiro(
   // `lib/data/faturamento-por-job` — a visão agregada do projeto usa a
   // MESMA classificação, e duas cópias dela divergiriam na primeira nota
   // cancelada. Em paralelo, nunca em série (`docs/PERFORMANCE.md`).
-  const [jobsRes, esteira, caixa, servicos, servicosRes, rateiosRes, comPedidoDeCancelamento] =
-    await Promise.all([
+  const [
+    jobsRes,
+    esteira,
+    caixa,
+    servicos,
+    servicosRes,
+    rateiosRes,
+    comPedidoDeCancelamento,
+    rentabilidades,
+  ] = await Promise.all([
       supabase
         .from("jobs")
         .select(SELECT_JOB_ABERTO)
@@ -230,6 +250,8 @@ export async function listarJobsDoFinanceiro(
         .eq("tenant_id", tenantId),
       // Os jobs com pedido de cancelamento no ar (decisão 169).
       jobsComCancelamentoPendente(supabase, tenantId),
+      // A Rentabilidade de cada job, a mesma da página do job (decisão 207).
+      rentabilidadeDosJobs(supabase, tenantId, STATUS_NA_LISTA),
     ]);
 
   const { data, error } = jobsRes;
@@ -265,6 +287,7 @@ export async function listarJobsDoFinanceiro(
     // lá, quem manda é ela: é o número mais atual.
     const semRecebimento = cx.recebimentos <= 0;
     const semCusto = cx.custos <= 0;
+    const rent = rentabilidades.get(j.id) ?? null;
 
     return {
       id: j.id,
@@ -316,6 +339,8 @@ export async function listarJobsDoFinanceiro(
       custos: semCusto ? Number(j.custo_previsto_total ?? 0) : cx.custos,
       custos_realizado: cx.custos_realizado,
       custos_do_previsto: semCusto,
+      rentabilidade: rent ? rent.valor : null,
+      rentabilidade_pct: rent ? rent.percentual : null,
     };
   });
 }

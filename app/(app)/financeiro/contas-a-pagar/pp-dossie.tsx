@@ -46,9 +46,11 @@ import {
   ppStatusLabel,
   rotuloDaVerbaMinusculo,
   rotuloDeQuemRecebeAVerba,
+  ROTULO_CARTAO_CORPORATIVO,
   type DocumentoDaPrestacao,
   type FiscalEstabelecimento,
 } from "@/lib/types";
+import { hrefDoLinkDaCompra } from "@/lib/validations/cartao-corporativo";
 import {
   camposDoDocumento,
   formatarCpfCnpj,
@@ -238,6 +240,27 @@ export function PPDossie({
 
           <Estados pp={pp} somenteLeitura={somenteLeitura} />
 
+          {/* Decisão 209: o cartão corporativo não tem fornecedor — a
+              plataforma e o link de onde o financeiro faz a compra. */}
+          {pp.cartao_corporativo ? (
+            <Grupo rotulo={ROTULO_CARTAO_CORPORATIVO}>
+              <p className="text-[13px] font-semibold leading-snug">{pp.cartao_plataforma}</p>
+              {pp.cartao_link && (
+                <a
+                  href={hrefDoLinkDaCompra(pp.cartao_link)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="mt-0.5 inline-flex max-w-full items-start gap-1 break-all text-[11.5px] leading-snug text-california-red hover:underline"
+                >
+                  {pp.cartao_link}
+                  <ExternalLink className="mt-0.5 h-3 w-3 flex-none" />
+                </a>
+              )}
+              <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                Pago no cartão de crédito da empresa; as parcelas são as da fatura.
+              </p>
+            </Grupo>
+          ) : (
           <Grupo
             rotulo={
               pp.tipo_verba
@@ -280,6 +303,7 @@ export function PPDossie({
               />
             )}
           </Grupo>
+          )}
 
           <Grupo rotulo="Origem no job">
             {/* O job na página do FINANCEIRO, não na da produção: o
@@ -343,7 +367,9 @@ export function PPDossie({
                 {formatDate(vencimentoOriginal || null)}
               </p>
               <p className="text-[10.5px] text-muted-foreground">
-                Negociado pela produção com o fornecedor.
+                {pp.cartao_corporativo
+                  ? "Pedido pela produção para a compra no cartão."
+                  : "Negociado pela produção com o fornecedor."}
               </p>
             </div>
             {vencimentoOriginal &&
@@ -393,7 +419,9 @@ export function PPDossie({
               <p className="text-[11.5px] text-muted-foreground">
                 {pp.reembolso_tipo
                   ? "A produção não enviou comprovante nesta PP."
-                  : "A produção não enviou documento nesta PP."}
+                  : pp.cartao_corporativo
+                    ? "Nenhum: o cartão corporativo vai sem nota."
+                    : "A produção não enviou documento nesta PP."}
               </p>
             ) : (
               <ul className="space-y-1">

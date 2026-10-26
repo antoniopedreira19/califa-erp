@@ -78,7 +78,11 @@ export async function POST(
     banco: parsed.data.banco,
     agencia: parsed.data.agencia,
     conta: parsed.data.conta,
+    // Decisão 212: o tipo de conta e o tipo da chave (a chave já no formato
+    // do banco, normalizada pelo schema).
+    tipo_conta: parsed.data.tipo_conta ?? null,
     pix_chave: parsed.data.pix_chave,
+    pix_tipo: parsed.data.pix_tipo ?? null,
   };
 
   const supabase = createServiceClient();

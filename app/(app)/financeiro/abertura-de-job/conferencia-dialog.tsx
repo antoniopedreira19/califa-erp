@@ -29,6 +29,7 @@ import {
   linhasDoRecebimentoEnviado,
 } from "./formatos";
 import { IconeSave } from "./icone-save";
+import { FaixaExcecaoNaAbertura } from "@/app/(app)/_planilha/excecao-no-fechamento";
 
 interface Props {
   job: JobNaFila | null;
@@ -112,6 +113,13 @@ export function ConferenciaDialog({ job, onOpenChange, onReprovar }: Props) {
         </DialogHeader>
 
         <FaixaDoEnvio job={job} />
+        {/* A exceção no fechamento da versão aprovada (decisão 206). */}
+        {job.excecao_fechamento && (
+          <FaixaExcecaoNaAbertura
+            excecao={job.excecao_fechamento.excecao}
+            taxas={job.excecao_fechamento.taxas}
+          />
+        )}
 
         <div className="flex flex-col gap-2.5 rounded-xl border border-border px-4 py-4">
           {dados.map((d) => (

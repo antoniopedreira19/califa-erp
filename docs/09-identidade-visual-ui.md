@@ -105,7 +105,7 @@ Case study: em 2026-09-16, depois de a página ganhar largura (decisão 085), o 
 
 ## Cores das planilhas (blocos de dado)
 
-As planilhas de orçamento e de job são lidas em blocos verticais, não coluna a coluna. **Uma cor por bloco, a mesma em todo o produto** — o leitor aprende a cor uma vez e ela vale da grade de itens ao card de Totais, do orçamento individual à visão agregada.
+As planilhas de orçamento e de job são lidas em blocos verticais, não coluna a coluna. **Uma cor por bloco nos fundos, faixas e cabeçalhos, a mesma em todo o produto** — o leitor aprende a cor uma vez e ela vale da grade de itens ao card de Totais, do orçamento individual à visão agregada.
 
 | Bloco | Cor | Papel |
 |---|---|---|
@@ -114,7 +114,36 @@ As planilhas de orçamento e de job são lidas em blocos verticais, não coluna 
 | **REALIZADO** | laranja `#C2410C` | o que de fato saiu |
 | **RENTABILIDADE** | grafite `#282828` | resultado da conta, não um quarto status |
 
+**Paleta numérica “Grafite e cinza” (aprovada em 22/10/2026):** os três
+blocos usam total, subtotal e total geral em grafite `#292929`; R$ unitário,
+QT e D/M em cinza `#606060`. A sublinha numérica do BV também fica cinza.
+Fundos, bordas e cabeçalhos mantêm azul/verde/laranja. Os resumos dos blocos
+e as prévias de planilha seguem a mesma hierarquia. Fonte única:
+`NUMEROS_PLANILHA` em `blocos.ts`. Números de custo acima do orçado usam
+`NUMEROS_PLANILHA.excedente` (`text-red-600`), com precedência sobre o
+neutro. Estados especiais da errata/save e painéis de resultado preservam
+suas cores semânticas.
+
 A rentabilidade fica em neutro de propósito: ela não é um bloco de entrada, é o que sobra entre dois outros. O grafite diz isso sem competir com os três. **O valor é sempre grafite, positivo ou negativo** — o sinal já está no número, e verde ali brigaria com o PLANEJADO. Isso vale só dentro de planilha e Totais; os painéis "Resultado operacional" e "Resultado geral" seguem verde/vermelho, porque não são coluna de planilha.
+
+**Exceções de limite (21/10/2026, decisão 204):**
+o total **planejado** fica vermelho quando excede seu orçado em todas as
+planilhas comparativas (Orçamentos, Jobs, financeiro, histórico e visões
+agregadas), inclusive subtotais e totais, além da referência na PP; o
+total orçado mantém o grafite da paleta aprovada (22/10/2026).
+No job, o total **realizado do item** fica vermelho quando o acumulado
+bruto (antes do BV, descontadas as devoluções aprovadas) excede o orçado.
+O destaque usa vermelho vibrante (`text-red-600`) nas vistas Bruto e
+Líquido. O **Resultado geral**
+do orçamento, no cabeçalho e no card de Totais, fica vermelho abaixo de
+20%; exatamente 20% mantém o verde. No card de Totais, fundo, borda e
+rótulos conservam o verde do planejado; somente o percentual fica
+vermelho. Sem resultado, o estado neutro permanece. As colunas de rentabilidade da grade
+continuam grafite. No formulário da PP, o cartão inicial preserva Em PPs
+emitidas e Planejado e acrescenta Orçado. A prévia tem triângulo âmbar acima
+do planejado ou escudo vermelho acima do orçado (precedência). Sob o total,
+o aviso contém somente ícone e título, sem texto explicativo ou cálculo.
+Fonte das comparações: `lib/calculos/limites-orcamento.ts`.
 
 **Fonte única:** `app/(app)/_planilha/blocos.ts`. Cada bloco exporta o conjunto pronto de classes (`faixa`, `cabecalhoAbre/Meio/Fim`, `celulaAbre/Meio/Total/Vazia`, `subtotalVazio/Valor`, `texto`, `textoSuave`, `bordaAbre`).
 
@@ -143,8 +172,8 @@ regras visuais.
   duas chaves com formas diferentes na mesma tela seriam duas gramáticas
   para a mesma ideia.
 - **O ORÇADO nunca muda** entre os modos: ele não recebe BV.
-- Na vista Líquido, o Total ganha uma **sub-linha** `BV −1.050,00`, na
-  cor do bloco a que pertence (verde no PLANEJADO, laranja no REALIZADO).
+- Na vista Líquido, o Total ganha uma **sub-linha** `BV −1.050,00`, em
+  cinza, conforme a paleta numérica aprovada em 22/10/2026.
   Ela aparece na célula do item **e no subtotal do grupo**, ali somando os
   BVs de todos os itens. É ela que torna a dedução auditável sem abrir o
   formulário — e é o motivo de o design 3b ter descartado tooltip: tooltip

@@ -17,7 +17,7 @@ import {
   type PPDaSublinha,
 } from "@/lib/exportacao/interna-do-job";
 import type { CategoriaModeloPlanilha } from "@/lib/types";
-import { nomeDeQuemRecebeAVerba, rotuloDaVerba, tipoDaVerba } from "@/lib/types";
+import { nomeDeQuemRecebeAVerba, nomeDoCartaoCorporativo, rotuloDaVerba, tipoDaVerba } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
@@ -123,7 +123,7 @@ export async function GET(
         .from("pedidos_compra")
         .select(
           "id, codigo, status, item_realizado_id, valor, valor_unitario, quantidade, dias_meses, " +
-            "verba_producao, tipo_verba, verba_titular_nome, " +
+            "verba_producao, tipo_verba, verba_titular_nome, cartao_corporativo, cartao_plataforma, " +
             "fornecedor:fornecedores(nome), responsavel:profiles!responsavel_verba_id(nome), " +
             "prestacao:pp_verba_prestacoes!pp_verba_prestacoes_pedido_compra_id_fkey(valor_devolvido)",
         )
@@ -174,7 +174,9 @@ export async function GET(
       pagoA: pp.verba_producao
         ? (nomeDeQuemRecebeAVerba({ ...pp, responsavel: responsavel ? { nome: responsavel } : null }) ??
           rotuloDaVerba(tipoDaVerba(pp) ?? "producao"))
-        : fornecedor,
+        : pp.cartao_corporativo
+          ? nomeDoCartaoCorporativo(pp.cartao_plataforma)
+          : fornecedor,
       valorDevolvido: Number(primeiro<any>(pp.prestacao)?.valor_devolvido ?? 0),
     });
     ppsPorItem.set(itemId, doItem);

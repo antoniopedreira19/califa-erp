@@ -7964,3 +7964,245 @@ os arquivos da frente do Antonio.
   - "Cancelar o job ESC-1001/26?" mostrou "Empresa · Agência California".
     Só aberto e fechado: o pedido continua pendente.
   - tsc, lint e build limpos.
+
+## ⚠️ Nota de 2026-10-22 (1) — as linhas da errata com borda vermelha na revisão da abertura (revisão da decisão 185)
+
+- **O quê:** com o job em revisão depois de uma errata, a planilha do job no
+  financeiro mostra as linhas que a errata mudou com uma borda vermelha de
+  2px em volta da linha inteira, sem fundo — a mesma do design do módulo
+  Suprimentos. Vale na aba Planilha Interna e no pop-up do "Visualizar
+  planilha interna" do formulário em revisão. Do protótipo de 17/10, o
+  Tiago escolheu só o destaque: sem faixa, sem selo e sem lista na faixa da
+  revisão.
+- **Quais linhas:** as de `linhasAlteradasNaRevisao` (decisão 185) — as
+  mesmas que travam o envio de PP. Alterada, nova e cancelada; a errata que
+  só reorganiza não destaca nada. Registrada a revisão, o destaque some.
+- **Código:** token `ERRATA.linhaEmRevisao` (`_planilha/blocos.ts`); prop
+  `linhasDaRevisao` em `JobRealizadoSection`, `JobItemRealizadoTable`,
+  `AberturaForm` e `PopUpDaPlanilha`; a página `financeiro/jobs/[jobId]`
+  lê as linhas junto da revisão. A linha do pedido de save em aprovação
+  continua em âmbar, e a versão antiga do histórico não destaca a revisão.
+
+## ⚠️ Nota de 2026-10-22 (2) — a exceção no fechamento do internacional na abertura (decisão 206)
+
+- Quando a versão aprovada do job internacional tem **exceção no
+  fechamento** (int. taxes, impostos BR ou custo de transação fora do
+  padrão, registrados pelo administrador), o financeiro vê:
+  - na **fila**, o selo "Exceção no fechamento" na coluna Job (a dica traz
+    as taxas);
+  - na **conferência** que a linha abre e na página **"Abrir job no
+    financeiro"**, a faixa âmbar com cada taxa e o padrão ao lado, o motivo,
+    quem e quando;
+  - no pop-up **"Abrir … no financeiro?"**, a linha da exceção.
+- Dado: `JobNaFila.excecao_fechamento`, lido no `SELECT_JOB_FILA` pelo embed
+  `versao_excecao:versoes_orcamento!jobs_versao_orcamento_aprovada_id_fkey(…, excecao_por:profiles!excecao_fechamento_por(nome))`.
+- Conferido com o TES-1031/26 (teste, não aberto; envio cancelado depois).
+
+## ⚠️ Nota de 2026-10-23 (1) — Resultado de Job, e as colunas novas de Visualizar Jobs (decisão 207)
+
+- **Central Financeira:** cartão novo **Resultado de Job**, o segundo da
+  grade, ao lado de Abertura de Job (de Contas a Pagar em diante, todos
+  descem uma casa). Rota `/financeiro/resultado-de-job`, sem abas: a lista
+  de jobs do financeiro.
+- **As duas listas** (Resultado de Job e a aba Visualizar Jobs da Abertura)
+  terminam em **Valor do Job · Faturamento · Rentabilidade**. Saíram
+  Recebimentos e Custos — da tabela, da faixa do projeto, da linha de
+  totais e do Excel. O Faturamento perdeu o selo da esteira (os chips de
+  cima continuam filtrando pela situação) e mantém o número da NF.
+- **Rentabilidade = a do job:** valor do job − impostos − custo planejado,
+  na conta do financeiro, em R$ (grafite) e em % do valor do job. É o
+  número do registro da abertura e do "Resultado Op. (Planejado)" do
+  cabeçalho do job. Conta em lote em `lib/data/rentabilidade-dos-jobs.ts`,
+  com as mesmas funções da página; o par R$ e % em `rentabilidadeDoJob`
+  (`lib/calculos/abertura-do-job.ts`), que o formulário da abertura passou
+  a usar.
+- `JobAberto` ganhou `rentabilidade` e `rentabilidade_pct` (nulos sem a
+  conta). `JobsAbertosList` recebe `tela: "abertura" | "resultado"`: cada
+  tela guarda os próprios filtros dos títulos, tem o seu texto de lista
+  vazia e o seu nome de arquivo do Excel. `notas-de-caixa.ts` foi apagado
+  (só servia às colunas que saíram).
+- Conferido logado em 23/10/2026: nove jobs (nacional, save, faturado em
+  parte, Mídia Off, mensal, zerado) com a Rentabilidade igual à da página
+  do job, ao centavo e no %.
+- **Fica para depois:** o relatório Rentabilidade de Jobs ainda usa outra
+  conta (ver decisão 207, "Fora desta decisão").
+
+## ⚠️ Nota de 2026-10-23 (2) — a planilha do job no financeiro abre as PPs de cada linha (decisão 208)
+
+- Na aba Planilha Interna de `/financeiro/jobs/[jobId]` (a mesma seção da
+  produção), toda linha com PP tem a seta que abre as PPs embaixo dela, uma
+  por sublinha: "↳ PP-00214 · Pago — serviço", com R$ Unit., QT, D/M e
+  Total no Realizado. "Exibir › PPs abertas em todas as linhas" abre todas.
+- No financeiro a sublinha é só leitura (não há o painel de PPs da
+  produção). No "Editar orçado" as PPs ficam fechadas.
+- **Conferido** no TES-1014/26; ver
+  [decisão 208](../decisions/208-pps-em-sublinhas-na-planilha-interna.md).
+
+## ⚠️ Nota de 2026-10-23 (3) — a PP no cartão corporativo (decisão 209)
+
+- A PP do cartão corporativo não tem fornecedor: lista de PPs, títulos e
+  aprovação mostram "Cartão corporativo — {plataforma}"; o dossiê mostra a
+  plataforma e o link da compra (abre em aba nova) e "Cartão corporativo: a
+  PP vai sem nota" no lugar do documento anexo.
+- Aprovar: "Como vai ser pago" abre em **Cartão de Crédito**, travado, com o
+  tipo em Custo Operacional; o financeiro escolhe o cartão e o subtipo. O
+  servidor recusa outra forma, e a CHECK `pp_cartao_corporativo_aprovada`
+  repete a regra (a intenção é gravada antes da RPC de aprovação).
+- Sem retenção nem nota: anexar a NF depois, pelo financeiro, é fase futura.
+- **Conferido** com a PP-00397 (TES-1001/26) aprovada no cartão "ZZ Teste
+  Empresa Teste", com o título em Títulos a Pagar. Ver
+  [decisão 209](../decisions/209-pp-no-cartao-corporativo.md).
+
+## ⚠️ Nota de 2026-10-26 (1) — o histórico da planilha: as tabelas e a tela de carga (decisão 211, A1)
+
+- Seis tabelas de histórico, só de leitura para admin e financeiro e escritas
+  só pelas funções da carga: `historico_cargas`, `historico_movimentos`,
+  `historico_notas`, `historico_jobs`, `historico_rateio_regional` e
+  `historico_saldos`. Elas não tocam lançamentos, contas nem relatórios.
+- Tela nova em **Financeiro › Cadastros › Histórico da planilha**, com cartão
+  em Cadastros do Financeiro (só para admin e financeiro). Ela lê o pacote
+  (.json do script `empacotar.ts`) no navegador e mostra período, linhas e
+  somas. Ela avisa as contas que faltam cadastrar e a carga ativa do mesmo
+  período, que vai ser substituída, e envia em partes. A lista mostra as
+  cargas com a situação; a ativa se desfaz e a incompleta se descarta, e o
+  registro fica.
+- O banco liga os textos aos cadastros (a conta é obrigatória; o resto fica
+  como texto quando não tem par), recusa período depois de 30/09/2026 e
+  movimento fora do período, e confere linhas e somas ao concluir. Concluir,
+  desfazer e descartar auditam.
+- **Conferido** com uma carga pequena (BB California, janeiro de 2023):
+  entrou, foi refeita e desfeita, e uma carga recusada no meio foi
+  descartada. As tabelas estão vazias; a primeira carga é a A2. Ver
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
+## ⚠️ Nota de 2026-10-26 (2) — a primeira carga do histórico da planilha (decisão 211, A2)
+
+- Duas contas novas em Cadastros › Contas bancárias, com saldo inicial 0 em
+  01/10/2026 e empresa contábil California; o saldo de 30/09 entra na
+  virada:
+  - **Fundo Fixo California:** tipo caixa.
+  - **BB Americas:** conta corrente do Banco do Brasil Americas, em dólar na
+    vida real. O extrato OFX dela não vai bater com o histórico, que está em
+    reais.
+- A 1ª carga (01/01/2023 a 30/06/2026) está ativa: 56.713 movimentos em 11
+  contas, 3.222 notas, 3.586 jobs, o rateio e os saldos. Ela ainda não aparece
+  em tela nenhuma além da lista de cargas: a Conciliação é a A3, os relatórios
+  são a A4.
+- **Conferido:** contagens, somas e o movimento de cada conta mês a mês são
+  os do pacote. O saldo de 30/06 bate com o da planilha em 8 das 11 contas;
+  nas outras três, a diferença são as frações de centavo que a planilha guarda
+  (R$ 2,33 na California Santander). Ver
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
+## ⚠️ Nota de 2026-10-26 (3) — o histórico da planilha no Extrato da Conciliação (decisão 211, A3)
+
+- Antes de a conta começar no sistema (a data do saldo inicial dela), o
+  Extrato mostra o histórico da planilha numa seção própria, só para leitura.
+  Ela usa a mesma grade e os mesmos quatro cartões, e o saldo parte da
+  abertura da carga. O ⓘ diz a aba e a linha da planilha.
+- Período todo antes do início: só o histórico. Período que atravessa: o
+  histórico, uma nota com o saldo em que ele termina e o saldo inicial do
+  sistema, e os lançamentos do sistema embaixo. Período sem histórico numa
+  conta que tem: uma faixa com atalhos para o primeiro e o último mês.
+- O filtro de período agora acompanha a mudança de período por link e pelo
+  voltar do navegador (antes ficava na data anterior).
+- **Conferido** na California Santander (março de 2024 e junho a agosto de
+  2026), no Fundo Fixo California (maio de 2025, igual ao saldo da planilha)
+  e na BB GoCrazy antes do histórico. Ver
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
+## ⚠️ Nota de 2026-10-26 (4) — o filtro de período da Conciliação anda mês a mês (decisão 211, A3)
+
+- **Datas pela URL:** as datas "De" e "Até" do filtro seguem a URL e
+  acompanham os atalhos e o voltar do navegador. O `DatePicker` ganhou um
+  `value` opcional, controlado; sem ele, os outros usos seguem como estavam.
+- **Setas e "Mês atual":** as setas ‹ › andam um mês inteiro a partir do mês
+  do "De", e "Mês atual" volta ao padrão.
+- **O histórico:** o mês é a unidade de navegação, e o limite de 3.000 linhas
+  fica como proteção, sem paginação.
+- O filtro é do Antonio: os ajustes foram aprovados pelo Tiago, combinados com
+  ele, em 26/10/2026. Ver
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
+## ⚠️ Nota de 2026-10-26 (5) — a DRE do histórico em Relatórios (decisão 211, A4)
+
+- **Onde:** Relatórios › "DRE do histórico" (`/relatorios/dre-historico`),
+  cartão só para admin e financeiro. Empresa (Agência California, CCH, Hitlab,
+  Ventura) e ano (2023 a 2026) pela URL; linhas da DRE da planilha × quatro
+  trimestres e o ano.
+- **Regra:** `lib/historico-financeiro/dre.ts` (com testes). Uma regra só por
+  linha no lugar das fórmulas da planilha: receita crédito − débito; custo e
+  despesa débito − crédito; todas as contas, menos as próprias de outra
+  empresa (a Santander Hitlab só na DRE da Hitlab); bonificação depois do
+  imobilizado em todas.
+- **Banco:** função `historico_dre` (migrations `20261026100003` e
+  `20261026100004`), SECURITY DEFINER com a trava de admin e financeiro, 0,2 s.
+- **Só o realizado (Tiago, 26/10/2026):** sem as previsões que a DRE da
+  planilha soma; elas entram no sistema na virada do 4T (Trilha B). Em 2025,
+  por isso, a receita da California fica R$ 2,12 milhões abaixo da planilha.
+- **Conferência:** `scripts/historico-financeiro/conferir-dre.ts`. Com tudo o
+  que a planilha tem, 2023 a 2025 batem, menos quatro células explicadas pela
+  própria planilha. Ver
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
+## ⚠️ Nota de 2026-10-26 (6) — a faixa de Hoje uma vez só na aba Títulos da Conciliação (revisão da decisão 195)
+
+- **O quê:** a faixa "Hoje" da Conciliação › Títulos saía duas vezes — no
+  topo, com os vencidos, e de novo no fim da lista —, e o console acusava a
+  chave repetida `2026-10-26` em `PlanilhaDeTitulos`. A causa era o título a
+  pagar sem data prevista (em 26/10, a AV-00003 e a AV-00004, testes da
+  remessa Santander, R$ 0,05 cada): a ordem o punha por último, e o
+  agrupamento por dia o contava como hoje.
+- **Regra (Tiago, 26/10/2026, opção A):** o sem data entra na faixa de Hoje,
+  como o vencido, e a lista ordena pela mesma data que agrupa. O saldo
+  previsto o desconta hoje; o saldo no fim da lista não muda. O filtro de
+  vencimento continua contando pelo vencimento do documento: o sem data só
+  aparece em "Todos".
+- **Código:** `ordenarPorDia` em `lib/financeiro/planilha-de-titulos.ts`, com
+  dois testes novos; `comSaldoPrevisto` recebe o `hoje`. Contas a Receber,
+  que usa `ordenarLinhas`, não muda. Ver a "Revisão de 26/10/2026" da
+  [decisão 195](../decisions/195-planilhas-de-titulos-e-extrato-nas-mesmas-colunas.md).
+
+## ⚠️ Nota de 2026-10-26 (7) — o resultado por regional do histórico em Relatórios (decisão 211, A4)
+
+- **Onde:** Relatórios › "Resultado por regional do histórico"
+  (`/relatorios/regional-historico`), cartão só para admin e financeiro.
+  Empresa (California ou CCH), ano e período (ano ou trimestre) pela URL; as
+  linhas das abas Gerencial × as regionais, "Sem regional" e o Total.
+- **Regra (Tiago, 26/10/2026):** o lançamento com regional entra na regional
+  dele, o TD se rateia pelo percentual do ano da planilha e o resto fica sem
+  regional; a coluna Total é a DRE do histórico. As exceções da planilha (o TD
+  ÷4) ficam documentadas e não se reproduzem. O rateio de cada ano aparece na
+  tela, com a célula de origem.
+- **Código:** `lib/historico-financeiro/regional.ts` (com testes) e a função
+  `historico_regional` (migrations `20261026100005` a `20261026100007`). As
+  peças de filtro dos dois relatórios do histórico estão em
+  `app/(app)/relatorios/_historico/filtros.tsx`.
+- **Conferência:** `scripts/historico-financeiro/conferir-regional.ts`. A
+  California de 2023 a 2025 bate com as abas Gerencial, menos as exceções. Ver
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
+## ⚠️ Nota de 2026-10-26 (8) — o resultado por regional pela divisão de cada job (decisão 211, A4)
+
+- **O que mudou:** o relatório "Resultado por regional do histórico" segue a
+  DRE regional da planilha (as abas "DRE Califa Regional" e "DRE CMH
+  Regional" do Fechamento). O faturamento e o custo operacional se dividem
+  pelas partes de cada job (o grupo "RATEIO %" das abas Res. Jobs); o imposto
+  é o teórico (a alíquota "Imp Real %" do job); o benefício do ISS e do PERSE
+  (o teórico menos o imposto pago, Tipo CT) entra depois do lucro líquido,
+  rateado pelo faturamento de cada regional no trimestre. A última linha
+  continua fechando com a DRE do histórico.
+- **Banco:** `historico_jobs` ganhou `rateio_regional` (jsonb) e
+  `imposto_teorico_percentual`; a carga lê os dois do pacote, e
+  `historico_regional` devolve o REC e o CO divididos (`pelo_job`) com o
+  imposto teórico (`teorico`). Migrations `20261026100008` e `20261026100009`.
+  A 1ª carga foi refeita pela tela com o pacote novo.
+- **Pacote:** a tabela de jobs tem duas colunas a mais: o pacote antigo não
+  passa mais na tela (gere de novo pelo `empacotar.ts`).
+- **Aguarda o Tiago:** o job que a planilha não divide (a Copa no 2T 2026 e
+  seis jobs da CCH no 1T 2026) fica na regional do lançamento; a planilha o
+  deixa fora da DRE regional.
+- **Conferência:** `conferir-regional.ts --fechamento`. De 2023 a 2025, as duas
+  empresas batem com a DRE regional do Fechamento, menos os trimestres em que a
+  planilha faz o benefício job a job e a CCH de 2023. Ver
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).

@@ -115,11 +115,13 @@ import type {
 import { IconeSave } from "../icone-save";
 import { BotaoDaPlanilha, PopUpDaPlanilha } from "./planilha-em-leitura";
 import { formatDiaBr } from "@/lib/formatar-data-hora";
+import { rentabilidadeDoJob } from "@/lib/calculos/abertura-do-job";
 import type { ContaBancariaOpcao } from "@/lib/data/contas-bancarias";
 import { useVoltar } from "@/components/voltar/botao-voltar";
 import { useProtegerSaida } from "@/components/voltar/estado";
 import { nomeDaPagina } from "@/lib/voltar";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { ExcecaoNaConfirmacao } from "@/app/(app)/_planilha/excecao-no-fechamento";
 
 interface CategoriaOption {
   id: string;
@@ -338,6 +340,11 @@ interface Props {
   fotos?: FotoDaAbertura[];
   /** A errata que devolveu o job ao mural — só no modo `revisao`. */
   revisao?: RevisaoDeErrata | null;
+  /** As linhas que as erratas da revisão mudaram (decisão 185): o
+   *  "Visualizar planilha interna" abre com elas em borda vermelha
+   *  (revisão da 185, 19/10/2026). `[]` fora da revisão. Obrigatória: quem
+   *  não destaca manda `[]`. */
+  linhasDaRevisao: string[];
   /**
    * Aprovação de save (decisão 099): o pedido que esta revisão aprova.
    * Vem com o modo `revisao`; a faixa do topo vira "Aprovação de save ·
@@ -484,6 +491,7 @@ export function AberturaForm({
   abertoPorNome,
   fotos = [],
   revisao = null,
+  linhasDaRevisao,
   aprovacaoSave,
   saves,
 }: Props) {
@@ -953,11 +961,9 @@ export function AberturaForm({
   // faturamento − custo previsto − impostos da nota —, e o job pago com
   // saldo de save de outro job, sem nada a faturar, saía com rentabilidade
   // negativa igual ao custo inteiro.
-  const margem = emCentavos(
-    rentabilidade.valorJob - rentabilidade.deducoes - rentabilidade.custoPlanejado,
-  );
-  const margemPct =
-    rentabilidade.valorJob > 0 ? (margem / rentabilidade.valorJob) * 100 : 0;
+  // A conta mora em `rentabilidadeDoJob`: as listas do financeiro mostram
+  // o mesmo número (decisão 207).
+  const { valor: margem, percentual: margemPct } = rentabilidadeDoJob(rentabilidade);
 
   // Contagem das linhas de cada bloco: aparece no rodapé da tabela de
   // previsões e no resumo do registro, na lateral.
@@ -3303,6 +3309,7 @@ export function AberturaForm({
             <AtalhoDaPlanilhaInterna
               job={job}
               destacarItens={aprovacaoSave?.linhaId ? [aprovacaoSave.linhaId] : []}
+              linhasDaRevisao={linhasDaRevisao}
             />
             {/* A planilha do job de origem do consumo, logo abaixo da
                 planilha interna e no mesmo tipo de botão (decisão 155). */}
@@ -3679,6 +3686,11 @@ export function AberturaForm({
               </span>
             </div>
           </div>
+
+          {/* A exceção no fechamento da versão aprovada (decisão 206). */}
+          {job.excecao_fechamento && (
+            <ExcecaoNaConfirmacao taxas={job.excecao_fechamento.taxas} />
+          )}
 
           <div className="flex items-center justify-end gap-2.5">
             <button
@@ -4530,14 +4542,18 @@ function SavesDesteJob({
 
 /** O atalho "Visualizar planilha interna": abre a planilha deste job num
  *  pop-up, em leitura, como os da origem (Tiago, 07/10/2026). Na aprovação
- *  de um save (decisão 099), a linha do pedido vem em destaque. A aba
- *  Planilha Interna continua no topo, e é nela que se edita. */
+ *  de um save (decisão 099), a linha do pedido vem em destaque; na revisão
+ *  depois de uma errata, as linhas que ela mudou vêm com a borda vermelha
+ *  (revisão da decisão 185). A aba Planilha Interna continua no topo, e é
+ *  nela que se edita. */
 function AtalhoDaPlanilhaInterna({
   job,
   destacarItens,
+  linhasDaRevisao,
 }: {
   job: { id: string; codigo: string; nome: string };
   destacarItens: string[];
+  linhasDaRevisao: string[];
 }) {
   const [aberto, setAberto] = React.useState(false);
   return (
@@ -4556,6 +4572,7 @@ function AtalhoDaPlanilhaInterna({
         codigo={job.codigo}
         descricao={`${job.nome} · em leitura — as linhas com save aparecem com o ícone de save. Para editar, use a aba Planilha Interna.`}
         destacarItens={destacarItens}
+        linhasDaRevisao={linhasDaRevisao}
       />
     </>
   );

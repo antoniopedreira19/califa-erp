@@ -47,6 +47,7 @@ import {
   resumoDoSave,
 } from "./save-do-orcamento";
 import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
+import type { LinhaDoFechamento } from "@/lib/calculos/excecao-fechamento";
 
 interface Props {
   grupos: VersaoOrcamentoGrupo[];
@@ -101,6 +102,9 @@ interface Props {
   /** Moeda e taxa de compra da coluna calculada da planilha. `null` fora
    *  do internacional. */
   moedaEstrangeira: MoedaEstrangeira | null;
+  /** As linhas da cadeia internacional fora do padrão por exceção do
+   *  administrador (decisão 206). Vazio fora dela. */
+  linhasEmExcecao: LinhaDoFechamento[];
   /** Orçamento de serviço Interno (decisão 105): tipo F · Interno travado,
    *  planejado igual ao orçado e nenhum controle de save. Obrigatória. */
   interno: boolean;
@@ -141,6 +145,7 @@ export function PlanilhaVersao({
   internacional,
   moedaEstrangeira,
   interno,
+  linhasEmExcecao,
   mes,
   semTotais,
   tituloTotais,
@@ -299,6 +304,8 @@ export function PlanilhaVersao({
           modeloPlanilha={modeloPlanilha}
           internacional={internacional}
           moedaEstrangeira={moedaEstrangeira}
+          interno={interno}
+          linhasEmExcecao={linhasEmExcecao}
           titulo={tituloTotais}
           subtitulo={subtituloTotais}
         />

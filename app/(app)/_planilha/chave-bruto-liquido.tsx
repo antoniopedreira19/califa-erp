@@ -102,8 +102,8 @@ export function SubLinhaBv({
   deducao: number;
   pendente?: boolean;
   formatar: (v: number) => string;
-  /** Cor do bloco a que a sub-linha pertence — verde no PLANEJADO,
-   *  laranja no REALIZADO. Vem de `blocos.ts`, nunca de hex aqui. */
+  /** Cor numérica da sublinha — cinza na paleta aprovada em 22/10/2026.
+   *  Vem de `blocos.ts`, nunca de hex aqui. */
   cor: string;
   corRotulo: string;
 }) {

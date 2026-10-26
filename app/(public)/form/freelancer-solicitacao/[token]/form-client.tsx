@@ -7,15 +7,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MaskedInput } from "@/components/ui/masked-input";
-import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
 import { cn, isValidCpf } from "@/lib/utils";
 import { CepInput } from "@/app/(app)/freelancers/_components/cep-input";
+import {
+  PagamentoDoFreelancer,
+  tipoDePagamentoPreenchido,
+} from "@/app/(app)/freelancers/_components/pagamento-do-freelancer";
 
 interface Props {
   token: string;
@@ -51,7 +48,9 @@ export function FormClient({ token, nomePreenchido, cpfPreenchido }: Props) {
     banco: "",
     agencia: "",
     conta: "",
+    tipo_conta: "",
     pix_chave: "",
+    pix_tipo: "",
   }));
 
   function set(key: string, value: string) {
@@ -82,6 +81,8 @@ export function FormClient({ token, nomePreenchido, cpfPreenchido }: Props) {
         for (const [k, v] of Object.entries(state)) {
           fd.set(k, v);
         }
+        // Decisão 212: o tipo de pagamento sai do que foi preenchido.
+        fd.set("tipo_pagamento", tipoDePagamentoPreenchido(state));
         const r = await fetch(
           `/api/public/freelancer-solicitacao/${token}/submit`,
           { method: "POST", body: fd },
@@ -104,8 +105,6 @@ export function FormClient({ token, nomePreenchido, cpfPreenchido }: Props) {
   }
 
   const temPj = !!state.cnpj;
-  const tipoPix = state.tipo_pagamento === "pix";
-  const tipoConta = state.tipo_pagamento === "conta_bancaria";
 
   return (
     <form onSubmit={onSubmit} className="space-y-6">
@@ -240,54 +239,16 @@ export function FormClient({ token, nomePreenchido, cpfPreenchido }: Props) {
         </div>
       </Secao>
 
-      <Secao titulo="Pagamento">
-        <Campo rotulo="Tipo de pagamento" erro={fieldErrors.tipo_pagamento}>
-          <Select
-            value={state.tipo_pagamento || undefined}
-            onValueChange={(v) => set("tipo_pagamento", v)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Escolha o tipo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="conta_bancaria">Conta bancária</SelectItem>
-              <SelectItem value="pix">PIX</SelectItem>
-            </SelectContent>
-          </Select>
-        </Campo>
-        {tipoConta && (
-          <>
-            <Campo rotulo="Banco *" erro={fieldErrors.banco}>
-              <Input
-                value={state.banco}
-                onChange={(e) => set("banco", e.target.value)}
-              />
-            </Campo>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Campo rotulo="Agência *" erro={fieldErrors.agencia}>
-                <Input
-                  value={state.agencia}
-                  onChange={(e) => set("agencia", e.target.value)}
-                />
-              </Campo>
-              <Campo rotulo="Conta *" erro={fieldErrors.conta}>
-                <Input
-                  value={state.conta}
-                  onChange={(e) => set("conta", e.target.value)}
-                />
-              </Campo>
-            </div>
-          </>
-        )}
-        {tipoPix && (
-          <Campo rotulo="Chave PIX *" erro={fieldErrors.pix_chave}>
-            <Input
-              value={state.pix_chave}
-              onChange={(e) => set("pix_chave", e.target.value)}
-              placeholder="CPF, email, telefone ou chave aleatória"
-            />
-          </Campo>
-        )}
+      {/* Decisão 212: PIX e conta à vista, com o tipo da chave e o tipo de
+          conta (antes, um seletor mostrava um ou outro). */}
+      <Secao titulo="Pagamento" descricao="Preencha o PIX e a conta, se tiver os dois. Um deles já basta.">
+        <PagamentoDoFreelancer
+          state={state}
+          set={set}
+          fieldErrors={fieldErrors}
+          pending={pending}
+          avisarChaveSemTipo={false}
+        />
       </Secao>
 
       <div className="flex items-center justify-end gap-3 pt-4 border-t border-border">

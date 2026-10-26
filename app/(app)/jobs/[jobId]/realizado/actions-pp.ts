@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
+import { bloqueioGeracaoPPPorLimite } from "@/lib/calculos/limites-orcamento";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
@@ -24,6 +25,7 @@ import {
 import type { PagamentoDoTitularNoPdf, SeloDaPP } from "@/lib/pdf/pedido-compra";
 import { pagamentoForaDoCadastroSchema } from "@/lib/validations/pagamento-fora-do-cadastro";
 import { pagamentoDoTitularSchema } from "@/lib/validations/pagamento-do-titular";
+import { LINK_DA_COMPRA, LINK_DA_COMPRA_MAX, PLATAFORMA_MAX } from "@/lib/validations/cartao-corporativo";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { formatCurrency } from "@/lib/utils";
 import { enviaPPNoJob, pode, type JobParaEnvioDePP } from "@/lib/permissoes";
@@ -139,15 +141,44 @@ function tipoDaVerbaDosDados(d: {
   return d.verba_producao ? (d.tipo_verba ?? "producao") : null;
 }
 
+/** Decisão 209: a plataforma e o link da PP no cartão corporativo. */
+type CartaoCorporativo = { plataforma: string; link: string };
+
+/** Decisão 209: o cartão corporativo da PP comum, ou null. */
+function cartaoDe(d: { verba_producao: boolean; cartao_corporativo?: CartaoCorporativo | null }): CartaoCorporativo | null {
+  return d.verba_producao ? null : (d.cartao_corporativo ?? null);
+}
+
+/** Decisão 209: a PP do cartão não leva nota fiscal. A nota exige
+ *  fornecedor (`notas_fiscais_fornecedor`), e anexá-la depois é com o
+ *  financeiro, em fase futura (Tiago, 23/10/2026). */
+function notaNoCartao(
+  cartao: CartaoCorporativo | null,
+  anexos: Array<{ documento_tipo?: string | null }>,
+): string | null {
+  if (!cartao || !anexos.some((a) => a.documento_tipo === "nota_fiscal")) return null;
+  return "A PP no cartão corporativo não leva nota fiscal: anexe o comprovante com outro tipo, ou tire a nota.";
+}
+
+/** Decisão 209: o cartão corporativo da PP gravada, ou null. */
+function cartaoDaLinha(pp: {
+  cartao_corporativo: boolean | null;
+  cartao_plataforma: string | null;
+  cartao_link: string | null;
+}): CartaoCorporativo | null {
+  return pp.cartao_corporativo ? { plataforma: pp.cartao_plataforma ?? "", link: pp.cartao_link ?? "" } : null;
+}
+
 /** A PP paga um fornecedor: a de fornecedor e a verba de um terceiro
  *  (decisão 164; nas três verbas desde a 171), que usa o pagamento do
- *  fornecedor. */
+ *  fornecedor. A PP do cartão corporativo (decisão 209) não tem. */
 function usaFornecedor(d: {
   verba_producao: boolean;
   tipo_verba?: TipoVerba | null;
   verba_titular_tipo?: TitularDaVerbaTipo | null;
+  cartao_corporativo?: CartaoCorporativo | null;
 }): boolean {
-  if (!d.verba_producao) return true;
+  if (!d.verba_producao) return !cartaoDe(d);
   return d.verba_titular_tipo === "fornecedor";
 }
 
@@ -160,6 +191,7 @@ function foraDoCadastroDe(d: {
   verba_producao: boolean;
   tipo_verba?: TipoVerba | null;
   verba_titular_tipo?: TitularDaVerbaTipo | null;
+  cartao_corporativo?: CartaoCorporativo | null;
   pagamento_fora_do_cadastro?: PagamentoForaDoCadastro | null;
 }): PagamentoForaDoCadastro | null {
   return usaFornecedor(d) ? (d.pagamento_fora_do_cadastro ?? null) : null;
@@ -175,15 +207,25 @@ function colunasDaVerba(
     fornecedor_id?: string | null;
     verba_titular_tipo?: TitularDaVerbaTipo | null;
     verba_titular_id?: string | null;
+    cartao_corporativo?: CartaoCorporativo | null;
   },
   titularNome: string | null,
 ) {
   const tipo = tipoDaVerbaDosDados(d);
+  // Decisão 209: o cartão corporativo, na PP comum e sem fornecedor. As
+  // CHECKs `pp_cartao_corporativo` e `chk_ppae_cartao_corporativo` repetem.
+  const cartao = cartaoDe(d);
+  const colunasDoCartao = {
+    cartao_corporativo: !!cartao,
+    cartao_plataforma: cartao?.plataforma ?? null,
+    cartao_link: cartao?.link ?? null,
+  };
   if (!tipo) {
     return {
+      ...colunasDoCartao,
       verba_producao: false,
       tipo_verba: null,
-      fornecedor_id: d.fornecedor_id ?? null,
+      fornecedor_id: cartao ? null : (d.fornecedor_id ?? null),
       responsavel_verba_id: null,
       verba_titular_tipo: null,
       verba_colaborador_id: null,
@@ -193,6 +235,7 @@ function colunasDaVerba(
   }
   const origem = d.verba_titular_tipo ?? null;
   return {
+    ...colunasDoCartao,
     verba_producao: true,
     tipo_verba: tipo,
     fornecedor_id: origem === "fornecedor" ? (d.fornecedor_id ?? null) : null,
@@ -350,6 +393,18 @@ const dataSchema = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Data deve estar em YYYY-MM-DD");
 
+/** Decisão 209: a plataforma e o link da compra no cartão corporativo — a
+ *  régua de `lib/validations/cartao-corporativo.ts`, a mesma da tela. */
+const cartaoCorporativoSchema = z.object({
+  plataforma: z.string().trim().min(1, "Informe a plataforma").max(PLATAFORMA_MAX),
+  link: z
+    .string()
+    .trim()
+    .min(1, "Cole o link da compra")
+    .max(LINK_DA_COMPRA_MAX)
+    .refine((l) => LINK_DA_COMPRA.test(l), "O link da compra não parece um endereço de site"),
+});
+
 /** Teto de parcelas: 24 (decisão 077, pergunta 7a). O formulário oferece
  *  1 a 6 e "Mais de 6…" até 24; o maior parcelamento gravado até
  *  14/09/2026 tinha 12. Vale também contra payload sem fim. */
@@ -410,11 +465,15 @@ const dadosBaseSchema = z.object({
   z.discriminatedUnion("verba_producao", [
     z.object({
       verba_producao: z.literal(false),
-      fornecedor_id: z.string().uuid(),
+      // Decisão 209: nulo só no cartão corporativo (ver o superRefine).
+      fornecedor_id: z.string().uuid().nullable().optional(),
       responsavel_verba_id: z.null().optional(),
       // Decisão 127: o meio só nesta PP — desde a decisão 161, chave
       // aleatória ou boleto. Null = paga pelo cadastro.
       pagamento_fora_do_cadastro: pagamentoForaDoCadastroSchema.nullable().optional(),
+      // Decisão 209: a compra que o financeiro paga no cartão da empresa —
+      // a plataforma e o link no lugar do fornecedor.
+      cartao_corporativo: cartaoCorporativoSchema.nullable().optional(),
     }),
     z.object({
       verba_producao: z.literal(true),
@@ -445,8 +504,17 @@ const dadosBaseSchema = z.object({
 /** As combinações da verba (decisões 164 e 171). O CHECK do banco é o
  *  backstop. */
 const dadosSchema = dadosBaseSchema.superRefine((d, ctx) => {
-  if (!d.verba_producao) return;
   const falha = (message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+  if (!d.verba_producao) {
+    // Decisão 209: o fornecedor, ou o cartão corporativo — nunca os dois.
+    if (d.cartao_corporativo) {
+      if (d.fornecedor_id) falha("O cartão corporativo não tem fornecedor");
+      if (d.pagamento_fora_do_cadastro) falha("O cartão corporativo é pago pelo financeiro, no cartão da empresa");
+    } else if (!d.fornecedor_id) {
+      falha("Escolha o fornecedor");
+    }
+    return;
+  }
   // Decisão 187: o reembolso vai para um colaborador ou freela — sem
   // terceiro — e diz se é de despesas ou de veículo próprio.
   if (d.tipo_verba === "reembolso") {
@@ -837,6 +905,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
          *  referência da PP desde 02/09/2026 (era o orçado). Vem da cópia,
          *  e não da versão aprovada, porque é a cópia que a errata altera. */
         total_planejado: number;
+        total_realizado: number;
         total_orcado: number;
         quantidade_orcada: number;
         /** Tipo de custo NA CÓPIA do job — a errata pode tê-lo trocado, e
@@ -884,7 +953,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
 
   const { data: ancora, error: itemErr } = await supabase
     .from("jobs_itens_realizado")
-    .select("id, tenant_id, job_id, item_id, job_item_orcado_id")
+    .select("id, tenant_id, job_id, item_id, job_item_orcado_id, total_realizado")
     .eq("id", itemRealizadoId)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
@@ -937,6 +1006,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
     item_nome: ((orcado as any).item as string) ?? "Item",
     total_planejado: Number((orcado as any).total_planejado ?? 0),
     total_orcado: Number(orcado.total_orcado ?? 0),
+    total_realizado: Number(ancora.total_realizado ?? 0),
     quantidade_orcada: Number(orcado.quantidade_orcada ?? 0),
     tipo_custo: (orcado as any).tipo_custo as TipoCusto,
     em_save: (orcado as any).em_save === true,
@@ -1381,6 +1451,10 @@ async function renderizarDocumentoDaPP(args: {
   };
   empresa: unknown;
   fornecedor: unknown | null;
+  /** Decisão 209: a plataforma e o link da PP no cartão corporativo, que
+   *  não tem fornecedor. Obrigatório: um chamador que o esquecesse soltaria
+   *  o documento do cartão com o bloco do fornecedor em branco. */
+  cartao: CartaoCorporativo | null;
   responsavelVerbaNome: string | null;
   /** Decisão 171: a conta e o PIX do colaborador titular (da foto da PP). */
   pagamentoDoTitular: PagamentoDoTitularNoPdf | null;
@@ -1426,6 +1500,7 @@ async function renderizarDocumentoDaPP(args: {
     selo: args.selo,
     empresa: args.empresa as never,
     fornecedor: (args.fornecedor ?? null) as never,
+    cartaoCorporativo: args.cartao,
     responsavelVerbaNome: args.responsavelVerbaNome,
     pagamentoDoTitular: args.pagamentoDoTitular,
     job: args.job,
@@ -1686,8 +1761,8 @@ async function finalizarPedidoCompraImpl(
   // ---- Valor da PP ----
   // O valor é o produto do trio que o GP digitou: R$ Unit. × QT × D/M. É
   // recalculado aqui de propósito — o cliente manda os três fatores, nunca
-  // o total. Nada limita o valor na geração (02/09/2026): o teto por PP
-  // saiu, e passar do planejado só muda quem pode enviar. A quantidade
+  // o total. A exceção do acumulado acima do orçado exige administrador
+  // na geração (decisão 204); passar só do planejado mantém o envio. A quantidade
   // nunca limitou: 4 diárias a R$ 2.500 cabem num item de 2 a R$ 5.000.
   const valor = valorDaPPPorUnidade(
     d.valor_unitario,
@@ -1699,6 +1774,20 @@ async function finalizarPedidoCompraImpl(
       ok: false,
       message: "R$ Unit., QT e D/M inválidos: o valor da PP ficaria zerado.",
     };
+  }
+
+  const bloqueioOrcado = bloqueioGeracaoPPPorLimite(
+    session.activeRole,
+    Math.round((item.total_realizado + valor) * 100) / 100,
+    item.total_orcado,
+  );
+  if (bloqueioOrcado) {
+    await logAuditEvent({
+      acao: "acao_negada", tenantId: session.activeTenant.id,
+      entidadeTipo: "pedido_compra", entidadeId: pp_id,
+      metadata: { acao_tentada: "pedido_compra.gerada", motivo: "realizado_acima_do_orcado", realizado: item.total_realizado, valor, orcado: item.total_orcado },
+    });
+    return { ok: false, message: bloqueioOrcado };
   }
 
   // Só para o registro de auditoria: o envio refaz esta conta na hora.
@@ -1727,6 +1816,8 @@ async function finalizarPedidoCompraImpl(
   if (!anexosParsed.success) {
     return { ok: false, message: "Formato de anexo inválido." };
   }
+  const nfNoCartao = notaNoCartao(cartaoDe(d), anexosParsed.data);
+  if (nfNoCartao) return { ok: false, message: nfNoCartao };
 
   // Valida tamanhos + prefix
   const expectedPrefix = `${session.activeTenant.id}/${job.id}/${pp_id}/anexos/`;
@@ -2027,6 +2118,7 @@ async function finalizarPedidoCompraImpl(
       empresa: cnpjDaPP.empresa,
       fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
       pagamentoPorBoleto: foraDoCadastroDe(d)?.meio === "boleto",
+      cartao: cartaoDe(d),
       responsavelVerbaNome: tipoVerba ? (titular.nome ?? "") : null,
       pagamentoDoTitular,
       job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
@@ -2601,6 +2693,7 @@ export async function previaDoPdfDaPP(
       empresa: cnpjDaPP.empresa,
       fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
       pagamentoPorBoleto: foraDoCadastroDe(d)?.meio === "boleto",
+      cartao: cartaoDe(d),
       responsavelVerbaNome: tipoVerba ? (titular.nome ?? "") : null,
       pagamentoDoTitular: pagamentoDigitadoNoPdf(pagTitularDaPrevia),
       job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },
@@ -2850,6 +2943,10 @@ async function refazerPdfDaPP(
     reembolso_tipo: ReembolsoTipo | null;
     reembolso_deslocamentos: DeslocamentosDoReembolso | null;
     pagamento_fora_do_cadastro_meio: string | null;
+    /** Decisão 209. */
+    cartao_corporativo: boolean | null;
+    cartao_plataforma: string | null;
+    cartao_link: string | null;
     parcelas: Array<{ id: string; numero: number; data_vencimento: string; valor: number | string }> | null;
     /** Decisão 191: o nome do item da planilha, para o PDF. */
     realizado: ItemDaPPEmbutido;
@@ -2918,6 +3015,7 @@ async function refazerPdfDaPP(
       },
       empresa: cnpjDaPP.empresa,
       fornecedor: fornecedorDoPdf,
+      cartao: cartaoDaLinha(pp),
       pagamentoDoTitular: pagamentoDoTitularDaPP(pp),
       pagamentoPorBoleto: pp.pagamento_fora_do_cadastro_meio === "boleto",
       responsavelVerbaNome: !pp.verba_producao
@@ -3151,7 +3249,7 @@ export async function enviarPedidoCompraAoFinanceiro(
   const { data: ppRow, error: ppErr } = await supabase
     .from("pedidos_compra")
     .select(
-      "id, codigo, job_id, item_realizado_id, status, valor, verba_producao, tipo_verba, reembolso_tipo, fornecedor_id, estabelecimento_id, prazo_pagamento, urgente, created_at, pagamento_fora_do_cadastro_meio, anexos:pedidos_compra_anexos(id)",
+      "id, codigo, job_id, item_realizado_id, status, valor, verba_producao, tipo_verba, reembolso_tipo, fornecedor_id, estabelecimento_id, prazo_pagamento, urgente, created_at, pagamento_fora_do_cadastro_meio, cartao_corporativo, anexos:pedidos_compra_anexos(id)",
     )
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -3171,6 +3269,7 @@ export async function enviarPedidoCompraAoFinanceiro(
       urgente: boolean;
       created_at: string;
       pagamento_fora_do_cadastro_meio: string | null;
+      cartao_corporativo: boolean;
       anexos: Array<{ id: string }> | null;
     }>();
 
@@ -3191,7 +3290,6 @@ export async function enviarPedidoCompraAoFinanceiro(
   const barradoNoEnvio = await barrarEnvioPeloPapel(gate.session, ppRow.id, gate.job);
   if (barradoNoEnvio) return barradoNoEnvio;
   const { item, job } = gate;
-
   const bloqueioEnvio = await barrarEnvioDePP(
     supabase,
     session.activeTenant.id,
@@ -3249,7 +3347,10 @@ export async function enviarPedidoCompraAoFinanceiro(
   // comprovantes — obrigatórios aqui, no envio, e não na geração.
   const reembolsoNoEnvio = ppRow.tipo_verba === "reembolso" ? (ppRow.reembolso_tipo ?? "despesas") : null;
   let anexosDoPedido: AnexoUploaded[] = [];
-  if (!ppRow.verba_producao || reembolsoNoEnvio) {
+  // Decisão 209: o cartão corporativo vai sem nota, como a verba — os
+  // anexos que a PP já tem ficam como estão.
+  const comDocumentosNoEnvio = (!ppRow.verba_producao && !ppRow.cartao_corporativo) || reembolsoNoEnvio;
+  if (comDocumentosNoEnvio) {
     const parsed = z.array(anexoUploadedSchema).safeParse(anexosDoEnvio ?? []);
     if (!parsed.success) return { ok: false, message: "Formato de anexo inválido." };
     anexosDoPedido = parsed.data;
@@ -3311,7 +3412,7 @@ export async function enviarPedidoCompraAoFinanceiro(
     );
     if (erroAnexos) return { ok: false, message: erroAnexos };
   }
-  if (!ppRow.verba_producao) {
+  if (!ppRow.verba_producao && !ppRow.cartao_corporativo) {
     const erroAnexos = await gravarAnexosDoEnvio(
       supabase,
       session.activeTenant.id,
@@ -3434,7 +3535,7 @@ export async function deixarPPProntaParaEnvio(
 
   const { data: ppRow, error: ppErr } = await supabase
     .from("pedidos_compra")
-    .select("id, codigo, job_id, item_realizado_id, status, valor, verba_producao, tipo_verba, reembolso_tipo, pagamento_fora_do_cadastro_meio")
+    .select("id, codigo, job_id, item_realizado_id, status, valor, verba_producao, tipo_verba, reembolso_tipo, pagamento_fora_do_cadastro_meio, cartao_corporativo")
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<{
@@ -3448,6 +3549,7 @@ export async function deixarPPProntaParaEnvio(
       tipo_verba: TipoVerba | null;
       reembolso_tipo: ReembolsoTipo | null;
       pagamento_fora_do_cadastro_meio: string | null;
+      cartao_corporativo: boolean;
     }>();
 
   if (ppErr || !ppRow) return { ok: false, message: "PP não encontrada." };
@@ -3472,7 +3574,10 @@ export async function deixarPPProntaParaEnvio(
   // com as regras dele (decisão 187).
   const reembolsoNoEnvio = ppRow.tipo_verba === "reembolso" ? (ppRow.reembolso_tipo ?? "despesas") : null;
   let anexosDoPedido: AnexoUploaded[] = [];
-  if (!ppRow.verba_producao || reembolsoNoEnvio) {
+  // Decisão 209: o cartão corporativo vai sem nota, como a verba — os
+  // anexos que a PP já tem ficam como estão.
+  const comDocumentosNoEnvio = (!ppRow.verba_producao && !ppRow.cartao_corporativo) || reembolsoNoEnvio;
+  if (comDocumentosNoEnvio) {
     const parsed = z.array(anexoUploadedSchema).safeParse(anexosDoEnvio ?? []);
     if (!parsed.success) return { ok: false, message: "Formato de anexo inválido." };
     anexosDoPedido = parsed.data;
@@ -3731,6 +3836,8 @@ export async function salvarPPAEmitir(
 
   const anexosParsed = z.array(anexoUploadedSchema).safeParse(anexos);
   if (!anexosParsed.success) return { ok: false, message: "Formato de anexo inválido." };
+  const nfNoCartao = notaNoCartao(cartaoDe(d), anexosParsed.data);
+  if (nfNoCartao) return { ok: false, message: nfNoCartao };
   const prefixo = `${tenantId}/${job.id}/${id}/anexos/`;
   const somaBytes = anexosParsed.data.reduce((s, a) => s + a.tamanho_bytes, 0);
   if (somaBytes > PP_ANEXOS_TAMANHO_TOTAL_MAX_BYTES) {
@@ -3840,6 +3947,9 @@ export async function salvarPPAEmitir(
       tipo_verba: linha.tipo_verba,
       fornecedor_id: linha.fornecedor_id,
       verba_titular_tipo: linha.verba_titular_tipo,
+      // Decisão 209.
+      cartao_corporativo: linha.cartao_corporativo,
+      cartao_plataforma: linha.cartao_plataforma,
       item_realizado_id: itemRealizadoId,
       job_id: job.id,
     },
@@ -4182,6 +4292,10 @@ export async function cancelarERefazerPP(
     verba_titular_nome: string | null;
     reembolso_tipo: ReembolsoTipo | null;
     reembolso_deslocamentos: DeslocamentosDoReembolso | null;
+    /** Decisão 209. */
+    cartao_corporativo: boolean | null;
+    cartao_plataforma: string | null;
+    cartao_link: string | null;
     servico: string;
     especificacoes: string | null;
     valor_unitario: number | string;
@@ -4313,6 +4427,8 @@ export async function cancelarERefazerPP(
         ? pagamentoDoTitularDaFoto(linhaPP as Parameters<typeof pagamentoDoTitularDaFoto>[0])
         : null,
     titular_paga_pelo_cadastro: pagaPeloCadastroHoje,
+    // Decisão 209: o cartão corporativo volta com a plataforma e o link.
+    cartao_corporativo: cartaoDaLinha(linhaPP),
   };
 
   // A PP a emitir nova, com os documentos copiados para o lugar dela.
@@ -4524,6 +4640,10 @@ export async function atualizarVencimentoDaPP(
     /** Decisão 187. */
     reembolso_tipo: ReembolsoTipo | null;
     reembolso_deslocamentos: DeslocamentosDoReembolso | null;
+    /** Decisão 209. */
+    cartao_corporativo: boolean | null;
+    cartao_plataforma: string | null;
+    cartao_link: string | null;
     parcelas: Array<{ id: string; numero: number; data_vencimento: string; valor: number | string }> | null;
     /** Decisão 191: o nome do item da planilha, para o PDF. */
     realizado: ItemDaPPEmbutido;
@@ -4622,6 +4742,7 @@ export async function atualizarVencimentoDaPP(
       },
       empresa: cnpjDaPP.empresa,
       fornecedor: fornecedorDoPdf,
+      cartao: cartaoDaLinha(pp),
       // Decisão 171: o pagamento do colaborador sai da foto da PP.
       pagamentoDoTitular: pagamentoDoTitularDaPP(pp),
       pagamentoPorBoleto:
@@ -4858,6 +4979,20 @@ async function editarPPGeradaImpl(
   if (valor <= 0) {
     return { ok: false, message: "R$ Unit., QT e D/M inválidos: o valor da PP ficaria zerado." };
   }
+  const bloqueioOrcado = bloqueioGeracaoPPPorLimite(
+    session.activeRole,
+    Math.round((item.total_realizado + valor - Number(ppRow.valor)) * 100) / 100,
+    item.total_orcado,
+  );
+  if (bloqueioOrcado) {
+    await logAuditEvent({
+      acao: "acao_negada", tenantId: session.activeTenant.id,
+      entidadeTipo: "pedido_compra", entidadeId: ppId,
+      metadata: { acao_tentada: "pedido_compra.editada", motivo: "realizado_acima_do_orcado", realizado: item.total_realizado, valor, orcado: item.total_orcado },
+    });
+    return { ok: false, message: bloqueioOrcado };
+  }
+
   if (!parcelasFecham(d.parcelas.map((p) => p.valor), valor)) {
     return {
       ok: false,
@@ -4868,6 +5003,8 @@ async function editarPPGeradaImpl(
   // ---- Anexos: conferidos antes de mexer em qualquer coisa ----
   const anexosParsed = z.array(anexoUploadedSchema).safeParse(anexos);
   if (!anexosParsed.success) return { ok: false, message: "Formato de anexo inválido." };
+  const nfNoCartao = notaNoCartao(cartaoDe(d), anexosParsed.data);
+  if (nfNoCartao) return { ok: false, message: nfNoCartao };
   const conferencia = await conferirAnexosDaPP(supabase, tenantId, job.id, ppId, anexosParsed.data);
   if (conferencia.erro !== null) return { ok: false, message: conferencia.erro };
 
@@ -4970,6 +5107,7 @@ async function editarPPGeradaImpl(
     empresa: cnpjDaPP.empresa,
     fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
     pagamentoPorBoleto: foraDoCadastroDe(d)?.meio === "boleto",
+    cartao: cartaoDe(d),
     // Decisão 171: a verba tem titular nas três; nada novo grava responsável.
     responsavelVerbaNome: tipoVerba ? (titular.nome ?? "") : null,
     job: { codigo: job.codigo, nome: job.nome, produto: job.produto ?? "" },

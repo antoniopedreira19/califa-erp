@@ -4,33 +4,7 @@ import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { createClient } from "@/lib/supabase/server";
-import { listarCidades, buscarSugestoesHibridas } from "@/lib/data/cidades";
-import type { CidadeSugestao } from "@/lib/data/cidades";
-
-/**
- * Busca de cidades do combobox do orçamento.
- *
- * Devolve o que ESTÁ no cadastro local do tenant + sugestões do IBGE que
- * ainda não foram cadastradas (com marcador `origem='ibge'`). Ao escolher
- * uma sugestão, o combobox chama `criarCidadeDoIBGE` pra materializá-la
- * no cadastro. Sem termo, mostra só o cadastro local (LIMITE_CIDADES).
- */
-export async function buscarCidades(
-  termo: string,
-): Promise<CidadeSugestao[]> {
-  const session = await requireSession();
-  const q = termo.trim();
-  if (q.length === 0) {
-    const locais = await listarCidades(session.activeTenant.id);
-    return locais.map((c) => ({
-      origem: "local" as const,
-      id: c.id,
-      nome: c.nome,
-      uf: c.uf,
-    }));
-  }
-  return buscarSugestoesHibridas(session.activeTenant.id, q);
-}
+import { municipioPorCodigo } from "@/lib/data/ibge-municipios";
 
 type CriarResult =
   | { ok: true; id: string; nome: string; uf: string | null }
@@ -57,13 +31,17 @@ export async function criarCidadeDoIBGE(
   if (!/^[0-9]{7}$/.test(ibgeCodigo)) {
     return { ok: false, message: "Código IBGE inválido." };
   }
-  if (!/^[A-Z]{2}$/.test(uf)) {
-    return { ok: false, message: "UF inválida." };
+  // Nome e UF gravados são os oficiais do código, não os que o navegador
+  // mandou: a lista do IBGE mora no servidor (`municipios-ibge.json`).
+  const oficial = await municipioPorCodigo(ibgeCodigo);
+  if (!oficial) {
+    return { ok: false, message: "Código IBGE inválido." };
   }
-  const nomeLimpo = nome.trim();
-  if (nomeLimpo.length === 0 || nomeLimpo.length > 80) {
-    return { ok: false, message: "Nome da cidade inválido." };
+  if (oficial.nome !== nome.trim() || oficial.uf !== uf) {
+    console.warn("[cidades.criar_ibge.divergente]", { ibgeCodigo, nome, uf });
   }
+  const nomeLimpo = oficial.nome;
+  uf = oficial.uf;
 
   const supabase = createClient();
 

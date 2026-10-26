@@ -26,6 +26,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { cn, formatCurrency } from "@/lib/utils";
 import {
   nomeDeQuemRecebeAVerba,
+  nomeDoCartaoCorporativo,
   podeCancelarPP,
   ppStatusLabel,
   rotuloDaVerbaMinusculo,
@@ -127,6 +128,7 @@ interface Props {
 
 /** O que o formulário da PP precisa e a aba não tinha (decisão 173). */
 export interface EdicaoDaPPNaAba {
+  podeGerarAcimaDoOrcado: boolean;
   jobId: string;
   jobEmpresaId: string;
   fornecedores: Array<{ id: string; nome: string; razao_social: string | null; cpf_cnpj?: string | null }>;
@@ -138,7 +140,7 @@ export interface EdicaoDaPPNaAba {
    *  conta dele, e se o item já está marcado como "todas as PPs geradas". */
   itens: Record<
     string,
-    { nome: string; planejado: number; unitario: number; quantidade: number; diasMeses: number; concluido: boolean }
+    { nome: string; orcado: number; realizado: number; planejado: number; unitario: number; quantidade: number; diasMeses: number; concluido: boolean }
   >;
   /** As PPs a emitir que reemitem uma rejeitada (revisão da 153,
    *  19/10/2026): o "Reemitir PP" da aba abre o formulário nelas, e a
@@ -276,6 +278,16 @@ function DtPagamento({
   );
 }
 
+/** O fornecedor da PP comum, ou "Cartão corporativo — plataforma" (decisão
+ *  209), que não tem fornecedor. */
+function nomeDoFornecedorDaPP(
+  pp: PedidoCompraNaLista,
+  fornecedoresPorId: Record<string, string>,
+): string | null {
+  if (pp.cartao_corporativo) return nomeDoCartaoCorporativo(pp.cartao_plataforma);
+  return pp.fornecedor_id ? (fornecedoresPorId[pp.fornecedor_id] ?? null) : null;
+}
+
 export function JobPPsSection({
   pps,
   fornecedoresPorId,
@@ -404,7 +416,7 @@ export function JobPPsSection({
         return false;
       }
       if (!termo) return true;
-      const fornecedor = (pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null) ?? "";
+      const fornecedor = nomeDoFornecedorDaPP(pp, fornecedoresPorId) ?? "";
       // O item e o bloco entraram na busca em 09/09/2026, junto da coluna
       // "Origem no job": procurar por "Fotógrafo" ou "TOOLKIT" é o jeito
       // natural de achar a PP depois que a origem virou visível.
@@ -474,7 +486,7 @@ export function JobPPsSection({
           const quem = nomeDeQuemRecebeAVerba(pp);
           const nome = tipo
             ? `${rotuloDaVerbaMinusculo(tipo).replace(/^./, (c) => c.toUpperCase())}${quem ? ` · ${quem}` : ""}`
-            : ((pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null) ?? "—");
+            : (nomeDoFornecedorDaPP(pp, fornecedoresPorId) ?? "—");
           return { valor: nome, rotulo: nome, ordem: nome };
         }
         case "vencimento": {
@@ -946,9 +958,7 @@ export function JobPPsSection({
                         </span>
                       ) : (
                         <span className="line-clamp-2 leading-snug">
-                          {(pp.fornecedor_id
-                            ? fornecedoresPorId[pp.fornecedor_id]
-                            : null) ?? "—"}
+                          {nomeDoFornecedorDaPP(pp, fornecedoresPorId) ?? "—"}
                           {/* O asterisco da decisão 067: o cadastro mudou
                               de conta depois que esta PP tirou a foto. A
                               PP continua valendo pela foto — o que o
@@ -1047,7 +1057,7 @@ export function JobPPsSection({
 
         {/* A trilha mora fora do frame, igual "Ver PP" / "Gerar PP" da
             Planilha Interna. Desde 08/10/2026 são três colunas de ícones —
-            enviar (só o GP, PP gerada com arquivo anexado), ver o
+            enviar (só o GP, toda PP gerada), ver o
             formulário (toda PP) e cancelar (a PP que ainda dá para
             cancelar) —; "Prestar contas" fica na coluna do cancelar, e o
             "Reemitir PP" da rejeitada entre o formulário e ele. */}
@@ -1070,14 +1080,11 @@ export function JobPPsSection({
               editable &&
               podeCancelarPP(pp.status) &&
               (papelEnviaPP || pp.status === "gerada");
-            // O envio é do GP (decisão 136) e precisa de arquivo anexado
-            // (pedido do Tiago, 08/10/2026: qualquer arquivo; o tipo e os
-            // dados da NF se conferem no pop-up). A verba sai sem nota.
-            const enviar =
-              editable &&
-              papelEnviaPP &&
-              pp.status === "gerada" &&
-              (pp.verba_producao || (pp.anexos ?? []).length > 0);
+            // O envio é do GP (decisão 136), em toda PP gerada. Até
+            // 22/10/2026 só aparecia com arquivo anexado (decisão 160 §4);
+            // agora a nota entra no pop-up, como no painel do item (decisão
+            // 152), e o servidor segue exigindo a NF. A verba sai sem nota.
+            const enviar = editable && papelEnviaPP && pp.status === "gerada";
             const trava = enviar ? travaDoEnvio(pp) : null;
             const enviarEl = enviar && (
               <Tooltip>
@@ -1230,9 +1237,10 @@ export function JobPPsSection({
               >
                 {/* Só o que vale nesta linha, um colado no outro (pedido do
                     Tiago, 08/10/2026): sem lugar vazio quando a PP não pode
-                    ser enviada. */}
-                {enviarEl}
+                    ser enviada. O lápis vem antes do avião (Tiago,
+                    22/10/2026): primeiro se acerta a PP, depois se envia. */}
                 {editarEl}
+                {enviarEl}
                 {formularioEl}
                 {prestarEl}
                 {refazerEl}
@@ -1261,15 +1269,14 @@ export function JobPPsSection({
                 ppEnviando.tipo_verba === "reembolso" ? (ppEnviando.reembolso_tipo ?? "despesas") : null,
               anexos: ppEnviando.anexos ?? [],
               pagaPorBoleto: ppEnviando.pagamento_fora_do_cadastro?.meio === "boleto",
+              cartaoCorporativo: ppEnviando.cartao_corporativo === true,
             } satisfies PPParaEnviar
           }
           onOpenChange={(o) => !o && setPpEnviando(null)}
           nomeDoFornecedor={
             (ppEnviando.verba_producao
               ? nomeDeQuemRecebeAVerba(ppEnviando)
-              : ppEnviando.fornecedor_id
-                ? fornecedoresPorId[ppEnviando.fornecedor_id]
-                : null) ?? "—"
+              : nomeDoFornecedorDaPP(ppEnviando, fornecedoresPorId)) ?? "—"
           }
           nomeDaEmpresa={
             tomadoresDaNf.find((t) => t.id === ppEnviando.estabelecimento_id)
@@ -1303,7 +1310,7 @@ export function JobPPsSection({
           ppVendo
             ? ppVendo.verba_producao
               ? (nomeDeQuemRecebeAVerba(ppVendo) ?? "—")
-              : ((ppVendo.fornecedor_id ? fornecedoresPorId[ppVendo.fornecedor_id] : null) ?? "—")
+              : (nomeDoFornecedorDaPP(ppVendo, fornecedoresPorId) ?? "—")
             : ""
         }
         // Decisão 156: a "Empresa emissora" da PP é o CNPJ dela.
@@ -1373,11 +1380,13 @@ export function JobPPsSection({
             podeEditarFornecedor={edicaoDaPP.podeEditarFornecedor}
             defaultEmpresaId={edicaoDaPP.jobEmpresaId}
             itemDescricao={item?.nome ?? ppEditando?.item_nome ?? ""}
+            valorOrcado={item?.orcado ?? 0}
+            podeGerarAcimaDoOrcado={edicaoDaPP.podeGerarAcimaDoOrcado}
             valorPlanejado={item?.planejado ?? planejadoPorItem[itemRealizadoId] ?? 0}
             unitarioPlanejado={item?.unitario ?? 0}
             quantidadePlanejada={item?.quantidade ?? 0}
             dmPlanejado={item?.diasMeses ?? 0}
-            emPPsEmitidas={emPPsDoItem(itemRealizadoId)}
+            emPPsEmitidas={item?.realizado ?? emPPsDoItem(itemRealizadoId)}
             aEmitirEditando={aEmitirEditando}
             ppGeradaEditando={ppEditando}
             itemConcluido={item?.concluido ?? false}
@@ -1417,7 +1426,9 @@ export function JobPPsSection({
           aEmitir={revisando}
           nomeDoFornecedor={
             revisando
-              ? !revisando.verba_producao
+              ? revisando.cartao_corporativo
+                ? nomeDoCartaoCorporativo(revisando.cartao_plataforma)
+                : !revisando.verba_producao
                 ? ((revisando.fornecedor_id ? fornecedoresPorId[revisando.fornecedor_id] : null) ?? "—")
                 : (revisando.verba_titular_nome ?? "—")
               : ""

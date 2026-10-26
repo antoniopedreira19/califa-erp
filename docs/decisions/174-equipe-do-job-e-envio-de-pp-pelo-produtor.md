@@ -123,3 +123,19 @@ era.
   [176](176-trocar-gp-e-produtor-do-job-aberto.md). A troca do produtor
   desliga a chave pelo mesmo gatilho desta decisão, e o "Salvar" compara a
   chave pedida com o estado depois da troca.
+
+## ⚠️ Nota de 2026-10-22 — o aviso das PPs já prontas ao ligar a chave
+
+- **O que confundiu:** no ANI-1001/26 a GP ligou a chave às 18:11 de 16/10;
+  três PPs que a produtora tinha marcado "pronta para envio" às 17:11
+  continuaram na fila da GP, e ela entendeu que a chave não funcionava.
+  A regra não muda: ligar a chave não mexe na PP já pronta — ela segue na
+  fila do GP, e o Produtor Responsável com a chave também pode enviá-la.
+- **Na tela:** enquanto a chave está sendo ligada no pop-up "Equipe" (no
+  job e na visão agregada), se o job tem PP gerada e pronta para envio,
+  aparece sob a chave: "A PP-00231, já pronta, segue na fila do GP. Com a
+  chave, o Produtor Responsável também pode enviá-la." (até três códigos;
+  acima disso, "e mais N"). Some ao desligar a chave ou fechar sem salvar.
+- **Onde:** `ppsProntas` em `JobNaEquipe` (`lib/data/equipe-do-projeto.ts`,
+  uma leitura a mais no mesmo `Promise.all`) e `AvisoDePPsProntas` em
+  `equipe-dialog.tsx`. Sem migration.

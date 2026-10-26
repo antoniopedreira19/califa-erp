@@ -20,6 +20,7 @@ import {
 } from "@/lib/importacao/diff-projeto";
 import { escolherJobDoFunil, estagioFunil } from "@/lib/calculos/funil";
 import { escolherVersaoVigente } from "@/lib/calculos/versao-vigente";
+import { FECHAMENTO_PADRAO } from "@/lib/calculos/excecao-fechamento";
 import type {
   CategoriaModeloPlanilha,
   ImportacaoWarning,
@@ -125,6 +126,8 @@ interface VersaoRow {
   cambio_cotacao: number | string | null;
   cambio_venda: number | string | null;
   cambio_data: string | null;
+  /** Decisão 206: a exceção no fechamento não passa para a versão nova. */
+  excecao_fechamento_motivo: string | null;
 }
 
 interface Analise {
@@ -261,7 +264,7 @@ async function analisar(
             "id, orcamento_id, numero_versao, status, moeda, taxa_cambio, " +
               "percentual_honorarios, percentual_imposto, save_por_padrao, created_at, " +
               "percentual_int_taxes, int_transaction_costs, moeda_estrangeira, " +
-              "cambio_compra, cambio_cotacao, cambio_venda, cambio_data",
+              "cambio_compra, cambio_cotacao, cambio_venda, cambio_data, excecao_fechamento_motivo",
           )
           .eq("tenant_id", tenantId)
           .in("orcamento_id", ids)
@@ -613,14 +616,22 @@ export async function confirmarImportacaoProjeto(
         moeda: vigente.moeda,
         taxa_cambio: num(vigente.taxa_cambio) || 1,
         percentual_honorarios: num(vigente.percentual_honorarios),
-        percentual_imposto: num(vigente.percentual_imposto),
+        // A exceção no fechamento é da vigente, não da versão nova (decisão
+        // 206): com ela, a nova nasce no padrão.
+        percentual_imposto: vigente.excecao_fechamento_motivo
+          ? FECHAMENTO_PADRAO.imposto
+          : num(vigente.percentual_imposto),
         save_por_padrao: vigente.save_por_padrao === true,
         // A cadeia internacional herda como o resto (decisão 072). Antes de
         // 14/09/2026 ficava de fora, e um orçamento internacional perdia
         // int. taxes, ITC e câmbio em silêncio a cada importação. No
         // nacional são 0 e nulos — copiar é inofensivo.
-        percentual_int_taxes: num(vigente.percentual_int_taxes),
-        int_transaction_costs: num(vigente.int_transaction_costs),
+        percentual_int_taxes: vigente.excecao_fechamento_motivo
+          ? FECHAMENTO_PADRAO.intTaxes
+          : num(vigente.percentual_int_taxes),
+        int_transaction_costs: vigente.excecao_fechamento_motivo
+          ? FECHAMENTO_PADRAO.itc
+          : num(vigente.int_transaction_costs),
         moeda_estrangeira: vigente.moeda_estrangeira,
         cambio_compra: vigente.cambio_compra,
         cambio_cotacao: vigente.cambio_cotacao,

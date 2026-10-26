@@ -1,5 +1,7 @@
 "use client";
 
+import { acimaDoOrcado } from "@/lib/calculos/limites-orcamento";
+
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { ChevronDown, Lock, Plus, Trash2, X } from "lucide-react";
@@ -68,6 +70,7 @@ import {
   type TipoEditor,
 } from "@/app/(app)/_planilha/selecao";
 import {
+  NUMEROS_PLANILHA,
   ORCADO,
   PLANEJADO,
   RENTABILIDADE,
@@ -1704,7 +1707,7 @@ export function ItensTable({
                         )}
                       >
                         <div className="flex flex-col items-end">
-                          <span className="font-mono text-[13px] font-bold leading-[1.2]">
+                          <span className={cn("font-mono text-[13px] font-bold leading-[1.2]", acimaDoOrcado(sub.planejado.bruto, subOrcado) && NUMEROS_PLANILHA.excedente)}>
                             {formatCurrency(subPlanejado, moeda)}
                           </span>
                           {/* A soma dos BVs de todos os itens do grupo. */}
@@ -1712,8 +1715,8 @@ export function ItensTable({
                             <SubLinhaBv
                               deducao={sub.planejado.deducaoBv}
                               formatar={(v) => formatCurrency(v, moeda)}
-                              cor={PLANEJADO.texto}
-                              corRotulo={PLANEJADO.textoSuave}
+                              cor={NUMEROS_PLANILHA.detalhe}
+                              corRotulo={NUMEROS_PLANILHA.detalhe}
                             />
                           )}
                         </div>
@@ -2081,15 +2084,18 @@ export function ItensTable({
                               className={PLANEJADO.celulaTotal}
                             >
                               <div className="flex flex-col items-end">
-                                <span className="font-mono text-xs font-semibold leading-[1.2]">
+                                <span className={cn(
+                                  "font-mono text-xs font-semibold leading-[1.2]",
+                                  acimaDoOrcado(totais.planejado, totais.orcado) && NUMEROS_PLANILHA.excedente,
+                                )}>
                                   {formatCurrency(planejadoNaVisao, moeda)}
                                 </span>
                                 {visao === "liquido" && (
                                   <SubLinhaBv
                                     deducao={blocos.planejado.deducaoBv}
                                     formatar={(v) => formatCurrency(v, moeda)}
-                                    cor={PLANEJADO.texto}
-                                    corRotulo={PLANEJADO.textoSuave}
+                                    cor={NUMEROS_PLANILHA.detalhe}
+                                    corRotulo={NUMEROS_PLANILHA.detalhe}
                                   />
                                 )}
                               </div>
@@ -2231,6 +2237,7 @@ export function ItensTable({
                   className={cn(
                     "px-3 py-2 text-right whitespace-nowrap",
                     PLANEJADO.subtotalValor,
+                    acimaDoOrcado(totaisDaPlanilha.planejado.bruto, totalOrcado) && NUMEROS_PLANILHA.excedente,
                   )}
                 >
                   <div className="flex flex-col items-end">
@@ -2241,8 +2248,8 @@ export function ItensTable({
                       <SubLinhaBv
                         deducao={totaisDaPlanilha.planejado.deducaoBv}
                         formatar={(v) => formatCurrency(v, moeda)}
-                        cor={PLANEJADO.texto}
-                        corRotulo={PLANEJADO.textoSuave}
+                        cor={NUMEROS_PLANILHA.detalhe}
+                        corRotulo={NUMEROS_PLANILHA.detalhe}
                       />
                     )}
                   </div>
@@ -2996,7 +3003,7 @@ function LinhaDraft({
         selecao={selecao}
         linhaId={DRAFT_ID}
         coluna="total_planejado"
-        className={cn("font-mono font-semibold", PLANEJADO.celulaTotal)}
+        className={cn("font-mono font-semibold", PLANEJADO.celulaTotal, acimaDoOrcado(totalPlanejado, totalOrcado) && NUMEROS_PLANILHA.excedente)}
       >
         {formatCurrency(totalPlanejado, moeda)}
       </CelulaCalculada>

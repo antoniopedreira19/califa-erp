@@ -28,6 +28,7 @@ import { AberturaForm } from "./abertura-form";
 import { lerFaturamentoMensalPeloJob } from "@/lib/data/faturamento-mensal";
 import { lerFechamentoMidiaDoJob } from "@/lib/data/midia-do-job";
 import { impostoDoJob } from "../imposto-previsto";
+import { FaixaExcecaoNaAbertura } from "@/app/(app)/_planilha/excecao-no-fechamento";
 import { JobFinanceiroTabs } from "../../jobs/[jobId]/job-financeiro-tabs";
 import { abaDaUrl } from "../../jobs/[jobId]/abas";
 import {
@@ -321,6 +322,14 @@ export default async function AbrirJobNoFinanceiroPage({
         </p>
       </div>
 
+      {/* A exceção no fechamento da versão aprovada (decisão 206). */}
+      {job.excecao_fechamento && (
+        <FaixaExcecaoNaAbertura
+          excecao={job.excecao_fechamento.excecao}
+          taxas={job.excecao_fechamento.taxas}
+        />
+      )}
+
       <JobFinanceiroTabs
         abaInicial={abaDaUrl(searchParams?.aba) ?? "abertura"}
         chatCount={detalhe.naoLidas}
@@ -328,6 +337,8 @@ export default async function AbrirJobNoFinanceiroPage({
         abertura={
           <AberturaForm
             job={job}
+            // Job na fila: ainda não há revisão, nem linha de errata.
+            linhasDaRevisao={[]}
             categorias={categoriasDoModelo}
             servicos={servicosDoLado(servicosRes.data ?? [], job)}
             projetos={projetos}
@@ -447,6 +458,7 @@ export default async function AbrirJobNoFinanceiroPage({
              formulário da aba Abertura do Job. */
           <JobRealizadoSection
             // Tela do financeiro: só leitura, não gera nem envia PP.
+            podeGerarAcimaDoOrcado={false}
             papelEnviaPP={false}
             papelCorrigeNf={false}
             confirmarSaidaParaOrcamento
@@ -469,6 +481,7 @@ export default async function AbrirJobNoFinanceiroPage({
             saldosDeSave={[]}
             clienteNome={detalhe.clienteNome}
             destacarItens={[]}
+            linhasDaRevisao={[]}
             job={{
               id: jobDoDetalhe.id,
               codigo: jobDoDetalhe.codigo,

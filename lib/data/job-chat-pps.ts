@@ -26,6 +26,8 @@ export type PPParaThreadChat = Pick<
   | "verba_producao"
   | "tipo_verba"
   | "verba_titular_nome"
+  | "cartao_corporativo"
+  | "cartao_plataforma"
   | "prazo_pagamento"
   | "enviada_financeiro_em"
   | "created_at"
@@ -106,6 +108,8 @@ export function montarThreadChatPPs(
       verba_titular_nome: pp.verba_titular_nome,
       fornecedor: fornecedorLookup ? { nome: fornecedorLookup } : null,
       responsavel: pp.responsavel,
+      cartao_corporativo: pp.cartao_corporativo,
+      cartao_plataforma: pp.cartao_plataforma,
     }) || "Fornecedor";
     const valorFmt = moeda(Number(pp.valor ?? 0), moedaCode);
 

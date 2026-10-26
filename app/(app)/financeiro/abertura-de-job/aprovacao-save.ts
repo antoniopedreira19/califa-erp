@@ -26,6 +26,7 @@ import {
 } from "@/lib/data/espelhos-do-job";
 import { grupoDoPedido, pedidosParaFinanceiroDoJob } from "@/lib/data/saves";
 import { tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
+import { linhasComPlanejadoDevolvido, planejadoAntesDoSave } from "@/lib/calculos/save-financeiro";
 import { desembolsoDaMidia } from "@/lib/calculos/midia-off";
 import { lerMidiaDoJob } from "@/lib/data/midia-do-job";
 import type {
@@ -129,15 +130,7 @@ export async function resumoComoOFinanceiroVe(
   }
   const totais = totaisDoFinanceiro(lida.base.itens, lida.base);
 
-  const linhasDevolvidas = lida.base.pedidos
-    .filter(
-      (p) =>
-        p.situacao === "aguardando" &&
-        p.momento === "job_aberto" &&
-        p.tipo === "gera" &&
-        p.jobItemOrcadoId !== null,
-    )
-    .map((p) => p.jobItemOrcadoId as string);
+  const linhasDevolvidas = linhasComPlanejadoDevolvido(lida.base.pedidos);
 
   let planejadoDosPedidos = 0;
   if (linhasDevolvidas.length > 0) {
@@ -155,12 +148,7 @@ export async function resumoComoOFinanceiroVe(
       id: string;
       planejado_antes_save: PlanejadoAntesDoSave | null;
     }[]) {
-      const antes = linha.planejado_antes_save;
-      planejadoDosPedidos += antes
-        ? Number(antes.valor_unitario ?? 0) *
-          Number(antes.quantidade ?? 0) *
-          Number(antes.dias_meses ?? 0)
-        : 0;
+      planejadoDosPedidos += planejadoAntesDoSave(linha.planejado_antes_save);
     }
   }
 

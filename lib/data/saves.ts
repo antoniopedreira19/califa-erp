@@ -694,7 +694,12 @@ export async function pedidosParaFinanceiroDoJob(
     // Sem os pedidos a conta sairia errada em silêncio: melhor parar.
     throw new Error(`[saves.pedidos_financeiro] ${error.message}`);
   }
-  return ((data ?? []) as any[]).map((p) => ({
+  return ((data ?? []) as any[]).map(paraPedidoDoFinanceiro);
+}
+
+/** Uma linha de `saves_aprovacoes` no formato da conta do financeiro. */
+function paraPedidoDoFinanceiro(p: any): PedidoParaFinanceiro {
+  return {
     id: p.id,
     jobItemOrcadoId: p.job_item_orcado_id ?? null,
     tipo: p.tipo as SaveAprovacaoTipo,
@@ -704,7 +709,34 @@ export async function pedidosParaFinanceiroDoJob(
       job_origem_id: o.job_origem_id,
       valor: Number(o.valor ?? 0),
     })),
-  }));
+  };
+}
+
+/**
+ * Os pedidos de save que aguardam, de TODOS os jobs do tenant, por job — a
+ * leitura em lote de `pedidosParaFinanceiroDoJob`, para a lista de jobs do
+ * financeiro fechar a conta de cada job sem uma consulta por linha
+ * (`docs/PERFORMANCE.md`). Mesmo filtro e mesmo formato.
+ */
+export async function pedidosParaFinanceiroDoTenant(
+  supabase: SupabaseClient,
+  tenantId: string,
+): Promise<Map<string, PedidoParaFinanceiro[]>> {
+  const { data, error } = await supabase
+    .from("saves_aprovacoes")
+    .select("id, job_id, job_item_orcado_id, tipo, situacao, momento, origens_antes")
+    .eq("tenant_id", tenantId)
+    .eq("situacao", "aguardando");
+  if (error) {
+    throw new Error(`[saves.pedidos_financeiro_tenant] ${error.message}`);
+  }
+  const porJob = new Map<string, PedidoParaFinanceiro[]>();
+  for (const p of (data ?? []) as any[]) {
+    const lista = porJob.get(p.job_id) ?? [];
+    lista.push(paraPedidoDoFinanceiro(p));
+    porJob.set(p.job_id, lista);
+  }
+  return porJob;
 }
 
 /**

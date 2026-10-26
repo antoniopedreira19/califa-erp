@@ -102,6 +102,7 @@ import {
 import { parcelaDePPDaChave, type RetencaoDaAprovacao } from "@/lib/fiscal/retencao-da-aprovacao";
 import { NoFiscalDoPagamento, useFiscalDaParcela } from "@/components/financeiro/no-fiscal";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
+import { AvisoDoPeriodoFechado, erroDoPeriodoFechado, usePeriodoFechado } from "@/components/financeiro/periodo-fechado";
 
 export interface BaixaTituloAlvo {
   /** Identifica o título e as baixas dele: o formulário recomeça quando
@@ -459,9 +460,17 @@ function FormularioDaBaixa({
   const saiDaConta = Math.round((v.liquido + jurosDaBaixa) * 100) / 100;
   const naoBate = !!linhaDoBanco && !noCartao && Math.abs(saiDaConta - linhaDoBanco.valor) > 0.004;
   const dataDiferenteDoBanco = !!linhaDoBanco && !!pagoEm && pagoEm !== linhaDoBanco.data;
+  // O fechamento da conciliação (decisão 205): no cartão nada sai da conta
+  // agora, e a trava não vale.
+  const fechadoAte = usePeriodoFechado(noCartao ? null : contaId, pagoEm);
 
   function handleSubmit() {
     setErroLocal(null);
+    // O período fechado vem antes de tudo (protótipo, `confirmar`).
+    if (fechadoAte) {
+      setErroLocal(erroDoPeriodoFechado(fechadoAte));
+      return;
+    }
     // Módulo fiscal: a parcela não sai sem a retenção que a aprovação da PP
     // decidiu — espera a busca voltar.
     if (aprovacao.buscando) {
@@ -544,6 +553,9 @@ function FormularioDaBaixa({
           A baixa soma {formatCurrency(saiDaConta, "BRL")} e a linha do banco é de{" "}
           {formatCurrency(linhaDoBanco.valor, "BRL")}. Ela só concilia quando os dois baterem.
         </Nota>
+      )}
+      {fechadoAte && (
+        <AvisoDoPeriodoFechado ate={fechadoAte} contaNome={contas.find((c) => c.id === contaId)?.nome ?? null} />
       )}
       {dataDiferenteDoBanco && linhaDoBanco && (
         <Nota tom="ambar">

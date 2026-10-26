@@ -12,7 +12,7 @@
  * continuam nas listas, que são de quem os desenha.
  */
 
-import { nomeDeQuemRecebeAVerba, situacaoDaVerba, tipoDaVerba } from "@/lib/types";
+import { nomeDeQuemRecebeAVerba, nomeDoCartaoCorporativo, situacaoDaVerba, tipoDaVerba } from "@/lib/types";
 import type {
   DocumentoTipo,
   FormaPagamento,
@@ -75,6 +75,7 @@ export const SELECT_PP_DO_FINANCEIRO = `
         rejeitada_em, motivo_rejeicao, pago_em, verba_producao,
         tipo_verba, verba_titular_tipo, verba_titular_nome,
         reembolso_tipo, reembolso_deslocamentos,
+        cartao_corporativo, cartao_plataforma, cartao_link,
         enviada_financeiro_em, aprovada_em, anexos_na_aprovacao,
         urgente, urgente_justificativa, urgente_em,
         forma_pagamento, cartao_credito_id,
@@ -245,6 +246,10 @@ export function mapearPPsDoFinanceiro(
     verba_titular_nome: string | null;
     reembolso_tipo: ReembolsoTipo | null;
     reembolso_deslocamentos: DeslocamentosDoReembolso | null;
+    /** Decisão 209. */
+    cartao_corporativo: boolean | null;
+    cartao_plataforma: string | null;
+    cartao_link: string | null;
     dados_pagamento_congelados_em: string | null;
     pagamento_fora_do_cadastro_meio: string | null;
     pagamento_fora_do_cadastro_motivo: string | null;
@@ -342,7 +347,14 @@ export function mapearPPsDoFinanceiro(
     urgente_em: r.urgente_em ?? null,
     urgente_por_nome: r.urgente_por_profile?.nome ?? null,
     fornecedor_id: r.fornecedor?.id ?? "",
-    fornecedor_nome: r.fornecedor?.razao_social ?? r.fornecedor?.nome ?? "",
+    // Decisão 209: o cartão corporativo não tem fornecedor — a plataforma
+    // vai no lugar dele, nas listas, nos títulos e na aprovação.
+    fornecedor_nome: r.cartao_corporativo
+      ? nomeDoCartaoCorporativo(r.cartao_plataforma)
+      : (r.fornecedor?.razao_social ?? r.fornecedor?.nome ?? ""),
+    cartao_corporativo: r.cartao_corporativo === true,
+    cartao_plataforma: r.cartao_plataforma ?? null,
+    cartao_link: r.cartao_link ?? null,
     /**
      * Asterisco da decisão 067: o cadastro do fornecedor mudou depois que
      * esta PP tirou a foto dos dados de pagamento.

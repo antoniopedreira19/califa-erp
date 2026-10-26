@@ -10,7 +10,7 @@ import { pode } from "@/lib/permissoes";
 import { listActiveMembers } from "@/lib/data/members";
 import { contatosDeCobrancaDoJob } from "@/lib/data/contatos-cobranca";
 import type { Job, JobStatus, Regional } from "@/lib/types";
-import { rotuloDaVerba, tipoDaVerba } from "@/lib/types";
+import { nomeDoCartaoCorporativo, rotuloDaVerba, tipoDaVerba } from "@/lib/types";
 import {
   jobStatusLabel,
   jobStatusExibido,
@@ -197,7 +197,9 @@ export default async function JobDetailPage({
       codigo: pp.codigo,
       quem: pp.verba_producao
         ? rotuloDaVerba(tipoDaVerba(pp) ?? "producao")
-        : (pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null) ?? "—",
+        : pp.cartao_corporativo
+          ? nomeDoCartaoCorporativo(pp.cartao_plataforma)
+          : (pp.fornecedor_id ? fornecedoresPorId[pp.fornecedor_id] : null) ?? "—",
       valor: Number(pp.valor ?? 0),
       status: pp.status as PPDoPedido["status"],
     }));
@@ -465,6 +467,7 @@ export default async function JobDetailPage({
             // O destaque é da planilha do financeiro, na aprovação de save
             // (decisão 099): a produção não destaca linha nenhuma.
             destacarItens={[]}
+            linhasDaRevisao={[]}
             job={{
               id: job.id,
               codigo: job.codigo,
@@ -513,6 +516,7 @@ export default async function JobDetailPage({
             podeMexerNoSave={podeMexerNoSave && !comPedido}
             podeExportarInterna={podeExportarInterna}
             podeGerarPP={podeGerarPP && !comPedido}
+            podeGerarAcimaDoOrcado={session.activeRole === "administrador"}
             papelEnviaPP={papelEnviaPP && !comPedido}
             papelCorrigeNf={papelCorrigeNf}
             ppsQuePossoPrestarContas={ppsQuePossoPrestarContas}
@@ -562,6 +566,7 @@ export default async function JobDetailPage({
             edicaoDaPP={
               podeGerarPP && !comPedido
                 ? {
+                    podeGerarAcimaDoOrcado: session.activeRole === "administrador",
                     jobId: job.id,
                     jobEmpresaId: job.empresa_id ?? "",
                     fornecedores,
@@ -583,6 +588,8 @@ export default async function JobDetailPage({
                                 realizado.id,
                                 {
                                   nome: it.item,
+                                  orcado: Number(it.total_orcado ?? 0),
+                                  realizado: Number(realizado.total_realizado ?? 0),
                                   planejado: Number(it.total_planejado ?? 0),
                                   unitario: Number(it.valor_unitario_planejado ?? 0),
                                   quantidade: Number(it.quantidade_planejada ?? 0),

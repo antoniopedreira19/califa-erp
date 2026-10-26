@@ -47,6 +47,9 @@ export interface JobNaEquipe {
   produtorId: string | null;
   /** A chave do envio de PP pelo Produtor Responsável (decisão 174). */
   produtorEnviaPP: boolean;
+  /** Os códigos das PPs "prontas para envio" que esperam o GP. Ligar a
+   *  chave não as tira da fila dele (22/10/2026): o pop-up avisa. */
+  ppsProntas: string[];
   /** Encerrado ou finalizado: não sai mais PP, e a chave fica parada. */
   congelado: boolean;
   /** Aberto ou em produção: o GP e o produtor se trocam pela Equipe
@@ -81,7 +84,7 @@ export async function carregarEquipeDoProjeto(
   tenantId: string,
   projetoId: string,
 ): Promise<EquipeDoProjeto | null> {
-  const [projetoRes, vinculosRes, orcsRes, jobsRes, membrosRes] =
+  const [projetoRes, vinculosRes, orcsRes, jobsRes, membrosRes, prontasRes] =
     await Promise.all([
       supabase
         .from("projetos")
@@ -115,11 +118,19 @@ export async function carregarEquipeDoProjeto(
         .neq("status", "cancelado")
         .order("created_at", { ascending: true }),
       supabase.rpc("membros_ativos_com_papel", { p_tenant_id: tenantId }),
+      supabase
+        .from("pedidos_compra")
+        .select("codigo, job_id, jobs!inner(projeto_id)")
+        .eq("jobs.projeto_id", projetoId)
+        .eq("tenant_id", tenantId)
+        .eq("status", "gerada")
+        .not("pronta_para_envio_em", "is", null)
+        .order("codigo", { ascending: true }),
     ]);
 
   const projeto = projetoRes.data;
   if (!projeto) return null;
-  for (const r of [vinculosRes, orcsRes, jobsRes, membrosRes]) {
+  for (const r of [vinculosRes, orcsRes, jobsRes, membrosRes, prontasRes]) {
     if (r.error) console.error("[equipe.carregar]", r.error.message);
   }
 
@@ -140,6 +151,13 @@ export async function carregarEquipeDoProjeto(
     produtor_envia_pp: boolean | null;
     status: JobStatus;
   }>;
+  const prontasPorJob = new Map<string, string[]>();
+  for (const pp of (prontasRes.data ?? []) as Array<{
+    codigo: string;
+    job_id: string;
+  }>) {
+    prontasPorJob.set(pp.job_id, [...(prontasPorJob.get(pp.job_id) ?? []), pp.codigo]);
+  }
   const ativos = (
     (membrosRes.data ?? []) as Array<{
       id: string;
@@ -227,6 +245,7 @@ export async function carregarEquipeDoProjeto(
       gpId: j.responsavel_id,
       produtorId: j.produtor_id,
       produtorEnviaPP: j.produtor_envia_pp === true,
+      ppsProntas: prontasPorJob.get(j.id) ?? [],
       congelado: jobEstaCongelado(j.status),
       aceitaTroca: j.status === "aberto" || j.status === "em_producao",
     })),

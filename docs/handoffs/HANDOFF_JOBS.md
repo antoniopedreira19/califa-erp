@@ -6238,3 +6238,188 @@ Protótipo aprovado em 17/10. Regra completa na decisão 192.
   Regras e conferência na decisão 123 §6. No código, só um comentário em
   `enviar-faturamento-dialog.tsx`.
 - **Na tela, nada muda.**
+
+## ⚠️ Nota de 2026-10-21 (3) — administrador na geração/edição acima do orçado (decisão 204)
+
+- **Regra aprovada:** a trava fica na geração e edição da PP. Usa o
+  acumulado do item (todas as PPs não canceladas menos devoluções
+  aprovadas), antes do BV, somando a nova PP ou substituindo o valor antigo
+  na edição. Igualdade libera. Somente administrador excede; a chave de
+  envio do produtor não concede essa permissão. Salvar PP a emitir continua
+  permitido. O envio preserva seus papéis e a confirmação do planejado.
+- **Formulário:** só acrescenta Orçado do item ao cartão inicial. Mantém
+  Planejado com o trio e Em PPs emitidas com a prévia e ícones de alerta
+  (triângulo âmbar para planejado; escudo vermelho para orçado). O aviso sob
+  o total contém somente ícone e título, sem cálculo ou explicação. Campos,
+  ordem e rodapé restantes preservados conforme o protótipo aprovado.
+  Gerar PP/Salvar alterações bloqueados para não admin acima do orçado.
+- **Planilha:** total realizado excedente vermelho em Bruto e Líquido.
+- **Proteção:** actions auditam a recusa; gatilhos recalculam sob trava da
+  âncora, incluindo geração/edição concorrentes. Migrations `20261021850001`
+  e `20261021850002` aplicadas e conferidas pelo MCP, sem backfill.
+- Regras e verificação na [decisão 204](../decisions/204-administrador-nas-excecoes-do-orcamento-e-da-pp.md).
+
+- **Conferência no navegador (21/10/2026):** build de produção local,
+  sessão de GP de teste. Avisos âmbar/vermelho, rascunho acima do orçado,
+  recusa do servidor pela revisão, geração de PP dentro do limite, edição
+  até o valor exato do orçado, bloqueio de um centavo excedente e segunda PP
+  de R$ 0,01 sobre acumulado no limite. Mesma trava pela aba PPs. Realizado
+  excedente vermelho em Bruto/Líquido; versão com Resultado geral 18,6% e
+  item excedente com valores vermelhos e aprovação desabilitada. PP criada
+  somente para conferir foi cancelada, sem envio ao financeiro; realizado
+  do item retornou a zero. Exceções de administrador conferidas nos testes
+  automatizados e SQL isolado, sem sessão administrativa de produção.
+
+- Build final repetido após integrar `a40e1e4d` (feedback de validação do
+  formulário). No navegador, 2.000 + 8.000,01 bloqueia em orçado de 10.000;
+  2.000 + 8.000 libera, mantendo o aviso de planejado. “Salvar” disponível.
+  40 testes automatizados e 22 cenários SQL aprovados; lint/typecheck/build
+  passaram, com apenas o aviso anterior de ARIA no `multi-select`.
+
+
+## Revisão visual — 22/10/2026 (decisão 204)
+
+- Total realizado excedente passa de vermelho da marca para vermelho
+  vibrante `text-red-600` (#dc2626), em Bruto e Líquido, para aumentar o
+  contraste. A comparação continua sobre o acumulado bruto do item.
+- Demais cores, formulário da PP, cálculos e permissões preservados.
+- **Conferência:** build de produção, lint e tipos aprovados (apenas o
+  aviso de ARIA anterior no `multi-select`); 40 testes existentes passaram.
+  No navegador com GP de teste, orçado azul e planejado excedente vermelho,
+  Resultado geral com fundo/rótulos verdes e só o percentual vermelho,
+  realizado em `rgb(220, 38, 38)` nas vistas Bruto e Líquido. Prints da
+  revisão de 22/10 capturados. Nenhum dado operacional alterado.
+
+
+## Planejado excedente em todas as planilhas — 22/10/2026
+
+- O total planejado fica vermelho ao ultrapassar o orçado nas linhas,
+  subtotais de grupo e totais comparáveis. A mesma regra cobre Jobs,
+  leitura do financeiro, histórico e visões agregadas de Jobs/Orçamentos,
+  além da referência do planejado no formulário da PP.
+- Comparação sobre o bruto, antes do BV; a vista Líquido preserva o alerta.
+  Igualdade e valores dentro do orçado mantêm o verde.
+- Sem alterar cálculo ou permissão. Os tons alternativos do alerta e dos
+  totais normais do realizado estão apenas no protótipo para escolha.
+- **Conferência:** 40 testes existentes passaram. No build de produção
+  local, navegador autenticado como GP de teste: Item 1 de Jobs e da
+  visão agregada com R$ 20.000 planejados para R$ 10.000 orçados exibe
+  apenas o total planejado vermelho; orçado azul e valores dentro do
+  limite verdes. Bruto/Líquido preservam o alerta; print capturado.
+  Sem alteração de dados operacionais.
+
+
+## Paleta “Grafite e cinza” aprovada — 22/10/2026
+
+- Opção 3 do protótipo completo: totais de Orçado/Planejado/Realizado
+  grafite (`#292929`), unitário/QT/D/M cinza (`#606060`); subtotal e total
+  geral seguem a mesma regra. Fundos, bordas e cabeçalhos preservados.
+- Fonte única `NUMEROS_PLANILHA` em `_planilha/blocos.ts`, compartilhada
+  pelas planilhas individuais, agregadas, financeiro/histórico e BV.
+  Prévias de importação também usam totais neutros.
+- Totais de custo excedentes preservam o vermelho vibrante com comparação
+  sobre o bruto, mesmo na vista Líquido. Sublinha de BV cinza.
+- Sem mudar cálculo, permissão, consulta, navegação, grade ou campos da PP.
+  Estados especiais de errata/save e painéis de resultado preservados.
+- **Verificação:** 41 testes de limites, composição do resultado,
+  Mídia Off e prestação de verba passaram; build/lint/tipos aprovados
+  (`NODE_OPTIONS=--max-old-space-size=8192`; permanece somente o aviso
+  anterior de ARIA no `multi-select`). Navegador com build de produção e
+  GP de teste: planilhas individuais de Jobs/Orçamentos, visão agregada
+  de Jobs e mini-planilha do BV. Confirmados `rgb(41, 41, 41)` nos totais,
+  `rgb(96, 96, 96)` em unitário/QT/D/M e `rgb(220, 38, 38)` nos totais
+  excedentes, preservando fundos. Bruto/Líquido e BV conferidos, prints
+  capturados. Nenhum dado operacional alterado.
+
+## ⚠️ Nota de 2026-10-22 — Aviso das PPs já prontas ao ligar a chave do produtor (decisão 174)
+
+- Ao ligar "Envia PPs ao financeiro" no pop-up "Equipe", o job que já tem
+  PP "pronta para envio" mostra sob a chave que ela segue na fila do GP e
+  que o Produtor Responsável, com a chave, também pode enviá-la. Só aviso:
+  nada muda no envio. Nasceu do relato da GP do ANI-1001/26 (19/10), que
+  não era bug — ver a nota de 22/10 na
+  [decisão 174](../decisions/174-equipe-do-job-e-envio-de-pp-pelo-produtor.md).
+
+## ⚠️ Nota de 2026-10-22 — o envio pela aba Pedidos de Produção vale para toda PP gerada (revisão da decisão 160)
+
+- O avião da trilha da aba Pedidos de Produção só aparecia na PP gerada com
+  algum arquivo anexado (decisão 160 §4). Agora aparece em toda PP gerada,
+  para quem envia, como o "Enviar ao financeiro" do painel do item: a nota
+  entra no próprio pop-up. Relato do Tiago na PP-00355 (AMB-1041/26), gerada
+  sem arquivo.
+- A exigência da NF não mudou: o servidor recusa o envio sem nota.
+- **Verificação:** no TES-1025/26, a PP-00266 (gerada, 0 anexos) passou a
+  mostrar o avião ao lado do lápis e do cancelar; o pop-up abriu com
+  "Anexar arquivos" e, ao enviar sem arquivo, recusou com "Anexe a nota
+  fiscal do fornecedor." — a PP seguiu `gerada`, sem `enviada_financeiro_em`
+  e sem anexo no banco. Ver
+  [decisão 160](../decisions/160-pp-pronta-para-envio-e-envio-pela-aba.md).
+- ⚠️ **Ordem dos ícones (2026-10-22).** Na PP gerada, a trilha passou a ser
+  lápis → avião → cancelar (antes o avião vinha primeiro). Conferido na
+  PP-00355: botões na ordem "Editar", "Enviar ao financeiro", "Cancelar".
+
+## ⚠️ Nota de 2026-10-23 — a linha da Planilha Interna abre em sublinhas, uma por PP (decisão 208)
+
+- Toda linha com PP ganha uma seta ao lado do nome; ela abre as PPs embaixo
+  da linha, uma por sublinha, como a planilha exportada: "↳ PP-00214 · Pago
+  — serviço", sem fornecedor nem titular, com R$ Unit., QT, D/M e Total no
+  Realizado. Com duas PPs ou mais a linha mostra só o total; a sublinha
+  devolve o detalhe de cada gasto.
+- "Exibir › PPs abertas em todas as linhas" abre todas. Clicar na sublinha
+  abre o painel do item (o mesmo da trilha). Na errata as PPs ficam
+  fechadas.
+- Responde ao caso da verba do ANI-1001/26: várias PPs na linha da verba,
+  sem errata, e cada gasto visível na planilha.
+- **Conferido** no TES-1014/26 (8 PPs em 4 linhas), com Save e as duas
+  rentabilidades ligadas. Ver
+  [decisão 208](../decisions/208-pps-em-sublinhas-na-planilha-interna.md).
+
+## ⚠️ Nota de 2026-10-23 (2) — a PP no cartão corporativo (decisão 209)
+
+- Quarto tipo de PP em "Fornecedor & Empresa": **Cartão corporativo**, ao
+  lado de Normal, Verba e Reembolso. Sem fornecedor: no lugar do campo, a
+  **Plataforma** e o **Link da compra**, lado a lado e obrigatórios
+  (`cartao-corporativo-field.tsx`, régua em
+  `lib/validations/cartao-corporativo.ts`).
+- Parcelas: "Na fatura do cartão, pelo financeiro" (a PP sai com uma). O
+  prazo segue as janelas. Anexos opcionais, sem o tipo "Nota fiscal".
+- A revisão mostra a plataforma e o link; o envio ao financeiro não pede
+  documento; o painel e a aba de PPs dizem "Cartão corporativo —
+  {plataforma}". O PDF troca os dados bancários e o bloco do fornecedor
+  pelo bloco "PAGAMENTO NO CARTÃO CORPORATIVO".
+- **Conferido** no TES-1001/26: PP-00397 gerada, enviada e aprovada. Ver
+  [decisão 209](../decisions/209-pp-no-cartao-corporativo.md).
+
+## ⚠️ Nota de 2026-10-26 — o tipo da chave PIX no cadastro do freela (decisão 212)
+
+- **Por quê:** completa a 193. A PP de verba ou reembolso do freela leva o
+  PIX do cadastro sozinha quando o tipo da chave se sabe; o cadastro não
+  guardava o tipo, e 13 freelas ativos ainda digitavam o PIX na PP.
+- **O que mudou:** `freelancers.pix_tipo` e `freelancers.tipo_conta`
+  (migration `20261026500001_tipo_do_pix_e_da_conta_do_freela.sql`), e a
+  seção Pagamento do cadastro do freela (editar, novo, diálogo de 5 passos e
+  link) com PIX e conta sempre à vista
+  (`freelancers/_components/pagamento-do-freelancer.tsx`).
+  `pix_do_cadastro_do_freelancer` usa o tipo gravado quando há; sem ele,
+  deduz como na 193. O telefone passa a ir automático.
+- **Para a PP:** nada muda no formulário da PP. Um freela passa a ir
+  automático assim que o RH escolhe o tipo da chave dele no editar.
+- **Chaves antigas:** as 45 chaves que não se deduziam ganharam o tipo pelo
+  banco (`20261026500002`), cada uma com uma só leitura (CNPJ ou CPF do
+  próprio freela, ou celular que não forma CPF válido). Dos 64 freelas
+  ativos, os 59 com PIX vão automáticos (eram 46); os 5 sem PIX digitam na
+  PP. Ver
+  [decisão 212](../decisions/212-tipo-do-pix-e-da-conta-no-cadastro-do-freela.md).
+
+## ⚠️ Nota de 2026-10-26 — Histórico: a troca de mês mantém a versão (revisão da decisão 186)
+
+- No mensal, clicar noutro mês da régua com uma versão antiga na tela voltava
+  à atual. O `JobRealizadoSection` descartava o histórico quando a lista de
+  linhas mudava de referência; a troca de mês (`?mes=`) entrega uma lista
+  nova com o mesmo conteúdo. Agora a comparação é pelo conteúdo
+  (`assinaturaDaPlanilha`): errata, alteração e save continuam descartando o
+  histórico; a troca de mês, não.
+- Conferido no TES-1002/26 (versão de 22/09 → novembro) e no TES-1025/26
+  (errata de teste do Item 4: histórico recarregado com 7 momentos).
+- Possibilidade futura registrada na 186: atalho "ver esta versão" nos cards
+  de Erratas e de Alterações do Financeiro.

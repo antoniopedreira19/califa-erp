@@ -1,5 +1,8 @@
 "use client";
 
+import { rentabilidadeAbaixoDoMinimo } from "@/lib/calculos/limites-orcamento";
+import type { LinhaDoFechamento } from "@/lib/calculos/excecao-fechamento";
+
 // Client por causa do liga-desliga das colunas de save no fechamento. O
 // único consumidor (`PlanilhaVersao`) já é client; a diretiva aqui é para
 // a regra ficar explícita se alguém renderizar este card de um server
@@ -66,10 +69,18 @@ interface Props {
   titulo?: string;
   /** Linha de apoio sob o título. */
   subtitulo?: string;
+  /** Serviço Interno (decisão 105): fora do mínimo de 20% da decisão 204,
+   *  o Resultado geral não acende o vermelho. */
+  interno: boolean;
+  /** As linhas da cadeia internacional fora do padrão por exceção
+   *  (decisão 206). Vazio fora dela. */
+  linhasEmExcecao: LinhaDoFechamento[];
 }
 
 export function TotaisCard({
   itens,
+  interno,
+  linhasEmExcecao,
   bvsPorItem,
   visao,
   percentualHonorarios,
@@ -324,6 +335,7 @@ export function TotaisCard({
               percentualHonorarios={percentualHonorarios}
               percentualIntTaxes={internacional.percentualIntTaxes}
               percentualImposto={percentualImposto}
+              linhasEmExcecao={linhasEmExcecao}
             />
           )}
         </div>
@@ -373,7 +385,9 @@ export function TotaisCard({
                   "whitespace-nowrap font-mono text-base font-bold",
                   resultadoOperacional === null
                     ? "text-muted-foreground"
-                    : corRentabilidade(resultadoOperacional),
+                    : !interno && rentabilidadeAbaixoDoMinimo(resultadoGeral)
+                      ? "text-california-red"
+                      : corRentabilidade(resultadoOperacional),
                 )}
               >
                 {resultadoOperacional === null
@@ -449,9 +463,7 @@ export function TotaisCard({
               "mt-2.5 rounded-xl border p-4",
               resultadoGeral === null
                 ? "border-border bg-muted/30"
-                : resultadoGeral >= 0
-                  ? "border-emerald-200 bg-emerald-50"
-                  : "border-rose-200 bg-rose-50",
+                : "border-emerald-200 bg-emerald-50",
             )}
           >
             <div className="flex items-baseline justify-between gap-3">
@@ -461,9 +473,7 @@ export function TotaisCard({
                     "text-sm font-semibold",
                     resultadoGeral === null
                       ? "text-muted-foreground"
-                      : resultadoGeral >= 0
-                        ? "text-emerald-800"
-                        : "text-california-red",
+                      : "text-emerald-800",
                   )}
                 >
                   Resultado geral
@@ -473,9 +483,7 @@ export function TotaisCard({
                     "mt-0.5 text-[11.5px]",
                     resultadoGeral === null
                       ? "text-muted-foreground"
-                      : resultadoGeral >= 0
-                        ? "text-emerald-700"
-                        : "text-california-red",
+                      : "text-emerald-700",
                   )}
                 >
                   {resultadoGeral === null
@@ -488,7 +496,7 @@ export function TotaisCard({
                   "whitespace-nowrap font-mono text-[26px] font-bold leading-none",
                   resultadoGeral === null
                     ? "text-muted-foreground"
-                    : resultadoGeral >= 0
+                    : interno || !rentabilidadeAbaixoDoMinimo(resultadoGeral)
                       ? "text-emerald-700"
                       : "text-california-red",
                 )}

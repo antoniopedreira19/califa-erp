@@ -146,7 +146,7 @@ export function AberturaTabs({
         />
       </div>
       <div role="tabpanel" className={cn(aba === "abertos" ? "" : "hidden")}>
-        <JobsAbertosList linhas={abertos} />
+        <JobsAbertosList linhas={abertos} tela="abertura" />
       </div>
       {/* O calendário só monta quando a aba é escolhida: ele varre a
           lista inteira por dia da grade, e manter isso rodando escondido

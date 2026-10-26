@@ -22,6 +22,7 @@ import {
   documentoTipoLabel,
   rotuloDaVerba,
   rotuloDeQuemRecebeAVerba,
+  ROTULO_CARTAO_CORPORATIVO,
   type AnexoDaPPNaLista,
   type PPAEmitir,
 } from "@/lib/types";
@@ -239,7 +240,14 @@ export function RevisaoDialog({
           ? [["Tipo", rotuloDoReembolso(reembolsoTipo)]]
           : [["Verba", rotuloDaVerba(tipoVerba)]]) as Array<[string, React.ReactNode]>)
       : []),
-    [rotuloDeQuemRecebe, nomeDoFornecedor],
+    // Decisão 209: o cartão corporativo não tem fornecedor — a plataforma e
+    // o link no lugar dele.
+    ...((d.cartao_corporativo
+      ? [
+          ["Plataforma", d.cartao_corporativo.plataforma],
+          ["Link da compra", <span key="link" className="break-all">{d.cartao_corporativo.link}</span>],
+        ]
+      : [[rotuloDeQuemRecebe, nomeDoFornecedor]]) as Array<[string, React.ReactNode]>),
     ...(dadosBancarios ? ([["Dados bancários", dadosBancarios]] as Array<[string, React.ReactNode]>) : []),
     ["Serviço", d.servico],
     [
@@ -255,7 +263,9 @@ export function RevisaoDialog({
     ["Empresa emissora", nomeDaEmpresa],
     [
       "Pagamento",
-      `${parcelas > 1 ? `${parcelas} parcelas, a 1ª em` : "Parcela única em"} ${dataBr(d.parcelas[0]?.data_vencimento ?? d.prazo_pagamento)}`,
+      d.cartao_corporativo
+        ? `${ROTULO_CARTAO_CORPORATIVO} · até ${dataBr(d.prazo_pagamento)} · parcelas na fatura, pelo financeiro`
+        : `${parcelas > 1 ? `${parcelas} parcelas, a 1ª em` : "Parcela única em"} ${dataBr(d.parcelas[0]?.data_vencimento ?? d.prazo_pagamento)}`,
     ],
     [
       reembolso ? "Comprovantes" : "Anexos",
@@ -436,6 +446,9 @@ export interface PPParaEnviar {
   anexos: AnexoDaPPNaLista[];
   /** Decisão 161: paga por boleto — o envio exige o boleto e a nota. */
   pagaPorBoleto: boolean;
+  /** Decisão 209: o cartão corporativo vai sem nota e sem anexos, como a
+   *  verba. Obrigatório: um chamador que o esquecesse cobraria a nota. */
+  cartaoCorporativo: boolean;
 }
 
 /**
@@ -490,7 +503,7 @@ export function EnvioDialog({
     tomadorEsperado,
     // Decisão 192: a IA lê o PDF ao anexar só na PP comum — o reembolso
     // tem comprovantes com tipos e campos próprios.
-    pp && !pp.verbaProducao && !pp.reembolsoTipo ? tomadores : undefined,
+    pp && !pp.verbaProducao && !pp.cartaoCorporativo && !pp.reembolsoTipo ? tomadores : undefined,
   );
   const [tentou, setTentou] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
@@ -535,7 +548,9 @@ export function EnvioDialog({
   // Decisão 187: o reembolso leva os comprovantes, com a regra dele.
   const reembolsoTipo = pp.reembolsoTipo;
   const veiculo = reembolsoTipo === "veiculo_proprio";
-  const comAnexos = !pp.verbaProducao || reembolsoTipo !== null;
+  // Decisão 209: o cartão corporativo vai sem nota (anexá-la depois é com o
+  // financeiro, em fase futura).
+  const comAnexos = (!pp.verbaProducao && !pp.cartaoCorporativo) || reembolsoTipo !== null;
   function camposDoComprovanteEnvio(id: string) {
     const a = anexos.find((x) => x.id === id);
     if (!a) return null;
@@ -693,7 +708,9 @@ export function EnvioDialog({
               </DialogTitle>
               <DialogDescription className="text-[12.5px] leading-relaxed">
                 {nomeDoFornecedor} · <span className="font-mono">{formatCurrency(pp.valor, moeda)}</span> · {pp.servico}.{" "}
-                {reembolsoTipo
+                {pp.cartaoCorporativo
+                  ? "No cartão corporativo, a nota não é exigida: o GP envia a PP ao financeiro pela aba Pedidos de Produção."
+                  : reembolsoTipo
                   ? "Confira os comprovantes do reembolso: o GP envia a PP ao financeiro pela aba Pedidos de Produção. Todos os campos são obrigatórios."
                   : "Confira os documentos do fornecedor: o GP envia a PP ao financeiro pela aba Pedidos de Produção. Todos os campos são obrigatórios."}
               </DialogDescription>
@@ -705,7 +722,9 @@ export function EnvioDialog({
               </DialogTitle>
               <DialogDescription className="text-[12.5px] leading-relaxed">
                 {nomeDoFornecedor} · <span className="font-mono">{formatCurrency(pp.valor, moeda)}</span> · {pp.servico}.{" "}
-                {reembolsoTipo
+                {pp.cartaoCorporativo
+                  ? "No cartão corporativo, a nota não é exigida no envio."
+                  : reembolsoTipo
                   ? "A PP não muda mais; aqui entram os comprovantes do reembolso. Todos os campos são obrigatórios para enviar."
                   : "A PP não muda mais; aqui entram os documentos do fornecedor. Todos os campos são obrigatórios para enviar."}
               </DialogDescription>
@@ -796,7 +815,7 @@ export function EnvioDialog({
             Voltar
           </button>
           <div className="flex items-center gap-2">
-            {!pp.verbaProducao && (
+            {!pp.verbaProducao && !pp.cartaoCorporativo && (
               <button
                 type="button"
                 onClick={() => setLadoALado({ foco: itensDaLista(anexos)[0]?.id ?? null })}
@@ -812,7 +831,7 @@ export function EnvioDialog({
         </div>
         {/* Decisão 153, entrega 3: a PP, os documentos e os dados lado a
             lado. O estado é o deste envio: o que se preenche lá aparece aqui. */}
-        {!pp.verbaProducao && (
+        {!pp.verbaProducao && !pp.cartaoCorporativo && (
           <ConferenciaDosDocumentos
             open={ladoALado !== null}
             onOpenChange={(o) => !o && setLadoALado(null)}

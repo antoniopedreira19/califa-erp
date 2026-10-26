@@ -222,7 +222,16 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 200 | [As ações da Conciliação automática: conciliar, baixar pelo lote com os dados do banco, conferir pela baixa real, corrigir a baixa, regras, saiu e voltou, ignorar e desfazer; a data do banco em tudo](200-acoes-da-conciliacao-automatica.md) | 2026-10-21 |
 | 201 | [O que se resolve sozinho na importação do extrato: a baixa feita à mão que bate, o título certo, a remessa e a regra; cada linha avaliada uma vez](201-o-que-se-resolve-sozinho-na-importacao.md) | 2026-10-21 |
 | 202 | [As marcas do banco no Extrato (✓, ⚠, ○, a faixa e o contador), o sinal na aba Títulos, e a folha e a remessa linha a linha (revê a 199)](202-marcas-do-banco-no-extrato-e-nos-titulos.md) | 2026-10-21 |
-| 203 | *Reservada* — conciliação com o banco (task 029, fase 4): o fechamento da conciliação, que trava até reabrir | 2026-10-21 |
+| 203 | *Reservada para a conciliação com o banco e não usada por ela:* o número foi tomado em paralelo, e o fechamento da conciliação virou a 205 | 2026-10-21 |
+| 204 | [Administrador nas exceções da aprovação e geração/edição de PP](204-administrador-nas-excecoes-do-orcamento-e-da-pp.md) | 2026-10-21 |
+| 205 | [O fechamento da conciliação com o banco: trava o caixa da conta até reabrir, com o gatilho em `lancamentos_financeiros` (M4.2, opção B) e o reabrir com motivo (revê a 120)](205-fechamento-da-conciliacao.md) | 2026-10-21 |
+| 206 | [A exceção no fechamento do internacional, só do administrador: int. taxes, impostos BR e custo de transação travados no padrão; câmbio em linha própria, com compra e venda a ±0,20 da cotação (revê a 072 e a 096)](206-excecao-no-fechamento-do-internacional.md) | 2026-10-22 |
+| 207 | [Resultado de Job na Central Financeira; Visualizar Jobs e Resultado de Job com Valor do Job, Faturamento sem selo e a Rentabilidade do próprio job (valor do job − impostos − custo planejado)](207-resultado-de-job.md) | 2026-10-23 |
+| 208 | [A linha da Planilha Interna abre em sublinhas, uma por PP (job e financeiro)](208-pps-em-sublinhas-na-planilha-interna.md) | 2026-10-23 |
+| 209 | [A PP no cartão corporativo: quarto tipo de PP, sem fornecedor, com plataforma e link da compra; parcelas da fatura e aprovação só no cartão; envio sem nota](209-pp-no-cartao-corporativo.md) | 2026-10-23 |
+| 210 | *Reservada* — o código do projeto sem a sigla do cliente (outra sessão, ainda não publicada) | 2026-10-23 |
+| 211 | [Importação do histórico da planilha financeira: como ler a planilha e o corte em 01/10/2026](211-importacao-do-historico-da-planilha-financeira.md) | 2026-10-25 |
+| 212 | [O tipo da chave PIX e o tipo de conta no cadastro do freela: PIX e conta sempre à vista, e o tipo gravado vence a dedução da 193](212-tipo-do-pix-e-da-conta-no-cadastro-do-freela.md) | 2026-10-26 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -235,4 +244,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 204**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 213**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)

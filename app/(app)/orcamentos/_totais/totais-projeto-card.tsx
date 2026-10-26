@@ -1,5 +1,6 @@
 "use client";
 
+import { acimaDoOrcado } from "@/lib/calculos/limites-orcamento";
 import type { CategoriaModeloPlanilha } from "@/lib/types";
 
 import * as React from "react";
@@ -29,6 +30,7 @@ import {
   LARGURA_MINIMA,
 } from "@/app/(app)/_planilha/grade-orcamento";
 import {
+  NUMEROS_PLANILHA,
   ORCADO,
   PLANEJADO,
   RENTABILIDADE,
@@ -298,6 +300,7 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
                       className={cn(
                         "whitespace-nowrap p-3 text-right font-mono text-[13px]",
                         PLANEJADO.celulaTotal,
+                        acimaDoOrcado(l.planejado, l.orcado) && NUMEROS_PLANILHA.excedente,
                       )}
                     >
                       {semPlanejado ? "—" : formatCurrency(l.planejado, moeda)}
@@ -354,6 +357,7 @@ export function TotaisProjetoCard({ linhas, moeda, descricao }: Props) {
                 className={cn(
                   "whitespace-nowrap p-3 text-right font-mono text-[13px] font-bold",
                   PLANEJADO.subtotalValor,
+                  acimaDoOrcado(totalPlanejado, totalOrcado) && NUMEROS_PLANILHA.excedente,
                 )}
               >
                 {totalPlanejado > 0 ? formatCurrency(totalPlanejado, moeda) : "—"}

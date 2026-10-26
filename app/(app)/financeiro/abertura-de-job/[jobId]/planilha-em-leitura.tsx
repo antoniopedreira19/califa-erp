@@ -35,10 +35,12 @@ function PlanilhaCarregada({
   jobId,
   codigo,
   destacarItens,
+  linhasDaRevisao,
 }: {
   jobId: string;
   codigo: string;
   destacarItens: string[];
+  linhasDaRevisao: string[];
 }) {
   const [estado, setEstado] = React.useState<Estado>({ tipo: "carregando" });
 
@@ -72,6 +74,7 @@ function PlanilhaCarregada({
     <JobRealizadoSection
       {...estado.props}
       destacarItens={destacarItens}
+      linhasDaRevisao={linhasDaRevisao}
       resultadoInicial="planejada"
     />
   );
@@ -86,6 +89,7 @@ export function PopUpDaPlanilha({
   codigo,
   descricao,
   destacarItens = SEM_DESTAQUE,
+  linhasDaRevisao = SEM_DESTAQUE,
 }: {
   aberto: boolean;
   onOpenChange: (aberto: boolean) => void;
@@ -96,6 +100,10 @@ export function PopUpDaPlanilha({
   /** Linhas em destaque (`jobs_itens_orcado.id`) — a do pedido de save em
    *  aprovação, na planilha do próprio job. */
   destacarItens?: string[];
+  /** As linhas que uma errata ainda não revisada mudou, com a borda
+   *  vermelha (revisão da decisão 185, 19/10/2026) — na planilha do
+   *  próprio job, quando a abertura está em revisão. */
+  linhasDaRevisao?: string[];
 }) {
   return (
     <Dialog open={aberto} onOpenChange={onOpenChange}>
@@ -105,7 +113,12 @@ export function PopUpDaPlanilha({
           <DialogDescription className="text-[13px]">{descricao}</DialogDescription>
         </DialogHeader>
         {aberto && (
-          <PlanilhaCarregada jobId={jobId} codigo={codigo} destacarItens={destacarItens} />
+          <PlanilhaCarregada
+            jobId={jobId}
+            codigo={codigo}
+            destacarItens={destacarItens}
+            linhasDaRevisao={linhasDaRevisao}
+          />
         )}
       </DialogContent>
     </Dialog>

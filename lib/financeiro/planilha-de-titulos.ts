@@ -258,7 +258,8 @@ export function trimestreDe(iso: string): string {
 }
 
 /** A data em que o título mexe na conta: o vencido entra como hoje (é o
- *  que sai primeiro); o pago, na data da baixa. */
+ *  que sai primeiro), e o sem data prevista também; o pago, na data da
+ *  baixa. */
 export function dataEfetiva(l: LinhaDaPlanilha, hoje: string): string {
   if (l.pagoEm) return l.pagoEm;
   const d = l.dataPrevista ?? hoje;
@@ -311,29 +312,43 @@ export function ordenarLinhas<L extends LinhaDaPlanilha>(linhas: L[]): L[] {
   );
 }
 
+/** A ordem da Conciliação › Títulos: pela data em que o título mexe na
+ *  conta (`dataEfetiva`), a mesma que agrupa por dia — o vencido e o sem
+ *  data prevista entram em hoje (revisão da 195, 26/10/2026); no mesmo
+ *  dia, a ordem da planilha. */
+export function ordenarPorDia<L extends LinhaDaPlanilha>(linhas: L[], hoje: string): L[] {
+  // O `sort` é estável: no empate da data efetiva fica a ordem da planilha
+  // (o vencido pela data prevista, o sem data por último no dia).
+  return ordenarLinhas(linhas).sort((a, b) => dataEfetiva(a, hoje).localeCompare(dataEfetiva(b, hoje)));
+}
+
 export type LinhaComSaldo<L extends LinhaDaPlanilha = LinhaDaPlanilha> = L & {
   /** O saldo da conta se cada título for baixado nela, na data prevista. */
   saldo: number;
   efeito: number;
 };
 
-/** O saldo previsto corrente, na ordem da planilha. Não muda com o filtro,
- *  como o Saldo do Extrato: quem filtra recebe as linhas já com o saldo. */
+/** O saldo previsto corrente, na ordem do dia (`ordenarPorDia`). Não muda
+ *  com o filtro, como o Saldo do Extrato: quem filtra recebe as linhas já
+ *  com o saldo. */
 export function comSaldoPrevisto<L extends LinhaDaPlanilha>(
   linhas: L[],
   saldoHoje: number,
   contaId: string,
+  hoje: string,
 ): Array<LinhaComSaldo<L>> {
   let s = saldoHoje;
-  return ordenarLinhas(linhas).map((l) => {
+  return ordenarPorDia(linhas, hoje).map((l) => {
     const efeito = efeitoNaConta(l, contaId);
     s = r2(s + efeito);
     return { ...l, saldo: s, efeito };
   });
 }
 
-/** Os títulos agrupados por dia (o vencido no dia de hoje), na ordem em
- *  que chegam. */
+/** Os títulos agrupados por dia (o vencido e o sem data prevista no dia de
+ *  hoje). Junta as linhas seguidas do mesmo dia: na ordem de
+ *  `ordenarPorDia`, que ordena pela mesma data, cada dia vira uma faixa
+ *  só. */
 export function agruparPorDia<L extends LinhaDaPlanilha>(
   linhas: L[],
   hoje: string,

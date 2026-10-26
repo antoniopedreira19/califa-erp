@@ -22,6 +22,7 @@ import { Globe } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { FechamentoLado } from "@/lib/calculos/versao-totais";
 import { CADEIA_INTERNACIONAL } from "./blocos";
+import type { LinhaDoFechamento } from "@/lib/calculos/excecao-fechamento";
 import {
   emMoedaEstrangeira,
   formatarTaxa,
@@ -56,6 +57,7 @@ export function CadeiaInternacional({
   percentualHonorarios,
   percentualIntTaxes,
   percentualImposto,
+  linhasEmExcecao,
 }: {
   faturamento: FechamentoLado;
   valorJob: number;
@@ -68,6 +70,9 @@ export function CadeiaInternacional({
   percentualHonorarios: number;
   percentualIntTaxes: number;
   percentualImposto: number;
+  /** As linhas fora do padrão por exceção do administrador (decisão 206):
+   *  levam a marca "exceção". Vazio no padrão e na planilha do job. */
+  linhasEmExcecao: LinhaDoFechamento[];
 }) {
   // O total recebido no exterior é a soma das três primeiras linhas — não
   // um campo à parte. Calcular aqui, a partir das mesmas parcelas que a
@@ -147,6 +152,7 @@ export function CadeiaInternacional({
           <LinhaCadeia
             rotulo="Int. taxes"
             detalhe={`(${formatPct(percentualIntTaxes)}%)`}
+            excecao={linhasEmExcecao.includes("intTaxes")}
             valor={faturamento.intTaxes}
             moeda={moeda}
             moedaEstrangeira={moedaEstrangeira}
@@ -161,12 +167,14 @@ export function CadeiaInternacional({
           <LinhaCadeia
             rotulo="Int. transaction costs"
             valor={faturamento.intTransactionCosts}
+            excecao={linhasEmExcecao.includes("itc")}
             moeda={moeda}
             moedaEstrangeira={moedaEstrangeira}
           />
           <LinhaCadeia
             rotulo="Impostos BR"
             detalhe={`(${formatPct(percentualImposto)}%)`}
+            excecao={linhasEmExcecao.includes("imposto")}
             valor={faturamento.imposto}
             moeda={moeda}
             moedaEstrangeira={moedaEstrangeira}
@@ -284,7 +292,10 @@ function LinhaCadeia({
   moeda,
   moedaEstrangeira,
   tipo = "comum",
+  excecao = false,
 }: {
+  /** Fora do padrão por exceção do administrador (decisão 206). */
+  excecao?: boolean;
   rotulo: string;
   /** Parêntese em tom apagado: o percentual, "(Invoice)". */
   detalhe?: string;
@@ -329,6 +340,14 @@ function LinhaCadeia({
     <>
       <span className={cn(rotuloClasse, fio)}>
         {rotulo}
+        {excecao && (
+          <>
+            {" "}
+            <span className="rounded bg-amber-100 px-1 py-px text-[10.5px] font-semibold text-amber-800">
+              exceção
+            </span>
+          </>
+        )}
         {detalhe && (
           <>
             {" "}

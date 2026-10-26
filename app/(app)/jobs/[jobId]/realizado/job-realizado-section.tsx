@@ -261,6 +261,7 @@ interface Props {
    *  Obrigatório: é ele que tira do produtor o "Enviar" e o cancelamento
    *  de PP já enviada. Repassado à tabela. */
   papelEnviaPP: boolean;
+  podeGerarAcimaDoOrcado: boolean;
   /** Corrige a NF da PP em avaliação sem aprovar (`jobs.corrigir_nf_pp`,
    *  revisão da decisão 152). Repassado à tabela e ao painel do item. */
   papelCorrigeNf: boolean;
@@ -311,6 +312,12 @@ interface Props {
    *  financeiro abre a partir da aprovação (decisão 099, 22/09/2026).
    *  Obrigatória: quem não destaca manda `[]`. */
   destacarItens: string[];
+  /** As linhas que uma errata ainda não revisada mudou (decisão 185), com
+   *  a borda vermelha da revisão da abertura (revisão da 185, 19/10/2026):
+   *  o financeiro vê onde a errata mexeu ao reconferir a abertura. Só a
+   *  planilha do job no financeiro manda; obrigatória pelo motivo de
+   *  `destacarItens`. */
+  linhasDaRevisao: string[];
   /** Exportar a planilha interna do job (decisão 088). Quem vê a tela
    *  exporta; o freelancer, que só tem a visão restrita, não. */
   podeExportarInterna?: boolean;
@@ -387,6 +394,31 @@ const SEM_LINHAS: string[] = [];
 
 const ERRO_DO_HISTORICO = "Não foi possível carregar o histórico da planilha. Tente de novo.";
 
+/** O que a planilha de hoje é, num texto: muda quando uma errata, uma
+ *  alteração do financeiro ou um save mexem nela, e só aí. */
+function assinaturaDaPlanilha(itens: ItemPlanilhaJob[], grupos: VersaoOrcamentoGrupo[]): string {
+  return JSON.stringify([
+    itens.map((i) => [
+      i.id,
+      i.grupo_id,
+      i.ordem,
+      i.item,
+      i.tipo_custo,
+      i.linha_vermelha,
+      i.valor_unitario_orcado,
+      i.quantidade_orcada,
+      i.dias_meses_orcado,
+      i.valor_unitario_planejado,
+      i.quantidade_planejada,
+      i.dias_meses_planejado,
+      i.em_save,
+      i.save_consumido,
+      i.cancelada_em,
+    ]),
+    grupos.map((g) => [g.id, g.nome, g.ordem, g.mes_id]),
+  ]);
+}
+
 /**
  * A planilha do job com o histórico de versões (decisão 186, 17/10/2026).
  * Guarda a versão escolhida e, quando ela não é a atual, entrega à mesma
@@ -396,7 +428,7 @@ const ERRO_DO_HISTORICO = "Não foi possível carregar o histórico da planilha.
  * versões roda aqui (`montarHistorico`).
  */
 export function JobRealizadoSection({ comHistorico, ...props }: Props) {
-  const { job, versao, modeloPlanilha, itens, midia } = props;
+  const { job, versao, modeloPlanilha, itens, grupos, midia } = props;
   const [dados, setDados] = React.useState<DadosDoHistorico | null>(null);
   const [carregando, setCarregando] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
@@ -404,15 +436,19 @@ export function JobRealizadoSection({ comHistorico, ...props }: Props) {
   const [destacar, setDestacar] = React.useState(true);
   const pedido = React.useRef(0);
 
-  // A página recarregou (errata, alteração, save): o histórico lido ficou
-  // velho, e a tela volta para a planilha atual.
+  // A planilha mudou de verdade (errata, alteração, save): o histórico lido
+  // ficou velho, e a tela volta para a planilha atual. Pelo CONTEÚDO, e não
+  // pela referência: a troca de mês da régua no mensal (`?mes=`) recarrega
+  // a página e entrega uma lista nova com as mesmas linhas — e a versão
+  // escolhida tem de ficar (revisão da decisão 186, 26/10/2026).
+  const assinatura = React.useMemo(() => assinaturaDaPlanilha(itens, grupos), [itens, grupos]);
   React.useEffect(() => {
     pedido.current += 1;
     setDados(null);
     setErro(null);
     setCarregando(false);
     setChave("atual");
-  }, [itens]);
+  }, [assinatura]);
 
   const versoes = React.useMemo(() => (dados ? montarHistorico(dados) : null), [dados]);
   const internacional = React.useMemo(
@@ -512,10 +548,13 @@ export function JobRealizadoSection({ comHistorico, ...props }: Props) {
       savePorItem={SEM_SAVES}
       linhasComEnvioTravado={SEM_LINHAS}
       destacarItens={destacar ? [...mudancaPorLinha.keys()] : SEM_LINHAS}
+      // A versão antiga não é a que a revisão confere.
+      linhasDaRevisao={SEM_LINHAS}
       podeAcoes={false}
       podeMexerNoSave={false}
       podeGerarPP={false}
       papelEnviaPP={false}
+      podeGerarAcimaDoOrcado={false}
       papelCorrigeNf={false}
       podeCadastrarFornecedor={false}
       podeEditarFornecedor={false}
@@ -554,6 +593,7 @@ function PlanilhaDoJob({
   podeExportarInterna = false,
   podeGerarPP = false,
   papelEnviaPP,
+  podeGerarAcimaDoOrcado,
   papelCorrigeNf,
   podeCadastrarFornecedor = false,
   podeEditarFornecedor = false,
@@ -574,6 +614,7 @@ function PlanilhaDoJob({
   saldosDeSave,
   clienteNome,
   destacarItens,
+  linhasDaRevisao,
   modeloPlanilha,
   meses = SEM_MESES,
   mesPedido,
@@ -866,6 +907,14 @@ function PlanilhaDoJob({
   // quem corrige ver o que já saiu.
   const [canceladasVisiveis, setCanceladasVisiveis] = React.useState(true);
   const temCancelada = itens.some((i) => i.cancelada_em);
+  // A linha com PP abre em sublinhas, uma por PP (decisão 208): a seta ao
+  // lado do nome abre um item; o "Exibir" abre todos. Nasce fechado, como a
+  // planilha de sempre.
+  const [ppsNasLinhas, setPpsNasLinhas] = React.useState(false);
+  const temPP = React.useMemo(
+    () => [...ppsPorItemId.values()].some((pps) => pps.some((pp) => pp.status !== "cancelada")),
+    [ppsPorItemId],
+  );
   // A errata exige job aberto, a porta de `AlterarOrcadoButton`, e fecha
   // com o envio para faturamento. O financeiro chega aqui com `podeAcoes`
   // falso e não faz errata: desde a decisão 115 (28/09/2026) ele edita os
@@ -1309,6 +1358,7 @@ function PlanilhaDoJob({
       <div className="rounded-2xl border border-border bg-card shadow-soft">
         <JobItemRealizadoTable
           jobId={job.id}
+          ppsNasLinhas={ppsNasLinhas}
           grupos={gruposDoTrecho}
           rotuloTotal={rotuloTotal}
           realizadosMap={realizadosMap}
@@ -1322,6 +1372,7 @@ function PlanilhaDoJob({
           podeAcoes={podeAcoes}
           podeGerarPP={podeGerarPP}
           papelEnviaPP={papelEnviaPP}
+          podeGerarAcimaDoOrcado={podeGerarAcimaDoOrcado}
           papelCorrigeNf={papelCorrigeNf}
           podeCadastrarFornecedor={podeCadastrarFornecedor}
           podeEditarFornecedor={podeEditarFornecedor}
@@ -1352,6 +1403,7 @@ function PlanilhaDoJob({
           abrirSaveSoComSave={modoDoSave === null}
           destacarItens={destacarItens}
           destaque={vendoAntiga ? "historico" : "save"}
+          linhasDaRevisao={linhasDaRevisao}
           seloDaLinha={historico?.antiga?.selo}
           errata={
             (modoFinanceiro ? podeEditarOrcado : podeErrata) && !mesFechado
@@ -1578,6 +1630,29 @@ function PlanilhaDoJob({
                         },
                       ],
                       dica: "A linha cancelada por errata fica zerada no orçado e no planejado.",
+                    },
+                  ]
+                : []),
+              // Decisão 208: as PPs embaixo de cada linha, como na planilha
+              // exportada. Na errata a linha está sendo reescrita: fechadas.
+              ...(temPP
+                ? [
+                    {
+                      titulo: "PPs",
+                      itens: [
+                        {
+                          chave: "pps_nas_linhas",
+                          rotulo: "PPs abertas em todas as linhas",
+                          visivel: ppsNasLinhas && !errata.ativo,
+                          onAlternar: errata.ativo
+                            ? undefined
+                            : () => setPpsNasLinhas((v) => !v),
+                          dica: errata.ativo
+                            ? "Na errata as PPs ficam fechadas."
+                            : undefined,
+                        },
+                      ],
+                      dica: "Cada PP numa linha abaixo do item, como na planilha exportada. A seta ao lado do nome abre um item só.",
                     },
                   ]
                 : []),

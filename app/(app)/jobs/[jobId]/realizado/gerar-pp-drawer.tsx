@@ -1,5 +1,7 @@
 "use client";
 
+import { NUMEROS_PLANILHA } from "@/app/(app)/_planilha/blocos";
+
 /**
  * O formulário da PP (decisão 153, 07/10/2026): ele salva a PP A EMITIR.
  *
@@ -28,10 +30,12 @@
  */
 
 import * as React from "react";
+import { acimaDoOrcado } from "@/lib/calculos/limites-orcamento";
 import { useRouter } from "next/navigation";
 import {
   X,
   AlertTriangle,
+  ShieldAlert,
   Columns2,
   Lock,
   Pencil,
@@ -161,6 +165,12 @@ import {
   quartaMarcada,
 } from "./prazo-e-urgencia-pp";
 import { EnvioAte, useFeriadosNacionais } from "./prazo-de-envio-pp";
+import {
+  CARTAO_VAZIO,
+  CartaoCorporativoField,
+  problemaDoCartao,
+  type CartaoCorporativoEstado,
+} from "./cartao-corporativo-field";
 import { NovoFornecedorDialog } from "@/app/(app)/fornecedores/novo-fornecedor-dialog";
 import type { FornecedorResumo } from "@/app/(app)/fornecedores/actions";
 import {
@@ -204,8 +214,10 @@ interface Props {
   defaultEmpresaId: string;
   itemDescricao: string;
   /** PLANEJADO do item — a referência da PP desde 02/09/2026 (era o
-   *  orçado). É contra ele que "Em PPs emitidas" acende em vermelho. */
+   *  orçado). Continua sendo referência do alerta de planejado. */
   valorPlanejado: number;
+  valorOrcado: number;
+  podeGerarAcimaDoOrcado: boolean;
   /** Decomposição do planejado — R$ Unit. × QT × D/M, para o cartão
    *  mostrar de onde os três campos vêm. São referência apenas: os
    *  campos da PP nascem vazios (decisão do Tiago, 01/09/2026). */
@@ -215,8 +227,8 @@ interface Props {
   /** O que o item já tem em PPs — todas menos as canceladas, a gerada
    *  inclusive (decisão 074). Na GERAÇÃO a prévia do cartão soma esta PP
    *  por cima; na EDIÇÃO ela já está aqui dentro e o valor antigo é
-   *  descontado antes. Sem teto: passar do planejado não impede gerar —
-   *  muda quem pode enviar. */
+   *  descontado antes. Devoluções aprovadas já são abatidas. Passar do
+   *  orçado exige administrador; passar só do planejado mantém o envio. */
   emPPsEmitidas: number;
   /** PP a emitir sendo editada. Null = uma nova. */
   aEmitirEditando: PPAEmitir | null;
@@ -274,6 +286,8 @@ function ppGeradaComoAEmitir(pp: PedidoCompraNaLista): PPAEmitir {
     tipo_verba: pp.tipo_verba,
     verba_titular_tipo: pp.verba_titular_tipo,
     verba_titular_nome: pp.verba_titular_nome,
+    cartao_corporativo: pp.cartao_corporativo === true,
+    cartao_plataforma: pp.cartao_plataforma,
     servico: pp.servico,
     valor: Number(pp.valor),
     dados: {
@@ -296,6 +310,10 @@ function ppGeradaComoAEmitir(pp: PedidoCompraNaLista): PPAEmitir {
       verba_titular_id: pp.verba_colaborador_id ?? pp.verba_freela_id ?? null,
       reembolso_tipo: pp.reembolso_tipo,
       deslocamentos: pp.reembolso_deslocamentos,
+      // Decisão 209.
+      cartao_corporativo: pp.cartao_corporativo
+        ? { plataforma: pp.cartao_plataforma ?? "", link: pp.cartao_link ?? "" }
+        : null,
       pagamento_fora_do_cadastro: fora
         ? {
             meio: fora.meio,
@@ -368,6 +386,8 @@ export function GerarPPDrawer({
   defaultEmpresaId,
   itemDescricao,
   valorPlanejado,
+  valorOrcado,
+  podeGerarAcimaDoOrcado,
   unitarioPlanejado,
   quantidadePlanejada,
   dmPlanejado,
@@ -386,7 +406,10 @@ export function GerarPPDrawer({
   /** O valor que a PP gerada tem hoje: ela já está em "Em PPs emitidas". */
   const valorAntesDaEdicao = ppGeradaEditando ? Number(ppGeradaEditando.valor) : 0;
   const router = useRouter();
-  const [pending, startTransition] = React.useTransition();
+  const [transitionPending, startTransition] = React.useTransition();
+  // React 18 não mantém a transição pendente depois do await da action.
+  const [salvando, setSalvando] = React.useState(false);
+  const pending = transitionPending || salvando;
 
   const [ppId, setPpId] = React.useState<string | null>(null);
   const [uploadPrefix, setUploadPrefix] = React.useState<string | null>(null);
@@ -426,8 +449,13 @@ export function GerarPPDrawer({
   /** "Terceiro (fornecedor)": a verba vai para um fornecedor, com o
    *  pagamento do fornecedor (não é o padrão). */
   const [titularTerceiro, setTitularTerceiro] = React.useState(false);
+  /** Decisão 209: a PP do cartão corporativo — sem fornecedor, com a
+   *  plataforma e o link da compra no lugar dele. */
+  const [cartao, setCartao] = React.useState(false);
+  const [cartaoDados, setCartaoDados] = React.useState<CartaoCorporativoEstado>(CARTAO_VAZIO);
+  const [faltaCartao, setFaltaCartao] = React.useState(false);
   /** A PP paga um fornecedor: a PP comum e a verba de um terceiro. */
-  const usaFornecedor = !verbaProducao || titularTerceiro;
+  const usaFornecedor = (!verbaProducao || titularTerceiro) && !cartao;
   /** A lista de colaboradores e freelas, pedida na primeira verba. */
   const [pessoas, setPessoas] = React.useState<PessoaParaVerba[] | null>(null);
   const pedindoPessoas = React.useRef(false);
@@ -596,6 +624,13 @@ export function GerarPPDrawer({
   const [parcelas, setParcelas] = React.useState<ParcelaLocal[]>([]);
   /** "Mais de 6…" escolhido: o número passa a ser digitado (7 a 24). */
   const [maisDeSeis, setMaisDeSeis] = React.useState(false);
+  // Decisão 209: no cartão as parcelas são as da fatura, que o financeiro
+  // define — a PP sai com uma só.
+  React.useEffect(() => {
+    if (!cartao) return;
+    setParcelas([]);
+    setMaisDeSeis(false);
+  }, [cartao]);
   const [parcelasTexto, setParcelasTexto] = React.useState("7");
   /** Prazo gravado da PP em edição: a data anterior à regra das janelas
    *  pode continuar como está (decisão 077, pergunta 6a). */
@@ -720,6 +755,14 @@ export function GerarPPDrawer({
         d.verba_titular_tipo === "colaborador" || d.verba_titular_tipo === "freela" ? (d.verba_titular_id ?? "") : "",
       );
       setFornecedorId(d.fornecedor_id ?? "");
+      // Decisão 209: o cartão volta com a plataforma e o link.
+      setCartao(!!d.cartao_corporativo);
+      setCartaoDados(
+        d.cartao_corporativo
+          ? { plataforma: d.cartao_corporativo.plataforma, link: d.cartao_corporativo.link }
+          : CARTAO_VAZIO,
+      );
+      setFaltaCartao(false);
       setPagamento(
         estadoDoPagamento(
           d.pagamento_fora_do_cadastro ? { ...d.pagamento_fora_do_cadastro, banco_nome: null } : null,
@@ -795,6 +838,9 @@ export function GerarPPDrawer({
     setTitularTerceiro(false);
     setFornecedorId("");
     setPagamento(PAGAMENTO_PELO_CADASTRO);
+    setCartao(false);
+    setCartaoDados(CARTAO_VAZIO);
+    setFaltaCartao(false);
     setPagTitular(PAGAMENTO_DO_TITULAR_VAZIO);
     setFaltaPagTitular(false);
     setEmpresaId(defaultEmpresaId);
@@ -875,7 +921,11 @@ export function GerarPPDrawer({
   // base (decisão 153): ela só conta no item quando for gerada. A PP gerada
   // em edição já está, e o valor dela sai antes (decisão 173).
   const previaEmPPs = Math.round((emPPsEmitidas - valorAntesDaEdicao + valorPP) * 100) / 100;
-  const passaPlanejado = valorPP > 0 && passaDoPlanejado(previaEmPPs, valorPlanejado);
+  const passaPlanejado = passaDoPlanejado(previaEmPPs, valorPlanejado);
+  const passaOrcado = acimaDoOrcado(previaEmPPs, valorOrcado);
+  const bloqueioLimite = passaOrcado && !podeGerarAcimaDoOrcado
+    ? "Somente um administrador pode gerar ou editar esta PP."
+    : null;
 
   const numeroDeParcelas = Math.max(parcelas.length, 1);
 
@@ -1006,6 +1056,10 @@ export function GerarPPDrawer({
     // Decisão 173: a PP gerada em edição tem um botão só, e ele abre a
     // revisão antes de gravar — as mesmas portas do "Gerar PP".
     if (editandoGerada) {
+      if (bloqueioLimite) {
+        setErro(bloqueioLimite);
+        return;
+      }
       if (travaDaAbertura) {
         setErro(travaDaAbertura);
         return;
@@ -1019,6 +1073,10 @@ export function GerarPPDrawer({
       return;
     }
     const gerar = submitter?.getAttribute("data-acao") === "gerar";
+    if (gerar && bloqueioLimite) {
+      setErro(bloqueioLimite);
+      return;
+    }
     if (gerar && travaDaAbertura) {
       setErro(travaDaAbertura);
       return;
@@ -1056,7 +1114,10 @@ export function GerarPPDrawer({
   /** As checagens do formulário. Devolve false e escreve o erro. */
   function validar(): boolean {
     setErro(null);
-    if (!ppId || !itemRealizadoId) return false;
+    if (!ppId || !itemRealizadoId) {
+      setErro("Não foi possível preparar a PP. Feche o formulário e tente novamente.");
+      return false;
+    }
     if (verbaProducao && !titularTerceiro && !titularId) {
       setErro(reembolso ? "Escolha o titular do reembolso." : "Escolha o titular da verba.");
       return false;
@@ -1078,6 +1139,14 @@ export function GerarPPDrawer({
       // fora de vista com o erro na tela.
       refUltimaPP.current?.scrollIntoView({ block: "center" });
       return false;
+    }
+    if (cartao) {
+      const problema = problemaDoCartao(cartaoDados);
+      if (problema) {
+        setFaltaCartao(true);
+        setErro(problema);
+        return false;
+      }
     }
     if (usaFornecedor && !fornecedorId) {
       setErro("Escolha um fornecedor.");
@@ -1209,9 +1278,13 @@ export function GerarPPDrawer({
           ? {
               ...dadosBase,
               verba_producao: false as const,
-              fornecedor_id: fornecedorId,
+              fornecedor_id: cartao ? null : fornecedorId,
               responsavel_verba_id: null,
-              pagamento_fora_do_cadastro: pagamentoParaEnvio(pagamento),
+              pagamento_fora_do_cadastro: cartao ? null : pagamentoParaEnvio(pagamento),
+              // Decisão 209.
+              cartao_corporativo: cartao
+                ? { plataforma: cartaoDados.plataforma.trim(), link: cartaoDados.link.trim() }
+                : null,
             }
           : titularTerceiro
             ? {
@@ -1264,6 +1337,7 @@ export function GerarPPDrawer({
     // render depois — clique duplo rápido passa pelo disabled=pending).
     if (submittingRef.current) return;
     submittingRef.current = true;
+    setSalvando(true);
 
     startTransition(async () => {
       try {
@@ -1283,8 +1357,11 @@ export function GerarPPDrawer({
         abortedRef.current = true;
         onSuccess?.(gerar ? "revisar" : "salva", res.id);
         onOpenChange(false);
+      } catch {
+        setErro("Não foi possível confirmar o salvamento da PP. Confira sua conexão e tente novamente. Os dados preenchidos continuam neste formulário.");
       } finally {
         submittingRef.current = false;
+        setSalvando(false);
       }
     });
   }
@@ -1376,7 +1453,22 @@ export function GerarPPDrawer({
         })();
 
   /** Falta escolher quem recebe: o fornecedor ou o titular. */
-  const faltaQuemRecebe = verbaProducao && !titularTerceiro ? !titularId : !fornecedorId;
+  const faltaQuemRecebe = cartao ? false : verbaProducao && !titularTerceiro ? !titularId : !fornecedorId;
+  // O motivo precisa aparecer mesmo sem submit: um botão disabled não
+  // dispara validação, e a escolha do pagamento pode estar fora da tela.
+  const pendenciaParaSalvar = faltaQuemRecebe
+    ? verbaProducao && !titularTerceiro
+      ? reembolso ? "Escolha o titular do reembolso." : "Escolha o titular da verba."
+      : "Escolha um fornecedor."
+    : usaFornecedor && pagamento.semCadastro && (pagamento.escolha === null || pagamento.escolha === "cadastro")
+      ? problemaDoPagamento(pagamento)
+      : null;
+  const avisoDeEspera = !ppId
+    ? "Preparando a PP. Aguarde para salvar ou gerar."
+    : anexos.some((a) => a.status === "uploading" || a.status === "selecionado")
+      ? "Aguarde os uploads terminarem antes de salvar ou gerar a PP."
+      : null;
+  const avisoDoFormulario = erro ?? avisoDeEspera ?? pendenciaParaSalvar;
 
   if (!open || !itemRealizadoId) return null;
 
@@ -1600,7 +1692,7 @@ export function GerarPPDrawer({
           </DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
+        <form onSubmit={handleSubmit} className="flex min-h-0 flex-col flex-1 overflow-hidden" aria-busy={salvando}>
           <div className="flex-1 space-y-4 p-6 overflow-y-auto">
             {/* Reemitindo uma PP rejeitada: o motivo no topo (decisão 153;
                 "Editar e Reemitir PP" desde 19/10/2026). */}
@@ -1625,26 +1717,17 @@ export function GerarPPDrawer({
                 Esta PP está pronta para envio. Ao salvar, a marca sai e os documentos precisam ser conferidos de novo.
               </div>
             )}
-            {erro && (
-              <div className="flex items-start justify-between gap-2 rounded border border-california-red/40 bg-california-red/5 p-3 text-sm text-california-red">
-                <span>{erro}</span>
-                <button type="button" onClick={() => setErro(null)}>
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            )}
-
             <div className="rounded-lg border border-border bg-muted/30 p-3">
               <p className="text-xs text-muted-foreground">Item</p>
               <p className="font-medium">{itemDescricao}</p>
-              {/* Duas colunas, como no design de 02/09/2026: a referência
-                  do item virou o PLANEJADO (era o orçado), e o "Máximo
-                  aceito" deu lugar à prévia de "Em PPs emitidas" com esta
-                  PP — sem teto, ela só avisa quando passa do planejado. */}
-              <div className="mt-2 grid grid-cols-2 gap-3">
+              <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">Orçado do item</p>
+                  <p className="font-mono font-semibold">{formatCurrency(valorOrcado, "BRL")}</p>
+                </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Planejado do item</p>
-                  <p className="font-mono font-semibold">
+                  <p className={cn("font-mono font-semibold", acimaDoOrcado(valorPlanejado, valorOrcado) && NUMEROS_PLANILHA.excedente)}>
                     {formatCurrency(valorPlanejado, "BRL")}
                   </p>
                   <p className="font-mono text-[11px] text-muted-foreground">
@@ -1657,11 +1740,16 @@ export function GerarPPDrawer({
                   <p className="text-xs text-muted-foreground">Em PPs emitidas</p>
                   <p
                     className={cn(
-                      "font-mono font-semibold",
-                      passaPlanejado && "text-california-red",
+                      "flex items-center gap-1.5 font-mono font-semibold",
+                      (passaPlanejado || passaOrcado) && "text-california-red",
                     )}
                   >
                     {formatCurrency(previaEmPPs, "BRL")}
+                    {passaOrcado ? (
+                      <span title="Acima do orçado"><ShieldAlert aria-label="Acima do orçado" className="h-3.5 w-3.5 text-california-red" /></span>
+                    ) : passaPlanejado ? (
+                      <span title="Acima do planejado"><AlertTriangle aria-label="Acima do planejado" className="h-3.5 w-3.5 text-amber-700" /></span>
+                    ) : null}
                   </p>
                   <p className="text-[11px] text-muted-foreground">
                     com esta PP · sem teto por PP
@@ -1681,7 +1769,28 @@ export function GerarPPDrawer({
               <TipoDaPPField
                 tipo={tipoVerba}
                 reembolsoTipo={reembolsoTipo}
+                cartao={cartao}
+                onCartao={() => {
+                  // Decisão 209: o cartão não tem fornecedor nem titular.
+                  setCartao(true);
+                  setFornecedorId("");
+                  setTitularId("");
+                  setTitularOrigem(null);
+                  setTitularTerceiro(false);
+                  setPagamento(PAGAMENTO_PELO_CADASTRO);
+                  setFaltaPagamento(false);
+                  if (tipoVerba !== null) {
+                    setTipoVerba(null);
+                    setReembolsoTipo(null);
+                    if (!urgente) tirarAQuartaDoPrazo();
+                  }
+                }}
                 onChange={(t, r) => {
+                  if (cartao) {
+                    setCartao(false);
+                    setCartaoDados(CARTAO_VAZIO);
+                    setFaltaCartao(false);
+                  }
                   if (t === tipoVerba && r === reembolsoTipo) return;
                   if (t !== tipoVerba) {
                     setFornecedorId("");
@@ -1784,16 +1893,11 @@ export function GerarPPDrawer({
                   </span>
                 </div>
 
-                {/* O aviso mora aqui, ao vivo. Não barra: passar do
-                    planejado muda quem pode ENVIAR, não se dá para gerar. */}
-                {passaPlanejado && (
-                  <div className="flex items-start gap-2 rounded-lg border border-amber-300/70 bg-amber-50 px-3 py-2.5">
-                    <AlertTriangle className="mt-px h-3.5 w-3.5 flex-none text-amber-700" />
-                    <span className="text-[11px] leading-relaxed text-amber-900">
-                      Com esta PP o item passa do planejado. Ela é gerada do
-                      mesmo jeito — o <strong>envio ao financeiro</strong>{" "}
-                      pedirá confirmação do responsável do job ou de um
-                      administrador.
+                {(passaOrcado || passaPlanejado) && (
+                  <div role="status" className={cn("flex items-center gap-2 rounded-lg border px-3 py-2.5", passaOrcado ? "border-california-red/30 bg-california-red/5 text-california-red" : "border-amber-300/70 bg-amber-50 text-amber-900")}>
+                    {passaOrcado ? <ShieldAlert className="h-3.5 w-3.5 flex-none" /> : <AlertTriangle className="h-3.5 w-3.5 flex-none text-amber-700" />}
+                    <span className="text-[11px] font-semibold leading-relaxed">
+                      {passaOrcado ? "O acumulado deste item ultrapassa o orçado" : "O acumulado está acima do planejado"}
                     </span>
                   </div>
                 )}
@@ -1852,7 +1956,14 @@ export function GerarPPDrawer({
 
               {/* Fornecedor (modo normal) ou Titular da verba (modo verba,
                   as três desde a decisão 171) */}
-              {verbaProducao && !titularTerceiro ? (
+              {cartao ? (
+                <CartaoCorporativoField
+                  valor={cartaoDados}
+                  onChange={setCartaoDados}
+                  destacarFalta={faltaCartao}
+                  disabled={pending}
+                />
+              ) : verbaProducao && !titularTerceiro ? (
                 <div>
                   <TitularDaVerbaField
                     rotulo={reembolso ? "Titular do reembolso *" : undefined}
@@ -1935,6 +2046,14 @@ export function GerarPPDrawer({
                     </p>
                   )}
                 </div>
+                {cartao ? (
+                  <div>
+                    <span className="text-xs font-medium">Parcelas</span>
+                    <p className="flex h-11 items-center text-[12.5px] text-muted-foreground">
+                      Na fatura do cartão, pelo financeiro.
+                    </p>
+                  </div>
+                ) : (
                 <div>
                   <span className="text-xs font-medium">Parcelas</span>
                   <div
@@ -2018,6 +2137,7 @@ export function GerarPPDrawer({
                     </p>
                   )}
                 </div>
+                )}
               </div>
               <AvisoPrazoForaDaJanela
                 prazo={prazoPagamento}
@@ -2094,6 +2214,8 @@ export function GerarPPDrawer({
                     : "Comprovantes da despesa (obrigatórios para o envio ao financeiro)"
                   : tipoVerba
                   ? `Anexos (não exigidos na ${rotuloDaVerbaMinusculo(tipoVerba)})`
+                  : cartao
+                  ? "Anexos (não exigidos no cartão corporativo)"
                   : "Anexos (obrigatórios para o envio ao financeiro)"}
               </h3>
               {tipoVerba && !reembolso ? (
@@ -2226,10 +2348,8 @@ export function GerarPPDrawer({
                   );
                 })}
               </div>
-              {/* A mensagem de erro do formulário fica no topo, e depois da
-                  rolagem até aqui ela some de vista: quem tenta gerar sem
-                  responder via só a borda vermelha, sem o motivo
-                  (17/09/2026). */}
+              {/* O aviso local acompanha a pergunta; o erro geral fica
+                  sempre visível junto dos botões, fora da rolagem. */}
               {faltaResposta && (
                 <span className="text-[11.5px] font-semibold text-california-red">
                   Responda se esta é a última PP deste item.
@@ -2243,6 +2363,27 @@ export function GerarPPDrawer({
             </div>
 
           </div>
+
+          {/* Fora da rolagem: uma validação não pode parecer um clique
+              sem resposta quando a pessoa já chegou ao fim do formulário. */}
+          {avisoDoFormulario && (
+            <div
+              role={erro || !avisoDeEspera ? "alert" : "status"}
+              className={cn(
+                "mx-6 mt-3 flex max-h-[25vh] shrink-0 items-start justify-between gap-2 overflow-y-auto rounded border p-3 text-sm",
+                erro || !avisoDeEspera
+                  ? "border-california-red/40 bg-california-red/5 text-california-red"
+                  : "border-border bg-muted/30 text-muted-foreground",
+              )}
+            >
+              <span>{avisoDoFormulario}</span>
+              {erro && (
+                <button type="button" aria-label="Dispensar aviso" onClick={() => setErro(null)} className="shrink-0">
+                  <X className="h-4 w-4" />
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Salvar guarda a PP a emitir; Gerar PP salva e o painel abre a
               revisão antes de gerar (Tiago, 06/10/2026). Os dois são de
@@ -2267,11 +2408,12 @@ export function GerarPPDrawer({
                   pending ||
                   !ppId ||
                   travaDaAbertura !== null ||
+                  bloqueioLimite !== null ||
                   cadastroIncompleto ||
                   anexos.some((a) => a.status === "uploading") ||
                   faltaQuemRecebe
                 }
-                title={travaDaAbertura ?? travaDoCadastro ?? undefined}
+                title={travaDaAbertura ?? travaDoCadastro ?? bloqueioLimite ?? undefined}
                 className="rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red-hover disabled:opacity-50"
               >
                 Salvar alterações
@@ -2322,11 +2464,12 @@ export function GerarPPDrawer({
                   pending ||
                   !ppId ||
                   travaDaAbertura !== null ||
+                  bloqueioLimite !== null ||
                   cadastroIncompleto ||
                   anexos.some((a) => a.status === "uploading") ||
                   faltaQuemRecebe
                 }
-                title={travaDaAbertura ?? travaDoCadastro ?? undefined}
+                title={travaDaAbertura ?? travaDoCadastro ?? bloqueioLimite ?? undefined}
                 className={cn(
                   "rounded-lg px-4 py-2 text-sm font-semibold",
                   travaDaAbertura
@@ -2334,7 +2477,7 @@ export function GerarPPDrawer({
                     : "bg-california-red text-white hover:bg-california-red-hover disabled:opacity-50",
                 )}
               >
-                Gerar PP
+                {salvando ? "Salvando..." : "Gerar PP"}
               </button>
             </div>
             <p className="flex items-start justify-end gap-1.5 text-right text-[11px] leading-snug text-muted-foreground">

@@ -264,7 +264,7 @@ export async function aprovarPPComData(input: unknown): Promise<Result> {
   const { data: pp } = await supabase
     .from("pedidos_compra")
     .select(
-      "id, status, codigo, valor, job_id, pagamento_fora_do_cadastro_meio, verba_producao, nf_registrada_em",
+      "id, status, codigo, valor, job_id, pagamento_fora_do_cadastro_meio, verba_producao, nf_registrada_em, cartao_corporativo, forma_pagamento, cartao_credito_id, plano_conta_tipo_id, plano_conta_subtipo_id",
     )
     .eq("id", parsed.data.pp_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -277,9 +277,20 @@ export async function aprovarPPComData(input: unknown): Promise<Result> {
       pagamento_fora_do_cadastro_meio: string | null;
       verba_producao: boolean | null;
       nf_registrada_em: string | null;
+      cartao_corporativo: boolean;
+      forma_pagamento: string | null;
+      cartao_credito_id: string | null;
+      plano_conta_tipo_id: string | null;
+      plano_conta_subtipo_id: string | null;
     }>();
 
   if (!pp) return { ok: false, message: "PP não encontrada." };
+  // Decisão 209: a PP do cartão corporativo não tem fornecedor — só se paga
+  // no cartão de crédito da empresa. A CHECK `pp_cartao_corporativo_aprovada`
+  // repete a regra no banco.
+  if (pp.cartao_corporativo && parsed.data.forma_pagamento !== "cartao_credito") {
+    return { ok: false, message: "A PP no cartão corporativo é paga no cartão de crédito: escolha o cartão." };
+  }
   if (pp.status !== "em_avaliacao") {
     return {
       ok: false,
@@ -327,6 +338,7 @@ export async function aprovarPPComData(input: unknown): Promise<Result> {
    */
   const temNotaFiscal =
     !pp.verba_producao &&
+    !pp.cartao_corporativo &&
     (anexosAgora ?? []).some((a) => a.documento_tipo === "nota_fiscal");
   if (temNotaFiscal && !pp.nf_registrada_em) {
     return {
@@ -365,11 +377,46 @@ export async function aprovarPPComData(input: unknown): Promise<Result> {
     }
   }
 
+  // Decisão 209: no cartão corporativo, a forma vai ANTES da RPC — a CHECK
+  // `pp_cartao_corporativo_aprovada` não deixa a PP virar aprovada sem ela.
+  // Se a RPC falhar, a intenção sai junto.
+  const intencaoDoCartao = {
+    forma_pagamento: parsed.data.forma_pagamento,
+    cartao_credito_id: parsed.data.cartao_credito_id,
+    plano_conta_tipo_id: parsed.data.plano_conta_tipo_id,
+    plano_conta_subtipo_id: parsed.data.plano_conta_subtipo_id,
+  };
+  if (pp.cartao_corporativo) {
+    const { error: errCartao } = await supabase
+      .from("pedidos_compra")
+      .update(intencaoDoCartao)
+      .eq("id", parsed.data.pp_id)
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "em_avaliacao");
+    if (errCartao) {
+      return { ok: false, message: `Falha ao aprovar: ${errCartao.message}` };
+    }
+  }
+
   const { error } = await supabase.rpc("aprovar_pp_com_data", {
     p_pp_id: parsed.data.pp_id,
     p_data_pagamento: parsed.data.data_pagamento,
   });
   if (error) {
+    if (pp.cartao_corporativo) {
+      await supabase
+        .from("pedidos_compra")
+        // Volta ao que estava antes desta tentativa.
+        .update({
+          forma_pagamento: pp.forma_pagamento,
+          cartao_credito_id: pp.cartao_credito_id,
+          plano_conta_tipo_id: pp.plano_conta_tipo_id,
+          plano_conta_subtipo_id: pp.plano_conta_subtipo_id,
+        })
+        .eq("id", parsed.data.pp_id)
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("status", "em_avaliacao");
+    }
     if (foraDoCadastro) {
       await supabase
         .from("pedidos_compra")
@@ -397,7 +444,7 @@ export async function aprovarPPComData(input: unknown): Promise<Result> {
   // pré-preencher e para a previsão de caixa projetar pela fatura. NÃO
   // roteia mais parcela para fatura — o item só entra no cartão quando o
   // financeiro confirma o pagamento, na baixa, e ali ainda pode trocar.
-  if (parsed.data.forma_pagamento) {
+  if (parsed.data.forma_pagamento && !pp.cartao_corporativo) {
     const { error: errIntencao } = await supabase
       .from("pedidos_compra")
       .update({

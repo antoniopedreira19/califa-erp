@@ -24,6 +24,7 @@ import {
 import { cn, isValidCpf, onlyDigits } from "@/lib/utils";
 import type { Freelancer } from "@/lib/types";
 import { CepInput } from "./cep-input";
+import { PagamentoDoFreelancer, tipoDePagamentoPreenchido } from "./pagamento-do-freelancer";
 import { criarFreelancer, atualizarFreelancer } from "../actions";
 
 type Modo = "novo" | "editar";
@@ -72,7 +73,9 @@ export function FreelancerForm({ modo, freelancer }: Props) {
     banco: freelancer?.banco ?? "",
     agencia: freelancer?.agencia ?? "",
     conta: freelancer?.conta ?? "",
+    tipo_conta: freelancer?.tipo_conta ?? "",
     pix_chave: freelancer?.pix_chave ?? "",
+    pix_tipo: freelancer?.pix_tipo ?? "",
     cor_raca: freelancer?.cor_raca ?? "",
     identidade_genero: freelancer?.identidade_genero ?? "",
     deficiencia: freelancer?.deficiencia ?? "",
@@ -127,7 +130,8 @@ export function FreelancerForm({ modo, freelancer }: Props) {
     setErroGeral(null);
     setFieldErrors({});
 
-    const fd = montarFormData(state);
+    // Decisão 212: o tipo de pagamento sai do que foi preenchido.
+    const fd = montarFormData({ ...state, tipo_pagamento: tipoDePagamentoPreenchido(state) });
 
     startTransition(async () => {
       const resultado =
@@ -151,8 +155,6 @@ export function FreelancerForm({ modo, freelancer }: Props) {
   }
 
   const temPj = !!state.cnpj;
-  const tipoPagamentoPix = state.tipo_pagamento === "pix";
-  const tipoPagamentoConta = state.tipo_pagamento === "conta_bancaria";
 
   return (
     <form onSubmit={onSubmit} className="space-y-8">
@@ -369,70 +371,19 @@ export function FreelancerForm({ modo, freelancer }: Props) {
       </Secao>
 
       {/* ============== Pagamento ============== */}
+      {/* Decisão 212: PIX e conta sempre à vista, com o tipo da chave e o
+          tipo de conta (antes, um seletor mostrava um ou outro). */}
       <Secao
         titulo="Pagamento"
-        descricao="Como transferir o valor dos contratos para este freelancer."
+        descricao="Como transferir o valor dos contratos para este freelancer. Conta e PIX sempre que houver; um deles já basta."
       >
-        <Campo rotulo="Tipo de pagamento" erro={fieldErrors.tipo_pagamento}>
-          <Select
-            value={state.tipo_pagamento || undefined}
-            onValueChange={(v) => set("tipo_pagamento", v)}
-            disabled={pending}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Escolha o tipo" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="conta_bancaria">Conta bancária</SelectItem>
-              <SelectItem value="pix">PIX</SelectItem>
-            </SelectContent>
-          </Select>
-          <input type="hidden" name="tipo_pagamento" value={state.tipo_pagamento} />
-        </Campo>
-
-        {tipoPagamentoConta && (
-          <>
-            <Campo rotulo="Banco *" erro={fieldErrors.banco}>
-              <Input
-                name="banco"
-                value={state.banco}
-                onChange={(e) => set("banco", e.target.value)}
-                placeholder="Nome do banco"
-                disabled={pending}
-              />
-            </Campo>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Campo rotulo="Agência *" erro={fieldErrors.agencia}>
-                <Input
-                  name="agencia"
-                  value={state.agencia}
-                  onChange={(e) => set("agencia", e.target.value)}
-                  disabled={pending}
-                />
-              </Campo>
-              <Campo rotulo="Conta *" erro={fieldErrors.conta}>
-                <Input
-                  name="conta"
-                  value={state.conta}
-                  onChange={(e) => set("conta", e.target.value)}
-                  disabled={pending}
-                />
-              </Campo>
-            </div>
-          </>
-        )}
-
-        {tipoPagamentoPix && (
-          <Campo rotulo="Chave PIX *" erro={fieldErrors.pix_chave}>
-            <Input
-              name="pix_chave"
-              value={state.pix_chave}
-              onChange={(e) => set("pix_chave", e.target.value)}
-              placeholder="CPF, email, telefone ou chave aleatória"
-              disabled={pending}
-            />
-          </Campo>
-        )}
+        <PagamentoDoFreelancer
+          state={state}
+          set={set}
+          fieldErrors={fieldErrors}
+          pending={pending}
+          avisarChaveSemTipo={modo === "editar"}
+        />
       </Secao>
 
       {/* ============== Diversidade (opcional) ============== */}

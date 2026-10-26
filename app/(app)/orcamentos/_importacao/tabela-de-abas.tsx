@@ -4,7 +4,7 @@ import * as React from "react";
 import { ChevronDown, EyeOff } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { AbaResumo } from "@/lib/importacao/tipos-da-importacao";
-import { ORCADO, PLANEJADO } from "@/app/(app)/_planilha/blocos";
+import { ORCADO, PLANEJADO, NUMEROS_PLANILHA } from "@/app/(app)/_planilha/blocos";
 
 /**
  * A tabela de abas do arquivo (decisão 110, design 1C). Todas as abas lado
@@ -126,10 +126,10 @@ export function TabelaDeAbas({
                 </td>
                 <td className="py-2 pr-3 text-right tabular-nums">{a.grupos}</td>
                 <td className="py-2 pr-3 text-right tabular-nums">{a.itens}</td>
-                <td className={cn("py-2 pr-3 text-right font-mono text-xs font-semibold", ORCADO.texto)}>
+                <td className={cn("py-2 pr-3 text-right font-mono text-xs font-semibold", NUMEROS_PLANILHA.total)}>
                   {formatCurrency(a.orcado, "BRL")}
                 </td>
-                <td className={cn("py-2 pr-3 text-right font-mono text-xs", PLANEJADO.texto)}>
+                <td className={cn("py-2 pr-3 text-right font-mono text-xs", NUMEROS_PLANILHA.total)}>
                   {a.planejado > 0 ? formatCurrency(a.planejado, "BRL") : "—"}
                 </td>
               </tr>

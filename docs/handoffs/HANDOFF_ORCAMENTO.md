@@ -2318,6 +2318,48 @@ página `force-dynamic`.
 no navegador **pendente** — entra na etapa final, junto com as demais
 telas.
 
+⚠️ **"Buscando…" que não acabava (2026-10-22).** Desde ~16/10 o IBGE não
+atende a Vercel. Cada busca de 2+ letras esperava os 10 s do connect
+timeout antes de devolver até as cidades cadastradas, e como `buscarCidades`
+era server action — e server actions da mesma aba rodam em fila —, cada
+letra digitada entrava atrás da anterior: na tela, "Buscando…" para
+sempre (visto ao buscar "salva" com Salvador já cadastrado). O que mudou:
+
+- O combobox filtra as `iniciais` no próprio navegador (sem acento e sem
+  caixa) e mostra as cidades cadastradas **na hora**; a resposta do
+  servidor **soma** a essa lista (o `ilike` do banco diferencia acento:
+  "sao se" não acha "São Sebastião").
+- A busca saiu da server action para `GET /api/cidades/busca`, abortada
+  quando o termo muda. `buscarCidades` foi removida.
+- `lib/data/ibge-municipios.ts`: limite de 4 s no `fetch` e, depois de uma
+  falha, 5 min sem tentar o IBGE de novo.
+- Erro na busca vira uma linha "Não foi possível procurar outras cidades"
+  abaixo da lista local, em vez de travar.
+
+~~Continua pendente: enquanto o IBGE não atender a Vercel, cidade **nova**
+não aparece como sugestão.~~ ✅ Resolvido no mesmo dia, abaixo.
+
+⚠️ **A lista do IBGE mora no repositório (2026-10-22).** A busca não chama
+mais a API: lê `lib/data/municipios-ibge.json` (5.571 municípios, 184 KB,
+`[codigo, nome, uf]` por linha), carregado por `import()` dinâmico só na
+primeira busca de cada instância (~40 ms; as seguintes, < 1 ms). As páginas
+que importam `lib/data/cidades.ts` não carregam o arquivo. Atualizar quando
+o IBGE criar município: `node scripts/atualizar-municipios-ibge.mjs` e
+commitar o diff. Efeitos colaterais:
+
+- **Boa Esperança do Norte/MT** passou a aparecer: a API não traz a
+  microrregião dele e a leitura antiga o descartava; o script pega a UF
+  pela região imediata.
+- `criarCidadeDoIBGE` grava o nome e a UF **oficiais** do código, conferidos
+  na lista, em vez dos que o navegador mandava; código fora da lista é
+  recusado.
+- Saíram o limite de 4 s e a pausa de 5 min do IBGE: não há mais rede.
+
+**Verificação:** logado, em `localhost:3271`, no formulário de novo
+orçamento do TES-P001/26 — "sao se", "florian", "natal" mostram a cadastrada
+em 60 ms e completam com o IBGE sem a cadastrada sumir; com a rota forçada
+a falhar, Salvador fica e aparece o aviso.
+
 ---
 
 ## ⚠️ 2026-08-24 — A planilha virou uma tabela só (design "Grupos Unificados")
@@ -5681,3 +5723,153 @@ aplicada na hora combinada com a frente do Antonio, junto da
   TES-P001/26-19 (v1 em rascunho), "Aprovar versão" → "Sim, aprovar versão"
   mostrou a mensagem nova no pop-up; a versão continuou em rascunho e a
   auditoria registrou o `acao_negada` de `orcamentos.aprovar`.
+
+## ⚠️ Nota de 2026-10-21 — Exceções da aprovação exigem administrador (decisão 204)
+
+- **Aprovar versão:** se qualquer item tem planejado maior que o orçado,
+  ou se o **Resultado geral da versão inteira** é inferior a 20%, só o
+  administrador aprova. O GP continua aprovando as demais versões.
+  Exatamente 20% é permitido; sem planejado, o resultado continua
+  travessão. As demais travas também se aplicam ao administrador.
+- **Tela:** o total **orçado do item** fica vermelho quando excedido pelo
+  planejado; a rentabilidade do cabeçalho e o Resultado geral em Totais
+  ficam vermelhos abaixo de 20%, inclusive positivos. A barra de aprovação
+  mostra o motivo e desabilita o botão para quem não é administrador.
+- **Servidor e banco:** a action relê itens e parâmetros e usa os mesmos
+  fechamentos da tela. Gatilhada no banco pela migration
+  `20261021850001_limites_na_aprovacao_e_no_envio_da_pp.sql`, aplicada via
+  MCP e conferida. Nacional/mensal, internacional e Mídia Off cobertos;
+  nenhum dado existente foi reescrito. Tentativa negada entra na auditoria.
+- Regras, arquivos e verificações na
+  [decisão 204](../decisions/204-administrador-nas-excecoes-do-orcamento-e-da-pp.md).
+
+- **Conferência no navegador (21/10/2026):** build de produção local,
+  sessão de GP de teste. Avisos âmbar/vermelho, rascunho acima do orçado,
+  recusa do servidor pela revisão, geração de PP dentro do limite, edição
+  até o valor exato do orçado, bloqueio de um centavo excedente e segunda PP
+  de R$ 0,01 sobre acumulado no limite. Mesma trava pela aba PPs. Realizado
+  excedente vermelho em Bruto/Líquido; versão com Resultado geral 18,6% e
+  item excedente com valores vermelhos e aprovação desabilitada. PP criada
+  somente para conferir foi cancelada, sem envio ao financeiro; realizado
+  do item retornou a zero. Exceções de administrador conferidas nos testes
+  automatizados e SQL isolado, sem sessão administrativa de produção.
+
+
+## Revisão visual — 22/10/2026 (decisão 204)
+
+- Correção do pedido: o destaque vermelho vai no **total planejado** do
+  item acima do orçado, incluindo a linha nova; o orçado conserva o azul.
+  A comparação continua sobre o bruto, com destaque nas duas vistas.
+- Resultado geral em Totais (inclusive Mídia Off): fundo, borda e rótulos
+  mantêm o verde do planejado. Somente o percentual abaixo de 20% fica
+  vermelho; sem resultado permanece neutro.
+- Ajuste somente de apresentação; cálculos e permissões preservados.
+- **Conferência:** build de produção, lint e tipos aprovados (apenas o
+  aviso de ARIA anterior no `multi-select`); 40 testes existentes passaram.
+  No navegador com GP de teste, orçado azul e planejado excedente vermelho,
+  Resultado geral com fundo/rótulos verdes e só o percentual vermelho,
+  realizado em `rgb(220, 38, 38)` nas vistas Bruto e Líquido. Prints da
+  revisão de 22/10 capturados. Nenhum dado operacional alterado.
+
+
+## Interno fora da decisão 204 e motivo com o percentual — 22/10/2026
+
+- O **serviço Interno** (decisão 105) não passa pelos limites da aprovação.
+  Lá o resultado geral é sempre 0%, e a regra barrava todo Interno de GP.
+  Tela, action e gatilho leem a mesma marca (`investimento_interno` do
+  serviço). Migration `20261022850001_interno_fora_dos_limites_da_aprovacao.sql`.
+- O motivo de bloqueio mostra o resultado: "o resultado geral está em
+  8,6%, abaixo do mínimo de 20%". Vale para a barra, o botão, a action e o
+  gatilho.
+- No Interno, o Resultado geral do cabeçalho e de Totais não fica vermelho
+  abaixo de 20% (fica verde). Na agregada, só quando todo o projeto é Interno.
+- Origem: a v1 do GOO-P005/26-01 recebeu a mensagem genérica porque o
+  gatilho de 21/10 entrou no banco antes do deploy do código que traduz a
+  recusa. Detalhes na revisão de 22/10 da
+  [decisão 204](../decisions/204-administrador-nas-excecoes-do-orcamento-e-da-pp.md).
+
+
+## Serviço no cabeçalho do orçamento — 22/10/2026
+
+- A linha de dados do cabeçalho da versão mostra **"Serviço:"** logo antes
+  de "Categoria:" (pedido do Tiago), para que se veja de cara se o orçamento
+  é Interno ou de qual serviço é. Vem do embed `servico` que a página já
+  lia; aparece só quando o orçamento tem serviço. O cabeçalho do job já
+  mostrava o serviço na ficha.
+- **Conferência:** como GP de teste, TES-P001/26-12 mostra "Serviço:
+  Interno · Categoria: Evento" e TES-P001/26-03 mostra "Serviço: Ativação ·
+  Categoria: Internacional". Tipos e lint limpos; print capturado.
+
+
+## Planejado excedente em todas as planilhas — 22/10/2026
+
+- O total planejado fica vermelho ao ultrapassar o orçado nas linhas,
+  subtotais de grupo e totais comparáveis. A mesma regra cobre Jobs,
+  leitura do financeiro, histórico e visões agregadas de Jobs/Orçamentos,
+  além da referência do planejado no formulário da PP.
+- Comparação sobre o bruto, antes do BV; a vista Líquido preserva o alerta.
+  Igualdade e valores dentro do orçado mantêm o verde.
+- Sem alterar cálculo ou permissão. Os tons alternativos do alerta e dos
+  totais normais do realizado estão apenas no protótipo para escolha.
+- **Conferência:** 40 testes existentes passaram. No build de produção
+  local, navegador autenticado como GP de teste: Item 1 de Jobs e da
+  visão agregada com R$ 20.000 planejados para R$ 10.000 orçados exibe
+  apenas o total planejado vermelho; orçado azul e valores dentro do
+  limite verdes. Bruto/Líquido preservam o alerta; print capturado.
+  Sem alteração de dados operacionais.
+
+
+## Paleta “Grafite e cinza” aprovada — 22/10/2026
+
+- Opção 3 do protótipo completo: totais de Orçado/Planejado/Realizado
+  grafite (`#292929`), unitário/QT/D/M cinza (`#606060`); subtotal e total
+  geral seguem a mesma regra. Fundos, bordas e cabeçalhos preservados.
+- Fonte única `NUMEROS_PLANILHA` em `_planilha/blocos.ts`, compartilhada
+  pelas planilhas individuais, agregadas, financeiro/histórico e BV.
+  Prévias de importação também usam totais neutros.
+- Totais de custo excedentes preservam o vermelho vibrante com comparação
+  sobre o bruto, mesmo na vista Líquido. Sublinha de BV cinza.
+- Sem mudar cálculo, permissão, consulta, navegação, grade ou campos da PP.
+  Estados especiais de errata/save e painéis de resultado preservados.
+- **Verificação:** 41 testes de limites, composição do resultado,
+  Mídia Off e prestação de verba passaram; build/lint/tipos aprovados
+  (`NODE_OPTIONS=--max-old-space-size=8192`; permanece somente o aviso
+  anterior de ARIA no `multi-select`). Navegador com build de produção e
+  GP de teste: planilhas individuais de Jobs/Orçamentos, visão agregada
+  de Jobs e mini-planilha do BV. Confirmados `rgb(41, 41, 41)` nos totais,
+  `rgb(96, 96, 96)` em unitário/QT/D/M e `rgb(220, 38, 38)` nos totais
+  excedentes, preservando fundos. Bruto/Líquido e BV conferidos, prints
+  capturados. Nenhum dado operacional alterado.
+
+
+## Exceção no fechamento do internacional — 22/10/2026 (decisão 206)
+
+Caso do SOF-P002/26-01: a planilha da produção fechava em R$ 309.011,95
+(sem IR retido no exterior, ISS abatido, taxa cambial fixa e fee de 13%) e o
+sistema em R$ 314.064,17. Protótipo aprovado pelo Tiago (forma A, aviso A).
+
+- **Linha de parâmetros do internacional:** Fee · Int. taxes · Impostos BR ·
+  Int. transaction costs (sempre à vista, padrão R$ 0,00). No "Editar" as
+  três taxas ficam **travadas para todos**; só o fee se edita ali.
+- **Botão "Exceção"**, só para o administrador: pop-up com as três linhas,
+  o padrão do sistema ao lado, motivo obrigatório, faturamento previsto
+  simulado e conferência opcional com o invoicing da planilha; "Voltar ao
+  padrão" remove. Com exceção, a linha mostra os valores em âmbar e o selo
+  "Exceção no fechamento" (dica: taxas, motivo, quem e quando), e a cadeia
+  dos Totais marca as linhas com "exceção".
+- **Aprovação:** fora do padrão sem exceção é barrada; com exceção, 17,03%
+  aprova.
+- **Versão nova não herda a exceção** (criar, duplicar, importar, planilha do
+  projeto): nasce em 18,02% · 19,53% · R$ 0. O gatilho do banco confere.
+- **Câmbio em linha própria** com "Editar câmbio": moeda numa lista com
+  busca (24 moedas ISO), data e cotação; **compra e venda = cotação ∓ 0,20**,
+  calculadas na tela e no servidor. "Cotação: 5,0022 (02/06/2026)".
+- **Resultado operacional vermelho abaixo de 20%** no cabeçalho e nos Totais
+  (Interno fora).
+- **Auditoria:** `versao_orcamento.editada` grava o antes e o depois de cada
+  parâmetro; a exceção tem ações próprias.
+- **Conferência:** no TES-P001/26-03 (internacional), como administrador:
+  câmbio, exceção, aprovação com 17,03%, envio, fila, conferência e abertura
+  do TES-1031/26 (não aberto; envio cancelado e versão de volta ao padrão).
+  Gatilho testado numa transação desfeita como GP e administrador. Testes,
+  tsc, lint e build limpos.
