@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Sparkles, Plus, TrendingUp } from "lucide-react";
+import { Sparkles, UserPlus, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Saude {
@@ -62,26 +62,29 @@ export function HeroDashboard({
   return (
     <div className="relative overflow-hidden rounded-2xl bg-california-dark text-white px-6 py-5 md:px-8 md:py-6 shadow-elevated">
       <div className="absolute -top-16 -right-16 h-48 w-48 rounded-full bg-california-red/30 blur-3xl pointer-events-none" />
-      <div className="relative flex items-start justify-between gap-4 flex-wrap">
+      <div className="relative flex items-end justify-between gap-6 flex-wrap">
         <div className="min-w-0 flex-1">
-          <p className="inline-flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.18em] text-white/60">
-            <Sparkles className="h-3 w-3" />
-            {dataFormatada}
-          </p>
-          <h1 className="mt-1 text-2xl md:text-3xl font-bold tracking-tight">
+          <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-white/60">
+            <Sparkles className="h-3.5 w-3.5 text-california-red" />
+            <span className="capitalize">{dataFormatada}</span>
+          </div>
+          <h1 className="mt-1.5 text-2xl md:text-[28px] font-bold tracking-tight">
             Olá, {primeiroNome}
           </h1>
-          <p className="mt-1 text-sm text-white/70">
-            {totalFreelancers} freelancer{totalFreelancers === 1 ? "" : "s"}{" "}
-            cadastrado{totalFreelancers === 1 ? "" : "s"}
+          <p className="mt-1 text-sm text-white/65 max-w-2xl">
+            {totalFreelancers}{" "}
+            {totalFreelancers === 1
+              ? "freelancer cadastrado"
+              : "freelancers cadastrados"}
             {totalIrregular > 0 && (
               <>
                 {" "}
                 ·{" "}
-                <span className="font-semibold text-california-red">
-                  {totalIrregular} precisa
-                  {totalIrregular === 1 ? "" : "m"} de atenção
-                </span>
+                {totalIrregular}{" "}
+                {totalIrregular === 1
+                  ? "item precisa"
+                  : "itens precisam"}{" "}
+                de atenção.
               </>
             )}
           </p>
@@ -91,9 +94,9 @@ export function HeroDashboard({
                 <Link
                   href="/freelancers/solicitacoes"
                   prefetch={false}
-                  className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-brand hover:bg-california-red-hover transition-colors"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-california-red px-3 py-1.5 text-xs font-semibold text-white shadow-brand hover:bg-california-red-hover transition-colors"
                 >
-                  <Plus className="h-4 w-4" />
+                  <UserPlus className="h-3.5 w-3.5" />
                   Solicitar contratação
                 </Link>
               )}
