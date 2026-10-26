@@ -4872,6 +4872,38 @@ export interface ColaboradorNfAnexo {
   escopo_id: string | null;
 }
 
+/** Uma linha da view vw_nf_pendentes_colaborador.
+ *  Representa uma NF que o colaborador precisa (ou já) emitiu para
+ *  um evento de pagamento específico (folha mensal, férias, abono, 13°).
+ *  Spec: docs/superpowers/specs/2026-10-26-quadro-nf-colaborador-design.md */
+export type NfPendenteQuadro = {
+  tenant_id: string;
+  colaborador_id: string;
+  escopo_tipo: NfAnexoEscopo;
+  escopo_id: string;
+  label: string;
+  competencia_ano: number | null;
+  competencia_mes: number | null;
+  valor: string | null;
+  prazo_anexo: string | null; // ISO date
+  nf_anexada: boolean;
+  nf_anexo_id: string | null;
+  nf_arquivo_nome: string | null;
+  nf_uploaded_at: string | null;
+};
+
+/** Uma linha da view vw_people_aprovar_financeiro.
+ *  Extensão de NfPendenteQuadro com dados de contexto do colaborador,
+ *  usada na aba People de /financeiro/contas-a-pagar.
+ *  Spec: docs/superpowers/specs/2026-10-26-quadro-nf-colaborador-design.md */
+export type PeopleAprovarItem = NfPendenteQuadro & {
+  linha_id: string;
+  tipo_contratacao: TipoContratacao;
+  funcao: string | null;
+  origem: FolhaOrigem | null;
+  alocacao_resumo: string | null;
+};
+
 /** Janela de pagamento: salários (dia 03 do mês seguinte) ou
  *  fornecedores (dia 08). Derivada de uploaded_at vs dia 25 do mês
  *  da competência em America/Sao_Paulo. */
