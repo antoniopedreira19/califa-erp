@@ -30,6 +30,8 @@ import { useExclusiveDropdown } from "../../_components/use-exclusive-dropdown";
 type TipoSolicitacao = "contratacao" | "renovacao";
 
 interface SolicitacaoLinha extends FreelancerSolicitacao {
+  /** Nome a exibir: preferência pelo nome_completo do cadastro, fallback pro texto da solicitação. */
+  nome_freela_display: string;
   solicitante_nome: string | null;
   solicitante_email: string | null;
   job_codigo: string | null;
@@ -116,6 +118,25 @@ export function SolicitacoesTabela({
   React.useEffect(() => {
     setBusca(searchParams.get("q") ?? "");
   }, [searchParams]);
+
+  // Busca incremental com debounce: espera 300ms de inatividade e sincroniza
+  // o `?q=` da URL (que dispara a server query). Se o valor já bate com o
+  // da URL (ex.: load inicial, ou navegação por botão), não refaz nada.
+  React.useEffect(() => {
+    const atual = searchParams.get("q") ?? "";
+    const alvo = busca.trim();
+    if (atual === alvo) return;
+    const id = setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (alvo) params.set("q", alvo);
+      else params.delete("q");
+      const qs = params.toString();
+      router.push(`/freelancers/solicitacoes${qs ? `?${qs}` : ""}`);
+    }, 300);
+    return () => clearTimeout(id);
+    // searchParams.toString() estabiliza a referência pra não refirar à toa.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busca, searchParams.toString()]);
 
   const statusAtivos = React.useMemo(() => {
     const raw = searchParams.get("status");
@@ -246,6 +267,7 @@ export function SolicitacoesTabela({
         // Aqui só reforço solicitante_nome pq o server não consegue filtrar
         // via join.
         return (
+          (s.nome_freela_display ?? "").toLowerCase().includes(buscaNorm) ||
           (s.nome_freela ?? "").toLowerCase().includes(buscaNorm) ||
           (s.cargo ?? "").toLowerCase().includes(buscaNorm) ||
           (s.cpf_freela ?? "").replace(/\D+/g, "").includes(buscaNorm.replace(/\D+/g, ""))
@@ -762,7 +784,7 @@ function SolicitacaoRow({
             </span>
           )}
           <p className="font-semibold text-foreground">
-            {s.nome_freela}
+            {s.nome_freela_display}
           </p>
         </div>
         {s.cpf_freela && (

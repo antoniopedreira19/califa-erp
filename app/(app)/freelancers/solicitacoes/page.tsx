@@ -151,18 +151,34 @@ export default async function SolicitacoesPage({
     ),
   );
   const contratosPorFreela = new Map<string, number>();
+  const nomeCompletoPorFreela = new Map<string, string>();
   if (freelancerIdsNaLista.length > 0) {
-    const { data: contratosEf } = await supabase
-      .from("freelancer_contratos")
-      .select("freelancer_id")
-      .eq("tenant_id", tenantId)
-      .in("freelancer_id", freelancerIdsNaLista)
-      .not("nome_job", "is", null);
-    for (const r of (contratosEf ?? []) as Array<{ freelancer_id: string }>) {
+    const [contratosEfRes, nomesRes] = await Promise.all([
+      supabase
+        .from("freelancer_contratos")
+        .select("freelancer_id")
+        .eq("tenant_id", tenantId)
+        .in("freelancer_id", freelancerIdsNaLista)
+        .not("nome_job", "is", null),
+      supabase
+        .from("freelancers")
+        .select("id, nome_completo, nome_social")
+        .eq("tenant_id", tenantId)
+        .in("id", freelancerIdsNaLista),
+    ]);
+    for (const r of (contratosEfRes.data ?? []) as Array<{ freelancer_id: string }>) {
       contratosPorFreela.set(
         r.freelancer_id,
         (contratosPorFreela.get(r.freelancer_id) ?? 0) + 1,
       );
+    }
+    for (const r of (nomesRes.data ?? []) as Array<{
+      id: string;
+      nome_completo: string | null;
+      nome_social: string | null;
+    }>) {
+      const nome = r.nome_completo?.trim() || r.nome_social?.trim() || null;
+      if (nome) nomeCompletoPorFreela.set(r.id, nome);
     }
   }
 
@@ -175,8 +191,14 @@ export default async function SolicitacoesPage({
       const anteriores = s.contrato_id ? total - 1 : total;
       if (anteriores > 0) tipo_solicitacao = "renovacao";
     }
+    const nomeCompleto = s.freelancer_id
+      ? (nomeCompletoPorFreela.get(s.freelancer_id) ?? null)
+      : null;
     return {
       ...(s as FreelancerSolicitacao),
+      // Prefere nome_completo do cadastro quando a solicitação já está vinculada
+      // a um freelancer; cai no texto da solicitação (nome_freela) pra legados.
+      nome_freela_display: nomeCompleto ?? s.nome_freela,
       solicitante_nome: s.solicitante?.nome ?? null,
       solicitante_email: s.solicitante?.email ?? null,
       job_codigo: s.job?.codigo ?? null,
