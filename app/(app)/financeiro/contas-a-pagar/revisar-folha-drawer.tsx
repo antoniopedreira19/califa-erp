@@ -116,7 +116,10 @@ export function RevisarFolhaDrawer({
     (acc, a) => acc + (Number(String(a.percentual).replace(",", ".")) || 0),
     0,
   );
-  const somaOk = Math.abs(soma - 100) < 0.01;
+  // Linhas sem alocação (férias, 13°, CLT importado) chegam com alocacoes=[].
+  // Para essas linhas a validação de soma 100 não se aplica.
+  const temAlocacoes = alocacoes.length > 0;
+  const somaOk = !temAlocacoes || Math.abs(soma - 100) < 0.01;
   const valorMudou =
     salarioBase !== "" &&
     Math.round(Number(salarioBase) * 100) !==

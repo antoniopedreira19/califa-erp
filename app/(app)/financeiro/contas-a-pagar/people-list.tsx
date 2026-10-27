@@ -267,8 +267,30 @@ export function PeopleList({
               const nomeColab = colab?.nome ?? "—";
               const variante = badgeVariantParaEscopo(item.escopo_tipo);
               const tipoTexto = labelEscopoTipo(item.escopo_tipo);
-              const semNf = !item.nf_anexada;
               const eFolhaMensal = item.escopo_tipo === "folha_mensal";
+
+              // Stub: 13° não está implementado — botão sempre bloqueado.
+              const stubDecimo =
+                item.escopo_tipo === "decimo_terceiro_p1" ||
+                item.escopo_tipo === "decimo_terceiro_p2";
+
+              // Espelha a regra do server (actions-folhas.ts: exigeNf):
+              //   origem california + pj/mei/clt_recibo exigem NF.
+              //   Férias (usufruto/abono) também exigem NF.
+              //   CLT puro / sócio / estagio e 13° não exigem NF.
+              const exigeNfLinha =
+                item.escopo_tipo === "folha_mensal" &&
+                item.origem === "california" &&
+                ["pj", "mei", "clt_recibo"].includes(item.tipo_contratacao);
+              const exigeNfFerias =
+                item.escopo_tipo === "ferias_usufruto" ||
+                item.escopo_tipo === "ferias_abono";
+              const exigeNfParaUI = exigeNfLinha || exigeNfFerias;
+
+              const bloqueado = stubDecimo || (exigeNfParaUI && !item.nf_anexada);
+              const tooltipBloqueado = stubDecimo
+                ? "13° será implementado em iteração futura."
+                : "Aguardando o colaborador anexar a NF.";
 
               return (
                 <tr
@@ -312,7 +334,7 @@ export function PeopleList({
                     {item.valor != null ? formatBRL(Number(item.valor)) : "—"}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    {semNf ? (
+                    {bloqueado ? (
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <span className="inline-block">
@@ -327,7 +349,7 @@ export function PeopleList({
                           </span>
                         </TooltipTrigger>
                         <TooltipContent side="left">
-                          Aguardando o colaborador anexar a NF.
+                          {tooltipBloqueado}
                         </TooltipContent>
                       </Tooltip>
                     ) : (
