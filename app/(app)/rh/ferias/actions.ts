@@ -29,7 +29,7 @@ async function carregarLancamento(id: string, tenantId: string) {
   const { data } = await supabase
     .from("colaboradores_ferias_lancamentos")
     .select(
-      "id, tenant_id, colaborador_id, periodo_id, tipo, dias, data_inicio, data_fim, status, solicitado_por",
+      "id, tenant_id, colaborador_id, periodo_id, tipo, dias, dias_abono, data_inicio, data_fim, status, solicitado_por",
     )
     .eq("id", id)
     .eq("tenant_id", tenantId)
@@ -65,6 +65,7 @@ export async function aprovarLancamento(
     lanc.data_inicio,
     lanc.tipo as FeriasLancamentoTipo,
     lanc.dias,
+    (lanc as { dias_abono?: number }).dias_abono ?? 0,
   );
 
   const updatePayload: Record<string, unknown> = {
@@ -264,36 +265,9 @@ export async function moverEmAnalise(
 
 // ---------- Lançamento direto pelo RH ----------
 
-const lancamentoDiretoSchema = z
-  .object({
-    colaborador_id: z.string().uuid(),
-    periodo_id: z.string().uuid().nullable(),
-    tipo: z.enum([
-      "usufruto",
-      "abono_combinado",
-      "abono_avulso",
-      "abono_excepcional",
-    ]),
-    data_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    data_fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-    observacao: z.string().max(500).optional().nullable(),
-  })
-  .superRefine((data, ctx) => {
-    if (data.tipo === "abono_avulso" && data.periodo_id !== null) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["periodo_id"],
-        message: "Abono avulso não vincula a período.",
-      });
-    }
-    if (data.tipo !== "abono_avulso" && !data.periodo_id) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["periodo_id"],
-        message: "Escolha o período aquisitivo.",
-      });
-    }
-  });
+// Schema movido pra lib/ferias/lancar-direto-schema.ts (pure module,
+// testável isolado via node --test).
+import { lancarDiretoSchema } from "@/lib/ferias/lancar-direto-schema";
 
 export async function lancarDiretoPeloRh(
   input: unknown,
@@ -302,7 +276,7 @@ export async function lancarDiretoPeloRh(
   const bloqueio = assertRh(session.activeRole);
   if (bloqueio) return bloqueio;
 
-  const parsed = lancamentoDiretoSchema.safeParse(input);
+  const parsed = lancarDiretoSchema.safeParse(input);
   if (!parsed.success) {
     const flat = parsed.error.flatten().fieldErrors;
     const primeiro = Object.values(flat).flat()[0];
@@ -318,9 +292,11 @@ export async function lancarDiretoPeloRh(
   if (fim < ini) {
     return { ok: false, message: "Data de fim antes do início." };
   }
-  const dias =
+  const diasFolga =
     Math.floor((fim.getTime() - ini.getTime()) / 86_400_000) + 1;
-  if (dias <= 0 || dias > 30) {
+  // Pra abono_combinado, `dias` é TOTAL consumido (folga + vendidos).
+  const dias = diasFolga + dados.dias_abono;
+  if (diasFolga <= 0 || dias > 30) {
     return { ok: false, message: "Período deve ter entre 1 e 30 dias." };
   }
 
@@ -333,6 +309,7 @@ export async function lancarDiretoPeloRh(
     dados.data_inicio,
     dados.tipo,
     dias,
+    dados.dias_abono,
   );
 
   const { data: lanc, error: insErr } = await supabase
@@ -345,6 +322,7 @@ export async function lancarDiretoPeloRh(
       data_inicio: dados.data_inicio,
       data_fim: dados.data_fim,
       dias,
+      dias_abono: dados.dias_abono,
       status: "aprovado",
       solicitado_por: session.profile.id,
       aprovado_por: session.profile.id,
