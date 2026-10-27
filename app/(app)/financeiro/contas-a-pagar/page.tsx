@@ -338,8 +338,8 @@ export default async function PedidosCompraFinanceiroPage({
       let q = supabase
         .from("vw_people_aprovar_financeiro")
         .select("*")
-        .order("competencia_ano", { ascending: true })
-        .order("competencia_mes", { ascending: true });
+        .order("competencia_ano", { ascending: false })
+        .order("competencia_mes", { ascending: false });
       if (empresaFiltroIds.length > 0) {
         // A view não tem empresa_id diretamente; filtramos por tenant apenas.
         // Filtro de empresa é visual na aba quando necessário.

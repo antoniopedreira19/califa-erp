@@ -437,6 +437,11 @@ export async function aprovarLinhaFolha(
   let salarioFinal = (centavos(folha.salario_base) / 100).toFixed(2);
   let alocacoesFinal = alocAtuais;
 
+  // Férias e 13° não têm alocação por regional — só folha mensal exige.
+  // Quando exigeAlocacao=false: pula validação de alocação vazia e pula
+  // delete/insert em folhas_pagamento_alocacoes (nada a persistir).
+  const exigeAlocacao = folha.tipo === "salario";
+
   // 4) Aplica edições (se houve de verdade — comparação numérica)
   if (parsedEdicoes?.success) {
     const novo = parsedEdicoes.data;
@@ -444,7 +449,8 @@ export async function aprovarLinhaFolha(
     const setAtual = new Set(alocAtuais.map(chaveAlocacao));
     const setNovo = new Set(novo.alocacoes.map(chaveAlocacao));
     const alocMudou =
-      setAtual.size !== setNovo.size || [...setAtual].some((k) => !setNovo.has(k));
+      exigeAlocacao &&
+      (setAtual.size !== setNovo.size || [...setAtual].some((k) => !setNovo.has(k)));
 
     if (valorMudou) {
       const { error: upFolhaError } = await supabase
@@ -507,7 +513,7 @@ export async function aprovarLinhaFolha(
     }
   }
 
-  if (alocacoesFinal.length === 0) {
+  if (exigeAlocacao && alocacoesFinal.length === 0) {
     return { ok: false, message: "A linha está sem alocação." };
   }
 
