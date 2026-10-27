@@ -593,6 +593,7 @@ export default async function JobDetailPage({
                                 {
                                   nome: it.item,
                                   orcado: Number(it.total_orcado ?? 0),
+                                  linhaVermelha: it.linha_vermelha,
                                   realizado: Number(realizado.total_realizado ?? 0),
                                   planejado: Number(it.total_planejado ?? 0),
                                   unitario: Number(it.valor_unitario_planejado ?? 0),

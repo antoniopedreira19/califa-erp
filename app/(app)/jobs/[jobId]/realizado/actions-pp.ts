@@ -1773,7 +1773,8 @@ async function finalizarPedidoCompraImpl(
   // O valor é o produto do trio que o GP digitou: R$ Unit. × QT × D/M. É
   // recalculado aqui de propósito — o cliente manda os três fatores, nunca
   // o total. A exceção do acumulado acima do orçado exige administrador
-  // na geração (decisão 204); passar só do planejado mantém o envio. A quantidade
+  // na geração (decisão 204), menos na linha vermelha (27/10/2026);
+  // passar só do planejado mantém o envio. A quantidade
   // nunca limitou: 4 diárias a R$ 2.500 cabem num item de 2 a R$ 5.000.
   const valor = valorDaPPPorUnidade(
     d.valor_unitario,
@@ -1791,6 +1792,7 @@ async function finalizarPedidoCompraImpl(
     session.activeRole,
     Math.round((item.total_realizado + valor) * 100) / 100,
     item.total_orcado,
+    item.linha_vermelha,
   );
   if (bloqueioOrcado) {
     await logAuditEvent({
@@ -5005,6 +5007,7 @@ async function editarPPGeradaImpl(
     session.activeRole,
     Math.round((item.total_realizado + valor - Number(ppRow.valor)) * 100) / 100,
     item.total_orcado,
+    item.linha_vermelha,
   );
   if (bloqueioOrcado) {
     await logAuditEvent({

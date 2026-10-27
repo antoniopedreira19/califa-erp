@@ -219,6 +219,9 @@ interface Props {
   valorPlanejado: number;
   valorOrcado: number;
   podeGerarAcimaDoOrcado: boolean;
+  /** Linha vermelha: orçado zero por definição, então passar do orçado não
+   *  pede administrador — só o alerta de planejado (27/10/2026). */
+  linhaVermelha: boolean;
   /** Decomposição do planejado — R$ Unit. × QT × D/M, para o cartão
    *  mostrar de onde os três campos vêm. São referência apenas: os
    *  campos da PP nascem vazios (decisão do Tiago, 01/09/2026). */
@@ -392,6 +395,7 @@ export function GerarPPDrawer({
   valorPlanejado,
   valorOrcado,
   podeGerarAcimaDoOrcado,
+  linhaVermelha,
   unitarioPlanejado,
   quantidadePlanejada,
   dmPlanejado,
@@ -927,7 +931,7 @@ export function GerarPPDrawer({
   // em edição já está, e o valor dela sai antes (decisão 173).
   const previaEmPPs = Math.round((emPPsEmitidas - valorAntesDaEdicao + valorPP) * 100) / 100;
   const passaPlanejado = passaDoPlanejado(previaEmPPs, valorPlanejado);
-  const passaOrcado = acimaDoOrcado(previaEmPPs, valorOrcado);
+  const passaOrcado = !linhaVermelha && acimaDoOrcado(previaEmPPs, valorOrcado);
   const bloqueioLimite = passaOrcado && !podeGerarAcimaDoOrcado
     ? "Somente um administrador pode gerar ou editar esta PP."
     : null;

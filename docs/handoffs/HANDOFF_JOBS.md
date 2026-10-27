@@ -6502,3 +6502,12 @@ três telas da ficha (Jobs, Financeiro › Jobs e Abertura de Job), lido em
   abriu no Total sem a faixa; com "Realizar errata", o clique numa linha de
   outubro mostrou o aviso, o × fechou e recolher o grupo não o trouxe de
   volta. Errata fechada sem registrar.
+
+## ⚠️ Linha vermelha fora da trava de administrador da PP (2026-10-27)
+
+- Na linha vermelha ("só realizado"), gerar ou editar PP acima do orçado
+  não pede mais administrador: o GP gera e envia ao financeiro como em
+  qualquer linha. A confirmação de planejado no envio continua.
+- Aplicação (`bloqueioGeracaoPPPorLimite`, formulário da PP) e banco
+  (`pp_confere_orcado_na_geracao`, migration `20261027950001`).
+- Regras e verificação na [decisão 204](../decisions/204-administrador-nas-excecoes-do-orcamento-e-da-pp.md#revisão-de-27102026--linha-vermelha-fora-da-trava-da-pp).

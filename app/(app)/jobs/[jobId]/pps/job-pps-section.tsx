@@ -151,7 +151,7 @@ export interface EdicaoDaPPNaAba {
    *  conta dele, e se o item já está marcado como "todas as PPs geradas". */
   itens: Record<
     string,
-    { nome: string; orcado: number; realizado: number; planejado: number; unitario: number; quantidade: number; diasMeses: number; concluido: boolean }
+    { nome: string; orcado: number; linhaVermelha: boolean; realizado: number; planejado: number; unitario: number; quantidade: number; diasMeses: number; concluido: boolean }
   >;
   /** As PPs a emitir que reemitem uma rejeitada (revisão da 153,
    *  19/10/2026): o "Reemitir PP" da aba abre o formulário nelas, e a
@@ -1414,6 +1414,7 @@ export function JobPPsSection({
             itemDescricao={item?.nome ?? ppEditando?.item_nome ?? ""}
             valorOrcado={item?.orcado ?? 0}
             podeGerarAcimaDoOrcado={edicaoDaPP.podeGerarAcimaDoOrcado}
+            linhaVermelha={item?.linhaVermelha ?? false}
             valorPlanejado={item?.planejado ?? planejadoPorItem[itemRealizadoId] ?? 0}
             unitarioPlanejado={item?.unitario ?? 0}
             quantidadePlanejada={item?.quantidade ?? 0}
