@@ -31,6 +31,7 @@ import {
 // Logo embed como base64: em serverless Vercel, `public/` não é copiado
 // pro filesystem da função runtime (ENOENT). Base64 no bundle resolve.
 import { formatDiaBr } from "@/lib/formatar-data-hora";
+import { PIX_TIPOS } from "@/lib/pix";
 import { LOGO_ICON_BASE64 } from "./logo-base64";
 
 // Lazy init do PdfPrinter — evita executar top-level side-effect ao
@@ -101,6 +102,12 @@ const ROTULO_TIPO_CONTA: Record<TipoContaBancariaFornecedor, string> = {
 function fmtTipoConta(tipo: string | null | undefined): string {
   if (!tipo) return "";
   return ROTULO_TIPO_CONTA[tipo as TipoContaBancariaFornecedor] ?? tipo;
+}
+// O tipo da chave PIX com o rótulo das telas ("Chave aleatória", não
+// "aleatoria").
+function fmtTipoPix(tipo: string | null | undefined): string {
+  if (!tipo) return "";
+  return PIX_TIPOS.find((t) => t.valor === tipo)?.rotulo ?? tipo;
 }
 
 // ===== Helpers de layout =====
@@ -772,7 +779,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
                 ],
                 [
                   { text: "Tipo de Chave PIX:", bold: true, fontSize: 8 },
-                  { text: pagamentoDoTitular.pix_tipo ?? "", fontSize: 8 },
+                  { text: fmtTipoPix(pagamentoDoTitular.pix_tipo), fontSize: 8 },
                   { text: "Chave PIX:", bold: true, fontSize: 8 },
                   { text: pagamentoDoTitular.pix_chave ?? "", fontSize: 8 },
                 ],
@@ -816,7 +823,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
                   ]
                 : [
                     { text: "Tipo de Chave PIX:", bold: true, fontSize: 8 },
-                    { text: fornecedor?.pix_tipo ?? "", fontSize: 8 },
+                    { text: fmtTipoPix(fornecedor?.pix_tipo), fontSize: 8 },
                     { text: "Chave PIX:", bold: true, fontSize: 8 },
                     { text: fornecedor?.pix_chave ?? "", fontSize: 8 },
                   ],

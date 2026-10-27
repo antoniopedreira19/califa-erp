@@ -6435,6 +6435,10 @@ Protótipo aprovado em 17/10. Regra completa na decisão 192.
   foram emitidos.
 - Conferido montando o PDF com dados fictícios (titular com poupança,
   fornecedor com conta de pagamento e sem tipo).
+- O "Tipo de Chave PIX" também: sai com o rótulo das telas (`PIX_TIPOS` de
+  `lib/pix`) — "CPF", "CNPJ", "E-mail", "Telefone", "Chave aleatória" — em
+  vez de "email" e "aleatoria" (`fmtTipoPix`). Conferido do mesmo jeito,
+  com os cinco tipos e sem PIX.
 
 ## ⚠️ Nota de 2026-10-26 (3) — As apresentações do projeto na ficha do job (decisão 213)
 
