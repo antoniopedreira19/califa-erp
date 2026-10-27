@@ -226,6 +226,19 @@ export default async function FreelancersListaPage({
     console.error("[freelancers.cargos]", cargosRes.error.message);
   }
 
+  // DEBUG temporario — pra investigar caso Carol/GP ver menos freelas do que o
+  // SQL direto mostra. Remover quando confirmado.
+  console.log("[DEBUG.freelancers.lista]", {
+    profile_id: session.profile.id,
+    role: session.activeRole,
+    isAprovador,
+    searchParams,
+    freelancersRes_count: freelancersRes.data?.length ?? 0,
+    freelancersRes_error: freelancersRes.error?.message ?? null,
+    totaisRes_count: totaisRes.data?.length ?? 0,
+    totaisRes_error: totaisRes.error?.message ?? null,
+  });
+
   const freelancers = freelancersRes.data ?? [];
   const cargos = cargosRes.data ?? [];
   const jobsNovo: JobItem[] = (jobsNovoRes.data ?? []).map((j: any) => ({
