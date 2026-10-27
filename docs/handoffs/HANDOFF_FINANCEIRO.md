@@ -8462,3 +8462,21 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   reconhecer a conta.
 - Detalhes na
   [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
+## ⚠️ Nota de 2026-10-27 (4) — a cauda do histórico: outubro dos jobs até o 3T (decisão 211, A6)
+
+- **Carga `cauda`** (migration `20261027100007`, `empacotar.ts --cauda`):
+  depois do corte, só os movimentos e as notas dos jobs até o 3T que não
+  existem no sistema. Carregada pela tela: 01/10 a 25/10, 1.058 movimentos,
+  R$ 4.418.507,94, 54 notas. A cauda nova substitui a ativa.
+- **Conciliação** (migration `20261027100008`): a linha do extrato se
+  concilia "do histórico" (`conciliar_linha_pelo_historico`), sem
+  lançamento; o motor da aba Banco acha a cauda antes dos títulos (mesmo dia
+  e valor) e depois deles (até 5 dias e somas do dia), e resolve sozinho na
+  importação. Saldo do fechamento, do resumo e o saldo anterior contam a
+  cauda.
+- **Extrato e fluxo de caixa** (migrations `20261027100009` e `100010`): a
+  cauda entra no Extrato na ordem do dia e no fluxo como realizado; o fluxo
+  lê a view página a página (passou de mil linhas).
+- Detalhes na
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).

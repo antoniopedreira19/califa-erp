@@ -34,6 +34,7 @@ import { carregarBancoDaConciliacao } from "./banco-dados";
 import { carregarFechamentoDaConciliacao } from "./fechamento-dados";
 import { FaixaDoFechamento } from "./fechamento";
 import { carregarHistoricoDoExtrato } from "./historico-dados";
+import { carregarCaudaDoExtrato, juntarNaOrdemDoDia } from "./cauda-no-extrato";
 import { AvisoDoHistorico, HistoricoNoExtrato } from "./historico-no-extrato";
 import { alertasDoExtrato } from "./motor-da-conta";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
@@ -219,7 +220,7 @@ export default async function ConciliacaoPage({
     const idsDasGuias = (brutos as Array<{ id: string; origem: string }>)
       .filter((r) => r.origem === "imposto_baixa")
       .map((r) => r.id);
-    const [montadas, lancamentosDasGuias, conciliadosRes] = await Promise.all([
+    const [montadas, lancamentosDasGuias, conciliadosRes, cauda] = await Promise.all([
       montarLinhasDeLancamentos(supabase, session.activeTenant.id, brutos),
       carregarLancamentosDasGuias(supabase, session.activeTenant.id, idsDasGuias),
       // Os lançamentos do período já ligados a uma linha do extrato do banco
@@ -235,6 +236,15 @@ export default async function ConciliacaoPage({
             .not("extrato_linha_id", "is", null)
             .returns<Array<{ id: string }>>()
         : Promise.resolve({ data: [] as Array<{ id: string }>, error: null }),
+      // A cauda do histórico da planilha (decisão 211, A6): conta no saldo
+      // desde o início da conta, então entra no Extrato na ordem do dia.
+      carregarCaudaDoExtrato(supabase, {
+        tenantId: session.activeTenant.id,
+        contaId,
+        dataDe,
+        dataAte,
+        inicioDaConta: s.saldoInicialData,
+      }),
     ]);
     if (conciliadosRes.error) console.error("[conciliacao.conciliados]", conciliadosRes.error.message);
     // Uma linha por guia, na posição do primeiro lançamento dela e com a
@@ -243,7 +253,7 @@ export default async function ConciliacaoPage({
     // A baixa e os juros dela também são um débito só no banco (decisão
     // 196): uma linha, com a soma, e "inclui R$ X de juros".
     const comJuros = juntarJurosNaBaixa(comGuias.linhas);
-    const semSaldo = comJuros.linhas;
+    const semSaldo = juntarNaOrdemDoDia(comJuros.linhas, cauda.linhas);
     detalhesImposto = comGuias.detalhes;
     jurosDasBaixas = comJuros.juros;
     linhaDoLancamento = new Map([...comGuias.linhaDoLancamento, ...comJuros.linhaDoLancamento]);
@@ -282,7 +292,7 @@ export default async function ConciliacaoPage({
         console.error("[conciliacao.alertas]", e);
       }
       marcasDoBanco = {
-        conciliados: (conciliadosRes.data ?? []).map((r) => r.id),
+        conciliados: [...(conciliadosRes.data ?? []).map((r) => r.id), ...cauda.conciliadas],
         alertas,
         fechadoAte: fechamento.ativo?.ate ?? null,
       };

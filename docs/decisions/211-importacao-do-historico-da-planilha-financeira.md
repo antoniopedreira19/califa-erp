@@ -1092,9 +1092,24 @@ ficam só os jobs do 4T." Os jobs do 3T que já existem no sistema (cerca de
   recebimentos que a planilha divide por nota e o banco recebe numa TED);
   no BB California, 12 linhas e sobram 7; na Santander GoCrazy, 16 e
   sobram 11.
-- **Falta:** o Extrato da conta listar as linhas da cauda (o saldo já as
-  conta), o fluxo de caixa mostrá-las como realizadas, e escolher à mão as
-  linhas da cauda de uma linha do banco que o motor não casou.
+- **O Extrato e o fluxo de caixa contam a cauda** (migrations
+  `20261027100009` e `20261027100010`): no Extrato da conta, depois do
+  início dela, as linhas da cauda entram na ordem do dia, só de leitura
+  ("Histórico da planilha · job", coluna Job "Histórico"), e o saldo de cada
+  linha bate com o do resumo; o histórico antes do início lê só as cargas
+  de período. No fluxo de caixa, a `vw_fluxo_caixa` ganha o ramo
+  `historico` (movimento realizado na conta, sem job do sistema) e a
+  `fc_saldos_por_conta` soma a cauda. Conferido em 27/10/2026: a California
+  Santander em outubro tem 1.014 linhas no Extrato (19 lançamentos e 995 da
+  cauda) e fecha em R$ 2.493.840,94, o mesmo do resumo das contas; o fluxo
+  mostra outubro com R$ 8.465.007 de entradas e R$ 4.626.469 de saídas
+  realizadas.
+- **O fluxo de caixa lê a view página a página:** com a cauda, a consulta
+  passou de mil linhas, o teto do PostgREST, e as previsões dos meses
+  seguintes sumiam da tela sem aviso.
+- **Falta:** escolher à mão as linhas da cauda de uma linha do banco que o
+  motor não casou (as 318 da California Santander, sobretudo recebimentos
+  que a planilha divide por nota).
 
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas
