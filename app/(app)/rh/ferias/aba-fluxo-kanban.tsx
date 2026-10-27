@@ -1,7 +1,9 @@
 "use client";
 
+import * as React from "react";
 import type { RhFeriasFluxoRow, ColunaFluxoFerias } from "@/lib/types";
 import { classificarColunaFluxo } from "@/lib/ferias/classificar-coluna-fluxo";
+import { CardFluxo } from "./card-fluxo";
 
 // ---------------------------------------------------------------------------
 // Configuração das colunas
@@ -108,15 +110,15 @@ function agrupar(rows: RhFeriasFluxoRow[]): Record<ColunaFluxoFerias, RhFeriasFl
 // Componentes
 // ---------------------------------------------------------------------------
 
-function PlaceholderCard({ row }: { row: RhFeriasFluxoRow }) {
-  return (
-    <div className="rounded border bg-white p-3 text-xs">
-      Lançamento {row.lancamento_id.slice(0, 8)}
-    </div>
-  );
-}
-
-function ColunaKanban({ config, rows }: { config: ColConfig; rows: RhFeriasFluxoRow[] }) {
+function ColunaKanban({
+  config,
+  rows,
+  onCardClick,
+}: {
+  config: ColConfig;
+  rows: RhFeriasFluxoRow[];
+  onCardClick: (row: RhFeriasFluxoRow) => void;
+}) {
   return (
     <div className="flex flex-col min-w-0">
       {/* Header */}
@@ -139,7 +141,14 @@ function ColunaKanban({ config, rows }: { config: ColConfig; rows: RhFeriasFluxo
         {rows.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-4">Nada aqui.</p>
         ) : (
-          rows.map((row) => <PlaceholderCard key={row.lancamento_id} row={row} />)
+          rows.map((row) => (
+            <CardFluxo
+              key={row.lancamento_id}
+              row={row}
+              coluna={config.key}
+              onClick={onCardClick}
+            />
+          ))
         )}
       </div>
     </div>
@@ -153,10 +162,15 @@ function ColunaKanban({ config, rows }: { config: ColConfig; rows: RhFeriasFluxo
 export function FluxoKanban({ rows }: { rows: RhFeriasFluxoRow[] }) {
   const grupos = agrupar(rows);
 
+  // Por ora no-op — Task 6 adiciona o modal de detalhes
+  const abrirModalDocs = React.useCallback((_row: RhFeriasFluxoRow) => {
+    // TODO Task 6: abrir modal com detalhes do lançamento
+  }, []);
+
   return (
     <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
       {COLUNAS.map((col) => (
-        <ColunaKanban key={col.key} config={col} rows={grupos[col.key]} />
+        <ColunaKanban key={col.key} config={col} rows={grupos[col.key]} onCardClick={abrirModalDocs} />
       ))}
     </div>
   );
