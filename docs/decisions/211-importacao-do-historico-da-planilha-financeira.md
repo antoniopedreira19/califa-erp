@@ -561,6 +561,30 @@ faturado com o recebido:
   financeiro uma vez e leva cerca de 30 ms. A situação e as somas ficam em
   `lib/historico-financeiro/faturamento.ts`.
 
+#### A visão por CNPJ, padrão do relatório (26/10/2026)
+
+**Decidido (Tiago, 26/10/2026):** "Quero os dois. E quero que a visão padrão
+seja a de relatório por CNPJ de forma equivalente à planilha." As visões por
+job agrupam pela empresa do job, não pelo CNPJ que emitiu a nota. A CCH e a
+Hitlab emitem também pelo CNPJ da California, e a CCH pela Go Crazy. Por isso
+o relatório ganhou:
+- **A visão "CNPJ", padrão:** uma linha por emissor, que é uma aba de
+  Faturamento da planilha: California Salvador, Fortaleza e SP; Go Crazy,
+  Santo André e SP; Hitlab Salvador. Cada linha traz o valor emitido em cada
+  mês, o faturado, o recebido e o a receber do ano. As respostas do Tiago:
+  - a nota cai no mês da **data de emissão**;
+  - as notas **sem job e de distribuição de lucro entram no total**, com o
+    valor marcado à parte; as canceladas ficam fora;
+  - o CNPJ abre a **lista das notas** dele no ano, como a aba (NF, job,
+    cliente, emissão, vencimento, recebimento, valor e impostos).
+- **O filtro "Emissor"** nas visões por cliente, marca e job: só os jobs com
+  nota daquele CNPJ, e só as notas dele.
+- A leitura é a função `historico_faturamento_notas`, e
+  `historico_faturamento_jobs` passou a trazer as somas de cada job por
+  emissor (migration `20261026100013_historico_faturamento_por_cnpj.sql`). A
+  conta fica em `montarPorCnpj` e `jobsDoEmissor`, em
+  `lib/historico-financeiro/faturamento.ts`.
+
 ## O pipeline (E1, E2 e E3)
 
 Código em `lib/historico-financeiro/` (regras puras, com teste) e
@@ -883,6 +907,18 @@ Uma linha da Hitlab de 2024 não tem a fórmula.
   R$ 6.250.984,77 faturados.
 - **Somas e acesso:** a soma das linhas fecha com o total nas três visões e
   num trimestre (2T de 2025). Para um usuário produtor, a função devolve nulo.
+- **Ambiente:** sem erro no console nem no servidor, e build OK.
+
+## Conferido em 26/10/2026 (A4, faturamento por CNPJ)
+
+- **Por CNPJ e mês:** em 2025, os 41 valores da tela são iguais à soma das
+  notas emitidas no banco. O faturamento de cada aba em cada mês já batia
+  entre a planilha e o padronizado (E3) e entre o pacote e o banco (A2).
+- **Lista e filtro:** a lista da aba Go Crazy de 2025 traz as 85 notas (58 de
+  job, 25 de distribuição de lucro e 2 sem job), com os mesmos totais da
+  linha. O filtro do emissor Go Crazy na CCH de 2025 dá os 7 jobs, com
+  R$ 1.723.000,00 faturados e R$ 1.276.400,00 recebidos, como o banco.
+- **Visões por job:** os totais sem filtro não mudaram.
 - **Ambiente:** sem erro no console nem no servidor, e build OK.
 
 ## O que fica para depois

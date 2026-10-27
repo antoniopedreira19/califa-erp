@@ -6,7 +6,7 @@
  * `lib/historico-financeiro/faturamento.ts`.
  */
 import type { createClient } from "@/lib/supabase/server";
-import type { JobFaturadoDoHistorico } from "@/lib/historico-financeiro/faturamento";
+import type { JobFaturadoDoHistorico, NotaDoHistorico } from "@/lib/historico-financeiro/faturamento";
 
 type Supabase = ReturnType<typeof createClient>;
 
@@ -31,6 +31,7 @@ type Resposta = {
     notas: Numero;
     faturado: Numero;
     recebido: Numero;
+    emissores: Record<string, { notas: Numero; faturado: Numero; recebido: Numero }>;
   }[];
 };
 
@@ -57,6 +58,46 @@ export async function carregarNotasDoAno(supabase: Supabase, tenantId: string, a
       notas: Number(j.notas),
       faturado: Number(j.faturado),
       recebido: Number(j.recebido),
+      emissores: Object.fromEntries(
+        Object.entries(j.emissores ?? {}).map(([e, s]) => [e, { notas: Number(s.notas), faturado: Number(s.faturado), recebido: Number(s.recebido) }]),
+      ),
+    })),
+  };
+}
+
+export interface NotasEmitidasNoAno {
+  cobertura: NotasDoAno["cobertura"];
+  notas: NotaDoHistorico[];
+}
+
+/**
+ * As notas emitidas no ano, pela data de emissão, de todos os emissores: a
+ * visão por CNPJ, como as abas de Faturamento. `null` quando a leitura falha.
+ */
+export async function carregarNotasEmitidas(supabase: Supabase, tenantId: string, ano: number): Promise<NotasEmitidasNoAno | null> {
+  const { data, error } = await supabase.rpc("historico_faturamento_notas", { p_tenant_id: tenantId, p_ano: ano });
+  if (error) {
+    console.error("[relatorios.faturamento-historico.notas]", error.message);
+    return null;
+  }
+  if (!data) return null;
+  const r = data as { cobertura: NotasDoAno["cobertura"]; notas?: (Omit<NotaDoHistorico, "valor" | "impostos" | "linha"> & { linha: Numero; valor: Numero; impostos: Numero })[] };
+  return {
+    cobertura: r.cobertura,
+    notas: (r.notas ?? []).map((n) => ({
+      estabelecimento: n.estabelecimento,
+      aba: n.aba,
+      linha: Number(n.linha),
+      numero: n.numero,
+      classe: n.classe,
+      empresa: n.empresa,
+      job: n.job,
+      cliente: n.cliente,
+      emissao: n.emissao,
+      vencimento: n.vencimento,
+      recebimento: n.recebimento,
+      valor: Number(n.valor),
+      impostos: Number(n.impostos),
     })),
   };
 }

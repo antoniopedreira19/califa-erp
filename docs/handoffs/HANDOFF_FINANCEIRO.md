@@ -8286,6 +8286,20 @@ os arquivos da frente do Antonio.
   24 que diferem estão na
   [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
 
+## ⚠️ Nota de 2026-10-26 (12) — o faturamento do histórico por CNPJ emissor (decisão 211, A4)
+
+- **Visão padrão "CNPJ"** em `/relatorios/faturamento-historico`, como as abas
+  de Faturamento da planilha:
+  - uma linha por emissor, com o valor de cada mês pela data de emissão e o
+    faturado, o recebido e o a receber do ano;
+  - as notas fora de job somam no total e aparecem marcadas;
+  - o CNPJ abre a lista das notas dele.
+- **Filtro "Emissor"** nas visões por cliente, marca e job.
+- **Banco:** `historico_faturamento_notas` e o `historico_faturamento_jobs`
+  com as somas por emissor (migration `20261026100013`).
+- Detalhes na
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
 ## Código do projeto do financeiro sem a sigla — 23/10/2026 (decisão 210)
 
 Aplicada em 26/10/2026 (migration `20261023950001`, destrutiva, na hora

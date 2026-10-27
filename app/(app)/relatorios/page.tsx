@@ -56,7 +56,7 @@ export default async function RelatoriosPage() {
               href="/relatorios/faturamento-historico"
               icon={Receipt}
               title="Faturamento dos jobs do histórico"
-              description="Notas emitidas, recebido e a receber de cada job das abas Res. Jobs, por cliente, marca ou job."
+              description="As notas por CNPJ emissor, mês a mês, como as abas de Faturamento, e o faturado, o recebido e o a receber de cada job."
             />
           </>
         )}

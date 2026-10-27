@@ -29,6 +29,8 @@ export type JobFaturadoDoHistorico = {
   faturado: number;
   /** O valor das notas com data de recebimento. */
   recebido: number;
+  /** As mesmas somas por emissor (o estabelecimento da aba de Faturamento). */
+  emissores: Record<string, { notas: number; faturado: number; recebido: number }>;
 };
 
 export type SituacaoDoFaturamento = "sem_nota" | "a_receber" | "parcial" | "recebido";
@@ -120,5 +122,94 @@ export function montarFaturamento(jobs: readonly JobFaturadoDoHistorico[], visao
     linhas,
     total: somar("total", "Total", null, jobs),
     semNota: jobs.filter((j) => j.notas === 0).length,
+  };
+}
+
+/** O nome curto do emissor: o estabelecimento sem a nota da aba ("GoCrazy (aba Faturamento Go Crazy)" → "GoCrazy"). */
+export function rotuloDoEmissor(estabelecimento: string): string {
+  return estabelecimento.replace(/\s*\(aba [^)]*\)$/, "");
+}
+
+/**
+ * Os jobs vistos por um emissor: só os que têm nota dele, com as somas das
+ * notas dele. Sem emissor, os jobs como estão.
+ */
+export function jobsDoEmissor(jobs: readonly JobFaturadoDoHistorico[], emissor: string | null): JobFaturadoDoHistorico[] {
+  if (!emissor) return [...jobs];
+  return jobs.flatMap((j) => {
+    const e = j.emissores[emissor];
+    return e ? [{ ...j, notas: e.notas, faturado: e.faturado, recebido: e.recebido }] : [];
+  });
+}
+
+// ---------------------------------------------------------------- por CNPJ
+
+/** Uma nota emitida do histórico, como a aba de Faturamento a lista. */
+export type NotaDoHistorico = {
+  estabelecimento: string;
+  aba: string;
+  linha: number;
+  numero: string;
+  /** "job", "sem job" ou "distribuição de lucro". */
+  classe: string;
+  empresa: string;
+  job: string | null;
+  cliente: string | null;
+  emissao: string;
+  vencimento: string | null;
+  recebimento: string | null;
+  valor: number;
+  impostos: number;
+};
+
+export type LinhaDoCnpj = {
+  estabelecimento: string;
+  rotulo: string;
+  notas: number;
+  /** O valor emitido em cada mês, de janeiro a dezembro. */
+  meses: number[];
+  faturado: number;
+  recebido: number;
+  aReceber: number;
+  /** A parte do faturado em notas sem job e de distribuição de lucro. */
+  foraDeJob: number;
+};
+
+/**
+ * As notas emitidas de um ano por emissor, como as abas de Faturamento da
+ * planilha: o valor de cada mês pela data de emissão, o recebido e o a
+ * receber, com as notas fora de job somadas e marcadas à parte. Do maior
+ * faturado para o menor, com o total.
+ */
+export function montarPorCnpj(notas: readonly NotaDoHistorico[]): { linhas: LinhaDoCnpj[]; total: LinhaDoCnpj } {
+  const nova = (estabelecimento: string, rotulo: string): LinhaDoCnpj => ({
+    estabelecimento, rotulo, notas: 0, meses: Array(12).fill(0), faturado: 0, recebido: 0, aReceber: 0, foraDeJob: 0,
+  });
+  const linhas = new Map<string, LinhaDoCnpj>();
+  const total = nova("total", "Total");
+  for (const n of notas) {
+    const l = linhas.get(n.estabelecimento) ?? nova(n.estabelecimento, rotuloDoEmissor(n.estabelecimento));
+    const mes = Number(n.emissao.slice(5, 7)) - 1;
+    const valor = centavos(n.valor);
+    for (const alvo of [l, total]) {
+      alvo.notas += 1;
+      alvo.meses[mes] += valor;
+      alvo.faturado += valor;
+      if (n.recebimento) alvo.recebido += valor;
+      if (n.classe !== "job") alvo.foraDeJob += valor;
+    }
+    linhas.set(n.estabelecimento, l);
+  }
+  const fechar = (l: LinhaDoCnpj): LinhaDoCnpj => ({
+    ...l,
+    meses: l.meses.map(centavos),
+    faturado: centavos(l.faturado),
+    recebido: centavos(l.recebido),
+    aReceber: centavos(l.faturado - l.recebido),
+    foraDeJob: centavos(l.foraDeJob),
+  });
+  return {
+    linhas: [...linhas.values()].map(fechar).sort((a, b) => b.faturado - a.faturado || a.rotulo.localeCompare(b.rotulo, "pt-BR")),
+    total: fechar(total),
   };
 }
