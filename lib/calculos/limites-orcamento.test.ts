@@ -1,39 +1,89 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { acimaDoOrcado, bloqueioAprovacaoPorLimites, bloqueioGeracaoPPPorLimite, rentabilidadeAbaixoDoMinimo } from "./limites-orcamento";
+import {
+  REGRAS_PADRAO_DO_COMITE,
+  acimaDoOrcado,
+  aprovaDiretoSemComite,
+  bloqueioGeracaoPPPeloComite,
+  motivosDaVersaoNoComite,
+  ppPassaDoOrcadoNoComite,
+  rentabilidadeAbaixoDoMinimo,
+  versaoCobertaPeloComite,
+  type RegrasDoComite,
+} from "./limites-orcamento";
 import { somaDasPPsNaoCanceladas } from "./pps-item";
 import type { AppRole } from "@/lib/types";
 
 const papeis: AppRole[] = ["administrador", "gerente_producao", "produtor", "freelancer", "financeiro", "rh", "colaborador"];
+const R = REGRAS_PADRAO_DO_COMITE;
+const com = (r: Partial<RegrasDoComite>): RegrasDoComite => ({ ...R, ...r });
 
-test("planejado maior que o orçado exige administrador mesmo com margem alta", () => {
+test("planejado maior que o orçado leva ao Comitê mesmo com margem alta", () => {
   const itens = [{ orcado: 100, planejado: 101 }, { orcado: 900, planejado: 100 }];
-  const excedeu = itens.some((i) => acimaDoOrcado(i.planejado, i.orcado));
-  for (const papel of papeis) {
-    assert.equal(bloqueioAprovacaoPorLimites(papel, excedeu, 70, false) === null, papel === "administrador");
-  }
+  const itensAcima = itens.filter((i) => acimaDoOrcado(i.planejado, i.orcado)).length;
+  assert.deepEqual(motivosDaVersaoNoComite(R, { itensAcima, resultadoGeral: 70 }, false), [
+    "há 1 item com planejado acima do orçado",
+  ]);
+  assert.deepEqual(motivosDaVersaoNoComite(com({ planejadoLigado: false }), { itensAcima, resultadoGeral: 70 }, false), []);
 });
 
-test("resultado positivo abaixo de 20% exige administrador; 20% exatos liberam", () => {
+test("resultado abaixo do mínimo leva ao Comitê; o mínimo exato libera", () => {
   for (const margem of [19.99, 0, -10]) {
-    for (const papel of papeis) {
-      assert.equal(bloqueioAprovacaoPorLimites(papel, false, margem, false) === null, papel === "administrador");
-    }
+    assert.equal(motivosDaVersaoNoComite(R, { itensAcima: 0, resultadoGeral: margem }, false).length, 1);
   }
-  assert.equal(bloqueioAprovacaoPorLimites("gerente_producao", false, 20, false), null);
-  assert.equal(bloqueioAprovacaoPorLimites("gerente_producao", false, null, false), null);
+  assert.deepEqual(motivosDaVersaoNoComite(R, { itensAcima: 0, resultadoGeral: 20 }, false), []);
+  assert.deepEqual(motivosDaVersaoNoComite(R, { itensAcima: 0, resultadoGeral: null }, false), []);
+  assert.deepEqual(motivosDaVersaoNoComite(com({ resultadoMinimo: 15 }), { itensAcima: 0, resultadoGeral: 18 }, false), []);
+  assert.deepEqual(motivosDaVersaoNoComite(com({ resultadoLigado: false }), { itensAcima: 0, resultadoGeral: 5 }, false), []);
   assert.equal(rentabilidadeAbaixoDoMinimo(19.999), true);
   assert.equal(rentabilidadeAbaixoDoMinimo(20 - Number.EPSILON), false);
 });
 
-test("igualdade monetária libera; um centavo acima acende e barra", () => {
+test("os dois motivos da aprovação aparecem juntos", () => {
+  const m = motivosDaVersaoNoComite(R, { itensAcima: 2, resultadoGeral: 8.6214 }, false);
+  assert.equal(m[0], "há 2 itens com planejado acima do orçado");
+  assert.equal(m[1], "o resultado geral está em 8,6%, abaixo do mínimo de 20%");
+});
+
+test("serviço Interno não passa pelo Comitê, nem com resultado zero", () => {
+  assert.deepEqual(motivosDaVersaoNoComite(R, { itensAcima: 0, resultadoGeral: 0 }, true), []);
+  assert.deepEqual(motivosDaVersaoNoComite(R, { itensAcima: 3, resultadoGeral: -5 }, true), []);
+});
+
+test("só o administrador aprova direto, e só com a regra dele ligada", () => {
+  for (const papel of papeis) assert.equal(aprovaDiretoSemComite(papel, R), papel === "administrador");
+  assert.equal(aprovaDiretoSemComite("administrador", com({ adminDireto: false })), false);
+});
+
+test("volta ao Comitê só se piorar: mais itens acima ou resultado menor", () => {
+  const aprovado = { itensAcima: 2, resultadoGeral: 15 };
+  assert.equal(versaoCobertaPeloComite(aprovado, { itensAcima: 2, resultadoGeral: 15 }), true);
+  assert.equal(versaoCobertaPeloComite(aprovado, { itensAcima: 1, resultadoGeral: 17 }), true);
+  assert.equal(versaoCobertaPeloComite(aprovado, { itensAcima: 3, resultadoGeral: 17 }), false);
+  assert.equal(versaoCobertaPeloComite(aprovado, { itensAcima: 2, resultadoGeral: 14.9 }), false);
+  assert.equal(versaoCobertaPeloComite(null, { itensAcima: 0, resultadoGeral: 30 }), false);
+});
+
+test("igualdade monetária libera; um centavo acima acende", () => {
   assert.equal(acimaDoOrcado(100, 100), false);
   assert.equal(acimaDoOrcado(0.1 + 0.2, 0.3), false);
   assert.equal(acimaDoOrcado(100.01, 100), true);
   assert.equal(acimaDoOrcado(0.01, 0), true);
 });
 
-test("PP menor que o orçado barra quando o acumulado ultrapassa, sem duplicar a gerada", () => {
+const pp = (over: Partial<Parameters<typeof bloqueioGeracaoPPPeloComite>[0]>) =>
+  bloqueioGeracaoPPPeloComite({
+    papel: "produtor",
+    regras: R,
+    realizadoComAPP: 101,
+    orcado: 100,
+    linhaVermelha: false,
+    valor: 41,
+    valorAprovado: null,
+    ...over,
+  });
+
+test("PP que leva o acumulado acima do orçado vai ao Comitê, sem duplicar a gerada", () => {
   const realizado = somaDasPPsNaoCanceladas([
     { valor: 60, status: "pago" },
     { valor: 41, status: "gerada" },
@@ -41,43 +91,37 @@ test("PP menor que o orçado barra quando o acumulado ultrapassa, sem duplicar a
   ]);
   assert.equal(realizado, 101);
   for (const papel of papeis) {
-    assert.equal(bloqueioGeracaoPPPorLimite(papel, realizado, 100, false) === null, papel === "administrador");
+    assert.equal(pp({ papel, realizadoComAPP: realizado }) === null, papel === "administrador");
   }
-  assert.equal(bloqueioGeracaoPPPorLimite("gerente_producao", 100, 100, false), null);
-  assert.equal(bloqueioGeracaoPPPorLimite("produtor", 101, 100, false)?.includes("administrador"), true);
+  assert.equal(pp({ realizadoComAPP: 100 }), null);
+  assert.match(pp({})!, /Comitê de Aprovações/);
+  assert.ok(pp({ papel: "administrador", regras: com({ adminDireto: false }) }));
+  assert.equal(pp({ regras: com({ ppLigado: false }) }), null);
 });
 
 test("devolução aprovada reduz o realizado; rejeitada conta até cancelar", () => {
   const soma = somaDasPPsNaoCanceladas([{ valor: 80, status: "rejeitada" }, { valor: 40, status: "gerada" }]);
-  assert.ok(bloqueioGeracaoPPPorLimite("gerente_producao", soma, 100, false));
-  assert.equal(bloqueioGeracaoPPPorLimite("gerente_producao", soma - 20, 100, false), null);
+  assert.ok(pp({ realizadoComAPP: soma }));
+  assert.equal(pp({ realizadoComAPP: soma - 20 }), null);
 });
 
-test("os dois motivos da aprovação aparecem juntos", () => {
-  const motivo = bloqueioAprovacaoPorLimites("gerente_producao", true, 8.6214, false);
-  assert.match(motivo!, /planejado acima do orçado/);
-  assert.match(motivo!, /resultado geral está em 8,6%, abaixo do mínimo de 20%/);
+test("linha vermelha só vai ao Comitê com a regra dela ligada", () => {
+  assert.equal(pp({ realizadoComAPP: 5000, orcado: 0, linhaVermelha: true }), null);
+  assert.ok(pp({ realizadoComAPP: 5000, orcado: 0, linhaVermelha: true, regras: com({ linhasVermelhas: true }) }));
+  assert.ok(pp({ realizadoComAPP: 5000, orcado: 0, linhaVermelha: false }));
 });
 
-test("serviço Interno não passa pela regra, nem com resultado zero", () => {
-  for (const papel of papeis) {
-    assert.equal(bloqueioAprovacaoPorLimites(papel, false, 0, true), null);
-    assert.equal(bloqueioAprovacaoPorLimites(papel, true, -5, true), null);
-  }
-  assert.ok(bloqueioAprovacaoPorLimites("gerente_producao", false, 0, false));
+test("tolerância: abaixo dos dois limites a PP segue sem o Comitê", () => {
+  const regras = com({ toleranciaLigada: true, toleranciaValor: 500, toleranciaPct: 5 });
+  // Orçado 10.000: 5% = 500. Excesso 400 passa; 600 não; 10.000 + 400 em
+  // orçado de 1.000 (5% = 50) também não.
+  assert.equal(ppPassaDoOrcadoNoComite(regras, 10_400, 10_000, false), false);
+  assert.equal(ppPassaDoOrcadoNoComite(regras, 10_600, 10_000, false), true);
+  assert.equal(ppPassaDoOrcadoNoComite(regras, 1_400, 1_000, false), true);
 });
 
-
-test("edição substitui o valor anterior e só bloqueia o novo acumulado excedente", () => {
-  const realizado = 100, valorAnterior = 40;
-  assert.equal(bloqueioGeracaoPPPorLimite("produtor", realizado - valorAnterior + 40, 100, false), null);
-  assert.ok(bloqueioGeracaoPPPorLimite("produtor", realizado - valorAnterior + 40.01, 100, false));
-  assert.equal(bloqueioGeracaoPPPorLimite("administrador", realizado - valorAnterior + 200, 100, false), null);
-});
-
-test("linha vermelha não pede administrador, nem com todo o valor acima do orçado zero", () => {
-  for (const papel of papeis) {
-    assert.equal(bloqueioGeracaoPPPorLimite(papel, 5000, 0, true), null);
-  }
-  assert.ok(bloqueioGeracaoPPPorLimite("gerente_producao", 5000, 0, false));
+test("PP aprovada volta ao Comitê só se ficar mais cara", () => {
+  assert.equal(pp({ valor: 1000, valorAprovado: 1000 }), null);
+  assert.equal(pp({ valor: 900, valorAprovado: 1000 }), null);
+  assert.ok(pp({ valor: 1000.01, valorAprovado: 1000 }));
 });

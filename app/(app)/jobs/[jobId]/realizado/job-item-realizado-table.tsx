@@ -1,5 +1,9 @@
 "use client";
 
+import type { ComiteDaPP, PedidoEmDecisao } from "@/lib/data/comite";
+import { BarraDeDecisaoDoComite } from "@/app/(app)/comite/_componentes/barra-de-decisao";
+import { linhasDoMotivoDaPP } from "@/app/(app)/comite/_componentes/motivo-do-caso";
+import { ConsultaDaPP } from "@/app/(app)/comite/_componentes/consulta-da-pp";
 import * as React from "react";
 import { situacaoMidiaDaPP, type MidiaSystemDoJob } from "@/lib/calculos/midia-system";
 import { Ban, ChevronDown, ChevronRight, Lock, Plus, Trash2, Undo2, X } from "lucide-react";
@@ -21,7 +25,7 @@ import type {
 } from "@/lib/types";
 import type { TomadorDaNf } from "./anexos-da-pp";
 import { TEXTO_LINHA_ALTERADA_EM_REVISAO, textoAguardaAbertura } from "./pp-a-emitir-ui";
-import { nomeContraparteBRPP, ppStatusLabel, situacaoDaVerba } from "@/lib/types";
+import { nomeContraparteBRPP, nomeDoCartaoCorporativo, ppStatusLabel, situacaoDaVerba } from "@/lib/types";
 import { CalhaLinha } from "./calha-linha";
 import {
   NomeDoGrupoNaErrata,
@@ -179,7 +183,12 @@ interface Props {
    *  ele o painel do item fecha o envio com o motivo, e o "Ver PP" só
    *  cancela a PP ainda não enviada. */
   papelEnviaPP: boolean;
-  podeGerarAcimaDoOrcado: boolean;
+  /** Comitê de Aprovações (decisão 223): as regras, quem aprova direto e o
+   *  que ele já aprovou, por PP a emitir. Repassado ao formulário da PP. */
+  comiteDaPP: ComiteDaPP;
+  /** A planilha aberta pela caixa do Comitê, por quem decide: a barra de
+   *  decisão embaixo e a PP do pedido em consulta. Nulo fora dela. */
+  emDecisaoPP: (PedidoEmDecisao & { embutido: boolean }) | null;
   /** Corrige a NF da PP em avaliação sem aprovar (`jobs.corrigir_nf_pp`,
    *  revisão da decisão 152): o botão no painel do item. */
   papelCorrigeNf: boolean;
@@ -726,7 +735,8 @@ export function JobItemRealizadoTable({
   podeAcoes,
   podeGerarPP = false,
   papelEnviaPP,
-  podeGerarAcimaDoOrcado,
+  comiteDaPP,
+  emDecisaoPP,
   papelCorrigeNf,
   podeCadastrarFornecedor = false,
   podeEditarFornecedor = false,
@@ -910,6 +920,26 @@ export function JobItemRealizadoTable({
     setItemIdAtual(itemRealizadoId);
     setPainelOpen(true);
   }
+
+  // ---- Comitê de Aprovações (decisão 223): a PP em decisão ----
+  const [consultaDoComite, setConsultaDoComite] = React.useState(false);
+  const itemDoComite = emDecisaoPP
+    ? (todosOsItens.find((i) => realizadosMap.get(i.id)?.id === emDecisaoPP.itemRealizadoId) ?? null)
+    : null;
+  const aEmitirDoComite = emDecisaoPP
+    ? ([...aEmitirPorItemId.values()].flat().find((a) => a.id === emDecisaoPP.ppAEmitirId) ?? null)
+    : null;
+  // A linha do item fica à vista quando a planilha abre.
+  React.useEffect(() => {
+    if (!itemDoComite) return;
+    const t = setTimeout(() => {
+      wrapperRef.current
+        ?.querySelector(`tr[data-calha="i:${itemDoComite.id}"]`)
+        ?.scrollIntoView({ block: "center" });
+    }, 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itemDoComite?.id]);
 
   /**
    * Os três blocos de UMA linha, já com a dedução de BV separada.
@@ -2569,6 +2599,10 @@ export function JobItemRealizadoTable({
                 cartaoCorporativo: pp.cartao_corporativo === true,
               }))}
               aEmitir={aEmitirDoItem}
+              comiteDaPP={comiteDaPP}
+              totalOrcado={Number(itemAtual?.total_orcado ?? 0)}
+              linhaVermelha={itemAtual?.linha_vermelha === true}
+              realizadoDoItem={Number(realizadoAtual?.total_realizado ?? emPPs)}
               statusDoJob={statusDoJob}
               pedidoDeRevisao={pedidoDeRevisao}
               onEditarAEmitir={
@@ -2676,7 +2710,7 @@ export function JobItemRealizadoTable({
               itemDescricao={itemAtual?.item ?? ""}
               valorPlanejado={planejadoAtual}
               valorOrcado={Number(itemAtual?.total_orcado ?? 0)}
-              podeGerarAcimaDoOrcado={podeGerarAcimaDoOrcado}
+              comiteDaPP={comiteDaPP}
               linhaVermelha={itemAtual?.linha_vermelha === true}
               unitarioPlanejado={unitarioPlanejado}
               quantidadePlanejada={quantidadePlanejada}
@@ -2841,6 +2875,87 @@ export function JobItemRealizadoTable({
               readOnly={!podeAcoes}
               podeConfirmar={podeAcoes && podeConfirmarBv}
             />
+          );
+        })()}
+
+      {emDecisaoPP &&
+        (() => {
+          const realizado = itemDoComite ? Number(realizadosMap.get(itemDoComite.id)?.total_realizado ?? 0) : 0;
+          const orcado = Number(itemDoComite?.total_orcado ?? 0);
+          const valor = aEmitirDoComite?.valor ?? 0;
+          const comAPP = Math.round((realizado + valor) * 100) / 100;
+          const a = aEmitirDoComite;
+          const fornecedor = !a
+            ? "—"
+            : a.cartao_corporativo
+              ? nomeDoCartaoCorporativo(a.cartao_plataforma)
+              : a.verba_producao
+                ? (a.verba_titular_nome ?? "—")
+                : nomeDoFornecedor(fornecedores, a.fornecedor_id ?? "");
+          const tomador = a
+            ? tomadoresDaNf.find((t) => t.id === (a.dados.estabelecimento_id ?? cnpjPadraoDaPP))
+            : undefined;
+          const nomeDoItem = itemDoComite?.item ?? "—";
+          return (
+            <>
+              <BarraDeDecisaoDoComite
+                pedido={emDecisaoPP}
+                versaoLabel={null}
+                embutido={emDecisaoPP.embutido}
+                ppAberta={consultaDoComite}
+                onAbrirMenu={
+                  emDecisaoPP.itemRealizadoId
+                    ? () => {
+                        setConsultaDoComite(false);
+                        abrirPainel(emDecisaoPP.itemRealizadoId!);
+                      }
+                    : null
+                }
+                onAbrirPP={
+                  a
+                    ? () => {
+                        setPainelOpen(false);
+                        setConsultaDoComite(true);
+                      }
+                    : null
+                }
+                resumo={
+                  <>
+                    Comitê · PP de <span className="font-mono font-semibold text-foreground">{formatCurrency(valor, "BRL")}</span> ·{" "}
+                    <strong className="text-foreground">{nomeDoItem}</strong> · {fornecedor}
+                  </>
+                }
+                motivoDaRegra={`o realizado do item com esta PP fica em ${formatCurrency(comAPP, "BRL")}, ${formatCurrency(
+                  comAPP - orcado,
+                  "BRL",
+                )} acima do orçado de ${formatCurrency(orcado, "BRL")}`}
+                linhas={linhasDoMotivoDaPP({
+                  item: nomeDoItem,
+                  linhaVermelha: itemDoComite?.linha_vermelha === true,
+                  orcado,
+                  realizadoComAPP: comAPP,
+                })}
+              />
+              {a && itemDoComite && (
+                <ConsultaDaPP
+                  open={consultaDoComite}
+                  onOpenChange={setConsultaDoComite}
+                  aEmitir={a}
+                  item={{
+                    nome: nomeDoItem,
+                    linhaVermelha: itemDoComite.linha_vermelha === true,
+                    orcado,
+                    planejado: Number(itemDoComite.total_planejado ?? 0),
+                    jaEmPPs: realizado,
+                  }}
+                  enviadoPor={emDecisaoPP.enviadoPor}
+                  enviadoEm={emDecisaoPP.enviadoEm}
+                  motivo={emDecisaoPP.motivo}
+                  fornecedor={fornecedor}
+                  empresaEmissora={tomador ? `${tomador.nome} · ${tomador.cnpj}` : "—"}
+                />
+              )}
+            </>
           );
         })()}
 

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import { carregarComiteDaPP, carregarPedidoEmDecisao } from "@/lib/data/comite";
+import { EnvioAoComite, ModoEmbutido } from "@/app/(app)/comite/_componentes/barra-de-decisao";
 import { FaixaDoProjeto } from "@/components/faixa-do-projeto";
 import { itensDeJobs } from "@/lib/faixa-do-projeto";
 import { notFound, redirect } from "next/navigation";
@@ -72,7 +74,9 @@ export default async function JobDetailPage({
   searchParams,
 }: {
   params: { jobId: string };
-  searchParams?: { from?: string; aba?: string; mes?: string };
+  /** `comite` e `embutido`: a planilha aberta pela caixa do Comitê de
+   *  Aprovações (decisão 223), no pop-up dela. */
+  searchParams?: { from?: string; aba?: string; mes?: string; comite?: string; embutido?: string };
 }) {
   const session = await requireSession();
   const fromParam = searchParams?.from;
@@ -94,7 +98,7 @@ export default async function JobDetailPage({
   // leituras independentes. A trava só interessa a quem pode pedir.
   const supabaseDoPedido = createClient();
   const podePedirCancelamento = pode(session.activeRole, "jobs.solicitar_cancelamento");
-  const [detalhe, cancelamento, travaDoPedido, equipe] = await Promise.all([
+  const [detalhe, cancelamento, travaDoPedido, equipe, comiteDaPP, emDecisao] = await Promise.all([
     carregarDetalheDoJob(session, params.jobId),
     cancelamentoDoJob(supabaseDoPedido, session.activeTenant.id, params.jobId),
     podePedirCancelamento
@@ -102,7 +106,18 @@ export default async function JobDetailPage({
       : Promise.resolve(null),
     // O botão "Equipe" (decisão 174).
     carregarEquipeDoJob(supabaseDoPedido, session.activeTenant.id, params.jobId),
+    // Comitê de Aprovações (decisão 223): as PPs que passam do orçado.
+    carregarComiteDaPP(
+      supabaseDoPedido,
+      session.activeTenant.id,
+      params.jobId,
+      session.activeRole === "administrador",
+    ),
+    searchParams?.comite
+      ? carregarPedidoEmDecisao(supabaseDoPedido, session.activeTenant.id, searchParams.comite, params.jobId)
+      : Promise.resolve(null),
   ]);
+  const embutido = searchParams?.embutido === "1";
   if (!detalhe) notFound();
 
   // Job cancelado não existe no módulo de Jobs (decisões 113 e 163). Antes
@@ -207,6 +222,10 @@ export default async function JobDetailPage({
 
   return (
     <div className="space-y-6">
+      {emDecisao && embutido && <ModoEmbutido />}
+      {emDecisao?.tipo === "pp" && (
+        <EnvioAoComite enviadoPor={emDecisao.enviadoPor} enviadoEm={emDecisao.enviadoEm} motivo={emDecisao.motivo} />
+      )}
       <div>
         {/* Faixa do projeto (decisão 106): a agregada e os jobs do projeto,
             os mesmos da agregada — sem os cancelados, menos este. */}
@@ -514,16 +533,18 @@ export default async function JobDetailPage({
             itens={itens}
             realizadosMap={realizadosMap}
             categoriasMap={categoriasMap}
-            podeAcoes={podeAcoesPlanilha && !comPedido}
-            podeMexerNoSave={podeMexerNoSave && !comPedido}
+            podeAcoes={podeAcoesPlanilha && !comPedido && !emDecisao}
+            podeMexerNoSave={podeMexerNoSave && !comPedido && !emDecisao}
             podeExportarInterna={podeExportarInterna}
-            podeGerarPP={podeGerarPP && !comPedido}
-            podeGerarAcimaDoOrcado={session.activeRole === "administrador"}
-            papelEnviaPP={papelEnviaPP && !comPedido}
+            podeGerarPP={podeGerarPP && !comPedido && !emDecisao}
+            comiteDaPP={comiteDaPP}
+            // Aberta pela caixa do Comitê: só leitura, com a barra de decisão.
+            emDecisaoPP={emDecisao?.tipo === "pp" ? { ...emDecisao, embutido } : null}
+            papelEnviaPP={papelEnviaPP && !comPedido && !emDecisao}
             papelCorrigeNf={papelCorrigeNf}
             ppsQuePossoPrestarContas={ppsQuePossoPrestarContas}
             midiaSystem={detalhe.midiaSystem}
-            podeConfirmarBv={podeConfirmarBv && !comPedido}
+            podeConfirmarBv={podeConfirmarBv && !comPedido && !emDecisao}
             jaEnviadoParaFaturamento={envioFaturamento !== null}
             linhasComEnvioTravado={linhasComEnvioTravado}
             ppsPorItemId={ppsPorItemId}
@@ -542,9 +563,9 @@ export default async function JobDetailPage({
           <JobPPsSection
             pps={ppsDoJob}
             fornecedoresPorId={fornecedoresPorId}
-            editable={podeGerarPP && !comPedido}
-            podeEnviar={podeEnviarPP && !comPedido}
-            papelEnviaPP={papelEnviaPP && !comPedido}
+            editable={podeGerarPP && !comPedido && !emDecisao}
+            podeEnviar={podeEnviarPP && !comPedido && !emDecisao}
+            papelEnviaPP={papelEnviaPP && !comPedido && !emDecisao}
             podePrestarContas={ppsQuePossoPrestarContas}
             midiaSystem={detalhe.midiaSystem}
             // Decisão 160: o envio, o formulário e a PP ao lado dos
@@ -568,9 +589,9 @@ export default async function JobDetailPage({
             // Decisão 173: a PP gerada se edita também pela aba, no mesmo
             // formulário do painel do item — com o que o painel recebe.
             edicaoDaPP={
-              podeGerarPP && !comPedido
+              podeGerarPP && !comPedido && !emDecisao
                 ? {
-                    podeGerarAcimaDoOrcado: session.activeRole === "administrador",
+                    comiteDaPP,
                     jobId: job.id,
                     jobEmpresaId: job.empresa_id ?? "",
                     fornecedores,

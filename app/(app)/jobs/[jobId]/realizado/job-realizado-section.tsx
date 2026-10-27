@@ -10,6 +10,7 @@
  *  e a do financeiro (`/financeiro/jobs/[jobId]`). Mexer aqui muda as
  *  duas, que é o que se quer — elas mostram a mesma planilha. */
 
+import { COMITE_DA_PP_SEM_ACAO, type ComiteDaPP, type PedidoEmDecisao } from "@/lib/data/comite";
 import * as React from "react";
 import type { MidiaSystemDoJob } from "@/lib/calculos/midia-system";
 import Link from "next/link";
@@ -266,7 +267,12 @@ interface Props {
    *  Obrigatório: é ele que tira do produtor o "Enviar" e o cancelamento
    *  de PP já enviada. Repassado à tabela. */
   papelEnviaPP: boolean;
-  podeGerarAcimaDoOrcado: boolean;
+  /** Comitê de Aprovações (decisão 223): as regras, quem aprova direto e o
+   *  que ele já aprovou, por PP a emitir. Repassado ao formulário da PP. */
+  comiteDaPP: ComiteDaPP;
+  /** A planilha aberta pela caixa do Comitê (decisão 223). Repassado à
+   *  tabela; nulo fora dela. */
+  emDecisaoPP: (PedidoEmDecisao & { embutido: boolean }) | null;
   /** Corrige a NF da PP em avaliação sem aprovar (`jobs.corrigir_nf_pp`,
    *  revisão da decisão 152). Repassado à tabela e ao painel do item. */
   papelCorrigeNf: boolean;
@@ -562,7 +568,8 @@ export function JobRealizadoSection({ comHistorico, ...props }: Props) {
       podeMexerNoSave={false}
       podeGerarPP={false}
       papelEnviaPP={false}
-      podeGerarAcimaDoOrcado={false}
+      comiteDaPP={COMITE_DA_PP_SEM_ACAO}
+      emDecisaoPP={null}
       papelCorrigeNf={false}
       podeCadastrarFornecedor={false}
       podeEditarFornecedor={false}
@@ -601,7 +608,8 @@ function PlanilhaDoJob({
   podeExportarInterna = false,
   podeGerarPP = false,
   papelEnviaPP,
-  podeGerarAcimaDoOrcado,
+  comiteDaPP,
+  emDecisaoPP,
   papelCorrigeNf,
   podeCadastrarFornecedor = false,
   podeEditarFornecedor = false,
@@ -1473,7 +1481,8 @@ function PlanilhaDoJob({
           podeAcoes={podeAcoes}
           podeGerarPP={podeGerarPP}
           papelEnviaPP={papelEnviaPP}
-          podeGerarAcimaDoOrcado={podeGerarAcimaDoOrcado}
+          comiteDaPP={comiteDaPP}
+          emDecisaoPP={emDecisaoPP}
           papelCorrigeNf={papelCorrigeNf}
           podeCadastrarFornecedor={podeCadastrarFornecedor}
           podeEditarFornecedor={podeEditarFornecedor}

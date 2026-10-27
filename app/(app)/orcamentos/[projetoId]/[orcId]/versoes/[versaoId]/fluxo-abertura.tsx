@@ -12,6 +12,7 @@ import {
   Check,
   CheckCircle2,
   FileText,
+  Gavel,
   History,
   Undo2,
 } from "lucide-react";
@@ -24,7 +25,14 @@ import {
   type CambioParaAprovar,
   type FechamentoParaAprovar,
 } from "@/lib/validations/versoes";
-import { aprovarVersao } from "../actions";
+import { aprovarVersao, solicitarAprovacaoDaVersao } from "../actions";
+import { cancelarEnvioAoComite } from "@/app/(app)/comite/actions";
+import {
+  SolicitarAprovacaoDialog,
+  linhasDoMotivoDaVersao,
+  type ItemAcimaDoOrcado,
+} from "@/app/(app)/comite/_componentes/motivo-do-caso";
+import type { ComiteDaVersao } from "@/lib/data/comite";
 import {
   cancelarEnvioParaAbertura,
   enviarJobParaAbertura,
@@ -45,7 +53,7 @@ import { anoDoCodigoDeJob, proximoCodigoDeJob } from "@/lib/codigos/jobs";
 import type { ClienteDoCampo } from "@/app/(app)/clientes/campo-cliente";
 import type { ProdutoOption } from "@/app/(app)/orcamentos/projeto-form";
 
-type Modal = "aprovar" | "form" | "envio" | "cancelar_envio" | null;
+type Modal = "aprovar" | "form" | "envio" | "cancelar_envio" | "comite" | "cancelar_comite" | null;
 
 export interface JobExistente {
   id: string;
@@ -96,7 +104,13 @@ interface Props {
   /** Itens com total orçado > 0 — linha começada e vazia não conta. Item
    *  com orçado zerado não bloqueia (revisão da decisão 011, 01/10/2026). */
   qtdItensComValor: number;
-  bloqueioLimites: string | null;
+  /** A versão diante do Comitê de Aprovações (decisão 223, no lugar do
+   *  "só o administrador" da 204). */
+  comite: ComiteDaVersao | null;
+  /** O quadro do motivo do pedido: os itens com planejado acima do orçado e
+   *  o Resultado geral do cabeçalho. */
+  itensAcimaDoOrcado: ItemAcimaDoOrcado[];
+  resultadoGeral: number | null;
   /** Alíquota gravada na versão, para checar se saiu do seletor. */
   percentualImposto: number;
   /** Câmbio da versão internacional — aprovar exige todos os campos
@@ -211,7 +225,9 @@ export function FluxoAbertura({
   qtdGrupos,
   qtdItens,
   qtdItensComValor,
-  bloqueioLimites,
+  comite,
+  itensAcimaDoOrcado,
+  resultadoGeral,
   percentualImposto,
   cambioInternacional,
   fechamentoInternacional,
@@ -294,7 +310,7 @@ export function FluxoAbertura({
   );
   // Mesma função que a server action usa: o title do botão explica exatamente
   // o motivo pelo qual o servidor recusaria.
-  const bloqueio = bloqueioLimites ?? bloqueioAprovacaoVersao({
+  const bloqueio = bloqueioAprovacaoVersao({
     parServicoCategoria,
     percentualImposto,
     cambioInternacional,
@@ -305,6 +321,12 @@ export function FluxoAbertura({
     linhasSemVeiculo,
   });
   const aprovada = versaoStatus === "aprovada";
+  // Comitê de Aprovações (decisão 223). O que barra a aprovação por outro
+  // motivo vem antes: o Comitê não aprova uma versão que não se aprova.
+  const pedidoDoComite = comite?.pedido ?? null;
+  const aguardandoComite = pedidoDoComite?.status === "pendente";
+  const vaiAoComite = !bloqueio && !aguardandoComite && comite?.precisa === true;
+  const devolvidaPeloComite = vaiAoComite && pedidoDoComite?.status === "devolvido";
   // `devolvida` (decisão 057): o financeiro rejeitou a abertura. O job
   // continua existindo — o reenvio refaz o formulário sobre ele —, mas a
   // barra volta a oferecer o envio, como na etapa `aprovada`.
@@ -382,6 +404,28 @@ export function FluxoAbertura({
 
   // Estados fora do fluxo (reprovada, substituída, cancelada) não têm barra.
   if (!podeAprovar && !aprovada) return null;
+
+  async function handleSolicitarComite(motivo: string): Promise<string | null> {
+    const res = await solicitarAprovacaoDaVersao(versaoId, motivo);
+    if (!res.ok) return res.message;
+    setModal(null);
+    router.refresh();
+    return null;
+  }
+
+  function handleCancelarComite() {
+    if (!pedidoDoComite) return;
+    setErroGeral(null);
+    startTransition(async () => {
+      const res = await cancelarEnvioAoComite(pedidoDoComite.id);
+      if (!res.ok) {
+        setErroGeral(res.message);
+        return;
+      }
+      setModal(null);
+      router.refresh();
+    });
+  }
 
   function handleAprovar() {
     setErroGeral(null);
@@ -561,7 +605,29 @@ export function FluxoAbertura({
       {/* Barra de ação — gruda no rodapé da viewport enquanto a página rola. */}
       <div className="sticky bottom-0 z-20 -mx-1 flex flex-wrap items-center justify-between gap-4 rounded-t-2xl border border-b-0 border-border bg-white/95 px-5 py-2 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur">
         <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          {etapa === "rascunho" && (
+          {etapa === "rascunho" && aguardandoComite && pedidoDoComite && (
+            <>
+              <span className="text-xs text-muted-foreground">
+                <strong className="text-amber-700">Versão {versaoLabel} aguardando aprovação</strong> · enviada
+                por {pedidoDoComite.enviadoPor} em {formatDataAsHoraBr(pedidoDoComite.enviadoEm)}
+              </span>
+              <span className="truncate text-xs text-muted-foreground" title={pedidoDoComite.motivo}>
+                Motivo: “{pedidoDoComite.motivo}”
+              </span>
+            </>
+          )}
+          {etapa === "rascunho" && devolvidaPeloComite && pedidoDoComite && (
+            <>
+              <span className="text-xs text-muted-foreground">
+                <strong className="text-california-red">Devolvida pelo Comitê</strong> ·{" "}
+                {pedidoDoComite.decididoPor}, {formatDataAsHoraBr(pedidoDoComite.decididoEm)}
+              </span>
+              <span className="text-xs text-muted-foreground">
+                Ajuste a versão e solicite a aprovação de novo.
+              </span>
+            </>
+          )}
+          {etapa === "rascunho" && !aguardandoComite && !devolvidaPeloComite && (
             <>
               <span className="text-xs text-muted-foreground">
                 Aprovando{" "}
@@ -583,6 +649,11 @@ export function FluxoAbertura({
                   <AlertCircle className="mt-px h-3.5 w-3.5 shrink-0" />
                   {bloqueio}
                 </span>
+              ) : vaiAoComite ? (
+                <span className="flex items-start gap-1.5 text-xs font-medium text-california-red">
+                  <AlertCircle className="mt-px h-3.5 w-3.5 shrink-0" />
+                  Esta versão vai ao Comitê: {comite?.motivos.join(" e ")}.
+                </span>
               ) : (
                 <span className="text-xs text-muted-foreground">
                   Valor do Job{" "}
@@ -599,7 +670,10 @@ export function FluxoAbertura({
               <span className="text-xs text-muted-foreground">
                 <strong className="text-emerald-700">
                   Versão {versaoLabel} aprovada
+                  {pedidoDoComite?.status === "aprovado" && " pelo Comitê"}
                 </strong>{" "}
+                {pedidoDoComite?.status === "aprovado" &&
+                  `· ${pedidoDoComite.decididoPor}, ${formatDataAsHoraBr(pedidoDoComite.decididoEm)} `}
                 · valores travados para edição
               </span>
               <span className="text-xs text-muted-foreground">
@@ -659,7 +733,33 @@ export function FluxoAbertura({
         </div>
 
         <div className="flex items-center gap-2.5">
-          {etapa === "rascunho" && (
+          {etapa === "rascunho" && vaiAoComite && (
+            <button
+              type="button"
+              onClick={() => {
+                setErroGeral(null);
+                setModal("comite");
+              }}
+              className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-[13px] font-semibold text-white shadow-sm transition-all hover:bg-california-red-hover hover:shadow-brand"
+            >
+              <Gavel className="h-4 w-4" />
+              Solicitar aprovação
+            </button>
+          )}
+          {etapa === "rascunho" && aguardandoComite && (
+            <button
+              type="button"
+              onClick={() => {
+                setErroGeral(null);
+                setModal("cancelar_comite");
+              }}
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-4 py-2 text-[13px] font-semibold text-foreground transition-colors hover:border-california-red/40 hover:text-california-red"
+            >
+              <Undo2 className="h-4 w-4" />
+              Cancelar envio
+            </button>
+          )}
+          {etapa === "rascunho" && !vaiAoComite && !aguardandoComite && (
             <button
               type="button"
               onClick={() => setModal("aprovar")}
@@ -712,6 +812,40 @@ export function FluxoAbertura({
           )}
         </div>
       </div>
+
+      {/* Comitê de Aprovações (decisão 223): o pedido, com o motivo. */}
+      <SolicitarAprovacaoDialog
+        aberto={modal === "comite"}
+        titulo={`Solicitar a aprovação da versão ${versaoLabel}?`}
+        descricao="Só o Comitê aprova esta versão. Enquanto ele decide, a versão fica travada."
+        linhas={linhasDoMotivoDaVersao({
+          pegaResultado: comite?.pegaResultado === true,
+          resultadoGeral,
+          resultadoMinimo: comite?.resultadoMinimo ?? 20,
+          pegaPlanejado: comite?.pegaPlanejado === true,
+          itensAcima: itensAcimaDoOrcado,
+        })}
+        motivoInicial={devolvidaPeloComite ? (pedidoDoComite?.motivo ?? "") : ""}
+        placeholder="Ex.: o cliente fechou o pacote com desconto; a margem volta no segundo evento."
+        onFechar={() => setModal(null)}
+        onEnviar={handleSolicitarComite}
+      />
+      <ConfirmDialog
+        open={modal === "cancelar_comite"}
+        onOpenChange={(o) => !o && setModal(null)}
+        title="Cancelar o envio ao Comitê?"
+        description={
+          <>
+            A versão sai da caixa do Comitê e volta a ser editável. Para aprovar, será preciso
+            solicitar a aprovação de novo.
+            {erroGeral && <span className="mt-3 block text-xs text-california-red">{erroGeral}</span>}
+          </>
+        }
+        confirmLabel="Cancelar envio"
+        cancelLabel="Voltar"
+        pending={pending}
+        onConfirm={handleCancelarComite}
+      />
 
       {/* Cancelar envio à abertura (decisão 057) */}
       <ConfirmDialog

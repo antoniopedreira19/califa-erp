@@ -6279,3 +6279,51 @@ export type RhFeriasFluxoRow = {
   todas_pagas: boolean | null;
   todas_enviadas: boolean | null;
 };
+
+// ---------------------------------------------------------------------------
+// Comitê de Aprovações (decisão 223)
+// ---------------------------------------------------------------------------
+
+export type ComitePedidoTipo = "versao" | "pp";
+export type ComitePedidoStatus = "pendente" | "aprovado" | "devolvido" | "cancelado";
+
+/** `public.comite_config`. Sem linha, valem os padrões (`REGRAS_PADRAO_DO_COMITE`). */
+export interface ComiteConfigRow {
+  tenant_id: string;
+  resultado_ligado: boolean;
+  resultado_minimo: number | string;
+  planejado_ligado: boolean;
+  pp_ligado: boolean;
+  linhas_vermelhas: boolean;
+  tolerancia_ligada: boolean;
+  tolerancia_valor: number | string;
+  tolerancia_pct: number | string;
+  admin_direto: boolean;
+  atualizado_por: string | null;
+  updated_at: string;
+}
+
+/**
+ * `public.comite_pedidos`. O `snapshot` é preenchido pelo banco: versão
+ * `{ itens_acima, resultado_geral }`; PP `{ valor, orcado, planejado,
+ * ja_em_pps, realizado, excesso, linha_vermelha }` (`numeric` chega como
+ * número no jsonb).
+ */
+export interface ComitePedidoRow {
+  id: string;
+  tenant_id: string;
+  tipo: ComitePedidoTipo;
+  orcamento_id: string | null;
+  versao_orcamento_id: string | null;
+  job_id: string | null;
+  item_realizado_id: string | null;
+  pp_a_emitir_id: string | null;
+  status: ComitePedidoStatus;
+  motivo: string;
+  snapshot: Record<string, unknown>;
+  enviado_por: string;
+  enviado_em: string;
+  decidido_por: string | null;
+  decidido_em: string | null;
+  comentario: string | null;
+}

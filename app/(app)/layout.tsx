@@ -2,6 +2,8 @@ import { Suspense } from "react";
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
+import { createClient } from "@/lib/supabase/server";
+import { souMembroDoComite } from "@/lib/data/comite";
 import { Sidebar } from "@/components/sidebar";
 import { RastroDeNavegacao } from "@/components/voltar/rastro-de-navegacao";
 import { AvisoDeVersaoNova } from "@/components/aviso-de-versao-nova";
@@ -35,11 +37,20 @@ export default async function AppLayout({
     );
   }
 
+  // O Comitê de Aprovações na barra lateral (decisão 223): o administrador
+  // sempre; os outros, se forem membros. Uma leitura curta e indexada, só
+  // para quem não é administrador nem freelancer.
+  const doComite =
+    session.activeRole === "administrador" ||
+    (session.activeRole !== "freelancer" &&
+      (await souMembroDoComite(createClient(), session.activeTenant.id, session.profile.id)));
+
   return (
     <div className="min-h-screen bg-background">
       <Sidebar
         role={session.activeRole}
         nome={session.profile.nome}
+        doComite={doComite}
       />
       {/* Rastro das páginas desta aba, para o botão Voltar (decisão 108).
           Não desenha nada; o Suspense é exigência do useSearchParams. */}

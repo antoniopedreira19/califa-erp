@@ -2,7 +2,8 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { bloqueioGeracaoPPPorLimite } from "@/lib/calculos/limites-orcamento";
+import { bloqueioGeracaoPPPeloComite } from "@/lib/calculos/limites-orcamento";
+import { carregarRegrasDoComite, ppAguardandoComite, valorAprovadoNoComite } from "@/lib/data/comite";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
@@ -1788,12 +1789,23 @@ async function finalizarPedidoCompraImpl(
     };
   }
 
-  const bloqueioOrcado = bloqueioGeracaoPPPorLimite(
-    session.activeRole,
-    Math.round((item.total_realizado + valor) * 100) / 100,
-    item.total_orcado,
-    item.linha_vermelha,
-  );
+  // Decisão 223: o Comitê de Aprovações no lugar do "só o administrador"
+  // da 204. A PP aprovada pelo Comitê (ou a que ela refaz) gera enquanto
+  // não ficar mais cara. O gatilho `pp_confere_orcado_na_geracao` confere
+  // de novo.
+  const [regrasDoComite, valorAprovado] = await Promise.all([
+    carregarRegrasDoComite(supabase, session.activeTenant.id),
+    valorAprovadoNoComite(supabase, session.activeTenant.id, pp_id),
+  ]);
+  const bloqueioOrcado = bloqueioGeracaoPPPeloComite({
+    papel: session.activeRole,
+    regras: regrasDoComite,
+    realizadoComAPP: Math.round((item.total_realizado + valor) * 100) / 100,
+    orcado: item.total_orcado,
+    linhaVermelha: item.linha_vermelha,
+    valor,
+    valorAprovado,
+  });
   if (bloqueioOrcado) {
     await logAuditEvent({
       acao: "acao_negada", tenantId: session.activeTenant.id,
@@ -3794,6 +3806,11 @@ export async function salvarPPAEmitir(
   const { item, job, supabase } = gate;
   const tenantId = session.activeTenant.id;
 
+  // Aguardando o Comitê (decisão 223): ele decide sobre a PP que viu.
+  if (await ppAguardandoComite(supabase, tenantId, id)) {
+    return { ok: false, message: "A PP está aguardando aprovação do Comitê. Cancele o envio para editar." };
+  }
+
   const travaMidia = await travaDoJobDeMidia(supabase, tenantId, job.id, "pp");
   if (travaMidia) return { ok: false, message: travaMidia };
 
@@ -4035,6 +4052,9 @@ export async function excluirPPAEmitir(id: string): Promise<Result> {
   if (!linha) return { ok: false, message: "PP a emitir não encontrada." };
   if (linha.pp_id) return { ok: false, message: "Esta PP a emitir já virou PP. Recarregue a página." };
   if (linha.excluida_em) return { ok: true };
+  if (await ppAguardandoComite(supabase, tenantId, id)) {
+    return { ok: false, message: "A PP está aguardando aprovação do Comitê. Cancele o envio antes de excluir." };
+  }
 
   const gate = await checarGatesRealizado(linha.item_realizado_id);
   if (!gate.ok) return gate;
@@ -4068,6 +4088,87 @@ export async function excluirPPAEmitir(id: string): Promise<Result> {
  * 164): colaboradores ativos do RH e freelas ativos. O formulário pede a
  * lista quando a verba nova é escolhida — ela não viaja com a página do job.
  */
+/**
+ * "Solicitar aprovação" da PP (decisão 223): a PP a emitir, já salva, leva o
+ * realizado do item acima do orçado e quem gera não aprova direto. O pedido
+ * guarda o motivo e o retrato da PP; aprovado, a produção gera a PP.
+ */
+export async function solicitarAprovacaoDaPP(aEmitirId: string, motivo: string): Promise<Result<{ id: string }>> {
+  const session = await requireSession();
+  const permissao = await checarPermissao(session, "jobs.emitir_pp");
+  if (!permissao.ok) return permissao;
+  const texto = motivo.trim();
+  if (!texto) return { ok: false, message: "Escreva o motivo para enviar." };
+  if (texto.length > 2000) return { ok: false, message: "O motivo passou de 2.000 caracteres." };
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const { data: linha } = await supabase
+    .from("pedidos_compra_a_emitir")
+    .select("id, job_id, item_realizado_id, pp_id, excluida_em, valor")
+    .eq("id", aEmitirId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{ id: string; job_id: string; item_realizado_id: string; pp_id: string | null; excluida_em: string | null; valor: number | string }>();
+  if (!linha || linha.excluida_em) return { ok: false, message: "PP a emitir não encontrada. Recarregue a página." };
+  if (linha.pp_id) return { ok: false, message: "Esta PP a emitir já virou PP. Recarregue a página." };
+
+  const gate = await checarGatesRealizado(linha.item_realizado_id);
+  if (!gate.ok) return gate;
+  const { item } = gate;
+  const valor = Number(linha.valor);
+  const [regrasDoComite, valorAprovado] = await Promise.all([
+    carregarRegrasDoComite(supabase, tenantId),
+    valorAprovadoNoComite(supabase, tenantId, aEmitirId),
+  ]);
+  const precisa = bloqueioGeracaoPPPeloComite({
+    papel: session.activeRole,
+    regras: regrasDoComite,
+    realizadoComAPP: Math.round((item.total_realizado + valor) * 100) / 100,
+    orcado: item.total_orcado,
+    linhaVermelha: item.linha_vermelha,
+    valor,
+    valorAprovado,
+  });
+  if (!precisa) {
+    return { ok: false, message: "Esta PP não precisa do Comitê. Recarregue a página e gere a PP." };
+  }
+
+  const { data: pedido, error } = await supabase
+    .from("comite_pedidos")
+    .insert({
+      tenant_id: tenantId,
+      tipo: "pp",
+      // O job, a linha, o retrato e quem enviou, o banco preenche
+      // (`comite_pedido_guarda`).
+      pp_a_emitir_id: aEmitirId,
+      job_id: linha.job_id,
+      item_realizado_id: linha.item_realizado_id,
+      motivo: texto,
+      enviado_por: session.profile.id,
+    })
+    .select("id")
+    .single<{ id: string }>();
+  if (error || !pedido) {
+    console.error("[comite.solicitar.pp]", error?.message);
+    return {
+      ok: false,
+      message: error?.code === "23505"
+        ? "Esta PP já está aguardando o Comitê."
+        : "Não foi possível solicitar a aprovação.",
+    };
+  }
+  await logAuditEvent({
+    acao: "comite.pedido_enviado",
+    tenantId,
+    entidadeTipo: "comite_pedido",
+    entidadeId: pedido.id,
+    metadata: { tipo: "pp", pp_a_emitir_id: aEmitirId, job_id: linha.job_id, valor },
+  });
+  revalidatePath(`/jobs/${linha.job_id}`);
+  revalidatePath("/comite");
+  return { ok: true, id: pedido.id };
+}
+
 export async function listarPessoasParaVerba(): Promise<Result<{ pessoas: PessoaParaVerba[] }>> {
   const session = await requireSession();
   const permissao = await checarPermissao(session, "jobs.emitir_pp");
@@ -4161,6 +4262,9 @@ export async function gerarPPDaPPAEmitir(id: string): Promise<Result<{ codigo: s
     }>();
   if (!linha) return { ok: false, message: "PP a emitir não encontrada." };
   if (linha.excluida_em) return { ok: false, message: "Esta PP a emitir foi excluída. Recarregue a página." };
+  if (!linha.pp_id && (await ppAguardandoComite(supabase, tenantId, id))) {
+    return { ok: false, message: "A PP está aguardando aprovação do Comitê." };
+  }
   if (linha.pp_id) {
     const { data: pp } = await supabase
       .from("pedidos_compra")
@@ -5003,12 +5107,24 @@ async function editarPPGeradaImpl(
   if (valor <= 0) {
     return { ok: false, message: "R$ Unit., QT e D/M inválidos: o valor da PP ficaria zerado." };
   }
-  const bloqueioOrcado = bloqueioGeracaoPPPorLimite(
-    session.activeRole,
-    Math.round((item.total_realizado + valor - Number(ppRow.valor)) * 100) / 100,
-    item.total_orcado,
-    item.linha_vermelha,
-  );
+  // Decisão 223: a edição que deixa a PP mais cara que o aprovado pelo
+  // Comitê (ou o realizado acima do orçado sem aprovação) volta ao Comitê.
+  // A PP gerada não vai ao Comitê: o pedido nasce da PP a emitir.
+  const [regrasDoComite, valorAprovado] = await Promise.all([
+    carregarRegrasDoComite(supabase, tenantId),
+    valorAprovadoNoComite(supabase, tenantId, ppId),
+  ]);
+  const bloqueioOrcado = bloqueioGeracaoPPPeloComite({
+    papel: session.activeRole,
+    regras: regrasDoComite,
+    realizadoComAPP: Math.round((item.total_realizado + valor - Number(ppRow.valor)) * 100) / 100,
+    orcado: item.total_orcado,
+    linhaVermelha: item.linha_vermelha,
+    valor,
+    valorAprovado,
+  })
+    ? "Esta edição leva a PP acima do orçado do item sem a aprovação do Comitê de Aprovações (ou acima do valor que ele aprovou). Para solicitar a aprovação, cancele a PP e refaça-a como PP a emitir."
+    : null;
   if (bloqueioOrcado) {
     await logAuditEvent({
       acao: "acao_negada", tenantId: session.activeTenant.id,

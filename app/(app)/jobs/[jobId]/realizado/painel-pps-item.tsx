@@ -80,7 +80,18 @@ import {
   CalendarClock,
   ClipboardCheck,
   PencilLine,
+  Gavel,
+  Undo2,
+  AlertCircle,
 } from "lucide-react";
+import type { ComiteDaPP } from "@/lib/data/comite";
+import { ppCobertaPeloComite, ppPassaDoOrcadoNoComite } from "@/lib/calculos/limites-orcamento";
+import { formatDataAsHoraBr } from "@/lib/formatar-data-hora";
+import { cancelarEnvioAoComite } from "@/app/(app)/comite/actions";
+import {
+  SolicitarAprovacaoDialog,
+  linhasDoMotivoDaPP,
+} from "@/app/(app)/comite/_componentes/motivo-do-caso";
 import { Dialog, DrawerContent } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
@@ -121,6 +132,7 @@ import {
   cancelarERefazerPP,
   excluirPPAEmitir,
   gerarPPDaPPAEmitir,
+  solicitarAprovacaoDaPP,
 } from "./actions-pp";
 import {
   EnvioDialog,
@@ -247,6 +259,14 @@ interface Props {
   onMensagem?: (mensagem: string) => void;
   /** Decisão 153: as PPs a emitir do item, fora do realizado. */
   aEmitir: PPAEmitir[];
+  /** Comitê de Aprovações (decisão 223): a PP a emitir que leva o
+   *  realizado acima do orçado do item vai a ele antes de gerar. */
+  comiteDaPP: ComiteDaPP;
+  totalOrcado: number;
+  linhaVermelha: boolean;
+  /** O realizado do item (PPs menos devoluções aprovadas), a base da regra
+   *  do Comitê — a mesma do formulário e do servidor. */
+  realizadoDoItem: number;
   /** O status do job — aguardando abertura e devolvido só aceitam PP a emitir. */
   statusDoJob: string;
   /** O formulário pediu a revisão desta PP a emitir (o "Gerar PP" dele). */
@@ -307,6 +327,10 @@ export function PainelPPsItem({
   onVerFormulario,
   onMensagem,
   aEmitir,
+  comiteDaPP,
+  totalOrcado,
+  linhaVermelha,
+  realizadoDoItem,
   statusDoJob,
   pedidoDeRevisao,
   onEditarAEmitir,
@@ -344,6 +368,39 @@ export function PainelPPsItem({
   const [corrigindoNf, setCorrigindoNf] = React.useState<PPDoItem | null>(null);
 
   const podeAgir = onNovaPP !== null;
+  // Comitê de Aprovações (decisão 223), por PP a emitir.
+  const [pedindoComite, setPedindoComite] = React.useState<PPAEmitir | null>(null);
+  const comiteDoCartao = (a: PPAEmitir) => {
+    const pedido = comiteDaPP.pedidos[a.id] ?? null;
+    const realizadoComAPP = Math.round((realizadoDoItem + a.valor) * 100) / 100;
+    const valorAprovado = comiteDaPP.valorAprovado[a.id] ?? null;
+    const vai =
+      !comiteDaPP.aprovaDireto &&
+      ppPassaDoOrcadoNoComite(comiteDaPP.regras, realizadoComAPP, totalOrcado, linhaVermelha) &&
+      !ppCobertaPeloComite(valorAprovado, a.valor);
+    return { pedido, realizadoComAPP, valorAprovado, vai, aguardando: pedido?.status === "pendente" };
+  };
+  function cancelarComite(pedidoId: string) {
+    setErro(null);
+    startTransition(async () => {
+      const res = await cancelarEnvioAoComite(pedidoId);
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+      onMensagem?.("Envio ao Comitê cancelado.");
+      router.refresh();
+    });
+  }
+  async function solicitarComite(motivo: string): Promise<string | null> {
+    if (!pedindoComite) return null;
+    const res = await solicitarAprovacaoDaPP(pedindoComite.id, motivo);
+    if (!res.ok) return res.message;
+    setPedindoComite(null);
+    onMensagem?.("Aprovação da PP solicitada ao Comitê.");
+    router.refresh();
+    return null;
+  }
   const pendentes = pps.filter((pp) => pp.status === "gerada");
   const enviadas = pps.filter((pp) => pp.status !== "gerada");
   const excede = passaDoPlanejado(emPPs, totalPlanejado);
@@ -627,7 +684,50 @@ export function PainelPPsItem({
               <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
                 PPs a emitir · {aEmitir.length}
               </span>
-              {aEmitir.map((a) => (
+              {aEmitir.map((a) => {
+                const c = comiteDoCartao(a);
+                const prazoOk = vencimentoAceitaEnvio(a.dados.prazo_pagamento, hoje, feriados);
+                const botaoComite = (
+                  <button
+                    type="button"
+                    onClick={() => setPedindoComite(a)}
+                    disabled={pending}
+                    className="inline-flex flex-none items-center gap-1.5 whitespace-nowrap rounded-[9px] border border-california-red bg-california-red px-2.5 py-1 text-[11px] font-bold text-white transition-colors hover:bg-california-red-hover disabled:opacity-60"
+                  >
+                    <Gavel className="h-3 w-3" />
+                    Solicitar aprovação
+                  </button>
+                );
+                const avisoDoComite = c.aguardando && c.pedido ? (
+                  <span className="flex flex-col gap-1.5">
+                    <span className="text-[11px] font-semibold leading-snug text-amber-800">
+                      Enviada em {formatDataAsHoraBr(c.pedido.enviadoEm)}.
+                    </span>
+                    <span className="text-[11px] leading-snug text-muted-foreground">Motivo: “{c.pedido.motivo}”</span>
+                  </span>
+                ) : c.vai && c.pedido?.status === "devolvido" ? (
+                  <span className="flex flex-col gap-1">
+                    <span className="text-[11px] font-semibold leading-snug text-red-700">
+                      Devolvida pelo Comitê — {c.pedido.decididoPor}, {formatDataAsHoraBr(c.pedido.decididoEm)}: “{c.pedido.comentario}”
+                    </span>
+                    <span className="text-[11px] leading-snug text-muted-foreground">
+                      Edite a PP pelo lápis e solicite a aprovação de novo.
+                    </span>
+                  </span>
+                ) : c.vai ? (
+                  <span className="flex items-start gap-1.5 text-[11px] font-semibold leading-snug text-california-red">
+                    <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+                    {c.valorAprovado !== null
+                      ? `Ficou mais cara que o valor aprovado pelo Comitê (${formatCurrency(c.valorAprovado, moeda)}): precisa do Comitê de novo antes de gerar.`
+                      : `Passa do orçado do item em ${formatCurrency(c.realizadoComAPP - totalOrcado, moeda)}: precisa do Comitê antes de gerar.`}
+                  </span>
+                ) : c.pedido?.status === "aprovado" ? (
+                  <span className="flex items-start gap-1.5 text-[11px] font-semibold leading-snug text-emerald-700">
+                    <CheckCircle2 className="mt-0.5 h-3 w-3 shrink-0" />
+                    Aprovada pelo Comitê — {c.pedido.decididoPor}, {formatDataAsHoraBr(c.pedido.decididoEm)}. Já pode gerar.
+                  </span>
+                ) : null;
+                return (
                 <CartaoPP
                   key={a.id}
                   pp={{
@@ -671,7 +771,14 @@ export function PainelPPsItem({
                   moeda={moeda}
                   codigo={<SeloPPAEmitir refaz={a.refaz?.codigo ?? null} />}
                   direita={
-                    podeAgir ? (
+                    c.aguardando ? (
+                      <span className="inline-flex flex-none items-center gap-1 whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-amber-800">
+                        <Gavel className="h-3 w-3" />
+                        Aguardando aprovação
+                      </span>
+                    ) : podeAgir && c.vai && travaDaAbertura === null ? (
+                      botaoComite
+                    ) : podeAgir ? (
                       <button
                         type="button"
                         onClick={() => {
@@ -693,7 +800,17 @@ export function PainelPPsItem({
                     ) : null
                   }
                   botoes={
-                    onEditarAEmitir ? (
+                    c.aguardando && c.pedido && onEditarAEmitir ? (
+                      // Aguardando o Comitê: nem editar nem excluir; só
+                      // cancelar o envio (o ícone, com a dica).
+                      <BotaoIcone
+                        titulo="Cancelar envio"
+                        onClick={() => cancelarComite(c.pedido!.id)}
+                        disabled={pending}
+                      >
+                        <Undo2 className="h-3 w-3" />
+                      </BotaoIcone>
+                    ) : onEditarAEmitir ? (
                       <>
                         <BotaoIcone
                           titulo="Editar a PP a emitir"
@@ -713,15 +830,21 @@ export function PainelPPsItem({
                     ) : null
                   }
                   aviso={
-                    vencimentoAceitaEnvio(a.dados.prazo_pagamento, hoje, feriados) ? null : (
-                      <span className="flex items-start gap-1.5 text-[11px] leading-snug text-amber-800">
-                        <CalendarClock className="mt-0.5 h-3 w-3 shrink-0" />
-                        O prazo de envio do vencimento {isoParaBr(a.dados.prazo_pagamento)} já passou. Edite a PP a emitir e escolha outra data antes de gerar.
+                    avisoDoComite || !prazoOk ? (
+                      <span className="flex flex-col gap-1.5">
+                        {avisoDoComite}
+                        {!prazoOk && (
+                          <span className="flex items-start gap-1.5 text-[11px] leading-snug text-amber-800">
+                            <CalendarClock className="mt-0.5 h-3 w-3 shrink-0" />
+                            O prazo de envio do vencimento {isoParaBr(a.dados.prazo_pagamento)} já passou. Edite a PP a emitir e escolha outra data antes de gerar.
+                          </span>
+                        )}
                       </span>
-                    )
+                    ) : null
                   }
                 />
-              ))}
+                );
+              })}
             </div>
           )}
 
@@ -1095,6 +1218,30 @@ export function PainelPPsItem({
         )}
 
         {/* Decisão 153: a revisão antes de gerar, sempre. */}
+        {/* Comitê de Aprovações (decisão 223): o pedido da PP a emitir. */}
+        <SolicitarAprovacaoDialog
+          aberto={pedindoComite !== null}
+          titulo="Solicitar a aprovação da PP?"
+          descricao="O realizado do item com esta PP passa do orçado. Aprovada pelo Comitê, ela fica liberada para gerar."
+          linhas={
+            pedindoComite
+              ? linhasDoMotivoDaPP({
+                  item: itemNome,
+                  linhaVermelha,
+                  orcado: totalOrcado,
+                  realizadoComAPP: Math.round((realizadoDoItem + pedindoComite.valor) * 100) / 100,
+                })
+              : []
+          }
+          motivoInicial={
+            pedindoComite && comiteDaPP.pedidos[pedindoComite.id]?.status === "devolvido"
+              ? comiteDaPP.pedidos[pedindoComite.id].motivo
+              : ""
+          }
+          placeholder="Ex.: o cliente pediu um painel a mais no palco na reunião de ontem."
+          onFechar={() => setPedindoComite(null)}
+          onEnviar={solicitarComite}
+        />
         <RevisaoDialog
           open={revisando !== null}
           onOpenChange={(o) => {

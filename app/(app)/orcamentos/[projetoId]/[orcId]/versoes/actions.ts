@@ -33,14 +33,9 @@ import type {
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
 } from "@/lib/types";
-import {
-  aceitaBV,
-  calcularTotaisVersao,
-  calcularResultadoOperacional,
-} from "@/lib/calculos/versao-totais";
-import { fechamentoDosItens, parametrosDaVersao } from "@/lib/calculos/midia-off";
-import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
-import { acimaDoOrcado, bloqueioAprovacaoPorLimites } from "@/lib/calculos/limites-orcamento";
+import { aceitaBV } from "@/lib/calculos/versao-totais";
+import { motivosDaVersaoNoComite } from "@/lib/calculos/limites-orcamento";
+import { carregarRegrasDoComite } from "@/lib/data/comite";
 import {
   gruposNaOrdemDaTela,
   moverNaLista,
@@ -1987,6 +1982,164 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
       message: "Só o GP pode aprovar a versão. Peça a aprovação ao GP responsável pelo orçamento.",
     };
   }
+  return aprovarVersaoInterna(session, versaoId, "tela");
+}
+
+/**
+ * A aprovação do Comitê de Aprovações (decisão 223): basta um membro (ou o
+ * administrador). Confere tudo o que o "Aprovar versão" confere — menos a
+ * regra do Comitê, que é o que ele decide —, marca o pedido como aprovado
+ * e aprova a versão em nome de quem decidiu. O banco aceita porque o pedido
+ * aprovado cobre a versão (`comite_situacao_da_versao`).
+ */
+export async function aprovarVersaoPeloComite(
+  pedidoId: string,
+  comentario: string | null = null,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+  const { data: podeDecidir } = await supabase.rpc("pode_decidir_no_comite", { p_tenant_id: tenantId });
+  if (podeDecidir !== true) {
+    await logAuditEvent({
+      acao: "acao_negada",
+      tenantId,
+      entidadeTipo: "comite_pedido",
+      entidadeId: pedidoId,
+      metadata: { acao_tentada: "comite.aprovar", motivo: "fora_do_comite" },
+    });
+    return { ok: false, message: "Só um membro do Comitê de Aprovações decide este pedido." };
+  }
+  const { data: pedido } = await supabase
+    .from("comite_pedidos")
+    .select("id, tipo, status, versao_orcamento_id")
+    .eq("id", pedidoId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{ id: string; tipo: string; status: string; versao_orcamento_id: string | null }>();
+  if (!pedido || pedido.tipo !== "versao" || !pedido.versao_orcamento_id) {
+    return { ok: false, message: "Pedido não encontrado." };
+  }
+  if (pedido.status !== "pendente") {
+    return { ok: false, message: "Este pedido já foi decidido ou cancelado. Recarregue a página." };
+  }
+
+  // Tudo o que barraria a aprovação, antes de marcar o pedido: depois de
+  // aprovado, ele não volta a pendente.
+  const conferencia = await aprovarVersaoInterna(session, pedido.versao_orcamento_id, "conferir");
+  if (!conferencia.ok) return conferencia;
+
+  const { error: errPedido } = await supabase
+    .from("comite_pedidos")
+    .update({ status: "aprovado", comentario: comentario?.trim().slice(0, 2000) || null })
+    .eq("id", pedidoId)
+    .eq("tenant_id", tenantId)
+    .eq("status", "pendente");
+  if (errPedido) {
+    console.error("[comite.aprovar.versao]", errPedido.message);
+    return { ok: false, message: "Não foi possível registrar a aprovação." };
+  }
+  await logAuditEvent({
+    acao: "comite.pedido_aprovado",
+    tenantId,
+    entidadeTipo: "comite_pedido",
+    entidadeId: pedidoId,
+    metadata: { tipo: "versao", versao_orcamento_id: pedido.versao_orcamento_id },
+  });
+
+  const res = await aprovarVersaoInterna(session, pedido.versao_orcamento_id, "comite");
+  if (!res.ok) {
+    return {
+      ok: false,
+      message: `O pedido foi aprovado, mas a versão não: ${res.message} Quando resolver, o GP aprova a versão direto na tela.`,
+    };
+  }
+  revalidatePath("/comite");
+  return res;
+}
+
+/**
+ * "Solicitar aprovação" (decisão 223): a versão esbarra numa regra ligada do
+ * Comitê. Confere o resto da aprovação antes (não faz sentido o Comitê
+ * aprovar uma versão que não pode ser aprovada) e grava o pedido com o
+ * motivo. Enquanto o Comitê decide, a versão fica travada (o banco trava).
+ */
+export async function solicitarAprovacaoDaVersao(
+  versaoId: string,
+  motivo: string,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "orcamentos.aprovar");
+  if (!gate.ok) {
+    return {
+      ...gate,
+      message: "Só o GP pode solicitar a aprovação da versão.",
+    };
+  }
+  const texto = motivo.trim();
+  if (!texto) return { ok: false, message: "Escreva o motivo para enviar." };
+  if (texto.length > 2000) return { ok: false, message: "O motivo passou de 2.000 caracteres." };
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const { data: situacao } = await supabase.rpc("comite_situacao_da_versao", { p_versao_id: versaoId });
+  const s = situacao as { regra?: boolean; direto?: boolean; coberta?: boolean } | null;
+  if (!s?.regra || s.direto || s.coberta) {
+    return { ok: false, message: "Esta versão não precisa do Comitê. Recarregue a página e aprove direto." };
+  }
+
+  const conferencia = await aprovarVersaoInterna(session, versaoId, "conferir");
+  if (!conferencia.ok) return conferencia;
+
+  const { data: pedido, error } = await supabase
+    .from("comite_pedidos")
+    .insert({
+      tenant_id: tenantId,
+      tipo: "versao",
+      // O orçamento, o retrato e quem enviou, o banco preenche
+      // (`comite_pedido_guarda`).
+      versao_orcamento_id: versaoId,
+      motivo: texto,
+      enviado_por: session.profile.id,
+    })
+    .select("id, orcamento_id")
+    .single<{ id: string; orcamento_id: string }>();
+  if (error || !pedido) {
+    console.error("[comite.solicitar.versao]", error?.message);
+    return {
+      ok: false,
+      message: error?.code === "23505"
+        ? "Já há uma versão deste orçamento aguardando o Comitê."
+        : "Não foi possível solicitar a aprovação.",
+    };
+  }
+  await logAuditEvent({
+    acao: "comite.pedido_enviado",
+    tenantId,
+    entidadeTipo: "comite_pedido",
+    entidadeId: pedido.id,
+    metadata: { tipo: "versao", versao_orcamento_id: versaoId, orcamento_id: pedido.orcamento_id },
+  });
+  const { data: orc } = await supabase
+    .from("orcamentos")
+    .select("projeto_id")
+    .eq("id", pedido.orcamento_id)
+    .maybeSingle<{ projeto_id: string }>();
+  if (orc) revalidatePath(`/orcamentos/${orc.projeto_id}/${pedido.orcamento_id}`);
+  revalidatePath("/comite");
+  return { ok: true, id: pedido.id };
+}
+
+/**
+ * - `tela`: o "Aprovar versão" de quem tem `orcamentos.aprovar`; a regra do
+ *   Comitê barra (decisão 223).
+ * - `conferir`: só as conferências, sem gravar (antes de o Comitê aprovar).
+ * - `comite`: a gravação da aprovação do Comitê.
+ */
+async function aprovarVersaoInterna(
+  session: Awaited<ReturnType<typeof requireSession>>,
+  versaoId: string,
+  modo: "tela" | "conferir" | "comite",
+): Promise<ActionResult> {
   const supabase = createClient();
 
   // 1. Fetch versão + orçamento (com projeto_id pra revalidatePath)
@@ -2164,41 +2317,52 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
     return { ok: false, message: bloqueio };
   }
 
-  const itensLimites = itensLimitesRes.data ?? [];
-  const planilha = configDaPlanilha(modeloDaVersao, {
-    percentual_int_taxes: Number(versao.percentual_int_taxes ?? 0),
-    int_transaction_costs: Number(versao.int_transaction_costs ?? 0),
-    moeda_estrangeira: versao.moeda_estrangeira,
-    cambio_compra: versao.cambio_compra === null ? null : Number(versao.cambio_compra),
-  });
-  const totaisLimites = calcularTotaisVersao(
-    itensLimites,
-    Number(versao.percentual_honorarios),
-    Number(versao.percentual_imposto),
-    planilha.internacional,
-  );
-  const resultadoGeral = modeloDaVersao === "midia_off"
-    ? fechamentoDosItens(itensLimites, parametrosDaVersao(versao)).resultadoGeral
-    : calcularResultadoOperacional(
-        totaisLimites.valorJob,
-        totaisLimites.deducoesDoResultado,
-        itensLimites.reduce((s, i) => s + Number(i.total_planejado ?? 0), 0),
-      ).resultadoGeral;
-  const bloqueioLimites = bloqueioAprovacaoPorLimites(
-    session.activeRole,
-    itensLimites.some((i) => acimaDoOrcado(Number(i.total_planejado), Number(i.total_orcado))),
-    resultadoGeral,
-    orc.servico?.investimento_interno === true,
-  );
-  if (bloqueioLimites) {
-    await logAuditEvent({
-      acao: "acao_negada",
-      tenantId: session.activeTenant.id,
-      entidadeTipo: "versao_orcamento",
-      entidadeId: versaoId,
-      metadata: { acao_tentada: "orcamentos.aprovar", motivo: "limites_do_orcamento", resultado_geral: resultadoGeral },
-    });
-    return { ok: false, message: bloqueioLimites };
+  // A regra do Comitê de Aprovações (decisão 223, no lugar do "só o
+  // administrador" da 204). A conta é a do banco, a mesma do gatilho
+  // `versao_confere_limites_na_aprovacao`: a tela nunca discorda do motivo.
+  if (modo === "tela") {
+    const [situacaoRes, pendenteRes] = await Promise.all([
+      supabase.rpc("comite_situacao_da_versao", { p_versao_id: versaoId }),
+      supabase
+        .from("comite_pedidos")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("tipo", "versao")
+        .eq("orcamento_id", versao.orcamento_id)
+        .eq("status", "pendente"),
+    ]);
+    if ((pendenteRes.count ?? 0) > 0) {
+      return {
+        ok: false,
+        message: "Há uma versão deste orçamento aguardando aprovação do Comitê. Cancele o envio para aprovar outra.",
+      };
+    }
+    const s = situacaoRes.data as {
+      regra?: boolean;
+      direto?: boolean;
+      coberta?: boolean;
+      itens_acima?: number;
+      resultado_geral?: number | null;
+    } | null;
+    if (s?.regra && !s.direto && !s.coberta) {
+      const regras = await carregarRegrasDoComite(supabase, session.activeTenant.id);
+      const motivos = motivosDaVersaoNoComite(
+        regras,
+        { itensAcima: Number(s.itens_acima ?? 0), resultadoGeral: s.resultado_geral ?? null },
+        orc.servico?.investimento_interno === true,
+      );
+      await logAuditEvent({
+        acao: "acao_negada",
+        tenantId: session.activeTenant.id,
+        entidadeTipo: "versao_orcamento",
+        entidadeId: versaoId,
+        metadata: { acao_tentada: "orcamentos.aprovar", motivo: "comite_de_aprovacoes", resultado_geral: s.resultado_geral ?? null },
+      });
+      return {
+        ok: false,
+        message: `Esta versão precisa da aprovação do Comitê de Aprovações: ${motivos.join(" e ")}. Solicite a aprovação.`,
+      };
+    }
   }
 
   // 3a. O consumo de save da versão cabe no saldo APROVADO de cada origem
@@ -2237,6 +2401,8 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
   // A coluna continua no banco com o que já foi congelado antes da
   // mudança. É histórico, e ninguém mais a lê.
 
+  if (modo === "conferir") return { ok: true, id: versaoId };
+
   // 4. Update versão (dispara trigger cascata pras outras versões)
   const { error: errUpdVer } = await supabase
     .from("versoes_orcamento")
@@ -2256,7 +2422,7 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
     // conferência acima e este UPDATE.
     return {
       ok: false,
-      message: /save|Só o administrador/i.test(errUpdVer.message)
+      message: /save|Comitê de Aprovações/i.test(errUpdVer.message)
         ? errUpdVer.message
         : "Não foi possível aprovar a versão.",
     };
@@ -2287,7 +2453,7 @@ export async function aprovarVersao(versaoId: string): Promise<ActionResult> {
     tenantId: session.activeTenant.id,
     entidadeTipo: "versao_orcamento",
     entidadeId: versaoId,
-    metadata: { orcamento_id: versao.orcamento_id },
+    metadata: { orcamento_id: versao.orcamento_id, pelo_comite: modo === "comite" },
   });
 
   revalidatePath(`/orcamentos/${orc.projeto_id}`);

@@ -4,11 +4,25 @@ import { FaixaDoProjeto } from "@/components/faixa-do-projeto";
 import { FaixaDosOrcamentos, faixaDoOrcamentoSemItens } from "../faixa-orcamentos";
 import { servicosDoOrcamentoQuery, type ServicoOption } from "@/lib/data/servicos";
 import { notFound } from "next/navigation";
-import { FileStack, FolderTree, Lock } from "lucide-react";
+import { FileStack, FolderTree, Gavel, Lock } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
-import { acimaDoOrcado, bloqueioAprovacaoPorLimites } from "@/lib/calculos/limites-orcamento";
+import { acimaDoOrcado } from "@/lib/calculos/limites-orcamento";
+import { formatDataAsHoraBr } from "@/lib/formatar-data-hora";
+import {
+  BarraDeDecisaoDoComite,
+  EnvioAoComite,
+  ModoEmbutido,
+} from "@/app/(app)/comite/_componentes/barra-de-decisao";
+import { linhasDoMotivoDaVersao } from "@/app/(app)/comite/_componentes/linhas-do-motivo";
+import {
+  carregarPedidoEmDecisao,
+  type PedidoEmDecisao,
+  carregarComiteDaVersao,
+  versaoAguardandoComite,
+  type ComiteDaVersao,
+} from "@/lib/data/comite";
 import { desviosDoPadrao, type LinhaDoFechamento } from "@/lib/calculos/excecao-fechamento";
 import { listarGpsParaOrcamento, listarProdutoresAtivos } from "@/lib/data/members";
 import {
@@ -37,7 +51,7 @@ import {
   type CategoriaParaServico,
 } from "@/lib/categorias-do-servico";
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import { HONORARIOS_PADRAO_FALLBACK } from "@/lib/validations/clientes";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import {
@@ -225,10 +239,16 @@ export default async function OrcamentoDetailPage({
     /** Modelo mensal (decisão 078): `2026-07` abre o mês, `trimestre` a
      *  vista dos meses empilhados. */
     mes?: string | string[];
+    /** Comitê de Aprovações (decisão 223): o pedido em decisão, e a página
+     *  aberta no pop-up da caixa (`embutido=1`). */
+    comite?: string | string[];
+    embutido?: string | string[];
   };
 }) {
   const session = await requireSession();
   const supabase = createClient();
+  const pedidoDoComiteId = Array.isArray(searchParams?.comite) ? searchParams?.comite[0] : searchParams?.comite;
+  const embutido = (Array.isArray(searchParams?.embutido) ? searchParams?.embutido[0] : searchParams?.embutido) === "1";
 
   const versaoPedida = Array.isArray(searchParams?.v)
     ? searchParams?.v[0]
@@ -594,7 +614,7 @@ export default async function OrcamentoDetailPage({
   const modeloDoOrcamento: CategoriaModeloPlanilha =
     orcamentoRaw?.categoria?.modelo_planilha ?? "nacional";
   const midiaOff = modeloDoOrcamento === "midia_off";
-  const [gruposRes, itensRes, bvsRes, agregadoRes, contatosRes, mesesRes, reenvioRes, ppsRes, veiculosRes, usoRes, excecaoPorRes] = await Promise.all([
+  const [gruposRes, itensRes, bvsRes, agregadoRes, contatosRes, mesesRes, reenvioRes, ppsRes, veiculosRes, usoRes, excecaoPorRes, comiteDaVersao, pedidoEmDecisao] = await Promise.all([
     versaoAtiva
       ? supabase
           .from("versoes_orcamento_grupos")
@@ -714,8 +734,29 @@ export default async function OrcamentoDetailPage({
           .eq("id", versaoAtiva.excecao_fechamento_por)
           .maybeSingle<{ nome: string }>()
       : Promise.resolve({ data: null, error: null }),
+    // A versão diante do Comitê de Aprovações (decisão 223).
+    versaoAtiva
+      ? carregarComiteDaVersao(
+          supabase,
+          session.activeTenant.id,
+          versaoAtiva,
+          orcamentoRaw?.servico?.investimento_interno === true,
+        )
+      : Promise.resolve(null),
+    // O pedido em decisão no Comitê, quando a página abre pela caixa dele.
+    versaoAtiva && pedidoDoComiteId
+      ? carregarPedidoEmDecisao(supabase, session.activeTenant.id, pedidoDoComiteId, versaoAtiva.id)
+      : Promise.resolve(null),
   ]);
   if (excecaoPorRes.error) console.error("[versao.excecao_por]", excecaoPorRes.error.message);
+  // Versão aguardando o Comitê: nenhuma versão nova até ele decidir ou o
+  // envio ser cancelado (o Comitê decide sobre o orçamento que viu).
+  const comiteTravaVersoes =
+    versaoAguardandoComite(comiteDaVersao) || Boolean(comiteDaVersao?.outraVersaoPendente);
+  const podeCriarVersaoAgora = podeCriarVersao && !comiteTravaVersoes;
+  const motivoBloqueioAgora = comiteTravaVersoes
+    ? "Há uma versão aguardando aprovação do Comitê."
+    : motivoBloqueio;
 
   if (ppsRes.error) console.error("[versao.pps_do_job]", (ppsRes.error as any).message);
   if (veiculosRes.error) console.error("[versao.veiculos]", (veiculosRes.error as any).message);
@@ -933,9 +974,10 @@ export default async function OrcamentoDetailPage({
                 qtdItens={(itensRes.data ?? []).length}
                 qtdBvs={(bvsRes.data ?? []).length}
                 totalVersoes={versoesTodas.length}
-                podeCriarVersao={podeCriarVersao}
-                motivoBloqueio={motivoBloqueio}
+                podeCriarVersao={podeCriarVersaoAgora}
+                motivoBloqueio={motivoBloqueioAgora}
                 arquivado={arquivado}
+                aguardandoComite={versaoAguardandoComite(comiteDaVersao)}
                 exportarBloqueado={
                   midiaOff
                     ? "A exportação de planilha da Mídia Off ainda não está disponível."
@@ -1049,8 +1091,8 @@ export default async function OrcamentoDetailPage({
         nomeJob={orcamento.nome}
         versoes={abas}
         ativaId={versaoAtiva?.id ?? null}
-        podeCriarVersao={podeCriarVersao}
-        motivoBloqueio={motivoBloqueio}
+        podeCriarVersao={podeCriarVersaoAgora}
+        motivoBloqueio={motivoBloqueioAgora}
         honorariosCliente={honorariosCliente}
         clienteNome={clienteNome}
         modeloPlanilha={orcamentoRaw?.categoria?.modelo_planilha ?? "nacional"}
@@ -1107,8 +1149,8 @@ export default async function OrcamentoDetailPage({
           codigosDeJobDoAno={((codigosDeJobRes.data ?? []) as { codigo: string }[]).map(
             (j) => j.codigo,
           )}
-          podeCriarVersao={podeCriarVersao}
-          motivoBloqueio={motivoBloqueio}
+          podeCriarVersao={podeCriarVersaoAgora}
+          motivoBloqueio={motivoBloqueioAgora}
           arquivado={arquivado}
           jobCancelado={statusExibido === "cancelado"}
           rastroDoCancelamento={rastroDoCancelamento}
@@ -1120,6 +1162,8 @@ export default async function OrcamentoDetailPage({
           ppsQueTravam={ppsQueTravam}
           veiculos={veiculos}
           excecaoPorNome={excecaoPorRes.data?.nome ?? null}
+          comite={comiteDaVersao}
+          emDecisao={pedidoEmDecisao ? { ...pedidoEmDecisao, embutido } : null}
         />
       ) : (
         <SemVersoes
@@ -1189,6 +1233,8 @@ function VersaoSelecionada({
   ppsQueTravam,
   veiculos,
   excecaoPorNome,
+  comite,
+  emDecisao,
 }: {
   params: { projetoId: string; orcId: string };
   session: Awaited<ReturnType<typeof requireSession>>;
@@ -1258,6 +1304,11 @@ function VersaoSelecionada({
   veiculos: VeiculoDaLista[];
   /** Quem registrou a exceção no fechamento (decisão 206); nulo sem ela. */
   excecaoPorNome: string | null;
+  /** A versão diante do Comitê de Aprovações (decisão 223). */
+  comite: ComiteDaVersao | null;
+  /** Aberta pela caixa do Comitê, por quem decide: a barra de decisão no
+   *  lugar da de aprovação. */
+  emDecisao: (PedidoEmDecisao & { embutido: boolean }) | null;
 }) {
   // Orçamento de serviço Interno (decisão 105): tipo F · Interno travado,
   // planejado igual ao orçado e sem save.
@@ -1303,11 +1354,15 @@ function VersaoSelecionada({
   // Financeiro cai aqui como se a versao estivesse aprovada (ver `readOnlyPeloPapel`
   // na page): a planilha inteira e os controles secundarios ficam read-only.
   const readOnlyPeloPapel = !pode(session.activeRole, "orcamentos.editar");
+  // Aguardando o Comitê (decisão 223): só leitura até ele decidir ou o
+  // envio ser cancelado. O banco também trava.
+  const aguardandoComite = versaoAguardandoComite(comite);
   const readOnly =
     versao.status === "aprovada" ||
     versao.status === "cancelada" ||
     readOnlyPeloPapel ||
-    arquivado;
+    arquivado ||
+    aguardandoComite;
   const temBv = Object.keys(bvsPorItem).length > 0;
   // Job devolvido (decisão 128): com a versão aprovada travada, só o
   // planejado abre — na versão que gerou o job.
@@ -1501,6 +1556,18 @@ function VersaoSelecionada({
           <Badge className={cn("border", statusVersaoBadgeClasses(versao.status))}>
             {versaoStatusLabel(versao.status)}
           </Badge>
+          {aguardandoComite && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-[3px] text-[11px] font-semibold text-amber-800">
+              <Gavel className="h-3 w-3" />
+              Aguardando aprovação
+            </span>
+          )}
+          {!aguardandoComite && comite?.pedido?.status === "devolvido" && versao.status !== "aprovada" && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-red-200 bg-red-50 px-2.5 py-[3px] text-[11px] font-semibold text-red-700">
+              <Gavel className="h-3 w-3" />
+              Devolvida pelo Comitê
+            </span>
+          )}
           <MetaVersao
             versaoId={versao.id}
             moeda={versao.moeda}
@@ -1511,11 +1578,13 @@ function VersaoSelecionada({
             // (Admin + GP a partir de 03/09/2026 — antes era so admin).
             podeEditarHonorarios={pode(session.activeRole, "orcamentos.editar_impostos")}
             clienteNome={clienteNome}
-            readOnly={versao.status === "aprovada" || arquivado}
+            readOnly={versao.status === "aprovada" || arquivado || aguardandoComite}
             readOnlyReason={
               arquivado
                 ? "Orçamento arquivado não pode ser editado."
-                : "Versão aprovada não pode ser editada."
+                : aguardandoComite
+                  ? "A versão está aguardando aprovação do Comitê."
+                  : "Versão aprovada não pode ser editada."
             }
             internacional={
               planilha.modeloPlanilha === "internacional"
@@ -1585,6 +1654,31 @@ function VersaoSelecionada({
           interno={interno}
         />
       </div>
+
+      {emDecisao?.embutido && <ModoEmbutido />}
+      {/* Aberta pela caixa do Comitê: quem enviou e por quê, em cima. */}
+      {emDecisao && (
+        <EnvioAoComite
+          enviadoPor={emDecisao.enviadoPor}
+          enviadoEm={emDecisao.enviadoEm}
+          motivo={emDecisao.motivo}
+        />
+      )}
+
+      {/* Devolvida pelo Comitê (decisão 223): o comentário de quem decidiu,
+          enquanto a versão não é enviada de novo nem aprovada. */}
+      {comite?.pedido?.status === "devolvido" && versao.status !== "aprovada" && (
+        <div className="rounded-2xl border border-california-red/30 bg-california-red/5 p-6 shadow-soft">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-california-red">
+            Devolvida pelo Comitê
+          </p>
+          <p className="whitespace-pre-line text-sm text-foreground">“{comite.pedido.comentario}”</p>
+          <p className="mt-1.5 text-xs text-muted-foreground">
+            {comite.pedido.decididoPor} · {formatDataAsHoraBr(comite.pedido.decididoEm)}. Ajuste a versão e
+            solicite a aprovação de novo.
+          </p>
+        </div>
+      )}
 
       <BannersEstado
         versaoLabel={`v${versao.numero_versao}`}
@@ -1753,14 +1847,39 @@ function VersaoSelecionada({
       {/* Arquivado (decisão 118) não se aprova nem vira job: a barra de
           aprovação e abertura não tem o que oferecer. O orçamento do job
           cancelado depois da abertura também não (decisão 163). */}
-      {!arquivado && !jobCancelado && (
+      {emDecisao ? (
+        <BarraDeDecisaoDoComite
+          pedido={emDecisao}
+          versaoLabel={`v${versao.numero_versao}`}
+          embutido={emDecisao.embutido}
+          ppAberta={false}
+          onAbrirMenu={null}
+          onAbrirPP={null}
+          resumo={
+            <>
+              Comitê · aprovando <strong className="text-foreground">v{versao.numero_versao}</strong> · {grupos.length}{" "}
+              {grupos.length === 1 ? "grupo" : "grupos"} · {itens.length} {itens.length === 1 ? "item" : "itens"} · Valor do Job{" "}
+              <span className="font-mono font-semibold text-foreground">{formatCurrency(valorDoJob, versao.moeda)}</span>
+            </>
+          }
+          motivoDaRegra={comite?.motivos.join(" e ") || "a versão esbarrou numa regra do Comitê"}
+          linhas={linhasDoMotivoDaVersao({
+            pegaResultado: comite?.pegaResultado === true,
+            resultadoGeral,
+            resultadoMinimo: comite?.resultadoMinimo ?? 20,
+            pegaPlanejado: comite?.pegaPlanejado === true,
+            itensAcima: itens
+              .filter((i) => acimaDoOrcado(i.total_planejado, i.total_orcado))
+              .map((i) => ({ item: i.item, orcado: i.total_orcado, planejado: i.total_planejado })),
+          })}
+        />
+      ) : !arquivado && !jobCancelado && (
       <FluxoAbertura
-        bloqueioLimites={bloqueioAprovacaoPorLimites(
-          session.activeRole,
-          itens.some((i) => acimaDoOrcado(i.total_planejado, i.total_orcado)),
-          resultadoGeral,
-          interno,
-        )}
+        comite={comite}
+        itensAcimaDoOrcado={itens
+          .filter((i) => acimaDoOrcado(i.total_planejado, i.total_orcado))
+          .map((i) => ({ item: i.item, orcado: i.total_orcado, planejado: i.total_planejado }))}
+        resultadoGeral={resultadoGeral}
         versaoId={versao.id}
         versaoLabel={`v${versao.numero_versao}`}
         versaoStatus={versao.status}

@@ -239,6 +239,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 220 | [13º Salário: integração com Folha de Pagamento via FK, não via reuso de tabela](220-decimo-terceiro-integracao-folha-pagamento.md) | 2026-10-21 |
 | 221 | [13º Salário: breakdown do híbrido CLT_recibo persistido no banco](221-decimo-terceiro-breakdown-hibrido.md) | 2026-10-21 |
 | 222 | [13º Salário: INSS/IRRF 10/2026 e Lei 15.270 hard-coded, substituição anual](222-decimo-terceiro-tabelas-10-2026.md) | 2026-10-21 |
+| 223 | [Comitê de Aprovações: o Comitê no lugar do "só o administrador" da 204](223-comite-de-aprovacoes.md) | 2026-10-27 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -251,4 +252,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 223**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 224**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)

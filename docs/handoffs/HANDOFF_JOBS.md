@@ -6529,3 +6529,16 @@ três telas da ficha (Jobs, Financeiro › Jobs e Abertura de Job), lido em
 - **Conferência (27/10/2026):** TES-1035/26 (do `ZZ Teste 219 mês pela
   errata`, só outubro): novembro entrou pela errata com a linha de
   outubro; dezembro vazio não entrou; revisão da abertura pendente.
+
+
+## ⚠️ Nota de 2026-10-27 — Comitê de Aprovações (decisão 223)
+
+A exceção da 204 deixou de ser "só o administrador". No formulário da PP, quando o realizado do item com ela passa do orçado, "Gerar PP" vira "Solicitar aprovação": salva a PP a emitir e a envia ao Comitê. O cartão dela no painel do item mostra Aguardando aprovação / Devolvida / Aprovada (já pode gerar). O Comitê não gera a PP.
+
+- Regras configuráveis em **Comitê de Aprovações → Configurações**
+  (`comite_config`); sem linha, os padrões de antes (20%, planejado e
+  realizado acima do orçado, linha vermelha fora, administrador direto).
+- **Volta ao Comitê só se piorar:** a PP (ou a reemitida, pela cadeia de `refaz_pp_id`) gera e edita direto enquanto não ficar mais cara que o valor aprovado. A PP gerada não vai ao Comitê: a edição que passaria dele é recusada.
+- Banco: `comite_pedidos` + os gatilhos da 204 lendo as regras e as
+  aprovações (`20261027970001`, `20261027970002`).
+- Detalhes na [decisão 223](../decisions/223-comite-de-aprovacoes.md).

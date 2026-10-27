@@ -6006,3 +6006,16 @@ Terceira entrega do protótipo aprovado em 26/10
   na versão aprovada, vazio, com o agrupamento "Incluído pela errata do
   job"; a régua mostra "Incluído pela errata do job" no lugar do resultado.
   O período do orçamento não muda.
+
+
+## ⚠️ Nota de 2026-10-27 — Comitê de Aprovações (decisão 223)
+
+A exceção da 204 deixou de ser "só o administrador". Quando uma regra ligada pega, o "Aprovar versão" do GP vira "Solicitar aprovação" (motivo obrigatório); a versão fica aguardando o Comitê, só leitura (também no banco), com "Cancelar envio". Devolvida, mostra o comentário; aprovada pelo Comitê, segue para a abertura.
+
+- Regras configuráveis em **Comitê de Aprovações → Configurações**
+  (`comite_config`); sem linha, os padrões de antes (20%, planejado e
+  realizado acima do orçado, linha vermelha fora, administrador direto).
+- **Volta ao Comitê só se piorar:** depois de aprovada pelo Comitê, a versão do mesmo orçamento é aprovada direto pelo GP enquanto não tiver mais itens com planejado acima do orçado nem Resultado geral menor.
+- Banco: `comite_pedidos` + os gatilhos da 204 lendo as regras e as
+  aprovações (`20261027970001`, `20261027970002`).
+- Detalhes na [decisão 223](../decisions/223-comite-de-aprovacoes.md).
