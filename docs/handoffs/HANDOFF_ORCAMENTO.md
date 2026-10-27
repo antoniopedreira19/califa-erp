@@ -5926,6 +5926,7 @@ Terceira entrega do protótipo aprovado em 26/10
   descem e ficam editáveis, e voltam para o orçamento na confirmação. O
   código do job segue a sigla do cliente escolhido (a prévia muda na hora);
   o reenvio mantém o código, inclusive o código guardado do job devolvido.
+  ⚠️ Revisto no mesmo dia — ver a nota seguinte.
 - **Projeto com vários clientes:** lista, filtro, cabeçalho, agregada e a
   planilha exportada mostram os clientes dos orçamentos.
 - **Conferência:** no P-0006/26, como administrador: Editar projeto salvo
@@ -5938,3 +5939,18 @@ Terceira entrega do protótipo aprovado em 26/10
   Não criei orçamento novo: não há produtor de teste na lista, e uma pessoa
   real entraria na lista "Meus" dela. Views de rentabilidade, saves,
   faturamento pendente e fluxo de caixa conferidas por hash antes e depois.
+
+## ⚠️ Nota de 2026-10-26 — O código do job segue sempre o cliente (revisão da decisão 215)
+
+- O Tiago reviu a resposta do reenvio: "Se o cliente mudar o codigo sempre
+  deve mudar para ficar de acordo com o novo cliente". O job devolvido
+  reenviado com cliente de outra sigla ganha código novo (audit
+  `job.codigo_trocado`); com a mesma sigla, fica. O código guardado do job
+  cancelado (decisão 128) volta só com a mesma sigla, como antes.
+- Novo registro `codigos_de_job_usados` (migration `20261026800006`): o
+  número antigo fica queimado. O gerador e a prévia leem dele.
+- **Conferência:** prévia do envio do "Teste Interno 105 · nacional" no
+  P-0006/26 (TES-1033/26 → TET-1001/26 ao trocar o cliente), sem enviar.
+  O reenvio de job devolvido não foi exercido na tela: o P-0006/26 não tem
+  job devolvido nem código guardado, e criar um pediria enviar e reprovar
+  um job de verdade.

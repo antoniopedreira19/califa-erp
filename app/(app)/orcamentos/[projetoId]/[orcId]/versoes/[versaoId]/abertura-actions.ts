@@ -696,7 +696,8 @@ export async function enviarJobParaAbertura(
   let codigo: string;
   try {
     // Sigla do cliente escolhido no envio + ano de hoje (decisões 114 e
-    // 215). O reenvio do job devolvido mantém o código que ele já tem.
+    // 215). O reenvio do job devolvido usa este código só se a sigla
+    // mudou; com a mesma sigla, mantém o que tem (passo 5b).
     codigo = await gerarCodigoJob(supabase, session.activeTenant.id, parsed.data.cliente_id);
   } catch (e) {
     return { ok: false, message: (e as Error).message };
@@ -738,6 +739,12 @@ export async function enviarJobParaAbertura(
   //     os `*_abertura` são refeitos pela cópia (passo 4b), porque o save
   //     do job devolvido se edita direto nela.
   if (jobDevolvido) {
+    // O código segue o cliente (Tiago, revisão da decisão 215): com outra
+    // sigla, o job devolvido ganha o código novo, e o antigo fica queimado
+    // no registro de códigos usados.
+    const codigoDoReenvio = codigo.startsWith(`${jobDevolvido.codigo.split("-")[0]}-`)
+      ? jobDevolvido.codigo
+      : codigo;
     // Sempre preenchido no passo 4b; a guarda é para o tipo.
     if (!espelhosDoReenvio) {
       return { ok: false, message: "Não foi possível recalcular os números do job." };
@@ -792,6 +799,7 @@ export async function enviarJobParaAbertura(
     const { error: errReenvio } = await supabase
       .from("jobs")
       .update({
+        codigo: codigoDoReenvio,
         nome: parsed.data.nome,
         produto: produtoRes.data.nome,
         // A marca do job (decisões 214 e 215): a escolhida no envio.
@@ -829,13 +837,29 @@ export async function enviarJobParaAbertura(
       return { ok: false, message: mapDbError(errReenvio.message) };
     }
 
+    if (codigoDoReenvio !== jobDevolvido.codigo) {
+      await logAuditEvent({
+        acao: "job.codigo_trocado",
+        tenantId: session.activeTenant.id,
+        entidadeTipo: "job",
+        entidadeId: jobDevolvido.id,
+        metadata: {
+          de: jobDevolvido.codigo,
+          para: codigoDoReenvio,
+          cliente_id: parsed.data.cliente_id,
+          motivo: "cliente_trocado_no_reenvio",
+          decisao: "215",
+        },
+      });
+    }
+
     await logAuditEvent({
       acao: "job.reenviado_para_aprovacao",
       tenantId: session.activeTenant.id,
       entidadeTipo: "job",
       entidadeId: jobDevolvido.id,
       metadata: {
-        codigo: jobDevolvido.codigo,
+        codigo: codigoDoReenvio,
         orcamento_id: orc.id,
         versao_id: versaoId,
         cidade_id: parsed.data.cidade_id,
@@ -873,7 +897,7 @@ export async function enviarJobParaAbertura(
     revalidatePath("/financeiro");
     revalidatePath("/financeiro/abertura-de-job");
 
-    return { ok: true, jobId: jobDevolvido.id, codigo: jobDevolvido.codigo };
+    return { ok: true, jobId: jobDevolvido.id, codigo: codigoDoReenvio };
   }
 
   // 6. Cria o job. `cidade` é texto no schema de jobs — gravamos o nome
@@ -941,7 +965,7 @@ export async function enviarJobParaAbertura(
   //     "Cancelar aprovação" da devolução guardou o código; o job novo
   //     nasceu com um código novo e válido, e a RPC troca os dois numa
   //     transação só — o cancelado ganha o sufixo "-C1". Se ela recusar
-  //     (o cliente do projeto mudou de sigla, por exemplo), o job segue com
+  //     (o cliente do job mudou de sigla: o código segue o cliente), o job segue com
   //     o código com que nasceu: nada fica pela metade.
   const { data: reservado } = await supabase
     .from("jobs")

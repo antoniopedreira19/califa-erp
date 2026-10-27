@@ -1,18 +1,22 @@
 # 215 — Cliente e marca no orçamento, não no projeto
 
 **Data:** 2026-10-26
-**Status:** aceita e implementada em 26/10/2026.
+**Status:** aceita e implementada em 26/10/2026; item 4 revisto no mesmo
+dia (o código segue sempre o cliente).
 **Quem decidiu:** Tiago — pedido em 23/10 ("jobs de clientes diferentes
 dentro de um mesmo projeto"), protótipo aprovado em 26/10
 (https://claude.ai/artifact/UxASwkRtQgA4GzFEinYTtQ), e três respostas em
 26/10: a coluna antiga do projeto fica opcional (opção 1); a sigla do job
-sai do cliente do envio e o reenvio mantém o código; a lista e o cabeçalho
-do projeto mostram os clientes dos orçamentos.
+sai do cliente do envio; a lista e o cabeçalho do projeto mostram os
+clientes dos orçamentos. Sobre o reenvio, a primeira resposta ("mantém o
+código") foi revista por ele no mesmo dia: "Se o cliente mudar o codigo
+sempre deve mudar para ficar de acordo com o novo cliente".
 **Revê:** a [122](122-cliente-do-projeto-so-muda-antes-da-aprovacao.md) (o
 cliente do projeto travava na aprovação) e a
 [133](133-projeto-com-mais-de-uma-marca.md) (várias marcas no projeto).
-**Migrations:** `20261026800004_cliente_e_marca_no_orcamento.sql` e
-`20261026800005_codigo_guardado_volta_com_cliente_trocado.sql`.
+**Migrations:** `20261026800004_cliente_e_marca_no_orcamento.sql`,
+`20261026800005_codigo_guardado_volta_com_cliente_trocado.sql` (desfeita
+pela seguinte) e `20261026800006_codigo_do_job_segue_o_cliente.sql`.
 
 ## O problema
 
@@ -34,10 +38,13 @@ clientes diferentes não cabia no sistema.
    para o lugar do Cliente e Categoria para o da Marca; Cliente e Marca
    descem e ficam editáveis. A troca volta para o orçamento na confirmação,
    como nome, GP, cidade e regional. A confirmação mostra os escolhidos.
-4. **O código do job sai da sigla do cliente escolhido no envio.** O
-   reenvio mantém o código que o job já tem — também o código guardado do
-   job devolvido e cancelado (decisão 128), que antes só voltava com a
-   mesma sigla.
+4. **O código do job segue sempre a sigla do cliente escolhido no envio.**
+   No reenvio do job devolvido, com a mesma sigla o código fica; com outra,
+   o job ganha um código novo e o antigo fica queimado (nunca volta a ser
+   usado). O código guardado do job devolvido e cancelado (decisão 128) só
+   volta com a mesma sigla. A prévia do formulário mostra o código que vai
+   valer. Risco aceito pelo Tiago: PP ou e-mail já emitido com o código
+   antigo deixa de bater — só acontece em job devolvido, antes da abertura.
 5. **O job leva o cliente do orçamento** (`jobs.cliente_id`, mantido pelo
    banco) e a marca escolhida no envio (`jobs.produto_id`, que o financeiro
    pode trocar — decisão 214). **O cliente do orçamento não muda depois que
@@ -77,6 +84,11 @@ clientes diferentes não cabia no sistema.
   `enviar_job_para_faturamento`, `enviar_lote_para_faturamento` e
   `versao_save_consumir_tudo` (o cliente da versão vem do orçamento). As
   quatro views devolveram o mesmo resultado antes e depois (hash).
-- `reaproveitar_codigo_do_job_devolvido` perde a trava da sigla.
+- `codigos_de_job_usados`: o registro de todo código que um job já teve
+  (gatilho `registrar_codigo_de_job`, com os 159 de hoje). O próximo
+  número de job sai daqui, e não só dos jobs existentes. A troca de código
+  no reenvio grava o audit `job.codigo_trocado` (de/para).
+- `reaproveitar_codigo_do_job_devolvido` mantém a trava da sigla (a
+  migration 800005 a tirou; a 800006 a recolocou).
 - O cadastro do cliente conta orçamentos, e não projetos, para congelar o
   código curto.

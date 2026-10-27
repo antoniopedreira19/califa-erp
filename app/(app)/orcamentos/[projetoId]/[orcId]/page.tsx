@@ -402,8 +402,10 @@ export default async function OrcamentoDetailPage({
     // (decisão 114): os códigos do ano de hoje. A sigla do cliente só se
     // sabe depois do projeto, que vem nesta mesma onda — o filtro por sigla
     // fica para a hora da conta.
+    // Do registro de códigos usados, como o gerador: número de job não
+    // volta, nem o que um job teve antes de trocar de cliente (215).
     supabase
-      .from("jobs")
+      .from("codigos_de_job_usados")
       .select("codigo")
       .eq("tenant_id", session.activeTenant.id)
       .like("codigo", `%/${anoDoCodigoDeJob()}`),
@@ -453,10 +455,15 @@ export default async function OrcamentoDetailPage({
   // se corrigem sem cancelar a aprovação.
   const jobDevolvido =
     job?.status === "rejeitado_financeiro" && orcamento.status === "job_criado";
-  // O código reservado vale sem job vivo. Desde 26/10/2026 (decisão 215,
-  // resposta do Tiago) ele volta mesmo com o cliente trocado: o reenvio
-  // mantém o código, que pode já ter circulado em PP e e-mail.
+  // O job cancelado com código guardado (decisão 128): sem job vivo, o
+  // formulário nasce dele. O CÓDIGO dele só volta com a mesma sigla — o
+  // código do job segue sempre o cliente (Tiago, revisão da decisão 215).
   const reservado = !job && reservadoRes.data ? reservadoRes.data : null;
+  const siglaDoOrcamento: string | null = orcamentoRaw.cliente?.codigo_curto ?? null;
+  const codigoReservadoValido =
+    reservado && siglaDoOrcamento && reservado.codigo.startsWith(`${siglaDoOrcamento}-`)
+      ? reservado.codigo
+      : null;
 
   const orcamentoCategoriaNome: string | null = orcamentoRaw.categoria?.nome ?? null;
   // Serviço antes da categoria no cabeçalho (22/10/2026): diz de cara se o
@@ -1087,8 +1094,8 @@ export default async function OrcamentoDetailPage({
           // Cliente sem código curto: o envio recusa com a mensagem que
           // pede o cadastro; a prévia fica em travessão.
           proximoCodigoJob={
-            reservado
-              ? reservado.codigo
+            codigoReservadoValido
+              ? codigoReservadoValido
               : orcamentoRaw.cliente?.codigo_curto
               ? proximoCodigoDeJob({
                   sigla: orcamentoRaw.cliente.codigo_curto,

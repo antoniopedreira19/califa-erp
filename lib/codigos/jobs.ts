@@ -7,12 +7,15 @@ import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
  *
  *   - SIGLA: o código curto ATUAL do cliente do job — desde a decisão 215
  *     (26/10/2026), o do orçamento, escolhido no envio para abertura. O
- *     reenvio de job devolvido mantém o código que ele já tinha, mesmo com
- *     o cliente trocado (resposta do Tiago, 26/10).
+ *     código segue SEMPRE o cliente (Tiago, revisão da 215): o job
+ *     devolvido reenviado com cliente de outra sigla ganha código novo, e
+ *     o antigo fica queimado.
  *   - ANO: o ano em que o job é criado, no fuso de São Paulo. Não a data
  *     de início, que se edita depois — e o código não muda.
  *   - SEQ: o maior número já usado na sigla e no ano, + 1. Número não
- *     volta a ser usado: job cancelado ou apagado queima o dele.
+ *     volta a ser usado: job cancelado ou apagado queima o dele, e o código
+ *     que um job deixou ao trocar de cliente também — por isso a conta lê
+ *     `codigos_de_job_usados`, e não só os jobs de hoje.
  *
  * Em 2026 o sequencial começa em 1001 — o "1 no lugar do primeiro 0". O
  * outro sistema da agência abre jobs no mesmo formato e ainda não chegou no
@@ -103,7 +106,7 @@ export async function gerarCodigoJob(
   // Só a coluna do código, e só a sigla e o ano: leitura leve. O LIKE só
   // estreita; quem decide é a expressão de `proximoCodigoDeJob`.
   const { data, error } = await supabase
-    .from("jobs")
+    .from("codigos_de_job_usados")
     .select("codigo")
     .eq("tenant_id", tenantId)
     .like("codigo", `${sigla}-%/${ano}`);

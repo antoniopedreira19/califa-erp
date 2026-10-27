@@ -155,9 +155,9 @@ interface Props {
   produtosDoEnvio: ProdutoOption[];
   codigosDeJobDoAno: string[];
   proximoCodigoJob: string;
-  /** O código do job cancelado pelo "Cancelar aprovação" da devolução, que
-   *  volta no próximo envio (decisão 128). `null` sem reserva — ou quando
-   *  a sigla do cliente mudou e ele não serve mais. */
+  /** O código do job cancelado pelo "Cancelar aprovação" da devolução
+   *  (decisão 128). Volta no próximo envio só se a sigla do cliente
+   *  escolhido for a mesma — a conta é feita aqui. `null` sem reserva. */
   codigoReservado: string | null;
   projetoNome: string;
   /** A empresa do projeto — que vira a do job (o gatilho
@@ -258,24 +258,36 @@ export function FluxoAbertura({
   const [erroGeral, setErroGeral] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>({});
 
-  // Cliente e marca escolhidos no envio (decisão 215). O código do job sai
-  // da sigla do cliente escolhido; job já enviado, devolvido ou com código
-  // guardado mantém o que tem (resposta do Tiago, 26/10).
+  // Cliente e marca escolhidos no envio (decisão 215). O código do job
+  // segue SEMPRE a sigla do cliente (Tiago, revisão da 215): o job
+  // devolvido e o código guardado mantêm o código só com a mesma sigla;
+  // com outra, a prévia mostra o código novo. Job já enviado mostra o seu.
   const clienteDoEnvio = clientesDoEnvio.find((c) => c.id === dados.clienteId) ?? null;
   const marcaDoEnvio = produtosDoEnvio.find((m) => m.id === dados.produtoId) ?? null;
   const clienteNomeDoEnvio = clienteDoEnvio?.nome_fantasia ?? clienteNome;
+  const siglaDoCliente = (id: string) =>
+    clientesDoEnvio.find((c) => c.id === id)?.codigo_curto ?? null;
+  const daSigla = (codigo: string | null | undefined, sigla: string | null) =>
+    codigo && sigla && codigo.startsWith(`${sigla}-`) ? codigo : null;
+  const siglaDoEnvio = siglaDoCliente(dados.clienteId);
+  const codigoQueVolta = daSigla(
+    job?.status === "rejeitado_financeiro" ? job.codigo : codigoReservado,
+    siglaDoEnvio,
+  );
   const codigoDoEnvio =
-    job?.codigo ??
-    codigoReservado ??
-    (dados.clienteId === inicial.clienteId
-      ? proximoCodigoJob
-      : clienteDoEnvio?.codigo_curto
-        ? proximoCodigoDeJob({
-            sigla: clienteDoEnvio.codigo_curto,
-            ano: anoDoCodigoDeJob(),
-            codigos: codigosDeJobDoAno,
-          })
-        : "—");
+    job && job.status !== "rejeitado_financeiro"
+      ? job.codigo
+      : (codigoQueVolta ??
+        (siglaDoEnvio
+          ? proximoCodigoDeJob({
+              sigla: siglaDoEnvio,
+              ano: anoDoCodigoDeJob(),
+              codigos: codigosDeJobDoAno,
+            })
+          : proximoCodigoJob));
+  // O código guardado que volta com o cliente do orçamento, para o recado
+  // da barra antes de abrir o formulário.
+  const codigoReservadoDoOrcamento = daSigla(codigoReservado, siglaDoCliente(inicial.clienteId));
 
   const podeAprovar = ["rascunho", "em_revisao", "enviada_cliente"].includes(
     versaoStatus,
@@ -591,10 +603,10 @@ export function FluxoAbertura({
                 · valores travados para edição
               </span>
               <span className="text-xs text-muted-foreground">
-                {codigoReservado
+                {codigoReservadoDoOrcamento
                   ? podeEnviarAbertura
-                    ? `Próximo passo: reenviar o job ${codigoReservado} para o financeiro`
-                    : `Próximo passo: o GP reenvia o job ${codigoReservado} para o financeiro`
+                    ? `Próximo passo: reenviar o job ${codigoReservadoDoOrcamento} para o financeiro`
+                    : `Próximo passo: o GP reenvia o job ${codigoReservadoDoOrcamento} para o financeiro`
                   : podeEnviarAbertura
                     ? "Próximo passo: abrir o job para o financeiro"
                     : "Próximo passo: o GP envia o job para abertura no financeiro"}
@@ -791,7 +803,7 @@ export function FluxoAbertura({
         clientes={clientesDoEnvio}
         produtos={produtosDoEnvio}
         codigoJob={codigoDoEnvio}
-        codigoReaproveitado={!job && codigoReservado !== null}
+        codigoReaproveitado={!job && codigoQueVolta !== null}
         rotuloFechamento={fechamento.rotulo}
         origemFechamento={fechamento.origem}
         valorTotal={fechamento.valorJob}
