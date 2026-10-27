@@ -1078,6 +1078,12 @@ export interface Job {
   abertura_revisao_desde: string | null;
   /** Errata que devolveu o job ao mural. */
   abertura_revisao_errata_id: string | null;
+  /** Decisão 216: job auditado pelo cliente pela Mídia System. Enquanto
+   *  `midia_system_liberado_em` é nulo, a PP vai ao financeiro sem NF; só
+   *  o financeiro marca e libera. */
+  midia_system: boolean;
+  midia_system_liberado_em: string | null;
+  midia_system_liberado_por: string | null;
   /** Data do EVENTO, informada no envio do job. Obrigatória no
    *  formulário desde 27/08/2026; nula nos jobs abertos antes disso e, desde
    *  a decisão 149, no Fee e no Always On, que não têm evento. */
@@ -2056,6 +2062,10 @@ export interface PedidoCompra {
   cartao_corporativo: boolean;
   cartao_plataforma: string | null;
   cartao_link: string | null;
+  /** Decisão 216: foi ao financeiro sem anexo com o job Mídia System em
+   *  auditoria. Depois da liberação, presta contas da NF na prestação da
+   *  verba (`lib/calculos/midia-system.ts`). */
+  sem_nf_na_auditoria: boolean;
   // Verba (subtipo de PP — adiantamento com prestação de contas). Desde a
   // decisão 164 o booleano vale para os três tipos de verba.
   verba_producao: boolean;

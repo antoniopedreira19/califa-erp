@@ -92,6 +92,7 @@ import {
 } from "@/lib/calculos/janelas-pagamento";
 import { carregarFeriadosNacionais } from "@/lib/data/feriados-nacionais";
 import { travaDoJobDeMidia } from "@/lib/data/midia-do-job";
+import { envioDispensaNf, midiaSystemDoJob } from "@/lib/calculos/midia-system";
 import {
   DESGASTE_POR_KM_PADRAO,
   contaDosDeslocamentos,
@@ -943,6 +944,10 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
         /** Quem envia PP do job além do GP (decisão 174). */
         produtor_id: string | null;
         produtor_envia_pp: boolean;
+        /** Decisão 216: o job Mídia System em auditoria dispensa a NF no
+         *  envio. */
+        midia_system: boolean;
+        midia_system_liberado_em: string | null;
       };
       supabase: ReturnType<typeof createClient>;
     }
@@ -1015,7 +1020,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
   const { data: jobRow, error: jobErr } = await supabase
     .from("jobs")
     .select(
-      "id, codigo, tenant_id, status, responsavel_id, empresa_id, produto, nome, projeto_id, orcamento_id, abertura_em_revisao, data_abertura_financeiro, regional_id, produtor_id, produtor_envia_pp",
+      "id, codigo, tenant_id, status, responsavel_id, empresa_id, produto, nome, projeto_id, orcamento_id, abertura_em_revisao, data_abertura_financeiro, regional_id, produtor_id, produtor_envia_pp, midia_system, midia_system_liberado_em",
     )
     .eq("id", item.job_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -1028,6 +1033,8 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
     ...jobRow,
     abertura_em_revisao: (jobRow as any).abertura_em_revisao === true,
     produtor_envia_pp: (jobRow as any).produtor_envia_pp === true,
+    midia_system: (jobRow as any).midia_system === true,
+    midia_system_liberado_em: ((jobRow as any).midia_system_liberado_em as string | null) ?? null,
   };
 
   // ⚠️ Mudou em 08/09/2026 (decisão 056). Até aqui GERAR PP exigia o job
@@ -3354,6 +3361,9 @@ export async function enviarPedidoCompraAoFinanceiro(
   // Decisão 209: o cartão corporativo vai sem nota, como a verba — os
   // anexos que a PP já tem ficam como estão.
   const comDocumentosNoEnvio = (!ppRow.verba_producao && !ppRow.cartao_corporativo) || reembolsoNoEnvio;
+  // Decisão 216: com o job Mídia System em auditoria, a PP comum pode ir
+  // sem anexo nenhum. O que for anexado segue as regras de sempre.
+  const semNfPermitido = !reembolsoNoEnvio && envioDispensaNf(midiaSystemDoJob(job));
   if (comDocumentosNoEnvio) {
     const parsed = z.array(anexoUploadedSchema).safeParse(anexosDoEnvio ?? []);
     if (!parsed.success) return { ok: false, message: "Formato de anexo inválido." };
@@ -3365,8 +3375,9 @@ export async function enviarPedidoCompraAoFinanceiro(
           Number(ppRow.valor ?? 0),
           ppRow.pagamento_fora_do_cadastro_meio === "boleto",
         );
-    if (falta) return { ok: false, message: falta };
+    if (falta && !(semNfPermitido && anexosDoPedido.length === 0)) return { ok: false, message: falta };
   }
+  const vaiSemNf = comDocumentosNoEnvio && semNfPermitido && anexosDoPedido.length === 0;
 
   // Revisão da 156 (16/10/2026): nota em outro CNPJ não pede mais "tem
   // certeza?" — a empresa emissora segue o documento, depois de gravar os
@@ -3463,6 +3474,9 @@ export async function enviarPedidoCompraAoFinanceiro(
       status: "em_avaliacao",
       enviada_financeiro_em: agora,
       enviada_financeiro_por: session.profile.id,
+      // Decisão 216: a marca que leva a PP à prestação de contas depois da
+      // liberação das NFs. O gatilho confere que o job está em auditoria.
+      ...(vaiSemNf ? { sem_nf_na_auditoria: true } : {}),
     })
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -3491,6 +3505,7 @@ export async function enviarPedidoCompraAoFinanceiro(
       acima_do_planejado: passaDoPlanejado(emPPsDepois, item.total_planejado),
       confirmado_acima_do_planejado: confirmarAcimaDoPlanejado,
       verba_producao: ppRow.verba_producao,
+      sem_nf_na_auditoria: vaiSemNf,
       anexos: anexosDoPedido.length,
       notas_fiscais: anexosDoPedido.filter((a) => a.documento_tipo === "nota_fiscal").length,
       // Revisão da 156: a empresa emissora que o documento definiu no envio.
@@ -3581,6 +3596,9 @@ export async function deixarPPProntaParaEnvio(
   // Decisão 209: o cartão corporativo vai sem nota, como a verba — os
   // anexos que a PP já tem ficam como estão.
   const comDocumentosNoEnvio = (!ppRow.verba_producao && !ppRow.cartao_corporativo) || reembolsoNoEnvio;
+  // Decisão 216: com o job Mídia System em auditoria, a PP comum pode ir
+  // sem anexo nenhum. O que for anexado segue as regras de sempre.
+  const semNfPermitido = !reembolsoNoEnvio && envioDispensaNf(midiaSystemDoJob(job));
   if (comDocumentosNoEnvio) {
     const parsed = z.array(anexoUploadedSchema).safeParse(anexosDoEnvio ?? []);
     if (!parsed.success) return { ok: false, message: "Formato de anexo inválido." };
@@ -3592,7 +3610,7 @@ export async function deixarPPProntaParaEnvio(
           Number(ppRow.valor ?? 0),
           ppRow.pagamento_fora_do_cadastro_meio === "boleto",
         );
-    if (falta) return { ok: false, message: falta };
+    if (falta && !(semNfPermitido && anexosDoPedido.length === 0)) return { ok: false, message: falta };
     const erroAnexos = await gravarAnexosDoEnvio(
       supabase,
       session.activeTenant.id,

@@ -72,7 +72,7 @@ export const SELECT_PP_DO_FINANCEIRO = `
         fornecedor_pix_tipo, fornecedor_pix_chave,
         pagamento_fora_do_cadastro_meio, pagamento_fora_do_cadastro_motivo,
         cancelada_em, motivo_cancelamento,
-        rejeitada_em, motivo_rejeicao, pago_em, verba_producao,
+        rejeitada_em, motivo_rejeicao, pago_em, verba_producao, sem_nf_na_auditoria,
         tipo_verba, verba_titular_tipo, verba_titular_nome,
         reembolso_tipo, reembolso_deslocamentos,
         cartao_corporativo, cartao_plataforma, cartao_link,
@@ -241,6 +241,7 @@ export function mapearPPsDoFinanceiro(
     motivo_rejeicao: string | null;
     pago_em: string | null;
     verba_producao: boolean;
+    sem_nf_na_auditoria: boolean | null;
     tipo_verba: TipoVerba | null;
     verba_titular_tipo: TitularDaVerbaTipo | null;
     verba_titular_nome: string | null;
@@ -395,6 +396,7 @@ export function mapearPPsDoFinanceiro(
     plano_conta_tipo_id: r.plano_conta_tipo_id ?? null,
     plano_conta_subtipo_id: r.plano_conta_subtipo_id ?? null,
     verba_producao: r.verba_producao ?? false,
+    sem_nf_na_auditoria: r.sem_nf_na_auditoria === true,
     // Decisão 164: o tipo da verba, e quem a recebe — o responsável na
     // produção, o titular guardado na PP na alimentação e no transporte.
     tipo_verba: tipoDaVerba(r),

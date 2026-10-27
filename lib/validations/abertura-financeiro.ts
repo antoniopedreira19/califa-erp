@@ -201,6 +201,9 @@ const camposDaAbertura = z.object({
   produto_id: z.string().uuid("Selecione a marca do job."),
   empresa_id: z.string().uuid("Selecione a empresa do job."),
   regional_id: z.string().uuid("Selecione a regional do job."),
+  // Decisão 216: o job auditado pelo cliente pela Mídia System. A PP vai
+  // ao financeiro sem NF até a liberação das notas.
+  midia_system: z.boolean(),
   competencias: rateioCompetenciasSchema,
   curva: curvaDesembolsoSchema,
   recebimento: previsaoRecebimentoSchema,

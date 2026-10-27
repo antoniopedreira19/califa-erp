@@ -6456,3 +6456,19 @@ três telas da ficha (Jobs, Financeiro › Jobs e Abertura de Job), lido em
   banco). Ficha, PDF da PP, saves, envio para faturamento (portal, CNPJ,
   envio em lote) e o chat das PPs leem dele. Jobs › projeto mostra os
   clientes dos jobs do projeto.
+
+## ⚠️ Nota de 2026-10-26 (5) — Mídia System: a PP vai sem NF durante a auditoria do cliente (decisão 216)
+
+- **Por quê:** o job que o cliente manda para a auditoria da Mídia System
+  não tem NF enquanto ela corre, e o envio da PP exigia a nota.
+- **O que mudou na produção:** o selo "Mídia System · em auditoria / NFs
+  liberadas" no cabeçalho do job. Em auditoria, o envio da PP comum aceita
+  zero anexo ("Anexos · opcionais na auditoria") e a PP mostra "Sem NF"
+  embaixo do status. Depois que o financeiro libera as NFs, ela fica
+  "Aguardando prestação" e a NF vai pelo mesmo "Prestar contas" da verba
+  (aba PPs e painel "PPs" do item), na mesma gaveta, sem "Não houve gasto"
+  nem saldo. As próximas PPs voltam a exigir a NF.
+- **Encerramento:** trava até a prestação aprovada, também durante a
+  auditoria ("1 PP sem NF da Mídia System: PP-…").
+- **Conferido** no TES-1029/26 (P-0006/26): PP-00572 do envio sem anexo à
+  prestação aprovada. Ver [decisão 216](../decisions/216-midia-system.md).

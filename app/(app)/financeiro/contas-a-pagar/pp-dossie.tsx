@@ -488,7 +488,7 @@ export function PPDossie({
               antes do histórico, e o histórico perde "Documentos na
               aprovação" — a verba é aprovada sem documento, sempre. O
               reembolso não presta contas (decisão 187). */}
-          {ehVerbaComPrestacao(pp) ? (
+          {ehVerbaComPrestacao(pp) || (pp.sem_nf_na_auditoria && pp.prestacao !== null) ? (
             <>
               <Prestacao
                 pp={pp}
@@ -594,6 +594,11 @@ function Historico({
             pp.verba_producao && !pp.reembolso_tipo ? (
               <p className="mt-1 text-[11px] text-muted-foreground">
                 Aprovada sem documento — PP de {rotuloDaVerbaMinusculo(pp.tipo_verba ?? "producao")}.
+              </p>
+            ) : pp.sem_nf_na_auditoria ? (
+              // Decisão 216: a NF chega depois, na prestação de contas.
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                Aprovada sem NF — job Mídia System em auditoria.
               </p>
             ) : (
               <p className="mt-1 text-[11px] font-semibold text-california-red">
@@ -926,11 +931,11 @@ function Prestacao({
       {pr && (
         <div className="mt-2 space-y-1 border-t border-border pt-2 text-[11px]">
           <div className="flex justify-between font-semibold">
-            <span>Gasto comprovado</span>
+            <span>{pp.verba_producao ? "Gasto comprovado" : "NFs da prestação"}</span>
             <span className="font-mono">{brl(gasto)}</span>
           </div>
           <div className="flex justify-between text-muted-foreground">
-            <span>Verba</span>
+            <span>{pp.verba_producao ? "Verba" : "Valor da PP"}</span>
             <span className="font-mono">{brl(pp.valor)}</span>
           </div>
           {pp.devolucao ? (
@@ -946,7 +951,8 @@ function Prestacao({
               </p>
             </>
           ) : (
-            pr.status !== "aprovada" && (
+            // Decisão 216: a PP da auditoria não tem saldo a devolver.
+            pr.status !== "aprovada" && pp.verba_producao && (
               <div className="flex justify-between text-muted-foreground">
                 <span>Saldo → estorno</span>
                 <span className="font-mono">{brl(Math.max(0, saldo))}</span>

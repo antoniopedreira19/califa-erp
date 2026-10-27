@@ -8357,3 +8357,21 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   `enviar_lote_para_faturamento`, `vw_faturamento_pendente` e
   `vw_fluxo_caixa` leem o cliente do job (mesmo resultado de antes,
   conferido).
+
+## ⚠️ Nota de 2026-10-26 (14) — Mídia System: marcar na abertura, "Liberar NFs" e conferir a NF na prestação (decisão 216)
+
+- **Abertura:** caixa "Mídia System" no fim do "Registro no financeiro"
+  (também no "Editar registro"; trava depois que há PP sem NF ou depois da
+  liberação). No job aberto, o mesmo campo mostra o estado e o botão
+  **"Liberar NFs"**, com a lista das PPs que foram sem NF. Não volta atrás.
+- **Contas a Pagar:** a PP sem NF é aprovada e paga como qualquer PP. Depois
+  da liberação, a NF chega pelo chip "Prestação de Contas", com aprovar e
+  reprovar da verba — **sem saldo nem estorno** (`valor_devolvido = 0`).
+  **Primeiro a PP, depois a prestação:** com a PP ainda em avaliação, a tela
+  diz "Aprove a PP antes da prestação" e o banco recusa a ordem inversa.
+- **Fiscal:** a NF entra no cadastro de notas na aprovação da prestação,
+  como a NF da verba (crédito de PIS/COFINS no mês da emissão). A PP paga
+  sem NF **sai sem retenção** — risco aceito pelo Tiago.
+- **Conferido** no TES-1029/26 (P-0006/26): NF 9216 da PP-00572 no cadastro
+  de notas, realizado do item intacto. Ver
+  [decisão 216](../decisions/216-midia-system.md).

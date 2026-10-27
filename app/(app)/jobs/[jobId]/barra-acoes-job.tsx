@@ -707,7 +707,7 @@ function pendenciasDoEncerramento(
   aberturaEmRevisao: boolean,
   junto: boolean,
 ): string[] {
-  const { ppsEmAberto, ppsAEmitir, verbasEmAberto, bvsEmAberto, itensSemMarcacao } = fechamento;
+  const { ppsEmAberto, ppsAEmitir, verbasEmAberto, nfsDaAuditoria, bvsEmAberto, itensSemMarcacao } = fechamento;
   const partes: string[] = [];
   if (ppsEmAberto.length > 0) {
     partes.push(
@@ -722,6 +722,11 @@ function pendenciasDoEncerramento(
   if (verbasEmAberto.length > 0) {
     partes.push(
       `${verbasEmAberto.length === 1 ? "1 verba não concluída" : `${verbasEmAberto.length} verbas não concluídas`} (${codigos(verbasEmAberto.map((v) => v.codigo))})`,
+    );
+  }
+  if (nfsDaAuditoria.length > 0) {
+    partes.push(
+      `${nfsDaAuditoria.length === 1 ? "1 PP sem NF da Mídia System" : `${nfsDaAuditoria.length} PPs sem NF da Mídia System`} (${codigos(nfsDaAuditoria.map((p) => p.codigo))})`,
     );
   }
   if (bvsEmAberto.length > 0) {

@@ -87,12 +87,14 @@ export async function prefixoUploadPrestacao(
   const supabase = createClient();
   const { data: pp } = await supabase
     .from("pedidos_compra")
-    .select("id, verba_producao")
+    .select("id, verba_producao, sem_nf_na_auditoria")
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
   if (!pp) return { ok: false, message: "PP não encontrada." };
-  if (!pp.verba_producao) {
+  // Decisão 216: a PP que foi sem NF na auditoria da Mídia System presta
+  // contas da nota na mesma prestação (a liberação o banco confere).
+  if (!pp.verba_producao && !pp.sem_nf_na_auditoria) {
     return { ok: false, message: "Esta PP não é de verba." };
   }
   return {

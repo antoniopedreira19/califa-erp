@@ -56,6 +56,7 @@ import {
 } from "./anexos-da-pp";
 import { CorrigirNfDialog } from "./corrigir-nf-da-pp";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
+import { TEXTO_ENVIO_AUDITORIA } from "@/app/(app)/jobs/_midia-system/midia-system";
 import { CamposDoComprovante, ResumoDosComprovantes, comprovantesDosAnexos } from "./comprovantes-do-reembolso";
 import {
   TIPOS_DE_COMPROVANTE,
@@ -477,6 +478,7 @@ export function EnvioDialog({
   nomeDaEmpresaDe,
   moeda,
   onEnviada,
+  envioSemNf,
 }: {
   /** "enviar": o GP manda ao financeiro. "preparar": o produtor deixa
    *  pronta para o GP enviar. */
@@ -495,6 +497,9 @@ export function EnvioDialog({
   /** Depois de gravar — enviada ao financeiro ou deixada pronta, conforme o
    *  modo. No envio, `emissora` diz se a PP passou para o CNPJ do documento. */
   onEnviada: (codigo: string, emissora?: TrocaDeEmissora | null) => void;
+  /** Decisão 216: o job Mídia System em auditoria — a PP comum pode ir sem
+   *  NF (`envioDispensaNf`). */
+  envioSemNf: boolean;
 }) {
   const preparar = modo === "preparar";
   const [prefixo, setPrefixo] = React.useState<string | null>(null);
@@ -551,6 +556,9 @@ export function EnvioDialog({
   // Decisão 209: o cartão corporativo vai sem nota (anexá-la depois é com o
   // financeiro, em fase futura).
   const comAnexos = (!pp.verbaProducao && !pp.cartaoCorporativo) || reembolsoTipo !== null;
+  // Decisão 216: com o job Mídia System em auditoria, a PP comum pode ir
+  // sem anexo nenhum; o que for anexado segue as regras de sempre.
+  const semNfNaAuditoria = envioSemNf && !pp.verbaProducao && !pp.cartaoCorporativo && reembolsoTipo === null;
   function camposDoComprovanteEnvio(id: string) {
     const a = anexos.find((x) => x.id === id);
     if (!a) return null;
@@ -577,7 +585,7 @@ export function EnvioDialog({
         ? "Aguarde os arquivos terminarem de subir."
         : faltaNosComprovantesDoReembolso(comprovantesDosAnexos(anexos), pp.valor, reembolsoTipo)
       : faltaNosAnexosParaEnviar(anexos, pp.valor, existentes, pp.pagaPorBoleto);
-    if (falta && comAnexos) {
+    if (falta && comAnexos && !(semNfNaAuditoria && anexos.length === 0)) {
       setErro(falta);
       return;
     }
@@ -708,7 +716,9 @@ export function EnvioDialog({
               </DialogTitle>
               <DialogDescription className="text-[12.5px] leading-relaxed">
                 {nomeDoFornecedor} · <span className="font-mono">{formatCurrency(pp.valor, moeda)}</span> · {pp.servico}.{" "}
-                {pp.cartaoCorporativo
+                {semNfNaAuditoria
+                  ? `${TEXTO_ENVIO_AUDITORIA} O GP envia a PP ao financeiro pela aba Pedidos de Produção.`
+                  : pp.cartaoCorporativo
                   ? "No cartão corporativo, a nota não é exigida: o GP envia a PP ao financeiro pela aba Pedidos de Produção."
                   : reembolsoTipo
                   ? "Confira os comprovantes do reembolso: o GP envia a PP ao financeiro pela aba Pedidos de Produção. Todos os campos são obrigatórios."
@@ -722,7 +732,9 @@ export function EnvioDialog({
               </DialogTitle>
               <DialogDescription className="text-[12.5px] leading-relaxed">
                 {nomeDoFornecedor} · <span className="font-mono">{formatCurrency(pp.valor, moeda)}</span> · {pp.servico}.{" "}
-                {pp.cartaoCorporativo
+                {semNfNaAuditoria
+                  ? TEXTO_ENVIO_AUDITORIA
+                  : pp.cartaoCorporativo
                   ? "No cartão corporativo, a nota não é exigida no envio."
                   : reembolsoTipo
                   ? "A PP não muda mais; aqui entram os comprovantes do reembolso. Todos os campos são obrigatórios para enviar."
@@ -756,7 +768,9 @@ export function EnvioDialog({
                   ? veiculo
                     ? "Comprovantes do deslocamento"
                     : "Comprovantes da despesa"
-                  : "Anexos"}
+                  : semNfNaAuditoria
+                    ? "Anexos · opcionais na auditoria"
+                    : "Anexos"}
               </p>
               {pp.pagaPorBoleto && <ExigidosNoEnvio anexos={anexos} />}
               <ZonaDeAnexos id={`envio-arquivos-${pp.id}`} pronto={prefixo !== null} onArquivos={subir} />

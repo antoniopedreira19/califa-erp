@@ -43,6 +43,9 @@ export interface PrestacaoParaAprovar {
   gasto: number;
   saldo: number;
   documentos: number;
+  /** Decisão 216: a prestação da NF da PP que foi sem NF na auditoria da
+   *  Mídia System — sem estorno nem saldo. */
+  midiaSystem: boolean;
   /** Nome do tipo do plano de contas da PP — o do estorno. */
   centroDeCusto: string;
   /** Decisão 136: o último envio da prestação. Quem presta contas é o
@@ -181,7 +184,12 @@ export function AprovarPrestacaoDialog({
             <span className="font-mono text-california-red">{alvo.codigo}</span>
           </DialogTitle>
           <DialogDescription>
-            {alvo.documentos === 0 ? (
+            {alvo.midiaSystem ? (
+              <>
+                PP de {brl(alvo.valor)}, enviada sem NF na auditoria da Mídia System · {alvo.documentos}{" "}
+                {alvo.documentos === 1 ? "documento conferido" : "documentos conferidos"}.
+              </>
+            ) : alvo.documentos === 0 ? (
               <>Verba de {brl(alvo.valor)} · sem gasto: a verba volta inteira.</>
             ) : (
               <>
@@ -211,10 +219,10 @@ export function AprovarPrestacaoDialog({
 
           <div className="space-y-1.5 rounded-lg border border-border bg-muted/30 p-3 text-sm">
             <div className="flex justify-between">
-              <span>Gasto comprovado</span>
+              <span>{alvo.midiaSystem ? "NFs da prestação" : "Gasto comprovado"}</span>
               <span className="font-mono font-semibold">{brl(alvo.gasto)}</span>
             </div>
-            {temSaldo ? (
+            {alvo.midiaSystem ? null : temSaldo ? (
               <div className="flex justify-between rounded-md bg-teal-50 px-2 py-1.5 font-semibold text-teal-800">
                 <span>Estorno do saldo</span>
                 <span className="font-mono">−{brl(alvo.saldo)}</span>

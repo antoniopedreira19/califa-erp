@@ -89,6 +89,7 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
     imp.ppsEmAberto.length > 0 ||
     imp.ppsAEmitir.length > 0 ||
     imp.verbasEmAberto.length > 0 ||
+    imp.nfsDaAuditoria.length > 0 ||
     imp.bvsEmAberto.length > 0 ||
     imp.itensSemMarcacao.length > 0 ||
     imp.savesAguardando.length > 0 ||
@@ -113,6 +114,13 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
       partes.push(
         `${imp.verbasEmAberto.length} ${imp.verbasEmAberto.length === 1 ? "verba não concluída" : "verbas não concluídas"} (${imp.verbasEmAberto
           .map((v) => `${v.codigo}: ${situacaoVerbaLabel(v.situacao).toLowerCase()}`)
+          .join(", ")})`,
+      );
+    }
+    if (imp.nfsDaAuditoria.length > 0) {
+      partes.push(
+        `${imp.nfsDaAuditoria.length} ${imp.nfsDaAuditoria.length === 1 ? "PP sem NF da Mídia System" : "PPs sem NF da Mídia System"} (${imp.nfsDaAuditoria
+          .map((p) => p.codigo)
           .join(", ")})`,
       );
     }
@@ -162,6 +170,7 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
         pps_em_aberto: imp.ppsEmAberto.length,
         pps_a_emitir: imp.ppsAEmitir.length,
         verbas_em_aberto: imp.verbasEmAberto.map((v) => v.codigo),
+        nfs_da_auditoria: imp.nfsDaAuditoria.map((p) => p.codigo),
         bvs_em_aberto: imp.bvsEmAberto.length,
         itens_sem_marcacao: imp.itensSemMarcacao.length,
         saves_aguardando: imp.savesAguardando.length,
@@ -182,6 +191,11 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
     if (imp.verbasEmAberto.length > 0) {
       comoResolver.push(
         "A produção presta contas da verba pelo PPs da planilha ou pela aba de PPs, e o financeiro aprova a prestação.",
+      );
+    }
+    if (imp.nfsDaAuditoria.length > 0) {
+      comoResolver.push(
+        "Depois que o financeiro liberar as NFs da Mídia System, a produção presta contas da nota de cada PP, e o financeiro aprova a prestação.",
       );
     }
     if (imp.itensSemMarcacao.length > 0) {

@@ -157,6 +157,9 @@ export interface PPRow {
   cartao_plataforma: string | null;
   cartao_link: string | null;
   /** Verdadeiro quando a PP é de verba (produção, alimentação ou transporte). */
+  /** Decisão 216: foi sem NF na auditoria da Mídia System — a NF chega
+   *  depois, na prestação de contas. */
+  sem_nf_na_auditoria: boolean;
   verba_producao: boolean;
   /** Decisão 164: o tipo da verba; null fora da verba. Obrigatório, como os
    *  campos abaixo: opcional, o `.map` o descartaria em silêncio. */

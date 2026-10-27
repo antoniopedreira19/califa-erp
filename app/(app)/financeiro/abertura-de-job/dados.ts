@@ -168,6 +168,12 @@ export interface JobNaFila {
    *  do internacional. Obrigatório: é o aviso que o financeiro não pode
    *  deixar de ver. */
   excecao_fechamento: { excecao: ExcecaoDoFechamento; taxas: TaxasDoFechamento } | null;
+  /** Decisão 216: o job Mídia System (auditoria do cliente), a liberação
+   *  das NFs e quem liberou. Na fila o job ainda não é (só o financeiro
+   *  marca, na abertura). */
+  midia_system: boolean;
+  midia_system_liberado_em: string | null;
+  midia_system_liberado_por_nome: string | null;
 }
 
 /**
@@ -351,6 +357,8 @@ const SELECT_JOB_FILA =
   "created_by, enviado_abertura_em, devolvido_em, motivo_rejeicao, " +
   "enviado_abertura:profiles!enviado_abertura_por(nome), " +
   "projeto_financeiro_id, conta_recebimento_id, conta_pagamento_id, conta_impostos_id, " +
+  // Decisão 216: a Mídia System do job e quem liberou as NFs.
+  "midia_system, midia_system_liberado_em, midia_system_liberado:profiles!midia_system_liberado_por(nome), " +
   // `servico_id` do JOB (decisão 055). A dica `!servico_id` é obrigatória:
   // `jobs` tem duas FKs para `categorias_dominio` desde 07/09/2026.
   "servico_id, servico:categorias_dominio!servico_id(nome), " +
@@ -519,6 +527,9 @@ function montarJobNaFila(
     revisao,
     saves,
     excecao_fechamento: excecaoDaVersao(j.versao_excecao),
+    midia_system: j.midia_system === true,
+    midia_system_liberado_em: j.midia_system_liberado_em ?? null,
+    midia_system_liberado_por_nome: j.midia_system_liberado?.nome ?? null,
   };
 }
 

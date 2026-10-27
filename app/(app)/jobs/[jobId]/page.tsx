@@ -61,6 +61,7 @@ import type {
   Categoria,
   ItemBv,
 } from "@/lib/types";
+import { SeloMidiaSystem } from "../_midia-system/midia-system";
 
 export const dynamic = "force-dynamic";
 
@@ -239,6 +240,8 @@ export default async function JobDetailPage({
               <Badge className={cn("border", statusBadgeClasses(statusExibido))}>
                 {jobStatusLabel(statusExibido)}
               </Badge>
+              {/* Decisão 216: o job auditado pelo cliente. */}
+              <SeloMidiaSystem midia={detalhe.midiaSystem} />
               {/* O "Editar" saiu na decisão 174: depois da abertura, o job
                   não muda. No lugar dele, a Equipe — membros do projeto,
                   responsáveis do job e a chave do envio de PP pelo
@@ -521,6 +524,7 @@ export default async function JobDetailPage({
             papelEnviaPP={papelEnviaPP && !comPedido}
             papelCorrigeNf={papelCorrigeNf}
             ppsQuePossoPrestarContas={ppsQuePossoPrestarContas}
+            midiaSystem={detalhe.midiaSystem}
             podeConfirmarBv={podeConfirmarBv && !comPedido}
             jaEnviadoParaFaturamento={envioFaturamento !== null}
             linhasComEnvioTravado={linhasComEnvioTravado}
@@ -544,6 +548,7 @@ export default async function JobDetailPage({
             podeEnviar={podeEnviarPP && !comPedido}
             papelEnviaPP={papelEnviaPP && !comPedido}
             podePrestarContas={ppsQuePossoPrestarContas}
+            midiaSystem={detalhe.midiaSystem}
             // Decisão 160: o envio, o formulário e a PP ao lado dos
             // documentos também pela aba — com o que o painel do item usa.
             statusDoJob={job.status}

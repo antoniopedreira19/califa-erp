@@ -219,6 +219,9 @@ async function conferirEnvioDoMesDaMidia(
   if (imp.verbasEmAberto.length > 0) {
     partes.push(conta(imp.verbasEmAberto.length, "verba não concluída", "verbas não concluídas"));
   }
+  if (imp.nfsDaAuditoria.length > 0) {
+    partes.push(conta(imp.nfsDaAuditoria.length, "PP sem NF da Mídia System", "PPs sem NF da Mídia System"));
+  }
   if (imp.bvsEmAberto.length > 0) {
     partes.push(conta(imp.bvsEmAberto.length, "BV não recebido", "BVs não recebidos"));
   }

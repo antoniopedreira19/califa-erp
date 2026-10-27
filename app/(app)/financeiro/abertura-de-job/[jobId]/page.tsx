@@ -31,6 +31,7 @@ import { lerFechamentoMidiaDoJob } from "@/lib/data/midia-do-job";
 import { impostoDoJob } from "../imposto-previsto";
 import { FaixaExcecaoNaAbertura } from "@/app/(app)/_planilha/excecao-no-fechamento";
 import { JobFinanceiroTabs } from "../../jobs/[jobId]/job-financeiro-tabs";
+import { MIDIA_SYSTEM_NA_FILA } from "./campo-midia-system";
 import { abaDaUrl } from "../../jobs/[jobId]/abas";
 import {
   carregarLinhasDeFluxo,
@@ -353,6 +354,8 @@ export default async function AbrirJobNoFinanceiroPage({
             projetos={projetos}
             sugestaoDeProjeto={sugestaoDeProjeto}
             opcoesDoRegistro={opcoesDoRegistro}
+            // Decisão 216: na fila o job ainda não tem PP no financeiro.
+            midiaSystem={MIDIA_SYSTEM_NA_FILA}
             contas={contas}
             custoPrevisto={custoPrevisto}
             faturamentoPrevisto={faturamentoPrevisto}
@@ -469,6 +472,7 @@ export default async function AbrirJobNoFinanceiroPage({
              115): ainda sem previsão, envio ou nota, o que acompanha é o
              formulário da aba Abertura do Job. */
           <JobRealizadoSection
+            midiaSystem={null}
             // Tela do financeiro: só leitura, não gera nem envia PP.
             podeGerarAcimaDoOrcado={false}
             papelEnviaPP={false}

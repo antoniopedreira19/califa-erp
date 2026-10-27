@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { situacaoMidiaDaPP, type MidiaSystemDoJob } from "@/lib/calculos/midia-system";
 import { Ban, ChevronDown, ChevronRight, Lock, Plus, Trash2, Undo2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
@@ -212,6 +213,9 @@ interface Props {
   /** Decisão 189: as verbas de que o usuário presta contas, pelo cartão da
    *  verba no painel do item. Telas de leitura não mandam. */
   ppsQuePossoPrestarContas?: string[];
+  /** Decisão 216: o job Mídia System (`null` = não é). Na auditoria a PP
+   *  vai sem NF; depois da liberação, a que foi sem nota presta contas. */
+  midiaSystem: MidiaSystemDoJob | null;
   /** Decisão 156: o CNPJ que a PP nova já traz escolhido. */
   cnpjPadraoDaPP: string | null;
   fornecedores: Array<Pick<Fornecedor, "id" | "nome" | "razao_social" | "status" | "cpf_cnpj">>;
@@ -736,6 +740,7 @@ export function JobItemRealizadoTable({
   tomadoresDaNf,
   tomadorPorEmpresa,
   ppsQuePossoPrestarContas = [],
+  midiaSystem,
   cnpjPadraoDaPP,
   fornecedores,
   empresas,
@@ -2547,6 +2552,7 @@ export function JobItemRealizadoTable({
                 prestacao: pp.prestacao,
                 devolucao: pp.devolucao,
                 podePrestarContas: ppsQuePossoPrestarContas.includes(pp.id),
+                situacaoMidia: situacaoMidiaDaPP(pp, midiaSystem),
                 fornecedorId: pp.fornecedor_id ?? null,
                 empresaId: pp.empresa_id,
                 estabelecimentoId: pp.estabelecimento_id ?? null,
@@ -2602,6 +2608,7 @@ export function JobItemRealizadoTable({
               tomadorPorEmpresa={tomadorPorEmpresa}
               cnpjPadraoDaPP={cnpjPadraoDaPP}
               podeCorrigirNf={papelCorrigeNf}
+              midiaSystem={midiaSystem}
               // Decisão 189: a prestação de contas também pelo cartão da
               // verba — a gaveta abre por cima do painel, que fica aberto.
               onPrestarContas={
@@ -2769,6 +2776,12 @@ export function JobItemRealizadoTable({
               tomadores={tomadoresDaNf}
               podeEditar={ppPrestando !== null && ppsQuePossoPrestarContas.includes(ppPrestando.id)}
               onSuccess={setToast}
+              fornecedor={(() => {
+                const f = ppPrestando?.fornecedor_id
+                  ? fornecedores.find((x) => x.id === ppPrestando.fornecedor_id)
+                  : null;
+                return f ? { nome: f.nome, razao_social: f.razao_social ?? null, cpf_cnpj: f.cpf_cnpj ?? null } : null;
+              })()}
             />
           </>
         );

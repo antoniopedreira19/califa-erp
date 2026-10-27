@@ -696,6 +696,9 @@ export async function abrirJobNoFinanceiro(
       produto: marcaEmpresaRegional.marcaNome,
       empresa_id: parsed.data.empresa_id,
       regional_id: parsed.data.regional_id,
+      // Decisão 216: o job Mídia System dispensa a NF no envio da PP até o
+      // financeiro liberar as notas.
+      midia_system: parsed.data.midia_system,
       competencia_trimestre: primeiraCompetencia.trimestre,
       competencia_ano: primeiraCompetencia.ano,
       custo_previsto_total: custoPrevisto,
@@ -941,6 +944,7 @@ export async function abrirJobNoFinanceiro(
       produto_id: parsed.data.produto_id,
       empresa_id: parsed.data.empresa_id,
       regional_id: parsed.data.regional_id,
+      midia_system: parsed.data.midia_system,
       competencia: rateioLabel(rateio),
       competencias: rateio,
       custo_previsto_total: custoPrevisto,
@@ -1527,13 +1531,38 @@ export async function editarRegistroDaAbertura(
         "nome_financeiro, projeto_financeiro_id, conta_recebimento_id, " +
         "conta_pagamento_id, conta_impostos_id, categoria_id, servico_id, competencia_trimestre, " +
         "competencia_ano, abertura_em_revisao, abertura_revisao_errata_id, " +
-        "data_inicio_prevista, produto_id, empresa_id, regional_id, cliente_id",
+        "data_inicio_prevista, produto_id, empresa_id, regional_id, cliente_id, " +
+        "midia_system, midia_system_liberado_em",
     )
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<any>();
 
   if (!job) return { ok: false, message: "Job não encontrado." };
+
+  // Decisão 216: a Mídia System não volta atrás depois da liberação das
+  // NFs, e o job com PP já enviada sem NF só sai da auditoria pelo
+  // "Liberar NFs". O gatilho `jobs_guarda_midia_system` confere de novo.
+  if (parsed.data.midia_system !== (job.midia_system === true)) {
+    if (job.midia_system_liberado_em) {
+      return { ok: false, message: "As NFs deste job já foram liberadas: a marcação Mídia System não muda mais." };
+    }
+    if (!parsed.data.midia_system) {
+      const { count: semNf } = await supabase
+        .from("pedidos_compra")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("job_id", jobId)
+        .eq("sem_nf_na_auditoria", true)
+        .neq("status", "cancelada");
+      if ((semNf ?? 0) > 0) {
+        return {
+          ok: false,
+          message: "Este job já tem PP enviada sem NF. Para encerrar a auditoria, use “Liberar NFs”.",
+        };
+      }
+    }
+  }
   if (!jobEstaAberto(job.status)) {
     return {
       ok: false,
@@ -1961,6 +1990,7 @@ export async function editarRegistroDaAbertura(
       produto: marcaEmpresaRegional.marcaNome,
       empresa_id: parsed.data.empresa_id,
       regional_id: parsed.data.regional_id,
+      midia_system: parsed.data.midia_system,
       competencia_trimestre: primeiraCompetencia.trimestre,
       competencia_ano: primeiraCompetencia.ano,
       custo_previsto_total: custoPrevisto,
@@ -2154,6 +2184,7 @@ export async function editarRegistroDaAbertura(
         produto_id: job.produto_id ?? null,
         empresa_id: job.empresa_id ?? null,
         regional_id: job.regional_id ?? null,
+        midia_system: job.midia_system === true,
         competencia: rateioLabel(rateioGuardado),
         competencias: ordenarCompetencias(rateioGuardado),
         curva: curvaGuardada,
@@ -2171,6 +2202,7 @@ export async function editarRegistroDaAbertura(
         produto_id: parsed.data.produto_id,
         empresa_id: parsed.data.empresa_id,
         regional_id: parsed.data.regional_id,
+        midia_system: parsed.data.midia_system,
         competencia: rateioLabel(rateio),
         competencias: rateio,
         curva: parsed.data.curva,

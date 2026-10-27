@@ -126,6 +126,7 @@ import { useProtegerSaida } from "@/components/voltar/estado";
 import { nomeDaPagina } from "@/lib/voltar";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ExcecaoNaConfirmacao } from "@/app/(app)/_planilha/excecao-no-fechamento";
+import { CampoMidiaSystem, type MidiaSystemNaAbertura } from "./campo-midia-system";
 
 interface CategoriaOption {
   id: string;
@@ -369,6 +370,10 @@ interface Props {
   saves: SavesDaAbertura | null;
   /** As listas de Marca, Empresa e Regional do registro (decisão 214). */
   opcoesDoRegistro: OpcoesDoRegistro;
+  /** Decisão 216: a liberação das NFs e as PPs que foram sem NF, para o
+   *  campo Mídia System e o "Liberar NFs". Na fila, `MIDIA_SYSTEM_NA_FILA`.
+   *  Obrigatória: prop opcional esconde a fronteira em que o dado some. */
+  midiaSystem: MidiaSystemNaAbertura;
 }
 
 /** O atalho "Visualizar planilha interna" — link ou botão de aba, mesma cara. */
@@ -501,6 +506,7 @@ export function AberturaForm({
   aprovacaoSave,
   saves,
   opcoesDoRegistro,
+  midiaSystem: midiaSystemInfo,
 }: Props) {
   const router = useRouter();
   // Revisão aberta pela fila volta à fila; pela Visualizar Jobs, volta lá
@@ -514,6 +520,14 @@ export function AberturaForm({
   const [editando, setEditando] = React.useState(false);
   const ehRevisao = modo === "revisao";
   const travado = modo === "leitura" && !editando;
+  // Decisão 216: a caixa "Mídia System" — na fila nasce desmarcada; no job
+  // aberto, como está gravada.
+  const [midiaSystem, setMidiaSystem] = React.useState(job.midia_system);
+  const resumoMidia = !midiaSystem
+    ? "Não"
+    : midiaSystemInfo.liberadoEm
+      ? "Sim · NFs liberadas"
+      : "Sim · PPs sem NF até a liberação";
   const ehEdicao =
     modo === "edicao" || ehRevisao || (modo === "leitura" && editando);
   const ultimaFoto = fotos.length > 0 ? fotos[fotos.length - 1] : null;
@@ -1361,6 +1375,7 @@ export function AberturaForm({
       produto_id: marcaId,
       empresa_id: empresaId,
       regional_id: regionalId,
+      midia_system: midiaSystem,
       competencias: compsNumericas,
       curva: semDesembolso
         ? []
@@ -1547,6 +1562,7 @@ export function AberturaForm({
     setMarcaId(marcaDoJob());
     setEmpresaId(empresaDoJob());
     setRegionalId(regionalDoJob());
+    setMidiaSystem(job.midia_system);
     setImpostosSoltos(impostosDoServidor());
     setDatasImposto({});
     setCategoriaId(
@@ -2501,6 +2517,17 @@ export function AberturaForm({
                   </div>
                 </div>
               )}
+              {/* Decisão 216: no fim do registro, em linha inteira. */}
+              <CampoMidiaSystem
+                modo={modo}
+                travado={travado}
+                marcado={midiaSystem}
+                marcadoNoRegistro={job.midia_system}
+                onMarcar={setMidiaSystem}
+                info={midiaSystemInfo}
+                jobId={job.id}
+                jobCodigo={job.codigo}
+              />
             </div>
           </section>
 
@@ -3632,6 +3659,14 @@ export function AberturaForm({
             </div>
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-[12.5px] text-muted-foreground">
+                Mídia System
+              </span>
+              <span className="text-right text-[12.5px] font-semibold">
+                {resumoMidia}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between gap-3">
+              <span className="text-[12.5px] text-muted-foreground">
                 Marca
               </span>
               <span className="text-right text-[12.5px] font-semibold">
@@ -3870,6 +3905,7 @@ export function AberturaForm({
             <ResumoLinha rotulo="Projeto" valor={projetoResumo} />
             <ResumoLinha rotulo="Categoria" valor={categoriaNome} />
             <ResumoLinha rotulo="Serviço" valor={servicoNome} />
+            <ResumoLinha rotulo="Mídia System" valor={resumoMidia} />
             <ResumoLinha rotulo="Cliente" valor={job.cliente_nome ?? "—"} />
             <ResumoLinha rotulo="Marca" valor={marcaNome} />
             <ResumoLinha rotulo="Empresa" valor={empresaNomeEscolhida} />
