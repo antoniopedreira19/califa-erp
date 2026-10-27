@@ -5,6 +5,8 @@ import { z } from "zod";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { createClient } from "@/lib/supabase/server";
+import { montarInvalidasFolhas } from "@/lib/ferias/montar-invalidas-folhas";
+export { montarInvalidasFolhas } from "@/lib/ferias/montar-invalidas-folhas";
 
 type ActionResult =
   | { ok: true; message?: string; count?: number }
@@ -49,7 +51,7 @@ export async function enviarFolhasFerias(input: {
 
   const { data: folhas, error: selErr } = await supabase
     .from("folhas_pagamento")
-    .select("id, status, origem, tipo, anexo_url, colaborador_id")
+    .select("id, status, origem, tipo, anexo_url, colaborador_id, tipo_folha_ferias, lancamento_ferias_id")
     .eq("tenant_id", tenantId)
     .in("id", ids);
 
@@ -66,22 +68,30 @@ export async function enviarFolhasFerias(input: {
     };
   }
 
-  // Valida cada uma antes de atualizar.
-  const invalidas: string[] = [];
-  for (const f of folhas ?? []) {
-    if (f.tipo !== "ferias") {
-      invalidas.push(`${f.id}: não é folha de férias`);
-      continue;
+  // Busca NFs anexadas pelos colaboradores PJ para as folhas de férias california.
+  const lancamentoIds = (folhas ?? [])
+    .filter((f) => f.origem === "california" && f.lancamento_ferias_id)
+    .map((f) => f.lancamento_ferias_id as string);
+
+  let nfsAnexadas = new Set<string>();
+  if (lancamentoIds.length > 0) {
+    const { data: nfs, error: nfErr } = await supabase
+      .from("colaboradores_nf_anexos")
+      .select("escopo_tipo, escopo_id")
+      .in("escopo_id", lancamentoIds)
+      .in("escopo_tipo", ["ferias_usufruto", "ferias_abono"]);
+
+    if (nfErr) {
+      console.error("[rh.ferias.pagamentos.enviar.nf_select]", nfErr.message);
+      return { ok: false, message: "Falha ao verificar NFs dos colaboradores." };
     }
-    if (f.status !== "rascunho") {
-      invalidas.push(`${f.id}: status ${f.status}, só rascunho pode ser enviada`);
-      continue;
-    }
-    if (f.origem === "contabilidade" && !f.anexo_url) {
-      invalidas.push(`${f.id}: CLT sem recibo contábil anexado`);
-      continue;
-    }
+    nfsAnexadas = new Set(
+      (nfs ?? []).map((nf) => `${nf.escopo_id}|${nf.escopo_tipo}`),
+    );
   }
+
+  // Valida cada folha antes de atualizar.
+  const invalidas = montarInvalidasFolhas(folhas ?? [], nfsAnexadas);
   if (invalidas.length > 0) {
     return {
       ok: false,
