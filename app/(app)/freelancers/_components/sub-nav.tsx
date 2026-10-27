@@ -2,7 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, ClipboardList, Users, type LucideIcon } from "lucide-react";
+import {
+  LayoutDashboard,
+  ClipboardList,
+  Users,
+  UserCog,
+  type LucideIcon,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type SubNavItem = {
@@ -38,10 +44,20 @@ const items: SubNavItem[] = [
       p.startsWith("/freelancers/novo/") ||
       p.startsWith("/freelancers/contratos/") ||
       // Qualquer /freelancers/<id>/* não coberto acima também acende "Freelancers".
-      // Match defensivo: tudo que começa com /freelancers/ e NÃO é dashboard ou solicitações.
+      // Match defensivo: tudo que começa com /freelancers/ e NÃO é dashboard,
+      // solicitações ou responsáveis.
       (p.startsWith("/freelancers/") &&
         !p.startsWith("/freelancers/solicitacoes") &&
+        !p.startsWith("/freelancers/responsaveis") &&
         p !== "/freelancers"),
+  },
+  {
+    href: "/freelancers/responsaveis",
+    label: "Responsáveis",
+    icon: UserCog,
+    isActive: (p) =>
+      p === "/freelancers/responsaveis" ||
+      p.startsWith("/freelancers/responsaveis/"),
   },
 ];
 
