@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { BarChart3, ArrowRight, TrendingUp, FileText, ScrollText, MapPinned, BadgePercent, type LucideIcon } from "lucide-react";
+import { BarChart3, ArrowRight, TrendingUp, FileText, ScrollText, MapPinned, BadgePercent, Receipt, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -51,6 +51,12 @@ export default async function RelatoriosPage() {
               icon={BadgePercent}
               title="Rentabilidade dos jobs do histórico"
               description="Resultado e rentabilidade depois do fee de cada job das abas Res. Jobs, por cliente, marca ou job."
+            />
+            <RelatorioCard
+              href="/relatorios/faturamento-historico"
+              icon={Receipt}
+              title="Faturamento dos jobs do histórico"
+              description="Notas emitidas, recebido e a receber de cada job das abas Res. Jobs, por cliente, marca ou job."
             />
           </>
         )}

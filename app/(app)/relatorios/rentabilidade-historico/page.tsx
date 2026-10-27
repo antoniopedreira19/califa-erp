@@ -9,30 +9,11 @@ import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { formatDiaBr } from "@/lib/formatar-data-hora";
 import { montarRentabilidade, type VisaoDaRentabilidade } from "@/lib/historico-financeiro/rentabilidade";
 import { Aviso, Filtro, Filtros, Opcao, anosEntre } from "../_historico/filtros";
+import { EMPRESAS, PERIODOS, VISOES } from "../_historico/jobs";
 import { carregarJobsDoAno } from "./dados";
 import { TabelaRentabilidade } from "./tabela-rentabilidade";
 
 export const dynamic = "force-dynamic";
-
-/** As empresas com abas Res. Jobs, com o endereço de cada uma. */
-const EMPRESAS: readonly { slug: string; empresa: string }[] = [
-  { slug: "california", empresa: "Agência California" },
-  { slug: "cch", empresa: "CCH" },
-  { slug: "hitlab", empresa: "Hitlab" },
-  { slug: "ventura", empresa: "Ventura" },
-];
-const PERIODOS: readonly { slug: string; rotulo: string; trimestre: string | null }[] = [
-  { slug: "ano", rotulo: "Ano", trimestre: null },
-  { slug: "1", rotulo: "1º tri", trimestre: "1T" },
-  { slug: "2", rotulo: "2º tri", trimestre: "2T" },
-  { slug: "3", rotulo: "3º tri", trimestre: "3T" },
-  { slug: "4", rotulo: "4º tri", trimestre: "4T" },
-];
-const VISOES: readonly { slug: VisaoDaRentabilidade; rotulo: string }[] = [
-  { slug: "cliente", rotulo: "Cliente" },
-  { slug: "marca", rotulo: "Marca" },
-  { slug: "job", rotulo: "Job" },
-];
 
 interface Props {
   searchParams: Promise<Record<string, string | string[] | undefined>>;

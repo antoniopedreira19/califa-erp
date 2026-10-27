@@ -79,8 +79,14 @@ export type RentabilidadeDosJobs = {
   semFee: number;
 };
 
-/** A chave e o rótulo do grupo de um job: o cadastro do sistema, ou o texto da planilha. */
-function grupoDoJob(job: JobDoHistorico, visao: VisaoDaRentabilidade): { chave: string; rotulo: string; detalhe: string | null } {
+/**
+ * A chave e o rótulo do grupo de um job: o cadastro do sistema, ou o texto da
+ * planilha. O faturamento dos jobs do histórico agrupa do mesmo jeito.
+ */
+export function grupoDoJob(
+  job: Pick<JobDoHistorico, "chave" | "nome" | "clienteId" | "cliente" | "marcaId" | "marca">,
+  visao: VisaoDaRentabilidade,
+): { chave: string; rotulo: string; detalhe: string | null } {
   if (visao === "job") {
     return { chave: job.chave, rotulo: job.nome, detalhe: [job.cliente, job.marca].filter(Boolean).join(" · ") || null };
   }

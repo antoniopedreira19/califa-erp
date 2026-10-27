@@ -8266,6 +8266,26 @@ os arquivos da frente do Antonio.
   da CCH de 2025 e 2026 e da Hitlab) estão na
   [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
 
+## ⚠️ Nota de 2026-10-26 (11) — o faturamento dos jobs do histórico em Relatórios (decisão 211, A4)
+
+- **Onde:** Relatórios › "Faturamento dos jobs do histórico"
+  (`/relatorios/faturamento-historico`), cartão só para admin e financeiro,
+  com os filtros da rentabilidade do histórico (agora em
+  `app/(app)/relatorios/_historico/jobs.ts`).
+- **Regra (Tiago, 26/10/2026):** as notas do job, o par do Faturamento de
+  Jobs. O histórico não tem o valor contratado, então a tela compara o
+  faturado (as notas emitidas do job, em qualquer data) com o recebido (as
+  notas com data de recebimento na planilha) e mostra o a receber. Na visão
+  por job, a situação: Recebido, Parcial, A receber ou Sem nota. O recebido é
+  o da nota, não o banco: a receita do banco por job está na rentabilidade.
+- **Banco:** a função `historico_faturamento_jobs` (migration
+  `20261026100012`), só de leitura, com a trava de admin e financeiro.
+- **Código e conferência:** `lib/historico-financeiro/faturamento.ts` (com
+  testes) e `scripts/historico-financeiro/conferir-faturamento.ts`, que refaz o
+  SUMIFS da coluna IMPOSTO com o valor da nota. Batem 2.688 de 2.712 jobs; os
+  24 que diferem estão na
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
 ## Código do projeto do financeiro sem a sigla — 23/10/2026 (decisão 210)
 
 Aplicada em 26/10/2026 (migration `20261023950001`, destrutiva, na hora

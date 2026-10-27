@@ -40,6 +40,7 @@ npx tsx scripts/historico-financeiro/revisao.ts "$V"
 npx tsx scripts/historico-financeiro/empacotar.ts "$V" --carga "1ª carga"
 npx tsx scripts/historico-financeiro/conferir-dre.ts "$V"
 npx tsx scripts/historico-financeiro/conferir-rentabilidade.ts "$V" --padronizado --com-previsoes
+npx tsx scripts/historico-financeiro/conferir-faturamento.ts "$V"
 npx tsx scripts/historico-financeiro/conferir-regional.ts "$V" --padronizado --com-previsoes \
   --fechamento "$T/fechamento-2026-10-26/origem.xlsx"
 ```
@@ -127,11 +128,17 @@ marcas, plano de contas, serviços, regionais, contas e os jobs abertos. O
   RENTABILIDADE das abas Res. Jobs (`lib/historico-financeiro/rentabilidade.ts`)
   e compara com a linha do job na aba mais nova dele. Com `--com-previsoes`,
   o imposto conta também as notas a emitir, como a planilha.
+- **Faturamento dos jobs, `conferir-faturamento.ts`:** a planilha não tem
+  coluna de faturado; o script refaz, em cada linha de job, o SUMIFS da coluna
+  IMPOSTO (as mesmas abas de Faturamento e o mesmo critério) com o Valor das
+  notas emitidas no período da carga e com o das que têm data de recebimento,
+  e compara com as notas do pacote ligadas ao job
+  (`lib/historico-financeiro/faturamento.ts`).
 - As opções de fonte das conferências estão em `movimentos-para-conferir.ts`,
   que traz também os jobs e os impostos das notas da mesma fonte.
 
 ## Testes
 
 ```bash
-node --import tsx --test lib/historico-financeiro/extracao.test.ts lib/historico-financeiro/regras.test.ts lib/historico-financeiro/formulas.test.ts lib/historico-financeiro/pacote.test.ts lib/historico-financeiro/dre.test.ts lib/historico-financeiro/regional.test.ts
+node --import tsx --test lib/historico-financeiro/extracao.test.ts lib/historico-financeiro/regras.test.ts lib/historico-financeiro/formulas.test.ts lib/historico-financeiro/pacote.test.ts lib/historico-financeiro/dre.test.ts lib/historico-financeiro/regional.test.ts lib/historico-financeiro/rentabilidade.test.ts lib/historico-financeiro/faturamento.test.ts
 ```

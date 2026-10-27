@@ -7,10 +7,10 @@ e E3 (validação, com as DREs e as abas Gerencial) implementadas em
 dia. A1 (as tabelas de histórico, com a do rateio, e a tela de carga) e A2
 (a primeira carga, de 01/01/2023 a 30/06/2026, com as contas Fundo Fixo
 California e BB Americas criadas antes) feitas e conferidas em 26/10/2026,
-A3 (o histórico de cada conta no Extrato da Conciliação) e duas entregas da
-A4 (a DRE do histórico e o resultado por regional, em Relatórios) no mesmo
-dia. Próxima entrega: a rentabilidade e o faturamento dos jobs do histórico
-(A4).
+A3 (o histórico de cada conta no Extrato da Conciliação) e a A4 (a DRE do
+histórico, o resultado por regional, a rentabilidade e o faturamento dos jobs
+do histórico, em Relatórios) no mesmo dia. Próxima entrega: a A5 (a recarga
+do 3T), quando chegar a planilha com o 3T fechado.
 **Quem decidiu:** Tiago, no plano "Importação do histórico financeiro"
 (página privada de 25/10/2026), com as respostas D1, D2 e D3 dadas no mesmo
 dia: "Aprovo D1, D2 e D3 como você recomendou".
@@ -522,6 +522,45 @@ internas." O relatório mostra as duas contas das abas Res. Jobs:
   financeiro uma vez. A conta fica em
   `lib/historico-financeiro/rentabilidade.ts`.
 
+### O faturamento dos jobs em Relatórios (A4, 26/10/2026)
+
+**Decidido (Tiago, 26/10/2026):** a planilha usa "faturamento" em dois
+sentidos — o valor das notas e o que entrou no banco (a aba "Fat por cliente"
+soma o TOTAL RECEITA das abas Res. Jobs, a receita da rentabilidade). Entre
+três leituras (as notas do job; a aba "Fat por cliente"; as notas pela data de
+emissão), o Tiago escolheu a das notas do job, o par do Faturamento de Jobs do
+sistema. O histórico não tem o valor contratado do job, então a comparação é o
+faturado com o recebido:
+
+| Coluna | De onde vem |
+|---|---|
+| Notas | as notas emitidas do job nas abas de Faturamento (as canceladas e as previsões não entram no histórico) |
+| Faturado | o valor dessas notas, em qualquer data |
+| Recebido | as notas com data de recebimento na planilha |
+| A receber | as notas sem essa data |
+| Situação (só na visão por job) | Recebido, Parcial, A receber ou Sem nota |
+| Período | o ano e o trimestre do job (a aba Res. Jobs e a coluna T) |
+
+- **Onde:** Relatórios › "Faturamento dos jobs do histórico"
+  (`/relatorios/faturamento-historico`), cartão só para admin e financeiro,
+  com os filtros da rentabilidade (empresa, ano, período e visão por cliente,
+  marca ou job), que agora moram em `app/(app)/relatorios/_historico/jobs.ts`.
+- **O job sem nota entra com zero e a situação "Sem nota",** para o total de
+  jobs ser o mesmo da rentabilidade: 51 dos 634 jobs da California em 2025,
+  36 deles sem receita nem custo no histórico.
+- **O recebimento é o que a planilha registra,** na versão da carga
+  (25/10/2026): a nota emitida até 30/06/2026 e recebida depois aparece como
+  recebida (R$ 282.715,12 nos jobs da California de 2025). Não é o banco: nos
+  jobs da California de 2025, as notas recebidas até 30/06/2026 somam
+  R$ 89.989.740,52 e a receita do Tipo REC, R$ 86.063.648,05. Os dois batem em
+  544 dos 634 jobs; em 82, a nota está recebida e o banco do job tem
+  R$ 4.024.261,90 a menos, e em 8 o banco tem R$ 98.169,97 a mais (o Tiago
+  viu a diferença antes de escolher).
+- A leitura é a função `historico_faturamento_jobs` (migration
+  `20261026100012_historico_faturamento_dos_jobs.sql`), que confere admin e
+  financeiro uma vez e leva cerca de 30 ms. A situação e as somas ficam em
+  `lib/historico-financeiro/faturamento.ts`.
+
 ## O pipeline (E1, E2 e E3)
 
 Código em `lib/historico-financeiro/` (regras puras, com teste) e
@@ -804,12 +843,53 @@ branco. A CCH de 2025 bate na receita (108/108), no imposto (98) e no custo
 (108), e não no resultado, pela fórmula dela. "Batem" inclui os centavos das
 frações da planilha.
 
+## Conferido em 26/10/2026 (A4, faturamento dos jobs)
+
+As abas Res. Jobs não têm coluna de faturado. A coluna IMPOSTO de cada job
+soma, por SUMIFS, o Total Impostos das abas de Faturamento cujo JOB é o nome
+do job. `scripts/historico-financeiro/conferir-faturamento.ts` refaz esse
+SUMIFS em cada linha de job de 2023 a 2026, com as mesmas abas e o mesmo
+critério. No lugar do Total Impostos, soma o Valor das notas emitidas no
+período da carga (o faturado) e o das que têm data de recebimento (o
+recebido), e compara com as notas do pacote:
+
+| Aba | Notas | Faturado | Recebido |
+|---|---|---|---|
+| California 2023 | 362/364 | 362/364 | 362/364 |
+| California 2024 | 450/450 | 450/450 | 450/450 |
+| California 2025 | 586/588 | 586/588 | 586/588 |
+| California 2026 | 634/635 | 634/635 | 634/635 |
+| Go Crazy 2024 a 2026 | 93/94 | 93/94 | 93/94 |
+| CCH 2023 a 2026 | 507/524 | 507/524 | 513/524 |
+| Hitlab 2024 a 2026 | 54/55 | 54/55 | 54/55 |
+| Ventura 2026 | 2/2 | 2/2 | 2/2 |
+
+Os 24 jobs que diferem, de 2.712, são os mesmos motivos do imposto na
+rentabilidade:
+- **19 jobs:** o histórico liga ao job uma nota de uma aba de Faturamento que
+  a fórmula dele não soma. Quase todos são da CCH faturados pelo CNPJ da Go
+  Crazy, que a coluna IMPOSTO da CMH não olha.
+- **4 jobs:** o JOB da nota tem espaço sobrando ou acento diferente. O SUMIFS
+  conta essa diferença; o histórico apara o texto.
+- **1 job:** o mesmo nome está na aba da CCH e na da California. A planilha
+  soma as mesmas duas notas nas duas linhas; o histórico as liga a um job só.
+
+Uma linha da Hitlab de 2024 não tem a fórmula.
+
+- **Na tela**, os totais são os das notas do pacote. Na California de 2025:
+  634 jobs, 865 notas, R$ 92.542.399,09 faturados, R$ 90.272.455,64
+  recebidos e R$ 2.269.943,45 a receber, com 570 jobs recebidos, 10 parciais,
+  3 a receber e 51 sem nota. Na CCH de 2024: 166 jobs, 184 notas e
+  R$ 6.250.984,77 faturados.
+- **Somas e acesso:** a soma das linhas fecha com o total nas três visões e
+  num trimestre (2T de 2025). Para um usuário produtor, a função devolve nulo.
+- **Ambiente:** sem erro no console nem no servidor, e build OK.
+
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas
   85 e 91 da Res. Jobs 2026; R$ 1.520.000,00 de benefício): o histórico segue a
   alíquota e o faturamento. Quando a carga do 3T trouxer a receita da Copa,
   vale confirmar com o Tiago se o imposto da Copa deve seguir o digitado.
-- A4: o faturamento dos jobs do histórico.
 - Revisar o rateio de um ano, mantendo o registro da planilha dos anos
   fechados. O RH tem a própria tabela de rateio
   (`empresas_rateios_regionais`, do Antonio), com percentuais diferentes dos
