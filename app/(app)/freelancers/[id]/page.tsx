@@ -222,26 +222,32 @@ export default async function FreelancerPerfilPage({
 
   const responsaveisDisponiveis: ResponsavelOption[] = [];
   if (podeTransferirResp) {
-    const respRes = await supabase
+    // Query em duas etapas (sem embed PostgREST): a FK de tenant_members.user_id
+    // aponta pra auth.users, nao pra profiles — profiles!inner retorna vazio.
+    const { data: membros } = await supabase
       .from("tenant_members")
-      .select("profiles!inner(id, nome)")
+      .select("user_id")
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo")
       .in("role", ROLES_RESPONSAVEL);
-    const rows = (respRes.data ?? []) as unknown as Array<{
-      profiles: { id: string; nome: string } | { id: string; nome: string }[];
-    }>;
-    const uniq = new Map<string, string>();
-    for (const r of rows) {
-      const list = Array.isArray(r.profiles) ? r.profiles : [r.profiles];
-      for (const p of list) {
-        if (p?.id && p?.nome) uniq.set(p.id, p.nome);
+    const userIds = Array.from(
+      new Set(
+        ((membros ?? []) as Array<{ user_id: string }>).map((m) => m.user_id),
+      ),
+    );
+    if (userIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, nome")
+        .in("id", userIds)
+        .eq("ativo", true)
+        .order("nome", { ascending: true });
+      for (const p of ((profiles ?? []) as Array<{
+        id: string;
+        nome: string;
+      }>)) {
+        responsaveisDisponiveis.push({ id: p.id, nome: p.nome });
       }
-    }
-    for (const [id, nome] of Array.from(uniq.entries()).sort((a, b) =>
-      a[1].localeCompare(b[1], "pt-BR"),
-    )) {
-      responsaveisDisponiveis.push({ id, nome });
     }
   }
 
