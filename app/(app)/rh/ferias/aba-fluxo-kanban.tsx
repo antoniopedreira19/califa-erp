@@ -16,7 +16,7 @@ type ColConfig = {
 const COLUNAS: ColConfig[] = [
   {
     key: "pendente",
-    titulo: "Pendente",
+    titulo: "Pendentes de aprovação",
     cor: "bg-amber-50 border-amber-200 text-amber-800",
   },
   {
@@ -26,17 +26,17 @@ const COLUNAS: ColConfig[] = [
   },
   {
     key: "enviada",
-    titulo: "Enviada",
+    titulo: "Enviadas",
     cor: "bg-violet-50 border-violet-200 text-violet-800",
   },
   {
     key: "parcial",
-    titulo: "Parcial",
+    titulo: "Parcialmente paga",
     cor: "bg-fuchsia-50 border-fuchsia-200 text-fuchsia-800",
   },
   {
     key: "finalizada",
-    titulo: "Finalizada",
+    titulo: "Finalizadas",
     cor: "bg-slate-100 border-slate-300 text-slate-700",
   },
 ];
@@ -125,7 +125,7 @@ function ColunaKanban({ config, rows }: { config: ColConfig; rows: RhFeriasFluxo
       >
         <span className="font-medium text-sm truncate">{config.titulo}</span>
         <span
-          className={`ml-auto shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold border ${config.cor}`}
+          className="ml-auto shrink-0 rounded-full bg-white border border-border px-2 py-0.5 text-xs font-semibold text-foreground"
         >
           {rows.length}
         </span>
