@@ -25,6 +25,7 @@ import {
   BellRing,
   Clock,
   CalendarDays,
+  User,
 } from "lucide-react";
 import {
   cn,
@@ -676,6 +677,16 @@ export function ContratoCard({
                   </span>
                 </>
               )}
+              {contrato.responsavel_id &&
+                gpNomesPorId?.[contrato.responsavel_id] && (
+                  <>
+                    <span className="h-1 w-1 rounded-full bg-border" />
+                    <span className="inline-flex items-center gap-1">
+                      <User className="h-3 w-3" />
+                      {gpNomesPorId[contrato.responsavel_id]}
+                    </span>
+                  </>
+                )}
             </div>
 
             {/* Contador de duração + tempo restante */}

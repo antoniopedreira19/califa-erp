@@ -83,12 +83,15 @@ interface Props {
   podeEditar: boolean;
   /** Contrato "atual" (vigente hoje) — alimenta período, cargo, cidade, valor, responsável. */
   contratoAtual?: HeroContratoAtual | null;
+  /** Botão/dialog de solicitar novo contrato. Composto pela page (precisa de jobs/cargos). */
+  botaoSolicitarContrato?: React.ReactNode;
 }
 
 export function HeroFreelancer({
   freelancer: f,
   podeEditar,
   contratoAtual,
+  botaoSolicitarContrato,
 }: Props) {
   const [valorVisivel, setValorVisivel] = React.useState(false);
   const avatarIniciais = initials(f.nome_social);
@@ -238,25 +241,16 @@ export function HeroFreelancer({
           )}
           <div className="flex items-center gap-2 flex-wrap justify-end">
             {podeEditar && (
-              <>
-                <Link
-                  href={`/freelancers/${f.id}/editar`}
-                  prefetch={false}
-                  className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 hover:border-white/30 transition-all"
-                >
-                  <Edit2 className="h-3.5 w-3.5" />
-                  Editar perfil
-                </Link>
-                <Link
-                  href={`/freelancers/contratos/novo?freelancer=${f.id}`}
-                  prefetch={false}
-                  className="inline-flex items-center gap-2 rounded-lg bg-california-red px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-california-red-hover transition-colors"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Novo contrato
-                </Link>
-              </>
+              <Link
+                href={`/freelancers/${f.id}/editar`}
+                prefetch={false}
+                className="inline-flex items-center gap-2 rounded-lg border border-white/20 bg-white/5 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10 hover:border-white/30 transition-all"
+              >
+                <Edit2 className="h-3.5 w-3.5" />
+                Editar perfil
+              </Link>
             )}
+            {botaoSolicitarContrato}
           </div>
         </div>
       </div>

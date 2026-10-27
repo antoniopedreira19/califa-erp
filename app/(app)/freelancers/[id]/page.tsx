@@ -13,6 +13,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type {
   Freelancer,
+  FreelancerCargo,
   FreelancerContrato,
   TipoContaBancariaFornecedor,
 } from "@/lib/types";
@@ -22,8 +23,12 @@ import { AbasPerfil } from "../_components/abas-perfil";
 import { BlocoInfo, Linha } from "../_components/bloco-info";
 import { ContratoCard } from "../contratos/_components/contrato-card";
 import { HistoricoContratoTimeline } from "../_components/historico-contrato-timeline";
+import { NovaSolicitacaoDialog } from "../solicitacoes/_components/nova-solicitacao-dialog";
+import type { JobItem } from "../_components/job-picker";
 import { formatCnpj, formatCep, formatTelefone } from "@/lib/utils";
 import { PIX_TIPOS } from "@/lib/pix";
+
+const JOBS_STATUS_EXCLUIDOS = ["cancelado", "rejeitado_financeiro"];
 
 const TIPO_CONTA_ROTULO: Record<TipoContaBancariaFornecedor, string> = {
   corrente: "Conta corrente",
@@ -43,29 +48,44 @@ export default async function FreelancerPerfilPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [freelancerRes, contratosRes, historicoRes] = await Promise.all([
-    supabase
-      .from("freelancers")
-      .select("*")
-      .eq("id", params.id)
-      .eq("tenant_id", session.activeTenant.id)
-      .maybeSingle(),
-    supabase
-      .from("freelancer_contratos")
-      .select("*, job:jobs(codigo, nome)")
-      .eq("freelancer_id", params.id)
-      .eq("tenant_id", session.activeTenant.id)
-      .order("data_inicio", { ascending: false, nullsFirst: false })
-      .order("created_at", { ascending: false }),
-    supabase
-      .from("freelancer_contrato_historico")
-      .select(
-        "*, autor:profiles!alterado_por(nome), contrato:freelancer_contratos!contrato_id(nome_job, freelancer_id)",
-      )
-      .eq("tenant_id", session.activeTenant.id)
-      .order("alterado_em", { ascending: false })
-      .limit(200),
-  ]);
+  const [freelancerRes, contratosRes, historicoRes, jobsRes, cargosRes] =
+    await Promise.all([
+      supabase
+        .from("freelancers")
+        .select("*")
+        .eq("id", params.id)
+        .eq("tenant_id", session.activeTenant.id)
+        .maybeSingle(),
+      supabase
+        .from("freelancer_contratos")
+        .select("*, job:jobs(codigo, nome)")
+        .eq("freelancer_id", params.id)
+        .eq("tenant_id", session.activeTenant.id)
+        .order("data_inicio", { ascending: false, nullsFirst: false })
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("freelancer_contrato_historico")
+        .select(
+          "*, autor:profiles!alterado_por(nome), contrato:freelancer_contratos!contrato_id(nome_job, freelancer_id)",
+        )
+        .eq("tenant_id", session.activeTenant.id)
+        .order("alterado_em", { ascending: false })
+        .limit(200),
+      supabase
+        .from("jobs")
+        .select("id, codigo, nome, status")
+        .eq("tenant_id", session.activeTenant.id)
+        .not("status", "in", `(${JOBS_STATUS_EXCLUIDOS.join(",")})`)
+        .order("codigo", { ascending: false })
+        .limit(500),
+      supabase
+        .from("freelancer_cargos")
+        .select("*")
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("ativo", true)
+        .order("nome", { ascending: true })
+        .returns<FreelancerCargo[]>(),
+    ]);
 
   const freelancer = freelancerRes.data as Freelancer | null;
 
@@ -174,6 +194,35 @@ export default async function FreelancerPerfilPage({
 
   const podeEditar = PODE_EDITAR.has(session.activeRole);
   const isRh = podeEditar; // administrador/rh/financeiro
+
+  const jobsNovaSolic: JobItem[] = (jobsRes.data ?? []).map((j: any) => ({
+    id: j.id as string,
+    codigo: j.codigo as string,
+    nome: j.nome as string,
+  }));
+  const cargosNovaSolic = cargosRes.data ?? [];
+
+  const botaoSolicitarContrato = (
+    <NovaSolicitacaoDialog
+      jobs={jobsNovaSolic}
+      cargos={cargosNovaSolic}
+      freelancer={{
+        id: freelancer.id,
+        nome: freelancer.nome_social,
+        cpf: freelancer.cpf,
+      }}
+      trigger={
+        <button
+          type="button"
+          className="inline-flex items-center gap-2 rounded-lg bg-california-red px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-california-red-hover transition-colors"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Solicitar novo contrato
+        </button>
+      }
+    />
+  );
+
   const abaContratos = (() => {
     if (contratosOrdenados.length === 0) {
       return (
@@ -188,16 +237,7 @@ export default async function FreelancerPerfilPage({
             Freelancers precisam ter contrato pra registrar valor, cargo e
             período de trabalho em um job.
           </p>
-          {podeEditar && (
-            <Link
-              href={`/freelancers/contratos/novo?freelancer=${freelancer.id}`}
-              prefetch={false}
-              className="mt-4 inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red-hover transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              Novo contrato
-            </Link>
-          )}
+          <div className="mt-4 inline-flex">{botaoSolicitarContrato}</div>
         </div>
       );
     }
@@ -365,6 +405,7 @@ export default async function FreelancerPerfilPage({
         freelancer={freelancer}
         podeEditar={podeEditar}
         contratoAtual={heroContratoAtual}
+        botaoSolicitarContrato={botaoSolicitarContrato}
       />
       <AbasPerfil
         dados={dadosPessoais}
