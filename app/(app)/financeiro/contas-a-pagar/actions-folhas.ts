@@ -388,6 +388,11 @@ export async function aprovarLinhaFolha(
     };
   }
 
+  // Captura o valor original logo após o SELECT, antes de qualquer edição,
+  // para que um refactor que adicione refresh do objeto não silenciosamente
+  // iguale valor_original a valor_aprovado no audit.
+  const valorOriginal = (centavos(folha.salario_base) / 100).toFixed(2);
+
   // 2) Valida tudo antes de gravar qualquer coisa
   const parsedEdicoes = edicoes ? linhaFolhaSchema.safeParse(edicoes) : null;
   if (parsedEdicoes && !parsedEdicoes.success) {
@@ -735,7 +740,6 @@ export async function aprovarLinhaFolha(
     return { ok: false, message: "Falha ao marcar como aprovada." };
   }
 
-  const valorOriginal = (centavos(folha.salario_base) / 100).toFixed(2);
   const valorEditado = centavos(salarioFinal) !== centavos(folha.salario_base);
 
   await logAuditEvent({
