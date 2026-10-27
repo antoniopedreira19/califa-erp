@@ -9,61 +9,14 @@ import type {
   ColaboradorFeriasPeriodo,
   TipoContratacao,
 } from "@/lib/types";
+import {
+  solicitarFeriasSchema,
+  ANTECEDENCIA_MINIMA_DIAS,
+} from "@/lib/ferias/solicitar-ferias-schema";
 
 type ActionResult =
   | { ok: true; id: string }
   | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
-
-const ANTECEDENCIA_MINIMA_DIAS = 5; // Decisão F13
-
-// ---------- Validação ----------
-
-const solicitarSchema = z
-  .object({
-    tipo: z.enum(["usufruto", "abono_avulso", "misto"]),
-    periodo_id: z.string().uuid().nullable(),
-    data_inicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data de início inválida."),
-    data_fim: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data de fim inválida."),
-    observacao: z.string().max(500).optional().nullable(),
-  })
-  .superRefine((data, ctx) => {
-    const ini = new Date(data.data_inicio + "T00:00:00");
-    const fim = new Date(data.data_fim + "T00:00:00");
-    if (fim < ini) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["data_fim"],
-        message: "A data de fim precisa ser igual ou posterior à data de início.",
-      });
-    }
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
-    const minimo = new Date(hoje);
-    minimo.setDate(hoje.getDate() + ANTECEDENCIA_MINIMA_DIAS);
-    if (ini < minimo) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["data_inicio"],
-        message: `A solicitação precisa ser feita com pelo menos ${ANTECEDENCIA_MINIMA_DIAS} dias de antecedência.`,
-      });
-    }
-    // abono_avulso não vincula a período
-    if (data.tipo === "abono_avulso" && data.periodo_id !== null) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["periodo_id"],
-        message: "Abono avulso não é vinculado a um período aquisitivo específico.",
-      });
-    }
-    // usufruto e misto PRECISAM de período
-    if ((data.tipo === "usufruto" || data.tipo === "misto") && !data.periodo_id) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["periodo_id"],
-        message: "Escolha o período aquisitivo das férias.",
-      });
-    }
-  });
 
 function diasEntre(iniStr: string, fimStr: string): number {
   const ini = new Date(iniStr + "T00:00:00");
@@ -75,7 +28,7 @@ function diasEntre(iniStr: string, fimStr: string): number {
 
 export async function solicitarFerias(input: unknown): Promise<ActionResult> {
   const session = await requireSession();
-  const parsed = solicitarSchema.safeParse(input);
+  const parsed = solicitarFeriasSchema.safeParse(input);
   if (!parsed.success) {
     return {
       ok: false,
@@ -116,8 +69,11 @@ export async function solicitarFerias(input: unknown): Promise<ActionResult> {
     };
   }
 
-  const dias = diasEntre(dados.data_inicio, dados.data_fim);
-  if (dias <= 0 || dias > 30) {
+  const diasFolga = diasEntre(dados.data_inicio, dados.data_fim);
+  // Pra abono_combinado, `dias` é o TOTAL consumido do saldo (folga + vendidos).
+  // Pros outros tipos, `dias = diasFolga` (dias_abono é sempre 0).
+  const dias = diasFolga + dados.dias_abono;
+  if (diasFolga <= 0 || dias > 30) {
     return {
       ok: false,
       message: "A solicitação precisa ter entre 1 e 30 dias.",
@@ -191,10 +147,11 @@ export async function solicitarFerias(input: unknown): Promise<ActionResult> {
       tenant_id: colab.tenant_id,
       colaborador_id: colab.id,
       periodo_id: dados.periodo_id,
-      tipo: dados.tipo === "misto" ? "usufruto" : dados.tipo,
+      tipo: dados.tipo,
       data_inicio: dados.data_inicio,
       data_fim: dados.data_fim,
       dias,
+      dias_abono: dados.dias_abono,
       status: "pendente_aprovacao",
       solicitado_por: session.profile.id,
       observacao: dados.observacao || null,
