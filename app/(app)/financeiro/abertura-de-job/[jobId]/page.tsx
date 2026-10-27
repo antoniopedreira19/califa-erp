@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import { COMITE_DA_PP_SEM_ACAO } from "@/lib/data/comite";
 import { ClipboardCheck, Landmark, TrendingUp } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -473,7 +474,8 @@ export default async function AbrirJobNoFinanceiroPage({
           <JobRealizadoSection
             midiaSystem={null}
             // Tela do financeiro: só leitura, não gera nem envia PP.
-            podeGerarAcimaDoOrcado={false}
+            comiteDaPP={COMITE_DA_PP_SEM_ACAO}
+            emDecisaoPP={null}
             papelEnviaPP={false}
             papelCorrigeNf={false}
             confirmarSaidaParaOrcamento

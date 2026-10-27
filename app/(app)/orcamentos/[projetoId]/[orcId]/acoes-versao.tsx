@@ -31,6 +31,9 @@ interface Props {
   /** Orçamento ou projeto arquivado (decisão 118): só o Exportar fica —
    *  duplicar já cai em `podeCriarVersao`, e excluir some. */
   arquivado: boolean;
+  /** Versão aguardando o Comitê de Aprovações (decisão 223): não se
+   *  exclui enquanto ele decide. */
+  aguardandoComite: boolean;
   /** Presente ⇒ "Exportar" fica desabilitado com este motivo. O modelo
    *  mensal usou até 15/09/2026, quando a exportação dele entrou (078). */
   exportarBloqueado?: string;
@@ -66,6 +69,7 @@ export function AcoesVersao({
   podeCriarVersao,
   motivoBloqueio,
   arquivado,
+  aguardandoComite,
   exportarBloqueado,
 }: Props) {
   const router = useRouter();
@@ -116,7 +120,7 @@ export function AcoesVersao({
   // é uma ação que não existe ali (decisão do Tiago). Apagá-la esvaziaria
   // `orcamentos.versao_aprovada_id` em silêncio; o caminho é "Cancelar
   // aprovação" e só então deletar.
-  const mostrarDeletar = status !== "aprovada" && !arquivado;
+  const mostrarDeletar = status !== "aprovada" && !arquivado && !aguardandoComite;
   // A última fica visível e travada: some seria pior, porque o botão
   // apareceria e sumiria conforme se cria versão, sem explicar a regra.
   const ehUnicaVersao = totalVersoes <= 1;

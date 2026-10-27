@@ -30,13 +30,23 @@ import { NUMEROS_PLANILHA } from "@/app/(app)/_planilha/blocos";
  */
 
 import * as React from "react";
-import { acimaDoOrcado } from "@/lib/calculos/limites-orcamento";
+import {
+  acimaDoOrcado,
+  ppCobertaPeloComite,
+  ppPassaDoOrcadoNoComite,
+} from "@/lib/calculos/limites-orcamento";
+import type { ComiteDaPP } from "@/lib/data/comite";
+import {
+  SolicitarAprovacaoDialog,
+  linhasDoMotivoDaPP,
+} from "@/app/(app)/comite/_componentes/motivo-do-caso";
 import { useRouter } from "next/navigation";
 import {
   X,
   AlertTriangle,
   ShieldAlert,
   Columns2,
+  Gavel,
   Lock,
   Pencil,
   Plus,
@@ -105,6 +115,7 @@ import {
   previaDoPdfDaPP,
   reservarPedidoCompra,
   salvarPPAEmitir,
+  solicitarAprovacaoDaPP,
   prefixoAnexosPPAEmitir,
   signedUrlAnexo,
   signedUrlAnexoAEmitir,
@@ -218,9 +229,11 @@ interface Props {
    *  orçado). Continua sendo referência do alerta de planejado. */
   valorPlanejado: number;
   valorOrcado: number;
-  podeGerarAcimaDoOrcado: boolean;
-  /** Linha vermelha: orçado zero por definição, então passar do orçado não
-   *  pede administrador — só o alerta de planejado (27/10/2026). */
+  /** Comitê de Aprovações (decisão 223): as regras, quem aprova direto e o
+   *  que ele já aprovou. No lugar do "só o administrador" da 204. */
+  comiteDaPP: ComiteDaPP;
+  /** Linha vermelha: orçado zero por definição; só vai ao Comitê com a
+   *  regra dela ligada (27/10/2026, decisão 223). */
   linhaVermelha: boolean;
   /** Decomposição do planejado — R$ Unit. × QT × D/M, para o cartão
    *  mostrar de onde os três campos vêm. São referência apenas: os
@@ -394,7 +407,7 @@ export function GerarPPDrawer({
   itemDescricao,
   valorPlanejado,
   valorOrcado,
-  podeGerarAcimaDoOrcado,
+  comiteDaPP,
   linhaVermelha,
   unitarioPlanejado,
   quantidadePlanejada,
@@ -932,9 +945,22 @@ export function GerarPPDrawer({
   const previaEmPPs = Math.round((emPPsEmitidas - valorAntesDaEdicao + valorPP) * 100) / 100;
   const passaPlanejado = passaDoPlanejado(previaEmPPs, valorPlanejado);
   const passaOrcado = !linhaVermelha && acimaDoOrcado(previaEmPPs, valorOrcado);
-  const bloqueioLimite = passaOrcado && !podeGerarAcimaDoOrcado
-    ? "Somente um administrador pode gerar ou editar esta PP."
+  // Comitê de Aprovações (decisão 223): passar do orçado leva a PP a emitir
+  // ao Comitê — "Gerar PP" vira "Solicitar aprovação". A aprovação dele
+  // (ou da PP que esta refaz) vale enquanto a PP não ficar mais cara.
+  const idDaPPNoComite = aEmitirEditando?.id ?? ppGeradaEditando?.id ?? null;
+  const valorAprovadoNoComite = idDaPPNoComite ? (comiteDaPP.valorAprovado[idDaPPNoComite] ?? null) : null;
+  const vaiAoComite =
+    !comiteDaPP.aprovaDireto &&
+    ppPassaDoOrcadoNoComite(comiteDaPP.regras, previaEmPPs, valorOrcado, linhaVermelha) &&
+    !ppCobertaPeloComite(valorAprovadoNoComite, valorPP);
+  const pedidoNoComite = aEmitirEditando ? (comiteDaPP.pedidos[aEmitirEditando.id] ?? null) : null;
+  // A PP gerada não vai ao Comitê (o pedido nasce da PP a emitir): a
+  // edição que passaria por ele fica barrada.
+  const bloqueioLimite = editandoGerada && vaiAoComite
+    ? "Esta edição leva a PP acima do orçado do item sem a aprovação do Comitê (ou acima do valor que ele aprovou). Para solicitar a aprovação, cancele a PP e refaça-a como PP a emitir."
     : null;
+  const [pedindoComite, setPedindoComite] = React.useState(false);
 
   const numeroDeParcelas = Math.max(parcelas.length, 1);
 
@@ -1081,11 +1107,10 @@ export function GerarPPDrawer({
       abrirRevisaoDaEdicao();
       return;
     }
-    const gerar = submitter?.getAttribute("data-acao") === "gerar";
-    if (gerar && bloqueioLimite) {
-      setErro(bloqueioLimite);
-      return;
-    }
+    const acao = submitter?.getAttribute("data-acao");
+    // "Solicitar aprovação" passa pelas mesmas portas do "Gerar PP": o
+    // Comitê não aprova uma PP que não se gera.
+    const gerar = acao === "gerar" || acao === "comite";
     if (gerar && travaDaAbertura) {
       setErro(travaDaAbertura);
       return;
@@ -1117,7 +1142,37 @@ export function GerarPPDrawer({
       }
     }
     if (!validar()) return;
+    if (acao === "comite") {
+      setPedindoComite(true);
+      return;
+    }
     salvar(gerar);
+  }
+
+  /** Salva a PP a emitir e a envia ao Comitê com o motivo (decisão 223). */
+  async function salvarESolicitarAprovacao(motivo: string): Promise<string | null> {
+    if (!ppId || !itemRealizadoId || ultimaPP === null) {
+      return "Não foi possível preparar a PP. Feche o formulário e tente novamente.";
+    }
+    if (submittingRef.current) return null;
+    submittingRef.current = true;
+    setSalvando(true);
+    try {
+      const salvo = await salvarPPAEmitir(ppId, itemRealizadoId, montarDados(), anexosParaAction(), ultimaPP);
+      if (!salvo.ok) return salvo.message;
+      const pedido = await solicitarAprovacaoDaPP(salvo.id, motivo);
+      if (!pedido.ok) return `A PP a emitir foi salva, mas não foi ao Comitê: ${pedido.message}`;
+      setPedindoComite(false);
+      abortedRef.current = true;
+      onSuccess?.("salva", salvo.id);
+      onOpenChange(false);
+      return null;
+    } catch {
+      return "Não foi possível confirmar o envio. Confira sua conexão e tente novamente.";
+    } finally {
+      submittingRef.current = false;
+      setSalvando(false);
+    }
   }
 
   /** As checagens do formulário. Devolve false e escreve o erro. */
@@ -2470,25 +2525,25 @@ export function GerarPPDrawer({
               </button>
               <button
                 type="submit"
-                data-acao="gerar"
+                data-acao={vaiAoComite ? "comite" : "gerar"}
                 disabled={
                   pending ||
                   !ppId ||
                   travaDaAbertura !== null ||
-                  bloqueioLimite !== null ||
                   cadastroIncompleto ||
                   anexos.some((a) => a.status === "uploading") ||
                   faltaQuemRecebe
                 }
-                title={travaDaAbertura ?? travaDoCadastro ?? bloqueioLimite ?? undefined}
+                title={travaDaAbertura ?? travaDoCadastro ?? undefined}
                 className={cn(
-                  "rounded-lg px-4 py-2 text-sm font-semibold",
+                  "inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold",
                   travaDaAbertura
                     ? "cursor-not-allowed border border-border bg-muted text-muted-foreground/70"
                     : "bg-california-red text-white hover:bg-california-red-hover disabled:opacity-50",
                 )}
               >
-                {salvando ? "Salvando..." : "Gerar PP"}
+                {vaiAoComite && !salvando && <Gavel className="h-4 w-4" />}
+                {salvando ? "Salvando..." : vaiAoComite ? "Solicitar aprovação" : "Gerar PP"}
               </button>
             </div>
             <p className="flex items-start justify-end gap-1.5 text-right text-[11px] leading-snug text-muted-foreground">
@@ -2502,11 +2557,32 @@ export function GerarPPDrawer({
               )}
               {travaDaAbertura ??
                 (travaDoCadastro ? `${travaDoCadastro} “Salvar” guarda a PP a emitir enquanto isso.` : null) ??
-                "“Salvar” guarda a PP a emitir para editar depois; “Gerar PP” salva e mostra a revisão antes de gerar. O envio ao financeiro é no painel do item."}
+                (vaiAoComite
+                  ? pedidoNoComite?.status === "aprovado"
+                    ? "A PP ficou mais cara que o valor aprovado pelo Comitê: “Solicitar aprovação” salva a PP a emitir e a envia de novo."
+                    : "O realizado do item com esta PP passa do orçado: “Solicitar aprovação” salva a PP a emitir e a envia ao Comitê. Aprovada, ela fica liberada para gerar."
+                  : "“Salvar” guarda a PP a emitir para editar depois; “Gerar PP” salva e mostra a revisão antes de gerar. O envio ao financeiro é no painel do item.")}
             </p>
           </div>
           )}
         </form>
+
+        {/* Comitê de Aprovações (decisão 223): o pedido, com o motivo. */}
+        <SolicitarAprovacaoDialog
+          aberto={pedindoComite}
+          titulo="Solicitar a aprovação da PP?"
+          descricao="O realizado do item com esta PP passa do orçado. A PP fica guardada; aprovada pelo Comitê, ela fica liberada para gerar."
+          linhas={linhasDoMotivoDaPP({
+            item: itemDescricao,
+            linhaVermelha,
+            orcado: valorOrcado,
+            realizadoComAPP: previaEmPPs,
+          })}
+          motivoInicial={pedidoNoComite?.status === "devolvido" ? pedidoNoComite.motivo : ""}
+          placeholder="Ex.: o cliente pediu um painel a mais no palco na reunião de ontem."
+          onFechar={() => setPedindoComite(false)}
+          onEnviar={salvarESolicitarAprovacao}
+        />
 
         <NovoFornecedorDialog
           // Só abre a edição quando o cadastro completo chegou: dialog

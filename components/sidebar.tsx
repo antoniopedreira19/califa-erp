@@ -21,6 +21,7 @@ import {
   Settings,
   Users,
   UserCheck,
+  Gavel,
 } from "lucide-react";
 
 type NavLink = {
@@ -37,6 +38,9 @@ type NavLink = {
    * Fonte-verdade em `lib/permissoes.ts`.
    */
   permissao?: Recurso;
+  /** Comitê de Aprovações (decisão 223): não é de papel, é de quem é
+   *  membro (ou administrador) — o layout diz. */
+  soDoComite?: boolean;
 };
 
 const links: NavLink[] = [
@@ -52,6 +56,12 @@ const links: NavLink[] = [
     label: "Jobs",
     icon: Briefcase,
     permissao: "sidebar.jobs",
+  },
+  {
+    href: "/comite",
+    label: "Comitê de Aprovações",
+    icon: Gavel,
+    soDoComite: true,
   },
   {
     href: "/financeiro/desembolsos",
@@ -99,9 +109,12 @@ const TRANSITION_MS = 300;
 export function Sidebar({
   role,
   nome,
+  doComite,
 }: {
   role: AppRole;
   nome: string;
+  /** Membro do Comitê de Aprovações ou administrador (decisão 223). */
+  doComite: boolean;
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -110,7 +123,7 @@ export function Sidebar({
   const expanded = hovered || mobileOpen;
 
   const visibleLinks = links.filter(
-    (l) => !l.permissao || pode(role, l.permissao),
+    (l) => (l.soDoComite ? doComite : !l.permissao || pode(role, l.permissao)),
   );
 
   // Engrenagem no footer: agrupa Cadastros e Administração (ex-itens de nav).

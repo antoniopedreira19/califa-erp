@@ -13,6 +13,7 @@
  *  existe para mostrar.
  */
 
+import { COMITE_DA_PP_SEM_ACAO } from "@/lib/data/comite";
 import * as React from "react";
 import type {
   ItemBv,
@@ -160,7 +161,8 @@ export function PlanilhaConferencia({
         <JobItemRealizadoTable
           midiaSystem={null}
           // Tela do financeiro: só leitura, não gera nem envia PP.
-          podeGerarAcimaDoOrcado={false}
+          comiteDaPP={COMITE_DA_PP_SEM_ACAO}
+          emDecisaoPP={null}
           papelEnviaPP={false}
           papelCorrigeNf={false}
           jobId={jobId}

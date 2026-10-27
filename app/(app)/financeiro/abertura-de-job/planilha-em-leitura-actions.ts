@@ -14,6 +14,7 @@
  * cliente do usuário (`carregarDetalheDoJob`).
  */
 
+import { COMITE_DA_PP_SEM_ACAO } from "@/lib/data/comite";
 import type { ComponentProps } from "react";
 import { z } from "zod";
 import { requireSession } from "@/lib/auth/session";
@@ -58,7 +59,8 @@ export async function lerPlanilhaEmLeitura(jobId: string): Promise<ResultadoDaPl
     ok: true,
     props: {
       papelEnviaPP: false,
-      podeGerarAcimaDoOrcado: false,
+      comiteDaPP: COMITE_DA_PP_SEM_ACAO,
+      emDecisaoPP: null,
       // A planilha da conferência só lê: sem marca da Mídia System.
       midiaSystem: null,
       papelCorrigeNf: false,

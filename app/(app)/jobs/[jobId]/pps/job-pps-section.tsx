@@ -1,5 +1,6 @@
 "use client";
 
+import type { ComiteDaPP } from "@/lib/data/comite";
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
@@ -139,7 +140,8 @@ interface Props {
 
 /** O que o formulário da PP precisa e a aba não tinha (decisão 173). */
 export interface EdicaoDaPPNaAba {
-  podeGerarAcimaDoOrcado: boolean;
+  /** Comitê de Aprovações (decisão 223). */
+  comiteDaPP: ComiteDaPP;
   jobId: string;
   jobEmpresaId: string;
   fornecedores: Array<{ id: string; nome: string; razao_social: string | null; cpf_cnpj?: string | null }>;
@@ -1413,7 +1415,7 @@ export function JobPPsSection({
             defaultEmpresaId={edicaoDaPP.jobEmpresaId}
             itemDescricao={item?.nome ?? ppEditando?.item_nome ?? ""}
             valorOrcado={item?.orcado ?? 0}
-            podeGerarAcimaDoOrcado={edicaoDaPP.podeGerarAcimaDoOrcado}
+            comiteDaPP={edicaoDaPP.comiteDaPP}
             linhaVermelha={item?.linhaVermelha ?? false}
             valorPlanejado={item?.planejado ?? planejadoPorItem[itemRealizadoId] ?? 0}
             unitarioPlanejado={item?.unitario ?? 0}

@@ -18,13 +18,20 @@ export function RastroDeNavegacao() {
   const query = useSearchParams().toString();
   const url = query ? `${caminho}?${query}` : caminho;
 
-  React.useEffect(() => {
-    iniciarRastro();
-  }, []);
+  // A página aberta dentro de um pop-up (o do Comitê de Aprovações,
+  // decisão 223) divide o sessionStorage com a aba de fora: anotá-la
+  // levaria o Voltar da aba para dentro do pop-up.
+  const embutida = typeof window !== "undefined" && window.self !== window.top;
 
   React.useEffect(() => {
+    if (embutida) return;
+    iniciarRastro();
+  }, [embutida]);
+
+  React.useEffect(() => {
+    if (embutida) return;
     registrarUrl(url);
-  }, [url]);
+  }, [url, embutida]);
 
   return null;
 }

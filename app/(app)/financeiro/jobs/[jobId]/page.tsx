@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { COMITE_DA_PP_SEM_ACAO } from "@/lib/data/comite";
 import { FaixaDoProjeto } from "@/components/faixa-do-projeto";
 import { itensDeJobs } from "@/lib/faixa-do-projeto";
 import { STATUS_NA_LISTA } from "../../abertura-de-job/dados-abertos";
@@ -842,7 +843,8 @@ export default async function JobNoFinanceiroPage({
             <JobRealizadoSection
               midiaSystem={midiaDoJob}
               // Tela do financeiro: só leitura, não gera nem envia PP.
-              podeGerarAcimaDoOrcado={false}
+              comiteDaPP={COMITE_DA_PP_SEM_ACAO}
+              emDecisaoPP={null}
               papelEnviaPP={false}
               papelCorrigeNf={pode(session.activeRole, "jobs.corrigir_nf_pp")}
               confirmarSaidaParaOrcamento
