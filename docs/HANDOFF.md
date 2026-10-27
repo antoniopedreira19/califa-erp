@@ -88,9 +88,20 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 20261002000011  rh_perf_indices_fks                        (task 009 Onda 1b)
 20261002000012  ferias_exclui_socios                       (sócios saem do subsistema)
 20261003000001  drop_ferias_notificacoes                   (drop tabela/enum/funções/cron)
+20261026700005  folha_tipo_ferias_coluna
+20261026700006  vw_people_tipo_folha_ferias
+20261026700007  ferias_policy_so_aprovado
+20261027100001  saldo_inicial_da_california_santander_em_01_10  (dec 211 A5)
+20261027100002  folha_prevista_no_fluxo_de_caixa              (dec 218)
+20261027100003  folha_do_mes_seguinte_nasce_sozinha            (dec 218)
+20261027100004  autor_das_auditorias_de_migration
+20261027100005  apaga_conta_sem_vinculo_criada_por_teste
+20261027700003  ferias_lancamentos_dias_abono
+20261027700004  ferias_lancamentos_dias_total_combinado
+20261027900001  freelancers_rls_gp_responsavel_le
 ```
 
-Última: `20261003000001`.
+Última: `20261027900001`.
 
 Migration removida do repo em 2026-09-23 (regionais GERAL aposentadas): `20260916000004_rh_regional_geral.sql`.
 
@@ -100,6 +111,8 @@ Ordem: mais recente primeiro. Cada linha aponta para um arquivo em `docs/handoff
 
 | Data | Entrega | Handoff |
 |---|---|---|
+| 2026-10-21 | 13º Salário end-to-end (criação com snapshot, breakdown híbrido CLT_recibo, adiantamentos durante o ano, fechar parcelas integrado ao fluxo de folha mensal, tabelas 10/2026 + Lei 15.270, histórico por colaborador; dec 219/220/221) | [2026-10-21-decimo-terceiro.md](handoffs/2026-10-21-decimo-terceiro.md) |
+| 2026-10-27 | Férias de ponta a ponta (abono combinado real, clt_recibo híbrido na parte RPA, UI compartilhada /perfil↔RH) + folha prevista no fluxo de caixa (dec 218) + mês seguinte nasce sozinho; rescisões alinhadas pra próxima sessão | [2026-10-27-ferias-fluxo-completo-e-folha-prevista.md](handoffs/2026-10-27-ferias-fluxo-completo-e-folha-prevista.md) |
 | 2026-10-21 | Conciliação com o banco (task 029, fases 1 a 4): planilhas de títulos, popup de baixa e cartão, importação do OFX e Conciliação automática, marcas do banco no Extrato, fechamento que trava o caixa (decisões 195 a 202 e 205) | [2026-10-21-conciliacao-com-o-banco-retrospectiva.md](handoffs/2026-10-21-conciliacao-com-o-banco-retrospectiva.md) |
 | 2026-10-21 | Vazamento de PII — fase 2: RLS fechada em freelancers/contratos/NF-anexos + buckets, guard-rail de pre-commit, ADR 203. GitHub público ficou pra decisão. | [2026-10-21-vazamento-pii-fase-2.md](handoffs/2026-10-21-vazamento-pii-fase-2.md) |
 | 2026-10-19 | Módulo Freelancers — fases 1 a 4 (cadastro, contrato+DOCX, solicitação com chat realtime, dashboard rico, distrato, histórico, export) + fundação da migração legados | [2026-10-19-modulo-freelancers-fases-1-a-4.md](handoffs/2026-10-19-modulo-freelancers-fases-1-a-4.md) |
