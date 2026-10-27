@@ -216,9 +216,11 @@ export default async function FreelancerPerfilPage({
   const podeEditar = PODE_EDITAR.has(session.activeRole);
   const isRh = podeEditar; // administrador/rh/financeiro
 
-  // Transferir responsável: admin + rh (igual AgCaliforniaRH).
+  // Transferir responsável: admin + rh + financeiro.
   const podeTransferirResp =
-    session.activeRole === "administrador" || session.activeRole === "rh";
+    session.activeRole === "administrador" ||
+    session.activeRole === "rh" ||
+    session.activeRole === "financeiro";
 
   const responsaveisDisponiveis: ResponsavelOption[] = [];
   if (podeTransferirResp) {
