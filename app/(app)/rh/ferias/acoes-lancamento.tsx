@@ -13,24 +13,32 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import type { FeriasLancamentoStatus, FeriasLancamentoTipo } from "@/lib/types";
+import type {
+  FeriasLancamentoStatus,
+  FeriasLancamentoTipo,
+  TipoContratacao,
+} from "@/lib/types";
 import {
   aprovarLancamento,
   previewValoresFerias,
   reprovarLancamento,
 } from "./actions";
 
+type ValoresBloco = {
+  valor_base_remuneracao: number;
+  valor_ferias: number;
+  valor_um_terco: number;
+  valor_abono: number;
+  valor_total: number;
+};
+
 type PreviewValores = {
   tipo: FeriasLancamentoTipo;
+  tipo_contratacao: TipoContratacao;
   dias: number;
   dias_abono: number;
-  valores: {
-    valor_base_remuneracao: number;
-    valor_ferias: number;
-    valor_um_terco: number;
-    valor_abono: number;
-    valor_total: number;
-  } | null;
+  valores: ValoresBloco | null;
+  valores_clt: ValoresBloco | null;
 };
 
 function formatarBRL(n: number): string {
@@ -74,9 +82,11 @@ export function AcoesLancamento({
       }
       setPreview({
         tipo: res.tipo,
+        tipo_contratacao: res.tipo_contratacao,
         dias: res.dias,
         dias_abono: res.dias_abono,
         valores: res.valores,
+        valores_clt: res.valores_clt,
       });
     });
   }
@@ -265,40 +275,107 @@ export function AcoesLancamento({
 
 function ResumoValores({ dados }: { dados: PreviewValores }) {
   const v = dados.valores!;
-  const temAbono = dados.tipo === "abono_combinado" && v.valor_abono > 0;
-  const soAbono =
-    (dados.tipo === "abono_avulso" || dados.tipo === "abono_excepcional") &&
-    v.valor_abono > 0;
+  const hibrido = dados.tipo_contratacao === "clt_recibo";
+  const totalCombinado = hibrido && dados.valores_clt
+    ? v.valor_total + dados.valores_clt.valor_total
+    : null;
 
   return (
-    <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm space-y-1.5">
+    <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm space-y-3">
+      <BlocoValores
+        titulo={hibrido ? "Parte PJ (RPA)" : "Resumo dos valores"}
+        valores={v}
+        tipo={dados.tipo}
+        dias={dados.dias}
+        diasAbono={dados.dias_abono}
+        destacarTotal={!hibrido}
+      />
+
+      {hibrido && dados.valores_clt && (
+        <>
+          <BlocoValores
+            titulo="Parte CLT (bruto estimado)"
+            valores={dados.valores_clt}
+            tipo={dados.tipo}
+            dias={dados.dias}
+            diasAbono={dados.dias_abono}
+            destacarTotal={false}
+          />
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            Parte CLT pendente do recibo da contabilidade. Valor final pode
+            variar após descontos (INSS, IRRF).
+          </p>
+        </>
+      )}
+
+      {hibrido && !dados.valores_clt && (
+        <p className="text-[11px] text-amber-800 bg-amber-50 border border-amber-200 rounded p-2 leading-snug">
+          Parte CLT não cadastrada no salário. O recibo da contabilidade entra
+          separado após a aprovação.
+        </p>
+      )}
+
+      {totalCombinado !== null && (
+        <div className="flex justify-between pt-2 border-t border-border">
+          <span className="font-semibold">Total estimado (PJ + CLT)</span>
+          <span className="font-semibold text-california-red">
+            {formatarBRL(totalCombinado)}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function BlocoValores({
+  titulo,
+  valores,
+  tipo,
+  dias,
+  diasAbono,
+  destacarTotal,
+}: {
+  titulo: string;
+  valores: ValoresBloco;
+  tipo: FeriasLancamentoTipo;
+  dias: number;
+  diasAbono: number;
+  destacarTotal: boolean;
+}) {
+  const temAbono = tipo === "abono_combinado" && valores.valor_abono > 0;
+  const soAbono =
+    (tipo === "abono_avulso" || tipo === "abono_excepcional") &&
+    valores.valor_abono > 0;
+
+  return (
+    <div className="space-y-1.5">
       <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-        Resumo dos valores
+        {titulo}
       </p>
       <div className="flex justify-between text-xs text-muted-foreground">
         <span>Base de cálculo (salário)</span>
         <span className="font-medium text-foreground">
-          {formatarBRL(v.valor_base_remuneracao)}
+          {formatarBRL(valores.valor_base_remuneracao)}
         </span>
       </div>
 
-      {dados.tipo === "usufruto" && (
+      {tipo === "usufruto" && (
         <>
-          <LinhaValor label="Férias" valor={v.valor_ferias} />
-          <LinhaValor label="1/3 constitucional" valor={v.valor_um_terco} />
+          <LinhaValor label="Férias" valor={valores.valor_ferias} />
+          <LinhaValor label="1/3 constitucional" valor={valores.valor_um_terco} />
         </>
       )}
 
       {temAbono && (
         <>
           <LinhaValor
-            label={`Férias (${dados.dias - dados.dias_abono} dias)`}
-            valor={v.valor_ferias}
+            label={`Férias (${dias - diasAbono} dias)`}
+            valor={valores.valor_ferias}
           />
-          <LinhaValor label="1/3 constitucional" valor={v.valor_um_terco} />
+          <LinhaValor label="1/3 constitucional" valor={valores.valor_um_terco} />
           <LinhaValor
-            label={`Abono (${dados.dias_abono} dias vendidos)`}
-            valor={v.valor_abono}
+            label={`Abono (${diasAbono} dias vendidos)`}
+            valor={valores.valor_abono}
           />
         </>
       )}
@@ -306,17 +383,25 @@ function ResumoValores({ dados }: { dados: PreviewValores }) {
       {soAbono && (
         <>
           <LinhaValor
-            label={`Abono (${dados.dias} dias vendidos)`}
-            valor={v.valor_abono}
+            label={`Abono (${dias} dias vendidos)`}
+            valor={valores.valor_abono}
           />
-          <LinhaValor label="1/3 constitucional" valor={v.valor_um_terco} />
+          <LinhaValor label="1/3 constitucional" valor={valores.valor_um_terco} />
         </>
       )}
 
-      <div className="flex justify-between pt-1.5 mt-1.5 border-t border-border">
-        <span className="font-semibold">Total</span>
-        <span className="font-semibold text-california-red">
-          {formatarBRL(v.valor_total)}
+      <div className="flex justify-between pt-1 mt-1 border-t border-border/60">
+        <span className={destacarTotal ? "font-semibold" : "font-medium text-xs"}>
+          {destacarTotal ? "Total" : "Subtotal"}
+        </span>
+        <span
+          className={
+            destacarTotal
+              ? "font-semibold text-california-red"
+              : "font-semibold"
+          }
+        >
+          {formatarBRL(valores.valor_total)}
         </span>
       </div>
     </div>

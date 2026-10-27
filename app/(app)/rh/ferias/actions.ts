@@ -6,6 +6,8 @@ import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import {
+  buscarSalarioParaFolha,
+  calcularValoresLancamento,
   calcularValoresLancamentoAuto,
   calcularValoresLancamentoPJ,
 } from "@/lib/ferias/calcular-valores";
@@ -14,7 +16,7 @@ import {
   gerarReciboFeriasPdf,
   type FormatoRecibo,
 } from "@/lib/pdf/recibo-ferias";
-import type { FeriasLancamentoTipo } from "@/lib/types";
+import type { FeriasLancamentoTipo, TipoContratacao } from "@/lib/types";
 
 type ActionResult =
   | { ok: true; id: string }
@@ -42,19 +44,27 @@ async function carregarLancamento(id: string, tenantId: string) {
 
 // ---------- Preview de valores (pra confirmar antes de aprovar) ----------
 
+type ValoresPreview = {
+  valor_base_remuneracao: number;
+  valor_ferias: number;
+  valor_um_terco: number;
+  valor_abono: number;
+  valor_total: number;
+};
+
 type PreviewResult =
   | {
       ok: true;
       tipo: FeriasLancamentoTipo;
+      tipo_contratacao: TipoContratacao;
       dias: number;
       dias_abono: number;
-      valores: {
-        valor_base_remuneracao: number;
-        valor_ferias: number;
-        valor_um_terco: number;
-        valor_abono: number;
-        valor_total: number;
-      } | null;
+      // valores: parte PJ (RPA) para clt_recibo; valores cheios para os outros.
+      valores: ValoresPreview | null;
+      // valores_clt: só preenchido para clt_recibo. Estimativa bruta sobre
+      // a parte CLT do salário (valor − valor_recibo). Serve como preview
+      // informativo; o valor real virá no recibo da contabilidade.
+      valores_clt: ValoresPreview | null;
     }
   | { ok: false; message: string };
 
@@ -79,22 +89,48 @@ export async function previewValoresFerias(
     .maybeSingle();
   if (!colab) return { ok: false, message: "Colaborador não encontrado." };
 
+  const tipoContratacao = (colab as { tipo_contratacao: TipoContratacao })
+    .tipo_contratacao;
+  const diasAbono = (lanc as { dias_abono?: number }).dias_abono ?? 0;
+
   const valores = await calcularValoresLancamentoAuto(
     lanc.colaborador_id,
     lanc.data_inicio,
-    (colab as { tipo_contratacao: import("@/lib/types").TipoContratacao })
-      .tipo_contratacao,
+    tipoContratacao,
     lanc.tipo as FeriasLancamentoTipo,
     lanc.dias,
-    (lanc as { dias_abono?: number }).dias_abono ?? 0,
+    diasAbono,
   );
+
+  // Pra clt_recibo, calcula também a parte CLT (bruto estimado) pra mostrar
+  // no dialog de aprovação. O valor real sai do recibo da contabilidade.
+  let valoresClt: ValoresPreview | null = null;
+  if (tipoContratacao === "clt_recibo") {
+    const salario = await buscarSalarioParaFolha(
+      lanc.colaborador_id,
+      lanc.data_inicio,
+      tipoContratacao,
+    );
+    if (salario && salario.parteClt > 0) {
+      valoresClt = await calcularValoresLancamento(
+        lanc.colaborador_id,
+        lanc.data_inicio,
+        lanc.tipo as FeriasLancamentoTipo,
+        lanc.dias,
+        diasAbono,
+        salario.parteClt,
+      );
+    }
+  }
 
   return {
     ok: true,
     tipo: lanc.tipo as FeriasLancamentoTipo,
+    tipo_contratacao: tipoContratacao,
     dias: lanc.dias,
-    dias_abono: (lanc as { dias_abono?: number }).dias_abono ?? 0,
+    dias_abono: diasAbono,
     valores,
+    valores_clt: valoresClt,
   };
 }
 
