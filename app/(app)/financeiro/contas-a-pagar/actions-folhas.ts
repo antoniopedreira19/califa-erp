@@ -14,6 +14,7 @@ import {
 import { normalizarChavePix } from "@/lib/pix";
 import { carregarColaboradoresPagamento } from "@/lib/financeiro/colaboradores-pagamento";
 import type { FolhaOrigem, TipoContratacao } from "@/lib/types";
+import { resolverEscopoDaFolha } from "@/lib/nf/escopo-da-folha";
 
 type ActionResult<T = Record<string, unknown>> =
   | ({ ok: true } & T)
@@ -372,7 +373,7 @@ export async function aprovarLinhaFolha(
   const { data: folha, error: folhaError } = await supabase
     .from("folhas_pagamento")
     .select(
-      "id, status, salario_base, colaborador_id, competencia_ano, competencia_mes, origem, tipo",
+      "id, status, salario_base, colaborador_id, competencia_ano, competencia_mes, origem, tipo, tipo_folha_ferias, lancamento_ferias_id",
     )
     .eq("id", folhaId)
     .eq("tenant_id", tenantId)
@@ -518,27 +519,41 @@ export async function aprovarLinhaFolha(
   }
 
   // 5.5) Trava de NF para linhas PJ geradas pela California.
-  // Spec: docs/superpowers/specs/2026-10-07-folha-anexo-nf.md (D3)
+  // Resolve o escopo (tipo+tipo_folha_ferias+lancamento_ferias_id) para buscar
+  // a NF correta. 13° entra como stub (sem trava por enquanto).
+  // Spec: docs/superpowers/specs/2026-10-26-quadro-nf-colaborador-design.md
+  let nfAnexoId: string | null = null;
   const exigeNf =
     folha.origem === "california" &&
     (colab.tipo_contratacao === "pj" ||
       colab.tipo_contratacao === "mei" ||
       colab.tipo_contratacao === "clt_recibo");
   if (exigeNf) {
-    const { data: nf } = await supabase
-      .from("colaboradores_nf_anexos")
-      .select("id")
-      .eq("tenant_id", tenantId)
-      .eq("colaborador_id", folha.colaborador_id)
-      .eq("competencia_ano", folha.competencia_ano)
-      .eq("competencia_mes", folha.competencia_mes)
-      .maybeSingle();
-    if (!nf) {
-      return {
-        ok: false,
-        message:
-          "Essa linha não pode ser aprovada sem NF anexada. Peça pro colaborador anexar em /perfil, ou use o cadastro dele em /rh/colaboradores.",
-      };
+    const escopo = resolverEscopoDaFolha({
+      id: folha.id,
+      tipo: folha.tipo as "salario" | "ferias" | "decimo_terceiro_1a_parcela" | "decimo_terceiro_2a_parcela",
+      tipo_folha_ferias: (folha as { tipo_folha_ferias?: "usufruto" | "abono" | null }).tipo_folha_ferias ?? null,
+      lancamento_ferias_id: (folha as { lancamento_ferias_id?: string | null }).lancamento_ferias_id ?? null,
+    });
+    if (!escopo) {
+      // Stub: 13° ou férias sem lancamento_id — segue sem trava de NF.
+      console.warn("[folha.aprovar.nf] escopo não resolvido para folha", folha.id, folha.tipo);
+    } else {
+      const { data: nf } = await supabase
+        .from("colaboradores_nf_anexos")
+        .select("id")
+        .eq("tenant_id", tenantId)
+        .eq("colaborador_id", folha.colaborador_id)
+        .eq("escopo_tipo", escopo.escopo_tipo)
+        .eq("escopo_id", escopo.escopo_id)
+        .maybeSingle();
+      if (!nf) {
+        return {
+          ok: false,
+          message: "Anexe a NF antes de aprovar.",
+        };
+      }
+      nfAnexoId = nf.id as string;
     }
   }
 
@@ -720,6 +735,9 @@ export async function aprovarLinhaFolha(
     return { ok: false, message: "Falha ao marcar como aprovada." };
   }
 
+  const valorOriginal = (centavos(folha.salario_base) / 100).toFixed(2);
+  const valorEditado = centavos(salarioFinal) !== centavos(folha.salario_base);
+
   await logAuditEvent({
     acao: "folha.linha.aprovada",
     tenantId,
@@ -728,7 +746,10 @@ export async function aprovarLinhaFolha(
     metadata: {
       colaborador_id: colab.id,
       competencia: chaveCompetencia(folha.competencia_ano, folha.competencia_mes),
-      valor_final: salarioFinal,
+      valor_original: valorOriginal,
+      valor_aprovado: salarioFinal,
+      valor_editado: valorEditado,
+      nf_anexo_id: nfAnexoId,
       contas_criadas: contasCriadas.length,
       regionais: alocacoesFinal.length,
       pagamento_informado: !!pagamentoValidado?.ok,
