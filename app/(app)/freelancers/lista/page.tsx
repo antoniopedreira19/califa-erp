@@ -70,7 +70,8 @@ export default async function FreelancersListaPage({
 
   // Query principal consome a view `freelancers_com_status` — ela traz
   // cargo e status derivado do contrato ativo. GP/produtor vê só os freelas
-  // que ele é responsável (RLS é frouxa porque o Buscar precisa ver todos).
+  // dos quais é responsavel em algum contrato (regra reforçada pela policy
+  // `freelancers_select_responsavel_contrato` + o filtro `.eq` abaixo).
   let query = supabase
     .from("freelancers_com_status")
     .select("*")
