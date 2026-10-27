@@ -72,6 +72,7 @@ import {
   baixarPelaLinha,
   cancelarBaixasDesfeitas,
   conciliarLinha,
+  conciliarPeloHistorico,
   conciliarPelosDocumentos,
   corrigirBaixa,
   criarRegraDoExtrato,
@@ -454,6 +455,12 @@ export function AbaBanco({
       const itens = rs.flatMap((r) => (r.regra?.id ? [{ linhaId: r.mov.id, regraId: r.regra.id as string }] : []));
       if (itens.length) executar(() => lancarPelaRegra(itens));
     },
+    conciliarHistorico: (rs) =>
+      emSerie(
+        rs,
+        (r) => (r.historicos?.length ? conciliarPeloHistorico(r.mov.id, r.historicos.map((h) => h.id)) : null),
+        (n) => (n === 1 ? "1 linha do banco conciliada pelo histórico" : `${n} linhas do banco conciliadas pelo histórico`),
+      ),
     lancarAvulso: (r) => {
       const lado = r.mov.valor < 0 ? "pagar" : "receber";
       if (dadosNovo) {
@@ -556,6 +563,11 @@ export function AbaBanco({
             minhas.has(r.mov.id) && r.regra?.id ? [{ linhaId: r.mov.id, regraId: r.regra.id as string }] : [],
           );
           if (regras.length) anotar(await lancarPelaRegra(regras, true));
+          for (const r of automacao.historicos) {
+            if (minhas.has(r.mov.id) && r.historicos?.length) {
+              anotar(await conciliarPeloHistorico(r.mov.id, r.historicos.map((h) => h.id), "historico"));
+            }
+          }
         }
       } catch {
         falhas.push("Não foi possível concluir agora.");
@@ -791,6 +803,18 @@ export function AbaBanco({
         <BotaoDaSecao disabled={pending} onClick={() => acoes.lancarRegra(secoes.regra)}>
           <Wand2 className="h-3.5 w-3.5" />
           Lançar as {secoes.regra.length}
+        </BotaoDaSecao>
+      ),
+    ],
+    [
+      "historico",
+      "Do histórico da planilha",
+      "Pagamentos e recebimentos dos jobs até o 3T que não existem no sistema: estão na cauda do histórico (decisão 211). Conciliar liga a linha do banco à linha da planilha, sem lançamento no sistema. Na importação elas se conciliam sozinhas.",
+      "violet",
+      secoes.historico.length > 1 && (
+        <BotaoDaSecao disabled={pending} onClick={() => acoes.conciliarHistorico(secoes.historico)}>
+          <Link2 className="h-3.5 w-3.5" />
+          Conciliar as {secoes.historico.length}
         </BotaoDaSecao>
       ),
     ],
@@ -1302,7 +1326,8 @@ function ZonaDeArquivo({
         <p className="text-xs text-muted-foreground">
           O arquivo que o internet banking do Santander, Itaú ou qualquer banco exporta. O sistema guarda só as linhas do
           extrato, sem repetir as que já vieram. O que é certo se resolve sozinho, com Desfazer: a baixa feita à mão que
-          bate, o título de valor exato, a remessa e a regra do histórico; o resto espera você.
+          bate, o título de valor exato, a remessa, a regra do histórico e a linha do histórico da planilha (os jobs até o 3T
+          fora do sistema); o resto espera você.
           {!compacta && ` A conta vem do próprio arquivo: ele só é aceito se for da ${contaNome}, a conta aberta no topo.`}
         </p>
       </div>

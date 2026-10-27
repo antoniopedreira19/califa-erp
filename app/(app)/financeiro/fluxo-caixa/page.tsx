@@ -63,7 +63,11 @@ export default async function FluxoCaixaPage({
   const vespera = iso(ano, mes - 1 - 4, 0); // véspera da âncora
   const fim = iso(ano, mes - 1 + 14, 0); // fim do 13º mês à frente
 
-  const queryFluxo = (() => {
+  // A view volta no máximo mil linhas por consulta (o teto do PostgREST): o
+  // fluxo lê página a página, na mesma ordem. Com a cauda do histórico
+  // (decisão 211, A6), outubro sozinho passou de mil linhas, e as previsões
+  // dos meses seguintes ficavam de fora sem aviso.
+  const paginaDoFluxo = (de: number, ate: number) => {
     let q = supabase
       .from("vw_fluxo_caixa")
       .select(
@@ -79,9 +83,24 @@ export default async function FluxoCaixaPage({
       .or(
         "origem_lancamento.is.null,origem_lancamento.not.in.(transferencia_saida,transferencia_entrada)",
       )
-      .order("data_evento", { ascending: true });
+      .order("data_evento", { ascending: true })
+      .order("origem_tipo", { ascending: true })
+      .order("origem_id", { ascending: true })
+      .order("regional_id", { ascending: true, nullsFirst: true })
+      .order("conta_bancaria_id", { ascending: true, nullsFirst: true });
     if (empresaFiltroIds.length > 0) q = q.in("empresa_id", empresaFiltroIds);
-    return q;
+    return q.range(de, ate);
+  };
+  const queryFluxo = (async () => {
+    const PAGINA = 1000;
+    const data: Array<Record<string, unknown>> = [];
+    for (let de = 0; de < 50_000; de += PAGINA) {
+      const res = await paginaDoFluxo(de, de + PAGINA - 1);
+      if (res.error) return { data, error: res.error };
+      data.push(...((res.data ?? []) as Array<Record<string, unknown>>));
+      if (!res.data || res.data.length < PAGINA) break;
+    }
+    return { data, error: null };
   })();
 
   const queryRegionais = (() => {

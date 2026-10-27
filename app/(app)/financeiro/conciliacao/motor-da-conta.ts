@@ -11,6 +11,7 @@
 
 import {
   casar,
+  diasEntre,
   gruposDeIguais,
   type CentroDoTitulo,
   type GrupoDeIguais,
@@ -19,6 +20,7 @@ import {
   type ResultadoDoMotor,
   type TituloDoMotor,
 } from "@/lib/conciliacao/motor";
+import { casarComHistorico } from "@/lib/conciliacao/historico";
 import { efeitoNaConta, r2 } from "@/lib/financeiro/planilha-de-titulos";
 import type { EntradaDaBaixaEmLote } from "@/lib/financeiro/baixa-em-lote";
 import type { ResolucaoSozinha } from "@/lib/types";
@@ -239,6 +241,11 @@ export function resolucaoDaLinha(
     case "avulso":
       texto = `Avulso criado e baixado: ${primeira}`;
       break;
+    case "historico": {
+      const jobs = [...new Set(l.historicos.map((h) => h.job ?? h.descricao ?? "sem job"))];
+      texto = `Do histórico da planilha: ${aspas(jobs[0] ?? "jobs até o 3T")}${jobs.length > 1 ? ` e mais ${jobs.length - 1}` : ""}`;
+      break;
+    }
     default:
       texto =
         l.resolvidaSozinha === "remessa"
@@ -262,7 +269,8 @@ export interface ConciliacaoDaConta {
 
 /** Roda o motor nas linhas do banco ainda sem solução. */
 export function conciliarConta(
-  dados: Pick<DadosDaAbaBanco, "linhas" | "lancamentos" | "remessasBaixadas" | "remessas" | "regras" | "periodos">,
+  dados: Pick<DadosDaAbaBanco, "linhas" | "lancamentos" | "remessasBaixadas" | "remessas" | "regras" | "periodos"> &
+    Partial<Pick<DadosDaAbaBanco, "historico">>,
   linhasDaPlanilha: Linha[],
   contaId: string,
   documentoDaParte: Record<string, string>,
@@ -280,14 +288,42 @@ export function conciliarConta(
     linha: l,
   }));
   const pendentes = movimentos.filter((m) => !m.linha.conciliada && !m.linha.ignorada);
-  const res = casar(pendentes, {
+
+  // A cauda do histórico (decisão 211, A6), antes dos títulos: a linha da
+  // cauda do mesmo dia e do mesmo valor é dela — um pagamento de job do 3T
+  // não vira baixa de um título do 4T de mesmo valor. A baixa feita à mão
+  // (passo 1) continua na frente.
+  const cauda = dados.historico ?? [];
+  const temBaixa = (m: MovimentoDaLinha) =>
+    dados.lancamentos.some((l) => Math.round(l.valor * 100) === Math.round(m.valor * 100) && Math.abs(diasEntre(l.data, m.data)) <= 3);
+  const doDia = casarComHistorico(pendentes.filter((m) => !temBaixa(m)), cauda, { soNoDia: true });
+  const usadasDaCauda = new Set([...doDia.values()].flat());
+  const res = casar(pendentes.filter((m) => !doDia.has(m)), {
     titulos,
     lancamentos: dados.lancamentos,
     lotes,
     remessasBaixadas: dados.remessasBaixadas,
     regras: dados.regras,
   });
+  // Depois dos títulos: o que ficou sem par procura a cauda até 5 dias e
+  // pelas somas do dia.
+  const semPar = res.filter((r) => r.estado === "sem_par").map((r) => r.mov);
+  const depois = casarComHistorico(semPar, cauda.filter((h) => !usadasDaCauda.has(h)));
+  const doHistorico = new Map([...doDia, ...depois]);
   const porId = new Map(res.map((r) => [r.mov.id, r]));
+  for (const [m, historicos] of doHistorico) {
+    const um = historicos.length === 1;
+    porId.set(m.id, {
+      mov: m,
+      estado: "historico",
+      confianca: "alta",
+      candidatos: [],
+      historicos,
+      motivo: um
+        ? `A linha do histórico de ${diaMes(historicos[0].data)} com o mesmo valor.`
+        : `${historicos.length} linhas do histórico de ${diaMes(historicos[0].data)} que somam o valor do banco.`,
+    });
+  }
   const regras = new Map(dados.regras.map((g) => [g.id as string, { centro: g.centro }]));
   const resultados: ResultadoDaLinha[] = movimentos.map((m) => {
     const r = porId.get(m.id);
@@ -355,6 +391,8 @@ export interface SecoesDoBanco {
   soma: ResultadoDaLinha[];
   par: ResultadoDaLinha[];
   regra: ResultadoDaLinha[];
+  /** A cauda do histórico da planilha (A6). */
+  historico: ResultadoDaLinha[];
   sem: ResultadoDaLinha[];
   conciliados: ResultadoDaLinha[];
 }
@@ -385,6 +423,7 @@ export function secoesDoBanco(resultados: ResultadoDaLinha[]): SecoesDoBanco {
     soma: pend.filter((r) => r.estado === "soma" || (r.estado === "combinacao" && !prontaSoma(r))),
     par: pend.filter((r) => r.estado === "par"),
     regra: pend.filter((r) => r.estado === "regra"),
+    historico: pend.filter((r) => r.estado === "historico"),
     sem: pend.filter((r) => r.estado === "sem_par"),
     conciliados: resolvidos.filter((r) => !r.resolvido?.ligados),
   };
@@ -410,8 +449,10 @@ export interface AutomacaoDaLeitura {
   titulos: ResultadoDaLinha[];
   /** a remessa que soma centavo a centavo (passo 4); */
   remessas: ResultadoDaLinha[];
-  /** a regra do histórico (passo 6). */
+  /** a regra do histórico (passo 6); */
   regras: ResultadoDaLinha[];
+  /** a cauda do histórico da planilha (A6). */
+  historicos: ResultadoDaLinha[];
 }
 
 /** A soma de títulos da mesma contraparte (passo 4b) não se resolve sozinha:
@@ -427,6 +468,7 @@ export function automacaoDaLeitura(resultados: ResultadoDaLinha[]): AutomacaoDaL
     titulos: novas.filter((r) => r.estado === "sugestao" && r.confianca === "alta" && comCentro(r.titulo)),
     remessas: novas.filter((r) => r.estado === "soma" && !!r.lote),
     regras: novas.filter((r) => r.estado === "regra" && !!r.regra?.id),
+    historicos: novas.filter((r) => r.estado === "historico" && !!r.historicos?.length),
   };
 }
 
@@ -439,12 +481,15 @@ export function textoDosSozinhos(resultados: ResultadoDaLinha[]): { quantas: num
   const titulo = conta("titulo");
   const remessa = conta("remessa");
   const regra = conta("regra");
+  const historico = conta("historico");
   const partes = [
     manual && `${manual === 1 ? "1 baixa feita à mão que bateu" : `${manual} baixas feitas à mão que bateram`} com o banco`,
     titulo &&
       `${titulo === 1 ? "1 título baixado e conciliado" : `${titulo} títulos baixados e conciliados`} (valor exato, pago na data e pela forma previstas, ou o CNPJ do cliente no histórico; com linhas iguais, quando são tantas quanto os títulos desse valor)`,
     remessa && (remessa === 1 ? "a remessa, que soma centavo a centavo" : `${remessa} remessas, que somam centavo a centavo`),
     regra && `${regra === 1 ? "1 tarifa" : `${regra} tarifas`} pela regra do histórico`,
+    historico &&
+      `${historico === 1 ? "1 linha" : `${historico} linhas`} do histórico da planilha (jobs até o 3T fora do sistema), pelo valor e pelo dia`,
   ].filter((p): p is string => !!p);
   return { quantas, partes };
 }

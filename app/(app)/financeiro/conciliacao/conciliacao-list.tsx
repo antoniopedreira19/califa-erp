@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { abrirDocumentoDoLancamento } from "./actions-documento";
+import { ORIGEM_DA_CAUDA } from "./cauda-no-extrato";
 import {
   BarraDosFiltrosDeColuna,
   celulaData,
@@ -313,6 +314,8 @@ export function ConciliacaoList({
   /** Uma linha do Extrato (e as sublinhas da fatura e da guia). */
   const renderLinha = (l: LancamentoLinha) => {
     const estornada = l.estornada;
+    // A cauda do histórico da planilha (decisão 211, A6): só leitura.
+    const daCauda = l.origem === ORIGEM_DA_CAUDA;
     const jobParaColuna = derivarJobParaColuna(l);
     const itens = itensDasFaturas[l.id] ?? [];
     // A guia de imposto abre no rateio; a fatura, nos itens.
@@ -396,7 +399,11 @@ export function ConciliacaoList({
           </span>
         </td>
         <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
-          {jobParaColuna.tipo === "link" ? (
+          {daCauda ? (
+            <span className="font-sans italic text-violet-700" title="Job até o 3T fora do sistema: está no histórico da planilha">
+              Histórico
+            </span>
+          ) : jobParaColuna.tipo === "link" ? (
             <Link
               href={`/financeiro/jobs/${jobParaColuna.id}`}
               prefetch={false}
@@ -464,6 +471,7 @@ export function ConciliacaoList({
           )}
         </td>
         <td className="px-2 py-2 text-center">
+          {!daCauda && (
           <BotaoDetalhes
             chave={`lancamento|${l.id}`}
             titulo={limparPrefixoDescricao(l.descricao, l.origem)}
@@ -475,6 +483,7 @@ export function ConciliacaoList({
             rateio={itens.length > 0 ? rateioPonderado(itens) : rateio}
             acoes={[]}
           />
+          )}
         </td>
       </tr>
       {aberta && itens.length > 0 && <LinhasDosItens itens={itens} chaves={chaves} />}

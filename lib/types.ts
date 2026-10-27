@@ -3701,7 +3701,7 @@ export interface ExtratoImportacao {
 }
 
 /** Como a linha se resolveu sozinha na importação (decisão 201). */
-export type ResolucaoSozinha = "manual" | "titulo" | "remessa" | "regra";
+export type ResolucaoSozinha = "manual" | "titulo" | "remessa" | "regra" | "historico";
 
 /** Um movimento do extrato do banco, sem repetir (`extrato_linhas`; a
  *  view `vw_extrato_linhas` traz o `conciliada`). */
@@ -3743,7 +3743,7 @@ export interface ExtratoLinha {
 }
 
 /** Ligacao: a baixa já existia. Baixa e avulso: nasceu na conciliação. */
-export type ConciliadaComo = "ligacao" | "baixa" | "avulso" | "regra" | "par" | "correcao";
+export type ConciliadaComo = "ligacao" | "baixa" | "avulso" | "regra" | "par" | "correcao" | "historico";
 
 /** A baixa feita à mão corrigida pela conciliação (`baixa_correcoes`). */
 export interface BaixaCorrecao {

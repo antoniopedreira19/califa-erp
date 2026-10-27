@@ -107,6 +107,8 @@ const ROTULO_LANCAMENTO: Record<string, string> = {
   manual: "Lançamento manual",
   // Decisão 130: o dinheiro entrou e a nota ainda não saiu.
   recebimento_antes_nf: "Recebimento antes da NF",
+  // A cauda do histórico (decisão 211, A6): jobs até o 3T fora do sistema.
+  historico: "Histórico da planilha (jobs até o 3T)",
 };
 
 const ROTULO_ORIGEM: Record<string, string> = {

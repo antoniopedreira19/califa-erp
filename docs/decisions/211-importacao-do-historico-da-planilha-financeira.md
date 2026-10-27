@@ -1068,8 +1068,48 @@ ficam só os jobs do 4T." Os jobs do 3T que já existem no sistema (cerca de
   R$ 4.418.507,94, 54 notas emitidas em outubro desses jobs e 200 jobs
   citados. Nenhuma linha da cauda é baixa já feita no sistema (as 47
   coincidências de valor eram valores redondos de jobs diferentes).
-- **Em seguida:** a conciliação marca a linha do extrato como do histórico,
-  e o saldo da conta, o fechamento e o fluxo de caixa contam a cauda.
+- **A conciliação marca a linha do extrato como do histórico** (migration
+  `20261027100008`): a linha da cauda liga à linha do extrato
+  (`historico_movimentos.extrato_linha_id`), sem lançamento, pela
+  `conciliar_linha_pelo_historico`; a linha fica conciliada "como
+  histórico" e o Desfazer solta. Na aba Banco, o motor procura a cauda em
+  dois momentos (`lib/conciliacao/historico.ts`): antes dos títulos, só a
+  linha do mesmo dia e do mesmo valor, para um pagamento de job do 3T não
+  virar baixa de um título do 4T de mesmo valor (a baixa feita à mão
+  continua na frente); depois dos títulos, o que ficou sem par procura até
+  5 dias e as somas do dia (as do mesmo job, todas, ou duas a três). O que
+  casa se concilia sozinho na importação; o resto fica na seção "Do
+  histórico da planilha", com Conciliar.
+- **A conta conta a cauda:** o saldo do sistema no fechamento, no resumo
+  das contas e no saldo anterior (`calcularSaldoAnterior`) soma os
+  movimentos da cauda desde o início da conta, e o fechamento pede a linha
+  do banco também para eles. A cauda nova substitui a ativa e solta as
+  linhas do extrato ligadas a ela, que voltam a pendentes para a tela ligar
+  à cauda nova.
+- **Simulação com os extratos de outubro (27/10/2026, sem gravar):** na
+  California Santander, 644 das 1.478 linhas se resolvem pelo histórico e
+  sobram 318 linhas da cauda sem linha do banco (R$ 1,66 mi: sobretudo
+  recebimentos que a planilha divide por nota e o banco recebe numa TED);
+  no BB California, 12 linhas e sobram 7; na Santander GoCrazy, 16 e
+  sobram 11.
+- **O Extrato e o fluxo de caixa contam a cauda** (migrations
+  `20261027100009` e `20261027100010`): no Extrato da conta, depois do
+  início dela, as linhas da cauda entram na ordem do dia, só de leitura
+  ("Histórico da planilha · job", coluna Job "Histórico"), e o saldo de cada
+  linha bate com o do resumo; o histórico antes do início lê só as cargas
+  de período. No fluxo de caixa, a `vw_fluxo_caixa` ganha o ramo
+  `historico` (movimento realizado na conta, sem job do sistema) e a
+  `fc_saldos_por_conta` soma a cauda. Conferido em 27/10/2026: a California
+  Santander em outubro tem 1.014 linhas no Extrato (19 lançamentos e 995 da
+  cauda) e fecha em R$ 2.493.840,94, o mesmo do resumo das contas; o fluxo
+  mostra outubro com R$ 8.465.007 de entradas e R$ 4.626.469 de saídas
+  realizadas.
+- **O fluxo de caixa lê a view página a página:** com a cauda, a consulta
+  passou de mil linhas, o teto do PostgREST, e as previsões dos meses
+  seguintes sumiam da tela sem aviso.
+- **Falta:** escolher à mão as linhas da cauda de uma linha do banco que o
+  motor não casou (as 318 da California Santander, sobretudo recebimentos
+  que a planilha divide por nota).
 
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas
