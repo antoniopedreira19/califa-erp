@@ -106,6 +106,13 @@ export function AcoesLancamento({
         setErro(res.message);
         return;
       }
+      if (res.aviso) {
+        // Aprovou mas falhou algo acessório (ex: folhas não geradas).
+        // Mantém o dialog aberto pra o RH ver o aviso.
+        setErro(res.aviso);
+        router.refresh();
+        return;
+      }
       setConfirmandoAprovar(false);
       router.refresh();
     });

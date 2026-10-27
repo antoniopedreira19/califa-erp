@@ -19,7 +19,7 @@ import {
 import type { FeriasLancamentoTipo, TipoContratacao } from "@/lib/types";
 
 type ActionResult =
-  | { ok: true; id: string }
+  | { ok: true; id: string; aviso?: string }
   | { ok: false; message: string };
 
 function assertRh(role: string): ActionResult | null {
@@ -209,17 +209,25 @@ export async function aprovarLancamento(
     .select("id, tipo_contratacao")
     .eq("id", lanc.colaborador_id)
     .maybeSingle();
+  let aviso: string | undefined;
   if (colabInfo.data) {
     const resFolhas = await criarFolhasDePagamentoDeFerias({
       lancamento: lanc,
       colaborador: colabInfo.data as {
         id: string;
-        tipo_contratacao: import("@/lib/types").TipoContratacao;
+        tipo_contratacao: TipoContratacao;
       },
       actorUserId: session.profile.id,
     });
     if (resFolhas.erro) {
-      console.warn("[rh.ferias.aprovar.folhas]", resFolhas.erro);
+      // Lançamento já foi aprovado (UPDATE acima). Expomos o erro de folha
+      // como aviso pro RH não ficar com um lançamento aprovado órfão de
+      // folhas e sem perceber.
+      console.error("[rh.ferias.aprovar.folhas]", resFolhas.erro);
+      aviso =
+        "Lançamento aprovado, mas falhou ao gerar folhas de pagamento: " +
+        resFolhas.erro +
+        ". Avise o administrador do sistema.";
     }
   }
 
@@ -238,7 +246,7 @@ export async function aprovarLancamento(
   revalidatePath("/rh/ferias");
   revalidatePath("/perfil");
   revalidatePath("/financeiro/contas-a-pagar");
-  return { ok: true, id: lanc.id };
+  return { ok: true, id: lanc.id, aviso };
 }
 
 // ---------- Reprovar ----------
