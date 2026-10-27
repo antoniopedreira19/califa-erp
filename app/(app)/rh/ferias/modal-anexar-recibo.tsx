@@ -28,9 +28,9 @@ function fmtData(iso: string | null): string {
 }
 
 /**
- * Modal pra RH anexar o recibo da contabilidade (CLT) + informar o
- * valor líquido que vai ser pago. Decisão PO 2026-10-03: só o
- * líquido é obrigatório.
+ * Modal pra RH anexar o recibo da contabilidade (CLT) ou recibo de abono California.
+ * Diferencia visualmente entre usufruto (recibo contabilidade) e abono (recibo assinado
+ * pelo colaborador).
  *
  * Fluxo:
  *   1. RH seleciona o PDF
@@ -39,6 +39,22 @@ function fmtData(iso: string | null): string {
  *   4. Chama server action com `anexo_url` + valor líquido
  */
 export function ModalAnexarRecibo({ folha, onFechar, onSucesso }: Props) {
+  const isAbono = folha.tipo_folha_ferias === "abono";
+
+  // Textos condicionais baseado no tipo
+  const titulo = isAbono
+    ? "Anexar recibo de abono California"
+    : "Anexar recibo da contabilidade";
+
+  const labelPdf = isAbono
+    ? "Recibo assinado pelo colaborador"
+    : "PDF do recibo (opcional pra atualizar valor)";
+
+  const labelValor = isAbono ? "Valor do abono (R$)" : "Valor líquido do recibo (R$)";
+
+  const ajudaValor = isAbono
+    ? `Deve bater com o abono calculado R$ ${folha.salario_base.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`
+    : "Valor que o financeiro vai pagar efetivamente (já com descontos aplicados).";
   const [arquivo, setArquivo] = React.useState<File | null>(null);
   const [valorLiquido, setValorLiquido] = React.useState<string>("");
   const [pending, setPending] = React.useState(false);
@@ -110,7 +126,7 @@ export function ModalAnexarRecibo({ folha, onFechar, onSucesso }: Props) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Paperclip className="h-4 w-4 text-california-red" />
-            Anexar recibo da contabilidade
+            {titulo}
           </DialogTitle>
           <p className="mt-1 text-xs text-muted-foreground">
             {folha.colaborador_nome} ·{" "}
@@ -122,6 +138,12 @@ export function ModalAnexarRecibo({ folha, onFechar, onSucesso }: Props) {
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {isAbono && (
+            <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+              Esse é o modelo California do abono, preenchido e assinado pelo colaborador.
+            </div>
+          )}
+
           {erro && (
             <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
               <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -131,7 +153,7 @@ export function ModalAnexarRecibo({ folha, onFechar, onSucesso }: Props) {
 
           <div className="space-y-1.5">
             <Label htmlFor="arquivo">
-              PDF do recibo (opcional pra atualizar valor)
+              {labelPdf}
             </Label>
             <div className="relative">
               <Input
@@ -152,7 +174,7 @@ export function ModalAnexarRecibo({ folha, onFechar, onSucesso }: Props) {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="valor">Valor líquido do recibo (R$)</Label>
+            <Label htmlFor="valor">{labelValor}</Label>
             <Input
               id="valor"
               type="text"
@@ -163,8 +185,7 @@ export function ModalAnexarRecibo({ folha, onFechar, onSucesso }: Props) {
               required
             />
             <p className="text-xs text-muted-foreground">
-              Valor que o financeiro vai pagar efetivamente (já com
-              descontos aplicados).
+              {ajudaValor}
             </p>
           </div>
 

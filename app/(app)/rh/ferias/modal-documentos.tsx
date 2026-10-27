@@ -114,6 +114,7 @@ function SlotFolha({
     salario_base: folha.salario_base,
     status: folha.status,
     origem: folha.origem,
+    tipo_folha_ferias: folha.tipo_folha_ferias,
     data_pagamento_prevista: row.vencimento_mais_proximo,
     data_pagamento: null,
     anexo_url: folha.anexo_url,

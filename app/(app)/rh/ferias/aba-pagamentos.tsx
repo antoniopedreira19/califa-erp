@@ -14,6 +14,7 @@ export type PagamentoFerias = {
   salario_base: number;
   status: "rascunho" | "enviada" | "aprovada" | "pendente_correcao" | "paga";
   origem: "california" | "contabilidade";
+  tipo_folha_ferias: "usufruto" | "abono" | null;
   data_pagamento_prevista: string | null;
   data_pagamento: string | null;
   anexo_url: string | null;
@@ -38,6 +39,7 @@ export async function AbaPagamentos({ tenantId }: Props) {
         salario_base,
         status,
         origem,
+        tipo_folha_ferias,
         data_pagamento_prevista,
         data_pagamento,
         anexo_url,
@@ -71,6 +73,7 @@ export async function AbaPagamentos({ tenantId }: Props) {
       salario_base: Number(r.salario_base) || 0,
       status: r.status as PagamentoFerias["status"],
       origem: r.origem as PagamentoFerias["origem"],
+      tipo_folha_ferias: (r.tipo_folha_ferias as "usufruto" | "abono" | null) ?? null,
       data_pagamento_prevista: (r.data_pagamento_prevista as string | null) ?? null,
       data_pagamento: (r.data_pagamento as string | null) ?? null,
       anexo_url: (r.anexo_url as string | null) ?? null,
