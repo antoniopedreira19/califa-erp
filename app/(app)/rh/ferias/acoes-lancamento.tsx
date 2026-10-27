@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Check, X, AlertCircle } from "lucide-react";
+import { Check, X, AlertCircle, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -13,8 +13,32 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import type { FeriasLancamentoStatus } from "@/lib/types";
-import { aprovarLancamento, reprovarLancamento } from "./actions";
+import type { FeriasLancamentoStatus, FeriasLancamentoTipo } from "@/lib/types";
+import {
+  aprovarLancamento,
+  previewValoresFerias,
+  reprovarLancamento,
+} from "./actions";
+
+type PreviewValores = {
+  tipo: FeriasLancamentoTipo;
+  dias: number;
+  dias_abono: number;
+  valores: {
+    valor_base_remuneracao: number;
+    valor_ferias: number;
+    valor_um_terco: number;
+    valor_abono: number;
+    valor_total: number;
+  } | null;
+};
+
+function formatarBRL(n: number): string {
+  return n.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  });
+}
 
 type Props = {
   lancamentoId: string;
@@ -33,6 +57,29 @@ export function AcoesLancamento({
   const [reprovandoAberto, setReprovandoAberto] = React.useState(false);
   const [motivo, setMotivo] = React.useState("");
   const [erro, setErro] = React.useState<string | null>(null);
+  const [preview, setPreview] = React.useState<PreviewValores | null>(null);
+  const [previewPending, setPreviewPending] = React.useState(false);
+  const [previewErro, setPreviewErro] = React.useState<string | null>(null);
+
+  function abrirConfirmacao() {
+    setConfirmandoAprovar(true);
+    setPreview(null);
+    setPreviewErro(null);
+    setPreviewPending(true);
+    void previewValoresFerias(lancamentoId).then((res) => {
+      setPreviewPending(false);
+      if (!res.ok) {
+        setPreviewErro(res.message);
+        return;
+      }
+      setPreview({
+        tipo: res.tipo,
+        dias: res.dias,
+        dias_abono: res.dias_abono,
+        valores: res.valores,
+      });
+    });
+  }
 
   const podeAprovar = status === "pendente_aprovacao";
   const podeReprovar = podeAprovar;
@@ -86,7 +133,7 @@ export function AcoesLancamento({
       {podeAprovar && (
         <button
           type="button"
-          onClick={() => setConfirmandoAprovar(true)}
+          onClick={abrirConfirmacao}
           className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-700 transition-colors"
         >
           <Check className="h-3 w-3" />
@@ -94,22 +141,50 @@ export function AcoesLancamento({
         </button>
       )}
 
-      {/* Confirmação de aprovação */}
+      {/* Confirmação de aprovação com preview de valores */}
       <ConfirmDialog
         open={confirmandoAprovar}
         onOpenChange={(o) => {
           if (!o) {
             setConfirmandoAprovar(false);
             setErro(null);
+            setPreview(null);
+            setPreviewErro(null);
           }
         }}
         title={`Aprovar férias de ${colaboradorNome}?`}
         description={
-          <div className="space-y-2">
+          <div className="space-y-3">
             <p>
               A solicitação muda para <strong>aprovado</strong>. O colaborador
               recebe notificação na página de perfil.
             </p>
+
+            {previewPending && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Calculando valores...
+              </div>
+            )}
+
+            {previewErro && (
+              <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded p-2 flex items-start gap-2">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                {previewErro}
+              </p>
+            )}
+
+            {preview && preview.valores && (
+              <ResumoValores dados={preview} />
+            )}
+
+            {preview && !preview.valores && (
+              <p className="text-xs text-muted-foreground bg-muted/40 rounded p-2">
+                Sem salário vigente cadastrado — valores serão calculados pela
+                contabilidade.
+              </p>
+            )}
+
             {erro && (
               <p className="text-sm text-red-700 bg-red-50 border border-red-200 rounded p-2 flex items-start gap-2">
                 <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -184,6 +259,75 @@ export function AcoesLancamento({
         </DialogContent>
       </Dialog>
 
+    </div>
+  );
+}
+
+function ResumoValores({ dados }: { dados: PreviewValores }) {
+  const v = dados.valores!;
+  const temAbono = dados.tipo === "abono_combinado" && v.valor_abono > 0;
+  const soAbono =
+    (dados.tipo === "abono_avulso" || dados.tipo === "abono_excepcional") &&
+    v.valor_abono > 0;
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm space-y-1.5">
+      <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+        Resumo dos valores
+      </p>
+      <div className="flex justify-between text-xs text-muted-foreground">
+        <span>Base de cálculo (salário)</span>
+        <span className="font-medium text-foreground">
+          {formatarBRL(v.valor_base_remuneracao)}
+        </span>
+      </div>
+
+      {dados.tipo === "usufruto" && (
+        <>
+          <LinhaValor label="Férias" valor={v.valor_ferias} />
+          <LinhaValor label="1/3 constitucional" valor={v.valor_um_terco} />
+        </>
+      )}
+
+      {temAbono && (
+        <>
+          <LinhaValor
+            label={`Férias (${dados.dias - dados.dias_abono} dias)`}
+            valor={v.valor_ferias}
+          />
+          <LinhaValor label="1/3 constitucional" valor={v.valor_um_terco} />
+          <LinhaValor
+            label={`Abono (${dados.dias_abono} dias vendidos)`}
+            valor={v.valor_abono}
+          />
+        </>
+      )}
+
+      {soAbono && (
+        <>
+          <LinhaValor
+            label={`Abono (${dados.dias} dias vendidos)`}
+            valor={v.valor_abono}
+          />
+          <LinhaValor label="1/3 constitucional" valor={v.valor_um_terco} />
+        </>
+      )}
+
+      <div className="flex justify-between pt-1.5 mt-1.5 border-t border-border">
+        <span className="font-semibold">Total</span>
+        <span className="font-semibold text-california-red">
+          {formatarBRL(v.valor_total)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function LinhaValor({ label, valor }: { label: string; valor: number }) {
+  return (
+    <div className="flex justify-between text-sm">
+      <span>{label}</span>
+      <span className="font-medium">{formatarBRL(valor)}</span>
     </div>
   );
 }

@@ -37,6 +37,54 @@ async function carregarLancamento(id: string, tenantId: string) {
   return data;
 }
 
+// ---------- Preview de valores (pra confirmar antes de aprovar) ----------
+
+type PreviewResult =
+  | {
+      ok: true;
+      tipo: FeriasLancamentoTipo;
+      dias: number;
+      dias_abono: number;
+      valores: {
+        valor_base_remuneracao: number;
+        valor_ferias: number;
+        valor_um_terco: number;
+        valor_abono: number;
+        valor_total: number;
+      } | null;
+    }
+  | { ok: false; message: string };
+
+export async function previewValoresFerias(
+  lancamentoId: string,
+): Promise<PreviewResult> {
+  const session = await requireSession();
+  const bloqueio = assertRh(session.activeRole);
+  if (bloqueio && !bloqueio.ok) {
+    return { ok: false, message: bloqueio.message };
+  }
+
+  const tenantId = session.activeTenant.id;
+  const lanc = await carregarLancamento(lancamentoId, tenantId);
+  if (!lanc) return { ok: false, message: "Lançamento não encontrado." };
+
+  const valores = await calcularValoresLancamentoPJ(
+    lanc.colaborador_id,
+    lanc.data_inicio,
+    lanc.tipo as FeriasLancamentoTipo,
+    lanc.dias,
+    (lanc as { dias_abono?: number }).dias_abono ?? 0,
+  );
+
+  return {
+    ok: true,
+    tipo: lanc.tipo as FeriasLancamentoTipo,
+    dias: lanc.dias,
+    dias_abono: (lanc as { dias_abono?: number }).dias_abono ?? 0,
+    valores,
+  };
+}
+
 // ---------- Aprovar ----------
 
 export async function aprovarLancamento(
