@@ -9,8 +9,9 @@ dia. A1 (as tabelas de histórico, com a do rateio, e a tela de carga) e A2
 California e BB Americas criadas antes) feitas e conferidas em 26/10/2026,
 A3 (o histórico de cada conta no Extrato da Conciliação) e a A4 (a DRE do
 histórico, o resultado por regional, a rentabilidade e o faturamento dos jobs
-do histórico, em Relatórios) no mesmo dia. Próxima entrega: a A5 (a recarga
-do 3T), quando chegar a planilha com o 3T fechado.
+do histórico, em Relatórios) no mesmo dia. A5 preparada no mesmo dia: o
+pacote do 3T sai da versão de 25/10 e passa no contrato; a carga do 3T ainda
+não foi feita.
 **Quem decidiu:** Tiago, no plano "Importação do histórico financeiro"
 (página privada de 25/10/2026), com as respostas D1, D2 e D3 dadas no mesmo
 dia: "Aprovo D1, D2 e D3 como você recomendou".
@@ -595,9 +596,9 @@ Código em `lib/historico-financeiro/` (regras puras, com teste) e
   do arquivo e as contagens. Leitura em fluxo, sem dependência nova: as 82 abas
   saem em cerca de 10 segundos.
 - **E2 — padronização** (`padronizar.ts`): movimentos, previsões, notas e jobs
-  num formato único, a carga de cada linha, a lista de pendências da primeira
-  carga e as propostas de de-para (plano de contas, cliente, marca, serviço e
-  regional).
+  num formato único, a carga de cada linha, a lista de pendências das cargas
+  que vão ao banco (a primeira e o 3T), com a carga de cada pendência, e as
+  propostas de de-para (plano de contas, cliente, marca, serviço e regional).
 - **Revisão** (`revisao.ts`): um .xlsx com uma aba por assunto e a coluna "Sua
   decisão"; vazia, vale a proposta.
 - **Aprovação do de-para** (`aprovar-depara.ts`): leva as propostas para a
@@ -921,6 +922,43 @@ Uma linha da Hitlab de 2024 não tem a fórmula.
 - **Visões por job:** os totais sem filtro não mudaram.
 - **Ambiente:** sem erro no console nem no servidor, e build OK.
 
+## Conferido em 26/10/2026 (A5, o 3T na versão de 25/10, sem carga)
+
+- **O limite do Ano Comp.:** em toda a planilha a coluna tem até 6
+  caracteres. Só duas linhas do 3T da Conta California BB trazem uma anotação
+  de 26 caracteres digitada nela. O contrato do pacote
+  (`lib/historico-financeiro/pacote.ts`) aceitava 20 e passa a aceitar 120,
+  como a coluna "DRE extra". O banco guarda `text` sem limite, então não houve
+  migration. A tela de carga só aceita o pacote do 3T depois do deploy desse
+  contrato.
+- **E1:** as 82 abas saíram idênticas, byte a byte. Só o manifesto muda, pela
+  hora da extração.
+- **E2:** movimentos, notas, jobs, previsões e propostas de de-para saíram
+  idênticos aos de antes, e os textos sem de-para aprovado são os mesmos 191.
+  A lista de pendências ganhou a coluna da carga e passou a cobrir o 3T: 16 da
+  1ª carga, 9 do 3T e 4 sem carga (as dos jobs e as de data). As 20 de antes
+  são as mesmas (16 + 4).
+- **E3:** idêntica à de 25/10, que já cobria 2026 inteiro. Só no 3T:
+  - Das 610 células das abas DRE e Gerencial com critério do 3T 2026, 608
+    batem. A linha "Empréstimo a CMH" do 3T na DRE da California soma
+    R$ 9.759,00 a mais no histórico: é um lançamento com espaço sobrando no
+    texto, que o SUMIFS da planilha deixa de fora. A linha FIT do 3T na DRE CMH
+    é um `#REF!` da própria planilha.
+  - Os saldos de julho a setembro (30 contas × mês) batem e encadeiam.
+  - O faturamento (14 abas × mês) bate, com 2 centavos de fração na Go Crazy
+    St André em julho.
+- **O pacote do 3T** (`cargas/3t-2026.json`, 4,3 MB): 7.325 movimentos (soma
+  R$ 9.203.359,58), 385 notas (R$ 44.639.771,23), 3.586 jobs, 40 linhas de
+  rateio e 41 saldos. Foi conferido pelo contrato, como a tela e o servidor
+  conferem, e não foi carregado.
+- **O período já carregado não muda:** o pacote da 1ª carga refeito agora é
+  idêntico, tabela por tabela, ao que está no banco.
+- **As 9 pendências do 3T são de um job só:** um nome de job do 3T de 2026 que
+  não está em nenhuma aba Res. Jobs da versão de 25/10. Ele aparece em 8
+  lançamentos da Conta Santander Califórnia (R$ 43.216,48) e em 1 nota da aba
+  Faturamento California (R$ 31.876,48). Corrige-se na planilha. Se o 3T for
+  carregado assim, os lançamentos e a nota entram sem job.
+
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas
   85 e 91 da Res. Jobs 2026; R$ 1.520.000,00 de benefício): o histórico segue a
@@ -930,9 +968,11 @@ Uma linha da Hitlab de 2024 não tem a fórmula.
   fechados. O RH tem a própria tabela de rateio
   (`empresas_rateios_regionais`, do Antonio), com percentuais diferentes dos
   da planilha em 2023, 2024 e 2026: um lugar só se decide com ele.
-- A5: o pacote do 3T não fecha na versão de 25/10/2026 — duas linhas da Conta
-  California BB têm a coluna "Ano Comp." com 26 caracteres, e o contrato do
-  pacote aceita 20.
+- A5: carregar o 3T. O pacote da versão de 25/10 está pronto e conferido, sem
+  carga. Falta corrigir na planilha o job do 3T que não está nas abas Res.
+  Jobs (as 9 pendências). Numa versão nova da planilha, E1, E2, E3 e o pacote
+  rodam de novo, e o pacote da 1ª carga se compara com o do banco antes da
+  carga.
 - As 20 pendências: as de data e de nome de job se corrigem na planilha e
   entram na versão do 3T.
 - A trilha do 4T no sistema: os jobs do 4T que só estão na planilha, as notas de

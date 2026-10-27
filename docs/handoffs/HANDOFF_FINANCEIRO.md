@@ -8300,6 +8300,19 @@ os arquivos da frente do Antonio.
 - Detalhes na
   [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
 
+## ⚠️ Nota de 2026-10-26 (13) — o pacote do 3T do histórico, preparado e sem carga (decisão 211, A5)
+
+- **Contrato do pacote:** a coluna "Ano Comp." dos movimentos passa de 20
+  para 120 caracteres (`lib/historico-financeiro/pacote.ts`), porque duas
+  linhas do 3T trazem uma anotação digitada nela. Sem migration: o banco
+  guarda `text`. A tela de carga só aceita o pacote do 3T depois do deploy.
+- **Pipeline:** a lista de pendências da padronização cobre a 1ª carga e o 3T,
+  com a carga de cada uma, e a planilha de revisão mostra a carga.
+- **3T na versão de 25/10:** E1, E2 e E3 rodadas e o pacote montado
+  (7.325 movimentos, 385 notas), sem carga. A 1ª carga não muda. As 9
+  pendências do 3T são de um job que falta nas abas Res. Jobs. Detalhes na
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
 ## Código do projeto do financeiro sem a sigla — 23/10/2026 (decisão 210)
 
 Aplicada em 26/10/2026 (migration `20261023950001`, destrutiva, na hora

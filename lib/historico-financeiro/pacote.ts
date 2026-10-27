@@ -53,7 +53,7 @@ export const COLUNAS_DO_PACOTE: Record<TabelaDoPacote, readonly ColunaDoPacote[]
     t("job_chave", 160), t("job_nome", 160), t("job_coluna", 10), t("tipo_planilha", 120), t("descricao", 2000),
     t("fornecedor", 300), t("parcela", 60), t("documento", 500), t("observacao", 2000), t("contrapartida", 120),
     t("coluna_jobs", 160), t("coluna_evento", 160), t("coluna_reg", 60), t("coluna_reg_cmh", 60), t("dre_extra", 120),
-    t("ano_comp", 20), T("aba", 120), I("linha"), T("digital", 64),
+    t("ano_comp", 120), T("aba", 120), I("linha"), T("digital", 64),
   ],
   notas: [
     T("empresa", 120), t("empresa_por", 40), T("estabelecimento", 120), T("numero", 40), T("situacao", 20), T("classe", 40),

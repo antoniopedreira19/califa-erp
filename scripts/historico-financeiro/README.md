@@ -19,8 +19,8 @@ tmp/historico-planilha/
     bruto/                 E1: um CSV por aba + manifesto.json
     padronizado/           E2: movimentos, previsões, notas, jobs, pendências, propostas/
     validacao/             E3: relatorios.csv, saldos.csv, faturamento.csv, resumo.json;
-                           A4: dre.csv, regional.csv, regional-fechamento.csv e
-                           rentabilidade.csv
+                           A4: dre.csv, regional.csv, regional-fechamento.csv,
+                           rentabilidade.csv e faturamento-dos-jobs.csv
                            (e as variantes do padronizado)
     revisao-e2.xlsx        pendências e de-para para revisar
     cargas/                A1: os pacotes de carga (.json) para a tela
@@ -75,7 +75,9 @@ marcas, plano de contas, serviços, regionais, contas e os jobs abertos. O
     "RATEIO %", a alíquota teórica, `imposto_teorico_percentual`, da coluna
     "Imp Real %", e o percentual de fee, `fee_percentual`, da coluna logo
     depois de "FEE LÍQUIDO");
-  - `pendencias.csv` — o que não fecha na primeira carga;
+  - `pendencias.csv` — o que não fecha nas cargas que vão ao banco (a
+    primeira e o 3T), com a carga de cada pendência; as dos jobs e as de data
+    inválida ficam sem carga;
   - `propostas/` — de-para proposto, com a forma como foi achado (igual,
     parecido, ambíguo, sem par);
   - `resumo.json` — contagens por aba, carga e pendência.

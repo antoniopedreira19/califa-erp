@@ -14,7 +14,8 @@
  * Uso:
  *   npx tsx scripts/historico-financeiro/conferir-faturamento.ts <pasta-da-versao> [--carga cargas/1a-carga.json]
  *
- * Saída em <pasta-da-versao>/validacao/faturamento.csv.
+ * Saída em <pasta-da-versao>/validacao/faturamento-dos-jobs.csv (o faturamento.csv
+ * da pasta é o da E3, por aba e mês).
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
@@ -162,7 +163,7 @@ const fmt = (n: number) => n.toLocaleString("pt-BR", { minimumFractionDigits: 2,
     totais.set(job.aba, t);
   }
   await mkdir(join(versao, "validacao"), { recursive: true });
-  await writeFile(join(versao, "validacao", "faturamento.csv"), saida.join("\n") + "\n", "utf8");
+  await writeFile(join(versao, "validacao", "faturamento-dos-jobs.csv"), saida.join("\n") + "\n", "utf8");
 
   const porAba = new Map<string, string[]>();
   for (const [k, n] of contagem) {
