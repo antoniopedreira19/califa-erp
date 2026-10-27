@@ -351,25 +351,24 @@ export function NovaSolicitacaoDialog({
               </p>
             </div>
 
-            {travado && (
+            {/* Banner "✓ Freela cadastrado selecionado" só faz sentido no fluxo
+                em /solicitacoes com busca interna — ali ajuda a confirmar o que
+                o user escolheu, e o botão "Trocar freela" vive junto. Quando o
+                dialog vem pré-travado do perfil do próprio freela, o contexto
+                já é óbvio e o banner vira ruído. */}
+            {travado && freelancerInicial === null && (
               <div className="mx-6 mt-4 flex items-center justify-between gap-3 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 shrink-0">
                 <p className="text-[11px] font-semibold text-emerald-900">
                   ✓ Freela cadastrado selecionado
                 </p>
-                {/* Trocar só faz sentido quando o freela foi escolhido DENTRO do
-                    dialog (ex.: fluxo em /solicitacoes com busca). Quando veio
-                    pré-travado da prop (ex.: aberto do perfil do próprio freela),
-                    trocar quebra a semântica — esconde o botão. */}
-                {freelancerInicial === null && (
-                  <button
-                    type="button"
-                    onClick={trocarFreela}
-                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 hover:text-emerald-900"
-                  >
-                    <UserX className="h-3 w-3" />
-                    Trocar freela
-                  </button>
-                )}
+                <button
+                  type="button"
+                  onClick={trocarFreela}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 hover:text-emerald-900"
+                >
+                  <UserX className="h-3 w-3" />
+                  Trocar freela
+                </button>
               </div>
             )}
 
