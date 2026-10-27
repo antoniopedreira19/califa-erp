@@ -8332,3 +8332,15 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   (regional em branco até escolher "Teste"), salvar (foto nº 3). "+" da
   marca aberto e fechado sem cadastrar. Fila do TES-1029/26 com os campos
   preenchidos. Relatório de Rentabilidade abre normal. tsc limpo.
+
+## Cliente do job no financeiro — 26/10/2026 (decisão 215)
+
+- O cliente que a fila, a abertura, os jobs abertos, contas a pagar e a
+  receber, o fluxo de caixa e os relatórios mostram é o do job
+  (`jobs.cliente_id`, o do orçamento), e não mais o do projeto. Hoje os
+  dois são iguais em todos os jobs; passam a diferir em projeto com
+  orçamentos de clientes diferentes.
+- `emitir_faturamento`, `enviar_job_para_faturamento`,
+  `enviar_lote_para_faturamento`, `vw_faturamento_pendente` e
+  `vw_fluxo_caixa` leem o cliente do job (mesmo resultado de antes,
+  conferido).

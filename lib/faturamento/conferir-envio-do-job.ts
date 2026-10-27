@@ -69,7 +69,8 @@ export interface JobDaConferencia {
   empresa_id: string | null;
   projeto_id: string;
   orcamento_id: string;
-  projeto: { cliente_id: string } | null;
+  /** O cliente do job (decisão 215): o do orçamento dele. */
+  cliente_id: string;
   versao_orcamento_aprovada_id: string;
   orcamento: { categoria: { modelo_planilha: string } | null } | null;
   versao: {
@@ -114,7 +115,7 @@ export async function conferirEnvioDoJob(
     supabase
       .from("jobs")
       .select(
-        "id, codigo, status, faturamento_previsto, abertura_em_revisao, empresa_id, projeto_id, orcamento_id, versao_orcamento_aprovada_id, projeto:projetos(cliente_id), orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(percentual_honorarios, percentual_imposto, percentual_veiculo, base_honorarios)",
+        "id, codigo, status, faturamento_previsto, abertura_em_revisao, empresa_id, projeto_id, orcamento_id, versao_orcamento_aprovada_id, cliente_id, orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(percentual_honorarios, percentual_imposto, percentual_veiculo, base_honorarios)",
       )
       .eq("id", jobId)
       .eq("tenant_id", tenantId)

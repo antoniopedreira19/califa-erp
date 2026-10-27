@@ -44,6 +44,8 @@ function extractInput(formData: FormData) {
     nome: formData.get("nome")?.toString() ?? "",
     categoria_id: formData.get("categoria_id")?.toString() ?? "",
     servico_id: formData.get("servico_id")?.toString() ?? "",
+    cliente_id: formData.get("cliente_id")?.toString() ?? "",
+    produto_id: formData.get("produto_id")?.toString() ?? "",
     descritivo: formData.get("descritivo")?.toString() ?? "",
     regional_id: formData.get("regional_id")?.toString() ?? "",
     cidade_id: formData.get("cidade_id")?.toString() ?? "",
@@ -60,6 +62,8 @@ function mapDbError(msg: string): string {
   if (msg.includes("serviço Interno") || msg.includes("BV confirmado ou recebido")) {
     return msg;
   }
+  // Decisão 215: o banco trava o cliente quando o job já abriu.
+  if (msg.includes("O cliente do orçamento não muda")) return msg;
   if (msg.includes("uniq_orcamentos_codigo_por_tenant")) {
     return "Já existe um orçamento com este código neste tenant.";
   }
@@ -431,6 +435,50 @@ export async function criarOrcamentoDaAgregada(
   return { ok: true, orcamentoId: res.orcamentoId, versaoId: res.versaoId };
 }
 
+/**
+ * Cliente e marca do orçamento (decisão 215). O cliente é do tenant e está
+ * ativo; a marca é do cliente e está ativa. Na edição, o cliente e a marca
+ * que o orçamento já tem passam mesmo inativados — o formulário os mostra
+ * e salvar outra coisa não pode recusá-los.
+ */
+async function conferirClienteEMarca(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  clienteId: string,
+  produtoId: string,
+  atual: { cliente_id: string | null; produto_id: string | null } | null,
+): Promise<{ ok: true } | { ok: false; message: string; fieldErrors: Record<string, string[]> }> {
+  const [{ data: cliente }, { data: marca }] = await Promise.all([
+    supabase
+      .from("clientes")
+      .select("id, status")
+      .eq("id", clienteId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<{ id: string; status: string }>(),
+    supabase
+      .from("cliente_produtos")
+      .select("id, cliente_id, ativo")
+      .eq("id", produtoId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<{ id: string; cliente_id: string; ativo: boolean }>(),
+  ]);
+  if (!cliente || (cliente.status !== "ativo" && cliente.id !== atual?.cliente_id)) {
+    return {
+      ok: false,
+      message: "Cliente inválido.",
+      fieldErrors: { cliente_id: ["Selecione um cliente ativo do cadastro."] },
+    };
+  }
+  if (!marca || marca.cliente_id !== clienteId || (!marca.ativo && marca.id !== atual?.produto_id)) {
+    return {
+      ok: false,
+      message: "Marca inválida para este cliente.",
+      fieldErrors: { produto_id: ["Selecione uma marca ativa do cliente."] },
+    };
+  }
+  return { ok: true };
+}
+
 /** O miolo da criação: orçamento + v1. Não exportada — todo export async
  *  de arquivo "use server" vira Server Action. */
 async function criarOrcamentoComV1(
@@ -498,7 +546,7 @@ async function criarOrcamentoComV1(
     if (recusa) return recusa;
   }
 
-  const [vinculo, produtor] = await Promise.all([
+  const [vinculo, produtor, clienteEMarca] = await Promise.all([
     assertRegionalEGpDoProjeto(
       supabase,
       projetoId,
@@ -507,9 +555,17 @@ async function criarOrcamentoComV1(
       parsed.data.gp_responsavel_id,
     ),
     assertProdutor(supabase, session.activeTenant.id, parsed.data.produtor_id, null),
+    conferirClienteEMarca(
+      supabase,
+      session.activeTenant.id,
+      parsed.data.cliente_id,
+      parsed.data.produto_id,
+      null,
+    ),
   ]);
   if (!vinculo.ok) return vinculo;
   if (!produtor.ok) return produtor;
+  if (!clienteEMarca.ok) return clienteEMarca;
 
   let codigo: string;
   try {
@@ -549,7 +605,13 @@ async function criarOrcamentoComV1(
     tenantId: session.activeTenant.id,
     entidadeTipo: "orcamento",
     entidadeId: data.id,
-    metadata: { codigo, nome: parsed.data.nome, projeto_id: projetoId },
+    metadata: {
+      codigo,
+      nome: parsed.data.nome,
+      projeto_id: projetoId,
+      cliente_id: parsed.data.cliente_id,
+      produto_id: parsed.data.produto_id,
+    },
   });
 
   // O GP de fora entra nos GPs Responsáveis do projeto (decisão 176). O
@@ -717,7 +779,7 @@ export async function atualizarOrcamento(
   const { data: atual } = await supabase
     .from("orcamentos")
     .select(
-      "status, arquivado_em, servico_id, categoria_id, produtor_id, data_inicio_prevista, data_fim_prevista, " +
+      "status, arquivado_em, servico_id, categoria_id, produtor_id, data_inicio_prevista, data_fim_prevista, cliente_id, produto_id, " +
         // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
         "categoria:categorias_dominio!categoria_id(modelo_planilha), " +
         "servico:categorias_dominio!servico_id(investimento_interno)",
@@ -733,6 +795,8 @@ export async function atualizarOrcamento(
       produtor_id: string | null;
       data_inicio_prevista: string | null;
       data_fim_prevista: string | null;
+      cliente_id: string | null;
+      produto_id: string | null;
       categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
       servico: { investimento_interno: boolean } | null;
     }>();
@@ -740,6 +804,14 @@ export async function atualizarOrcamento(
   if (!atual) {
     return { ok: false, message: "Orçamento não encontrado." };
   }
+  const clienteEMarca = await conferirClienteEMarca(
+    supabase,
+    session.activeTenant.id,
+    parsed.data.cliente_id,
+    parsed.data.produto_id,
+    atual,
+  );
+  if (!clienteEMarca.ok) return clienteEMarca;
   if (atual.arquivado_em) {
     return { ok: false, message: ORCAMENTO_ARQUIVADO };
   }

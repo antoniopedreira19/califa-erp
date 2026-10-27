@@ -90,6 +90,10 @@ export const aberturaJobSchema = z
       .trim()
       .min(2, "Informe o nome do job (mín. 2 caracteres).")
       .max(200, "Máximo 200 caracteres."),
+    // Cliente e marca do job (decisão 215): nascem com os do orçamento e,
+    // trocados aqui, voltam para ele.
+    cliente_id: z.string().uuid("Selecione o cliente."),
+    produto_id: z.string().uuid("Selecione a marca."),
     cidade_id: z.string().uuid("Selecione a cidade."),
     regional_id: z.string().uuid("Selecione a regional."),
     // Decisão 135: as mensagens são as do formulário do orçamento.

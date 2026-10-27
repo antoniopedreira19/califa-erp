@@ -5911,3 +5911,30 @@ Primeira entrega do protótipo aprovado em 26/10
   `.xlsx` (recusado com o motivo), salvar (linha e arquivo no bucket),
   anexar outro e fechar sem salvar (saiu do bucket), abrir pela ficha do
   job. "Editar" do `P-0006/26-33` abre o pop-up. tsc e lint limpos.
+
+## Cliente e marca no orçamento — 26/10/2026 (decisão 215)
+
+Terceira entrega do protótipo aprovado em 26/10
+(https://claude.ai/artifact/UxASwkRtQgA4GzFEinYTtQ).
+
+- **Projeto sem Cliente e Marcas.** Empresa e Regionais ficam. A coluna
+  `projetos.cliente_id` virou opcional e legado (resposta do Tiago:
+  opção 1).
+- **Orçamento com Cliente e Marca** (Novo, Editar e o da agregada), com o
+  "+" da marca e a sugestão do último orçamento do projeto.
+- **Envio para abertura:** Serviço e Categoria sobem; Cliente e Marca
+  descem e ficam editáveis, e voltam para o orçamento na confirmação. O
+  código do job segue a sigla do cliente escolhido (a prévia muda na hora);
+  o reenvio mantém o código, inclusive o código guardado do job devolvido.
+- **Projeto com vários clientes:** lista, filtro, cabeçalho, agregada e a
+  planilha exportada mostram os clientes dos orçamentos.
+- **Conferência:** no P-0006/26, como administrador: Editar projeto salvo
+  sem cliente (o antigo ficou guardado); "Novo orçamento" nasce com o
+  cliente e a marca do último; o rascunho "ZZ Teste 158 planilha de um
+  mês" passou para o cliente de teste "Teste 22" (TET) pelo Editar — o
+  projeto passou a mostrar "Teste, Teste 22" no cabeçalho e na lista;
+  envio do "Teste Interno 105 · nacional" aberto e fechado sem enviar,
+  com o código indo de TES-1033/26 para TET-1001/26 ao trocar o cliente.
+  Não criei orçamento novo: não há produtor de teste na lista, e uma pessoa
+  real entraria na lista "Meus" dela. Views de rentabilidade, saves,
+  faturamento pendente e fluxo de caixa conferidas por hash antes e depois.

@@ -46,7 +46,9 @@ export interface ProjetoRow {
    *  e o que a lista de projetos precisa mostrar é quem responde por ele. */
   gps: string[];
   status: ProjetoStatus;
-  cliente_id: string;
+  /** Os clientes dos orçamentos do projeto (decisão 215). */
+  cliente_ids: string[];
+  /** Os nomes deles, separados por vírgula. */
   cliente_nome: string | null;
   /** Marcas escolhidas no projeto, na ordem do código (decisão 133). Uma
    *  ou mais; vazia só nos projetos anteriores ao campo. */
@@ -256,7 +258,8 @@ export function ProjetosList({
     const q = busca.trim().toLowerCase();
     return projetos.filter((p) => {
       if (meus && !meusIds.has(p.id)) return false;
-      if (clienteFiltro !== "todos" && p.cliente_id !== clienteFiltro) return false;
+      // O projeto entra se algum orçamento for do cliente (decisão 215).
+      if (clienteFiltro !== "todos" && !p.cliente_ids.includes(clienteFiltro)) return false;
       if (
         produtoFiltro !== "todos" &&
         !p.marcas.some((m) => m.id === produtoFiltro)

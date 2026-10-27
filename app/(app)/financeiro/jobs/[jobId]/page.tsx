@@ -660,6 +660,8 @@ export default async function JobNoFinanceiroPage({
               job={{
                 codigo: job.codigo,
                 nome: nomeNoFinanceiro,
+                // O cliente do job (decisão 215): o do orçamento.
+                clienteNome: detalhe.raw.cliente?.nome_fantasia ?? null,
                 categoriaNome: detalhe.raw.categoria?.nome ?? null,
                 // O serviço do JOB, com o do orçamento como fallback —
                 // `dados.ts` da abertura já resolve (decisão 055).
@@ -690,8 +692,6 @@ export default async function JobNoFinanceiroPage({
                   jobNaFila.projeto_financeiro_nome ??
                   detalhe.raw.projeto?.nome ??
                   "—",
-                clienteNome:
-                  detalhe.raw.projeto?.cliente?.nome_fantasia ?? null,
                 dataInicio: detalhe.raw.projeto?.data_inicio_prevista ?? null,
                 dataFim: detalhe.raw.projeto?.data_fim_prevista ?? null,
                 apresentacoes: detalhe.apresentacoesDoProjeto,

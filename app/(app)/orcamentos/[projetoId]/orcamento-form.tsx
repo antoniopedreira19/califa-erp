@@ -3,7 +3,13 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertCircle, Save } from "lucide-react";
+import { AlertCircle, Plus, Save } from "lucide-react";
+import {
+  CampoCliente,
+  type ClienteDoCampo,
+  type MarcaNova,
+} from "@/app/(app)/clientes/campo-cliente";
+import type { ProdutoOption } from "../projeto-form";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -51,6 +57,9 @@ export interface DadosOrcamento {
   nome: string;
   categoria_id: string;
   servico_id: string;
+  /** Cliente e marca do orçamento (decisão 215). */
+  cliente_id: string;
+  produto_id: string;
   descritivo: string | null;
   regional_id: string;
   cidade_id: string;
@@ -87,6 +96,18 @@ interface Props {
   /** Só as regionais cadastradas no projeto — a peça não sai da praça
    *  que a iniciativa cobre. */
   regionaisDoProjeto: Pick<Regional, "id" | "nome">[];
+  /** Cliente e marca são do orçamento (decisão 215): os clientes ativos
+   *  (o campo busca por nome e sigla) e as marcas ativas de todos eles —
+   *  o campo Marca filtra pelo cliente escolhido. */
+  clientes: ClienteDoCampo[];
+  produtos: ProdutoOption[];
+  /** Cliente e marca do último orçamento do projeto: o novo nasce com
+   *  eles. Nulo no primeiro orçamento do projeto e na edição. */
+  sugestao: { clienteId: string; marcaId: string; orcamentoNome: string } | null;
+  /** `cadastros.clientes.inline` (cadastrar cliente e o "+" da Marca) e
+   *  `cadastros.clientes.editar`. */
+  podeCadastrarCliente: boolean;
+  podeEditarCliente: boolean;
   /** Primeiras cidades do cadastro, só para o combobox não abrir vazio —
    *  o resto é buscado no servidor a cada digitação. */
   cidadesIniciais: CidadeOption[];
@@ -141,6 +162,11 @@ export function OrcamentoForm({
   projetoNome,
   projetoCodigo,
   regionaisDoProjeto,
+  clientes,
+  produtos,
+  sugestao,
+  podeCadastrarCliente,
+  podeEditarCliente,
   cidadesIniciais,
   cidadeAtual,
   gps,
@@ -165,6 +191,54 @@ export function OrcamentoForm({
     orcamento?.descritivo ?? "",
   );
   const [regionalId, setRegionalId] = React.useState(orcamento?.regional_id ?? "");
+
+  // Cliente e marca do orçamento (decisão 215). O orçamento novo nasce
+  // com os do último orçamento do projeto; a edição, com os gravados.
+  const [clientesLocais, setClientesLocais] = React.useState<ClienteDoCampo[]>(() => clientes);
+  const [produtosLocais, setProdutosLocais] = React.useState<ProdutoOption[]>(() => produtos);
+  const [clienteId, setClienteId] = React.useState<string>(
+    orcamento?.cliente_id ?? sugestao?.clienteId ?? "",
+  );
+  const [marcaId, setMarcaId] = React.useState<string>(
+    orcamento?.produto_id ?? sugestao?.marcaId ?? "",
+  );
+  const [abrirMarcas, setAbrirMarcas] = React.useState(false);
+  const marcasDoCliente = produtosLocais.filter((m) => m.cliente_id === clienteId);
+  const siglaDoCliente = clientesLocais.find((c) => c.id === clienteId)?.codigo_curto ?? null;
+  const veioDaSugestao = !isEdit && sugestao !== null && clienteId === sugestao.clienteId;
+  /** Trocar o cliente troca a marca: a única dele, ou a geral (PRD-01). */
+  function trocarCliente(id: string) {
+    setClienteId(id);
+    const doNovo = produtosLocais.filter((m) => m.cliente_id === id);
+    setMarcaId(doNovo.length === 1 ? doNovo[0].id : (doNovo.find((m) => m.padrao)?.id ?? ""));
+  }
+  /** O cliente criado ou editado pelo campo entra na lista na hora, com as
+   *  marcas que nasceram com ele. */
+  function absorverCadastro(cliente: ClienteDoCampo, marcas: MarcaNova[]) {
+    setClientesLocais((atual) =>
+      atual.some((c) => c.id === cliente.id)
+        ? atual.map((c) => (c.id === cliente.id ? { ...c, ...cliente } : c))
+        : [...atual, cliente].sort((a, b) =>
+            a.nome_fantasia.localeCompare(b.nome_fantasia, "pt-BR"),
+          ),
+    );
+    setProdutosLocais((atual) => [
+      ...atual.filter((p) => p.cliente_id !== cliente.id),
+      ...marcas.map((m) => ({
+        id: m.id,
+        nome: m.nome,
+        codigo: m.codigo,
+        cliente_id: cliente.id,
+        padrao: m.padrao,
+      })),
+    ]);
+  }
+  /** A marca criada pelo "+": entra na lista e já fica escolhida. */
+  function absorverMarca(marca: { id: string; nome: string; codigo: string }) {
+    if (!clienteId) return;
+    setProdutosLocais((atual) => [...atual, { ...marca, cliente_id: clienteId, padrao: false }]);
+    setMarcaId(marca.id);
+  }
   const [cidade, setCidade] = React.useState<CidadeOption | null>(
     cidadeAtual ?? null,
   );
@@ -287,6 +361,8 @@ export function OrcamentoForm({
     const formData = new FormData(e.currentTarget);
     formData.set("categoria_id", categoriaId);
     formData.set("servico_id", servicoId);
+    formData.set("cliente_id", clienteId);
+    formData.set("produto_id", marcaId);
     formData.set("regional_id", regionalId);
     formData.set("cidade_id", cidade?.id ?? "");
     formData.set("gp_responsavel_id", gpId);
@@ -340,6 +416,8 @@ export function OrcamentoForm({
         nome: formData.get("nome")?.toString() ?? "",
         categoria_id: formData.get("categoria_id")?.toString() ?? "",
         servico_id: servicoId,
+        cliente_id: clienteId,
+        produto_id: marcaId,
         descritivo: descritivo,
         regional_id: regionalId,
         cidade_id: cidade?.id ?? "",
@@ -431,6 +509,62 @@ export function OrcamentoForm({
             </p>
           </Field>
         )}
+
+        {/* Cliente e Marca do orçamento (decisão 215): saíram do projeto, e
+            o job herda os dois. O "+" da Marca abre o mesmo pop-up do
+            projeto. */}
+        <Field label="Cliente" name="cliente_id" required errors={fieldErrors}>
+          <CampoCliente
+            value={clienteId || null}
+            onChange={(v) => trocarCliente(v ?? "")}
+            clientes={clientesLocais}
+            onCadastroMudou={absorverCadastro}
+            podeCadastrar={podeCadastrarCliente}
+            podeEditar={podeEditarCliente}
+            className={erroClasses("cliente_id")}
+            abrirMarcas={abrirMarcas}
+            onAbrirMarcasResolvido={() => setAbrirMarcas(false)}
+            onMarcaCriada={absorverMarca}
+          />
+          <p className="text-xs text-muted-foreground">
+            {veioDaSugestao
+              ? `Como no último orçamento do projeto (${sugestao!.orcamentoNome}).`
+              : siglaDoCliente
+                ? `O código do job leva a sigla ${siglaDoCliente}.`
+                : "O job herda o cliente deste orçamento."}
+          </p>
+        </Field>
+
+        <Field label="Marca" name="produto_id" required errors={fieldErrors}>
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <Combobox
+                items={marcasDoCliente.map((m) => ({
+                  value: m.id,
+                  label: m.nome,
+                  descricao: m.padrao ? `${m.codigo} · marca geral do cliente` : m.codigo,
+                }))}
+                value={marcaId || null}
+                onChange={(v) => setMarcaId(v ?? "")}
+                disabled={!clienteId}
+                placeholder={clienteId ? "Selecione a marca" : "Selecione o cliente primeiro"}
+                buscaPlaceholder="Buscar marca..."
+                className={`${COMBOBOX_COMO_SELECT} h-10 ${erroClasses("produto_id")}`}
+              />
+            </div>
+            {clienteId && podeCadastrarCliente && (
+              <button
+                type="button"
+                onClick={() => setAbrirMarcas(true)}
+                title="Cadastrar marca deste cliente"
+                aria-label="Cadastrar marca deste cliente"
+                className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:border-california-red/40 hover:bg-california-red/[0.06]"
+              >
+                <Plus className="h-[17px] w-[17px]" />
+              </button>
+            )}
+          </div>
+        </Field>
 
         {/* Serviço vem imediatamente antes de Categoria, os dois na mesma
             linha. Desceu do projeto em 02/09/2026: descreve o trabalho

@@ -146,7 +146,7 @@ export async function carregarDetalheDoJob(
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, recebimento_previsto_por_mes, observacoes, responsavel_id, produtor_id, produtor_envia_pp, produtor_envia_pp_por, produtor_envia_pp_em, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, devolvido_em, enviado_abertura_por, enviado_abertura_em, codigo_reservado, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), enviado_abertura_perfil:profiles!enviado_abertura_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome, investimento_interno), categoria:categorias_dominio!categoria_id(nome, modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, percentual_veiculo, base_honorarios), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia, cnpj))",
+        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, recebimento_previsto_por_mes, observacoes, responsavel_id, produtor_id, produtor_envia_pp, produtor_envia_pp_por, produtor_envia_pp_em, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, devolvido_em, enviado_abertura_por, enviado_abertura_em, codigo_reservado, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), enviado_abertura_perfil:profiles!enviado_abertura_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome, investimento_interno), categoria:categorias_dominio!categoria_id(nome, modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, percentual_veiculo, base_honorarios), cliente_id, cliente:clientes!jobs_cliente_id_fkey(id, nome_fantasia, cnpj), projeto:projetos(id, codigo, nome, data_inicio_prevista, data_fim_prevista)",
       )
       .eq("id", jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -558,7 +558,7 @@ export async function carregarDetalheDoJob(
   // Só os portais do cliente DESTE job — a consulta traz os do tenant e o
   // filtro por cliente é feito aqui, com o id que já veio no `raw`.
   const portaisDoCliente = ((portaisRes.data ?? []) as any[])
-    .filter((p) => p.cliente?.id === raw.projeto?.cliente_id)
+    .filter((p) => p.cliente?.id === raw.cliente_id)
     .map((p) => ({ id: p.id, nome: p.nome, url: p.url }));
 
   // Indexado pela CÓPIA do job: a calha consulta uma chave por linha, e
@@ -1605,7 +1605,7 @@ export async function carregarDetalheDoJob(
           ];
   // SAVE — o crédito entre jobs. As duas leituras vão juntas: uma em
   // série apareceria no TTFB da tela mais pesada do job.
-  const clienteIdDoJob: string = raw.projeto?.cliente_id ?? "";
+  const clienteIdDoJob: string = raw.cliente_id ?? "";
   const [savePorItem, saldosDeSave] = await Promise.all([
     saveDoJob(supabase, session.activeTenant.id, jobId, itens),
     clienteIdDoJob
@@ -1684,10 +1684,10 @@ export async function carregarDetalheDoJob(
     midia,
     savePorItem,
     saldosDeSave,
-    clienteNome: raw.projeto?.cliente?.nome_fantasia ?? "—",
+    clienteNome: raw.cliente?.nome_fantasia ?? "—",
     // O CNPJ do cadastro do cliente: cada nota do envio para faturamento
     // nasce com ele (decisão 123).
-    cnpjCliente: (raw.projeto?.cliente as { cnpj?: string | null } | null)?.cnpj ?? null,
+    cnpjCliente: (raw.cliente as { cnpj?: string | null } | null)?.cnpj ?? null,
     job,
     grupos,
     itens,

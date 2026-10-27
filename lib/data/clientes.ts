@@ -57,7 +57,8 @@ export async function honorariosDoProjeto(
   return normalizar(data);
 }
 
-/** Cliente do orçamento (via projeto). Usado por nova versão e importação. */
+/** Cliente do orçamento (decisão 215: o do próprio orçamento, não mais o
+ *  do projeto). Usado por nova versão e importação. */
 export async function honorariosDoOrcamento(
   orcamentoId: string,
   tenantId: string,
@@ -66,15 +67,15 @@ export async function honorariosDoOrcamento(
   const { data, error } = await supabase
     .from("orcamentos")
     .select(
-      "projeto:projetos(cliente:clientes(id, nome_fantasia, percentual_honorarios_padrao))",
+      "cliente:clientes!orcamentos_cliente_id_fkey(id, nome_fantasia, percentual_honorarios_padrao)",
     )
     .eq("id", orcamentoId)
     .eq("tenant_id", tenantId)
-    .maybeSingle<{ projeto: ClienteEmbed | null }>();
+    .maybeSingle<ClienteEmbed>();
 
   if (error) {
     console.error("[clientes.honorariosDoOrcamento]", error.message);
     return null;
   }
-  return normalizar(data?.projeto ?? null);
+  return normalizar(data ?? null);
 }

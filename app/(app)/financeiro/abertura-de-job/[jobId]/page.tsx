@@ -404,6 +404,8 @@ export default async function AbrirJobNoFinanceiroPage({
               job={{
                 codigo: jobDoDetalhe.codigo,
                 nome: job.nome,
+                // O cliente do job (decisão 215): o do orçamento.
+                clienteNome: detalhe.raw.cliente?.nome_fantasia ?? null,
                 // Antes da abertura a categoria do job ainda é a do
                 // orçamento: `jobs.categoria_id` só é gravado ao confirmar.
                 categoriaNome:
@@ -430,7 +432,6 @@ export default async function AbrirJobNoFinanceiroPage({
                 id: detalhe.raw.projeto_id,
                 codigo: detalhe.raw.projeto?.codigo ?? "—",
                 nome: detalhe.raw.projeto?.nome ?? "—",
-                clienteNome: detalhe.raw.projeto?.cliente?.nome_fantasia ?? null,
                 dataInicio: detalhe.raw.projeto?.data_inicio_prevista ?? null,
                 dataFim: detalhe.raw.projeto?.data_fim_prevista ?? null,
                 apresentacoes: detalhe.apresentacoesDoProjeto,

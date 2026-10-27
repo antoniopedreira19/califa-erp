@@ -26,6 +26,8 @@ import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { cn, formatCurrency } from "@/lib/utils";
 import { SAVE } from "@/app/(app)/_planilha/blocos";
 import { OBSERVACOES_MAX } from "@/lib/validations/abertura-job";
+import type { ClienteDoCampo } from "@/app/(app)/clientes/campo-cliente";
+import type { ProdutoOption } from "@/app/(app)/orcamentos/projeto-form";
 import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
 import {
   alterarRecebimento,
@@ -106,6 +108,10 @@ export function contatoVazio(): ContatoCobranca {
 
 export interface DadosJob {
   nome: string;
+  /** Cliente e marca do job (decisão 215): nascem com os do orçamento e,
+   *  se mudarem aqui, o orçamento acompanha na confirmação. */
+  clienteId: string;
+  produtoId: string;
   /** Pré-preenchidos com o orçamento; se mudarem, o orçamento acompanha. */
   cidadeId: string;
   cidadeNome: string;
@@ -183,6 +189,8 @@ export interface PessoaOpcao {
 /** Campos que o Zod do servidor valida — as chaves batem com `fieldErrors`. */
 type CampoObrigatorio =
   | "nome"
+  | "cliente_id"
+  | "produto_id"
   | "cidade_id"
   | "regional_id"
   | "gp_responsavel_id"
@@ -225,6 +233,8 @@ export function faltamCampos(
 ): Record<CampoObrigatorio, boolean> {
   return {
     nome: d.nome.trim().length < 2,
+    cliente_id: !d.clienteId,
+    produto_id: !d.produtoId,
     cidade_id: !d.cidadeId,
     regional_id: !d.regionalId,
     gp_responsavel_id: !d.gpId,
@@ -264,14 +274,10 @@ export function faltamCampos(
 /** Falta algo herdado? Então o projeto está incompleto e a abertura não
  *  tem como gravar o job. Cidade e regional não entram: são campos do
  *  formulário desde 12/08/2026 e o usuário resolve na hora; GP e produtor
- *  também, desde a decisão 135.
- *
- *  Espelha a checagem do servidor em `enviarJobParaAbertura`, que olha
- *  `projeto.produto_id`. */
-export function herdadosIncompletos(h: HerdadosJob): string[] {
-  const faltando: string[] = [];
-  if (!h.produtoId) faltando.push("Marca (no projeto)");
-  return faltando;
+ *  também, desde a decisão 135; cliente e marca, desde a decisão 215. Hoje
+ *  nada herdado falta — a função fica para o próximo campo travado. */
+export function herdadosIncompletos(_h: HerdadosJob): string[] {
+  return [];
 }
 
 interface Props {
@@ -288,7 +294,10 @@ interface Props {
   projetoNome: string;
   /** A empresa do projeto, que vira a do job (19/10/2026). */
   empresaNome: string;
-  clienteNome: string;
+  /** Os clientes ativos e as marcas ativas deles: as listas de Cliente e
+   *  Marca do envio (decisão 215). */
+  clientes: ClienteDoCampo[];
+  produtos: ProdutoOption[];
   codigoJob: string;
   /** O código é o do job cancelado pelo "Cancelar aprovação" da devolução,
    *  que volta neste envio (decisão 128). */
@@ -352,7 +361,8 @@ export function EnviarJobModal({
   orcamentoNome,
   projetoNome,
   empresaNome,
-  clienteNome,
+  clientes,
+  produtos,
   codigoJob,
   codigoReaproveitado,
   rotuloFechamento,
@@ -408,6 +418,16 @@ export function EnviarJobModal({
 
   const faltandoHerdados = herdadosIncompletos(herdados);
 
+  // Cliente e marca do envio (decisão 215): nascem com os do orçamento;
+  // trocar aqui atualiza o orçamento na confirmação, como nome, GP, cidade
+  // e regional. Trocar o cliente troca a marca: a única dele, ou a geral.
+  const marcasDoClienteEnvio = produtos.filter((m) => m.cliente_id === dados.clienteId);
+  function trocarClienteEnvio(id: string) {
+    const doNovo = produtos.filter((m) => m.cliente_id === id);
+    const marca = doNovo.length === 1 ? doNovo[0] : doNovo.find((m) => m.padrao);
+    onChange({ clienteId: id, produtoId: marca?.id ?? "" });
+  }
+
   /** Contatos não usam o "Campo obrigatório." genérico: a pendência pode
    *  ser "não tem nenhum" ou "tem, mas incompleto" — e são conversas
    *  diferentes com o usuário. */
@@ -459,7 +479,7 @@ export function EnviarJobModal({
           <div className="min-w-0 space-y-1">
             <DialogTitle className="text-xl">Enviar job para abertura</DialogTitle>
             <DialogDescription>
-              {`Confira as informações essenciais. Alterações em nome, GP, produtor, cidade, regional e datas são gravadas também no orçamento “${orcamentoNome}”.`}
+              {`Confira as informações essenciais. Alterações em nome, cliente, marca, GP, produtor, cidade, regional e datas são gravadas também no orçamento “${orcamentoNome}”.`}
             </DialogDescription>
           </div>
         </DialogHeader>
@@ -479,8 +499,9 @@ export function EnviarJobModal({
           >
             <Travado valor={codigoJob} mono />
           </Campo>
-          <Campo rotulo="Cliente">
-            <Travado valor={clienteNome} />
+          {/* Serviço sobe para o lugar do Cliente (decisão 215). */}
+          <Campo rotulo="Serviço" apoio="Cadastrado no orçamento.">
+            <Travado valor={herdados.servicoNome ?? "— não informado"} />
           </Campo>
 
           {/* Linha 2 — nome ocupa 2 colunas, a marca fecha a linha. */}
@@ -501,15 +522,9 @@ export function EnviarJobModal({
               placeholder="Ex.: Bebedouros SP"
             />
           </Campo>
-          <Campo
-            rotulo="Marca"
-            apoio={
-              herdados.projetoComVariasMarcas
-                ? "O projeto tem mais de uma marca: o job segue com a marca geral do cliente."
-                : "Cadastrada no projeto."
-            }
-          >
-            <Travado valor={herdados.produtoNome ?? "— não informado"} />
+          {/* Categoria sobe para o lugar da Marca (decisão 215). */}
+          <Campo rotulo="Categoria" apoio="Cadastrada no orçamento.">
+            <Travado valor={herdados.categoriaNome ?? "— não informada"} />
           </Campo>
 
           {/* Linhas 3 e 4 — as três colunas ficam sempre cheias (decisão
@@ -520,12 +535,56 @@ export function EnviarJobModal({
               As opções de regional saem do PROJETO
               (`regionaisDoProjeto`), não da cidade escolhida — uma nunca
               dependeu da outra. */}
-          <Campo rotulo="Serviço" apoio="Cadastrado no orçamento.">
-            <Travado valor={herdados.servicoNome ?? "— não informado"} />
+          {/* Cliente e Marca descem para cá e ficam editáveis (decisão
+              215): saíram do projeto para o orçamento e não mexem na
+              planilha aprovada. */}
+          <Campo
+            rotulo="Cliente"
+            obrigatorio
+            erro={erroDe("cliente_id")}
+            apoio="Se alterar, o orçamento é atualizado na confirmação."
+          >
+            <Combobox
+              ariaLabel="Cliente"
+              items={clientes.map((c) => ({
+                value: c.id,
+                label: c.nome_fantasia,
+                busca: c.codigo_curto ?? undefined,
+              }))}
+              value={dados.clienteId || null}
+              onChange={(v) => trocarClienteEnvio(v ?? "")}
+              placeholder="Selecione o cliente"
+              buscaPlaceholder="Escreva o nome"
+              className={cn(
+                COMBOBOX_COMO_SELECT,
+                erroDe("cliente_id") && "border-california-red ring-2 ring-california-red/15",
+              )}
+            />
           </Campo>
 
-          <Campo rotulo="Categoria" apoio="Cadastrada no orçamento.">
-            <Travado valor={herdados.categoriaNome ?? "— não informada"} />
+          <Campo
+            rotulo="Marca"
+            obrigatorio
+            erro={erroDe("produto_id")}
+            apoio="Se alterar, o orçamento é atualizado na confirmação."
+          >
+            <Combobox
+              ariaLabel="Marca"
+              items={marcasDoClienteEnvio.map((m) => ({
+                value: m.id,
+                label: m.nome,
+                descricao: m.padrao ? `${m.codigo} · marca geral do cliente` : m.codigo,
+              }))}
+              value={dados.produtoId || null}
+              onChange={(v) => onChange({ produtoId: v ?? "" })}
+              disabled={!dados.clienteId}
+              placeholder={dados.clienteId ? "Selecione a marca" : "Selecione o cliente primeiro"}
+              buscaPlaceholder="Buscar marca..."
+              className={cn(
+                COMBOBOX_COMO_SELECT,
+                erroDe("produto_id") && "border-california-red ring-2 ring-california-red/15",
+              )}
+            />
           </Campo>
 
           <Campo

@@ -290,8 +290,12 @@ export interface Projeto {
    *  gravados continuam (a busca da lista ainda casa por campanha). */
   campanha: string | null;
   categoria_id: string | null;
-  cliente_id: string;
-  /** Marca que o JOB leva ao financeiro (`cliente_produtos`), copiada para
+  /** LEGADO desde a decisão 215 (26/10/2026): o cliente é do orçamento
+   *  (`Orcamento.cliente_id`) e do job. Os projetos anteriores guardam o
+   *  que tinham; os novos ficam sem. Não ler para saber o cliente de um
+   *  job ou orçamento. */
+  cliente_id: string | null;
+  /** LEGADO desde a decisão 215, como `cliente_id`. Marca que o JOB leva ao financeiro (`cliente_produtos`), copiada para
    *  `jobs.produto` no envio para abertura. Desde a decisão 133
    *  (30/09/2026) o projeto aceita mais de uma marca: as escolhidas vivem
    *  em `projeto_marcas`, e esta coluna guarda a única escolhida ou, com
@@ -348,6 +352,11 @@ export interface Orcamento {
   status: OrcamentoStatus;
   versao_aprovada_id: string | null;
   categoria_id: string | null;
+  /** Cliente e marca do orçamento (decisão 215): saíram do projeto. O job
+   *  herda os dois (`jobs.cliente_id`, mantido pelo banco, e
+   *  `jobs.produto_id`). */
+  cliente_id: string;
+  produto_id: string | null;
   /** Serviço do job deste orçamento. Desceu do projeto em 02/09/2026 e lê
    *  `categorias_dominio` com escopo `projeto` — lista diferente da
    *  `categoria_id` acima, que usa escopo `orcamento`. */

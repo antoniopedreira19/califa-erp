@@ -445,7 +445,7 @@ export async function abrirJobNoFinanceiro(
   const { data: job } = await supabase
     .from("jobs")
     .select(
-      "id, status, projeto_id, orcamento_id, faturamento_previsto, valor_total, data_inicio_prevista, produto_id, projeto:projetos(cliente_id)",
+      "id, status, projeto_id, orcamento_id, faturamento_previsto, valor_total, data_inicio_prevista, produto_id, cliente_id",
     )
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)
@@ -458,7 +458,7 @@ export async function abrirJobNoFinanceiro(
       valor_total: number | string | null;
       data_inicio_prevista: string | null;
       produto_id: string | null;
-      projeto: { cliente_id: string } | null;
+      cliente_id: string;
     }>();
 
   if (!job) return { ok: false, message: "Job não encontrado." };
@@ -492,7 +492,7 @@ export async function abrirJobNoFinanceiro(
   const marcaEmpresaRegional = await conferirMarcaEmpresaRegional(
     supabase,
     session.activeTenant.id,
-    job.projeto?.cliente_id ?? null,
+    job.cliente_id ?? null,
     job.produto_id ?? null,
     parsed.data,
   );
@@ -505,7 +505,7 @@ export async function abrirJobNoFinanceiro(
   const refsErro = await conferirProjetoEContas(
     supabase,
     session.activeTenant.id,
-    job.projeto?.cliente_id ?? null,
+    job.cliente_id ?? null,
     parsed.data,
   );
   if (refsErro) return { ok: false, message: refsErro };
@@ -664,7 +664,7 @@ export async function abrirJobNoFinanceiro(
         tenantId: session.activeTenant.id,
         profileId: session.profile.id,
         // Conferido em `conferirProjetoEContas`: projeto novo exige cliente.
-        clienteId: job.projeto?.cliente_id ?? "",
+        clienteId: job.cliente_id ?? "",
         nome: parsed.data.projeto_financeiro_novo,
       })
     : null;
@@ -1527,7 +1527,7 @@ export async function editarRegistroDaAbertura(
         "nome_financeiro, projeto_financeiro_id, conta_recebimento_id, " +
         "conta_pagamento_id, conta_impostos_id, categoria_id, servico_id, competencia_trimestre, " +
         "competencia_ano, abertura_em_revisao, abertura_revisao_errata_id, " +
-        "data_inicio_prevista, produto_id, empresa_id, regional_id, projeto:projetos(cliente_id)",
+        "data_inicio_prevista, produto_id, empresa_id, regional_id, cliente_id",
     )
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)
@@ -1669,7 +1669,7 @@ export async function editarRegistroDaAbertura(
   const marcaEmpresaRegional = await conferirMarcaEmpresaRegional(
     supabase,
     session.activeTenant.id,
-    job.projeto?.cliente_id ?? null,
+    job.cliente_id ?? null,
     job.produto_id ?? null,
     parsed.data,
   );
@@ -1681,7 +1681,7 @@ export async function editarRegistroDaAbertura(
   const refsErro = await conferirProjetoEContas(
     supabase,
     session.activeTenant.id,
-    job.projeto?.cliente_id ?? null,
+    job.cliente_id ?? null,
     parsed.data,
   );
   if (refsErro) return { ok: false, message: refsErro };
@@ -1882,7 +1882,7 @@ export async function editarRegistroDaAbertura(
     ? await criarProjetoDoJob(supabase, {
         tenantId: session.activeTenant.id,
         profileId: session.profile.id,
-        clienteId: job.projeto?.cliente_id ?? "",
+        clienteId: job.cliente_id ?? "",
         nome: parsed.data.projeto_financeiro_novo,
       })
     : null;

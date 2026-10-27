@@ -353,6 +353,9 @@ export default async function JobDetailPage({
               job={{
                 codigo: job.codigo,
                 nome: job.nome,
+                // O cliente do job (decisão 215): o do orçamento, do
+                // cadastro de clientes.
+                clienteNome: raw.cliente?.nome_fantasia ?? null,
                 // Categoria do job = `jobs.categoria_id`, que só é gravado
                 // quando o financeiro abre o job (e a abertura a exige).
                 // Na fila, ou devolvido, vale a do orçamento — a mesma
@@ -383,9 +386,6 @@ export default async function JobDetailPage({
                 id: raw.projeto_id,
                 codigo: raw.projeto?.codigo ?? "—",
                 nome: raw.projeto?.nome ?? "—",
-                // Cliente de verdade, do cadastro — antes desta tela o card
-                // rotulava "Cliente" e mostrava o nome do PROJETO.
-                clienteNome: raw.projeto?.cliente?.nome_fantasia ?? null,
                 dataInicio: raw.projeto?.data_inicio_prevista ?? null,
                 dataFim: raw.projeto?.data_fim_prevista ?? null,
                 apresentacoes: detalhe.apresentacoesDoProjeto,

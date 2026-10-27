@@ -354,7 +354,7 @@ const SELECT_JOB_FILA =
   // `servico_id` do JOB (decisão 055). A dica `!servico_id` é obrigatória:
   // `jobs` tem duas FKs para `categorias_dominio` desde 07/09/2026.
   "servico_id, servico:categorias_dominio!servico_id(nome), " +
-  "projeto:projetos(codigo, nome, cliente_id, cliente:clientes(nome_fantasia)), " +
+  "cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), projeto:projetos(codigo, nome), " +
   // A empresa do job. Dica de FK por segurança: `jobs` tem uma FK só para
   // `empresas` hoje, mas uma segunda deixaria o embed ambíguo (HTTP 300).
   "empresa:empresas!jobs_empresa_id_fkey(nome_fantasia, razao_social), " +
@@ -472,8 +472,8 @@ function montarJobNaFila(
     projeto_codigo: j.projeto?.codigo ?? null,
     projeto_nome: j.projeto?.nome ?? null,
     empresa_nome: j.empresa?.nome_fantasia ?? j.empresa?.razao_social ?? null,
-    cliente_id: j.projeto?.cliente_id ?? null,
-    cliente_nome: j.projeto?.cliente?.nome_fantasia ?? null,
+    cliente_id: j.cliente_id ?? null,
+    cliente_nome: j.cliente?.nome_fantasia ?? null,
     projeto_financeiro_id: j.projeto_financeiro_id ?? null,
     projeto_financeiro_codigo: j.projeto_financeiro?.codigo ?? null,
     projeto_financeiro_nome: j.projeto_financeiro?.nome ?? null,
@@ -1072,7 +1072,7 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
       .from("jobs")
       .select(
         "id, codigo, nome, produto, " +
-          "projeto:projetos(codigo, nome, cliente_id, cliente:clientes(nome_fantasia)), " +
+          "cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), projeto:projetos(codigo, nome), " +
           "empresa:empresas!jobs_empresa_id_fkey(nome_fantasia, razao_social), " +
           "responsavel:profiles!responsavel_id(nome), " +
           "produtor:profiles!produtor_id(nome), " +
@@ -1136,7 +1136,7 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
   const clientesDosPedidos = [
     ...new Set(
       [...jobs.values()]
-        .map((j) => j.projeto?.cliente_id as string | null)
+        .map((j) => j.cliente_id as string | null)
         .filter(Boolean),
     ),
   ] as string[];
@@ -1187,7 +1187,7 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
       projetoCodigo: j.projeto?.codigo ?? null,
       projetoNome: j.projeto?.nome ?? null,
       empresaNome: j.empresa?.nome_fantasia ?? j.empresa?.razao_social ?? null,
-      clienteNome: j.projeto?.cliente?.nome_fantasia ?? null,
+      clienteNome: j.cliente?.nome_fantasia ?? null,
       produto: j.produto ?? null,
       responsavelNome: j.responsavel?.nome ?? null,
       produtorNome: j.produtor?.nome ?? null,
@@ -1213,8 +1213,8 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
                 | undefined) ?? null,
             )
           : null,
-      saldoDoCliente: j.projeto?.cliente_id
-        ? (disponivelPorCliente.get(j.projeto.cliente_id) ?? 0)
+      saldoDoCliente: j.cliente_id
+        ? (disponivelPorCliente.get(j.cliente_id) ?? 0)
         : 0,
       origens: ((p.origens ?? []) as OrigemDeSave[])
         .map((o) => ({

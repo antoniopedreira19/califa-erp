@@ -5,9 +5,10 @@ import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
  * Código do job: "[SIGLA]-[SEQ_4]/[ANO_2]" — o formato que nomeava os
  * projetos até então (decisão 114, Tiago, 28/09/2026). Ex.: "AMB-1006/26".
  *
- *   - SIGLA: o código curto ATUAL do cliente do projeto. Não a sigla que
- *     está no código do projeto: ela fica velha quando o projeto troca de
- *     cliente (o HIT-0001/26 é da Universal, UER).
+ *   - SIGLA: o código curto ATUAL do cliente do job — desde a decisão 215
+ *     (26/10/2026), o do orçamento, escolhido no envio para abertura. O
+ *     reenvio de job devolvido mantém o código que ele já tinha, mesmo com
+ *     o cliente trocado (resposta do Tiago, 26/10).
  *   - ANO: o ano em que o job é criado, no fuso de São Paulo. Não a data
  *     de início, que se edita depois — e o código não muda.
  *   - SEQ: o maior número já usado na sigla e no ano, + 1. Número não
@@ -75,25 +76,26 @@ export function compararCodigosDeJob(a: string, b: string): number {
 }
 
 /**
- * Gera o código do próximo job de um projeto: a sigla vem do cliente do
- * projeto, o ano é o de hoje.
+ * Gera o código do próximo job: a sigla vem do cliente do job — o escolhido
+ * no envio para abertura, que é o do orçamento (decisão 215) —, o ano é o
+ * de hoje.
  */
 export async function gerarCodigoJob(
   supabase: SupabaseClient,
   tenantId: string,
-  projetoId: string,
+  clienteId: string,
 ): Promise<string> {
-  const { data: projeto, error: errProj } = await supabase
-    .from("projetos")
-    .select("cliente:clientes(codigo_curto)")
-    .eq("id", projetoId)
+  const { data: cliente, error: errCli } = await supabase
+    .from("clientes")
+    .select("codigo_curto")
+    .eq("id", clienteId)
     .eq("tenant_id", tenantId)
-    .maybeSingle<{ cliente: { codigo_curto: string | null } | null }>();
+    .maybeSingle<{ codigo_curto: string | null }>();
 
-  const sigla = projeto?.cliente?.codigo_curto;
-  if (errProj || !sigla) {
+  const sigla = cliente?.codigo_curto;
+  if (errCli || !sigla) {
     throw new Error(
-      "O cliente do projeto está sem código curto — preencha no cadastro do cliente.",
+      "O cliente do orçamento está sem código curto — preencha no cadastro do cliente.",
     );
   }
 

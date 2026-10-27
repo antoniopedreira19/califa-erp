@@ -53,7 +53,8 @@ interface LinhaComJob {
     data_abertura_financeiro: string | null;
     aberto_por: string | null;
     projeto_financeiro_id: string | null;
-    projeto: { codigo: string; nome: string; cliente: { nome_fantasia: string } | null } | null;
+    cliente: { nome_fantasia: string } | null;
+    projeto: { codigo: string; nome: string } | null;
     empresa: { nome_fantasia: string | null; razao_social: string | null } | null;
     responsavel: { nome: string } | null;
     regional: { nome: string } | null;
@@ -71,7 +72,7 @@ export async function listarCancelamentosNaFila(
       // `aberto_por` aponta para `auth.users`, não para `profiles`: o nome
       // vem numa leitura à parte, na segunda onda.
       `${SELECT_CANCELAMENTO}, job:jobs!inner(id, codigo, nome, nome_financeiro, produto, valor_total, data_abertura_financeiro, aberto_por, projeto_financeiro_id, ` +
-        "projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia)), " +
+        "cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), projeto:projetos(codigo, nome), " +
         "empresa:empresas!jobs_empresa_id_fkey(nome_fantasia, razao_social), " +
         "responsavel:profiles!responsavel_id(nome), " +
         "regional:regionais(nome), projeto_financeiro:projetos_financeiro(codigo))",
@@ -173,7 +174,7 @@ export async function listarCancelamentosNaFila(
       projetoCodigo: j.projeto?.codigo ?? null,
       projetoNome: j.projeto?.nome ?? null,
       empresaNome: j.empresa?.nome_fantasia ?? j.empresa?.razao_social ?? null,
-      clienteNome: j.projeto?.cliente?.nome_fantasia ?? null,
+      clienteNome: j.cliente?.nome_fantasia ?? null,
       produto: j.produto,
       responsavelNome: j.responsavel?.nome ?? null,
       regionalNome: j.regional?.nome ?? null,

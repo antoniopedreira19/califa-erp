@@ -72,6 +72,8 @@ function parseRecebimentos(raw: string): unknown {
 function extractInput(formData: FormData) {
   return {
     nome: formData.get("nome")?.toString() ?? "",
+    cliente_id: formData.get("cliente_id")?.toString() ?? "",
+    produto_id: formData.get("produto_id")?.toString() ?? "",
     cidade_id: formData.get("cidade_id")?.toString() ?? "",
     regional_id: formData.get("regional_id")?.toString() ?? "",
     gp_responsavel_id: formData.get("gp_responsavel_id")?.toString() ?? "",
@@ -255,13 +257,15 @@ export async function enviarJobParaAbertura(
       // derruba a query inteira em silêncio.
       // `!servico_id` pelo mesmo motivo: o Interno não tem recebimento
       // (decisão 149), e é o serviço que diz se o orçamento é Interno.
-      "id, status, versao_aprovada_id, projeto_id, gp_responsavel_id, produtor_id, data_inicio_prevista, data_fim_prevista, categoria:categorias_dominio!categoria_id(modelo_planilha), servico:categorias_dominio!servico_id(investimento_interno)",
+      "id, status, versao_aprovada_id, projeto_id, gp_responsavel_id, produtor_id, data_inicio_prevista, data_fim_prevista, cliente_id, produto_id, categoria:categorias_dominio!categoria_id(modelo_planilha), servico:categorias_dominio!servico_id(investimento_interno)",
     )
     .eq("id", versao.orcamento_id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<{
       id: string;
       status: string;
+      cliente_id: string;
+      produto_id: string | null;
       versao_aprovada_id: string | null;
       projeto_id: string;
       gp_responsavel_id: string | null;
@@ -366,27 +370,25 @@ export async function enviarJobParaAbertura(
     };
   }
 
-  // 3. Produto vem do projeto. `projetos.produto_id` é a marca que o job
-  //    leva (decisão 133): a única escolhida no projeto ou, com mais de
-  //    uma, a geral do cliente (PRD-01). Quem a grava é a action do
-  //    projeto. O formulário só a exibe — reler do banco é o que garante
-  //    que o job grave o que está cadastrado, e não o que chegou no
-  //    payload. Cidade, regional, GP e produtor, ao contrário, o modal
-  //    deixa trocar (os dois últimos desde a decisão 135): vêm do
-  //    formulário e são conferidos logo abaixo.
-  const { data: projeto } = await supabase
-    .from("projetos")
-    .select("id, cliente_id, produto_id")
-    .eq("id", orc.projeto_id)
+  // 3. Cliente e marca vêm do formulário (decisão 215): nascem com os do
+  //    orçamento e podem ser trocados — e voltam para ele no passo 5,
+  //    junto de nome, cidade, regional, GP e produtor. O cliente é do
+  //    tenant e está ativo (ou é o que o orçamento já tem); a marca é do
+  //    cliente escolhido e está ativa (ou é a que o orçamento já tem).
+  const { data: clienteDoEnvio } = await supabase
+    .from("clientes")
+    .select("id, status")
+    .eq("id", parsed.data.cliente_id)
     .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ id: string; cliente_id: string; produto_id: string | null }>();
-
-  if (!projeto) return { ok: false, message: "Projeto não encontrado." };
-
-  if (!projeto.produto_id) {
+    .maybeSingle<{ id: string; status: string }>();
+  if (
+    !clienteDoEnvio ||
+    (clienteDoEnvio.status !== "ativo" && clienteDoEnvio.id !== orc.cliente_id)
+  ) {
     return {
       ok: false,
-      message: "Complete o cadastro antes de abrir o job: Marca (no projeto).",
+      message: "Cliente inválido.",
+      fieldErrors: { cliente_id: ["Selecione um cliente ativo do cadastro."] },
     };
   }
 
@@ -406,11 +408,11 @@ export async function enviarJobParaAbertura(
   const [produtoRes, cidadeRes, regionalDoProjetoRes, gpDoProjetoRes, membrosRes] = await Promise.all([
     supabase
       .from("cliente_produtos")
-      .select("id, nome")
-      .eq("id", projeto.produto_id!)
-      .eq("cliente_id", projeto.cliente_id)
+      .select("id, nome, ativo")
+      .eq("id", parsed.data.produto_id)
+      .eq("cliente_id", parsed.data.cliente_id)
       .eq("tenant_id", session.activeTenant.id)
-      .maybeSingle<{ id: string; nome: string }>(),
+      .maybeSingle<{ id: string; nome: string; ativo: boolean }>(),
     supabase
       .from("cidades")
       .select("id, nome")
@@ -433,10 +435,14 @@ export async function enviarJobParaAbertura(
       : Promise.resolve({ data: [{ id: parsed.data.produtor_id }], error: null }),
   ]);
 
-  if (!produtoRes.data) {
+  if (
+    !produtoRes.data ||
+    (!produtoRes.data.ativo && produtoRes.data.id !== orc.produto_id)
+  ) {
     return {
       ok: false,
-      message: "A marca cadastrada no projeto não pertence mais a este cliente. Edite o projeto.",
+      message: "Marca inválida para este cliente.",
+      fieldErrors: { produto_id: ["Selecione uma marca ativa do cliente."] },
     };
   }
   if (!cidadeRes.data) {
@@ -689,8 +695,9 @@ export async function enviarJobParaAbertura(
 
   let codigo: string;
   try {
-    // Sigla do cliente do projeto + ano de hoje (decisão 114).
-    codigo = await gerarCodigoJob(supabase, session.activeTenant.id, orc.projeto_id);
+    // Sigla do cliente escolhido no envio + ano de hoje (decisões 114 e
+    // 215). O reenvio do job devolvido mantém o código que ele já tem.
+    codigo = await gerarCodigoJob(supabase, session.activeTenant.id, parsed.data.cliente_id);
   } catch (e) {
     return { ok: false, message: (e as Error).message };
   }
@@ -702,6 +709,10 @@ export async function enviarJobParaAbertura(
     .from("orcamentos")
     .update({
       nome: parsed.data.nome,
+      // Decisão 215: cliente e marca também voltam para o orçamento. O
+      // banco leva o cliente para o job que ainda não abriu.
+      cliente_id: parsed.data.cliente_id,
+      produto_id: parsed.data.produto_id,
       cidade_id: parsed.data.cidade_id,
       regional_id: parsed.data.regional_id,
       gp_responsavel_id: parsed.data.gp_responsavel_id,
@@ -783,8 +794,8 @@ export async function enviarJobParaAbertura(
       .update({
         nome: parsed.data.nome,
         produto: produtoRes.data.nome,
-        // A marca do job (decisão 214): nasce com a do projeto.
-        produto_id: projeto.produto_id,
+        // A marca do job (decisões 214 e 215): a escolhida no envio.
+        produto_id: parsed.data.produto_id,
         regional_id: parsed.data.regional_id,
         cidade: cidadeRes.data.nome,
         data_inicio_prevista: parsed.data.data_inicio_prevista,
@@ -831,6 +842,9 @@ export async function enviarJobParaAbertura(
         regional_id: parsed.data.regional_id,
         gp_responsavel_id: parsed.data.gp_responsavel_id,
         produtor_id: parsed.data.produtor_id,
+        // Decisão 215: cliente e marca escolhidos no envio.
+        cliente_id: parsed.data.cliente_id,
+        produto_id: parsed.data.produto_id,
         data_evento: parsed.data.data_evento,
         data_prevista_faturamento: parsed.data.data_prevista_faturamento,
         recebimento_previsto_por_mes: recebimentoPorMes,
@@ -874,8 +888,8 @@ export async function enviarJobParaAbertura(
       versao_orcamento_aprovada_id: versaoId,
       nome: parsed.data.nome,
       produto: produtoRes.data.nome,
-      // A marca do job (decisão 214): nasce com a do projeto.
-      produto_id: projeto.produto_id,
+      // A marca do job (decisões 214 e 215): a escolhida no envio.
+      produto_id: parsed.data.produto_id,
       regional_id: parsed.data.regional_id,
       cidade: cidadeRes.data.nome,
       data_inicio_prevista: parsed.data.data_inicio_prevista,
@@ -1272,6 +1286,9 @@ export async function enviarJobParaAbertura(
       // Editáveis desde a decisão 135.
       gp_responsavel_id: parsed.data.gp_responsavel_id,
       produtor_id: parsed.data.produtor_id,
+      // Editáveis desde a decisão 215.
+      cliente_id: parsed.data.cliente_id,
+      produto_id: parsed.data.produto_id,
       valor_total: Number(totais.valorJob.toFixed(2)),
       faturamento_previsto: Number(totais.faturamentoPrevisto.toFixed(2)),
       data_evento: parsed.data.data_evento,

@@ -6447,3 +6447,12 @@ período do projeto: os arquivos anexados no formulário do projeto. Cada
 nome abre o arquivo numa aba nova; sem nenhum, "Nenhuma anexada". Vale nas
 três telas da ficha (Jobs, Financeiro › Jobs e Abertura de Job), lido em
 `carregarDetalheDoJob` junto das outras consultas.
+
+## ⚠️ Nota de 2026-10-26 (4) — O cliente é do job, que o leva do orçamento (decisão 215)
+
+- O card JOB da ficha mostra "Cliente · Marca"; o cliente saiu do card
+  PROJETO.
+- `jobs.cliente_id` é o cliente do job (o do orçamento, mantido pelo
+  banco). Ficha, PDF da PP, saves, envio para faturamento (portal, CNPJ,
+  envio em lote) e o chat das PPs leem dele. Jobs › projeto mostra os
+  clientes dos jobs do projeto.

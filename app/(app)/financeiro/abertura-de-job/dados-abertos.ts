@@ -173,7 +173,7 @@ const SELECT_JOB_ABERTO =
   "categoria:categorias_dominio!categoria_id(nome), " +
   "regional:regionais(nome), " +
   "responsavel:profiles!responsavel_id(nome), " +
-  "projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia))";
+  "cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), projeto:projetos(codigo, nome)";
 
 /**
  * Status que a aba "Visualizar Jobs" lista: tudo que já passou pela
@@ -308,7 +308,7 @@ export async function listarJobsDoFinanceiro(
       projeto_financeiro_id: j.projeto_financeiro_id ?? null,
       projeto_financeiro_codigo: j.projeto_financeiro?.codigo ?? null,
       projeto_financeiro_nome: j.projeto_financeiro?.nome ?? null,
-      cliente_nome: j.projeto?.cliente?.nome_fantasia ?? null,
+      cliente_nome: j.cliente?.nome_fantasia ?? null,
       responsavel_nome: j.responsavel?.nome ?? null,
       regional_nome: j.regional?.nome ?? null,
       produto: j.produto,

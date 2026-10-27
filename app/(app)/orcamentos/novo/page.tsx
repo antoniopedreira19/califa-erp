@@ -1,10 +1,9 @@
 import { requireSession } from "@/lib/auth/session";
-import { pode } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
 import { listActiveMembers, listarGpsAtivos } from "@/lib/data/members";
 import { listEmpresasAtivas, getEmpresaPrincipal } from "@/lib/data/empresas";
-import type { CategoriaDominio, Cliente, Regional } from "@/lib/types";
-import { ProjetoForm, type ProdutoOption } from "../projeto-form";
+import type { CategoriaDominio, Regional } from "@/lib/types";
+import { ProjetoForm } from "../projeto-form";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
@@ -13,13 +12,8 @@ export default async function NovoProjetoPage() {
   const session = await requireSession();
   const supabase = createClient();
 
-  const [clientesRes, responsaveis, gps, regionaisRes, produtosRes, categoriasRes, empresas, principal] = await Promise.all([
-    supabase
-      .from("clientes")
-      .select("id, nome_fantasia, codigo_curto")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("status", "ativo")
-      .order("nome_fantasia"),
+  // Cliente e marcas saíram do projeto (decisão 215): são do orçamento.
+  const [responsaveis, gps, regionaisRes, categoriasRes, empresas, principal] = await Promise.all([
     listActiveMembers(session.activeTenant.id),
     // GPs Responsáveis: só quem pode ser GP (decisão 170).
     listarGpsAtivos(session.activeTenant.id),
@@ -31,14 +25,6 @@ export default async function NovoProjetoPage() {
       // Regional só de folha (AMBEV) não é opção de projeto — decisão 134.
       .eq("disponivel_em_projetos", true)
       .order("nome"),
-    // Cadastro pequeno (por cliente): vem inteiro e o formulário filtra
-    // pelo cliente escolhido, sem ida extra ao servidor a cada troca.
-    supabase
-      .from("cliente_produtos")
-      .select("id, nome, codigo, cliente_id, padrao")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true)
-      .order("codigo"),
     supabase
       .from("categorias_dominio")
       .select("id, nome")
@@ -50,12 +36,7 @@ export default async function NovoProjetoPage() {
     getEmpresaPrincipal(session.activeTenant.id),
   ]);
 
-  const clientes = (clientesRes.data ?? []) as Pick<
-    Cliente,
-    "id" | "nome_fantasia" | "codigo_curto"
-  >[];
   const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome" | "empresa_id">[];
-  const produtos = (produtosRes.data ?? []) as ProdutoOption[];
   const categorias = (categoriasRes.data ?? []) as Pick<
     CategoriaDominio,
     "id" | "nome"
@@ -76,21 +57,11 @@ export default async function NovoProjetoPage() {
         <ProjetoForm
           empresas={empresas}
           empresaPrincipalId={principal?.id}
-          clientes={clientes}
           responsaveis={responsaveis}
           gps={gps}
           regionais={regionais}
-          produtos={produtos}
           categorias={categorias}
           criadorId={session.profile.id}
-          podeCadastrarCliente={pode(
-            session.activeRole,
-            "cadastros.clientes.inline",
-          )}
-          podeEditarCliente={pode(
-            session.activeRole,
-            "cadastros.clientes.editar",
-          )}
         />
       </div>
     </div>

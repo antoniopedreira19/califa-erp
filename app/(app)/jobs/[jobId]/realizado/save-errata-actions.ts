@@ -252,7 +252,7 @@ async function portaDoConsumo(
 
 /**
  * As origens de um consumo têm de ser jobs do MESMO TENANT e do MESMO
- * CLIENTE (`projetos.cliente_id`) do job que consome (decisão 099,
+ * CLIENTE (`jobs.cliente_id`, decisão 215) do job que consome (decisão 099,
  * 22/09/2026). A tela só oferece os saldos do cliente, mas a action chamada
  * direto aceitava qualquer origem — e o banco confere o saldo, não o
  * cliente. Uma consulta só: o job e as origens, com o cliente de cada um.
@@ -271,7 +271,7 @@ async function conferirOrigensDoCliente(
   const ids = [...new Set([jobId, ...origens.map((o) => o.job_origem_id)])];
   const { data, error } = await supabase
     .from("jobs")
-    .select("id, projeto:projetos(cliente_id)")
+    .select("id, cliente_id")
     .eq("tenant_id", tenantId)
     .in("id", ids);
   if (error) {
@@ -281,9 +281,9 @@ async function conferirOrigensDoCliente(
   const clienteDe = new Map<string, string | null>();
   for (const j of (data ?? []) as unknown as {
     id: string;
-    projeto: { cliente_id: string | null } | null;
+    cliente_id: string | null;
   }[]) {
-    clienteDe.set(j.id, j.projeto?.cliente_id ?? null);
+    clienteDe.set(j.id, j.cliente_id ?? null);
   }
   const clienteDoJob = clienteDe.get(jobId) ?? null;
   if (!clienteDoJob) {

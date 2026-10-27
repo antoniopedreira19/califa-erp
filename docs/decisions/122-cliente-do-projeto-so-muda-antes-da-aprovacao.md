@@ -4,6 +4,11 @@
 **Decidido por:** Tiago
 **Migration:** `20260929300001_cliente_do_projeto_so_muda_antes_da_aprovacao.sql`.
 
+**Revista pela [215](215-cliente-e-marca-no-orcamento.md) (26/10/2026):** o
+cliente saiu do projeto e passou ao orçamento. O projeto não tem mais
+cliente para trocar; o cliente do orçamento trava quando o job abre no
+financeiro.
+
 ---
 
 ## 1. A regra

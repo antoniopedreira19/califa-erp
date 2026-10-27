@@ -56,6 +56,8 @@ function formatPeriodo(inicio: string | null, fim: string | null): string {
 export interface JobDaFicha {
   codigo: string;
   nome: string;
+  /** O cliente do job (decisão 215): o do orçamento dele. */
+  clienteNome: string | null;
   categoriaNome: string | null;
   /**
    * Serviço do job — `jobs.servico_id` desde a decisão 055 (gravado na
@@ -93,7 +95,6 @@ export interface ProjetoDaFicha {
   id: string;
   codigo: string;
   nome: string;
-  clienteNome: string | null;
   dataInicio: string | null;
   dataFim: string | null;
   /** As apresentações mostradas ao cliente (decisão 213). */
@@ -229,7 +230,11 @@ export function FichaJob({
                   .filter(Boolean)
                   .join(" · ") || "—"}
               </Campo>
-              <Campo rotulo="Marca">{job.produto ?? "—"}</Campo>
+              {/* O cliente é do job, que o leva do orçamento (decisão 215),
+                  e não mais do projeto. */}
+              <Campo rotulo="Cliente · Marca">
+                {[job.clienteNome, job.produto].filter(Boolean).join(" · ") || "—"}
+              </Campo>
               <Campo rotulo="Regional · Cidade">
                 {[job.regionalNome, job.cidade].filter(Boolean).join(" · ") ||
                   "—"}
@@ -322,7 +327,6 @@ export function FichaJob({
               <Campo rotulo="Nome do projeto" destaque>
                 {projeto.nome}
               </Campo>
-              <Campo rotulo="Cliente">{projeto.clienteNome ?? "—"}</Campo>
               <Campo rotulo="Período do projeto" mono>
                 {formatPeriodo(projeto.dataInicio, projeto.dataFim)}
               </Campo>

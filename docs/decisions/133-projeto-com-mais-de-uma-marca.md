@@ -5,6 +5,10 @@
 **Migration:** `20260930200001_projeto_marcas.sql` (tabela `projeto_marcas`
 e o backfill dos 22 projetos).
 
+**Revista pela [215](215-cliente-e-marca-no-orcamento.md) (26/10/2026):** a
+marca saiu do projeto e passou ao orçamento — uma por orçamento, levada ao
+job no envio. `projeto_marcas` e `projetos.produto_id` ficam como legado.
+
 ---
 
 ## 1. A regra

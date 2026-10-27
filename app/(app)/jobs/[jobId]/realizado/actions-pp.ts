@@ -1330,17 +1330,22 @@ interface ContextoPdf {
 async function carregarContextoPdf(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
-  job: { projeto_id: string | null; empresa_id: string | null; regional_id: string | null },
+  job: { id: string; projeto_id: string | null; empresa_id: string | null; regional_id: string | null },
 ): Promise<ContextoPdf> {
-  const [projetoRes, empresaRes, regionalRes] = await Promise.all([
+  const [projetoRes, clienteRes, empresaRes, regionalRes] = await Promise.all([
     supabase
       .from("projetos")
-      .select(
-        "id, campanha, cliente:clientes(nome_fantasia), responsavel:profiles!responsavel_id(nome)",
-      )
+      .select("id, campanha, responsavel:profiles!responsavel_id(nome)")
       .eq("id", job.projeto_id ?? "")
       .eq("tenant_id", tenantId)
       .maybeSingle(),
+    // O cliente do PDF é o do job (decisão 215): o do orçamento dele.
+    supabase
+      .from("jobs")
+      .select("cliente:clientes!jobs_cliente_id_fkey(nome_fantasia)")
+      .eq("id", job.id)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<{ cliente: { nome_fantasia: string } | null }>(),
     job.empresa_id
       ? supabase
           .from("empresas")
@@ -1363,13 +1368,12 @@ async function carregarContextoPdf(
 
   const projeto = projetoRes.data as {
     campanha: string | null;
-    cliente: { nome_fantasia: string } | null;
     responsavel: { nome: string } | null;
   } | null;
 
   return {
     projeto: { campanha: projeto?.campanha ?? null },
-    cliente: { nome_fantasia: projeto?.cliente?.nome_fantasia ?? "" },
+    cliente: { nome_fantasia: clienteRes.data?.cliente?.nome_fantasia ?? "" },
     responsavelNome: projeto?.responsavel?.nome ?? "",
     empresaGerencial: empresa ? (empresa.nome_fantasia ?? empresa.razao_social) : null,
     regional: regional?.nome ?? null,

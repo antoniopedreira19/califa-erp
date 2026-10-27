@@ -72,14 +72,14 @@ export async function cadastrarPortalDoClienteDoJob(
 
   const { data: job } = await supabase
     .from("jobs")
-    .select("id, projeto:projetos(cliente_id)")
+    .select("id, cliente_id")
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ id: string; projeto: { cliente_id: string } | null }>();
+    .maybeSingle<{ id: string; cliente_id: string }>();
 
   if (!job) return { ok: false, message: "Job não encontrado." };
 
-  const clienteId = job.projeto?.cliente_id ?? null;
+  const clienteId = job.cliente_id ?? null;
   if (!clienteId) {
     return {
       ok: false,
@@ -391,7 +391,7 @@ export async function enviarJobParaFaturamento(
         ativo: boolean;
       }>();
 
-    if (!portal || portal.cliente_id !== job.projeto?.cliente_id) {
+    if (!portal || portal.cliente_id !== job.cliente_id) {
       return { ok: false, message: "Portal inválido para este cliente." };
     }
     portalUrl = portal.url;

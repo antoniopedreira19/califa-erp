@@ -102,21 +102,22 @@ export async function GET(
   const [projRes, orcsRes, jobsRes, versoesRes] = await Promise.all([
     supabase
       .from("projetos")
-      .select("id, codigo, nome, cliente:clientes(nome_fantasia)")
+      .select("id, codigo, nome")
       .eq("id", params.projetoId)
       .eq("tenant_id", tenantId)
       .maybeSingle<{
         id: string;
         codigo: string;
         nome: string;
-        cliente: { nome_fantasia: string } | null;
       }>(),
     supabase
       .from("orcamentos")
       // `!categoria_id` é obrigatório: `orcamentos` tem duas FKs para
       // `categorias_dominio`, e o embed ambíguo derruba a query inteira.
       .select(
-        "id, codigo, nome, status, versao_aprovada_id, categoria:categorias_dominio!categoria_id(modelo_planilha)",
+        "id, codigo, nome, status, versao_aprovada_id, categoria:categorias_dominio!categoria_id(modelo_planilha), " +
+          // O cliente é do orçamento (decisão 215).
+          "cliente:clientes!orcamentos_cliente_id_fkey(nome_fantasia)",
       )
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", tenantId)
@@ -143,7 +144,16 @@ export async function GET(
     return NextResponse.json({ error: "Projeto não encontrado" }, { status: 404 });
   }
   const projeto = projRes.data;
-  const clienteNome = projeto.cliente?.nome_fantasia ?? "—";
+  // Os clientes dos orçamentos exportados, sem repetir (decisão 215): o
+  // projeto pode ter orçamentos de clientes diferentes.
+  const nomesDosClientes = Array.from(
+    new Set(
+      ((orcsRes.data ?? []) as any[])
+        .map((o) => o.cliente?.nome_fantasia as string | undefined)
+        .filter((n): n is string => !!n),
+    ),
+  );
+  const clienteNome = nomesDosClientes.length > 0 ? nomesDosClientes.join(", ") : "—";
 
   const orcamentos = (orcsRes.data ?? []) as unknown as Array<{
     id: string;

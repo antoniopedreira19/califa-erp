@@ -28,6 +28,9 @@ export const DESCRICAO_MAX = 600;
  *
  * Desde 30/09/2026 (decisão 133): Marca também é lista (`produto_ids`,
  * tabela `projeto_marcas`).
+ *
+ * Desde 26/10/2026 (decisão 215): Cliente e Marcas saíram do projeto e
+ * passaram ao orçamento.
  */
 export const projetoSchema = z
   .object({
@@ -43,14 +46,8 @@ export const projetoSchema = z
       .optional()
       .transform((v) => (v && v.length > 0 ? v : null)),
     empresa_id: z.string().uuid("Selecione a empresa."),
-    cliente_id: z.string().uuid("Selecione um cliente válido."),
-    // Decisão 133 (30/09/2026): o projeto aceita mais de uma marca. A
-    // lista vai para `projeto_marcas`; `projetos.produto_id` — a marca que
-    // o job leva — o servidor deriva dela (ver `lib/marcas-do-projeto.ts`).
-    produto_ids: z
-      .array(z.string().uuid("Marca inválida."))
-      .min(1, "Selecione ao menos uma marca do cadastro do cliente.")
-      .transform((v) => Array.from(new Set(v))),
+    // Cliente e marcas saíram do projeto (decisão 215, 26/10/2026): são
+    // escolhidos em cada orçamento.
     // As listas chegam de `formData.getAll`, e a conferência do servidor
     // compara o tamanho da lista com o número de linhas que o `.in()`
     // devolveu — que vem deduplicado. Um id repetido reprovaria com

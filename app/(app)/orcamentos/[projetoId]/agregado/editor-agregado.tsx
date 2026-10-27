@@ -107,6 +107,7 @@ import {
 } from "../[orcId]/versoes/[versaoId]/save-actions";
 import { esquecerPagina, useProtegerSaida } from "@/components/voltar/estado";
 import type { GpParaEscolha } from "@/lib/gps-para-escolha";
+import type { OpcoesDoClienteDoOrcamento } from "@/lib/data/cliente-do-orcamento";
 
 interface Props {
   projeto: {
@@ -119,8 +120,9 @@ interface Props {
   /** Faixa do projeto (decisão 106), montada no servidor: o voltar, a
    *  agregada e os orçamentos do projeto. */
   faixa: React.ReactNode;
-  /** Honorários do cadastro do cliente. Vale para os orçamentos criados
-   *  aqui; os que já existem mantêm o percentual gravado na versão. */
+  /** Honorários do cadastro do cliente quando ele não tem um próprio.
+   *  Vale para os orçamentos criados aqui; os que já existem mantêm o
+   *  percentual gravado na versão. */
   honorariosCliente: number;
   /** Projeto arquivado (decisão 118): tudo em consulta, sem orçamento novo. */
   projetoArquivado: boolean;
@@ -165,6 +167,10 @@ interface Props {
   /** Primeiras cidades do cadastro — o combobox do formulário busca o
    *  resto no servidor. O rótulo do card sai de `orc.cidade_nome`. */
   cidadesIniciais: CidadeOption[];
+  /** Cliente e marca do orçamento novo (decisão 215). */
+  clienteDoOrcamento: OpcoesDoClienteDoOrcamento;
+  podeCadastrarCliente: boolean;
+  podeEditarCliente: boolean;
   /** Todos os vinculados ao projeto: dá o nome do GP no card dos
    *  orçamentos que já existem. */
   gpsDoProjeto: Pick<Profile, "id" | "nome">[];
@@ -182,9 +188,12 @@ interface Props {
    *  do BV da agregada grava pelas actions da versão e o refresh traz a
    *  lista de volta (decisão 148). */
   bvsPorItem: Record<string, ItemBv[]>;
-  /** Saldos de save que este cliente tem para gastar — alimentam o
-   *  formulário de "consumir save de outro job". */
-  saldosDeSave?: SaldoDeSave[];
+  /** Saldos de save de cada cliente dos orçamentos da tela — alimentam o
+   *  formulário de "consumir save de outro job". Save só se consome entre
+   *  jobs do mesmo cliente, e o cliente é do orçamento (decisão 215). */
+  saldosPorCliente: Record<string, SaldoDeSave[]>;
+  /** O cliente de cada orçamento da tela (decisão 215). */
+  clientePorOrcamento: Record<string, { id: string; nome: string }>;
   /** Nome do grupo por id, de todos os orçamentos da tela: o formulário
    *  mostra de qual grupo a linha veio. */
   nomeDoGrupo?: Record<string, string>;
@@ -269,7 +278,8 @@ export function EditorAgregado({
   faixa,
   savePorItem,
   bvsPorItem,
-  saldosDeSave,
+  saldosPorCliente,
+  clientePorOrcamento,
   nomeDoGrupo,
   honorariosCliente,
   projetoArquivado,
@@ -286,6 +296,9 @@ export function EditorAgregado({
   servicos,
   regionaisDoProjeto,
   cidadesIniciais,
+  clienteDoOrcamento,
+  podeCadastrarCliente,
+  podeEditarCliente,
   gpsDoProjeto,
   gpsPossiveis,
   produtores,
@@ -321,7 +334,15 @@ export function EditorAgregado({
     parametros: ParametrosVersao;
     /** Decide a cadeia do "Faturamento desta linha" (decisão 072). */
     modeloPlanilha: OrcamentoRascunho["modeloPlanilha"];
+    /** O cliente do orçamento da linha: são os saves dele (decisão 215). */
+    orcamentoId: string;
   } | null>(null);
+  // O cliente dos orçamentos criados nesta tela entra aqui na hora; os
+  // gravados vêm do servidor.
+  const [clientesDaTela, setClientesDaTela] = React.useState(clientePorOrcamento);
+  React.useEffect(() => setClientesDaTela(clientePorOrcamento), [clientePorOrcamento]);
+  const clienteDoOrcamentoDaTela = (orcamentoId: string | null | undefined) =>
+    orcamentoId ? (clientesDaTela[orcamentoId] ?? null) : null;
   const [orcamentos, setOrcamentos] =
     React.useState<OrcamentoRascunho[]>(inicial);
 
@@ -514,6 +535,8 @@ export function EditorAgregado({
     fd.set("nome", dados.nome);
     fd.set("categoria_id", dados.categoria_id ?? "");
     fd.set("servico_id", dados.servico_id ?? "");
+    fd.set("cliente_id", dados.cliente_id);
+    fd.set("produto_id", dados.produto_id);
     fd.set("descritivo", dados.descritivo ?? "");
     fd.set("regional_id", dados.regional_id);
     fd.set("cidade_id", dados.cidade_id);
@@ -532,6 +555,15 @@ export function EditorAgregado({
       categorias.find((c) => c.id === dados.categoria_id)?.modelo_planilha ??
       "nacional";
     const id = res.orcamentoId;
+    setClientesDaTela((atual) => ({
+      ...atual,
+      [id]: {
+        id: dados.cliente_id,
+        nome:
+          clienteDoOrcamento.clientes.find((c) => c.id === dados.cliente_id)?.nome_fantasia ??
+          "cliente",
+      },
+    }));
     const origemBanco: OrigemBanco = res.versaoId
       ? {
           orcamentoId: id,
@@ -572,7 +604,8 @@ export function EditorAgregado({
       // cadastro do cliente e a alíquota padrão (`criarVersaoInicial`).
       parametros: {
         ...PARAMETROS_PADRAO,
-        percentual_honorarios: honorariosCliente,
+        percentual_honorarios:
+          clienteDoOrcamento.honorariosPorCliente[dados.cliente_id] ?? honorariosCliente,
         ...(modeloPlanilha === "internacional"
           ? {
               moeda_estrangeira: "USD",
@@ -1253,6 +1286,7 @@ export function EditorAgregado({
                         item,
                         parametros: orc.parametros,
                         modeloPlanilha: orc.modeloPlanilha,
+                        orcamentoId: orc.id,
                       })
                   : undefined
               }
@@ -1333,6 +1367,11 @@ export function EditorAgregado({
             servicos={servicos}
             regionaisDoProjeto={regionaisDoProjeto}
             cidadesIniciais={cidadesIniciais}
+            clientes={clienteDoOrcamento.clientes}
+            produtos={clienteDoOrcamento.produtos}
+            sugestao={clienteDoOrcamento.sugestao}
+            podeCadastrarCliente={podeCadastrarCliente}
+            podeEditarCliente={podeEditarCliente}
             gps={gpsPossiveis}
             produtores={produtores}
             onRascunho={criarOrcamento}
@@ -1362,7 +1401,7 @@ export function EditorAgregado({
           onOpenChange={(o) => !o && setModal(null)}
           parametros={orcParametros.parametros}
           onSalvar={(p: ParametrosVersao) => void salvarParametros(orcParametros, p)}
-          clienteNome={projeto.cliente ?? "cliente"}
+          clienteNome={clienteDoOrcamentoDaTela(orcParametros.id)?.nome ?? "cliente"}
           travarImposto={
             orcParametros.modeloPlanilha === "internacional" &&
             !podeEditarImpostos
@@ -1405,7 +1444,9 @@ export function EditorAgregado({
             ? (savePorItem?.[linhaSave.item.id] ?? SAVE_VAZIO)
             : SAVE_VAZIO
         }
-        saldos={saldosDeSave ?? []}
+        saldos={
+          saldosPorCliente[clienteDoOrcamentoDaTela(linhaSave?.orcamentoId)?.id ?? ""] ?? []
+        }
         moeda={linhaSave?.parametros.moeda ?? "BRL"}
         percentualHonorarios={linhaSave?.parametros.percentual_honorarios ?? 0}
         percentualImposto={linhaSave?.parametros.percentual_imposto ?? 0}
@@ -1415,7 +1456,7 @@ export function EditorAgregado({
                 .internacional
             : null
         }
-        clienteNome={projeto.cliente ?? "cliente"}
+        clienteNome={clienteDoOrcamentoDaTela(linhaSave?.orcamentoId)?.nome ?? "cliente"}
         onMarcarSave={
           linhaSave && podeMarcarSave
             ? async (marcar) => {

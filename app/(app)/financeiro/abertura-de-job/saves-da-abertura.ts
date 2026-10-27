@@ -90,7 +90,7 @@ export async function carregarSavesDaAbertura(
     supabase
       .from("jobs")
       .select(
-        "id, projeto:projetos(cliente_id, cliente:clientes(nome_fantasia)), " +
+        "id, cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), " +
           "versao:versoes_orcamento!versao_orcamento_aprovada_id(percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, save_por_padrao, save_consumo_job_id), " +
           "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
       )
@@ -121,8 +121,8 @@ export async function carregarSavesDaAbertura(
   const job = jobRes.data as any;
   const versao = job?.versao ?? null;
   const modelo = (job?.orcamento?.categoria?.modelo_planilha ?? null) as CategoriaModeloPlanilha | null;
-  const clienteId = (job?.projeto?.cliente_id as string | null) ?? null;
-  const clienteNome = (job?.projeto?.cliente?.nome_fantasia as string | null) ?? "o cliente";
+  const clienteId = (job?.cliente_id as string | null) ?? null;
+  const clienteNome = (job?.cliente?.nome_fantasia as string | null) ?? "o cliente";
 
   const tipos = new Map<string, TipoCusto>();
   let vivas = 0;

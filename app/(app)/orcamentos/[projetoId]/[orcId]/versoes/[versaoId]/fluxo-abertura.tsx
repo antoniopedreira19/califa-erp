@@ -41,6 +41,9 @@ import type { MesDoEnvio } from "@/lib/calculos/recebimento-por-mes";
 import type { GpParaEscolha } from "@/lib/gps-para-escolha";
 import { ConfirmarEnvioModal } from "./confirmar-envio-modal";
 import { PPsQueTravam, type PPQueTravaOEnvio } from "./pps-que-travam";
+import { anoDoCodigoDeJob, proximoCodigoDeJob } from "@/lib/codigos/jobs";
+import type { ClienteDoCampo } from "@/app/(app)/clientes/campo-cliente";
+import type { ProdutoOption } from "@/app/(app)/orcamentos/projeto-form";
 
 type Modal = "aprovar" | "form" | "envio" | "cancelar_envio" | null;
 
@@ -145,6 +148,12 @@ interface Props {
   moeda: string;
 
   clienteNome: string;
+  /** Cliente e Marca editáveis no envio (decisão 215): as listas, e os
+   *  códigos de job do ano — a prévia do código segue a sigla do cliente
+   *  escolhido. */
+  clientesDoEnvio: ClienteDoCampo[];
+  produtosDoEnvio: ProdutoOption[];
+  codigosDeJobDoAno: string[];
   proximoCodigoJob: string;
   /** O código do job cancelado pelo "Cancelar aprovação" da devolução, que
    *  volta no próximo envio (decisão 128). `null` sem reserva — ou quando
@@ -222,6 +231,9 @@ export function FluxoAbertura({
   fechamentoDaCopia,
   moeda,
   clienteNome,
+  clientesDoEnvio,
+  produtosDoEnvio,
+  codigosDeJobDoAno,
   proximoCodigoJob,
   codigoReservado,
   projetoNome,
@@ -245,6 +257,25 @@ export function FluxoAbertura({
   const [dados, setDados] = React.useState<DadosJob>(inicial);
   const [erroGeral, setErroGeral] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<Record<string, string[]>>({});
+
+  // Cliente e marca escolhidos no envio (decisão 215). O código do job sai
+  // da sigla do cliente escolhido; job já enviado, devolvido ou com código
+  // guardado mantém o que tem (resposta do Tiago, 26/10).
+  const clienteDoEnvio = clientesDoEnvio.find((c) => c.id === dados.clienteId) ?? null;
+  const marcaDoEnvio = produtosDoEnvio.find((m) => m.id === dados.produtoId) ?? null;
+  const clienteNomeDoEnvio = clienteDoEnvio?.nome_fantasia ?? clienteNome;
+  const codigoDoEnvio =
+    job?.codigo ??
+    codigoReservado ??
+    (dados.clienteId === inicial.clienteId
+      ? proximoCodigoJob
+      : clienteDoEnvio?.codigo_curto
+        ? proximoCodigoDeJob({
+            sigla: clienteDoEnvio.codigo_curto,
+            ano: anoDoCodigoDeJob(),
+            codigos: codigosDeJobDoAno,
+          })
+        : "—");
 
   const podeAprovar = ["rascunho", "em_revisao", "enviada_cliente"].includes(
     versaoStatus,
@@ -373,11 +404,13 @@ export function FluxoAbertura({
     setErroGeral(null);
     setFieldErrors({});
 
-    // Produto não vai no payload: o servidor o lê do projeto. Cidade,
-    // regional, GP e produtor vão, porque o modal deixa trocá-los (os dois
-    // últimos desde a decisão 135) — e o servidor confere antes de gravar.
+    // Cidade, regional, GP, produtor, cliente e marca vão, porque o modal
+    // deixa trocá-los (GP e produtor desde a decisão 135; cliente e marca
+    // desde a 215) — e o servidor confere antes de gravar.
     const formData = new FormData();
     formData.set("nome", dados.nome);
+    formData.set("cliente_id", dados.clienteId);
+    formData.set("produto_id", dados.produtoId);
     formData.set("cidade_id", dados.cidadeId);
     formData.set("regional_id", dados.regionalId);
     formData.set("gp_responsavel_id", dados.gpId);
@@ -450,13 +483,14 @@ export function FluxoAbertura({
 
   const resumoEnvio = [
     { rotulo: "Job", valor: dados.nome || "—" },
-    { rotulo: "Código", valor: job?.codigo ?? proximoCodigoJob, mono: true },
+    { rotulo: "Código", valor: codigoDoEnvio, mono: true },
     // Só o nome: o único código da conferência é o do job (30/09/2026).
     { rotulo: "Projeto", valor: projetoNome },
     // A empresa do job, que vem do projeto (19/10/2026).
     { rotulo: "Empresa", valor: empresaNome },
-    { rotulo: "Cliente", valor: clienteNome },
-    { rotulo: "Marca", valor: herdados.produtoNome ?? "— não informada" },
+    // O cliente e a marca escolhidos no formulário (decisão 215).
+    { rotulo: "Cliente", valor: clienteNomeDoEnvio },
+    { rotulo: "Marca", valor: marcaDoEnvio?.nome ?? herdados.produtoNome ?? "— não informada" },
     {
       // Herdada do orçamento — é a categoria com que o job chega ao
       // financeiro na abertura.
@@ -754,8 +788,9 @@ export function FluxoAbertura({
         orcamentoNome={orcamentoNome}
         projetoNome={projetoNome}
         empresaNome={empresaNome}
-        clienteNome={clienteNome}
-        codigoJob={job?.codigo ?? proximoCodigoJob}
+        clientes={clientesDoEnvio}
+        produtos={produtosDoEnvio}
+        codigoJob={codigoDoEnvio}
         codigoReaproveitado={!job && codigoReservado !== null}
         rotuloFechamento={fechamento.rotulo}
         origemFechamento={fechamento.origem}

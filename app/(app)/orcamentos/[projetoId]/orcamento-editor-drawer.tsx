@@ -24,6 +24,7 @@ import type { CategoriaParaServico } from "@/lib/categorias-do-servico";
 import type { CidadeOption } from "../cidade-combobox";
 import { OrcamentoForm } from "./orcamento-form";
 import type { GpParaEscolha } from "@/lib/gps-para-escolha";
+import type { OpcoesDoClienteDoOrcamento } from "@/lib/data/cliente-do-orcamento";
 
 interface Props {
   projetoId: string;
@@ -42,6 +43,10 @@ interface Props {
   /** Quem pode ser GP: os do projeto e os outros (decisão 176). */
   gps: GpParaEscolha[];
   produtores: Pick<Profile, "id" | "nome">[];
+  /** Cliente e marca do orçamento (decisão 215): as listas do formulário. */
+  clienteDoOrcamento: OpcoesDoClienteDoOrcamento;
+  podeCadastrarCliente: boolean;
+  podeEditarCliente: boolean;
   /** O projeto, travado no formulário como na criação. */
   projetoNome: string;
   projetoCodigo: string;
@@ -67,6 +72,9 @@ export function OrcamentoEditorDrawer({
   cidadeAtual,
   gps,
   produtores,
+  clienteDoOrcamento,
+  podeCadastrarCliente,
+  podeEditarCliente,
   projetoNome,
   projetoCodigo,
   disabled,
@@ -158,6 +166,12 @@ export function OrcamentoEditorDrawer({
               cidadeAtual={cidadeAtual}
               gps={gps}
               produtores={produtores}
+              clientes={clienteDoOrcamento.clientes}
+              produtos={clienteDoOrcamento.produtos}
+              // A edição mostra o que está gravado, sem sugestão.
+              sugestao={null}
+              podeCadastrarCliente={podeCadastrarCliente}
+              podeEditarCliente={podeEditarCliente}
               projetoNome={projetoNome}
               projetoCodigo={projetoCodigo}
               onSuccess={() => setOpen(false)}

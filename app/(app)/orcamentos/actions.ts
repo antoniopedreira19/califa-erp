@@ -8,7 +8,6 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { projetoSchema } from "@/lib/validations/projetos";
 import { gerarCodigoProjeto } from "@/lib/codigos/projetos";
-import { marcaDoJob } from "@/lib/marcas-do-projeto";
 import { FILTRO_SEM_CANCELADO_ANTES_DA_ABERTURA } from "@/lib/types";
 import { lerApresentacoesDoForm } from "@/lib/apresentacoes-do-projeto";
 import { sincronizarApresentacoes } from "@/lib/data/apresentacoes-do-projeto";
@@ -21,9 +20,6 @@ function extractInput(formData: FormData) {
   const base = {
     empresa_id: formData.get("empresa_id")?.toString() ?? "",
     nome: formData.get("nome")?.toString() ?? "",
-    cliente_id: formData.get("cliente_id")?.toString() ?? "",
-    // Marcas do projeto (decisão 133): uma ou mais.
-    produto_ids: formData.getAll("produto_ids").map((v) => v.toString()),
     // `getAll` preserva a ordem de envio, e a ordem importa: o primeiro
     // item alimenta as colunas de compatibilidade em `projetos`.
     responsavel_ids: formData.getAll("responsavel_ids").map((v) => v.toString()),
@@ -135,87 +131,33 @@ async function conferirGpsResponsaveis(
 }
 
 /**
- * A marca é cadastrada por cliente e o banco não consegue garantir que as
- * escolhidas pertencem ao cliente do projeto — a FK só aponta para
- * `cliente_produtos`. A checagem é aqui, como já acontece na abertura de
- * job. Mesma ideia para as regionais: confirma que existem, estão ativas
- * no tenant e não são só de folha (decisão 134) antes de gravar os
- * vínculos. O banco tem a mesma trava; esta dá a mensagem no campo.
- *
- * Devolve também a MARCA DO JOB (decisão 133), que vai para
- * `projetos.produto_id`: a única escolhida ou, com mais de uma, a marca
- * geral do cliente (`padrao`, PRD-01). O cadastro do cliente é pequeno e
- * vem inteiro numa leitura só — a geral nem sempre está entre as
- * escolhidas.
+ * As regionais existem, estão ativas no tenant e não são só de folha
+ * (decisão 134) antes de gravar os vínculos. O banco tem a mesma trava;
+ * esta dá a mensagem no campo. Cliente e marca saíram do projeto (decisão
+ * 215): são conferidos no orçamento.
  */
-async function validarMarcasERegionais(
+async function validarRegionais(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
-  clienteId: string,
-  produtoIds: string[],
   regionalIds: string[],
 ): Promise<
-  | { ok: true; marcaDoJobId: string }
-  | { ok: false; message: string; fieldErrors?: Record<string, string[]> }
+  { ok: true } | { ok: false; message: string; fieldErrors?: Record<string, string[]> }
 > {
-  const [marcasRes, regionaisRes] = await Promise.all([
-    supabase
-      .from("cliente_produtos")
-      .select("id, ativo, padrao")
-      .eq("cliente_id", clienteId)
-      .eq("tenant_id", tenantId),
-    supabase
-      .from("regionais")
-      .select("id")
-      .in("id", regionalIds)
-      .eq("tenant_id", tenantId)
-      .eq("ativo", true)
-      .eq("disponivel_em_projetos", true),
-  ]);
-
-  if (marcasRes.error) {
-    console.error("[projetos.marcas.listar]", marcasRes.error.message);
-  }
-  const marcasDoCliente = (marcasRes.data ?? []) as {
-    id: string;
-    ativo: boolean;
-    padrao: boolean;
-  }[];
-  const ativas = new Set(marcasDoCliente.filter((m) => m.ativo).map((m) => m.id));
-
-  if (produtoIds.some((id) => !ativas.has(id))) {
-    return {
-      ok: false,
-      message: "Marca inválida para este cliente.",
-      fieldErrors: { produto_ids: ["Selecione marcas ativas do cadastro do cliente."] },
-    };
-  }
-
-  const marcaDoJobId = marcaDoJob(
-    produtoIds,
-    marcasDoCliente.find((m) => m.padrao && m.ativo)?.id ?? null,
-  );
-  if (!marcaDoJobId) {
-    // Só acontece com mais de uma marca num cliente sem a marca geral —
-    // nenhum dos 157 clientes está assim (30/09/2026), e o banco cria a
-    // geral junto do cliente. A mensagem existe para não gravar um projeto
-    // sem a marca que o job leva.
-    return {
-      ok: false,
-      message:
-        "Este cliente não tem a marca geral (PRD-01), que é a que o job leva quando o projeto tem mais de uma marca. Avise o suporte.",
-      fieldErrors: { produto_ids: ["Cliente sem a marca geral (PRD-01)."] },
-    };
-  }
-
-  if ((regionaisRes.data ?? []).length !== regionalIds.length) {
+  const { data } = await supabase
+    .from("regionais")
+    .select("id")
+    .in("id", regionalIds)
+    .eq("tenant_id", tenantId)
+    .eq("ativo", true)
+    .eq("disponivel_em_projetos", true);
+  if ((data ?? []).length !== regionalIds.length) {
     return {
       ok: false,
       message: "Regional inválida.",
       fieldErrors: { regional_ids: ["Selecione regionais ativas do cadastro."] },
     };
   }
-  return { ok: true, marcaDoJobId };
+  return { ok: true };
 }
 
 /** Regrava os vínculos N:N do projeto. Apaga e reinsere: o conjunto é
@@ -226,29 +168,25 @@ async function sincronizarVinculos(
   projetoId: string,
   regionalIds: string[],
   responsavelIds: string[],
-  /** Marcas escolhidas no projeto (decisão 133). */
-  produtoIds: string[],
   /** Acréscimos MANUAIS à Equipe (papel `equipe`). Criador, GPs e
    *  produtores dos orçamentos NÃO entram aqui: são derivados na leitura,
    *  e gravá-los exigiria re-sincronizar a cada troca de GP ou orçamento
    *  novo (decisão 037). */
   equipeIds: string[] = [],
 ): Promise<{ ok: true } | { ok: false; message: string }> {
-  const [delReg, delResp, delMarcas] = await Promise.all([
+  // `projeto_marcas` não é mais regravada (decisão 215): a marca é do
+  // orçamento, e as linhas que existem ficam como registro.
+  const [delReg, delResp] = await Promise.all([
     supabase.from("projeto_regionais").delete().eq("projeto_id", projetoId).eq("tenant_id", tenantId),
     supabase.from("projeto_responsaveis").delete().eq("projeto_id", projetoId).eq("tenant_id", tenantId),
-    supabase.from("projeto_marcas").delete().eq("projeto_id", projetoId).eq("tenant_id", tenantId),
   ]);
 
-  if (delReg.error || delResp.error || delMarcas.error) {
-    console.error(
-      "[projetos.vinculos.delete]",
-      delReg.error?.message ?? delResp.error?.message ?? delMarcas.error?.message,
-    );
-    return { ok: false, message: "Não foi possível gravar regionais, responsáveis e marcas." };
+  if (delReg.error || delResp.error) {
+    console.error("[projetos.vinculos.delete]", delReg.error?.message ?? delResp.error?.message);
+    return { ok: false, message: "Não foi possível gravar regionais e responsáveis." };
   }
 
-  const [insReg, insResp, insMarcas] = await Promise.all([
+  const [insReg, insResp] = await Promise.all([
     supabase.from("projeto_regionais").insert(
       regionalIds.map((regional_id) => ({
         projeto_id: projetoId,
@@ -274,18 +212,10 @@ async function sincronizarVinculos(
           papel: "equipe" as const,
         })),
     ]),
-    supabase.from("projeto_marcas").insert(
-      produtoIds.map((produto_id) => ({
-        projeto_id: projetoId,
-        produto_id,
-        tenant_id: tenantId,
-      })),
-    ),
   ]);
 
-  if (insReg.error || insResp.error || insMarcas.error) {
-    const msg =
-      insReg.error?.message ?? insResp.error?.message ?? insMarcas.error?.message ?? "";
+  if (insReg.error || insResp.error) {
+    const msg = insReg.error?.message ?? insResp.error?.message ?? "";
     console.error("[projetos.vinculos.insert]", msg);
     return { ok: false, message: mapDbError(msg) };
   }
@@ -310,17 +240,10 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
 
   const supabase = createClient();
 
-  const { regional_ids, responsavel_ids, equipe_ids, produto_ids, ...campos } =
-    parsed.data;
+  const { regional_ids, responsavel_ids, equipe_ids, ...campos } = parsed.data;
 
   const [check, gps] = await Promise.all([
-    validarMarcasERegionais(
-      supabase,
-      session.activeTenant.id,
-      campos.cliente_id,
-      produto_ids,
-      regional_ids,
-    ),
+    validarRegionais(supabase, session.activeTenant.id, regional_ids),
     conferirGpsResponsaveis(supabase, session.activeTenant.id, responsavel_ids),
   ]);
   if (!check.ok) return check;
@@ -341,9 +264,7 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
       // A fonte-verdade são `projeto_regionais` e `projeto_responsaveis`.
       responsavel_id: responsavel_ids[0],
       regional_id: regional_ids[0],
-      // A marca que o job leva (decisão 133). As escolhidas vão para
-      // `projeto_marcas`, logo abaixo.
-      produto_id: check.marcaDoJobId,
+      // Sem cliente e sem marca: são do orçamento (decisão 215).
       codigo,
       tenant_id: session.activeTenant.id,
       // `created_by` registra quem cadastrou — pode não ser o responsável.
@@ -363,7 +284,6 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
     data.id,
     regional_ids,
     responsavel_ids,
-    produto_ids,
     equipe_ids,
   );
   if (!vinculos.ok) return vinculos;
@@ -388,58 +308,12 @@ export async function criarProjeto(formData: FormData): Promise<ActionResult> {
     metadata: {
       codigo,
       nome: parsed.data.nome,
-      cliente_id: parsed.data.cliente_id,
-      marcas: produto_ids,
-      marca_do_job: check.marcaDoJobId,
       apresentacoes: apresentacoes?.length ?? 0,
     },
   });
 
   revalidatePath("/orcamentos");
   redirect(`/orcamentos/${data.id}`);
-}
-
-/**
- * Troca o cliente do projeto (decisão 122). Desde a decisão 210
- * (23/10/2026) o código do projeto não leva a sigla do cliente, então a
- * troca não mexe em código nenhum — nem no do projeto, nem no dos
- * orçamentos.
- */
-async function trocarClienteDoProjeto(
-  supabase: ReturnType<typeof createClient>,
-  session: Awaited<ReturnType<typeof requireSession>>,
-  args: {
-    projetoId: string;
-    clienteId: string;
-    produtoId: string;
-  },
-): Promise<ActionResult> {
-  const tenantId = session.activeTenant.id;
-
-  const aprovacao = await projetoTemAprovacao(supabase, tenantId, args.projetoId);
-  if (!aprovacao.ok) {
-    return { ok: false, message: "Falha ao verificar os orçamentos do projeto." };
-  }
-  if (aprovacao.aprovado) {
-    return {
-      ok: false,
-      message: "O cliente do projeto não muda depois que um orçamento é aprovado.",
-      fieldErrors: {
-        cliente_id: ["Já há orçamento aprovado neste projeto."],
-      },
-    };
-  }
-
-  const { error } = await supabase.rpc("trocar_cliente_do_projeto", {
-    p_projeto_id: args.projetoId,
-    p_cliente_id: args.clienteId,
-    p_produto_id: args.produtoId,
-  });
-  if (error) {
-    console.error("[projetos.trocarCliente]", error.message);
-    return { ok: false, message: mapDbError(error.message) };
-  }
-  return { ok: true, id: args.projetoId };
 }
 
 export async function atualizarProjeto(
@@ -465,10 +339,10 @@ export async function atualizarProjeto(
   // nele. O banco recusa também; aqui a mensagem chega inteira.
   const { data: atual } = await supabase
     .from("projetos")
-    .select("status, cliente_id")
+    .select("status")
     .eq("id", id)
     .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ status: string; cliente_id: string }>();
+    .maybeSingle<{ status: string }>();
   if (!atual) return { ok: false, message: "Projeto não encontrado." };
   if (atual.status === "arquivado") {
     return {
@@ -477,17 +351,10 @@ export async function atualizarProjeto(
     };
   }
 
-  const { regional_ids, responsavel_ids, equipe_ids, produto_ids, ...campos } =
-    parsed.data;
+  const { regional_ids, responsavel_ids, equipe_ids, ...campos } = parsed.data;
 
   const [check, gps] = await Promise.all([
-    validarMarcasERegionais(
-      supabase,
-      session.activeTenant.id,
-      campos.cliente_id,
-      produto_ids,
-      regional_ids,
-    ),
+    validarRegionais(supabase, session.activeTenant.id, regional_ids),
     conferirGpsResponsaveis(supabase, session.activeTenant.id, responsavel_ids, id),
   ]);
   if (!check.ok) return check;
@@ -503,23 +370,7 @@ export async function atualizarProjeto(
     ...base,
     responsavel_id: responsavel_ids[0],
     regional_id: regional_ids[0],
-    // A marca que o job leva (decisão 133): a única escolhida ou, com mais
-    // de uma, a geral do cliente.
-    produto_id: check.marcaDoJobId,
   };
-
-  // Decisão 122: o cliente só muda antes de algum orçamento ser aprovado.
-  // A troca vai ANTES do resto: se ela falhar, nada mudou. O banco recusa
-  // a troca depois da aprovação também. Desde a decisão 210 o código do
-  // projeto não carrega a sigla e fica como está.
-  if (campos.cliente_id !== atual.cliente_id) {
-    const troca = await trocarClienteDoProjeto(supabase, session, {
-      projetoId: id,
-      clienteId: campos.cliente_id,
-      produtoId: check.marcaDoJobId,
-    });
-    if (!troca.ok) return troca;
-  }
 
   // Confirma que o projeto pertence ao tenant do usuário (RLS já filtra,
   // mas explicitamos no where pra clareza).
@@ -540,7 +391,6 @@ export async function atualizarProjeto(
     id,
     regional_ids,
     responsavel_ids,
-    produto_ids,
     equipe_ids,
   );
   if (!vinculos.ok) return vinculos;
@@ -560,11 +410,7 @@ export async function atualizarProjeto(
     tenantId: session.activeTenant.id,
     entidadeTipo: "projeto",
     entidadeId: id,
-    // As marcas e a marca que o job leva (decisão 133): é o que muda o
-    // que chega ao financeiro na abertura.
     metadata: {
-      marcas: produto_ids,
-      marca_do_job: check.marcaDoJobId,
       apresentacoes: apresentacoes?.length ?? null,
     },
   });

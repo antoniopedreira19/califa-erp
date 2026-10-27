@@ -260,7 +260,7 @@ export default async function ContasReceberPage({
     // escolhido nesta mesma lista.
     supabase
       .from("jobs")
-      .select("id, codigo, nome, status, empresa_id, regional_id, projeto:projetos!jobs_projeto_id_fkey(cliente_id)")
+      .select("id, codigo, nome, status, empresa_id, regional_id, cliente_id")
       .eq("tenant_id", tenantId)
       .in("status", ["aberto", "em_producao", "encerrado", "finalizado"])
       .order("codigo", { ascending: false }),
@@ -750,7 +750,7 @@ export default async function ContasReceberPage({
       status: string;
       empresa_id: string | null;
       regional_id: string | null;
-      projeto: { cliente_id: string | null } | null;
+      cliente_id: string | null;
     }>
   ).map((j) => ({
     id: j.id,
@@ -759,7 +759,7 @@ export default async function ContasReceberPage({
     encerrado: j.status === "encerrado" || j.status === "finalizado",
     empresa_id: j.empresa_id,
     regional_id: j.regional_id,
-    cliente_id: j.projeto?.cliente_id ?? null,
+    cliente_id: j.cliente_id ?? null,
   }));
 
   // O CNPJ do tomador da avulsa nasce com o do cadastro do cliente; os já

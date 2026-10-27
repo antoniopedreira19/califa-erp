@@ -98,7 +98,7 @@ export const SELECT_PP_DO_FINANCEIRO = `
         job:jobs(
           id, codigo, nome, regional_id,
           responsavel:profiles!responsavel_id(nome),
-          projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia))
+          cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), projeto:projetos(codigo, nome)
         ),
         ${SELECT_PRESTACAO_DA_VERBA},
         ${SELECT_EVENTOS_DA_PP},
@@ -295,10 +295,10 @@ export function mapearPPsDoFinanceiro(
       nome: string;
       regional_id: string | null;
       responsavel: { nome: string } | null;
+      cliente: { nome_fantasia: string } | null;
       projeto: {
         codigo: string;
         nome: string;
-        cliente: { nome_fantasia: string } | null;
       } | null;
     } | null;
     anexos: Array<AnexoComNotaDoBanco & { arquivo_tamanho_bytes: number }>;
@@ -385,7 +385,7 @@ export function mapearPPsDoFinanceiro(
     job_responsavel_nome: r.job?.responsavel?.nome ?? null,
     projeto_codigo: r.job?.projeto?.codigo ?? null,
     projeto_nome: r.job?.projeto?.nome ?? null,
-    cliente_nome: r.job?.projeto?.cliente?.nome_fantasia ?? null,
+    cliente_nome: r.job?.cliente?.nome_fantasia ?? null,
     cancelada_por_nome: r.cancelada_por_profile?.nome ?? null,
     emitida_por_nome: r.emitida_por_profile?.nome ?? null,
     // Escolhidos na aprovação, pelo financeiro (29/08/2026). Antes disso
