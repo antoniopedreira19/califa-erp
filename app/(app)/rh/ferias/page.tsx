@@ -9,16 +9,16 @@ import { AbaPainel } from "./aba-painel";
 import { AbaSolicitacoes } from "./aba-solicitacoes";
 import { AbaQuadro } from "./aba-quadro";
 import { AbaPagamentos } from "./aba-pagamentos";
+import { AbaFluxo } from "./aba-fluxo";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "painel" | "quadro" | "solicitacoes" | "pagamentos";
+type Tab = "painel" | "quadro" | "solicitacoes" | "pagamentos" | "fluxo";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "painel", label: "Painel" },
   { key: "quadro", label: "Quadro" },
-  { key: "solicitacoes", label: "Solicitações" },
-  { key: "pagamentos", label: "Pagamentos" },
+  { key: "fluxo", label: "Fluxo" },
 ];
 
 export default async function FeriasPage({
@@ -35,6 +35,12 @@ export default async function FeriasPage({
   }
 
   const tenantId = session.activeTenant.id;
+
+  // Abas removidas da UI redirecionam para Fluxo
+  if (searchParams.tab === "solicitacoes" || searchParams.tab === "pagamentos") {
+    redirect("/rh/ferias?tab=fluxo");
+  }
+
   const tab: Tab = normalizarTab(searchParams.tab);
 
   return (
@@ -72,6 +78,7 @@ export default async function FeriasPage({
 
       {tab === "painel" && <AbaPainel tenantId={tenantId} />}
       {tab === "quadro" && <AbaQuadro tenantId={tenantId} />}
+      {tab === "fluxo" && <AbaFluxo tenantId={tenantId} />}
       {tab === "solicitacoes" && (
         <AbaSolicitacoes
           tenantId={tenantId}
@@ -84,7 +91,7 @@ export default async function FeriasPage({
 }
 
 function normalizarTab(t: string | undefined): Tab {
-  const vals: Tab[] = ["painel", "quadro", "solicitacoes", "pagamentos"];
+  const vals: Tab[] = ["painel", "quadro", "fluxo", "solicitacoes", "pagamentos"];
   return (vals as string[]).includes(t ?? "") ? (t as Tab) : "painel";
 }
 
