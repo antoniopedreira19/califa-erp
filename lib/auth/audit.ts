@@ -470,6 +470,8 @@ export type AuditAction =
   | "freelancer_contrato.distrato_cancelado"
   // Módulo Freelancers — ação prevista inline (Task 027).
   | "freelancer.acao_prevista_alterada"
+  // Módulo Freelancers — transferência do dono da pessoa (ADR a seguir).
+  | "freelancer.responsavel_transferido"
   // Módulo Freelancers — migração dos legados do AgCaliforniaRH (Task 028).
   | "freelancers.migracao_executada"
   // Módulo 13º Salário — Parte 1 (21/10/2026).

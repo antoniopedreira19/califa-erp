@@ -211,6 +211,15 @@ export async function criarFreelancerCompleto(
     if (existente?.id) {
       freelancer_id = existente.id;
       ja_existia = true;
+      // Se o freela já existia mas estava sem dono (legado pré-backfill ou
+      // criado pelo form público), preenche com o responsável escolhido agora.
+      // Se já tem dono, preserva — pra trocar o dono o RH usa "Transferir
+      // responsável" explicitamente.
+      await supabase
+        .from("freelancers")
+        .update({ responsavel_id })
+        .eq("id", freelancer_id)
+        .is("responsavel_id", null);
       // Atualiza conservador: só o que normalmente vem fresco (contato,
       // endereço, bancário).
       await supabase
@@ -247,6 +256,7 @@ export async function criarFreelancerCompleto(
         ...dadosFreela,
         tenant_id: session.activeTenant.id,
         origem: "manual",
+        responsavel_id,
         created_by: session.profile.id,
         updated_by: session.profile.id,
       })
@@ -429,5 +439,77 @@ export async function atualizarFreelancer(
 
   revalidatePath("/freelancers/lista");
   revalidatePath(`/freelancers/${id}`);
+  return { ok: true };
+}
+
+/**
+ * Transfere o "dono da pessoa" (freelancers.responsavel_id) de um freela
+ * pra outro responsável. NÃO toca em contratos — por decisão, dono do freela
+ * pode diferir do responsável de contrato específico (ex: GP empresta o freela
+ * pra outro num job pontual).
+ *
+ * Permissão: admin + rh (igual AgCaliforniaRH). Financeiro não transfere.
+ */
+export async function transferirResponsavelFreelancer(
+  freelancerId: string,
+  novoResponsavelId: string,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const PODE_TRANSFERIR = new Set(["administrador", "rh"]);
+  if (!PODE_TRANSFERIR.has(session.activeRole)) {
+    return { ok: false, message: "Sem permissão para transferir responsável" };
+  }
+
+  if (!/^[0-9a-f-]{36}$/i.test(freelancerId)) {
+    return { ok: false, message: "ID de freelancer inválido" };
+  }
+  if (!/^[0-9a-f-]{36}$/i.test(novoResponsavelId)) {
+    return { ok: false, message: "Selecione um responsável" };
+  }
+
+  const supabase = createClient();
+
+  const { data: atual, error: errLer } = await supabase
+    .from("freelancers")
+    .select("responsavel_id, nome_social, tenant_id")
+    .eq("id", freelancerId)
+    .maybeSingle();
+  if (errLer || !atual) {
+    return { ok: false, message: "Freelancer não encontrado" };
+  }
+  if (atual.tenant_id !== session.activeTenant.id) {
+    return { ok: false, message: "Freelancer não pertence ao tenant ativo" };
+  }
+  if (atual.responsavel_id === novoResponsavelId) {
+    return { ok: false, message: "Esse já é o responsável atual" };
+  }
+
+  const { error } = await supabase
+    .from("freelancers")
+    .update({
+      responsavel_id: novoResponsavelId,
+      updated_by: session.profile.id,
+    })
+    .eq("id", freelancerId);
+
+  if (error) {
+    console.error("[freelancers.transferir_responsavel]", error.message);
+    return { ok: false, message: error.message };
+  }
+
+  await logAuditEvent({
+    acao: "freelancer.responsavel_transferido",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "freelancer",
+    entidadeId: freelancerId,
+    metadata: {
+      nome_social: atual.nome_social,
+      responsavel_anterior: atual.responsavel_id,
+      responsavel_novo: novoResponsavelId,
+    },
+  });
+
+  revalidatePath("/freelancers/lista");
+  revalidatePath(`/freelancers/${freelancerId}`);
   return { ok: true };
 }

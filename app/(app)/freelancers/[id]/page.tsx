@@ -8,10 +8,12 @@ import {
   Heart,
   FileText,
   Plus,
+  User,
 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type {
+  AppRole,
   Freelancer,
   FreelancerCargo,
   FreelancerContrato,
@@ -24,11 +26,23 @@ import { BlocoInfo, Linha } from "../_components/bloco-info";
 import { ContratoCard } from "../contratos/_components/contrato-card";
 import { HistoricoContratoTimeline } from "../_components/historico-contrato-timeline";
 import { NovaSolicitacaoDialog } from "../solicitacoes/_components/nova-solicitacao-dialog";
+import {
+  TransferirResponsavelDialog,
+  type ResponsavelOption,
+} from "../_components/transferir-responsavel-dialog";
 import type { JobItem } from "../_components/job-picker";
-import { formatCnpj, formatCep, formatTelefone } from "@/lib/utils";
+import { formatCnpj, formatCep, formatTelefone, initials } from "@/lib/utils";
 import { PIX_TIPOS } from "@/lib/pix";
 
 const JOBS_STATUS_EXCLUIDOS = ["cancelado", "rejeitado_financeiro"];
+
+const ROLES_RESPONSAVEL: AppRole[] = [
+  "administrador",
+  "rh",
+  "financeiro",
+  "gerente_producao",
+  "produtor",
+];
 
 const TIPO_CONTA_ROTULO: Record<TipoContaBancariaFornecedor, string> = {
   corrente: "Conta corrente",
@@ -131,22 +145,29 @@ export default async function FreelancerPerfilPage({
     historicoPorContrato.set(h.contrato_id, arr);
   }
 
-  // Resolve nomes dos profiles pra mostrar quem solicitou distrato.
-  // Pega IDs únicos de responsavel_id + distrato_solicitado_por.
+  // Resolve nomes dos profiles pra mostrar quem solicitou distrato + o dono
+  // da pessoa (freelancer.responsavel_id).
   const profileIds = new Set<string>();
   for (const c of contratos) {
     if (c.responsavel_id) profileIds.add(c.responsavel_id);
     if (c.distrato_solicitado_por) profileIds.add(c.distrato_solicitado_por);
   }
+  if (freelancer.responsavel_id) profileIds.add(freelancer.responsavel_id);
   let gpNomesPorId: Record<string, string> = {};
+  let gpEmailsPorId: Record<string, string> = {};
   if (profileIds.size > 0) {
     const profilesRes = await supabase
       .from("profiles")
-      .select("id, nome")
+      .select("id, nome, email")
       .in("id", Array.from(profileIds));
     if (profilesRes.data) {
-      for (const p of profilesRes.data as Array<{ id: string; nome: string }>) {
+      for (const p of profilesRes.data as Array<{
+        id: string;
+        nome: string;
+        email: string | null;
+      }>) {
         gpNomesPorId[p.id] = p.nome;
+        if (p.email) gpEmailsPorId[p.id] = p.email;
       }
     }
   }
@@ -194,6 +215,42 @@ export default async function FreelancerPerfilPage({
 
   const podeEditar = PODE_EDITAR.has(session.activeRole);
   const isRh = podeEditar; // administrador/rh/financeiro
+
+  // Transferir responsável: admin + rh (igual AgCaliforniaRH).
+  const podeTransferirResp =
+    session.activeRole === "administrador" || session.activeRole === "rh";
+
+  const responsaveisDisponiveis: ResponsavelOption[] = [];
+  if (podeTransferirResp) {
+    const respRes = await supabase
+      .from("tenant_members")
+      .select("profiles!inner(id, nome)")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "ativo")
+      .in("role", ROLES_RESPONSAVEL);
+    const rows = (respRes.data ?? []) as unknown as Array<{
+      profiles: { id: string; nome: string } | { id: string; nome: string }[];
+    }>;
+    const uniq = new Map<string, string>();
+    for (const r of rows) {
+      const list = Array.isArray(r.profiles) ? r.profiles : [r.profiles];
+      for (const p of list) {
+        if (p?.id && p?.nome) uniq.set(p.id, p.nome);
+      }
+    }
+    for (const [id, nome] of Array.from(uniq.entries()).sort((a, b) =>
+      a[1].localeCompare(b[1], "pt-BR"),
+    )) {
+      responsaveisDisponiveis.push({ id, nome });
+    }
+  }
+
+  const responsavelNome = freelancer.responsavel_id
+    ? (gpNomesPorId[freelancer.responsavel_id] ?? null)
+    : null;
+  const responsavelEmail = freelancer.responsavel_id
+    ? (gpEmailsPorId[freelancer.responsavel_id] ?? null)
+    : null;
 
   const jobsNovaSolic: JobItem[] = (jobsRes.data ?? []).map((j: any) => ({
     id: j.id as string,
@@ -289,8 +346,55 @@ export default async function FreelancerPerfilPage({
     freelancer.contato_emergencia
   );
 
+  const blocoResponsavel = (
+    <div className="rounded-2xl border border-border bg-white p-5 shadow-soft md:col-span-2">
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-california-red/10 text-california-red">
+            <User className="h-3.5 w-3.5" />
+          </div>
+          <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-foreground">
+            Responsável
+          </h3>
+        </div>
+        {podeTransferirResp && (
+          <TransferirResponsavelDialog
+            freelancerId={freelancer.id}
+            freelancerNome={freelancer.nome_social}
+            responsavelAtualId={freelancer.responsavel_id}
+            responsavelAtualNome={responsavelNome}
+            responsaveisDisponiveis={responsaveisDisponiveis}
+          />
+        )}
+      </div>
+      {responsavelNome ? (
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-california-red/10 text-california-red text-xs font-bold shrink-0">
+            {initials(responsavelNome)}
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground truncate">
+              {responsavelNome}
+            </p>
+            {responsavelEmail && (
+              <p className="text-xs text-muted-foreground truncate">
+                {responsavelEmail}
+              </p>
+            )}
+          </div>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Sem responsável atribuído.
+          {podeTransferirResp && " Use \"Transferir responsável\" acima."}
+        </p>
+      )}
+    </div>
+  );
+
   const dadosPessoais = (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      {blocoResponsavel}
       {temContato && (
         <BlocoInfo icon={Mail} titulo="Contato">
           {freelancer.email && <Linha rotulo="Email" valor={freelancer.email} />}
@@ -386,7 +490,7 @@ export default async function FreelancerPerfilPage({
         !temDiversidade && (
           <div className="md:col-span-2 rounded-2xl border border-dashed border-border bg-muted/30 p-8 text-center">
             <p className="text-sm text-muted-foreground">
-              Nenhum dado adicional cadastrado.
+              Nenhum outro dado cadastrado.
             </p>
             {podeEditar && (
               <p className="text-xs text-muted-foreground/80 mt-1">

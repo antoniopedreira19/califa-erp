@@ -5947,6 +5947,11 @@ export interface Freelancer {
   acao_prevista: AcaoPrevistaFreelancer | null;
   origem: OrigemFreelancer;
 
+  // Dono da relação com a pessoa (separado do responsavel por contrato — ver
+  // migration 20261027900003). Nullable porque legados pré-backfill podem não
+  // ter; forms novos exigem.
+  responsavel_id: string | null;
+
   // Auditoria
   created_at: string;
   updated_at: string;
@@ -6138,8 +6143,13 @@ export interface FreelancerContratoHistorico {
  * Linha da view `freelancers_com_status`: freelancer + contrato ativo +
  * status derivados. Todos os campos de contrato são nullable porque o
  * freelancer pode não ter contrato.
+ *
+ * Atenção: `responsavel_id` (sem prefixo) vem do contrato ativo e muda quando
+ * o contrato muda. `freela_responsavel_id` vem direto de `freelancers` e é o
+ * dono estável. Usa Omit<Freelancer, "responsavel_id"> pra não colidir com
+ * o do contrato que a view expõe com o mesmo nome.
  */
-export interface FreelancerComStatus extends Freelancer {
+export interface FreelancerComStatus extends Omit<Freelancer, "responsavel_id"> {
   contrato_id: string | null;
   contrato_origem_sistema: OrigemFreelancerContratoSistema | null;
   nome_job: string | null;
@@ -6153,7 +6163,8 @@ export interface FreelancerComStatus extends Freelancer {
   arquivo_url: string | null;
   minuta_url: string | null;
 
-  // Responsável do contrato (join com profiles)
+  // Responsável do contrato ativo (join com profiles — muda quando contrato
+  // muda; use `freela_responsavel_id` pra o dono estável da pessoa).
   responsavel_id: string | null;
   responsavel_nome: string | null;
   responsavel_email: string | null;
@@ -6166,6 +6177,12 @@ export interface FreelancerComStatus extends Freelancer {
   // Derivados
   status_contrato: StatusContrato;
   status_calculado: StatusCalculado;
+
+  // Dono da relação com a pessoa (freelancers.responsavel_id + join). Usado
+  // como fonte de verdade pra filtro "meus freelas" do GP/produtor.
+  freela_responsavel_id: string | null;
+  freela_responsavel_nome: string | null;
+  freela_responsavel_email: string | null;
 }
 
 // ----------------------------------------------------------------------------
