@@ -39,7 +39,7 @@ function labelTipoLancamento(tipo: RhFeriasFluxoRow["tipo_lancamento"]): string 
 
 function BadgeTipo({ tipo }: { tipo: RhFeriasFluxoRow["tipo_lancamento"] }) {
   return (
-    <span className="inline-flex items-center rounded-full border border-border bg-white px-2 py-0.5 text-[10px] font-medium text-foreground">
+    <span className="inline-flex items-center whitespace-nowrap rounded-full border border-border bg-white px-2 py-0.5 text-[10px] font-medium text-foreground">
       {labelTipoLancamento(tipo)}
     </span>
   );
@@ -72,13 +72,10 @@ function BarraProgresso({ valor, total }: { valor: number; total: number }) {
 function CardPendente({ row }: { row: RhFeriasFluxoRow }) {
   return (
     <div className="rounded border border-amber-200 bg-white p-3 space-y-2 shadow-sm">
-      {/* Linha 1: nome + badge tipo */}
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-semibold text-foreground leading-tight truncate">
-          {row.colaborador_nome}
-        </p>
-        <BadgeTipo tipo={row.tipo_lancamento} />
-      </div>
+      {/* Linha 1: nome */}
+      <p className="text-sm font-semibold text-foreground leading-tight truncate">
+        {row.colaborador_nome}
+      </p>
 
       {/* Linha 2: N dias · DD/MM a DD/MM */}
       <p className="text-xs text-muted-foreground">
@@ -86,8 +83,11 @@ function CardPendente({ row }: { row: RhFeriasFluxoRow }) {
         {formatarDataCurta(row.data_fim)}
       </p>
 
-      {/* Linha 3: badge contratação */}
-      <BadgeContratacao tipo={row.tipo_contratacao} />
+      {/* Linha 3: badges contratação + tipo */}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <BadgeContratacao tipo={row.tipo_contratacao} />
+        <BadgeTipo tipo={row.tipo_lancamento} />
+      </div>
 
       {/* Rodapé: ações */}
       <div className="pt-1 border-t border-border">
