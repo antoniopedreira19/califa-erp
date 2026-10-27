@@ -251,6 +251,10 @@ export async function anexarReciboContabilFolhaFerias(
 
 // ---------- Cancelar folha de férias em rascunho ----------
 
+// TODO (ruling do final review): UI do cancelamento não foi migrada pro
+// kanban novo. Server action mantida pra permitir resurface no modal
+// de admin numa iteração futura. Se decidir não voltar, deletar junto com
+// a rota de audit "folha.linha.editada_rh" relacionada.
 export async function cancelarFolhaFerias(input: {
   folha_id: string;
 }): Promise<ActionResult> {

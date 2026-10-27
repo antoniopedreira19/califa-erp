@@ -10,7 +10,9 @@ import { AcoesLancamento } from "./acoes-lancamento";
 // ---------------------------------------------------------------------------
 
 function formatarData(iso: string): string {
-  const [ano, mes, dia] = iso.split("-");
+  const parts = iso.slice(0, 10).split("-");
+  if (parts.length !== 3) return iso;
+  const [ano, mes, dia] = parts;
   return `${dia}/${mes}`;
 }
 

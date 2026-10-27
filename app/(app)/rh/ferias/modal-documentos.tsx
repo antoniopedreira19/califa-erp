@@ -289,11 +289,11 @@ export function ModalDocumentos({
 
   const docsConcluidos = folhas.filter(folhaEstaCompleta).length;
   const docsTotal = folhas.length;
-  const podaEnviar = !readonly && docsConcluidos === docsTotal && docsTotal > 0;
+  const podeEnviar = !readonly && docsConcluidos === docsTotal && docsTotal > 0;
   const faltam = docsTotal - docsConcluidos;
 
   async function handleEnviar() {
-    if (!podaEnviar) return;
+    if (!podeEnviar) return;
     setErro(null);
     setEnviando(true);
     try {
@@ -402,14 +402,14 @@ export function ModalDocumentos({
                     <button
                       type="button"
                       onClick={handleEnviar}
-                      disabled={!podaEnviar || enviando}
+                      disabled={!podeEnviar || enviando}
                       className="rounded-lg bg-california-red px-4 py-1.5 text-sm font-medium text-white hover:bg-california-red/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {enviando ? "Enviando..." : "Enviar ao financeiro"}
                     </button>
                   </span>
                 </TooltipTrigger>
-                {!podaEnviar && faltam > 0 && (
+                {!podeEnviar && faltam > 0 && (
                   <TooltipContent side="top">
                     Faltam {faltam} documento{faltam !== 1 ? "s" : ""}
                   </TooltipContent>

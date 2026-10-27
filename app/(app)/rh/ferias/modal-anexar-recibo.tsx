@@ -53,7 +53,7 @@ export function ModalAnexarRecibo({ folha, onFechar, onSucesso }: Props) {
   const labelValor = isAbono ? "Valor do abono (R$)" : "Valor líquido do recibo (R$)";
 
   const ajudaValor = isAbono
-    ? `Deve bater com o abono calculado R$ ${folha.salario_base.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`
+    ? `Deve bater com o abono calculado ${folha.salario_base.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`
     : "Valor que o financeiro vai pagar efetivamente (já com descontos aplicados).";
   const [arquivo, setArquivo] = React.useState<File | null>(null);
   const [valorLiquido, setValorLiquido] = React.useState<string>("");
