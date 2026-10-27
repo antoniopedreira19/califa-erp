@@ -1,9 +1,12 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import type { RhFeriasFluxoRow, ColunaFluxoFerias } from "@/lib/types";
 import { classificarColunaFluxo } from "@/lib/ferias/classificar-coluna-fluxo";
 import { CardFluxo } from "./card-fluxo";
+import { ModalDocumentos } from "./modal-documentos";
+import type { FolhaDoc } from "./modal-documentos";
 
 // ---------------------------------------------------------------------------
 // Configuração das colunas
@@ -159,19 +162,62 @@ function ColunaKanban({
 // Export principal
 // ---------------------------------------------------------------------------
 
-export function FluxoKanban({ rows }: { rows: RhFeriasFluxoRow[] }) {
+type FluxoKanbanProps = {
+  rows: RhFeriasFluxoRow[];
+  folhasPorLancamento: Record<string, FolhaDoc[]>;
+};
+
+export function FluxoKanban({ rows, folhasPorLancamento }: FluxoKanbanProps) {
+  const router = useRouter();
   const grupos = agrupar(rows);
 
-  // Por ora no-op — Task 6 adiciona o modal de detalhes
-  const abrirModalDocs = React.useCallback((_row: RhFeriasFluxoRow) => {
-    // TODO Task 6: abrir modal com detalhes do lançamento
-  }, []);
+  // Estado para o modal de documentos
+  const [rowSelecionado, setRowSelecionado] = React.useState<RhFeriasFluxoRow | null>(null);
+  const [colunaSelecionada, setColunaSelecionada] = React.useState<ColunaFluxoFerias>("em_andamento");
+
+  const abrirModalDocs = React.useCallback(
+    (row: RhFeriasFluxoRow) => {
+      const coluna = classificarColunaFluxo(row);
+      // Só abre modal para colunas que têm detalhes de doc
+      if (coluna === "pendente") return;
+      setRowSelecionado(row);
+      setColunaSelecionada(coluna);
+    },
+    [],
+  );
+
+  function fecharModal() {
+    setRowSelecionado(null);
+  }
+
+  function handleSucesso() {
+    setRowSelecionado(null);
+    router.refresh();
+  }
 
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
-      {COLUNAS.map((col) => (
-        <ColunaKanban key={col.key} config={col} rows={grupos[col.key]} onCardClick={abrirModalDocs} />
-      ))}
-    </div>
+    <>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+        {COLUNAS.map((col) => (
+          <ColunaKanban
+            key={col.key}
+            config={col}
+            rows={grupos[col.key]}
+            onCardClick={abrirModalDocs}
+          />
+        ))}
+      </div>
+
+      {rowSelecionado && (
+        <ModalDocumentos
+          row={rowSelecionado}
+          folhas={folhasPorLancamento[rowSelecionado.lancamento_id] ?? []}
+          coluna={colunaSelecionada}
+          open
+          onClose={fecharModal}
+          onSucesso={handleSucesso}
+        />
+      )}
+    </>
   );
 }
