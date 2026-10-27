@@ -402,7 +402,7 @@ export default async function FreelancerPerfilPage({
 
   const dadosPessoais = (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-      {blocoResponsavel}
+      {podeTransferirResp && blocoResponsavel}
       {temContato && (
         <BlocoInfo icon={Mail} titulo="Contato">
           {freelancer.email && <Linha rotulo="Email" valor={freelancer.email} />}
