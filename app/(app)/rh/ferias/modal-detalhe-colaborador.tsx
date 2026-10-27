@@ -83,8 +83,7 @@ export function ModalDetalheColaborador({
     if (
       l.status !== "aprovado" &&
       l.status !== "concluido" &&
-      l.status !== "pendente_aprovacao" &&
-      l.status !== "em_analise"
+      l.status !== "pendente_aprovacao"
     )
       continue;
     diasOcupadosPorPeriodo.set(
@@ -121,7 +120,6 @@ export function ModalDetalheColaborador({
   const lancamentosAgendados = lancamentos.filter(
     (l) =>
       l.status === "pendente_aprovacao" ||
-      l.status === "em_analise" ||
       (l.status === "aprovado" && l.data_fim >= hojeISO),
   );
   const lancamentosHistorico = lancamentos.filter(
@@ -525,10 +523,7 @@ function HeroPeriodo({
   const t = tom[p.status as "vencido" | "em_alerta" | "apto"] ?? tom.apto;
 
   const agendados = lancamentos.filter(
-    (l) =>
-      l.status === "aprovado" ||
-      l.status === "pendente_aprovacao" ||
-      l.status === "em_analise",
+    (l) => l.status === "aprovado" || l.status === "pendente_aprovacao",
   );
 
   return (
@@ -758,7 +753,6 @@ function BadgeLancamento({ status }: { status: FeriasLancamentoStatus }) {
       label: "Pendente",
       cls: "bg-amber-100 text-amber-900",
     },
-    em_analise: { label: "Em análise", cls: "bg-sky-100 text-sky-800" },
     aguardando_financeiro: { label: "Ag. financeiro", cls: "bg-purple-100 text-purple-800" },
     aprovado: { label: "Aprovado", cls: "bg-emerald-100 text-emerald-800" },
     reprovado: { label: "Reprovado", cls: "bg-red-100 text-red-800" },

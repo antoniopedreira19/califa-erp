@@ -49,7 +49,7 @@ export async function aprovarLancamento(
   const tenantId = session.activeTenant.id;
   const lanc = await carregarLancamento(lancamentoId, tenantId);
   if (!lanc) return { ok: false, message: "Lançamento não encontrado." };
-  if (lanc.status !== "pendente_aprovacao" && lanc.status !== "em_analise") {
+  if (lanc.status !== "pendente_aprovacao") {
     return {
       ok: false,
       message:
@@ -162,14 +162,10 @@ export async function reprovarLancamento(
   const tenantId = session.activeTenant.id;
   const lanc = await carregarLancamento(lancId, tenantId);
   if (!lanc) return { ok: false, message: "Lançamento não encontrado." };
-  if (
-    lanc.status !== "pendente_aprovacao" &&
-    lanc.status !== "em_analise"
-  ) {
+  if (lanc.status !== "pendente_aprovacao") {
     return {
       ok: false,
-      message:
-        "Só é possível reprovar solicitações pendentes ou em análise.",
+      message: "Só é possível reprovar solicitações pendentes.",
     };
   }
 
@@ -199,63 +195,6 @@ export async function reprovarLancamento(
       motivo,
       dias: lanc.dias,
     },
-  });
-
-  revalidatePath("/rh/ferias");
-  revalidatePath("/perfil");
-  return { ok: true, id: lanc.id };
-}
-
-// ---------- Mover para "em análise" ----------
-
-const emAnaliseSchema = z.object({
-  lancamento_id: z.string().uuid(),
-  observacao: z.string().trim().max(500).optional().nullable(),
-});
-
-export async function moverEmAnalise(
-  input: unknown,
-): Promise<ActionResult> {
-  const session = await requireSession();
-  const bloqueio = assertRh(session.activeRole);
-  if (bloqueio) return bloqueio;
-
-  const parsed = emAnaliseSchema.safeParse(input);
-  if (!parsed.success) {
-    return { ok: false, message: "Dados inválidos." };
-  }
-  const { lancamento_id: lancId, observacao } = parsed.data;
-
-  const tenantId = session.activeTenant.id;
-  const lanc = await carregarLancamento(lancId, tenantId);
-  if (!lanc) return { ok: false, message: "Lançamento não encontrado." };
-  if (lanc.status !== "pendente_aprovacao") {
-    return {
-      ok: false,
-      message: "Só é possível mover para análise solicitações pendentes.",
-    };
-  }
-
-  const supabase = createClient();
-  const { error: updErr } = await supabase
-    .from("colaboradores_ferias_lancamentos")
-    .update({
-      status: "em_analise",
-      observacao: observacao || null,
-    })
-    .eq("id", lancId);
-
-  if (updErr) {
-    console.error("[rh.ferias.em_analise]", updErr.message);
-    return { ok: false, message: "Falha: " + updErr.message };
-  }
-
-  await logAuditEvent({
-    acao: "ferias.lancamento.movido_em_analise",
-    tenantId,
-    entidadeTipo: "ferias_lancamento",
-    entidadeId: lanc.id,
-    metadata: { colaborador_id: lanc.colaborador_id, observacao },
   });
 
   revalidatePath("/rh/ferias");

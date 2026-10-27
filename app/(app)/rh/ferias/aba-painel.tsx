@@ -45,7 +45,7 @@ export async function AbaPainel({ tenantId }: Props) {
       .from("colaboradores_ferias_lancamentos")
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
-      .in("status", ["pendente_aprovacao", "em_analise"]),
+      .eq("status", "pendente_aprovacao"),
     supabase
       .from("colaboradores_ferias_periodos")
       .select("id", { count: "exact", head: true })
@@ -69,7 +69,7 @@ export async function AbaPainel({ tenantId }: Props) {
         "id, tipo, dias, data_inicio, data_fim, status, created_at, colaborador:colaboradores!colaborador_id(id, nome, tipo_contratacao)",
       )
       .eq("tenant_id", tenantId)
-      .in("status", ["pendente_aprovacao", "em_analise"])
+      .eq("status", "pendente_aprovacao")
       .order("created_at", { ascending: false })
       .limit(5),
     supabase
@@ -424,7 +424,6 @@ function StatusBadge({ status }: { status: FeriasLancamentoStatus }) {
       label: "Pendente",
       cls: "bg-amber-100 text-amber-900",
     },
-    em_analise: { label: "Em análise", cls: "bg-sky-100 text-sky-800" },
     aguardando_financeiro: { label: "Ag. financeiro", cls: "bg-purple-100 text-purple-800" },
     aprovado: { label: "Aprovado", cls: "bg-emerald-100 text-emerald-800" },
     reprovado: { label: "Reprovado", cls: "bg-red-100 text-red-800" },

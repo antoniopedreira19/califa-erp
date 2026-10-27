@@ -66,12 +66,7 @@ export async function AbaQuadro({ tenantId }: Props) {
       .from("colaboradores_ferias_lancamentos")
       .select("colaborador_id, periodo_id, dias, status")
       .eq("tenant_id", tenantId)
-      .in("status", [
-        "aprovado",
-        "concluido",
-        "pendente_aprovacao",
-        "em_analise",
-      ]),
+      .in("status", ["aprovado", "concluido", "pendente_aprovacao"]),
   ]);
 
   const colaboradores = (colaboradoresRes.data ?? []) as Pick<

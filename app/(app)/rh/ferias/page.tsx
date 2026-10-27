@@ -91,7 +91,6 @@ function normalizarTab(t: string | undefined): Tab {
 function normalizarStatus(s: string | undefined): FeriasLancamentoStatus | "todos" {
   const valores: FeriasLancamentoStatus[] = [
     "pendente_aprovacao",
-    "em_analise",
     "aguardando_financeiro",
     "aprovado",
     "reprovado",

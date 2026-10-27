@@ -5175,7 +5175,6 @@ export type FeriasLancamentoTipo =
  *  → aguardando_financeiro → aprovado → concluido. Alternativas: reprovado, cancelado. */
 export type FeriasLancamentoStatus =
   | "pendente_aprovacao"
-  | "em_analise"
   | "aguardando_financeiro"
   | "aprovado"
   | "reprovado"

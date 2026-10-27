@@ -28,8 +28,7 @@ export function CardMinhasFerias({
     if (
       l.status !== "aprovado" &&
       l.status !== "concluido" &&
-      l.status !== "pendente_aprovacao" &&
-      l.status !== "em_analise"
+      l.status !== "pendente_aprovacao"
     )
       continue;
     diasOcupadosPorPeriodo.set(
@@ -80,12 +79,11 @@ export function CardMinhasFerias({
   // grupo, ordem por created_at desc.
   const prioridadeStatus: Record<string, number> = {
     pendente_aprovacao: 0,
-    em_analise: 1,
-    aguardando_financeiro: 2,
-    aprovado: 3,
-    concluido: 4,
-    reprovado: 5,
-    cancelado: 6,
+    aguardando_financeiro: 1,
+    aprovado: 2,
+    concluido: 3,
+    reprovado: 4,
+    cancelado: 5,
   };
   const lancamentosOrdenados = [...lancamentos].sort((a, b) => {
     const pa = prioridadeStatus[a.status] ?? 99;
