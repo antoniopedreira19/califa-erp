@@ -235,9 +235,10 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 216 | [Mídia System: o job auditado pelo cliente; a PP vai sem NF até o financeiro liberar as notas, e a NF entra pela prestação de contas da verba, sem saldo](216-midia-system.md) | 2026-10-26 |
 | 217 | [O código do projeto sai das telas: só o nome, ordem pela criação, sem coluna de código no Excel](217-codigo-do-projeto-fora-das-telas.md) | 2026-10-27 |
 | 218 | [A folha entra no fluxo de caixa como previsão (data prevista da linha ou dia 03 do mês seguinte, a partir de 10/2026), a aprovação grava a mesma data e a folha do mês seguinte nasce sozinha 30 dias antes](218-folha-prevista-no-fluxo-de-caixa.md) | 2026-10-27 |
-| 219 | [13º Salário: integração com Folha de Pagamento via FK, não via reuso de tabela](219-decimo-terceiro-integracao-folha-pagamento.md) | 2026-10-21 |
-| 220 | [13º Salário: breakdown do híbrido CLT_recibo persistido no banco](220-decimo-terceiro-breakdown-hibrido.md) | 2026-10-21 |
-| 221 | [13º Salário: INSS/IRRF 10/2026 e Lei 15.270 hard-coded, substituição anual](221-decimo-terceiro-tabelas-10-2026.md) | 2026-10-21 |
+| 219 | [Fee e Always On: o fim vem no fim do trimestre, os meses aparecem no formulário, orçamento e job abrem no Total, e o mês que faltou entra no job pela errata](219-os-tres-meses-do-trimestre.md) | 2026-10-27 |
+| 220 | [13º Salário: integração com Folha de Pagamento via FK, não via reuso de tabela](220-decimo-terceiro-integracao-folha-pagamento.md) | 2026-10-21 |
+| 221 | [13º Salário: breakdown do híbrido CLT_recibo persistido no banco](221-decimo-terceiro-breakdown-hibrido.md) | 2026-10-21 |
+| 222 | [13º Salário: INSS/IRRF 10/2026 e Lei 15.270 hard-coded, substituição anual](222-decimo-terceiro-tabelas-10-2026.md) | 2026-10-21 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -250,4 +251,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 222**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 223**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)

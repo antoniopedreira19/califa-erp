@@ -19,7 +19,6 @@ import {
   Check,
   Clock,
   ClipboardList,
-  Lock,
   Send,
 } from "lucide-react";
 import {
@@ -107,6 +106,7 @@ import {
   somaDasPPsNaoCanceladas,
 } from "@/lib/calculos/pps-item";
 import { useRascunhoErrata } from "./errata-rascunho";
+import { AvisoDoMesEnviado } from "./aviso-do-mes-enviado";
 import { ErrataProntaFaixa, quandoDaPronta } from "./errata-pronta-faixa";
 import type { FechamentoDaAbertura } from "@/lib/calculos/abertura-do-job";
 import { ErrataBarra } from "./errata-barra";
@@ -188,11 +188,6 @@ const ROTULO_DA_SITUACAO: Record<SituacaoDoMes, string> = {
   faturado: "Faturado",
   sem_faturamento: "Sem faturamento",
 };
-
-function listaDeMeses(nomes: string[]): string {
-  if (nomes.length <= 1) return nomes.join("");
-  return `${nomes.slice(0, -1).join(", ")} e ${nomes[nomes.length - 1]}`;
-}
 
 /** Referência estável para o default: um `[]` novo a cada render mudaria
  *  as dependências dos `useMemo` abaixo. */
@@ -738,6 +733,9 @@ function PlanilhaDoJob({
   const [confirmando, setConfirmando] = React.useState(false);
   const [salvando, setSalvando] = React.useState(false);
   const [erroErrata, setErroErrata] = React.useState<string | null>(null);
+  // O mês enviado em que alguém clicou com a errata ligada: o aviso de por
+  // que a linha não abre aparece acima da planilha dele (27/10/2026).
+  const [tentouNoMes, setTentouNoMes] = React.useState<string | null>(null);
 
   // Os dois lados da conta, pela MESMA função que o card de Totais e o
   // servidor usam. Reimplementar aqui faria a barra mostrar um número e a
@@ -1221,9 +1219,10 @@ function PlanilhaDoJob({
       };
     });
   }, [mensal, meses, errata.grupos, gruposDaPlanilha, paraTotais]);
-  // Sem `?mes=`, abre no primeiro mês — como a planilha do orçamento.
+  // Sem `?mes=`, abre no Total, como a planilha do orçamento: o mês só abre
+  // sozinho quando é escolhido na régua (Tiago, 27/10/2026).
   const mesSelecionado =
-    !mensal || mesDaTela === "trimestre"
+    !mensal || mesDaTela === undefined || mesDaTela === "trimestre"
       ? null
       : (dadosDosMeses.find((d) => d.chave === mesDaTela) ??
         dadosDosMeses[0] ??
@@ -1298,25 +1297,6 @@ function PlanilhaDoJob({
   const faturadosNoTrimestre = faturamentoMensal.filter(
     (m) => m.situacao === "faturado",
   ).length;
-  // "Julho e agosto já foram enviados para faturamento: errata e save ficam
-  // travados nesses meses. Setembro continua editável." (design aprovado).
-  // Desde a decisão 099 (§14) gerar save segue valendo no mês enviado, até
-  // o encerramento: o que trava é a errata e o CONSUMO de save.
-  const avisoDosMesesEnviados = (() => {
-    if (!mensal || mesesEnviados.size === 0) return null;
-    const enviados = dadosDosMeses.filter((d) => mesesEnviados.has(d.mes.id));
-    const livres = dadosDosMeses.filter((d) => !mesesEnviados.has(d.mes.id));
-    const nomesEnviados = listaDeMeses(enviados.map((d) => nomeDoMes(d.mes.mes)));
-    const inicio = nomesEnviados.charAt(0).toUpperCase() + nomesEnviados.slice(1);
-    const parte1 =
-      enviados.length === 1
-        ? `${inicio} já foi enviado para faturamento: errata e consumo de save ficam travados nesse mês.`
-        : `${inicio} já foram enviados para faturamento: errata e consumo de save ficam travados nesses meses.`;
-    if (livres.length === 0) return parte1;
-    const nomesLivres = listaDeMeses(livres.map((d) => nomeDoMes(d.mes.mes)));
-    const livresInicio = nomesLivres.charAt(0).toUpperCase() + nomesLivres.slice(1);
-    return `${parte1} ${livresInicio} ${livres.length === 1 ? "continua editável" : "continuam editáveis"}.`;
-  })();
   const descricaoDosMeses =
     dadosDosMeses.length === 1
       ? rotuloMes(dadosDosMeses[0].mes.mes)
@@ -1359,8 +1339,28 @@ function PlanilhaDoJob({
     // Um card para a planilha inteira — antes era um por grupo. Sem
     // `overflow-hidden`: a calha de ações precisa escapar do frame, e são
     // os filhos que arredondam os cantos.
+    const tentativaNoMesEnviado =
+      errata.ativo && !modoFinanceiro && mesFechado && mesId !== null;
+    const mesDoAviso =
+      tentativaNoMesEnviado && tentouNoMes === mesId
+        ? meses.find((m) => m.id === mesId)
+        : undefined;
     return (
-      <div className="rounded-2xl border border-border bg-card shadow-soft">
+      <>
+      {mesDoAviso && (
+        <AvisoDoMesEnviado mes={mesDoAviso.mes} onFechar={() => setTentouNoMes(null)} />
+      )}
+      <div
+        className="rounded-2xl border border-border bg-card shadow-soft"
+        onClickCapture={
+          tentativaNoMesEnviado
+            ? (e) => {
+                // Recolher um grupo não é tentativa de errata.
+                if (!(e.target as HTMLElement).closest("button")) setTentouNoMes(mesId);
+              }
+            : undefined
+        }
+      >
         <JobItemRealizadoTable
           jobId={job.id}
           ppsNasLinhas={ppsNasLinhas}
@@ -1424,6 +1424,7 @@ function PlanilhaDoJob({
           rentabRealizadaVisivel={rentabRealizada}
         />
       </div>
+      </>
     );
   }
 
@@ -1787,7 +1788,8 @@ function PlanilhaDoJob({
             descricao={descricaoDosMeses}
             trimestre={{
               chave: "trimestre",
-              rotulo: "Trimestre",
+              // "Total" desde 27/10/2026; a chave na URL continua `trimestre`.
+              rotulo: "Total",
               faturamento: dadosDosMeses.reduce((s, d) => s + d.faturamento, 0),
               resultadoGeral: null,
               detalhe:
@@ -1820,12 +1822,6 @@ function PlanilhaDoJob({
                 : undefined
             }
           />
-          {avisoDosMesesEnviados && (
-            <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
-              <Lock className="mt-0.5 h-3.5 w-3.5 flex-none" />
-              <span>{avisoDosMesesEnviados}</span>
-            </div>
-          )}
           {mesSelecionado ? (
             <>
               {tabela(

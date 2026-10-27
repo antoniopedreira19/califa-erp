@@ -320,9 +320,9 @@ Toda ação do módulo registra em `audit_events`:
 
 Ver ADRs:
 
-- [219 — Integração do 13º com Folha de Pagamento](../../decisions/219-decimo-terceiro-integracao-folha-pagamento.md): por que criar tabelas separadas (`decimo_terceiro_*`) e integrar via FK em `folhas_pagamento` em vez de reusar a tabela existente ou criar `contas_avulsas` direto.
-- [220 — Breakdown do híbrido CLT_recibo](../../decisions/220-decimo-terceiro-breakdown-hibrido.md): por que persistir `parte_clt_*` e `parte_pj_*` no banco em vez de calcular na UI.
-- [221 — Tabelas INSS/IRRF 10/2026 e Lei 15.270](../../decisions/221-decimo-terceiro-tabelas-10-2026.md): hard-coded na lib `calc.ts`, substituição anual.
+- [220 — Integração do 13º com Folha de Pagamento](../../decisions/220-decimo-terceiro-integracao-folha-pagamento.md): por que criar tabelas separadas (`decimo_terceiro_*`) e integrar via FK em `folhas_pagamento` em vez de reusar a tabela existente ou criar `contas_avulsas` direto.
+- [221 — Breakdown do híbrido CLT_recibo](../../decisions/221-decimo-terceiro-breakdown-hibrido.md): por que persistir `parte_clt_*` e `parte_pj_*` no banco em vez de calcular na UI.
+- [222 — Tabelas INSS/IRRF 10/2026 e Lei 15.270](../../decisions/222-decimo-terceiro-tabelas-10-2026.md): hard-coded na lib `calc.ts`, substituição anual.
 
 ## 13. Migrations
 

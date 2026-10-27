@@ -24,7 +24,7 @@ A Kika pode fazer a folha de 13º/2026 inteira dentro do ERP: criar, ajustar cas
 
 ### Tabelas INSS/IRRF são hard-coded, não vêm do banco
 
-Em `lib/decimo-terceiro/calc.ts`. Toda vez que o governo mudar faixas (Portaria MPS anual) ou sair lei nova, **tem que editar o arquivo + testes**. Procedimento documentado em [ADR 221](../decisions/221-decimo-terceiro-tabelas-10-2026.md). Se esquecer, o cálculo fica errado em silêncio — ninguém testa valor absoluto na UI, só o teste da Caroline captura divergência.
+Em `lib/decimo-terceiro/calc.ts`. Toda vez que o governo mudar faixas (Portaria MPS anual) ou sair lei nova, **tem que editar o arquivo + testes**. Procedimento documentado em [ADR 222](../decisions/222-decimo-terceiro-tabelas-10-2026.md). Se esquecer, o cálculo fica errado em silêncio — ninguém testa valor absoluto na UI, só o teste da Caroline captura divergência.
 
 ### Snapshot é imutável até "Recalcular folha"
 
@@ -53,9 +53,9 @@ RH não tem permissão de criar `contas_avulsas` direto (só admin/financeiro). 
 ### Documentação do módulo em 3 lugares
 
 - Spec viva: [`docs/modulos/rh/60-decimo-terceiro.md`](../modulos/rh/60-decimo-terceiro.md)
-- ADR integração folha de pagamento: [`docs/decisions/219`](../decisions/219-decimo-terceiro-integracao-folha-pagamento.md)
-- ADR breakdown híbrido: [`docs/decisions/220`](../decisions/220-decimo-terceiro-breakdown-hibrido.md)
-- ADR tabelas 10/2026: [`docs/decisions/221`](../decisions/221-decimo-terceiro-tabelas-10-2026.md)
+- ADR integração folha de pagamento: [`docs/decisions/220`](../decisions/220-decimo-terceiro-integracao-folha-pagamento.md)
+- ADR breakdown híbrido: [`docs/decisions/221`](../decisions/221-decimo-terceiro-breakdown-hibrido.md)
+- ADR tabelas 10/2026: [`docs/decisions/222`](../decisions/222-decimo-terceiro-tabelas-10-2026.md)
 - Design doc da Parte 1 original (histórico): [`docs/superpowers/specs/2026-10-21-decimo-terceiro-parte-1-design.md`](../superpowers/specs/2026-10-21-decimo-terceiro-parte-1-design.md)
 - Plano de execução da Parte 1 (histórico): [`docs/superpowers/plans/2026-10-21-decimo-terceiro-parte-1.md`](../superpowers/plans/2026-10-21-decimo-terceiro-parte-1.md)
 

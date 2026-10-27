@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { BarraDaPlanilha } from "@/app/(app)/_planilha/lugar-da-barra";
 import type {
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
@@ -119,7 +120,9 @@ export function GruposSection({
 
   return (
     <div>
-      <div className="mb-3 flex items-center justify-between gap-3">
+      {/* Na vista Total do mensal ela sobe para acima da linha do mês
+          (lugar-da-barra.tsx). */}
+      <BarraDaPlanilha>
         {/* Sem agrupamento não há o que recolher — e o botão leria
             "Expandir todos", porque nenhum grupo está aberto. O `span`
             segura o lugar para as chaves continuarem à direita. */}
@@ -179,7 +182,7 @@ export function GruposSection({
             ]}
           />
         </div>
-      </div>
+      </BarraDaPlanilha>
 
       {faixaDoSave}
 

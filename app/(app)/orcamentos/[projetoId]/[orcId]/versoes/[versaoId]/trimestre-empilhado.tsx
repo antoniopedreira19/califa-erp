@@ -15,6 +15,7 @@ import { ChevronRight } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { NUMEROS_PLANILHA } from "@/app/(app)/_planilha/blocos";
 import { BotaoRecolherTodos } from "@/app/(app)/_planilha/recolher-grupos";
+import { ComLugarDaBarra } from "@/app/(app)/_planilha/lugar-da-barra";
 
 export interface MesDoTrimestre {
   id: string;
@@ -36,6 +37,7 @@ export function TrimestreEmpilhado({
   moeda,
   acoes,
   onAbrir,
+  barraAcimaDoMes = false,
 }: {
   meses: MesDoTrimestre[];
   moeda: string;
@@ -46,6 +48,10 @@ export function TrimestreEmpilhado({
    *  do mês. É a planilha em pop-up da abertura do job (19/10/2026). Sem
    *  ele, é o link de sempre. */
   onAbrir?: (id: string) => void;
+  /** A barra da planilha de cada mês ("Save", "Exibir") sobe para acima da
+   *  linha do mês (Tiago, 27/10/2026). Só no orçamento: a planilha do job
+   *  não tem barra por mês. */
+  barraAcimaDoMes?: boolean;
 }) {
   // Nasce com o primeiro mês aberto: com os três abertos a página enterra
   // o Totais do trimestre, e com todos fechados ela não mostra planilha.
@@ -53,6 +59,20 @@ export function TrimestreEmpilhado({
     () => new Set(meses[0] ? [meses[0].id] : []),
   );
   const algumAberto = abertos.size > 0;
+
+  // O lugar da barra acima da linha de cada mês aberto. A ref de cada mês é
+  // a mesma em todo render: ref nova a cada render faria o React chamar a
+  // antiga com null e a nova com o elemento, sem parar.
+  const [lugares, setLugares] = React.useState<Record<string, HTMLElement | null>>({});
+  const refsDosLugares = React.useRef(new Map<string, (el: HTMLDivElement | null) => void>());
+  function refDoLugar(id: string) {
+    let ref = refsDosLugares.current.get(id);
+    if (!ref) {
+      ref = (el) => setLugares((l) => (l[id] === el ? l : { ...l, [id]: el }));
+      refsDosLugares.current.set(id, ref);
+    }
+    return ref;
+  }
 
   function alternar(id: string) {
     setAbertos((atual) => {
@@ -78,6 +98,7 @@ export function TrimestreEmpilhado({
         const aberto = abertos.has(m.id);
         return (
           <div key={m.id} className="space-y-3">
+            {aberto && barraAcimaDoMes && <div ref={refDoLugar(m.id)} />}
             <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-5 py-3 shadow-soft">
               <button
                 type="button"
@@ -134,7 +155,11 @@ export function TrimestreEmpilhado({
                 </Link>
               )}
             </div>
-            {aberto && m.conteudo}
+            {aberto && (
+              <ComLugarDaBarra lugar={barraAcimaDoMes ? (lugares[m.id] ?? null) : null}>
+                {m.conteudo}
+              </ComLugarDaBarra>
+            )}
           </div>
         );
       })}
