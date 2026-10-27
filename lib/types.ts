@@ -6228,3 +6228,42 @@ export interface FreelancerContratoHistoricoEntry
   alterado_por_nome: string | null;
   contrato_nome_job: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Kanban de fluxo de férias (/rh/ferias)
+// Spec: docs/superpowers/specs/2026-10-27-rh-ferias-kanban-fluxo-design.md
+// ---------------------------------------------------------------------------
+
+export type ColunaFluxoFerias =
+  | "pendente"
+  | "em_andamento"
+  | "enviada"
+  | "parcial"
+  | "finalizada";
+
+export type RhFeriasFluxoRow = {
+  lancamento_id: string;
+  tenant_id: string;
+  colaborador_id: string;
+  colaborador_nome: string;
+  tipo_contratacao: TipoContratacao;
+  tipo_lancamento: FeriasLancamentoTipo;
+  data_inicio: string;
+  data_fim: string;
+  dias: number;
+  dias_abono: number;
+  status_lancamento: FeriasLancamentoStatus;
+  created_at: string;
+  aprovado_em: string | null;
+  motivo_reprovacao: string | null;
+  observacao: string | null;
+  folhas_total: number;
+  folhas_clt_com_recibo: number;
+  folhas_clt_total: number;
+  folhas_pj_total: number;
+  folhas_pj_com_nf: number;
+  folhas_pagas: number;
+  vencimento_mais_proximo: string | null;
+  todas_pagas: boolean | null;
+  todas_enviadas: boolean | null;
+};
