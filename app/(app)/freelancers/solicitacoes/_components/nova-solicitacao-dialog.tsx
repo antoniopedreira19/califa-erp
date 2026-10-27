@@ -356,14 +356,20 @@ export function NovaSolicitacaoDialog({
                 <p className="text-[11px] font-semibold text-emerald-900">
                   ✓ Freela cadastrado selecionado
                 </p>
-                <button
-                  type="button"
-                  onClick={trocarFreela}
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 hover:text-emerald-900"
-                >
-                  <UserX className="h-3 w-3" />
-                  Trocar freela
-                </button>
+                {/* Trocar só faz sentido quando o freela foi escolhido DENTRO do
+                    dialog (ex.: fluxo em /solicitacoes com busca). Quando veio
+                    pré-travado da prop (ex.: aberto do perfil do próprio freela),
+                    trocar quebra a semântica — esconde o botão. */}
+                {freelancerInicial === null && (
+                  <button
+                    type="button"
+                    onClick={trocarFreela}
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-800 hover:text-emerald-900"
+                  >
+                    <UserX className="h-3 w-3" />
+                    Trocar freela
+                  </button>
+                )}
               </div>
             )}
 
