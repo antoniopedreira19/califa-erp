@@ -50,30 +50,22 @@ type CardTipo = "usufruto" | "abono_combinado" | "abono_avulso";
 type CardConfig = {
   tipo: CardTipo;
   titulo: string;
-  descricao: string;
   Icone: React.ComponentType<{ className?: string }>;
 };
 
 const CARDS: CardConfig[] = [
-  {
-    tipo: "usufruto",
-    titulo: "Férias",
-    descricao: "Tirar dias de folga",
-    Icone: Palmtree,
-  },
-  {
-    tipo: "abono_combinado",
-    titulo: "Férias + venda",
-    descricao: "Tirar parte, vender o resto",
-    Icone: Split,
-  },
-  {
-    tipo: "abono_avulso",
-    titulo: "Só venda",
-    descricao: "Vender dias sem tirar folga",
-    Icone: DollarSign,
-  },
+  { tipo: "usufruto", titulo: "Férias", Icone: Palmtree },
+  { tipo: "abono_combinado", titulo: "Férias + venda", Icone: Split },
+  { tipo: "abono_avulso", titulo: "Só venda", Icone: DollarSign },
 ];
+
+/** Soma N-1 dias à data (data_fim = data_inicio + diasFolga - 1). */
+function calcularDataFim(dataInicio: string, diasFolga: number): string {
+  if (!dataInicio || diasFolga <= 0) return "";
+  const ini = new Date(dataInicio + "T00:00:00");
+  ini.setDate(ini.getDate() + diasFolga - 1);
+  return ini.toISOString().slice(0, 10);
+}
 
 export function SolicitarFeriasForm({
   periodos,
@@ -103,7 +95,6 @@ export function SolicitarFeriasForm({
   );
 
   // Reconcilia periodoId se a lista mudar (ex: RH alterna "modo retroativo").
-  // Sem isso, o Select renderia um value que não existe nos SelectItems.
   React.useEffect(() => {
     if (tipo === "abono_avulso") return;
     const reconciliado = reconciliarPeriodoSelecionado(
@@ -114,8 +105,9 @@ export function SolicitarFeriasForm({
       setPeriodoId(reconciliado);
     }
   }, [periodosDisponiveis, periodoId, tipo]);
+
+  const [qtdDias, setQtdDias] = React.useState<number>(0);
   const [dataInicio, setDataInicio] = React.useState<string>("");
-  const [dataFim, setDataFim] = React.useState<string>("");
   const [diasAbono, setDiasAbono] = React.useState<number>(0);
   const [observacao, setObservacao] = React.useState<string>("");
 
@@ -124,28 +116,27 @@ export function SolicitarFeriasForm({
     setPeriodoId(
       novo === "abono_avulso" ? "" : periodosDisponiveis[0]?.id ?? "",
     );
+    setQtdDias(0);
     setDataInicio("");
-    setDataFim("");
     setDiasAbono(novo === "abono_combinado" ? 1 : 0);
     setErros({});
     setErro(null);
   }
 
-  const diasFolga = React.useMemo(() => {
-    if (!dataInicio || !dataFim) return 0;
-    const ini = new Date(dataInicio + "T00:00:00");
-    const fim = new Date(dataFim + "T00:00:00");
-    const diff = Math.floor((fim.getTime() - ini.getTime()) / 86_400_000) + 1;
-    return diff > 0 ? diff : 0;
-  }, [dataInicio, dataFim]);
-
   const periodoAtivo = periodosDisponiveis.find((p) => p.id === periodoId);
   const saldoDisponivel = periodoAtivo?.saldo ?? 0;
 
-  const diasTotal =
-    tipo === "abono_combinado" ? diasFolga + diasAbono : diasFolga;
+  const diasConsumidosDoSaldo =
+    tipo === "abono_combinado" ? qtdDias + diasAbono : qtdDias;
   const excedeSaldo =
-    tipo !== "abono_avulso" && diasTotal > saldoDisponivel && saldoDisponivel > 0;
+    tipo !== "abono_avulso" &&
+    diasConsumidosDoSaldo > saldoDisponivel &&
+    saldoDisponivel > 0;
+
+  const dataFimCalculada = React.useMemo(
+    () => calcularDataFim(dataInicio, qtdDias),
+    [dataInicio, qtdDias],
+  );
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -157,7 +148,7 @@ export function SolicitarFeriasForm({
         tipo,
         periodo_id: tipo === "abono_avulso" ? null : periodoId || null,
         data_inicio: dataInicio,
-        data_fim: dataFim,
+        data_fim: dataFimCalculada,
         dias_abono: tipo === "abono_combinado" ? diasAbono : 0,
         observacao: observacao.trim() || null,
       };
@@ -185,11 +176,11 @@ export function SolicitarFeriasForm({
 
   const submitDesabilitado =
     pending ||
+    qtdDias <= 0 ||
     !dataInicio ||
-    !dataFim ||
-    diasFolga <= 0 ||
     (tipo === "abono_combinado" && diasAbono < 1) ||
-    (tipo !== "abono_avulso" && !periodoId);
+    (tipo !== "abono_avulso" && !periodoId) ||
+    excedeSaldo;
 
   const labelSubmit =
     modo === "rh"
@@ -200,8 +191,11 @@ export function SolicitarFeriasForm({
         ? "Enviando..."
         : "Enviar solicitação";
 
+  const labelQtdDias =
+    tipo === "abono_avulso" ? "Quantos dias quer vender?" : "Quantos dias de férias?";
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
+    <form onSubmit={handleSubmit} className="space-y-4">
       {erro && (
         <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
           <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
@@ -209,10 +203,10 @@ export function SolicitarFeriasForm({
         </div>
       )}
 
-      {/* Cards de tipo */}
-      <div className="space-y-2">
+      {/* Cards de tipo — compactos */}
+      <div className="space-y-1.5">
         <Label>Como você quer solicitar?</Label>
-        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3">
+        <div className="grid gap-2 sm:grid-cols-3">
           {cardsVisiveis.map((c) => {
             const ativo = tipo === c.tipo;
             return (
@@ -220,34 +214,29 @@ export function SolicitarFeriasForm({
                 key={c.tipo}
                 type="button"
                 onClick={() => trocarTipo(c.tipo)}
-                className={`flex flex-col items-start gap-2 rounded-xl border p-4 text-left transition-colors ${
+                className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-left transition-colors ${
                   ativo
                     ? "border-california-red bg-california-red/5 ring-1 ring-california-red/20"
                     : "border-border bg-white hover:bg-muted/40"
                 }`}
               >
                 <div
-                  className={`inline-flex h-9 w-9 items-center justify-center rounded-lg ${
+                  className={`inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${
                     ativo
                       ? "bg-california-red text-white"
                       : "bg-muted text-muted-foreground"
                   }`}
                 >
-                  <c.Icone className="h-4 w-4" />
+                  <c.Icone className="h-3.5 w-3.5" />
                 </div>
-                <div>
-                  <p className="text-sm font-semibold">{c.titulo}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {c.descricao}
-                  </p>
-                </div>
+                <p className="text-sm font-medium">{c.titulo}</p>
               </button>
             );
           })}
         </div>
       </div>
 
-      {/* Período aquisitivo */}
+      {/* Período aquisitivo — vem antes do input de dias pra mostrar o saldo */}
       {tipo !== "abono_avulso" && (
         <div className="space-y-1.5">
           <Label htmlFor="sff-periodo">Período aquisitivo</Label>
@@ -263,19 +252,29 @@ export function SolicitarFeriasForm({
               <SelectContent>
                 {periodosDisponiveis.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
-                    {`#${p.numero} · ${p.aquisitivo_inicio.slice(0, 4)}/${p.aquisitivo_fim.slice(0, 4)} · ${p.saldo} dias disponíveis`}
+                    {`#${p.numero} · ${p.aquisitivo_inicio.slice(0, 4)}/${p.aquisitivo_fim.slice(0, 4)}`}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           )}
-          {periodoAtivo?.data_limite_gozo && (
-            <p className="text-xs text-muted-foreground">
-              Precisa começar até:{" "}
-              {new Date(
-                periodoAtivo.data_limite_gozo + "T00:00:00",
-              ).toLocaleDateString("pt-BR")}
-            </p>
+          {periodoAtivo && (
+            <div className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-2 text-xs">
+              <span className="font-medium">
+                Saldo disponível:{" "}
+                <span className="text-california-red">
+                  {saldoDisponivel} {saldoDisponivel === 1 ? "dia" : "dias"}
+                </span>
+              </span>
+              {periodoAtivo.data_limite_gozo && (
+                <span className="text-muted-foreground">
+                  Precisa começar até{" "}
+                  {new Date(
+                    periodoAtivo.data_limite_gozo + "T00:00:00",
+                  ).toLocaleDateString("pt-BR")}
+                </span>
+              )}
+            </div>
           )}
           {erros.periodo_id && (
             <p className="text-xs text-red-600">{erros.periodo_id[0]}</p>
@@ -283,8 +282,23 @@ export function SolicitarFeriasForm({
         </div>
       )}
 
-      {/* Datas */}
-      <div className="grid gap-4 md:grid-cols-2">
+      {/* Qtd dias + Data início + Data fim calculada */}
+      <div className="grid gap-4 sm:grid-cols-[1fr_1fr_1fr]">
+        <div className="space-y-1.5">
+          <Label htmlFor="sff-qtd-dias">{labelQtdDias}</Label>
+          <Input
+            id="sff-qtd-dias"
+            type="number"
+            min={1}
+            max={30}
+            value={qtdDias || ""}
+            onChange={(e) => setQtdDias(Number(e.target.value) || 0)}
+          />
+          {erros.data_fim && (
+            <p className="text-xs text-red-600">{erros.data_fim[0]}</p>
+          )}
+        </div>
+
         <div className="space-y-1.5">
           <Label htmlFor="sff-data-inicio">Data de início</Label>
           <DatePicker
@@ -303,25 +317,14 @@ export function SolicitarFeriasForm({
 
         <div className="space-y-1.5">
           <Label htmlFor="sff-data-fim">Data de fim</Label>
-          <DatePicker
+          <div
             id="sff-data-fim"
-            name="_sff_data_fim"
-            defaultValue={dataFim}
-            dateDisabled={(d) => {
-              if (dateDisabled && dateDisabled(d)) return true;
-              if (dataInicio) {
-                const ini = new Date(dataInicio + "T00:00:00");
-                if (d < ini) return true;
-              }
-              return false;
-            }}
-            onDateChange={(d) => {
-              setDataFim(d ? d.toISOString().slice(0, 10) : "");
-            }}
-          />
-          {erros.data_fim && (
-            <p className="text-xs text-red-600">{erros.data_fim[0]}</p>
-          )}
+            className="flex h-10 items-center rounded-lg border border-border bg-muted/40 px-3 text-sm text-muted-foreground"
+          >
+            {dataFimCalculada
+              ? new Date(dataFimCalculada + "T00:00:00").toLocaleDateString("pt-BR")
+              : "—"}
+          </div>
         </div>
       </div>
 
@@ -334,7 +337,7 @@ export function SolicitarFeriasForm({
             type="number"
             min={1}
             max={30}
-            value={diasAbono}
+            value={diasAbono || ""}
             onChange={(e) => setDiasAbono(Number(e.target.value) || 0)}
           />
           <p className="text-xs text-muted-foreground">
@@ -361,12 +364,12 @@ export function SolicitarFeriasForm({
       </div>
 
       {/* Resumo */}
-      {diasFolga > 0 && (
+      {qtdDias > 0 && dataInicio && (
         <div className="rounded-lg bg-muted/40 p-3 text-sm">
           {tipo === "usufruto" && (
             <>
               <p className="font-medium">
-                {diasFolga} {diasFolga === 1 ? "dia" : "dias"} de folga
+                {qtdDias} {qtdDias === 1 ? "dia" : "dias"} de folga
               </p>
               {saldoDisponivel > 0 && (
                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -376,7 +379,10 @@ export function SolicitarFeriasForm({
                       excedeSaldo ? "font-medium text-red-700" : "font-medium"
                     }
                   >
-                    {saldoDisponivel - diasTotal} dias
+                    {saldoDisponivel - diasConsumidosDoSaldo}{" "}
+                    {saldoDisponivel - diasConsumidosDoSaldo === 1
+                      ? "dia"
+                      : "dias"}
                   </span>
                 </p>
               )}
@@ -385,8 +391,8 @@ export function SolicitarFeriasForm({
           {tipo === "abono_combinado" && diasAbono > 0 && (
             <>
               <p className="font-medium">
-                {diasFolga} dias de folga + {diasAbono} vendidos = {diasTotal}{" "}
-                dias
+                {qtdDias} dias de folga + {diasAbono} vendidos ={" "}
+                {diasConsumidosDoSaldo} dias
               </p>
               {saldoDisponivel > 0 && (
                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -396,7 +402,7 @@ export function SolicitarFeriasForm({
                       excedeSaldo ? "font-medium text-red-700" : "font-medium"
                     }
                   >
-                    {saldoDisponivel - diasTotal} dias
+                    {saldoDisponivel - diasConsumidosDoSaldo} dias
                   </span>
                 </p>
               )}
@@ -410,9 +416,9 @@ export function SolicitarFeriasForm({
           {tipo === "abono_avulso" && (
             <>
               <p className="font-medium">
-                {diasFolga} {diasFolga === 1 ? "dia" : "dias"} vendidos
+                {qtdDias} {qtdDias === 1 ? "dia" : "dias"} vendidos
               </p>
-              {diasFolga > 10 && (
+              {qtdDias > 10 && (
                 <p className="mt-1 text-xs text-amber-700">
                   Acima de 10 dias requer acordo com a empresa — RH vai avaliar.
                 </p>
