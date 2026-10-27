@@ -2,7 +2,6 @@ import * as React from "react";
 import { FileText } from "lucide-react";
 import type { NfPendenteQuadro, TipoContratacao } from "@/lib/types";
 import { QuadroNfLinha } from "./quadro-nf-linha";
-import { HistoricoNfModal } from "./historico-nf-modal";
 
 // Wrapper client só para o modal de histórico (precisa de estado).
 import { QuadroNfHistorico } from "./quadro-nf-historico";
