@@ -9,10 +9,7 @@ import type {
   ColaboradorFeriasPeriodo,
   TipoContratacao,
 } from "@/lib/types";
-import {
-  solicitarFeriasSchema,
-  ANTECEDENCIA_MINIMA_DIAS,
-} from "@/lib/ferias/solicitar-ferias-schema";
+import { solicitarFeriasSchema } from "@/lib/ferias/solicitar-ferias-schema";
 
 type ActionResult =
   | { ok: true; id: string }
@@ -81,7 +78,7 @@ export async function solicitarFerias(input: unknown): Promise<ActionResult> {
     };
   }
 
-  // Se é usufruto/misto, confere saldo do período informado
+  // Se é usufruto/abono_combinado, confere saldo do período informado
   let periodo: ColaboradorFeriasPeriodo | null = null;
   if (dados.periodo_id) {
     const { data: p } = await supabase

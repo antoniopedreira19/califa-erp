@@ -1,13 +1,7 @@
 "use client";
 
 import * as React from "react";
-import {
-  AlertCircle,
-  CheckCircle2,
-  DollarSign,
-  Palmtree,
-  Split,
-} from "lucide-react";
+import { AlertCircle, DollarSign, Palmtree, Split } from "lucide-react";
 import { Label } from "@/components/ui/label";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Textarea } from "@/components/ui/textarea";
@@ -23,6 +17,7 @@ import type {
   ColaboradorFeriasPeriodo,
   TipoContratacao,
 } from "@/lib/types";
+import { reconciliarPeriodoSelecionado } from "@/lib/ferias/reconciliar-periodo-selecionado";
 
 export type SolicitarFeriasPayload = {
   tipo: "usufruto" | "abono_avulso" | "abono_combinado";
@@ -106,6 +101,19 @@ export function SolicitarFeriasForm({
   const [periodoId, setPeriodoId] = React.useState<string>(
     periodosDisponiveis[0]?.id ?? "",
   );
+
+  // Reconcilia periodoId se a lista mudar (ex: RH alterna "modo retroativo").
+  // Sem isso, o Select renderia um value que não existe nos SelectItems.
+  React.useEffect(() => {
+    if (tipo === "abono_avulso") return;
+    const reconciliado = reconciliarPeriodoSelecionado(
+      periodosDisponiveis,
+      periodoId,
+    );
+    if (reconciliado !== periodoId) {
+      setPeriodoId(reconciliado);
+    }
+  }, [periodosDisponiveis, periodoId, tipo]);
   const [dataInicio, setDataInicio] = React.useState<string>("");
   const [dataFim, setDataFim] = React.useState<string>("");
   const [diasAbono, setDiasAbono] = React.useState<number>(0);
@@ -233,9 +241,6 @@ export function SolicitarFeriasForm({
                     {c.descricao}
                   </p>
                 </div>
-                {ativo && (
-                  <CheckCircle2 className="absolute h-0 w-0 opacity-0" />
-                )}
               </button>
             );
           })}
