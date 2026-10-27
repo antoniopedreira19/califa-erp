@@ -7,7 +7,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { linhaDeJob, linhaDeMovimento, linhasDeSaldo, linhasDoRateio, type FonteDoRateio, type LinhaLida } from "./empacotar";
+import { jobDaCauda, linhaDeJob, linhaDeMovimento, linhasDeSaldo, linhasDoRateio, type FonteDoRateio, type LinhaLida } from "./empacotar";
 import {
   COLUNAS_DO_PACOTE,
   FORMATO_DO_PACOTE,
@@ -65,7 +65,7 @@ function pacoteCom(movimentos: unknown[][]): Pacote {
   const vazio = (t: TabelaDoPacote) => ({ colunas: COLUNAS_DO_PACOTE[t].map((c) => c.nome), linhas: [] as never[] });
   return {
     formato: FORMATO_DO_PACOTE,
-    carga: { nome: "Teste", de: "2023-01-01", ate: "2023-01-31" },
+    carga: { nome: "Teste", de: "2023-01-01", ate: "2023-01-31", tipo: "periodo" },
     planilha: { versao: "2026-10-25", arquivo: "origem.xlsx", sha256: "a".repeat(64), exportado_em: null },
     esperado: {
       movimentos: { linhas: movimentos.length, soma: "-150.25" },
@@ -246,4 +246,39 @@ test("saldos: abertura com o último saldo antes do período e os meses do perí
   assert.deepEqual(linhasDeSaldo("Conta Nova", meses.slice(1), "2023-01-01", "2023-01-31"), [
     ["Conta Nova", "2023-01-01", 900, -100, false],
   ]);
+});
+
+test("cauda: só o job até o 3T de 2026, ou de ano anterior, que não existe no sistema", () => {
+  const job = (ano: string, trimestre: string, job_sistema = ""): LinhaLida => ({ ano, trimestre, job_sistema });
+  assert.equal(jobDaCauda(job("2026", "3T")), true);
+  assert.equal(jobDaCauda(job("2026", "1T")), true);
+  assert.equal(jobDaCauda(job("2025", "4T")), true);
+  assert.equal(jobDaCauda(job("2025", "")), true);
+  assert.equal(jobDaCauda(job("2026", "4T")), false);
+  assert.equal(jobDaCauda(job("2027", "1T")), false);
+  assert.equal(jobDaCauda(job("2026", "")), false);
+  assert.equal(jobDaCauda(job("2026", "3T", "AAA-1001/26")), false);
+  assert.equal(jobDaCauda(job("", "3T")), false);
+});
+
+test("cabeçalho: o pacote sem tipo é de período; a cauda declara o tipo", () => {
+  const base = (carga: Record<string, string>) =>
+    JSON.stringify({
+      formato: FORMATO_DO_PACOTE,
+      carga,
+      planilha: { versao: "2026-10-25", arquivo: "planilha.xlsx", sha256: "a".repeat(64), exportado_em: null },
+      esperado: {
+        movimentos: { linhas: 0, soma: "0.00" },
+        notas: { linhas: 0, soma: "0.00" },
+        jobs: { linhas: 0 },
+        rateio: { linhas: 0 },
+        saldos: { linhas: 0 },
+      },
+      tabelas: Object.fromEntries(TABELAS_DO_PACOTE.map((t) => [t, { colunas: COLUNAS_DO_PACOTE[t].map((c) => c.nome), linhas: [] }])),
+    });
+  const antigo = lerPacote(base({ nome: "3T 2026", de: "2026-07-01", ate: "2026-09-30" }));
+  assert.ok(antigo.ok && antigo.pacote.carga.tipo === "periodo");
+  const cauda = lerPacote(base({ nome: "Outubro 2026 · jobs até o 3T", de: "2026-10-01", ate: "2026-10-25", tipo: "cauda" }));
+  assert.ok(cauda.ok && cauda.pacote.carga.tipo === "cauda");
+  assert.equal(lerPacote(base({ nome: "X", de: "2026-10-01", ate: "2026-10-25", tipo: "outro" })).ok, false);
 });

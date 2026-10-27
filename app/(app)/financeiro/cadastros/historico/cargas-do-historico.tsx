@@ -25,6 +25,7 @@ export type CargaNaLista = Pick<
   HistoricoCarga,
   | "id"
   | "nome"
+  | "tipo"
   | "periodo_de"
   | "periodo_ate"
   | "planilha_versao"
@@ -415,12 +416,15 @@ export function CargasDoHistorico({ cargas }: { cargas: CargaNaLista[] }) {
   );
 }
 
-/** A carga ativa do mesmo período (que a nova substitui) e a que cruza o período sem ser igual (que impede). */
-function cargasDoPeriodo(cargas: CargaNaLista[], carga: { de: string; ate: string }) {
-  const ativas = cargas.filter((c) => c.situacao === "ativa" && c.periodo_de <= carga.ate && c.periodo_ate >= carga.de);
+/** A carga ativa do mesmo período (que a nova substitui) e a que cruza o período sem ser igual (que impede).
+ *  A cauda substitui a cauda ativa, qualquer que seja o período: a planilha nova estende a mesma cauda. */
+function cargasDoPeriodo(cargas: CargaNaLista[], carga: { de: string; ate: string; tipo: string }) {
+  const ativas = cargas.filter((c) => c.situacao === "ativa" && c.tipo === carga.tipo);
+  if (carga.tipo === "cauda") return { mesmoPeriodo: ativas[0], cruzada: undefined };
+  const cruzam = ativas.filter((c) => c.periodo_de <= carga.ate && c.periodo_ate >= carga.de);
   return {
-    mesmoPeriodo: ativas.find((c) => c.periodo_de === carga.de && c.periodo_ate === carga.ate),
-    cruzada: ativas.find((c) => c.periodo_de !== carga.de || c.periodo_ate !== carga.ate),
+    mesmoPeriodo: cruzam.find((c) => c.periodo_de === carga.de && c.periodo_ate === carga.ate),
+    cruzada: cruzam.find((c) => c.periodo_de !== carga.de || c.periodo_ate !== carga.ate),
   };
 }
 
@@ -459,7 +463,9 @@ function ResumoDoPacote({ lido, cargas, comAvisos }: { lido: Lido; cargas: Carga
         })}
       </dl>
       {comAvisos && mesmoPeriodo && (
-        <Aviso tom="alerta">Substitui a carga ativa “{mesmoPeriodo.nome}”, do mesmo período, quando terminar.</Aviso>
+        <Aviso tom="alerta">
+          Substitui a carga ativa “{mesmoPeriodo.nome}”, {carga.tipo === "cauda" ? "a cauda de antes" : "do mesmo período"}, quando terminar.
+        </Aviso>
       )}
       {comAvisos && cruzada && (
         <Aviso tom="erro">

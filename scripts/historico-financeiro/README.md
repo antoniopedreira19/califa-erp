@@ -38,6 +38,7 @@ npx tsx scripts/historico-financeiro/padronizar.ts "$V" "$T/sistema" "$T/depara"
 npx tsx scripts/historico-financeiro/validar.ts "$V"
 npx tsx scripts/historico-financeiro/revisao.ts "$V"
 npx tsx scripts/historico-financeiro/empacotar.ts "$V" --carga "1ª carga"
+npx tsx scripts/historico-financeiro/empacotar.ts "$V" --cauda
 npx tsx scripts/historico-financeiro/conferir-dre.ts "$V"
 npx tsx scripts/historico-financeiro/conferir-rentabilidade.ts "$V" --padronizado --com-previsoes
 npx tsx scripts/historico-financeiro/conferir-faturamento.ts "$V"
@@ -102,6 +103,11 @@ marcas, plano de contas, serviços, regionais, contas e os jobs abertos. O
   linhas e as somas declaradas. O contrato das colunas está em
   `lib/historico-financeiro/pacote.ts`, o mesmo da tela e do servidor, e o
   script confere o pacote como eles vão conferir.
+- **Cauda, `empacotar.ts --cauda` (A6):** depois do corte, do dia 01/10 até
+  o dia em que a planilha foi baixada, só os movimentos e as notas dos jobs
+  até o 3T de 2026 (ou de ano anterior) que não existem no sistema (sem
+  `job_sistema` no de-para). O resto de outubro entra pelo sistema. A cauda
+  nova substitui a ativa, qualquer que seja o período.
 - **Carga, na tela:** Financeiro › Cadastros › Histórico da planilha (admin e
   financeiro). Ela lê o pacote no navegador, avisa as contas que faltam
   cadastrar e envia em partes; o banco liga os textos aos cadastros, confere

@@ -136,7 +136,14 @@ const SOMA = z.string().regex(/^-?\d+\.\d{2}$/);
 
 export const ESQUEMA_DO_CABECALHO = z.object({
   formato: z.literal(FORMATO_DO_PACOTE),
-  carga: z.object({ nome: z.string().trim().min(1).max(80), de: z.string().regex(DATA), ate: z.string().regex(DATA) }),
+  // `cauda` (A6): depois do corte, só os jobs até o 3T que não existem no
+  // sistema. O pacote antigo, sem o campo, é de período.
+  carga: z.object({
+    nome: z.string().trim().min(1).max(80),
+    de: z.string().regex(DATA),
+    ate: z.string().regex(DATA),
+    tipo: z.enum(["periodo", "cauda"]).default("periodo"),
+  }),
   planilha: z.object({
     versao: z.string().regex(DATA),
     arquivo: z.string().trim().min(1).max(255),

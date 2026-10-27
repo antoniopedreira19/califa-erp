@@ -103,6 +103,20 @@ export function linhaDeNota(n: LinhaLida): ValorDoPacote[] {
   });
 }
 
+/**
+ * O job vai para a cauda (A6): até o 3T de 2026, ou de ano anterior, e fora
+ * do sistema (sem `job_sistema` no de-para). Os jobs do 4T e os que existem
+ * no sistema seguem pelo sistema depois do corte.
+ */
+export function jobDaCauda(j: LinhaLida): boolean {
+  if (j.job_sistema) return false;
+  const ano = Number(j.ano);
+  const tri = Number((j.trimestre || "").replace(/T$/, ""));
+  if (!ano) return false;
+  if (ano < 2026) return true;
+  return ano === 2026 && tri >= 1 && tri <= 3;
+}
+
 export function linhaDeJob(j: LinhaLida): ValorDoPacote[] {
   return emOrdem("jobs", {
     chave: j.id,

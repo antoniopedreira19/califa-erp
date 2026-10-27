@@ -10,6 +10,13 @@
  *   npx tsx scripts/historico-financeiro/empacotar.ts <pasta-da-versao> --nome "Teste da A1" \
  *     --de 2023-01-01 --ate 2023-01-31 --conta "BB California"
  *
+ *   npx tsx scripts/historico-financeiro/empacotar.ts <pasta-da-versao> --cauda
+ *
+ * A cauda (A6) vai do dia seguinte ao corte até o dia em que a planilha foi
+ * baixada e leva só os movimentos e as notas dos jobs até o 3T de 2026 que
+ * não existem no sistema (sem `job_sistema` no de-para); os jobs do 4T, os
+ * do sistema e o que não é de job entram pelo sistema. Sem rateio nem saldos.
+ *
  * Com `--conta` (pode repetir), a carga leva só os movimentos e os saldos
  * daquelas contas e só os jobs que os movimentos e as notas citam: serve para
  * uma carga pequena de teste. O período vai do primeiro dia de um mês ao
@@ -26,6 +33,7 @@ import { lerCsv } from "../../lib/historico-financeiro/csv";
 import { lerTabelaCsv } from "../../lib/historico-financeiro/depara";
 import {
   FONTES_DO_RATEIO,
+  jobDaCauda,
   linhaDeJob,
   linhaDeMovimento,
   linhaDeNota,
@@ -49,19 +57,27 @@ import type { Manifesto } from "./extrair";
 
 const USO =
   'Uso: npx tsx scripts/historico-financeiro/empacotar.ts <pasta-da-versao> --carga "1ª carga"\n' +
-  '  ou: … <pasta-da-versao> --nome "Teste da A1" --de 2023-01-01 --ate 2023-01-31 [--conta "BB California"]';
+  '  ou: … <pasta-da-versao> --nome "Teste da A1" --de 2023-01-01 --ate 2023-01-31 [--conta "BB California"]\n' +
+  '  ou: … <pasta-da-versao> --cauda';
+
+const NOME_DA_CAUDA = "Outubro 2026 · jobs até o 3T";
 
 const PERIODOS: Record<string, [string, string]> = {
   "1ª carga": ["2023-01-01", "2026-06-30"],
   "3T 2026": ["2026-07-01", "2026-09-30"],
 };
 
-type Opcoes = { carga?: string; nome?: string; de?: string; ate?: string; contas: string[] };
+type Opcoes = { carga?: string; nome?: string; de?: string; ate?: string; contas: string[]; cauda?: boolean };
 
 function lerArgumentos(args: string[]): { pasta: string | undefined; opcoes: Opcoes } {
   const opcoes: Opcoes = { contas: [] };
   for (let k = 1; k < args.length; k += 2) {
     const chave = args[k];
+    if (chave === "--cauda") {
+      opcoes.cauda = true;
+      k -= 1; // sem valor
+      continue;
+    }
     const valor = args[k + 1];
     if (valor === undefined) throw new Error(`Falta o valor de ${chave}.`);
     if (chave === "--carga") opcoes.carga = valor;
@@ -104,6 +120,7 @@ async function main() {
     process.exit(1);
   }
   const versao = resolve(pasta);
+  if (opcoes.cauda) return empacotarCauda(versao);
   const padrao = opcoes.carga ? PERIODOS[opcoes.carga] : undefined;
   if (opcoes.carga && !padrao) {
     throw new Error(`Carga desconhecida: ${opcoes.carga}. Use ${Object.keys(PERIODOS).join(" ou ")}, ou --nome com --de e --ate.`);
@@ -173,9 +190,13 @@ async function main() {
     notas: embalar("notas", nts.map(linhaDeNota)),
     movimentos: embalar("movimentos", movs.map(linhaDeMovimento)),
   };
+  await gravarPacote(versao, manifesto, { nome, de, ate, tipo: "periodo" }, tabelas);
+}
+
+async function gravarPacote(versao: string, manifesto: Manifesto, carga: Pacote["carga"], tabelas: Pacote["tabelas"]) {
   const pacote: Pacote = {
     formato: FORMATO_DO_PACOTE,
-    carga: { nome, de, ate },
+    carga,
     planilha: {
       versao: (manifesto.origem.exportado_em || basename(versao)).slice(0, 10),
       arquivo: manifesto.origem.arquivo,
@@ -205,7 +226,7 @@ async function main() {
 
   const pastaDeSaida = join(versao, "cargas");
   await mkdir(pastaDeSaida, { recursive: true });
-  const arquivo = join(pastaDeSaida, `${nomeDeArquivo(nome)}.json`);
+  const arquivo = join(pastaDeSaida, `${nomeDeArquivo(carga.nome)}.json`);
   await writeFile(arquivo, texto);
   console.log(
     JSON.stringify(
@@ -215,6 +236,47 @@ async function main() {
     ),
   );
 }
+
+/** A cauda (A6): do dia seguinte ao corte até a versão da planilha, só os jobs até o 3T fora do sistema. */
+async function empacotarCauda(versao: string) {
+  const manifesto: Manifesto = JSON.parse(await readFile(join(versao, "bruto", "manifesto.json"), "utf8"));
+  const ler = async (...caminho: string[]): Promise<LinhaLida[]> => {
+    const tabela = await lerTabelaCsv(join(versao, ...caminho));
+    if (!tabela) throw new Error(`Não achei ${join(...caminho)}: rode a padronização (E2) antes.`);
+    return tabela;
+  };
+  const [movimentos, notas, jobs] = await Promise.all([
+    ler("padronizado", "movimentos.csv"),
+    ler("padronizado", "notas.csv"),
+    ler("padronizado", "jobs.csv"),
+  ]);
+  const de = diaSeguinte(CORTE);
+  const ate = (manifesto.origem.exportado_em || basename(versao)).slice(0, 10);
+  if (ate < de) throw new Error(`A planilha é de ${ate}: não tem nada depois do corte.`);
+
+  const daCauda = new Set(jobs.filter(jobDaCauda).map((j) => j.id));
+  const movs = movimentos.filter((m) => m.carga === "depois do corte" && m.data >= de && m.data <= ate && daCauda.has(m.job_id));
+  const nts = notas.filter(
+    (n) => (n.situacao === "emitida" || n.situacao === "cancelada") && n.emissao >= de && n.emissao <= ate && daCauda.has(n.job_id),
+  );
+  const citados = new Set([...movs.map((m) => m.job_id), ...nts.map((n) => n.job_id)]);
+  const jbs = jobs.filter((j) => citados.has(j.id));
+
+  const tabelas: Pacote["tabelas"] = {
+    rateio: embalar("rateio", []),
+    saldos: embalar("saldos", []),
+    jobs: embalar("jobs", jbs.map(linhaDeJob)),
+    notas: embalar("notas", nts.map(linhaDeNota)),
+    movimentos: embalar("movimentos", movs.map(linhaDeMovimento)),
+  };
+  await gravarPacote(versao, manifesto, { nome: NOME_DA_CAUDA, de, ate, tipo: "cauda" }, tabelas);
+}
+
+const diaSeguinte = (data: string) => {
+  const d = new Date(`${data}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+};
 
 main().catch((erro) => {
   console.error(erro instanceof Error ? erro.message : erro);

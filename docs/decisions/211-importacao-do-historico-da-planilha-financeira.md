@@ -1045,6 +1045,32 @@ a BB California pela tela e a Santander Hitlab por migration".
   A Go Crazy está completa (extrato de 30/09 a 27/10 e aplicação de setembro
   e outubro, que bate linha a linha com o extrato).
 
+## A cauda: outubro dos jobs até o 3T (A6, 27/10/2026)
+
+Depois do inventário do 4T (planilha de 01 a 25/10 contra os extratos e o
+sistema, só leitura, em `tmp/historico-planilha/inventario-4t/`), o grosso
+do que faltava no sistema eram pagamentos e recebimentos de jobs do 1T ao
+3T que não existem nele. **Decidido (Tiago, 27/10/2026):** "Os movimentos de
+outubro dos jobs até o 3T entram no histórico, como uma carga própria, e a
+conciliação marca essas linhas do extrato como do histórico. No sistema
+ficam só os jobs do 4T." Os jobs do 3T que já existem no sistema (cerca de
+15, com PPs) **ficam no sistema** (resposta dele à pergunta).
+
+- **A carga `cauda`** (migration `20261027100007`): o histórico passa a ter
+  dois tipos de carga. A de período vai até 30/09, como antes; a cauda
+  começa em 01/10 e leva só as linhas dos jobs até o 3T de 2026 (ou de ano
+  anterior) que não existem no sistema, escolhidas pelo
+  `empacotar.ts --cauda` (`jobDaCauda`). A cauda nova substitui a ativa ao
+  concluir, qualquer que seja o período, porque cresce a cada planilha.
+- **Carregada pela tela em 27/10/2026:** "Outubro 2026 · jobs até o 3T", de
+  01/10 a 25/10, com 1.058 movimentos (995 na California Santander, 32 no
+  BB California, 30 na Santander GoCrazy, 1 no Paypal), soma
+  R$ 4.418.507,94, 54 notas emitidas em outubro desses jobs e 200 jobs
+  citados. Nenhuma linha da cauda é baixa já feita no sistema (as 47
+  coincidências de valor eram valores redondos de jobs diferentes).
+- **Em seguida:** a conciliação marca a linha do extrato como do histórico,
+  e o saldo da conta, o fechamento e o fluxo de caixa contam a cauda.
+
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas
   85 e 91 da Res. Jobs 2026; R$ 1.520.000,00 de benefício): o histórico segue a

@@ -3822,6 +3822,11 @@ export interface CondicoesDoFechamento {
 /** carregando → ativa → substituída ou desfeita; carregando → descartada. */
 export type SituacaoDaCargaHistorico = "carregando" | "ativa" | "substituida" | "desfeita" | "descartada";
 
+/** `periodo`: a planilha de um período até 30/09/2026. `cauda`: depois do
+ *  corte, só os movimentos e as notas dos jobs até o 3T que não existem no
+ *  sistema (decisão 211, A6). */
+export type TipoDaCargaHistorico = "periodo" | "cauda";
+
 export type TabelaDoHistorico = "rateio" | "saldos" | "jobs" | "notas" | "movimentos";
 
 /** Uma carga do histórico (`historico_cargas`, decisão 211, A1): um pacote
@@ -3830,6 +3835,7 @@ export interface HistoricoCarga {
   id: string;
   tenant_id: string;
   nome: string;
+  tipo: TipoDaCargaHistorico;
   periodo_de: string;
   periodo_ate: string;
   /** O dia em que a planilha foi baixada. */
