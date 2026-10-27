@@ -21,14 +21,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import type { RhFeriasFluxoRow, ColunaFluxoFerias } from "@/lib/types";
+import type { RhFeriasFluxoRow, ColunaFluxoFerias, TipoContratacao } from "@/lib/types";
 import { formatarTipoContratacao } from "@/lib/colaboradores/format-tipo-contratacao";
 import { enviarFolhasFerias } from "./actions-pagamentos";
 import { ModalAnexarRecibo } from "./modal-anexar-recibo";
-import type { PagamentoFerias } from "./aba-pagamentos";
 
 // ---------------------------------------------------------------------------
-// Tipo local (não compartilhado globalmente — usado só pelo modal)
+// Tipos locais (não compartilhados globalmente — usados só pelo modal)
 // ---------------------------------------------------------------------------
 
 export type FolhaDoc = {
@@ -39,6 +38,25 @@ export type FolhaDoc = {
   status: "rascunho" | "enviada" | "aprovada" | "pendente_correcao" | "paga";
   anexo_url: string | null;
   nf_anexada: boolean;
+};
+
+export type PagamentoFerias = {
+  id: string;
+  colaborador_id: string;
+  colaborador_nome: string;
+  tipo_contratacao: TipoContratacao;
+  salario_base: number;
+  status: "rascunho" | "enviada" | "aprovada" | "pendente_correcao" | "paga";
+  origem: "california" | "contabilidade";
+  tipo_folha_ferias: "usufruto" | "abono" | null;
+  data_pagamento_prevista: string | null;
+  data_pagamento: string | null;
+  anexo_url: string | null;
+  lancamento_ferias_id: string | null;
+  lancamento_data_inicio: string | null;
+  lancamento_data_fim: string | null;
+  lancamento_dias: number | null;
+  enviada_em: string | null;
 };
 
 // ---------------------------------------------------------------------------

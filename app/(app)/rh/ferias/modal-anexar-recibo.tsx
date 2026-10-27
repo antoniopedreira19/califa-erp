@@ -14,7 +14,7 @@ import {
   anexarReciboContabilFolhaFerias,
   gerarUrlUploadReciboContabil,
 } from "./actions-pagamentos";
-import type { PagamentoFerias } from "./aba-pagamentos";
+import type { PagamentoFerias } from "./modal-documentos";
 
 type Props = {
   folha: PagamentoFerias;

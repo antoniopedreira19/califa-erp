@@ -4,16 +4,13 @@ import { Palmtree } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { PageHeader } from "@/components/ui/page-header";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
-import type { FeriasLancamentoStatus } from "@/lib/types";
 import { AbaPainel } from "./aba-painel";
-import { AbaSolicitacoes } from "./aba-solicitacoes";
 import { AbaQuadro } from "./aba-quadro";
-import { AbaPagamentos } from "./aba-pagamentos";
 import { AbaFluxo } from "./aba-fluxo";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "painel" | "quadro" | "solicitacoes" | "pagamentos" | "fluxo";
+type Tab = "painel" | "quadro" | "fluxo";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "painel", label: "Painel" },
@@ -79,33 +76,11 @@ export default async function FeriasPage({
       {tab === "painel" && <AbaPainel tenantId={tenantId} />}
       {tab === "quadro" && <AbaQuadro tenantId={tenantId} />}
       {tab === "fluxo" && <AbaFluxo tenantId={tenantId} />}
-      {tab === "solicitacoes" && (
-        <AbaSolicitacoes
-          tenantId={tenantId}
-          statusFiltro={normalizarStatus(searchParams.status)}
-        />
-      )}
-      {tab === "pagamentos" && <AbaPagamentos tenantId={tenantId} />}
     </div>
   );
 }
 
 function normalizarTab(t: string | undefined): Tab {
-  const vals: Tab[] = ["painel", "quadro", "fluxo", "solicitacoes", "pagamentos"];
+  const vals: Tab[] = ["painel", "quadro", "fluxo"];
   return (vals as string[]).includes(t ?? "") ? (t as Tab) : "painel";
-}
-
-function normalizarStatus(s: string | undefined): FeriasLancamentoStatus | "todos" {
-  const valores: FeriasLancamentoStatus[] = [
-    "pendente_aprovacao",
-    "aguardando_financeiro",
-    "aprovado",
-    "reprovado",
-    "cancelado",
-    "concluido",
-  ];
-  if (s && (valores as string[]).includes(s)) {
-    return s as FeriasLancamentoStatus;
-  }
-  return "pendente_aprovacao";
 }
