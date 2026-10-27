@@ -373,7 +373,7 @@ export function NovaSolicitacaoDialog({
               </div>
             )}
 
-            <div className="p-6 space-y-3">
+            <div className="p-6 space-y-3 flex-1 overflow-y-auto min-h-0">
               {/* CPF obrigatório */}
               <Campo rotulo="CPF *" erro={fieldErrors.cpf_freela}>
                 <div className="relative">
