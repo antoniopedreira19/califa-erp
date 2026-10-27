@@ -17,7 +17,7 @@ export type ValoresLancamento = {
  *
  * Fórmula (docs/modulos/rh/25-ferias.md §4.6):
  *   diario = salario / 30
- *   usufruto / abono_combinado:
+ *   usufruto:
  *     valor_ferias   = diario × dias
  *     valor_um_terco = valor_ferias / 3
  *     valor_abono    = 0
@@ -25,15 +25,17 @@ export type ValoresLancamento = {
  *     valor_ferias   = 0
  *     valor_abono    = diario × dias
  *     valor_um_terco = valor_abono / 3
+ *   abono_combinado (dias = dias_folga + dias_abono):
+ *     diasFolga      = dias - diasAbono
+ *     valor_ferias   = diario × diasFolga
+ *     valor_abono    = diario × diasAbono
+ *     valor_um_terco = valor_ferias / 3   (só sobre férias, CLT: abono não gera 1/3)
  *
  * Fonte do salário: `colaboradores_salarios.valor` vigente na
  * `data_inicio` das férias.
  *
  * Caso especial `clt_recibo` (híbrido): o cálculo é feito sobre a
  * BASE desejada, que o chamador passa explicitamente via `salarioBase`.
- * Isso permite calcular 2 folhas pro mesmo colaborador:
- *   - 1 folha sobre valor_recibo (parte RPA, vai pro fluxo PJ)
- *   - 1 folha sobre valor - valor_recibo (parte CLT, vai pra contabilidade)
  *
  * Retorna null se não tem salário vigente na data_inicio.
  */
@@ -42,6 +44,7 @@ export async function calcularValoresLancamento(
   dataInicio: string,
   tipo: FeriasLancamentoTipo,
   dias: number,
+  diasAbono: number = 0,
   salarioBaseOverride?: number,
 ): Promise<ValoresLancamento | null> {
   let salario: number;
@@ -67,16 +70,28 @@ export async function calcularValoresLancamento(
   if (!salario || !isFinite(salario) || salario <= 0) return null;
 
   const diario = salario / 30;
-  const valorPorDiasBrutos = round2(diario * dias);
 
-  const isAbono =
-    tipo === "abono_avulso" || tipo === "abono_excepcional";
+  let valor_ferias: number;
+  let valor_abono: number;
+  let valor_um_terco: number;
 
-  const valor_ferias = isAbono ? 0 : valorPorDiasBrutos;
-  const valor_abono = isAbono ? valorPorDiasBrutos : 0;
-  const valor_um_terco = round2(
-    (isAbono ? valor_abono : valor_ferias) / 3,
-  );
+  if (tipo === "abono_avulso" || tipo === "abono_excepcional") {
+    valor_ferias = 0;
+    valor_abono = round2(diario * dias);
+    valor_um_terco = round2(valor_abono / 3);
+  } else if (tipo === "abono_combinado") {
+    const diasFolga = dias - diasAbono;
+    valor_ferias = round2(diario * diasFolga);
+    valor_abono = round2(diario * diasAbono);
+    // 1/3 só sobre férias (CLT: abono pecuniário não gera 1/3 constitucional)
+    valor_um_terco = round2(valor_ferias / 3);
+  } else {
+    // usufruto
+    valor_ferias = round2(diario * dias);
+    valor_abono = 0;
+    valor_um_terco = round2(valor_ferias / 3);
+  }
+
   const valor_total = round2(valor_ferias + valor_abono + valor_um_terco);
 
   return {
@@ -102,8 +117,9 @@ export async function calcularValoresLancamentoPJ(
   dataInicio: string,
   tipo: FeriasLancamentoTipo,
   dias: number,
+  diasAbono: number = 0,
 ): Promise<ValoresLancamento | null> {
-  return calcularValoresLancamento(colaboradorId, dataInicio, tipo, dias);
+  return calcularValoresLancamento(colaboradorId, dataInicio, tipo, dias, diasAbono);
 }
 
 /**
