@@ -13,7 +13,10 @@
  *   imposto (decisão 141) e as baixas dos itens de uma remessa no mesmo dia
  *   são um débito só;
  * - **as remessas** da conta, para o passo 4 (a soma centavo a centavo);
- * - **as regras do histórico** ativas da conta e as de todas.
+ * - **as regras do histórico** ativas da conta e as de todas;
+ * - **a cauda do histórico da planilha** (decisão 211, A6): os movimentos
+ *   dos jobs até o 3T depois do início da conta, os ainda sem linha do
+ *   banco para o motor e os ligados para a coluna No sistema.
  *
  * Os títulos em aberto vêm da leitura da aba Títulos
  * (`carregarTitulosDaConciliacao`), que a página lê junto.
@@ -25,6 +28,7 @@
 import type { createClient } from "@/lib/supabase/server";
 import type { ConciliadaComo, ExtratoLinhaComSituacao, ResolucaoSozinha } from "@/lib/types";
 import type { LancamentoDoMotor, RegraDoMotor } from "@/lib/conciliacao/motor";
+import type { HistoricoDoMotor } from "@/lib/conciliacao/historico";
 import { somaDias } from "@/lib/conciliacao/motor";
 import { contaTemNumero } from "@/lib/conciliacao/ofx";
 import { calcularSaldoAnterior } from "@/lib/calculos/saldo-conta";
@@ -87,6 +91,8 @@ export interface LinhaDoBanco {
   correcao: { de: number; para: number; motivo: string } | null;
   /** A regra que lançou a linha. */
   regraId: string | null;
+  /** A cauda do histórico ligada (na conciliada `como 'historico'`, A6). */
+  historicos: Array<{ id: string; valor: number; job: string | null; descricao: string | null }>;
 }
 
 /** O que a tela cancela para tirar uma baixa sem linha no banco: o tipo e o
@@ -157,6 +163,8 @@ export interface DadosDaAbaBanco {
   regras: RegraDaConta[];
   /** O saldo do sistema no fim do último dia do extrato. */
   saldoSistemaNoFim: number | null;
+  /** A cauda do histórico da conta ainda sem linha do banco (A6). */
+  historico: HistoricoDoMotor[];
 }
 
 // ---------------------------------------------------------------------------
@@ -255,6 +263,16 @@ function cancelamentoDe(l: LancamentoCru): CancelamentoDaBaixa | null {
   }
 }
 
+type CaudaCrua = {
+  id: string;
+  data: string;
+  /** Com sinal, como a planilha: o que entra é positivo. */
+  valor: string | number;
+  job_nome: string | null;
+  descricao: string | null;
+  extrato_linha_id: string | null;
+};
+
 const assinado = (l: LancamentoCru) => (l.natureza === "entrada" ? Number(l.valor) : -Number(l.valor));
 
 export async function carregarBancoDaConciliacao(
@@ -267,7 +285,7 @@ export async function carregarBancoDaConciliacao(
   const [contaRes, importacoesRes, linhasCruas, itensRes, regrasRes] = await Promise.all([
     supabase
       .from("contas_bancarias")
-      .select("id, nome, banco, agencia, numero_conta, numero_conta_dv")
+      .select("id, nome, banco, agencia, numero_conta, numero_conta_dv, saldo_inicial_data")
       .eq("tenant_id", tenantId)
       .eq("id", contaId)
       .maybeSingle(),
@@ -328,6 +346,7 @@ export async function carregarBancoDaConciliacao(
     agencia: string | null;
     numero_conta: string | null;
     numero_conta_dv: string | null;
+    saldo_inicial_data: string;
   } | null;
   const conta: DadosDaAbaBanco["conta"] = {
     id: contaId,
@@ -453,7 +472,7 @@ export async function carregarBancoDaConciliacao(
   const janela = dias.length ? { de: somaDias(dias[0], -3), ate: somaDias(dias[dias.length - 1], 3) } : null;
 
   const corrigidas = conciliadas.filter((l) => l.conciliada_como === "correcao").map((l) => l.id);
-  const [semLinhaCrus, ligadosRes, saldoNoFim, correcoesRes] = await Promise.all([
+  const [semLinhaCrus, ligadosRes, saldoNoFim, correcoesRes, caudaCrua] = await Promise.all([
     janela
       ? todasAsPaginas<LancamentoCru>(
           (de, ate) =>
@@ -495,6 +514,25 @@ export async function carregarBancoDaConciliacao(
           .in("extrato_linha_id", corrigidas)
           .is("desfeita_em", null)
       : Promise.resolve({ data: [], error: null }),
+    // A cauda do histórico (A6): desde o início da conta, da carga ativa.
+    c?.saldo_inicial_data
+      ? todasAsPaginas<CaudaCrua>(
+          (de, ate) =>
+            supabase
+              .from("historico_movimentos")
+              .select("id, data, valor, job_nome, descricao, extrato_linha_id, carga:historico_cargas!inner(tipo, situacao)")
+              .eq("tenant_id", tenantId)
+              .eq("conta_bancaria_id", contaId)
+              .eq("carga.tipo", "cauda")
+              .eq("carga.situacao", "ativa")
+              .gte("data", c.saldo_inicial_data)
+              .order("data", { ascending: true })
+              .order("id", { ascending: true })
+              .range(de, ate)
+              .returns<CaudaCrua[]>(),
+          "cauda",
+        )
+      : Promise.resolve([] as CaudaCrua[]),
   ]);
   if (ligadosRes.error) console.error("[conciliacao.banco.ligados]", ligadosRes.error.message);
   if (correcoesRes.error) console.error("[conciliacao.banco.correcoes]", correcoesRes.error.message);
@@ -516,6 +554,16 @@ export async function carregarBancoDaConciliacao(
     lista.push({ id: l.id, descricao: l.descricao, valor: assinado(l), origem: l.origem });
     ligadosPorLinha.set(l.extrato_linha_id, lista);
   }
+  const caudaPorLinha = new Map<string, LinhaDoBanco["historicos"]>();
+  const historico: HistoricoDoMotor[] = [];
+  for (const h of caudaCrua) {
+    const item = { id: h.id, data: h.data, valor: Number(h.valor), job: h.job_nome, descricao: h.descricao };
+    if (h.extrato_linha_id) {
+      caudaPorLinha.set(h.extrato_linha_id, [...(caudaPorLinha.get(h.extrato_linha_id) ?? []), item]);
+    } else {
+      historico.push(item);
+    }
+  }
   const linhas: LinhaDoBanco[] = linhasCruas.map((l) => ({
     id: l.id,
     digital: l.digital,
@@ -536,6 +584,7 @@ export async function carregarBancoDaConciliacao(
     datasTrocadas: l.desfazer?.datas ?? [],
     correcao: correcaoDaLinha.get(l.id) ?? null,
     regraId: l.desfazer?.regra_id ?? null,
+    historicos: caudaPorLinha.get(l.id) ?? [],
   }));
 
   return {
@@ -548,6 +597,7 @@ export async function carregarBancoDaConciliacao(
     regras,
     remessasBaixadas,
     saldoSistemaNoFim: saldoNoFim === null ? null : r2(saldoNoFim),
+    historico,
   };
 }
 

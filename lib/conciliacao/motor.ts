@@ -129,6 +129,7 @@ export type EstadoDaLinha =
   | "soma"
   | "combinacao"
   | "regra"
+  | "historico"
   | "sem_par";
 
 export type Confianca = "alta" | "media" | "baixa";
@@ -155,6 +156,8 @@ export interface ResultadoDoMotor<M extends MovimentoDoMotor = MovimentoDoMotor>
   lote?: LoteDoMotor;
   titulos?: TituloDoMotor[];
   regra?: RegraDoMotor;
+  /** A cauda do histórico que a linha paga ou recebe (decisão 211, A6). */
+  historicos?: Array<{ id: string; data: string; valor: number; job: string | null; descricao: string | null }>;
 }
 
 export interface SistemaDoMotor {

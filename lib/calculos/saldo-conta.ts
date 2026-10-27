@@ -124,20 +124,56 @@ export async function calcularSaldoAnterior(
     return { saldoAnterior: saldoInicial, saldoInicialData };
   }
 
-  const { data: lancsAnteriores } = await supabase
-    .from("lancamentos_financeiros")
-    .select("valor, natureza")
-    .eq("tenant_id", args.tenantId)
-    .eq("conta_bancaria_id", args.contaId)
-    .gte("data_movimento", saldoInicialData)
-    .lt("data_movimento", args.dataDe);
+  const [{ data: lancsAnteriores }, deltaCauda] = await Promise.all([
+    supabase
+      .from("lancamentos_financeiros")
+      .select("valor, natureza")
+      .eq("tenant_id", args.tenantId)
+      .eq("conta_bancaria_id", args.contaId)
+      .gte("data_movimento", saldoInicialData)
+      .lt("data_movimento", args.dataDe),
+    somaDaCauda(supabase, { ...args, saldoInicialData }),
+  ]);
 
   const delta = (lancsAnteriores ?? []).reduce((acc, l) => {
     const v = Number(l.valor);
     return acc + (l.natureza === "entrada" ? v : -v);
   }, 0);
 
-  return { saldoAnterior: saldoInicial + delta, saldoInicialData };
+  return { saldoAnterior: saldoInicial + delta + deltaCauda, saldoInicialData };
+}
+
+/**
+ * A cauda do histórico (decisão 211, A6) antes de `dataDe`: os movimentos dos
+ * jobs até o 3T depois do início da conta também são da conta. Valor com
+ * sinal. Página a página: a cauda de uma conta passa de mil linhas.
+ */
+async function somaDaCauda(
+  supabase: SupabaseClient,
+  args: { tenantId: string; contaId: string; dataDe: string; saldoInicialData: string },
+): Promise<number> {
+  const PAGINA = 1000;
+  let soma = 0;
+  for (let de = 0; de < 50_000; de += PAGINA) {
+    const { data, error } = await supabase
+      .from("historico_movimentos")
+      .select("valor, carga:historico_cargas!inner(tipo, situacao)")
+      .eq("tenant_id", args.tenantId)
+      .eq("conta_bancaria_id", args.contaId)
+      .eq("carga.tipo", "cauda")
+      .eq("carga.situacao", "ativa")
+      .gte("data", args.saldoInicialData)
+      .lt("data", args.dataDe)
+      .order("id", { ascending: true })
+      .range(de, de + PAGINA - 1);
+    if (error) {
+      console.error("[saldo-conta.cauda]", error.message);
+      break;
+    }
+    for (const h of (data ?? []) as Array<{ valor: string | number }>) soma += Number(h.valor);
+    if (!data || data.length < PAGINA) break;
+  }
+  return soma;
 }
 
 /**

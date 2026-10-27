@@ -123,6 +123,7 @@ const linhaDoBanco = (id: string, extra: Partial<LinhaDoBanco> = {}): LinhaDoBan
   datasTrocadas: [],
   correcao: null,
   regraId: null,
+  historicos: [],
   ...extra,
 });
 
@@ -338,4 +339,57 @@ test("as baixas da remessa: uma a uma, e o grupo só com a linha da soma (passo 
   assert.equal(total.resultados[0].estado, "ja_lancado");
   assert.deepEqual(total.lancamentos.get(total.resultados[0].lancamento?.id ?? "")?.ids, ["a", "b"]);
   assert.deepEqual(total.naoApareceu, []);
+});
+
+test("a cauda do histórico (A6): do mesmo dia antes do título, até 5 dias e pela soma depois", () => {
+  const base = { lancamentos: [], remessasBaixadas: [], remessas: [], regras: [], periodos: [] };
+  const cauda = [
+    { id: "h1", data: "2026-10-19", valor: -600, job: "Job Exemplo 3T", descricao: null },
+    { id: "h2", data: "2026-10-17", valor: -250, job: "Job Exemplo 3T", descricao: null },
+    { id: "h3", data: "2026-10-19", valor: 1000, job: "Job A 3T", descricao: null },
+    { id: "h4", data: "2026-10-19", valor: 2500.5, job: "Job B 3T", descricao: null },
+  ];
+  const { resultados } = conciliarConta(
+    {
+      ...base,
+      historico: cauda,
+      linhas: [
+        linhaDoBanco("1", { valor: -600 }),
+        linhaDoBanco("2", { valor: -250, ordem: 1 }),
+        linhaDoBanco("3", { valor: 3500.5, ordem: 2 }),
+        linhaDoBanco("4", { valor: -999, ordem: 3 }),
+      ],
+    },
+    [],
+    "conta",
+    {},
+    "2026-10-21",
+  );
+  assert.deepEqual(
+    resultados.map((r) => [r.mov.id, r.estado, (r.historicos ?? []).map((h) => h.id).join("+")]),
+    [
+      ["1", "historico", "h1"],
+      ["2", "historico", "h2"],
+      ["3", "historico", "h3+h4"],
+      ["4", "sem_par", ""],
+    ],
+  );
+  const secoes = secoesDoBanco(resultados);
+  assert.equal(secoes.historico.length, 3);
+  assert.equal(automacaoDaLeitura(resultados).historicos.length, 3);
+});
+
+test("a linha conciliada pelo histórico diz o job", () => {
+  const l = linhaDoBanco("a", {
+    conciliada: true,
+    conciliadaComo: "historico",
+    resolvidaSozinha: "historico",
+    historicos: [
+      { id: "h1", valor: -600, job: "Job Exemplo 3T", descricao: null },
+      { id: "h2", valor: -400, job: "Job Outro 3T", descricao: null },
+    ],
+  });
+  const r = resolucaoDaLinha(l);
+  assert.equal(r?.sozinho, "historico");
+  assert.equal(r?.texto, "Do histórico da planilha: “Job Exemplo 3T” e mais 1");
 });

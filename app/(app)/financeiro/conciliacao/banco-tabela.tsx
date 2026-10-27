@@ -43,6 +43,8 @@ export interface AcoesDoBanco {
   conferirTitulo: (r: ResultadoDaLinha, t: TituloDoMotor) => void;
   conciliarPar: (r: ResultadoDaLinha) => void;
   lancarRegra: (rs: ResultadoDaLinha[]) => void;
+  /** A cauda do histórico da planilha (decisão 211, A6). */
+  conciliarHistorico: (rs: ResultadoDaLinha[]) => void;
   lancarAvulso: (r: ResultadoDaLinha) => void;
   procurar: (r: ResultadoDaLinha) => void;
   ignorar: (r: ResultadoDaLinha) => void;
@@ -251,6 +253,7 @@ function Situacao({ r }: { r: ResultadoDaLinha }) {
     divergencia: ["Baixa diverge", "text-california-red"],
     par: ["Saiu e voltou", "text-violet-700"],
     regra: ["Regra", "text-violet-700"],
+    historico: ["Do histórico", "text-violet-700"],
     sem_par: ["Sem correspondência", "text-california-red"],
   };
   const [texto, cor] = m[r.estado];
@@ -309,6 +312,22 @@ function TituloNaCelula({ t, l }: { t: TituloDoMotor; l: Linha | undefined }) {
 
 /** O que o sistema tem para a linha do banco, em uma célula. */
 function NoSistema({ r, contexto }: { r: ResultadoDaLinha; contexto: ContextoDasCelulas }) {
+  if (r.estado === "historico" && r.historicos?.length) {
+    const hs = r.historicos;
+    const jobs = [...new Set(hs.map((h) => h.job ?? h.descricao ?? "sem job"))];
+    return (
+      <div className="min-w-0">
+        <p className="truncate text-xs font-semibold" title={jobs.join(" · ")}>
+          {jobs[0]}
+          {jobs.length > 1 ? ` e mais ${jobs.length - 1}` : ""}
+        </p>
+        <p className="truncate text-[11px] text-muted-foreground">
+          Histórico da planilha · {hs.length === 1 ? `linha de ${dataBR(hs[0].data)}` : `${hs.length} linhas de ${dataBR(hs[0].data)} que somam o banco`} ·
+          sem lançamento no sistema
+        </p>
+      </div>
+    );
+  }
   if (r.estado === "ja_lancado" && r.lancamento) {
     const l = contexto.lancamentos.get(r.lancamento.id);
     return (
@@ -554,6 +573,18 @@ function AcoesDaLinha({ r, acoes, contexto }: { r: ResultadoDaLinha; acoes: Acoe
               <span className="block text-center text-[10.5px] leading-tight text-muted-foreground">com a devolução</span>
             )
           }
+        />
+      );
+    case "historico":
+      return (
+        <Vagas
+          principal={
+            <button type="button" disabled={off} onClick={() => acoes.conciliarHistorico([r])} className={VERDE}>
+              <Link2 className="h-3 w-3" />
+              Conciliar
+            </button>
+          }
+          terceiro={ignorar}
         />
       );
     case "regra":

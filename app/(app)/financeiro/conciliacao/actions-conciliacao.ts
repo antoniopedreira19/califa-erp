@@ -228,6 +228,27 @@ export async function conciliarLinha(linhaId: string, lancamentoIds: string[], s
 }
 
 /**
+ * A linha do banco é da cauda do histórico da planilha (decisão 211, A6): os
+ * movimentos dos jobs até o 3T que não existem no sistema. Liga sem
+ * lançamento; o banco confere a conta, a cauda ativa e a soma.
+ */
+export async function conciliarPeloHistorico(
+  linhaId: string,
+  movimentoIds: string[],
+  sozinha: "historico" | null = null,
+): Promise<Resultado> {
+  if (!UUID.safeParse(linhaId).success || !z.array(UUID).min(1).max(500).safeParse(movimentoIds).success) {
+    return { ok: false, message: "Entrada inválida." };
+  }
+  if (sozinha !== null && sozinha !== "historico") return { ok: false, message: "Entrada inválida." };
+  return chamar(
+    "conciliar_linha_pelo_historico",
+    { p_linha_id: linhaId, p_movimento_ids: movimentoIds, p_sozinha: sozinha },
+    "Não foi possível conciliar esta linha pelo histórico. Tente de novo.",
+  );
+}
+
+/**
  * A avaliação única da importação (decisão 201): reserva as linhas que
  * ainda não passaram por ela e devolve as que reservou. Só essas se
  * resolvem sozinhas — duas abas abertas não baixam a mesma linha duas vezes.
