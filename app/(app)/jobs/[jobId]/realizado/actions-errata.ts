@@ -12,7 +12,7 @@ import {
   mensagemMesJaEnviado,
   mesesEnviadosDoJob,
 } from "@/lib/data/envio-faturamento";
-import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
+import { mesesDoTrimestre, nomeDoMes, trimestreDe } from "@/lib/calculos/meses-trimestre";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import {
   calcularEfeitoDaMudanca,
@@ -279,6 +279,9 @@ const alteracaoSchema = z.object({
 
 /** O agrupamento de uma linha: o id de um agrupamento do job, ou a chave de
  *  um criado nesta errata (`grupo-novo:N`, decisão 162). */
+/** A chave de um mês novo da errata (decisão 219): `mes-novo:2026-11`. */
+const CHAVE_MES_NOVO = /^mes-novo:\d{4}-\d{2}$/;
+
 const refDoGrupo = z
   .string()
   .refine(
@@ -323,7 +326,15 @@ const conteudoSchema = z.object({
           z.object({
             chave: z.string().regex(/^grupo-novo:\d+$/),
             nome: z.string(),
-            mes_id: z.string().uuid().nullable(),
+            // O mês da versão, ou a chave de um mês novo desta errata
+            // (decisão 219).
+            mes_id: z
+              .string()
+              .refine(
+                (v) => z.string().uuid().safeParse(v).success || CHAVE_MES_NOVO.test(v),
+                "Mês inválido.",
+              )
+              .nullable(),
           }),
         )
         .default([]),
@@ -337,6 +348,17 @@ const conteudoSchema = z.object({
     })
     .nullable()
     .optional(),
+  /** Decisão 219: os meses do trimestre que o job não tinha e que esta
+   *  errata inclui. Os agrupamentos novos deles vêm com a chave no
+   *  `mes_id`. Ausente na pronta gravada antes de 27/10/2026. */
+  meses_novos: z
+    .array(
+      z.object({
+        chave: z.string().regex(CHAVE_MES_NOVO),
+        mes: z.string().regex(/^\d{4}-\d{2}-01$/),
+      }),
+    )
+    .default([]),
 });
 
 const payloadSchema = conteudoSchema.extend({
@@ -672,6 +694,8 @@ export async function salvarErrataPronta(
     // A organização da planilha (decisão 162), como a tela a pediu: quem
     // abre a pronta de novo continua dela.
     estrutura: parsed.data.estrutura ?? null,
+    // Decisão 219: o mês que a pronta inclui volta com ela.
+    meses_novos: parsed.data.meses_novos,
   };
   const numeros = {
     conteudo,
@@ -877,6 +901,8 @@ async function montarErrata(
   if (alteracoes.length + novas.length + cancelamentos.length === 0 && !pediuOrganizacao) {
     return { ok: false, message: "Nenhuma alteração informada." };
   }
+  // Decisão 219: os meses do trimestre que esta errata inclui no job.
+  const mesesNovos = conteudo.meses_novos ?? [];
 
   // ---- Gate: job existe, do tenant, e em status editável ----
   const { data: job, error: jobErr } = await supabase
@@ -1032,6 +1058,43 @@ async function montarErrata(
   if (gruposErr || !gruposDoJob) {
     return { ok: false, message: "Não foi possível ler os agrupamentos do job." };
   }
+  // ---- Decisão 219: o mês que faltou no trimestre ----
+  // Só no Fee e no Always On, só mês do trimestre do job que ele ainda não
+  // tem. O banco confere de novo (e cria o mês na versão aprovada).
+  if (mesesNovos.length > 0) {
+    if (!mensal) {
+      return { ok: false, message: "Só o job de Fee ou Always On ganha mês pela errata." };
+    }
+    const { data: mesesDaVersao, error: mesesErr } = await supabase
+      .from("versoes_orcamento_meses")
+      .select("mes")
+      .eq("versao_orcamento_id", job.versao_orcamento_aprovada_id)
+      .eq("tenant_id", session.activeTenant.id);
+    if (mesesErr || !mesesDaVersao || mesesDaVersao.length === 0) {
+      return { ok: false, message: "Não foi possível ler os meses do job. Tente de novo." };
+    }
+    const jaTem = new Set(mesesDaVersao.map((m) => String(m.mes).slice(0, 10)));
+    const doTrimestre = new Set(
+      mesesDoTrimestre(trimestreDe(String(mesesDaVersao[0].mes).slice(0, 10))),
+    );
+    const vistas = new Set<string>();
+    for (const m of mesesNovos) {
+      if (m.chave !== `mes-novo:${m.mes.slice(0, 7)}` || vistas.has(m.chave)) {
+        return { ok: false, message: "A lista de meses novos veio errada. Recarregue a página." };
+      }
+      vistas.add(m.chave);
+      if (jaTem.has(m.mes)) {
+        return { ok: false, message: `${capitalizar(nomeDoMes(m.mes))} já está no job. Recarregue a página.` };
+      }
+      if (!doTrimestre.has(m.mes)) {
+        return {
+          ok: false,
+          message: "O mês novo precisa ser do mesmo trimestre do job: cada job de Fee ou Always On é um trimestre.",
+        };
+      }
+    }
+  }
+
   const organizacao = montarOrganizacao(
     gruposDoJob,
     (itensAtuais as any[]).map((i) => ({
@@ -1042,6 +1105,7 @@ async function montarErrata(
     })),
     novas.map((n) => ({ grupo_id: n.grupo_id, item: n.item })),
     est,
+    new Set(mesesNovos.map((m) => m.chave)),
   );
   if (!organizacao.ok) return organizacao;
   /** O nome final do agrupamento em que a linha termina. */
@@ -1461,6 +1525,20 @@ async function montarErrata(
   const depois = totaisDoFinanceiro(depoisItens, base);
   const espelhos = espelhosDe(depois);
 
+  // Decisão 219: o mês novo entra com ao menos uma linha. A tela já não
+  // manda o mês deixado vazio; o banco confere de novo.
+  for (const m of mesesNovos) {
+    const temLinha = novas.some(
+      (n, k) => organizacao.mesDe(organizacao.grupoFinalDaLinha(`nova:${k + 1}`) ?? n.grupo_id) === m.chave,
+    );
+    if (!temLinha) {
+      return {
+        ok: false,
+        message: `${capitalizar(nomeDoMes(m.mes))} veio sem linha. Inclua ao menos um item nele ou tire o mês.`,
+      };
+    }
+  }
+
   // ---- O pacote de `registrar_errata_do_job` (24/09/2026) ----
   //
   // Montado aqui e gravado por `registrarErrata` (decisão 159: a errata
@@ -1610,6 +1688,8 @@ async function montarErrata(
       // sequência das linhas e os agrupamentos que ficaram vazios. `null`
       // quando a errata não mexe nela.
       estrutura: organizacao.paraFuncao,
+      // Decisão 219: os meses que a função cria na versão aprovada.
+      meses_novos: mesesNovos.map((m) => ({ chave: m.chave, mes: m.mes })),
     },
     mudancas,
     estrutura: organizacao.lista,
@@ -1618,6 +1698,10 @@ async function montarErrata(
     perderamBv,
     devolveAoMural,
   };
+}
+
+function capitalizar(s: string): string {
+  return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
 // ---- A organização da planilha (decisão 162) ------------------------------
@@ -1685,6 +1769,10 @@ function montarOrganizacao(
   linhas: LinhaDoJobLida[],
   novas: Array<{ grupo_id: string; item: string }>,
   est: EstruturaPedida | null | undefined,
+  /** Decisão 219: as chaves dos meses novos desta errata. O agrupamento
+   *  novo de um deles leva a chave no lugar da âncora: a âncora nasce na
+   *  versão dentro de `registrar_errata_do_job`. */
+  mesesNovos: Set<string>,
 ): OrganizacaoMontada {
   const vivos = grupos.filter((g) => g.removido_em === null);
   const vivoPorId = new Map(vivos.map((g) => [g.id, g]));
@@ -1703,6 +1791,10 @@ function montarOrganizacao(
   for (const n of est?.grupos_novos ?? []) {
     if (novosGrupos.some((x) => x.chave === n.chave)) {
       return { ok: false, message: "A lista de agrupamentos novos veio repetida. Recarregue a página." };
+    }
+    if (n.mes_id !== null && mesesNovos.has(n.mes_id)) {
+      novosGrupos.push({ chave: n.chave, nome: n.nome.trim(), mesId: n.mes_id, ancora: n.mes_id });
+      continue;
     }
     const doMes = grupos.find((g) => (g.mes_id ?? null) === (n.mes_id ?? null));
     if (!doMes) {

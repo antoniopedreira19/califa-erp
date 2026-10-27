@@ -105,8 +105,9 @@ import {
   itemPrecisaDeConclusao,
   somaDasPPsNaoCanceladas,
 } from "@/lib/calculos/pps-item";
-import { useRascunhoErrata } from "./errata-rascunho";
+import { paraEdicao, useRascunhoErrata } from "./errata-rascunho";
 import { AvisoDoMesEnviado } from "./aviso-do-mes-enviado";
+import { MesesQueFaltam } from "./meses-que-faltam";
 import { ErrataProntaFaixa, quandoDaPronta } from "./errata-pronta-faixa";
 import type { FechamentoDaAbertura } from "@/lib/calculos/abertura-do-job";
 import { ErrataBarra } from "./errata-barra";
@@ -124,9 +125,11 @@ import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import { jobAceitaAcoesPlanilha, type ErrataPronta, type JobStatus } from "@/lib/types";
 import { definirModoErrata } from "../modo-errata";
 import {
+  mesesDoTrimestre,
   nomeDoMes,
   rotuloMes,
   rotuloMesCurto,
+  trimestreDe,
 } from "@/lib/calculos/meses-trimestre";
 import { ReguaMeses } from "@/app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/regua-meses";
 import { TrimestreEmpilhado } from "@/app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/trimestre-empilhado";
@@ -192,6 +195,12 @@ const ROTULO_DA_SITUACAO: Record<SituacaoDoMes, string> = {
 /** Referência estável para o default: um `[]` novo a cada render mudaria
  *  as dependências dos `useMemo` abaixo. */
 const SEM_MESES: VersaoOrcamentoMes[] = [];
+
+/** A chave do mês que a errata inclui (decisão 219): `mes-novo:2026-11`.
+ *  É o `mes_id` dos agrupamentos novos dele até a errata ser registrada. */
+function chaveDoMesNovo(mes: string): string {
+  return `mes-novo:${mes.slice(0, 7)}`;
+}
 
 interface Props {
   job: Pick<
@@ -616,7 +625,7 @@ function PlanilhaDoJob({
   destacarItens,
   linhasDaRevisao,
   modeloPlanilha,
-  meses = SEM_MESES,
+  meses: mesesSalvos = SEM_MESES,
   mesPedido,
   hrefPlanilha,
   faturamentoMensal = SEM_FATURAMENTO_MENSAL,
@@ -680,6 +689,48 @@ function PlanilhaDoJob({
     definirModoErrata(errata.ativo);
     return () => definirModoErrata(false);
   }, [errata.ativo]);
+
+  // Decisão 219: os meses do trimestre que esta errata inclui no job (o
+  // mês que o GP esqueceu no orçamento). Vivem no rascunho: entram na tela
+  // como meses do job e só existem no banco quando a errata é registrada.
+  const [mesesNovos, setMesesNovos] = React.useState<string[]>([]);
+  React.useEffect(() => {
+    if (!errata.ativo) setMesesNovos([]);
+  }, [errata.ativo]);
+  const meses = React.useMemo(
+    () =>
+      mesesNovos.length === 0
+        ? mesesSalvos
+        : [
+            ...mesesSalvos,
+            ...mesesNovos.map(
+              (mes): VersaoOrcamentoMes => ({
+                id: chaveDoMesNovo(mes),
+                tenant_id: "",
+                versao_orcamento_id: versao.id,
+                mes,
+                incluido_na_errata_id: null,
+                created_by: null,
+                created_at: "",
+                updated_at: "",
+              }),
+            ),
+          ].sort((a, b) => a.mes.localeCompare(b.mes)),
+    [mesesSalvos, mesesNovos, versao.id],
+  );
+  // Os meses do trimestre que o job não tem. Só no Fee e no Always On: a
+  // Mídia Off tem a régua da campanha.
+  const doTrimestre = React.useMemo(
+    () =>
+      modeloPlanilha === "mensal" && !midia && mesesSalvos.length > 0
+        ? mesesDoTrimestre(trimestreDe(mesesSalvos[0].mes))
+        : [],
+    [modeloPlanilha, midia, mesesSalvos],
+  );
+  const faltamNoJob = doTrimestre.filter(
+    (m) => !mesesSalvos.some((x) => x.mes.slice(0, 10) === m),
+  );
+  const faltamNaErrata = faltamNoJob.filter((m) => !mesesNovos.includes(m));
 
   // Errata com alteração ainda não registrada: o voltar e as abas da faixa
   // do projeto perguntam antes de descartar (decisão 108). O rascunho só
@@ -819,8 +870,9 @@ function PlanilhaDoJob({
   async function confirmarErrata(descricao: string) {
     setSalvando(true);
     setErroErrata(null);
-    const { descricao: _descricao, ...conteudo } = errata.payload(descricao);
+    const { descricao: _descricao, ...doRascunho } = errata.payload(descricao);
     void _descricao;
+    const conteudo = { ...doRascunho, meses_novos: mesesNovosDoPayload() };
     // Quem prepara grava a errata pronta para envio (decisão 159); quem
     // registra envia ao financeiro — e, se a errata veio da pronta, a
     // consome no mesmo passo.
@@ -868,7 +920,47 @@ function PlanilhaDoJob({
     setOrcadoVisivel(true);
     setErroErrata(null);
     setAbertaDaPronta(errataPronta !== null);
+    // Decisão 219: a pronta que inclui mês volta com ele.
+    setMesesNovos((errataPronta?.conteudo?.meses_novos ?? []).map((m) => m.mes));
     errata.ligar(errataPronta?.conteudo ?? null);
+  }
+
+  /** Decisão 219: o mês que falta entra no rascunho — com os itens do
+   *  último mês do job, copiados como linhas novas, ou vazio — e a tela vai
+   *  para ele. */
+  function adicionarMes(mes: string, copiarItens: boolean) {
+    const chave = chaveDoMesNovo(mes);
+    setMesesNovos((atual) => (atual.includes(mes) ? atual : [...atual, mes]));
+    const fonte = mesesSalvos[mesesSalvos.length - 1];
+    if (copiarItens && fonte) {
+      for (const g of errata.grupos.filter((x) => x.mes_id === fonte.id)) {
+        const r = errata.criarGrupo(g.nome, chave);
+        if (!r.ok) continue;
+        for (const it of errata.itens.filter((i) => i.grupo_id === g.id && !i.cancelada_em)) {
+          const k = errata.adicionar(r.id, it.linha_vermelha);
+          errata.editarNome(k, it.item);
+          errata.editarTipo(k, it.tipo_custo);
+          if (it.linha_vermelha) continue;
+          errata.editarCampo(k, "unitario", paraEdicao(Number(it.valor_unitario_orcado ?? 0)));
+          errata.editarCampo(k, "quantidade", paraEdicao(Number(it.quantidade_orcada ?? 0)));
+          errata.editarCampo(k, "diasMeses", paraEdicao(Number(it.dias_meses_orcado ?? 0)));
+          errata.editarCampo(k, "planUnitario", paraEdicao(Number(it.valor_unitario_planejado ?? 0)));
+          errata.editarCampo(k, "planQuantidade", paraEdicao(Number(it.quantidade_planejada ?? 0)));
+          errata.editarCampo(k, "planDiasMeses", paraEdicao(Number(it.dias_meses_planejado ?? 0)));
+        }
+      }
+    }
+    if (hrefPlanilha && !mesNoLugar) {
+      router.push(`${hrefPlanilha}&mes=${mes.slice(0, 7)}`, { scroll: false });
+    }
+  }
+
+  /** Os meses novos que a errata leva: o deixado vazio não entra. */
+  function mesesNovosDoPayload() {
+    const mesDoGrupo = new Map(errata.grupos.map((g) => [g.id, g.mes_id ?? null]));
+    return mesesNovos
+      .map((mes) => ({ chave: chaveDoMesNovo(mes), mes }))
+      .filter((m) => errata.itens.some((i) => mesDoGrupo.get(i.grupo_id) === m.chave));
   }
 
   /** Sai do modo errata sem gravar. A errata pronta, se havia, fica como
@@ -936,8 +1028,12 @@ function PlanilhaDoJob({
     () => new Set(faturamentoMensal.filter((m) => m.envio !== null).map((m) => m.mesId)),
     [faturamentoMensal],
   );
+  // Com mês faltando no trimestre, a errata segue aberta mesmo com todos os
+  // meses do job enviados: é por ela que o mês entra (decisão 219).
   const todosOsMesesEnviados =
-    faturamentoMensal.length > 0 && mesesEnviados.size === faturamentoMensal.length;
+    faturamentoMensal.length > 0 &&
+    mesesEnviados.size === faturamentoMensal.length &&
+    faltamNoJob.length === 0;
   // Decisão 159: a errata deixou de seguir `podeAcoes` (que continua
   // valendo para o BV) — o produtor também a faz, deixando-a pronta para
   // envio. Continua exigindo o job aberto.
@@ -1813,6 +1909,16 @@ function PlanilhaDoJob({
             }))}
             selecionado={mesSelecionado?.mes.id ?? "trimestre"}
             editar={null}
+            acao={
+              // Decisão 219: o mês que falta no trimestre, só na errata.
+              errata.ativo && !modoFinanceiro && faltamNaErrata.length > 0 && mesesSalvos.length > 0 ? (
+                <MesesQueFaltam
+                  faltam={faltamNaErrata}
+                  fonte={mesesSalvos[mesesSalvos.length - 1].mes}
+                  onAdicionar={adicionarMes}
+                />
+              ) : undefined
+            }
             onSelecionar={
               mesNoLugar
                 ? (chave) =>
@@ -2069,6 +2175,11 @@ function PlanilhaDoJob({
         resumo={errata.resumo}
         mudancas={errata.mudancas}
         estrutura={errata.estrutura}
+        mesesNovos={mesesNovos.map((mes) => {
+          const chave = chaveDoMesNovo(mes);
+          const doMes = new Set(errata.grupos.filter((g) => g.mes_id === chave).map((g) => g.id));
+          return { mes, itens: errata.itens.filter((i) => doMes.has(i.grupo_id)).length };
+        })}
         orcado={{
           antes: totaisAntes.subtotalGeral,
           depois: totaisDepois.subtotalGeral,

@@ -270,6 +270,9 @@ export function PlanilhaMensal({
           rotulo: rotuloMesCurto(d.mes.mes),
           faturamento: d.faturamento,
           resultadoGeral: d.resultadoGeral,
+          // Decisão 219: o mês que a errata do job incluiu na versão
+          // aprovada. Ele vem vazio: as linhas são só do job.
+          detalhe: d.mes.incluido_na_errata_id ? "Incluído pela errata do job" : undefined,
           href: d.href,
         }))}
         selecionado={selecionado}

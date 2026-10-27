@@ -6511,3 +6511,21 @@ três telas da ficha (Jobs, Financeiro › Jobs e Abertura de Job), lido em
 - Aplicação (`bloqueioGeracaoPPPorLimite`, formulário da PP) e banco
   (`pp_confere_orcado_na_geracao`, migration `20261027950001`).
 - Regras e verificação na [decisão 204](../decisions/204-administrador-nas-excecoes-do-orcamento-e-da-pp.md#revisão-de-27102026--linha-vermelha-fora-da-trava-da-pp).
+
+## ⚠️ Nota de 2026-10-27 — o mês que faltou entra pela errata (decisão 219, entrega 2)
+
+- Job de Fee ou Always On com mês faltando no trimestre: com "Realizar
+  errata", os meses que faltam aparecem tracejados na régua; o clique
+  inclui o mês com os itens do último mês do job ou vazio. A errata abre
+  mesmo com todos os meses do job enviados, se falta mês.
+- "Confirmar errata" lista os meses novos; o mês vazio não entra (o
+  servidor recusa mês novo sem linha).
+- No banco o mês entra também na versão aprovada, vazio, com um
+  agrupamento-âncora vazio, marcados com a errata (`incluido_na_errata_id`).
+  O período do job passa a cobrir o mês. O financeiro revisa a abertura e
+  informa a data de recebimento do mês novo.
+- Defeito antigo corrigido: errata que criava agrupamento sem reordenar
+  linhas não gravava ("cannot extract elements from a scalar").
+- **Conferência (27/10/2026):** TES-1035/26 (do `ZZ Teste 219 mês pela
+  errata`, só outubro): novembro entrou pela errata com a linha de
+  outubro; dezembro vazio não entrou; revisão da abertura pendente.

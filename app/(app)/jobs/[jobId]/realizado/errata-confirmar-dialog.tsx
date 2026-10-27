@@ -20,7 +20,7 @@
  */
 
 import * as React from "react";
-import { AlertCircle, ArrowRight, FilePenLine, Landmark, Send, UserCheck } from "lucide-react";
+import { AlertCircle, ArrowRight, CalendarPlus, FilePenLine, Landmark, Send, UserCheck } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -30,6 +30,7 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { cn, formatCurrency } from "@/lib/utils";
+import { rotuloMesCurto } from "@/lib/calculos/meses-trimestre";
 import { ERRATA, PLANEJADO } from "@/app/(app)/_planilha/blocos";
 import type { MudancaDeEstrutura, MudancaErrata } from "./errata-rascunho";
 
@@ -47,6 +48,9 @@ interface Props {
   mudancas: MudancaErrata[];
   /** O que a errata muda na organização da planilha (decisão 162). */
   estrutura: MudancaDeEstrutura[];
+  /** Decisão 219: os meses do trimestre que esta errata inclui no job, com
+   *  quantos itens cada um leva. O deixado vazio não entra. */
+  mesesNovos: Array<{ mes: string; itens: number }>;
   orcado: ParDeValores;
   faturamento: ParDeValores;
   valorJob: ParDeValores;
@@ -201,6 +205,7 @@ export function ErrataConfirmarDialog({
   resumo,
   mudancas,
   estrutura,
+  mesesNovos,
   orcado,
   faturamento,
   valorJob,
@@ -263,6 +268,29 @@ export function ErrataConfirmarDialog({
         </DialogHeader>
 
         <div className="space-y-4 pt-1">
+          {/* Decisão 219: os meses que entram no job, antes das linhas. */}
+          {mesesNovos.length > 0 && (
+            <section className="rounded-xl border border-border">
+              <h3 className="border-b border-border px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                {mesesNovos.length === 1 ? "Mês novo no job" : "Meses novos no job"}
+              </h3>
+              <ul className="divide-y divide-border">
+                {mesesNovos.map((m) => (
+                  <li key={m.mes} className="flex items-center gap-2.5 px-3.5 py-2 text-[13px]">
+                    <CalendarPlus className="h-3.5 w-3.5 flex-none text-muted-foreground" />
+                    <span className="font-semibold">{rotuloMesCurto(m.mes)}</span>
+                    {m.itens > 0 ? (
+                      <span className="text-muted-foreground">
+                        {m.itens === 1 ? "1 item" : `${m.itens} itens`}
+                      </span>
+                    ) : (
+                      <span className="text-amber-700">sem item: não entra no job</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
           {/* O que muda no orçado */}
           {mudancas.length > 0 && (
           <section className="rounded-xl border border-border">

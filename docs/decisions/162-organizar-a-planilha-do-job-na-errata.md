@@ -114,3 +114,12 @@ sai** quando a errata é confirmada. Nada disso mexe em valor.
 - A **Mídia Off** (agrupamento "meio · formato", decisão 147) ainda não
   tem job; quando tiver, a organização da planilha dela se decide lá.
 - A **versão aprovada** e a exportação dela para o cliente não mudam.
+
+## ⚠️ Nota de 2026-10-27 — errata com agrupamento novo e sem reordenar (decisão 219)
+
+`registrar_errata_do_job` quebrava quando a errata criava agrupamento e
+lançava linha nele sem mexer na sequência: a action manda `ordem: null`, o
+`coalesce` não troca o JSON `null`, e a função recusava a errata inteira
+("cannot extract elements from a scalar"). Corrigido na migration
+`20261027960002_errata_ordem_nula.sql`. Ver
+[219](219-os-tres-meses-do-trimestre.md).

@@ -1,8 +1,8 @@
 # 219 — Fee e Always On: os três meses do trimestre
 
 **Data:** 2026-10-27
-**Status:** entrega 1 (orçamento e planilhas) implementada em 27/10/2026;
-entrega 2 (mês novo no job pela errata) em andamento.
+**Status:** implementada em 27/10/2026 — entrega 1 (orçamento e
+planilhas) e entrega 2 (mês novo no job pela errata).
 **Quem decidiu:** Tiago. Pedido em 27/10/2026: "Atualmente GPs tem esquecido
 de adicionar os meses seguintes frequentemente." Protótipo aprovado no mesmo
 dia, depois de onze versões comentadas por ele:
@@ -11,7 +11,9 @@ implementar").
 **Revê:** a [078](078-orcamento-mensal-fee-e-always-on.md) na régua (o
 bloco "Trimestre" vira "Total" e é onde a tela abre) e no aviso do mês
 enviado.
-**Migrations:** nenhuma na entrega 1.
+**Migrations:** nenhuma na entrega 1; entrega 2:
+`20261027960001_mes_novo_no_job_pela_errata.sql` e
+`20261027960002_errata_ordem_nula.sql`.
 
 ## O problema
 
@@ -66,15 +68,64 @@ entrar: a saída era cancelar o job.
 - `app/(app)/jobs/[jobId]/realizado/aviso-do-mes-enviado.tsx`: o aviso; a
   tabela do mês travado escuta o clique na errata.
 
-## Entrega 2 — mês novo no job pela errata
+## A regra — entrega 2: o mês que faltou entra pela errata
 
-Aprovada no protótipo, em implementação:
+6. **Fora da errata a régua do job fica como hoje.** Com "Realizar errata",
+   os meses do trimestre que o job não tem aparecem tracejados ao lado dos
+   outros ("Adicionar mês · Entra com esta errata"). O clique pergunta
+   como o mês entra: "Com os itens de {último mês do job}" (os grupos e as
+   linhas, com orçado e planejado, viram linhas novas da errata) ou
+   "Vazio". A tela vai para o mês novo.
+7. **A errata abre mesmo com todos os meses do job enviados para
+   faturamento** quando falta mês no trimestre; os meses enviados seguem
+   travados.
+8. **O "Confirmar errata" lista os meses novos** ("Novembro · 1 item";
+   "Dezembro · sem item: não entra no job"). O mês deixado vazio não
+   entra; o servidor recusa mês novo sem linha.
+9. **Só meses do mesmo trimestre do job** — um job continua sendo um
+   trimestre. Só Fee e Always On.
+10. **Onde o mês fica (escolha do Tiago, opção 1):** o job lê os meses da
+    versão aprovada, então o mês novo entra **também na versão aprovada,
+    vazio**, com um agrupamento-âncora vazio ("Incluído pela errata do
+    job"); os dois ficam marcados com a errata (`incluido_na_errata_id`).
+    As linhas são só do job. No orçamento, a régua mostra o mês com
+    "Incluído pela errata do job"; o período do orçamento não muda.
+11. **O período do job acompanha:** `data_inicio_prevista` e
+    `data_fim_prevista` passam a cobrir o mês novo.
+12. Como toda errata depois da abertura, o job volta ao mural para a
+    revisão do financeiro, que pede a data de recebimento do mês novo
+    (uma parcela por mês, como na abertura).
 
-- Fora da errata a régua do job fica como hoje. Com "Realizar errata", os
-  meses do trimestre que o job não tem aparecem tracejados ao lado dos
-  outros; o clique põe o mês na errata, com os itens do último mês do job
-  ou vazio.
-- A errata abre mesmo com todos os meses do job enviados para faturamento,
-  quando falta mês no trimestre.
-- O "Confirmar errata" lista os meses novos; o mês deixado vazio não entra.
-- Só meses do mesmo trimestre: um job continua sendo um trimestre.
+## Como funciona — entrega 2
+
+- `registrar_errata_do_job` aceita `p.meses_novos`
+  (`[{ chave: "mes-novo:AAAA-MM", mes: "AAAA-MM-01" }]`): cria o mês e a
+  âncora na versão aprovada; agrupamento novo e item da errata levam a
+  chave no lugar da âncora; confere que o mês novo tem linha e alarga o
+  período do job.
+- `actions-errata.ts`: o schema aceita `meses_novos` e a chave do mês no
+  `mes_id` do agrupamento novo; `montarErrata` confere mensal, trimestre,
+  mês repetido e linha no mês; `montarOrganizacao` usa a chave como âncora.
+  A errata pronta (decisão 159) guarda e devolve os meses novos.
+- `job-realizado-section.tsx`: os meses novos ficam no estado da tela
+  enquanto a errata está aberta (somem ao descartar); a cópia usa as
+  ações do rascunho (`criarGrupo`, `adicionar`, `editarCampo`).
+  `meses-que-faltam.tsx` desenha os blocos tracejados.
+- **Defeito antigo corrigido (20261027960002):** a errata que cria
+  agrupamento sem mexer na ordem das linhas mandava `estrutura.ordem =
+  null`, e a função quebrava com "cannot extract elements from a scalar"
+  — nada era gravado. Valia para qualquer errata da 162 nesse formato.
+
+## Conferência — entrega 2 (27/10/2026)
+
+No `P-0006/26 · Teste`, pelas telas: orçamento "ZZ Teste 219 mês pela
+errata" criado só com outubro (× de dezembro e de novembro no formulário),
+aprovado, enviado e aberto no financeiro como TES-1035/26. Na errata,
+novembro "Com os itens de outubro" e dezembro "Vazio"; o pop-up listou
+"Novembro · 1 item" e "Dezembro · sem item". Registrada: no banco, novembro
+e a âncora na versão com a marca da errata, "Conteúdo" de novembro no job
+com a linha copiada (R$ 5.000 orçado, R$ 4.000 planejado), período
+01/10–30/11, abertura em revisão; dezembro não entrou. A revisão do
+financeiro pede a data de novembro; o orçamento mostra novembro "Incluído
+pela errata do job"; reabrindo a errata, só dezembro aparece. A revisão da
+abertura ficou pendente, de propósito.

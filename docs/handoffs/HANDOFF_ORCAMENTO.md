@@ -5999,3 +5999,10 @@ Terceira entrega do protótipo aprovado em 26/10
   de outubro; no Novo orçamento (sem gravar), Always On + início 01/10
   preencheu 31/12, o × de dezembro levou o fim a 30/11 e o aviso "Dezembro
   fica de fora do 4º trimestre de 2026" apareceu.
+
+## ⚠️ Nota de 2026-10-27 — mês incluído pela errata do job (decisão 219, entrega 2)
+
+- Quando a errata do job inclui um mês do trimestre, ele aparece também
+  na versão aprovada, vazio, com o agrupamento "Incluído pela errata do
+  job"; a régua mostra "Incluído pela errata do job" no lugar do resultado.
+  O período do orçamento não muda.

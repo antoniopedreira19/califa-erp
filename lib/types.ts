@@ -540,6 +540,9 @@ export interface VersaoOrcamentoMes {
   versao_orcamento_id: string;
   /** Primeiro dia do mês de referência, `YYYY-MM-01`. */
   mes: string;
+  /** Decisão 219: a errata do job que incluiu o mês na versão aprovada
+   *  (o mês que faltou no trimestre). `null` no mês do orçamento. */
+  incluido_na_errata_id: string | null;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -2554,7 +2557,10 @@ export interface ConteudoErrata {
   cancelamentos: string[];
   /** Decisão 162: a organização da planilha. Ausente (ou nula) quando a
    *  errata não mexe nela — e na pronta gravada antes de 09/10/2026. */
-  estrutura?: EstruturaDaErrata | null;
+  estrutura?: EstruturaDaErrata | null;  /** Decisão 219: os meses do trimestre que a errata inclui no job
+   *  (`chave` = `mes-novo:AAAA-MM`, que os agrupamentos novos levam no
+   *  `mes_id`). Ausente na pronta gravada antes de 27/10/2026. */
+  meses_novos?: Array<{ chave: string; mes: string }>;
 }
 
 /** O que a errata decide sobre a ORGANIZAÇÃO da planilha (decisão 162).
