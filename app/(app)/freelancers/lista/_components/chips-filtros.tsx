@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   STATUS_FILTRAVEIS,
@@ -111,8 +112,43 @@ export function ChipsFiltros() {
     });
   }
 
+  // Chaves de filtro que o Limpar remove. "card" tb entra porque virou URL
+  // ao clicar nos 4 cards de analise no topo.
+  const CHAVES_FILTRO = [
+    "trabalho",
+    "status",
+    "acao",
+    "card",
+    "responsavel",
+    "job",
+    "cargo",
+    "inicio_apos",
+  ] as const;
+  const temFiltroAtivo = CHAVES_FILTRO.some((k) => searchParams.get(k));
+
+  function limparTudo() {
+    router.push("/freelancers/lista");
+  }
+
   return (
     <div className="rounded-xl border border-border bg-muted/30 p-4 space-y-3">
+      {temFiltroAtivo && (
+        <div className="flex items-center justify-between gap-3 pb-3 border-b border-border/60">
+          <p className="text-[11px] text-muted-foreground">
+            Filtros ativos escondem freelancers. Clique em{" "}
+            <span className="font-semibold text-foreground">Limpar filtros</span>{" "}
+            pra ver todos.
+          </p>
+          <button
+            type="button"
+            onClick={limparTudo}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/40 bg-white px-3 py-1.5 text-[11px] font-semibold text-california-red hover:bg-california-red hover:text-white transition-colors shrink-0"
+          >
+            <X className="h-3 w-3" />
+            Limpar filtros
+          </button>
+        </div>
+      )}
       <FilterGroup label="Status do trabalho">
         {TRABALHO_CHIPS.map((c) => (
           <Chip
