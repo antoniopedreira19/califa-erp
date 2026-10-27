@@ -9,9 +9,9 @@ dia. A1 (as tabelas de histórico, com a do rateio, e a tela de carga) e A2
 California e BB Americas criadas antes) feitas e conferidas em 26/10/2026,
 A3 (o histórico de cada conta no Extrato da Conciliação) e a A4 (a DRE do
 histórico, o resultado por regional, a rentabilidade e o faturamento dos jobs
-do histórico, em Relatórios) no mesmo dia. A5 preparada no mesmo dia: o
-pacote do 3T sai da versão de 25/10 e passa no contrato; a carga do 3T ainda
-não foi feita.
+do histórico, em Relatórios) no mesmo dia. A5: o 3T carregado em 27/10/2026,
+da versão de 25/10. Próximo: o saldo inicial das contas em 01/10, pelo
+extrato de 30/09, e a trilha do 4T no sistema.
 **Quem decidiu:** Tiago, no plano "Importação do histórico financeiro"
 (página privada de 25/10/2026), com as respostas D1, D2 e D3 dadas no mesmo
 dia: "Aprovo D1, D2 e D3 como você recomendou".
@@ -959,21 +959,54 @@ Uma linha da Hitlab de 2024 não tem a fórmula.
   Faturamento California (R$ 31.876,48). Corrige-se na planilha. Se o 3T for
   carregado assim, os lançamentos e a nota entram sem job.
 
+## Conferido em 27/10/2026 (A5, a carga do 3T)
+
+- **A carga:** o pacote do 3T entrou pela tela, pela sessão do Tiago, a
+  pedido dele ("Sim, carregue o 3T pela tela agora"), em 6 segundos:
+  7.325 movimentos (R$ 9.203.359,58), 385 notas (R$ 44.639.771,23), 3.586
+  jobs, 41 saldos e 40 linhas de rateio. O banco conferiu com o pacote ao
+  concluir. A carga "3T 2026" ficou ativa ao lado da 1ª carga, que não mudou.
+- **Mês a mês:** os 26 grupos de conta por mês (julho a setembro) saem do
+  banco iguais aos do pacote.
+- **Telas:** os quatro relatórios do histórico abrem em 2026 sem erro, e a
+  cobertura vai até 30/09/2026. Na DRE da California de 2026, o 3º trimestre
+  tem R$ 8.647.743,05 de receita. A coluna do 4º trimestre mostra o que já
+  tinha competência do 4T e foi lançado até 30/09: R$ 5.364.811,56 de receita
+  e R$ 1.542.869,99 de custo operacional. No Extrato da BB California, agosto
+  mostra as 136 linhas do histórico.
+- **O que ainda não aparece:** o Extrato mostra o histórico só antes da data
+  do saldo inicial da conta (01/08 na California Santander, 11/09 em oito
+  contas). O fim do 3T aparece quando o saldo inicial passar para 01/10.
+
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas
   85 e 91 da Res. Jobs 2026; R$ 1.520.000,00 de benefício): o histórico segue a
-  alíquota e o faturamento. Quando a carga do 3T trouxer a receita da Copa,
-  vale confirmar com o Tiago se o imposto da Copa deve seguir o digitado.
+  alíquota e o faturamento. A carga do 3T trouxe a receita da Copa: falta
+  confirmar com o Tiago se o imposto da Copa deve seguir o digitado.
 - Revisar o rateio de um ano, mantendo o registro da planilha dos anos
   fechados. O RH tem a própria tabela de rateio
   (`empresas_rateios_regionais`, do Antonio), com percentuais diferentes dos
   da planilha em 2023, 2024 e 2026: um lugar só se decide com ele.
-- A5: carregar o 3T. O pacote da versão de 25/10 está pronto e conferido, sem
-  carga. Falta corrigir na planilha o job do 3T que não está nas abas Res.
-  Jobs (as 9 pendências). Numa versão nova da planilha, E1, E2, E3 e o pacote
-  rodam de novo, e o pacote da 1ª carga se compara com o do banco antes da
-  carga.
+- A5, o que sobrou da carga do 3T:
+  - O saldo inicial das contas passa para 01/10 com o saldo do extrato de
+    30/09, depois de comparar com a planilha. É o critério de "3T fechado".
+    Conta bancária é da frente do Antonio.
+  - Corrigir na planilha o job do 3T que falta nas abas Res. Jobs (as 9
+    pendências) e recarregar o 3T. Numa versão nova, E1, E2, E3 e o pacote
+    rodam de novo, e o pacote da 1ª carga se compara com o do banco.
 - As 20 pendências: as de data e de nome de job se corrigem na planilha e
-  entram na versão do 3T.
-- A trilha do 4T no sistema: os jobs do 4T que só estão na planilha, as notas de
-  outubro, a virada de 30/09 e a conciliação de outubro pelo OFX.
+  entram numa versão nova.
+- A trilha do 4T no sistema. **Decidido (Tiago, 26/10/2026):** o corte fica em
+  30/09, em duas etapas — "Vamos primeiro até 30/09, e depois vamos tentar
+  subir as movimentações no sistema [...] O ideal seria termos 4T inteiro no
+  sistema, e acho que vale a tentativa", para o sistema bater com a planilha e
+  ela poder ser largada.
+  - **Primeiro, um inventário** de tudo do 4T que não está no sistema, sem
+    lançar nada, separado pelo jeito de entrar: job a subir, nota a faturar,
+    título a receber, PP, avulsa, folha, imposto ou transferência. Inclui o
+    que tem competência do 4T e foi lançado até 30/09.
+  - **Os extratos até 25/10**, que o Tiago já tem, entram para casar cada
+    linha do banco com a da planilha.
+  - **A relação de recorrências** que o Tiago vai mandar serve para cadastrar
+    os custos fixos no sistema e ajudar a achar o título de cada baixa do OFX
+    depois de 30/09.

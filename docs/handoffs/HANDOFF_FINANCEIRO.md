@@ -8375,3 +8375,18 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Conferido** no TES-1029/26 (P-0006/26): NF 9216 da PP-00572 no cadastro
   de notas, realizado do item intacto. Ver
   [decisão 216](../decisions/216-midia-system.md).
+
+## ⚠️ Nota de 2026-10-27 (1) — o 3T de 2026 carregado no histórico (decisão 211, A5)
+
+- **Carga "3T 2026"** (01/07 a 30/09/2026, planilha de 25/10) feita pela
+  tela, a pedido do Tiago: 7.325 movimentos, 385 notas, 3.586 jobs, 41 saldos
+  e 40 linhas de rateio, ativa ao lado da 1ª carga. O banco conferiu com o
+  pacote, e os 26 grupos de conta por mês são iguais.
+- **Relatórios do histórico:** passam a ir até 30/09/2026. Os números dos
+  anos anteriores podem mudar: o job soma o que recebeu e pagou em qualquer
+  data, e a DRE soma pela competência.
+- **Extrato da Conciliação:** o histórico aparece antes da data do saldo
+  inicial de cada conta. Hoje essa data é 01/08 na California Santander e
+  11/09 em oito contas, então o fim do 3T fica escondido até o saldo inicial
+  passar para 01/10, com o saldo do extrato de 30/09 (próximo passo, com os
+  saldos que o Tiago vai mandar).
