@@ -991,8 +991,6 @@ Uma linha da Hitlab de 2024 não tem a fórmula.
     receita financeira (RF).
   - A conta corrente começa em 01/10 com R$ 0,00, como o banco.
   - A aplicação começa com o saldo de 30/09, conferido com o extrato dela.
-    As duas contas de aplicação ainda não foram criadas: o saldo inicial trava
-    no primeiro lançamento.
 - **Conta bancária e conciliação passaram para o Tiago** ("Eu tomei frente da
   conta bancaria e conciliação, então isso passa por mim mesmo"). Antes eram
   da frente do Antonio.
@@ -1010,6 +1008,42 @@ Uma linha da Hitlab de 2024 não tem a fórmula.
   R$ 132.975,94 no BB, igual à planilha, e R$ 14.645,67 na Santander, contra
   R$ 14.648,11 na planilha. Os R$ 2,44 são as frações de centavo que a
   planilha guarda e o histórico arredonda. Outubro começa em R$ 0,00.
+
+### As contas de aplicação e as contas da Hitlab e da Go Crazy (27/10/2026)
+
+Com os extratos das aplicações que o Tiago mandou (PDF da Santander, do BB
+e da Hitlab; xlsx da Go Crazy), autorizado por ele: "Pode criar as 4 contas
+de aplicação com o saldo do extrato em 01/10, ajustar a Santander GoCrazy e
+a BB California pela tela e a Santander Hitlab por migration".
+
+| Conta de investimento (nova, pela tela) | Saldo em 01/10 (extrato de 30/09) | Planilha em 30/09 |
+|---|---|---|
+| Santander ContaMax California | R$ 14.648,13 | R$ 14.648,11 |
+| BB Rende Fácil California | R$ 132.975,94 | R$ 132.975,94 |
+| Santander ContaMax Hitlab | R$ 32.827,98 | R$ 32.827,98 |
+| Santander ContaMax GoCrazy | R$ 68.516,98 | R$ 68.516,98 |
+
+- A planilha soma a aplicação no saldo da conta, e a conta corrente fecha
+  30/09 em R$ 0,00 nas quatro: o saldo da planilha é o da aplicação. Na
+  California Santander, o sistema começa R$ 0,02 acima da planilha (vale o
+  extrato).
+- As contas de investimento ficam sem agência e conta: o extrato OFX é o da
+  conta corrente (as linhas "APLICACAO CONTAMAX" e "RESGATE CONTAMAX
+  AUTOMATICO" vêm nele), e com o número repetido o arquivo casaria com duas
+  contas.
+- **Santander GoCrazy:** começa em 01/10 com R$ 0,00 (era 11/09), pela tela,
+  com a agência e a conta do extrato.
+- **Santander Hitlab:** agência e conta do extrato, pela tela; a data foi
+  de 11/09 para 01/10 pela migration `20261027100006` (destrutiva,
+  confirmada), porque a conta tem 5 baixas de PP, todas de 14/10, que
+  continuam somando.
+- **BB California:** agência e conta do extrato, pela tela.
+- Conferido: cada extrato OFX que temos casa com uma conta só pela regra da
+  importação (`arquivoEhDaConta`), e a Conciliação mostra as quatro contas de
+  investimento com o saldo da tabela.
+- **Falta o outubro da Hitlab:** vieram só setembro da conta e da aplicação.
+  A Go Crazy está completa (extrato de 30/09 a 27/10 e aplicação de setembro
+  e outubro, que bate linha a linha com o extrato).
 
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas

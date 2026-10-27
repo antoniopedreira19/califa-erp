@@ -8447,3 +8447,18 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   mês seguinte uma vez, 30 dias antes do pagamento: a 11/2026 nasce em
   03/11. Detalhes na
   [decisão 218](../decisions/218-folha-prevista-no-fluxo-de-caixa.md).
+
+## ⚠️ Nota de 2026-10-27 (3) — contas de aplicação e as contas da Hitlab e da Go Crazy em 01/10 (decisão 211, A5)
+
+- Quatro contas de investimento novas, pela tela, com o saldo do extrato de
+  30/09 em 01/10: Santander ContaMax California (R$ 14.648,13), BB Rende
+  Fácil California (R$ 132.975,94), Santander ContaMax Hitlab (R$ 32.827,98)
+  e Santander ContaMax GoCrazy (R$ 68.516,98). Sem agência e conta: o OFX é o
+  da conta corrente.
+- Santander GoCrazy e Santander Hitlab começam em 01/10 com R$ 0,00 (eram
+  11/09): a GoCrazy pela tela, a Hitlab pela migration `20261027100006`
+  (tem baixas, só de 14/10). Agência e conta preenchidas na BB California,
+  na Santander GoCrazy e na Santander Hitlab, para a importação do extrato
+  reconhecer a conta.
+- Detalhes na
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
