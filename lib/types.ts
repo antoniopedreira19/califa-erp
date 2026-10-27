@@ -5195,7 +5195,10 @@ export interface ColaboradorFeriasLancamento {
   tipo: FeriasLancamentoTipo;
   data_inicio: string;
   data_fim: string;
+  /** TOTAL consumido do saldo = dias_folga + dias_abono. */
   dias: number;
+  /** Dias vendidos dentro do bloco de férias. Só > 0 quando tipo = 'abono_combinado'. */
+  dias_abono: number;
   status: FeriasLancamentoStatus;
   solicitado_por: string;
   aprovado_por: string | null;
