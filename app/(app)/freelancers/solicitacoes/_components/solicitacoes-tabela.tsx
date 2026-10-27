@@ -56,6 +56,14 @@ interface Props {
 
 const APROVADORES = new Set(["administrador", "rh", "financeiro"]);
 
+/** Normaliza string pra comparação sem acento/caixa. */
+function norm(s: string | null | undefined): string {
+  return (s ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
+}
+
 // Prioridade dos status pra ordem padrão. Pendente primeiro — é o que exige
 // ação do aprovador. Finalizados ficam no final.
 const PRIORIDADE_STATUS: Record<FreelancerSolicitacaoStatus, number> = {
@@ -221,25 +229,27 @@ export function SolicitacoesTabela({
     setPopoverOpen(true);
   }
 
-  // Busca por nome do solicitante — client-side (join não suportado por .or())
-  // e filtro de tipo — client-side (calculado após o fetch)
+  // Filtro 100% client-side: nome do freela (display + legado), cargo,
+  // solicitante, CPF — sem acento, sem caixa. Tipo é filtro separado via dropdown.
   const filtradas = React.useMemo(() => {
     let base = solicitacoes;
-    const buscaNorm = busca.trim().toLowerCase();
-    if (buscaNorm) {
+    const alvo = busca.trim();
+    if (alvo) {
+      const alvoNorm = norm(alvo);
+      const soDigitos = alvo.replace(/\D+/g, "");
       base = base.filter((s) => {
-        if ((s.solicitante_nome ?? "").toLowerCase().includes(buscaNorm)) {
+        if (norm(s.nome_freela_display).includes(alvoNorm)) return true;
+        if (norm(s.nome_freela).includes(alvoNorm)) return true;
+        if (norm(s.cargo).includes(alvoNorm)) return true;
+        if (norm(s.solicitante_nome).includes(alvoNorm)) return true;
+        if (
+          soDigitos.length >= 3 &&
+          s.cpf_freela &&
+          s.cpf_freela.replace(/\D+/g, "").includes(soDigitos)
+        ) {
           return true;
         }
-        // Nome freela, cargo, cpf — já cobertos pelo server-side via `?q=`.
-        // Aqui só reforço solicitante_nome pq o server não consegue filtrar
-        // via join.
-        return (
-          (s.nome_freela_display ?? "").toLowerCase().includes(buscaNorm) ||
-          (s.nome_freela ?? "").toLowerCase().includes(buscaNorm) ||
-          (s.cargo ?? "").toLowerCase().includes(buscaNorm) ||
-          (s.cpf_freela ?? "").replace(/\D+/g, "").includes(buscaNorm.replace(/\D+/g, ""))
-        );
+        return false;
       });
     }
     if (tipoAtual) {
