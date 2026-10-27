@@ -35,68 +35,92 @@ export default async function ResponsaveisPage() {
   const supabase = createClient();
 
   // Profiles ativos do tenant com role que pode ser responsavel
-  const { data: membersRaw, error: errMembers } = await supabase
+  // 1. Fonte da verdade: quem aparece como responsável em algum freela do
+  //    tenant (freelancers.responsavel_id). Vale pra mostrar todo mundo que
+  //    efetivamente gerencia alguém, independentemente do role atual.
+  const { data: freelasRows } = await supabase
+    .from("freelancers")
+    .select("responsavel_id")
+    .eq("tenant_id", session.activeTenant.id)
+    .not("responsavel_id", "is", null);
+
+  const contagem = new Map<string, number>();
+  for (const row of (freelasRows ?? []) as Array<{ responsavel_id: string }>) {
+    contagem.set(
+      row.responsavel_id,
+      (contagem.get(row.responsavel_id) ?? 0) + 1,
+    );
+  }
+
+  // 2. Também inclui gente que PODE ser responsável mesmo sem freela atribuído
+  //    (admin/rh/financeiro/GP/produtor ativos no tenant). Assim o RH ve quem
+  //    está disponível pra assumir freelancers.
+  const { data: membersRows } = await supabase
     .from("tenant_members")
-    .select("role, profiles!inner(id, nome, email, ativo)")
+    .select("user_id, role")
     .eq("tenant_id", session.activeTenant.id)
     .eq("status", "ativo")
     .in("role", ROLES_RESPONSAVEL);
-  if (errMembers) {
-    console.error("[freelancers.responsaveis]", errMembers.message);
+
+  const rolesPorUserId = new Map<string, Set<string>>();
+  for (const m of (membersRows ?? []) as Array<{
+    user_id: string;
+    role: string;
+  }>) {
+    const set = rolesPorUserId.get(m.user_id) ?? new Set<string>();
+    set.add(m.role);
+    rolesPorUserId.set(m.user_id, set);
   }
 
-  type MemberRow = {
-    role: string;
-    profiles:
-      | { id: string; nome: string; email: string | null; ativo: boolean }
-      | Array<{ id: string; nome: string; email: string | null; ativo: boolean }>;
-  };
+  // 3. Busca os profiles de ambas as fontes (dedup por id).
+  const idsUniao = new Set<string>([
+    ...contagem.keys(),
+    ...rolesPorUserId.keys(),
+  ]);
 
-  const porId = new Map<
+  const profilesPorId = new Map<
     string,
-    {
+    { id: string; nome: string; email: string | null; ativo: boolean }
+  >();
+  if (idsUniao.size > 0) {
+    const { data: profilesRows } = await supabase
+      .from("profiles")
+      .select("id, nome, email, ativo")
+      .in("id", Array.from(idsUniao));
+    for (const p of (profilesRows ?? []) as Array<{
       id: string;
       nome: string;
       email: string | null;
       ativo: boolean;
-      roles: Set<string>;
+    }>) {
+      profilesPorId.set(p.id, p);
     }
-  >();
-  for (const r of ((membersRaw ?? []) as unknown as MemberRow[])) {
-    const list = Array.isArray(r.profiles) ? r.profiles : [r.profiles];
-    for (const p of list) {
-      if (!p?.id || !p?.ativo) continue;
-      const cur = porId.get(p.id) ?? {
-        id: p.id,
+  }
+
+  // 4. Monta a lista final. Inclui mesmo quem tem profile inativo mas é
+  //    responsável de freela — RH precisa enxergar pra transferir.
+  const responsaveis = Array.from(idsUniao)
+    .map((id) => {
+      const p = profilesPorId.get(id);
+      if (!p) return null;
+      return {
+        id,
         nome: p.nome,
         email: p.email,
         ativo: p.ativo,
-        roles: new Set<string>(),
+        roles: rolesPorUserId.get(id) ?? new Set<string>(),
       };
-      cur.roles.add(r.role);
-      porId.set(p.id, cur);
-    }
-  }
-  const responsaveis = Array.from(porId.values()).sort((a, b) =>
-    a.nome.localeCompare(b.nome, "pt-BR"),
-  );
-
-  // Contagem de freelas por responsavel direto (dono da pessoa).
-  const idsResp = responsaveis.map((r) => r.id);
-  const contagem = new Map<string, number>();
-  if (idsResp.length > 0) {
-    const { data: contRows } = await supabase
-      .from("freelancers")
-      .select("responsavel_id")
-      .eq("tenant_id", session.activeTenant.id)
-      .in("responsavel_id", idsResp);
-    for (const row of (contRows ?? []) as Array<{ responsavel_id: string }>) {
-      contagem.set(
-        row.responsavel_id,
-        (contagem.get(row.responsavel_id) ?? 0) + 1,
-      );
-    }
-  }
+    })
+    .filter(
+      (r): r is {
+        id: string;
+        nome: string;
+        email: string | null;
+        ativo: boolean;
+        roles: Set<string>;
+      } => r !== null,
+    )
+    .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
   const totalFreelas = Array.from(contagem.values()).reduce((a, b) => a + b, 0);
 
