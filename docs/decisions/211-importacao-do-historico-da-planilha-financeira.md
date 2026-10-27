@@ -978,6 +978,39 @@ Uma linha da Hitlab de 2024 não tem a fórmula.
   do saldo inicial da conta (01/08 na California Santander, 11/09 em oito
   contas). O fim do 3T aparece quando o saldo inicial passar para 01/10.
 
+## Saldo inicial das contas correntes em 01/10 (A5, 27/10/2026)
+
+- **A aplicação automática é conta à parte.** Os extratos de outubro mostram
+  a conta corrente em R$ 0,00 todo dia nas duas contas mais movimentadas: o
+  banco aplica o que sobra (Rende Fácil no BB, ContaMax na Santander), e a
+  planilha soma a aplicação no saldo da conta. **Decidido (Tiago, 27/10/2026,
+  na sessão bifurcada):** "Ok, concordo com a recomendação vamos fazer as duas
+  contas para ter as contas de aplicação."
+  - Cada aplicação e cada resgate do extrato vira transferência entre a
+    corrente e a aplicação, por regra, e o rendimento entra na aplicação como
+    receita financeira (RF).
+  - A conta corrente começa em 01/10 com R$ 0,00, como o banco.
+  - A aplicação começa com o saldo de 30/09, conferido com o extrato dela.
+    As duas contas de aplicação ainda não foram criadas: o saldo inicial trava
+    no primeiro lançamento.
+- **Conta bancária e conciliação passaram para o Tiago** ("Eu tomei frente da
+  conta bancaria e conciliação, então isso passa por mim mesmo"). Antes eram
+  da frente do Antonio.
+- **BB California:** a data do saldo inicial foi de 11/09 para 01/10 pela tela
+  de contas bancárias, com R$ 0,00.
+- **California Santander:** a tela não deixa mudar o saldo inicial de conta
+  com lançamento, e esta tem 25 baixas de PP. Por isso a mudança foi pela
+  migration `20261027100001`: de R$ 100.000,00 em 01/08 para R$ 0,00 em 01/10.
+  Ela é destrutiva e foi confirmada pelo Tiago ("a California Santander
+  direto no banco por causa da trava"). As 8 baixas de agosto e setembro
+  ficaram antes do início, e estão no histórico. A troca está na auditoria,
+  como a edição pela tela.
+- **Conferido no Extrato:** em setembro, as duas contas mostram o histórico
+  com "A conta começa no sistema em 01/10/2026". O saldo final de setembro dá
+  R$ 132.975,94 no BB, igual à planilha, e R$ 14.645,67 na Santander, contra
+  R$ 14.648,11 na planilha. Os R$ 2,44 são as frações de centavo que a
+  planilha guarda e o histórico arredonda. Outubro começa em R$ 0,00.
+
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas
   85 e 91 da Res. Jobs 2026; R$ 1.520.000,00 de benefício): o histórico segue a
@@ -988,9 +1021,10 @@ Uma linha da Hitlab de 2024 não tem a fórmula.
   (`empresas_rateios_regionais`, do Antonio), com percentuais diferentes dos
   da planilha em 2023, 2024 e 2026: um lugar só se decide com ele.
 - A5, o que sobrou da carga do 3T:
-  - O saldo inicial das contas passa para 01/10 com o saldo do extrato de
-    30/09, depois de comparar com a planilha. É o critério de "3T fechado".
-    Conta bancária é da frente do Antonio.
+  - As contas de aplicação (Santander ContaMax e BB Rende Fácil), com o saldo
+    de 30/09 do extrato da aplicação, que o Tiago vai mandar.
+  - As outras 9 contas: o saldo inicial em 01/10 com o saldo do extrato de
+    30/09, comparado com a planilha. É o critério de "3T fechado".
   - Corrigir na planilha o job do 3T que falta nas abas Res. Jobs (as 9
     pendências) e recarregar o 3T. Numa versão nova, E1, E2, E3 e o pacote
     rodam de novo, e o pacote da 1ª carga se compara com o do banco.

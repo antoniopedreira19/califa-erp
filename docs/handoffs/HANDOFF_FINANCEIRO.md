@@ -8391,6 +8391,20 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   passar para 01/10, com o saldo do extrato de 30/09 (próximo passo, com os
   saldos que o Tiago vai mandar).
 
+## ⚠️ Nota de 2026-10-27 (2) — saldo inicial da BB California e da California Santander em 01/10 (decisão 211, A5)
+
+- **Conta bancária e conciliação** agora respondem ao Tiago, e não à frente
+  do Antonio (Tiago, 27/10/2026).
+- **As duas contas correntes começam em 01/10/2026 com R$ 0,00,** como o
+  extrato do banco: a aplicação automática (Rende Fácil e ContaMax) vai virar
+  conta de investimento à parte. A BB California mudou pela tela. A California
+  Santander mudou pela migration `20261027100001`, porque a tela trava saldo
+  inicial de conta com lançamento. Era R$ 100.000,00 em 01/08. Na Santander,
+  as 8 baixas de PP de agosto e setembro ficaram antes do início.
+- **No Extrato,** setembro mostra o histórico da planilha até 30/09 e outubro
+  começa em R$ 0,00. Detalhes na
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
 ## O código do projeto sai das telas — 27/10/2026 (decisão 217)
 
 - Fila de abertura: a coluna "Projeto · Cliente", o funil e o "Ordenar de A
