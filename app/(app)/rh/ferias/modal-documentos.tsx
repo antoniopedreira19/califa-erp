@@ -295,7 +295,6 @@ export function ModalDocumentos({
 
   function handleAnexarSucesso() {
     router.refresh();
-    onSucesso();
   }
 
   return (
