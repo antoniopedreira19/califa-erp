@@ -36,7 +36,10 @@ export function AbasPerfil({
   return (
     <div className="space-y-4">
       <div className="border-b border-border">
-        <nav className="flex items-center gap-1 overflow-x-auto" role="tablist">
+        <nav
+          className="flex items-center gap-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          role="tablist"
+        >
           {ABAS.map((a) => {
             const Icon = a.icon;
             const ativo = a.key === ativa;
