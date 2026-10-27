@@ -6488,3 +6488,17 @@ três telas da ficha (Jobs, Financeiro › Jobs e Abertura de Job), lido em
   visível, nas dicas e nos placeholders de cada tela e pop-up — zero em
   todas. Prints de antes e depois na página
   https://claude.ai/artifact/V2i6P4pthYtNJahKEAnWJG.
+
+## Os três meses do trimestre — 27/10/2026 (decisão 219, entrega 1)
+
+- Planilha interna do job mensal (produção e financeiro): abre no bloco
+  "Total" (era "Trimestre") quando a URL não pede mês.
+- A faixa fixa "Outubro já foi enviado para faturamento: errata e consumo de
+  save ficam travados nesse mês" saiu da régua. Com a errata ligada, clicar
+  numa linha de mês enviado mostra acima da planilha do mês "Outubro já foi
+  enviado para faturamento: as linhas desse mês não mudam pela errata."
+  (× fecha; recolher grupo não conta).
+- **Conferência (27/10/2026):** TES-1002/26 (outubro na fila do financeiro):
+  abriu no Total sem a faixa; com "Realizar errata", o clique numa linha de
+  outubro mostrou o aviso, o × fechou e recolher o grupo não o trouxe de
+  volta. Errata fechada sem registrar.

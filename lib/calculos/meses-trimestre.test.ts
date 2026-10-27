@@ -9,6 +9,8 @@ import assert from "node:assert/strict";
 
 import {
   erroDoPeriodoMensal,
+  fimDoTrimestre,
+  mesesForaDoPeriodo,
   mesesDoPeriodo,
   mesesDoTrimestre,
   mesmoTrimestre,
@@ -120,4 +122,21 @@ test("validação do período do orçamento mensal", () => {
   assert.match(erroDoPeriodoMensal("2026-09-15", "2026-10-15") ?? "", /mesmo trimestre/);
   assert.match(erroDoPeriodoMensal("2026-09-30", "2026-07-01") ?? "", /posterior/);
   assert.match(erroDoPeriodoMensal("2026-02-30", "2026-03-31") ?? "", /início e o fim/);
+});
+
+test("fim do trimestre: o Fim previsto que o início sugere", () => {
+  assert.equal(fimDoTrimestre("2026-10-01"), "2026-12-31");
+  assert.equal(fimDoTrimestre("2026-11-15"), "2026-12-31");
+  assert.equal(fimDoTrimestre("2027-01-20"), "2027-03-31");
+  assert.equal(fimDoTrimestre("2026-05-02"), "2026-06-30");
+});
+
+test("meses do trimestre que ficam depois do fim", () => {
+  assert.deepEqual(mesesForaDoPeriodo("2026-10-01", "2026-12-31"), []);
+  assert.deepEqual(mesesForaDoPeriodo("2026-10-01", "2026-10-31"), ["2026-11-01", "2026-12-01"]);
+  assert.deepEqual(mesesForaDoPeriodo("2026-10-15", "2026-11-30"), ["2026-12-01"]);
+  // Outubro antes do início não conta.
+  assert.deepEqual(mesesForaDoPeriodo("2026-11-01", "2026-12-31"), []);
+  // Período inválido: nada a dizer.
+  assert.deepEqual(mesesForaDoPeriodo("2026-10-01", "2027-01-31"), []);
 });

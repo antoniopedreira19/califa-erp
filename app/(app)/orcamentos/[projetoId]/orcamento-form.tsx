@@ -40,10 +40,14 @@ import {
   type CategoriaParaServico,
 } from "@/lib/categorias-do-servico";
 import {
+  dataIsoValida,
   erroDoPeriodoDaCampanha,
   erroDoPeriodoMensal,
+  fimDoTrimestre,
+  mesmoTrimestre,
 } from "@/lib/calculos/meses-trimestre";
 import { CidadeCombobox, type CidadeOption } from "../cidade-combobox";
+import { MesesDoPeriodo } from "./meses-do-periodo";
 import { gpDeFora, itensDeGp, type GpParaEscolha } from "@/lib/gps-para-escolha";
 import {
   atualizarOrcamento,
@@ -306,6 +310,20 @@ export function OrcamentoForm({
   // Mídia Off (decisão 147): o período é a campanha inteira, e é dele que
   // os meses da planilha nascem.
   const ehMidiaOff = modeloEscolhido === "midia_off";
+
+  // Fee e Always On: o fim vem no último dia do trimestre do início, para o
+  // orçamento nascer com os meses seguintes — os GPs esqueciam deles
+  // (Tiago, 27/10/2026). Só quando o fim está vazio ou em outro trimestre:
+  // o fim que o GP encurtou fica. Corre ao mudar o início ou o modelo, não
+  // ao mudar o fim, para não desfazer o que ele digita ali.
+  const fimRef = React.useRef(fim);
+  fimRef.current = fim;
+  React.useEffect(() => {
+    if (!ehMensal || !dataIsoValida(inicio)) return;
+    const atual = fimRef.current;
+    if (dataIsoValida(atual) && atual >= inicio && mesmoTrimestre(inicio, atual)) return;
+    setFim(fimDoTrimestre(inicio));
+  }, [ehMensal, inicio]);
 
   function handleServico(novo: string) {
     setServicoId(novo);
@@ -749,21 +767,15 @@ export function OrcamentoForm({
         >
           <DatePicker
             name="data_fim_prevista"
-            defaultValue={orcamento?.data_fim_prevista ?? ""}
+            // Controlado: o fim muda sozinho com o início e com o × dos
+            // meses do Fee e do Always On.
+            value={fim}
             placeholder="Selecione a data"
             onDateChange={(d) => setFim(d ? format(d, "yyyy-MM-dd") : "")}
           />
         </Field>
 
-        {ehMensal && (
-          <p className="-mt-2 text-xs text-muted-foreground md:col-span-2">
-            O período define o trimestre do orçamento: início e fim no mesmo
-            trimestre, e os meses da planilha nascem dele.
-            {inicio && fim && !erroDoPeriodoMensal(inicio, fim)
-              ? " Os meses podem ser editados depois, na planilha."
-              : ""}
-          </p>
-        )}
+        {ehMensal && <MesesDoPeriodo inicio={inicio} fim={fim} onFim={setFim} />}
 
         {ehMidiaOff && (
           <p className="-mt-2 text-xs text-muted-foreground md:col-span-2">

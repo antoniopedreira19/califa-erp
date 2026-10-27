@@ -159,8 +159,11 @@ export function PlanilhaMensal({
   const itensDosMeses = dados.flatMap((d) => d.itens);
   const doTrimestre = fechamento(itensDosMeses);
 
+  // Sem `?mes=`, abre no Total, com os meses empilhados: o mês só abre
+  // sozinho quando é escolhido na régua (Tiago, 27/10/2026). Antes abria no
+  // primeiro mês, e quem olhava só ele esquecia os seguintes.
   const selecionado =
-    mesPedido === "trimestre" || dados.length === 0
+    mesPedido === undefined || mesPedido === "trimestre" || dados.length === 0
       ? "trimestre"
       : (dados.find((d) => chaveDoMes(d.mes.mes) === mesPedido)?.mes.id ??
         dados[0].mes.id);
@@ -257,7 +260,8 @@ export function PlanilhaMensal({
         descricao={descricao}
         trimestre={{
           chave: "trimestre",
-          rotulo: "Trimestre",
+          // "Total" desde 27/10/2026; a chave na URL continua `trimestre`.
+          rotulo: "Total",
           ...doTrimestre,
           href: `${base}&mes=trimestre`,
         }}
@@ -346,6 +350,7 @@ export function PlanilhaMensal({
           </div>
           <div className={cn("space-y-6", calha)}>
             <TrimestreEmpilhado
+              barraAcimaDoMes
               moeda={moeda}
               meses={dados.map((d) => ({
                 id: d.mes.id,

@@ -62,9 +62,10 @@ uma lista só de grupos e itens.
     dentro dos meses** (desde 16/09/2026; até então era só consulta). Os
     meses em si, a cópia de itens entre meses e a criação de Fee/Always On
     continuam na tela do orçamento — ver "Edição pela visão agregada".
-11. Visual: régua de meses (Trimestre + um bloco por mês); o mês abre a
-    planilha e os Totais dele; o Trimestre abre os meses empilhados e os
-    Totais do trimestre. "Ano consolidado" em tabela foi rejeitado; o
+11. Visual: régua de meses (Total — "Trimestre" até 27/10/2026 — + um
+    bloco por mês); o mês abre a planilha e os Totais dele; o Total abre os
+    meses empilhados e os Totais do trimestre, e é onde a tela abre sem
+    `?mes=` (decisão 219). "Ano consolidado" em tabela foi rejeitado; o
     limite de faturamento e a "conta para sobra" da planilha saíram.
 
 ## O modelo de dados
@@ -181,7 +182,8 @@ O que mudou:
   situação própria, "Sem faturamento". Não tem o que enviar e não segura o
   encerramento nem a liquidação (confirmado pelo Tiago em 14/09/2026).
 - **Errata e save travam só o mês enviado**, na tela (tabela do mês sem
-  errata e sem save, com aviso na régua) e no servidor
+  errata e sem save; o aviso na régua virou aviso na tentativa, decisão
+  219) e no servidor
   (`registrarErrata`, `salvarSaveDaErrata`). O botão da errata só some
   quando todos os meses foram enviados.
 
@@ -380,3 +382,11 @@ meses ou entram só no primeiro (no orçamento de um mês, entra direto); e o
 bloco de um mês que o orçamento não tem fica de fora com aviso, em vez de
 recusar a planilha. A importação do projeto continua exigindo os meses
 exatos da vigente. Ver [158](158-planilha-de-um-mes-no-fee-e-always-on.md).
+
+## ⚠️ Nota de 2026-10-27 — os três meses do trimestre (decisão 219)
+
+O orçamento novo nasce com o Fim previsto no fim do trimestre e mostra os
+meses abaixo das datas; a régua chama "Total" o que era "Trimestre", e
+orçamento e planilha do job abrem nele; a faixa fixa "já foi enviado para
+faturamento" saiu da régua do job. Ver
+[219](219-os-tres-meses-do-trimestre.md).

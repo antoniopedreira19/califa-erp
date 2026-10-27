@@ -82,6 +82,24 @@ export function mesesDoTrimestre({ ano, trimestre }: Trimestre): string[] {
   return [0, 1, 2].map((i) => `${ano}-${doisDigitos(primeiro + i)}-01`);
 }
 
+/** O último dia do trimestre da data: o Fim previsto que o orçamento de
+ *  Fee e Always On recebe ao escolher o início (Tiago, 27/10/2026). Os GPs
+ *  esqueciam os meses seguintes quando o fim ficava em branco. */
+export function fimDoTrimestre(iso: string): string {
+  const meses = mesesDoTrimestre(trimestreDe(iso));
+  return ultimoDiaDoMes(meses[meses.length - 1]);
+}
+
+/** Os meses do trimestre do início que ficam DEPOIS do fim — os que o GP
+ *  esquece. Mês antes do início não conta: o serviço começa no início.
+ *  Vazio quando o período é inválido. */
+export function mesesForaDoPeriodo(inicio: string, fim: string): string[] {
+  if (erroDoPeriodoMensal(inicio, fim)) return [];
+  const doPeriodo = mesesDoPeriodo({ inicio, fim });
+  const ultimo = doPeriodo[doPeriodo.length - 1];
+  return mesesDoTrimestre(trimestreDe(inicio)).filter((m) => m > ultimo);
+}
+
 /** Os meses que o período cobre, em ordem. Só faz sentido para período
  *  dentro de um trimestre — quem chama confere antes com
  *  `mesmoTrimestre`. */

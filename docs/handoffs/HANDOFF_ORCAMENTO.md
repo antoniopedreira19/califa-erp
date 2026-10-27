@@ -5981,3 +5981,21 @@ Terceira entrega do protótipo aprovado em 26/10
   visível, nas dicas e nos placeholders de cada tela e pop-up — zero em
   todas. Prints de antes e depois na página
   https://claude.ai/artifact/V2i6P4pthYtNJahKEAnWJG.
+
+## Os três meses do trimestre — 27/10/2026 (decisão 219, entrega 1)
+
+- Novo orçamento / Editar (Fee e Always On): escolher o Início previsto
+  preenche o Fim com o último dia do trimestre (só com o fim vazio, antes
+  do início ou em outro trimestre). Abaixo das datas, "Meses da planilha"
+  com os meses do período; o × ao lado do último mês tira o mês e o fim
+  volta ao último dia do mês anterior; o primeiro mês não tem ×; o do meio
+  fica apagado. O mês do trimestre que ficou de fora aparece em âmbar.
+- A régua chama "Total" o bloco que era "Trimestre", e a tela do orçamento
+  abre nele sem `?mes=` (antes abria no primeiro mês).
+- Na vista Total, a barra de cada mês aberto ("Recolher todos" dos grupos,
+  "Save", "Exibir") fica acima da linha do mês.
+- **Conferência (27/10/2026):** no navegador, logado como administrador, no
+  `P-0006/26 · Teste`: "Teste Always On" abriu no Total com a barra acima
+  de outubro; no Novo orçamento (sem gravar), Always On + início 01/10
+  preencheu 31/12, o × de dezembro levou o fim a 30/11 e o aviso "Dezembro
+  fica de fora do 4º trimestre de 2026" apareceu.
