@@ -34,7 +34,10 @@ export default async function FreelancersLayout({
 
   return (
     <div className="space-y-0">
-      <FreelancersSubNav countSolicitacoes={countSolicitacoes} />
+      <FreelancersSubNav
+        countSolicitacoes={countSolicitacoes}
+        mostrarResponsaveis={isAprovador}
+      />
       {children}
     </div>
   );

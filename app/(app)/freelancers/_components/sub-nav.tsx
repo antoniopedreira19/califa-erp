@@ -63,10 +63,16 @@ const items: SubNavItem[] = [
 
 export function FreelancersSubNav({
   countSolicitacoes = 0,
+  mostrarResponsaveis = false,
 }: {
   countSolicitacoes?: number;
+  /** Tab "Responsáveis" só pra admin/rh/financeiro; GP/produtor não enxerga. */
+  mostrarResponsaveis?: boolean;
 }) {
   const pathname = usePathname();
+  const itensVisiveis = items.filter(
+    (i) => i.href !== "/freelancers/responsaveis" || mostrarResponsaveis,
+  );
 
   return (
     <div className="border-b border-border -mx-5 md:-mx-8 px-5 md:px-8 mb-6">
@@ -75,7 +81,7 @@ export function FreelancersSubNav({
         role="tablist"
         aria-label="Seções do módulo Freelancers"
       >
-        {items.map((item) => {
+        {itensVisiveis.map((item) => {
           const Icon = item.icon;
           const active = item.isActive(pathname);
           return (
