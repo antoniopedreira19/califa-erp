@@ -8438,7 +8438,12 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   mês seguinte. Só competências a partir de 10/2026; vencida vai para a
   próxima janela de pagamento. Ao aprovar, o título entra e a previsão sai.
 - Rótulo "Folha prevista" na composição da célula (`fluxo-caixa-matriz.ts`).
-- **Aberto, código do Antonio:** a aprovação ainda grava o título no último
-  dia do mês (deveria ser a mesma data da previsão), e a folha do mês
-  seguinte ainda não nasce sozinha. Detalhes na
+- ⚠️ **A aprovação e a folha automática (2026-10-27).** No código da frente
+  do Antonio, com autorização do Tiago: a aprovação da linha grava o título
+  na mesma data da previsão (`dataDePagamentoDaFolha`, era o último dia do
+  mês); a geração do "Gerar folha" passa para o banco
+  (`gerar_folha_da_competencia`, migration `20261027100003`), e a rotina
+  `gerar-folhas-automaticas` (pg_cron, 03:00 de Brasília) gera a folha do
+  mês seguinte uma vez, 30 dias antes do pagamento: a 11/2026 nasce em
+  03/11. Detalhes na
   [decisão 218](../decisions/218-folha-prevista-no-fluxo-de-caixa.md).
