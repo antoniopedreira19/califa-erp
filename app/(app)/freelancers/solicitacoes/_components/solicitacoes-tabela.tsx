@@ -100,7 +100,7 @@ export function SolicitacoesTabela({
   const router = useRouter();
   const searchParams = useSearchParams();
   const isAprovador = APROVADORES.has(activeRole);
-  const [busca, setBusca] = React.useState(searchParams.get("q") ?? "");
+  const [busca, setBusca] = React.useState("");
   const [selecionada, setSelecionada] =
     React.useState<SolicitacaoLinha | null>(null);
   const [popoverOpen, setPopoverOpen] = React.useState(false);
@@ -115,28 +115,6 @@ export function SolicitacoesTabela({
   const [sortKey, setSortKey] = React.useState<SortKey | null>(null);
   const [sortDir, setSortDir] = React.useState<SortDir>("asc");
 
-  React.useEffect(() => {
-    setBusca(searchParams.get("q") ?? "");
-  }, [searchParams]);
-
-  // Busca incremental com debounce: espera 300ms de inatividade e sincroniza
-  // o `?q=` da URL (que dispara a server query). Se o valor já bate com o
-  // da URL (ex.: load inicial, ou navegação por botão), não refaz nada.
-  React.useEffect(() => {
-    const atual = searchParams.get("q") ?? "";
-    const alvo = busca.trim();
-    if (atual === alvo) return;
-    const id = setTimeout(() => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (alvo) params.set("q", alvo);
-      else params.delete("q");
-      const qs = params.toString();
-      router.push(`/freelancers/solicitacoes${qs ? `?${qs}` : ""}`);
-    }, 300);
-    return () => clearTimeout(id);
-    // searchParams.toString() estabiliza a referência pra não refirar à toa.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busca, searchParams.toString()]);
 
   const statusAtivos = React.useMemo(() => {
     const raw = searchParams.get("status");
@@ -217,19 +195,9 @@ export function SolicitacoesTabela({
     });
   }
 
-  function submitBusca(e: React.FormEvent) {
-    e.preventDefault();
-    alterarQueryString((p) => {
-      const t = busca.trim();
-      if (t) p.set("q", t);
-      else p.delete("q");
-    });
-  }
-
   function limparFiltros() {
     setBusca("");
     alterarQueryString((p) => {
-      p.delete("q");
       p.delete("status");
       p.delete("solicitante");
       p.delete("cargo");
@@ -418,10 +386,10 @@ export function SolicitacoesTabela({
 
       {/* Busca + filtros em dropdowns + ações */}
       <div className="rounded-xl border border-border bg-white p-3 flex items-center gap-2 flex-wrap">
-        <form onSubmit={submitBusca} className="relative flex-1 min-w-[220px] max-w-md">
+        <div className="relative flex-1 min-w-[220px] max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <input
-            type="search"
+            type="text"
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
             placeholder="Buscar por nome, CPF, cargo, solicitante..."
@@ -430,17 +398,14 @@ export function SolicitacoesTabela({
           {busca && (
             <button
               type="button"
-              onClick={() => {
-                setBusca("");
-                alterarQueryString((p) => p.delete("q"));
-              }}
+              onClick={() => setBusca("")}
               className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               aria-label="Limpar busca"
             >
               <X className="h-3.5 w-3.5" />
             </button>
           )}
-        </form>
+        </div>
 
         <MultiSelectDropdown
           label="Todos os status"

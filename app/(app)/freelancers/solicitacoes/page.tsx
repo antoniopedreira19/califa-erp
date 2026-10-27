@@ -52,22 +52,8 @@ export default async function SolicitacoesPage({
     )
     .eq("tenant_id", tenantId);
 
-  // Busca: nome do freela, CPF (quando parece CPF), cargo, nome do solicitante.
-  // Solicitante é join — não dá pra filtrar via or() direto, filtro client-side
-  // é mais honesto. Deixa aqui só nome_freela, cpf, cargo.
-  const termo = searchParams.q?.trim();
-  if (termo) {
-    const soDigitos = termo.replace(/\D+/g, "");
-    const likeNome = `%${termo}%`;
-    const condicoes = [
-      `nome_freela.ilike.${likeNome}`,
-      `cargo.ilike.${likeNome}`,
-    ];
-    if (soDigitos.length >= 3) {
-      condicoes.push(`cpf_freela.ilike.%${soDigitos}%`);
-    }
-    query = query.or(condicoes.join(","));
-  }
+  // Busca por nome/CPF/cargo/solicitante é 100% client-side no componente
+  // SolicitacoesTabela — sem round-trip nem param na URL.
 
   const statusFiltro = (searchParams.status ?? "")
     .split(",")
