@@ -20,10 +20,19 @@ type ActionResult<T = Record<string, unknown>> =
   | ({ ok: true } & T)
   | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
 
-/** Último dia do mês (formato ISO YYYY-MM-DD). */
-function ultimoDiaDoMes(ano: number, mes: number): string {
-  const d = new Date(ano, mes, 0);
-  return `${ano}-${String(mes).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+/** Data do título da linha (decisão 218): a data prevista de pagamento da
+ *  linha; vazia, o dia 03 do mês seguinte à competência, como a planilha
+ *  paga o pessoal. É a mesma data da "Folha prevista" do fluxo de caixa
+ *  (`vw_fluxo_caixa`), para a previsão virar o título sem mudar de dia. */
+function dataDePagamentoDaFolha(
+  ano: number,
+  mes: number,
+  dataPrevista: string | null,
+): string {
+  if (dataPrevista) return dataPrevista;
+  const anoSeguinte = mes === 12 ? ano + 1 : ano;
+  const mesSeguinte = mes === 12 ? 1 : mes + 1;
+  return `${anoSeguinte}-${String(mesSeguinte).padStart(2, "0")}-03`;
 }
 
 /** Mapeia (tipo de contratação, origem da linha, tipo da folha) → código do
@@ -373,7 +382,7 @@ export async function aprovarLinhaFolha(
   const { data: folha, error: folhaError } = await supabase
     .from("folhas_pagamento")
     .select(
-      "id, status, salario_base, colaborador_id, competencia_ano, competencia_mes, origem, tipo, tipo_folha_ferias, lancamento_ferias_id",
+      "id, status, salario_base, colaborador_id, competencia_ano, competencia_mes, origem, tipo, tipo_folha_ferias, lancamento_ferias_id, data_pagamento_prevista",
     )
     .eq("id", folhaId)
     .eq("tenant_id", tenantId)
@@ -629,9 +638,10 @@ export async function aprovarLinhaFolha(
   }
   const grupos = [...porEmpresa.entries()];
   const totalCentavos = centavos(salarioFinal);
-  const dataPrevistaPagamento = ultimoDiaDoMes(
+  const dataPrevistaPagamento = dataDePagamentoDaFolha(
     folha.competencia_ano,
     folha.competencia_mes,
+    folha.data_pagamento_prevista as string | null,
   );
   const competencia = competenciaLabel(folha.competencia_ano, folha.competencia_mes);
   const { data: empresasRows } = grupos.length > 1

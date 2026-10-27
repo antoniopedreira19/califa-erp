@@ -8428,3 +8428,22 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   visível, nas dicas e nos placeholders de cada tela e pop-up — zero em
   todas. Prints de antes e depois na página
   https://claude.ai/artifact/V2i6P4pthYtNJahKEAnWJG.
+
+## A folha ainda não aprovada no fluxo de caixa — 27/10/2026 (decisão 218)
+
+- `vw_fluxo_caixa` ganha o ramo `previsao_folha` (migration
+  `20261027100002`): a linha da folha em rascunho, enviada ou pendente de
+  correção, sem título, entra como "Folha prevista · MM/AAAA", somada por
+  empresa e regional, sem nome. Data: a prevista da linha; vazia, dia 03 do
+  mês seguinte. Só competências a partir de 10/2026; vencida vai para a
+  próxima janela de pagamento. Ao aprovar, o título entra e a previsão sai.
+- Rótulo "Folha prevista" na composição da célula (`fluxo-caixa-matriz.ts`).
+- ⚠️ **A aprovação e a folha automática (2026-10-27).** No código da frente
+  do Antonio, com autorização do Tiago: a aprovação da linha grava o título
+  na mesma data da previsão (`dataDePagamentoDaFolha`, era o último dia do
+  mês); a geração do "Gerar folha" passa para o banco
+  (`gerar_folha_da_competencia`, migration `20261027100003`), e a rotina
+  `gerar-folhas-automaticas` (pg_cron, 03:00 de Brasília) gera a folha do
+  mês seguinte uma vez, 30 dias antes do pagamento: a 11/2026 nasce em
+  03/11. Detalhes na
+  [decisão 218](../decisions/218-folha-prevista-no-fluxo-de-caixa.md).
