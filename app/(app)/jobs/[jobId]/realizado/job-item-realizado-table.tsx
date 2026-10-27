@@ -2677,6 +2677,7 @@ export function JobItemRealizadoTable({
               valorPlanejado={planejadoAtual}
               valorOrcado={Number(itemAtual?.total_orcado ?? 0)}
               podeGerarAcimaDoOrcado={podeGerarAcimaDoOrcado}
+              linhaVermelha={itemAtual?.linha_vermelha === true}
               unitarioPlanejado={unitarioPlanejado}
               quantidadePlanejada={quantidadePlanejada}
               dmPlanejado={dmPlanejado}

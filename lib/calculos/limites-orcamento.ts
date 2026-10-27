@@ -33,12 +33,19 @@ export function bloqueioAprovacaoPorLimites(
     : null;
 }
 
+/**
+ * Decisão 204. A linha vermelha (orçado e planejado zerados, só recebe PP)
+ * fica fora: toda PP dela passa do orçado, então a regra faria do
+ * administrador o único a lançar custo que o orçamento não previu
+ * (27/10/2026). A confirmação de planejado no envio continua valendo.
+ */
 export function bloqueioGeracaoPPPorLimite(
   papel: AppRole,
   realizado: number,
   orcado: number,
+  linhaVermelha: boolean,
 ): string | null {
-  return papel !== "administrador" && acimaDoOrcado(realizado, orcado)
+  return papel !== "administrador" && !linhaVermelha && acimaDoOrcado(realizado, orcado)
     ? "Só o administrador pode gerar ou editar esta PP: o realizado acumulado do item ultrapassa o orçado. Salve a PP a emitir e peça a revisão ao administrador."
     : null;
 }

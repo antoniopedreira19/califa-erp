@@ -144,6 +144,33 @@ teste: TES-P001/26-12 (Interno) mostra 0,0% em `rgb(4, 120, 87)` no
 cabeçalho e em Totais; TES-P001/26-03 v2 (comum) segue em
 `rgb(231, 75, 86)` com 10,9%. Prints capturados.
 
+## Revisão de 27/10/2026 — linha vermelha fora da trava da PP
+
+Pedido do Tiago: na **linha vermelha** (orçado e planejado zerados, só
+recebe realizado por PP) a exceção do acumulado acima do orçado **não pede
+administrador**. Toda PP dessa linha passa do orçado zero, então a regra
+fazia do administrador o único a lançar custo que o orçamento não previu —
+o GP salvava a PP a emitir e ficava esperando.
+
+- `bloqueioGeracaoPPPorLimite` ganhou `linhaVermelha` (obrigatório) e
+  devolve `null` nela; a geração e a edição da PP passam
+  `item.linha_vermelha`.
+- O formulário da PP recebe `linhaVermelha` (obrigatório) pelo painel do
+  item e pela aba PPs: o alerta vermelho "O acumulado deste item ultrapassa
+  o orçado" dá lugar ao amarelo "O acumulado está acima do planejado", e o
+  "Gerar PP" não trava.
+- Banco: `pp_confere_orcado_na_geracao` lê `linha_vermelha` da linha do
+  job e libera antes da soma (migration `20261027950001`). Só o corpo da
+  função mudou; os dois gatilhos e o `revoke` seguem iguais.
+- **Continua valendo:** a confirmação de planejado no envio — toda PP da
+  linha vermelha passa do planejado zero e o envio segue pedindo o "tem
+  certeza?" do responsável do job ou administrador.
+- Teste novo em `limites-orcamento.test.ts`: linha vermelha não bloqueia
+  nenhum papel, a mesma conta fora dela bloqueia o GP.
+- Conferido no job da linha "Eletricista" (só realizado, PP a emitir de
+  R$ 2.000,00): o formulário mostra o alerta amarelo de planejado, sem o
+  vermelho de orçado. Fechado sem salvar.
+
 ## Paleta aprovada “Grafite e cinza” — 22/10/2026
 
 Após comparar o protótipo completo, o usuário aprovou a opção 3:
