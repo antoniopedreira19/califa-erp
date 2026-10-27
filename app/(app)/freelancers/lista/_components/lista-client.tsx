@@ -8,6 +8,8 @@ import {
   Clock,
   Eye,
   EyeOff,
+  Search,
+  X,
 } from "lucide-react";
 import {
   cn,
@@ -31,6 +33,18 @@ import { ToggleAcaoPrevista } from "./toggle-acao-prevista";
 interface Props {
   freelancers: FreelancerComStatus[];
   podeEditar: boolean;
+  /** Dropdowns de filtro (responsável/job/cargo). Renderizados no mesmo bloco da busca. */
+  filtrosDropdowns?: React.ReactNode;
+  /** Chips de filtros ativos (status, ação, trabalho, card). */
+  chipsFiltros?: React.ReactNode;
+}
+
+/** Normaliza string pra comparação sem acento/caixa. */
+function norm(s: string | null | undefined): string {
+  return (s ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
 }
 
 const TIPO_LABEL: Record<TipoFreelancerContrato, string> = {
@@ -39,25 +53,99 @@ const TIPO_LABEL: Record<TipoFreelancerContrato, string> = {
   diarias: "Diárias",
 };
 
-export function ListaClient({ freelancers, podeEditar }: Props) {
+export function ListaClient({
+  freelancers,
+  podeEditar,
+  filtrosDropdowns,
+  chipsFiltros,
+}: Props) {
   const [valoresVisiveis, setValoresVisiveis] = React.useState(false);
+  const [busca, setBusca] = React.useState("");
 
-  if (freelancers.length === 0) {
-    return (
-      <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-10 text-center">
-        <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted/50">
-          <Users className="h-5 w-5 text-muted-foreground" />
-        </div>
-        <p className="text-sm font-medium text-foreground">
-          Nenhum freelancer encontrado
-        </p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          Ajuste a busca ou os filtros.
-        </p>
+  // Filtro client-side: nome_social, nome_completo e CPF. Sem round-trip e
+  // sem query string — a URL só carrega os filtros de dropdown/chip.
+  const filtrados = React.useMemo(() => {
+    const alvo = busca.trim();
+    if (!alvo) return freelancers;
+    const alvoNorm = norm(alvo);
+    const soDigitos = alvo.replace(/\D+/g, "");
+    return freelancers.filter((f) => {
+      if (norm(f.nome_social).includes(alvoNorm)) return true;
+      if (norm(f.nome_completo).includes(alvoNorm)) return true;
+      if (soDigitos.length >= 3 && f.cpf && f.cpf.includes(soDigitos)) {
+        return true;
+      }
+      return false;
+    });
+  }, [freelancers, busca]);
+
+  const buscaInput = (
+    <div className="relative flex-1 min-w-[240px] max-w-md">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+      <input
+        type="search"
+        value={busca}
+        onChange={(e) => setBusca(e.target.value)}
+        placeholder="Buscar por nome ou CPF..."
+        className="w-full h-10 rounded-lg border border-border bg-white pl-10 pr-9 text-sm placeholder:text-muted-foreground focus:outline-none focus:border-california-red focus:ring-2 focus:ring-california-red/15"
+      />
+      {busca && (
+        <button
+          type="button"
+          onClick={() => setBusca("")}
+          className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+          aria-label="Limpar busca"
+        >
+          <X className="h-3.5 w-3.5" />
+        </button>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 flex-wrap">
+        {buscaInput}
+        {filtrosDropdowns}
       </div>
-    );
-  }
+      {chipsFiltros}
+      {filtrados.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-10 text-center">
+          <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted/50">
+            <Users className="h-5 w-5 text-muted-foreground" />
+          </div>
+          <p className="text-sm font-medium text-foreground">
+            {freelancers.length === 0
+              ? "Nenhum freelancer encontrado"
+              : `Nenhum resultado para "${busca}"`}
+          </p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Ajuste a busca ou os filtros.
+          </p>
+        </div>
+      ) : (
+        <TabelaFreelancers
+          filtrados={filtrados}
+          podeEditar={podeEditar}
+          valoresVisiveis={valoresVisiveis}
+          setValoresVisiveis={setValoresVisiveis}
+        />
+      )}
+    </div>
+  );
+}
 
+function TabelaFreelancers({
+  filtrados,
+  podeEditar,
+  valoresVisiveis,
+  setValoresVisiveis,
+}: {
+  filtrados: FreelancerComStatus[];
+  podeEditar: boolean;
+  valoresVisiveis: boolean;
+  setValoresVisiveis: React.Dispatch<React.SetStateAction<boolean>>;
+}) {
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-soft">
       <div className="overflow-x-auto">
@@ -93,7 +181,7 @@ export function ListaClient({ freelancers, podeEditar }: Props) {
             </tr>
           </thead>
           <tbody>
-            {freelancers.map((f) => (
+            {filtrados.map((f) => (
               <FreelancerRow
                 key={f.id}
                 f={f}

@@ -133,13 +133,28 @@ export default async function FreelancerPerfilPage({
 
   // Define o contrato "atual" (único): o primeiro que está vigente hoje.
   const hojeISO = new Date().toISOString().slice(0, 10);
-  const idAtual = contratos.find(
+  const contratoAtualObj = contratos.find(
     (c) =>
       c.status_real &&
       c.data_inicio !== null &&
       c.data_inicio <= hojeISO &&
       (c.data_termino === null || c.data_termino >= hojeISO),
-  )?.id;
+  );
+  const idAtual = contratoAtualObj?.id;
+  const heroContratoAtual = contratoAtualObj
+    ? {
+        valor: contratoAtualObj.valor,
+        tipo: contratoAtualObj.tipo,
+        data_inicio: contratoAtualObj.data_inicio,
+        data_termino: contratoAtualObj.data_termino,
+        cidade: contratoAtualObj.cidade,
+        cargo: contratoAtualObj.cargo,
+        responsavel_nome: contratoAtualObj.responsavel_id
+          ? (gpNomesPorId[contratoAtualObj.responsavel_id] ?? null)
+          : null,
+        status_real: contratoAtualObj.status_real,
+      }
+    : null;
 
   // Ordenação: atual > agendado (status_real + inicio no futuro) > encerrados
   const prioridade = (c: FreelancerContrato) => {
@@ -346,7 +361,11 @@ export default async function FreelancerPerfilPage({
   return (
     <div className="space-y-6">
       <BotaoVoltar reserva="/freelancers/lista" />
-      <HeroFreelancer freelancer={freelancer} podeEditar={podeEditar} />
+      <HeroFreelancer
+        freelancer={freelancer}
+        podeEditar={podeEditar}
+        contratoAtual={heroContratoAtual}
+      />
       <AbasPerfil
         dados={dadosPessoais}
         contratos={abaContratos}

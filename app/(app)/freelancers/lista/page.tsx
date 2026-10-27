@@ -6,7 +6,6 @@ import { createClient } from "@/lib/supabase/server";
 import { pode } from "@/lib/permissoes";
 import type { FreelancerComStatus, FreelancerCargo } from "@/lib/types";
 import { ListaClient } from "./_components/lista-client";
-import { BuscaInput } from "./_components/busca-input";
 import { FiltrosDropdowns } from "./_components/filtros-dropdowns";
 import { ChipsFiltros } from "./_components/chips-filtros";
 import { GerenciarCargosDialog } from "./_components/gerenciar-cargos-dialog";
@@ -81,19 +80,9 @@ export default async function FreelancersListaPage({
     query = query.eq("responsavel_id", session.profile.id);
   }
 
-  const termo = searchParams.q?.trim();
-  if (termo) {
-    const soDigitos = termo.replace(/\D+/g, "");
-    const likeNome = `%${termo}%`;
-    const condicoes = [
-      `nome_social.ilike.${likeNome}`,
-      `nome_completo.ilike.${likeNome}`,
-    ];
-    if (soDigitos.length >= 3) {
-      condicoes.push(`cpf.ilike.%${soDigitos}%`);
-    }
-    query = query.or(condicoes.join(","));
-  }
+  // Busca por nome/CPF é 100% client-side em `ListaClient` — sem round-trip
+  // no servidor nem param na URL. Só os filtros que vêm dos dropdowns/chips
+  // continuam sendo passados via query string (persistem link compartilhável).
 
   // Filtro por ação prevista
   const acoesFiltro = (searchParams.acao ?? "")
@@ -353,20 +342,17 @@ export default async function FreelancersListaPage({
 
       <CardsAnalise totais={totais} />
 
-      <div className="flex items-center gap-2 flex-wrap">
-        <BuscaInput />
-        <FiltrosDropdowns
-          responsaveisDisponiveis={responsaveisDisponiveis}
-          jobsDisponiveis={jobsDisponiveis}
-          cargosDisponiveis={cargosDisponiveis}
-        />
-      </div>
-
-      <ChipsFiltros />
-
       <ListaClient
         freelancers={freelancers}
         podeEditar={podeCriarFreelancer}
+        filtrosDropdowns={
+          <FiltrosDropdowns
+            responsaveisDisponiveis={responsaveisDisponiveis}
+            jobsDisponiveis={jobsDisponiveis}
+            cargosDisponiveis={cargosDisponiveis}
+          />
+        }
+        chipsFiltros={<ChipsFiltros />}
       />
     </div>
   );
