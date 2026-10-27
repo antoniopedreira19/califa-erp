@@ -2,8 +2,14 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import type { RhFeriasFluxoRow, ColunaFluxoFerias } from "@/lib/types";
+import { Search, X } from "lucide-react";
+import type {
+  RhFeriasFluxoRow,
+  ColunaFluxoFerias,
+  TipoContratacao,
+} from "@/lib/types";
 import { classificarColunaFluxo } from "@/lib/ferias/classificar-coluna-fluxo";
+import { formatarTipoContratacao } from "@/lib/colaboradores/format-tipo-contratacao";
 import { CardFluxo } from "./card-fluxo";
 import { ModalDocumentos } from "./modal-documentos";
 import type { FolhaDoc } from "./modal-documentos";
@@ -113,6 +119,30 @@ function agrupar(rows: RhFeriasFluxoRow[]): Record<ColunaFluxoFerias, RhFeriasFl
 // Componentes
 // ---------------------------------------------------------------------------
 
+function ChipFiltro({
+  ativo,
+  onClick,
+  children,
+}: {
+  ativo: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+        ativo
+          ? "bg-california-red text-white"
+          : "bg-muted text-muted-foreground hover:bg-muted/70"
+      }`}
+    >
+      {children}
+    </button>
+  );
+}
+
 function ColunaKanban({
   config,
   rows,
@@ -169,7 +199,44 @@ type FluxoKanbanProps = {
 
 export function FluxoKanban({ rows, folhasPorLancamento }: FluxoKanbanProps) {
   const router = useRouter();
-  const grupos = agrupar(rows);
+
+  // Filtros client-side
+  const [busca, setBusca] = React.useState("");
+  const [tipoFiltro, setTipoFiltro] = React.useState<TipoContratacao | "todos">(
+    "todos",
+  );
+
+  // Tipos de contratação que aparecem no dataset (não lista chips vazios)
+  const tiposDisponiveis = React.useMemo(() => {
+    const set = new Set<TipoContratacao>();
+    for (const r of rows) set.add(r.tipo_contratacao);
+    const ordem: TipoContratacao[] = [
+      "pj",
+      "mei",
+      "clt_recibo",
+      "clt",
+      "estagio",
+      "socio",
+    ];
+    return ordem.filter((t) => set.has(t));
+  }, [rows]);
+
+  const rowsFiltrados = React.useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (tipoFiltro !== "todos" && r.tipo_contratacao !== tipoFiltro) {
+        return false;
+      }
+      if (termo && !r.colaborador_nome.toLowerCase().includes(termo)) {
+        return false;
+      }
+      return true;
+    });
+  }, [rows, busca, tipoFiltro]);
+
+  const grupos = agrupar(rowsFiltrados);
+  const totalFiltrado = rowsFiltrados.length;
+  const temFiltroAtivo = tipoFiltro !== "todos" || busca.trim().length > 0;
 
   // Estado para o modal de documentos
   const [rowSelecionado, setRowSelecionado] = React.useState<RhFeriasFluxoRow | null>(null);
@@ -197,6 +264,57 @@ export function FluxoKanban({ rows, folhasPorLancamento }: FluxoKanbanProps) {
 
   return (
     <>
+      {/* Barra de filtros */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {/* Busca por nome */}
+        <div className="relative flex-1 min-w-[200px] max-w-md">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="search"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar colaborador..."
+            className="h-9 w-full rounded-lg border border-border bg-white pl-9 pr-9 text-sm placeholder:text-muted-foreground focus:border-california-red focus:outline-none"
+          />
+          {busca && (
+            <button
+              type="button"
+              onClick={() => setBusca("")}
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:bg-muted"
+              aria-label="Limpar busca"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Chips de tipo de contratação */}
+        <div className="flex flex-wrap gap-1.5">
+          <ChipFiltro
+            ativo={tipoFiltro === "todos"}
+            onClick={() => setTipoFiltro("todos")}
+          >
+            Todos
+          </ChipFiltro>
+          {tiposDisponiveis.map((tipo) => (
+            <ChipFiltro
+              key={tipo}
+              ativo={tipoFiltro === tipo}
+              onClick={() => setTipoFiltro(tipo)}
+            >
+              {formatarTipoContratacao(tipo)}
+            </ChipFiltro>
+          ))}
+        </div>
+
+        {temFiltroAtivo && (
+          <span className="text-xs text-muted-foreground ml-auto">
+            {totalFiltrado} de {rows.length} lançamento
+            {rows.length === 1 ? "" : "s"}
+          </span>
+        )}
+      </div>
+
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
         {COLUNAS.map((col) => (
           <ColunaKanban
