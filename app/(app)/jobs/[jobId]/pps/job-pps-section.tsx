@@ -1426,6 +1426,7 @@ export function JobPPsSection({
             tomadores={tomadoresDaNf}
             tomadorPorEmpresa={tomadorPorEmpresa}
             cnpjPadraoDaPP={edicaoDaPP.cnpjPadraoDaPP}
+            midiaSystem={midiaSystem}
             onSuccess={(modo, idOuCodigo) => {
               if (modo === "editada") {
                 setToast(`${idOuCodigo} atualizada. O PDF foi refeito com os dados novos.`);

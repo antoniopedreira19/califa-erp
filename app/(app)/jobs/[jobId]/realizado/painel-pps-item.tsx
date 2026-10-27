@@ -1453,6 +1453,7 @@ function PrestacaoNoCartao({
           comprovado={comprovado}
           verba={pp.valor}
           devolucao={pp.devolucao}
+          semSaldo={pp.situacaoMidia !== null}
           compacta
         />
       )}

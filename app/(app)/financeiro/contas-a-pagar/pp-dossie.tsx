@@ -421,7 +421,9 @@ export function PPDossie({
                   ? "A produção não enviou comprovante nesta PP."
                   : pp.cartao_corporativo
                     ? "Nenhum: o cartão corporativo vai sem nota."
-                    : "A produção não enviou documento nesta PP."}
+                    : pp.sem_nf_na_auditoria
+                      ? "Nenhum: a PP foi sem NF na auditoria da Mídia System. A NF entra na prestação de contas."
+                      : "A produção não enviou documento nesta PP."}
               </p>
             ) : (
               <ul className="space-y-1">

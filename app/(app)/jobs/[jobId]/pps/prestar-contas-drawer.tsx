@@ -605,6 +605,7 @@ export function PrestarContasDrawer({
                 comprovado={gastoCentavos / 100}
                 verba={Number(ppAtual.valor)}
                 devolucao={ppAtual.devolucao}
+                semSaldo={ehMidia}
               />
             </div>
 

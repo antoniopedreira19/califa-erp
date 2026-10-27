@@ -87,6 +87,16 @@ com `valor_devolvido = 0`, sem estorno, NF 9216 no cadastro de notas com
 crédito, realizado do item intacto em R$ 3.000,00; pendência do
 encerramento saiu.
 
+No TES-1030/26, em 27/10/2026: marcação pelo "Editar registro"; PP-00576
+enviada sem anexo; encerramento travado na auditoria e de novo depois da
+liberação; caixa travada na edição ("Já há PPs sem NF"); prestação
+reprovada, corrigida e reenviada, depois aprovada (NF 9217, sem estorno);
+a pendência saiu do encerramento. No TES-1029/26, já liberado, a PP-00575
+nova foi barrada sem NF ("Anexe a nota fiscal do fornecedor") e cancelada.
+Na PP da auditoria, a barra da prestação diz "falta" ou "completo" no lugar
+de "saldo", e o financeiro lê "A PP foi sem NF na auditoria da Mídia
+System" no lugar de "A produção não enviou documento".
+
 ## Riscos e o que fica de fora
 
 - **A PP paga sem NF sai sem retenção** (ISS, IRRF, CSRF). A NF que chega

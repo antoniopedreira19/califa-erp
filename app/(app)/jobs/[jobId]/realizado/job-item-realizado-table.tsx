@@ -2688,6 +2688,7 @@ export function JobItemRealizadoTable({
               tomadores={tomadoresDaNf}
               tomadorPorEmpresa={tomadorPorEmpresa}
               cnpjPadraoDaPP={cnpjPadraoDaPP}
+              midiaSystem={midiaSystem}
               onSuccess={(modo, id) => {
                 if (modo === "editada") {
                   setToast(`${id} atualizada. O PDF foi refeito com os dados novos.`);

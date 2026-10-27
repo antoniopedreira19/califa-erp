@@ -551,7 +551,9 @@ export function PPTela(
                       ? "Sem gasto: a produção devolve a verba inteira."
                       : pp?.cartao_corporativo
                         ? "Cartão corporativo: a PP vai sem nota."
-                        : "A produção não enviou documento nesta PP."
+                        : pp?.sem_nf_na_auditoria
+                          ? "A PP foi sem NF na auditoria da Mídia System. A nota entra na prestação de contas."
+                          : "A produção não enviou documento nesta PP."
                   }
                 />
               ) : urlAnexo ? (
