@@ -27,9 +27,7 @@ export interface EscopoResolvido {
  * `maybeSingle` retorna `any` pois o tipo real é `PostgrestBuilder` (não um
  * `Promise` plain) — a interface é suficientemente larga para aceitar ambos.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface SupabaseQueryClient {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   from(table: string): any;
 }
 
