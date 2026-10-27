@@ -123,6 +123,43 @@ export async function calcularValoresLancamentoPJ(
 }
 
 /**
+ * Calcula valores escolhendo automaticamente a base correta por tipo
+ * de contratação. Pra `clt_recibo` (híbrido), usa `parteRpa` (parte PJ)
+ * — a parte CLT é calculada pela contabilidade e entra no sistema via
+ * recibo em PDF. Pros outros tipos, usa `valorTotal`.
+ *
+ * Usado em `aprovarLancamento` e no preview do dialog de aprovação,
+ * garantindo que o valor_total gravado no lançamento reflita só o
+ * fluxo PJ (que é o que o sistema paga automaticamente).
+ */
+export async function calcularValoresLancamentoAuto(
+  colaboradorId: string,
+  dataInicio: string,
+  tipoContratacao: TipoContratacao,
+  tipo: FeriasLancamentoTipo,
+  dias: number,
+  diasAbono: number = 0,
+): Promise<ValoresLancamento | null> {
+  const salario = await buscarSalarioParaFolha(
+    colaboradorId,
+    dataInicio,
+    tipoContratacao,
+  );
+  if (!salario) return null;
+  const base =
+    tipoContratacao === "clt_recibo" ? salario.parteRpa : salario.valorTotal;
+  if (base <= 0) return null;
+  return calcularValoresLancamento(
+    colaboradorId,
+    dataInicio,
+    tipo,
+    dias,
+    diasAbono,
+    base,
+  );
+}
+
+/**
  * Divide o salário de um `clt_recibo` nas 2 parcelas.
  * - `parteRpa`: valor_recibo (parte PJ, calculada pelo sistema).
  * - `parteClt`: valor − valor_recibo (parte CLT, aguarda contabilidade).

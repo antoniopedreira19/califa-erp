@@ -5,7 +5,10 @@ import { z } from "zod";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { calcularValoresLancamentoPJ } from "@/lib/ferias/calcular-valores";
+import {
+  calcularValoresLancamentoAuto,
+  calcularValoresLancamentoPJ,
+} from "@/lib/ferias/calcular-valores";
 import { criarFolhasDePagamentoDeFerias } from "@/lib/ferias/criar-folhas-pagamento";
 import {
   gerarReciboFeriasPdf,
@@ -68,9 +71,19 @@ export async function previewValoresFerias(
   const lanc = await carregarLancamento(lancamentoId, tenantId);
   if (!lanc) return { ok: false, message: "Lançamento não encontrado." };
 
-  const valores = await calcularValoresLancamentoPJ(
+  const supabase = createClient();
+  const { data: colab } = await supabase
+    .from("colaboradores")
+    .select("tipo_contratacao")
+    .eq("id", lanc.colaborador_id)
+    .maybeSingle();
+  if (!colab) return { ok: false, message: "Colaborador não encontrado." };
+
+  const valores = await calcularValoresLancamentoAuto(
     lanc.colaborador_id,
     lanc.data_inicio,
+    (colab as { tipo_contratacao: import("@/lib/types").TipoContratacao })
+      .tipo_contratacao,
     lanc.tipo as FeriasLancamentoTipo,
     lanc.dias,
     (lanc as { dias_abono?: number }).dias_abono ?? 0,
@@ -107,10 +120,24 @@ export async function aprovarLancamento(
 
   const supabase = createClient();
 
-  // Calcula valores de PJ (CLT retorna null = fica tudo em branco).
-  const valores = await calcularValoresLancamentoPJ(
+  // Precisa do tipo_contratacao pra calcular corretamente: clt_recibo usa
+  // só a parteRpa (parte PJ), não o salário total. Fazemos o lookup antes
+  // do UPDATE pra guardar valores corretos no lançamento.
+  const { data: colabParaValores } = await supabase
+    .from("colaboradores")
+    .select("tipo_contratacao")
+    .eq("id", lanc.colaborador_id)
+    .maybeSingle();
+  if (!colabParaValores) {
+    return { ok: false, message: "Colaborador não encontrado." };
+  }
+
+  const valores = await calcularValoresLancamentoAuto(
     lanc.colaborador_id,
     lanc.data_inicio,
+    (colabParaValores as {
+      tipo_contratacao: import("@/lib/types").TipoContratacao;
+    }).tipo_contratacao,
     lanc.tipo as FeriasLancamentoTipo,
     lanc.dias,
     (lanc as { dias_abono?: number }).dias_abono ?? 0,

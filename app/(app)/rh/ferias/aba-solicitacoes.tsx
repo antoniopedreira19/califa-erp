@@ -1,10 +1,13 @@
 import Link from "next/link";
+import { AlertCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import type {
   ColaboradorFeriasLancamento,
   FeriasLancamentoStatus,
   FeriasLancamentoTipo,
+  TipoContratacao,
 } from "@/lib/types";
+import { formatarTipoContratacao } from "@/lib/colaboradores/format-tipo-contratacao";
 import { AcoesLancamento } from "./acoes-lancamento";
 
 type Props = {
@@ -39,7 +42,14 @@ export async function AbaSolicitacoes({ tenantId, statusFiltro }: Props) {
     query = query.eq("status", statusFiltro);
   }
 
-  const { data } = await query;
+  const [{ data }, { count: countPendentes }] = await Promise.all([
+    query,
+    supabase
+      .from("colaboradores_ferias_lancamentos")
+      .select("id", { count: "exact", head: true })
+      .eq("tenant_id", tenantId)
+      .eq("status", "pendente_aprovacao"),
+  ]);
 
   type Row = ColaboradorFeriasLancamento & {
     colaborador: {
@@ -50,24 +60,62 @@ export async function AbaSolicitacoes({ tenantId, statusFiltro }: Props) {
   };
   const lancamentos = (data ?? []) as unknown as Row[];
 
+  const totalPendentes = countPendentes ?? 0;
+
   return (
     <div className="space-y-5">
+      {/* Hero de pendências — destaca o backlog que o RH precisa resolver */}
+      {totalPendentes > 0 && statusFiltro !== "pendente_aprovacao" && (
+        <Link
+          href="/rh/ferias?tab=solicitacoes&status=pendente_aprovacao"
+          prefetch={false}
+          className="flex items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 hover:bg-amber-100 transition-colors"
+        >
+          <div className="flex items-center gap-2">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            <span>
+              <strong>
+                {totalPendentes}{" "}
+                {totalPendentes === 1
+                  ? "solicitação pendente"
+                  : "solicitações pendentes"}
+              </strong>{" "}
+              aguardando sua aprovação
+            </span>
+          </div>
+          <span className="text-xs font-medium underline">Ver pendentes</span>
+        </Link>
+      )}
+
       {/* Filtros */}
       <div className="flex flex-wrap gap-2">
         {FILTROS_STATUS.map((f) => {
           const ativo = f.valor === statusFiltro;
+          const mostraContador =
+            f.valor === "pendente_aprovacao" && totalPendentes > 0;
           return (
             <Link
               key={f.valor}
               href={`/rh/ferias?tab=solicitacoes&status=${f.valor}`}
               prefetch={false}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+              className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                 ativo
                   ? "bg-california-red text-white"
                   : "bg-muted text-muted-foreground hover:bg-muted/70"
               }`}
             >
               {f.label}
+              {mostraContador && (
+                <span
+                  className={`inline-flex items-center justify-center rounded-full px-1.5 min-w-[1.25rem] text-[10px] font-semibold ${
+                    ativo
+                      ? "bg-white/20 text-white"
+                      : "bg-amber-200 text-amber-900"
+                  }`}
+                >
+                  {totalPendentes}
+                </span>
+              )}
             </Link>
           );
         })}
@@ -83,10 +131,16 @@ export async function AbaSolicitacoes({ tenantId, statusFiltro }: Props) {
       ) : (
         <div className="rounded-2xl border border-border bg-card shadow-soft overflow-hidden">
           <ul className="divide-y divide-border">
-            {lancamentos.map((l) => (
+            {lancamentos.map((l) => {
+              const isPendente = l.status === "pendente_aprovacao";
+              return (
               <li
                 key={l.id}
-                className="flex items-start gap-4 px-5 py-4 flex-wrap"
+                className={`flex items-start gap-4 px-5 py-4 flex-wrap transition-colors ${
+                  isPendente
+                    ? "border-l-4 border-l-amber-400 bg-amber-50/30"
+                    : ""
+                }`}
               >
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
@@ -96,8 +150,10 @@ export async function AbaSolicitacoes({ tenantId, statusFiltro }: Props) {
                     <StatusBadge status={l.status} />
                     <TipoBadge tipo={l.tipo} />
                     {l.colaborador?.tipo_contratacao && (
-                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-                        {l.colaborador.tipo_contratacao.toUpperCase()}
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                        {formatarTipoContratacao(
+                          l.colaborador.tipo_contratacao as TipoContratacao,
+                        )}
                       </span>
                     )}
                   </div>
@@ -123,7 +179,8 @@ export async function AbaSolicitacoes({ tenantId, statusFiltro }: Props) {
                   colaboradorNome={l.colaborador?.nome ?? ""}
                 />
               </li>
-            ))}
+              );
+            })}
           </ul>
         </div>
       )}
