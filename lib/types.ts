@@ -4886,6 +4886,8 @@ export type NfPendenteQuadro = {
   competencia_mes: number | null;
   valor: string | null;
   prazo_anexo: string | null; // ISO date
+  /** Null quando tipo != 'ferias'. 'usufruto' | 'abono' quando tipo = 'ferias'. */
+  tipo_folha_ferias: 'usufruto' | 'abono' | null;
   nf_anexada: boolean;
   nf_anexo_id: string | null;
   nf_arquivo_nome: string | null;
@@ -4998,6 +5000,8 @@ export interface FolhaPagamento {
   origem: FolhaOrigem;
   /** Data de pagamento vinda do PDF da contabilidade. NULL em linhas california. */
   data_pagamento_prevista: string | null;
+  /** Null exceto quando tipo='ferias'. Distingue folha de férias (usufruto) de folha de abono. */
+  tipo_folha_ferias: 'usufruto' | 'abono' | null;
   motivo_pendencia: string | null;
   enviada_em: string | null;
   enviada_por: string | null;
