@@ -5,7 +5,7 @@ import type {
   FeriasPeriodoStatus,
   TipoContratacao,
 } from "@/lib/types";
-import { SolicitarFeriasDrawer } from "./solicitar-ferias-drawer";
+import { SolicitarFeriasModal } from "./solicitar-ferias-modal";
 
 type Props = {
   periodos: ColaboradorFeriasPeriodo[];
@@ -116,7 +116,7 @@ export function CardMinhasFerias({
           </div>
           <h2 className="text-lg font-semibold">Minhas férias</h2>
         </div>
-        <SolicitarFeriasDrawer
+        <SolicitarFeriasModal
           periodos={periodosComSaldo}
           tipoContratacao={tipoContratacao}
         />
