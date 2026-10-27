@@ -124,3 +124,17 @@ test("status != rascunho → inválida", () => {
   assert.equal(result.length, 1);
   assert.match(result[0], /só rascunho pode ser enviada/);
 });
+
+// ---------------------------------------------------------------------------
+// 8. PJ com tipo_folha_ferias=null → inválida (sem tipo)
+// ---------------------------------------------------------------------------
+
+test("PJ com tipo_folha_ferias=null → inválida (sem tipo)", () => {
+  const f = folha({
+    origem: "california",
+    tipo_folha_ferias: null,
+  });
+  const result = montarInvalidasFolhas([f], semNfs);
+  assert.equal(result.length, 1);
+  assert.match(result[0], /PJ sem tipo de folha de férias/);
+});

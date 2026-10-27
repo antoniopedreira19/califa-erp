@@ -48,9 +48,12 @@ export function montarInvalidasFolhas(
       continue;
     }
     if (f.origem === "california") {
+      if (!f.tipo_folha_ferias) {
+        invalidas.push(`${f.id}: PJ sem tipo de folha de férias`);
+        continue;
+      }
       // Monta a chave correta conforme tipo_folha_ferias
-      const escopoTipo =
-        f.tipo_folha_ferias === "abono" ? "ferias_abono" : "ferias_usufruto";
+      const escopoTipo = f.tipo_folha_ferias === "abono" ? "ferias_abono" : "ferias_usufruto";
       const chave = `${f.lancamento_ferias_id}|${escopoTipo}`;
       if (!nfsAnexadas.has(chave)) {
         invalidas.push(`${f.id}: PJ sem NF anexada pelo colaborador`);

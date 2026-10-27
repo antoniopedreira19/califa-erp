@@ -69,9 +69,13 @@ export async function enviarFolhasFerias(input: {
   }
 
   // Busca NFs anexadas pelos colaboradores PJ para as folhas de férias california.
-  const lancamentoIds = (folhas ?? [])
-    .filter((f) => f.origem === "california" && f.lancamento_ferias_id)
-    .map((f) => f.lancamento_ferias_id as string);
+  const lancamentoIds = [
+    ...new Set(
+      (folhas ?? [])
+        .filter((f) => f.origem === "california" && f.lancamento_ferias_id)
+        .map((f) => f.lancamento_ferias_id as string),
+    ),
+  ];
 
   let nfsAnexadas = new Set<string>();
   if (lancamentoIds.length > 0) {
