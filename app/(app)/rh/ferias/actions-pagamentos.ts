@@ -6,7 +6,6 @@ import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { createClient } from "@/lib/supabase/server";
 import { montarInvalidasFolhas } from "@/lib/ferias/montar-invalidas-folhas";
-export { montarInvalidasFolhas } from "@/lib/ferias/montar-invalidas-folhas";
 
 type ActionResult =
   | { ok: true; message?: string; count?: number }
