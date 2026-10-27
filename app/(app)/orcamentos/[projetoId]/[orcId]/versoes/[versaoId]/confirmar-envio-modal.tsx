@@ -33,6 +33,7 @@ export function ConfirmarEnvioModal({
   pending,
   somenteLeitura = false,
   reenvio = false,
+  codigoNovoNoReenvio,
   orcamentoNome,
   linhas,
   valorTotal,
@@ -56,6 +57,10 @@ export function ConfirmarEnvioModal({
   /** Job devolvido pelo financeiro sendo reenviado (decisão 057): o
    *  texto diz que ele volta à fila no mesmo código, não que é criado. */
   reenvio?: boolean;
+  /** No reenvio, o cliente escolhido tem outra sigla e o job ganha código
+   *  novo (revisão da decisão 215): o texto avisa em vez de dizer "no
+   *  mesmo código". Obrigatória: prop opcional some em silêncio. */
+  codigoNovoNoReenvio: boolean;
   orcamentoNome: string;
   linhas: { rotulo: string; valor: string; mono?: boolean }[];
   /** Valor do Job — o que vai para `jobs.valor_total`. */
@@ -109,7 +114,9 @@ export function ConfirmarEnvioModal({
             ) : (
               <>
                 {reenvio
-                  ? "O job volta à fila do financeiro com os dados abaixo, no mesmo código. "
+                  ? codigoNovoNoReenvio
+                    ? "O job volta à fila do financeiro com os dados abaixo e com código novo, porque o cliente mudou. "
+                    : "O job volta à fila do financeiro com os dados abaixo, no mesmo código. "
                   : "O job será criado e enviado ao financeiro. "}
                 Nome e datas alterados aqui serão gravados no orçamento{" "}
                 <strong className="font-semibold text-foreground">

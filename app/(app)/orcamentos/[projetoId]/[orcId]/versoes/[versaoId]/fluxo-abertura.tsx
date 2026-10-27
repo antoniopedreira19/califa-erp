@@ -837,6 +837,7 @@ export function FluxoAbertura({
         pending={pending}
         somenteLeitura={etapa === "enviada"}
         reenvio={etapa === "devolvida"}
+        codigoNovoNoReenvio={etapa === "devolvida" && !!job && codigoDoEnvio !== job.codigo}
         orcamentoNome={orcamentoNome}
         linhas={resumoEnvio}
         valorTotal={fechamento.valorJob}

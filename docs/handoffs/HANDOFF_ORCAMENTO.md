@@ -5951,6 +5951,11 @@ Terceira entrega do protótipo aprovado em 26/10
   número antigo fica queimado. O gerador e a prévia leem dele.
 - **Conferência:** prévia do envio do "Teste Interno 105 · nacional" no
   P-0006/26 (TES-1033/26 → TET-1001/26 ao trocar o cliente), sem enviar.
-  O reenvio de job devolvido não foi exercido na tela: o P-0006/26 não tem
-  job devolvido nem código guardado, e criar um pediria enviar e reprovar
-  um job de verdade.
+  Em 27/10, com autorização do Tiago, o reenvio foi exercido no mesmo
+  orçamento: enviado como TES-1033/26 (cliente Teste), reprovado pelo
+  financeiro, reenviado com o cliente Teste 22 → TET-1001/26 (audit
+  `job.codigo_trocado`); reprovado de novo e reenviado com o cliente Teste →
+  TES-1034/26 (o 1033 não voltou). Os três códigos ficaram no registro. No
+  fim, "Cancelar envio à abertura": o job ficou cancelado e o orçamento
+  voltou a Aprovado. A confirmação do reenvio diz "com código novo, porque
+  o cliente mudou" quando o código troca.
