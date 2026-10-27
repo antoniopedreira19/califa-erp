@@ -84,6 +84,11 @@ const POR_ROTULO_DA_DRE: [RegExp, string][] = [
   [/^FATURAMENTO$/, "REC"],
   [/^IMPOSTOSEMPERSE$|^IMPOSTO$/, "IMP"],
   [/^CUSTOOPERACIONAL$/, "CO"],
+  // O bloco dos projetos proprietários ("DRE Califa Regional", 300 a 303; "DRE CMH Regional", 250 a 253), antes do benefício geral.
+  [/^RECPROPIETARIOS$|^RECEITAPROJETOS$/, "PREC"],
+  [/^COCOPA$|^DESPESASPROJETOS$/, "PCO"],
+  [/^IMPOSTOPROPIETARIOS$|^IMPOSTOSPROJETOS$/, "PIMP"],
+  [/^BENEFICIOTRIBUTARIOPROPIETARIOS$|^BENEFICIOTRIBUTARIOPROJETOS$/, "PBEN"],
   [/^BENEFICIOTRIBUTARIO/, "BEN"],
 ];
 /**
@@ -98,6 +103,10 @@ const EXCECOES_DA_DRE = new Set([
   "Agência California|2026|4|BEN",
   ...["REC", "IMP", "CO", "BEN"].flatMap((l) => [`CCH|2023|1|${l}`, `CCH|2023|2|${l}`]),
   "CCH|2023|3|BEN", "CCH|2023|4|BEN", "CCH|2023|4|IMP",
+  // Os projetos proprietários de 2026: o imposto teórico da Copa digitado nas linhas 85 e 91 da Res. Jobs 2026, o benefício
+  // da Copa digitado (R$ 1.520.000,00) e o dos projetos da CCH em zero, e o imposto real (não o teórico) dos projetos da CCH.
+  "Agência California|2026|2|PIMP", "Agência California|2026|2|PBEN", "Agência California|2026|2|BEN",
+  "CCH|2026|1|PIMP", "CCH|2026|1|PBEN",
 ]);
 
 const numero = (t: string | undefined) => {
@@ -225,15 +234,16 @@ async function lerDresRegionais(arquivo: string): Promise<(Celula & { empresa: E
     if (m.ano !== null && m.grupo !== null && m.trimestre !== null) {
       const job = m.grupo === "REC" || m.grupo === "CO" ? jobs.get(m.jobChave ?? "") : undefined;
       const partes = partesDoJob(job?.rateio ?? null);
+      const regionalDoJob = job?.regional ? job.regional.trim().toUpperCase() || null : null;
       const destinos = partes.length
-        ? partes.map((p) => ({ regional: p.codigo, todas: false, peloJob: true, parte: p.parte }))
-        : [{ regional: m.regional, todas: m.todas, peloJob: false, parte: 1 }];
+        ? partes.map((p) => ({ regional: p.codigo, todas: false, peloJob: true, regionalDoJob: null, parte: p.parte }))
+        : [{ regional: m.regional, todas: m.todas, peloJob: false, regionalDoJob, parte: 1 }];
       if (!porGrupo.has(m.ano)) porGrupo.set(m.ano, new Map());
       for (const d of destinos) {
-        const chave = [m.sigla, m.grupo, m.trimestre, m.aba, d.regional ?? "", d.todas, d.peloJob].join("|");
+        const chave = [m.sigla, m.grupo, m.trimestre, m.aba, d.regional ?? "", d.todas, d.peloJob, d.regionalDoJob ?? ""].join("|");
         const s = porGrupo.get(m.ano)!.get(chave) ?? {
           sigla: m.sigla, grupo: m.grupo, trimestre: m.trimestre, aba: m.aba, regional: d.regional, todas: d.todas, peloJob: d.peloJob,
-          credito: 0, debito: 0, teorico: 0,
+          regionalDoJob: d.regionalDoJob, credito: 0, debito: 0, teorico: 0,
         };
         s.credito += m.credito * d.parte;
         s.debito += m.debito * d.parte;
@@ -278,9 +288,10 @@ async function lerDresRegionais(arquivo: string): Promise<(Celula & { empresa: E
     const difere: string[] = [];
     for (const c of celulas) {
       const r = doSistema(c.empresa, c.ano, c.trimestre);
-      const linha = r.linhas.find((l) => l.chave === c.chave)!;
+      // Sem projeto no período, o bloco dos projetos não aparece: vale zero.
+      const linha = r.linhas.find((l) => l.chave === c.chave);
       const i = r.colunas.indexOf(c.regional);
-      const sistema = i >= 0 ? linha.regionais[i] : 0;
+      const sistema = linha && i >= 0 ? linha.regionais[i] : 0;
       const d = Math.round((sistema - c.valor) * 100) / 100;
       const situacao =
         Math.abs(d) < 0.01 ? "bate" : Math.abs(d) < 1 ? "centavos" : excecoes.has(`${c.empresa}|${c.ano}|${c.trimestre}|${c.chave}`) ? nomeDaExcecao : "difere";

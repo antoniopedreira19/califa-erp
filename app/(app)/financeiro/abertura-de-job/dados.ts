@@ -57,6 +57,12 @@ export interface JobNaFila {
   observacoes: string | null;
   created_at: string;
   produto: string | null;
+  /** A marca do job (`jobs.produto_id`, decisão 214): nasce com a do
+   *  projeto e o financeiro pode trocar no registro. `produto` é o nome. */
+  produto_id: string | null;
+  /** A empresa e a regional do job, que o registro também edita. */
+  empresa_id: string | null;
+  regional_id: string | null;
   cidade: string | null;
   projeto_id: string;
   projeto_codigo: string | null;
@@ -162,6 +168,12 @@ export interface JobNaFila {
    *  do internacional. Obrigatório: é o aviso que o financeiro não pode
    *  deixar de ver. */
   excecao_fechamento: { excecao: ExcecaoDoFechamento; taxas: TaxasDoFechamento } | null;
+  /** Decisão 216: o job Mídia System (auditoria do cliente), a liberação
+   *  das NFs e quem liberou. Na fila o job ainda não é (só o financeiro
+   *  marca, na abertura). */
+  midia_system: boolean;
+  midia_system_liberado_em: string | null;
+  midia_system_liberado_por_nome: string | null;
 }
 
 /**
@@ -336,16 +348,21 @@ export interface TotaisPlanilhaJob {
 const SELECT_JOB_FILA =
   "id, codigo, nome, nome_financeiro, valor_total, faturamento_previsto, data_inicio_prevista, data_fim_prevista, " +
   "data_prevista_faturamento, recebimento_previsto_por_mes, observacoes, created_at, produto, cidade, projeto_id, " +
+  // Marca, empresa e regional do job, que o registro do financeiro edita
+  // (decisão 214).
+  "produto_id, empresa_id, regional_id, " +
   // Quem enviou (decisão 136). `created_by` aponta para `auth.users`, e o
   // nome dele sai em query própria; `enviado_abertura_por` aponta para
   // `profiles` e vem no embed.
   "created_by, enviado_abertura_em, devolvido_em, motivo_rejeicao, " +
   "enviado_abertura:profiles!enviado_abertura_por(nome), " +
   "projeto_financeiro_id, conta_recebimento_id, conta_pagamento_id, conta_impostos_id, " +
+  // Decisão 216: a Mídia System do job e quem liberou as NFs.
+  "midia_system, midia_system_liberado_em, midia_system_liberado:profiles!midia_system_liberado_por(nome), " +
   // `servico_id` do JOB (decisão 055). A dica `!servico_id` é obrigatória:
   // `jobs` tem duas FKs para `categorias_dominio` desde 07/09/2026.
   "servico_id, servico:categorias_dominio!servico_id(nome), " +
-  "projeto:projetos(codigo, nome, cliente_id, cliente:clientes(nome_fantasia)), " +
+  "cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), projeto:projetos(codigo, nome), " +
   // A empresa do job. Dica de FK por segurança: `jobs` tem uma FK só para
   // `empresas` hoje, mas uma segunda deixaria o embed ambíguo (HTTP 300).
   "empresa:empresas!jobs_empresa_id_fkey(nome_fantasia, razao_social), " +
@@ -455,13 +472,16 @@ function montarJobNaFila(
     observacoes: j.observacoes,
     created_at: j.created_at,
     produto: j.produto,
+    produto_id: j.produto_id ?? null,
+    empresa_id: j.empresa_id ?? null,
+    regional_id: j.regional_id ?? null,
     cidade: j.cidade,
     projeto_id: j.projeto_id,
     projeto_codigo: j.projeto?.codigo ?? null,
     projeto_nome: j.projeto?.nome ?? null,
     empresa_nome: j.empresa?.nome_fantasia ?? j.empresa?.razao_social ?? null,
-    cliente_id: j.projeto?.cliente_id ?? null,
-    cliente_nome: j.projeto?.cliente?.nome_fantasia ?? null,
+    cliente_id: j.cliente_id ?? null,
+    cliente_nome: j.cliente?.nome_fantasia ?? null,
     projeto_financeiro_id: j.projeto_financeiro_id ?? null,
     projeto_financeiro_codigo: j.projeto_financeiro?.codigo ?? null,
     projeto_financeiro_nome: j.projeto_financeiro?.nome ?? null,
@@ -507,6 +527,9 @@ function montarJobNaFila(
     revisao,
     saves,
     excecao_fechamento: excecaoDaVersao(j.versao_excecao),
+    midia_system: j.midia_system === true,
+    midia_system_liberado_em: j.midia_system_liberado_em ?? null,
+    midia_system_liberado_por_nome: j.midia_system_liberado?.nome ?? null,
   };
 }
 
@@ -1060,7 +1083,7 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
       .from("jobs")
       .select(
         "id, codigo, nome, produto, " +
-          "projeto:projetos(codigo, nome, cliente_id, cliente:clientes(nome_fantasia)), " +
+          "cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), projeto:projetos(codigo, nome), " +
           "empresa:empresas!jobs_empresa_id_fkey(nome_fantasia, razao_social), " +
           "responsavel:profiles!responsavel_id(nome), " +
           "produtor:profiles!produtor_id(nome), " +
@@ -1124,7 +1147,7 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
   const clientesDosPedidos = [
     ...new Set(
       [...jobs.values()]
-        .map((j) => j.projeto?.cliente_id as string | null)
+        .map((j) => j.cliente_id as string | null)
         .filter(Boolean),
     ),
   ] as string[];
@@ -1175,7 +1198,7 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
       projetoCodigo: j.projeto?.codigo ?? null,
       projetoNome: j.projeto?.nome ?? null,
       empresaNome: j.empresa?.nome_fantasia ?? j.empresa?.razao_social ?? null,
-      clienteNome: j.projeto?.cliente?.nome_fantasia ?? null,
+      clienteNome: j.cliente?.nome_fantasia ?? null,
       produto: j.produto ?? null,
       responsavelNome: j.responsavel?.nome ?? null,
       produtorNome: j.produtor?.nome ?? null,
@@ -1201,8 +1224,8 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
                 | undefined) ?? null,
             )
           : null,
-      saldoDoCliente: j.projeto?.cliente_id
-        ? (disponivelPorCliente.get(j.projeto.cliente_id) ?? 0)
+      saldoDoCliente: j.cliente_id
+        ? (disponivelPorCliente.get(j.cliente_id) ?? 0)
         : 0,
       origens: ((p.origens ?? []) as OrigemDeSave[])
         .map((o) => ({

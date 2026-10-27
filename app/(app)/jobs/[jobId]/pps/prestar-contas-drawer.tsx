@@ -70,6 +70,7 @@ import {
   type CamposDoDocumento,
 } from "@/lib/calculos/prestacao-da-verba";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
+import { producaoEditaNfDaAuditoria } from "@/lib/calculos/midia-system";
 import { formatDiaBr } from "@/lib/formatar-data-hora";
 import {
   BarraDoComprovado,
@@ -139,6 +140,7 @@ export function PrestarContasDrawer({
   tomadores,
   podeEditar,
   onSuccess,
+  fornecedor,
 }: {
   open: boolean;
   onOpenChange: (aberto: boolean) => void;
@@ -149,6 +151,10 @@ export function PrestarContasDrawer({
    *  gaveta só mostra. */
   podeEditar: boolean;
   onSuccess: (mensagem: string) => void;
+  /** Decisão 216: o fornecedor da PP que foi sem NF na auditoria da Mídia
+   *  System — nome na gaveta e emitente da NF já preenchido. `null` na
+   *  verba (não tem fornecedor). */
+  fornecedor: { nome: string; razao_social: string | null; cpf_cnpj: string | null } | null;
 }) {
   const router = useRouter();
   const supabase = React.useMemo(() => createClient(), []);
@@ -171,7 +177,8 @@ export function PrestarContasDrawer({
   const ppIdRef = React.useRef<string | null>(null);
   if (pp) ppIdRef.current = pp.id;
 
-  const editavel = !!pp && podeEditar && producaoEditaPrestacao(pp);
+  // Decisão 216: a PP que foi sem NF presta contas da nota na mesma gaveta.
+  const editavel = !!pp && podeEditar && (producaoEditaPrestacao(pp) || producaoEditaNfDaAuditoria(pp));
 
   const atualizar = React.useCallback((chave: string, mudanca: Partial<DocLocal>) => {
     setDocs((prev) => prev.map((d) => (d.chave === chave ? { ...d, ...mudanca } : d)));
@@ -239,7 +246,7 @@ export function PrestarContasDrawer({
         mensagem: null,
       })),
     );
-    if (!podeEditar || !producaoEditaPrestacao(pp)) return;
+    if (!podeEditar || !(producaoEditaPrestacao(pp) || producaoEditaNfDaAuditoria(pp))) return;
     let vivo = true;
     (async () => {
       const res = await prefixoUploadPrestacao(pp.id);
@@ -275,7 +282,12 @@ export function PrestarContasDrawer({
   const ppAtual = pp;
   const prestacao = ppAtual.prestacao;
   const reprovada = prestacao?.status === "reprovada";
-  const paga = ppAtual.status === "pago";
+  // Decisão 216: a PP que foi sem NF na auditoria da Mídia System presta
+  // contas da nota. Muda só o que é da verba: valor da PP e fornecedor no
+  // lugar de verba e titular, sem "Não houve gasto" nem saldo a devolver, e
+  // o envio não espera o pagamento.
+  const ehMidia = ppAtual.sem_nf_na_auditoria && !ppAtual.verba_producao;
+  const paga = ppAtual.status === "pago" || ehMidia;
   const situacao = situacaoDoDocumento(prestacao?.status ?? null);
 
   const validos = docs.filter((d) => d.arquivo === "ok");
@@ -305,6 +317,12 @@ export function PrestarContasDrawer({
           !novos.tomador_estabelecimento_id
         ) {
           novos.tomador_estabelecimento_id = tomadorPadrao;
+        }
+        // Na PP da auditoria o emitente da NF é o fornecedor da PP: vem
+        // preenchido, e se troca se a nota vier de outro CNPJ.
+        if (ehMidia && fornecedor && campos.documento_tipo === "nota_fiscal" && !novos.emitente_documento) {
+          novos.emitente_documento = formatarCpfCnpj(fornecedor.cpf_cnpj);
+          novos.emitente_nome = fornecedor.razao_social ?? fornecedor.nome;
         }
         if (campos.documento_tipo && !tipoSomaNoComprovado(campos.documento_tipo)) novos.valor = null;
         return { ...d, campos: novos, salvo: "pendente" };
@@ -447,7 +465,11 @@ export function PrestarContasDrawer({
         return;
       }
       if (validos.length === 0) {
-        setErro("Anexe ao menos um documento — ou marque “Não houve gasto”.");
+        setErro(ehMidia ? "Anexe a NF do fornecedor." : "Anexe ao menos um documento — ou marque “Não houve gasto”.");
+        return;
+      }
+      if (ehMidia && !validos.some((d) => d.campos.documento_tipo === "nota_fiscal")) {
+        setErro("Anexe a NF do fornecedor, com o tipo NF.");
         return;
       }
       const incompleto = validos.find((d) => faltasDoDocumento(d.campos).length > 0);
@@ -463,7 +485,9 @@ export function PrestarContasDrawer({
       }
       if (passouDaVerba) {
         setErro(
-          `Os documentos somam ${reais(gastoCentavos)}, acima da verba de ${reais(verbaCentavos)}. Retire documentos até fechar dentro da verba — o excedente precisa de uma PP nova.`,
+          ehMidia
+            ? `As NFs somam ${reais(gastoCentavos)}, acima do valor da PP (${reais(verbaCentavos)}). Em cada NF, informe só a parte desta PP.`
+            : `Os documentos somam ${reais(gastoCentavos)}, acima da verba de ${reais(verbaCentavos)}. Retire documentos até fechar dentro da verba — o excedente precisa de uma PP nova.`,
         );
         return;
       }
@@ -557,7 +581,7 @@ export function PrestarContasDrawer({
               <div>
                 {/* Decisão 164: o tipo da verba, e quem a recebe. */}
                 <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  {rotuloDaVerba(tipoDaVerba(ppAtual) ?? "producao")}
+                  {ehMidia ? "Valor da PP" : rotuloDaVerba(tipoDaVerba(ppAtual) ?? "producao")}
                 </p>
                 <p className="font-mono text-[13px] font-bold">{formatCurrency(Number(ppAtual.valor), "BRL")}</p>
               </div>
@@ -569,9 +593,9 @@ export function PrestarContasDrawer({
               </div>
               <div className="min-w-0">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  {rotuloDeQuemRecebeAVerba(ppAtual)}
+                  {ehMidia ? "Fornecedor" : rotuloDeQuemRecebeAVerba(ppAtual)}
                 </p>
-                <p className="truncate text-[13px] font-semibold">{nomeDeQuemRecebeAVerba(ppAtual) ?? "—"}</p>
+                <p className="truncate text-[13px] font-semibold">{ehMidia ? (fornecedor?.nome ?? "—") : (nomeDeQuemRecebeAVerba(ppAtual) ?? "—")}</p>
               </div>
             </div>
 
@@ -581,14 +605,15 @@ export function PrestarContasDrawer({
                 comprovado={gastoCentavos / 100}
                 verba={Number(ppAtual.valor)}
                 devolucao={ppAtual.devolucao}
+                semSaldo={ehMidia}
               />
             </div>
 
             <div className="space-y-2">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Documentos do gasto
+                {ehMidia ? "NF do fornecedor" : "Documentos do gasto"}
               </h3>
-              {editavel && (
+              {editavel && !ehMidia && (
                 <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border border-border bg-white p-3">
                   <input
                     type="checkbox"
@@ -680,21 +705,27 @@ export function PrestarContasDrawer({
 
             <div className="space-y-1.5 border-t border-border pt-3 text-[12.5px]">
               <div className="flex justify-between font-semibold">
-                <span>Gasto comprovado</span>
+                <span>{ehMidia ? "NFs anexadas" : "Gasto comprovado"}</span>
                 <span className={cn("font-mono", passouDaVerba && "text-california-red")}>
                   {reais(gastoCentavos)}
                 </span>
               </div>
               <div className="flex justify-between text-muted-foreground">
-                <span>Verba</span>
+                <span>{ehMidia ? "Valor da PP" : "Verba"}</span>
                 <span className="font-mono">{reais(verbaCentavos)}</span>
               </div>
               {passouDaVerba ? (
                 <p className="text-[11.5px] text-california-red">
-                  O gasto passa da verba em {reais(-saldoCentavos)}. Retire documentos até fechar dentro da verba — o
-                  excedente precisa de uma PP nova, que passa pela aprovação.
+                  {ehMidia ? (
+                    <>As NFs passam do valor da PP em {reais(-saldoCentavos)}. Em cada NF, informe só a parte desta PP.</>
+                  ) : (
+                    <>
+                      O gasto passa da verba em {reais(-saldoCentavos)}. Retire documentos até fechar dentro da verba — o
+                      excedente precisa de uma PP nova, que passa pela aprovação.
+                    </>
+                  )}
                 </p>
-              ) : (
+              ) : ehMidia ? null : (
                 <>
                   <div className="flex justify-between rounded-lg bg-teal-50 px-3 py-2 font-semibold text-teal-800">
                     <span>Saldo a devolver</span>

@@ -157,6 +157,9 @@ export interface PPRow {
   cartao_plataforma: string | null;
   cartao_link: string | null;
   /** Verdadeiro quando a PP é de verba (produção, alimentação ou transporte). */
+  /** Decisão 216: foi sem NF na auditoria da Mídia System — a NF chega
+   *  depois, na prestação de contas. */
+  sem_nf_na_auditoria: boolean;
   verba_producao: boolean;
   /** Decisão 164: o tipo da verba; null fora da verba. Obrigatório, como os
    *  campos abaixo: opcional, o `.map` o descartaria em silêncio. */
@@ -325,9 +328,11 @@ const ORDEM_DO_STATUS = [
 ];
 
 /**
- * As colunas. No chip "Prestação de Contas" quatro títulos mudam de sentido —
- * Emissão vira "Enviada em", Prazo original vira "Gasto" e Parcela vira
- * "Saldo"; Valor só muda de nome ("Verba", o mesmo número). As três que
+ * As colunas. No chip "Prestação de Contas" três títulos mudam de sentido —
+ * Emissão vira "Enviada em", Prazo original vira "Comprovado" e Parcela vira
+ * "Saldo"; Valor fica igual. Os títulos são neutros porque a lista junta a
+ * verba e a PP da Mídia System (decisão 216), que não tem verba nem saldo a
+ * devolver: nela o Saldo é sempre R$ 0,00. As três que
  * mudam de sentido têm chave própria em cada modo: o filtro feito em
  * "Emissão" não vale sobre a data de envio da prestação, e volta quando
  * o chip sai de Prestação de Contas. Código, Fornecedor, Job, Enviada por, Valor e
@@ -393,7 +398,7 @@ function colunasDoModo(prestacoes: boolean): ColunaFiltravel<PPRow>[] {
     },
     {
       chave: "valor",
-      rotulo: prestacoes ? "Verba" : "Valor",
+      rotulo: "Valor",
       tipo: "valor",
       faixa: true,
       alinhar: "right",
@@ -402,7 +407,7 @@ function colunasDoModo(prestacoes: boolean): ColunaFiltravel<PPRow>[] {
     prestacoes
       ? {
           chave: "gasto",
-          rotulo: "Gasto",
+          rotulo: "Comprovado",
           tipo: "valor",
           faixa: true,
           celula: (r) => celulaValor(r.prestacao?.valor_gasto ?? 0, formatMoney),

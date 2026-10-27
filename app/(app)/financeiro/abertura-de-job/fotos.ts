@@ -34,6 +34,10 @@ export interface RegistrarFotoArgs {
     conta_impostos_id: string | null;
     categoria_id: string | null;
     servico_id: string | null;
+    /** Marca, empresa e regional do job (decisão 214). */
+    produto_id: string | null;
+    empresa_id: string | null;
+    regional_id: string | null;
     competencias: JobCompetencia[];
     curva: LinhaPrevisaoFoto[];
     recebimento: LinhaPrevisaoFoto[];
@@ -85,6 +89,9 @@ export async function registrarFotoDaAbertura(
     conta_impostos_id: r.conta_impostos_id,
     categoria_id: r.categoria_id,
     servico_id: r.servico_id,
+    produto_id: r.produto_id,
+    empresa_id: r.empresa_id,
+    regional_id: r.regional_id,
     competencias: ordenarCompetencias(r.competencias),
     curva: r.curva,
     recebimento: r.recebimento,
@@ -166,7 +173,11 @@ export async function fotosDaAbertura(
   const temRevisao = linhas.some((l) => l.tipo === "revisao_errata");
 
   const vazio = Promise.resolve({ data: [] as any[], error: null });
-  const [projetosRes, contasRes, dominioRes, perfisRes, erratasRes] =
+  const marcaIds = ids("produto_id");
+  const empresaIds = ids("empresa_id");
+  const regionalIds = ids("regional_id");
+
+  const [projetosRes, contasRes, dominioRes, perfisRes, erratasRes, marcasRes, empresasRes, regionaisRes] =
     await Promise.all([
       projetoIds.length
         ? supabase
@@ -200,12 +211,38 @@ export async function fotosDaAbertura(
             .eq("job_id", jobId)
             .order("created_at", { ascending: true })
         : vazio,
+      // Marca, empresa e regional da foto (decisão 214).
+      marcaIds.length
+        ? supabase.from("cliente_produtos").select("id, nome").in("id", marcaIds)
+        : vazio,
+      empresaIds.length
+        ? supabase
+            .from("empresas")
+            .select("id, nome_fantasia, razao_social")
+            .in("id", empresaIds)
+        : vazio,
+      regionalIds.length
+        ? supabase.from("regionais").select("id, nome").in("id", regionalIds)
+        : vazio,
     ]);
+  const marcas = new Map(
+    ((marcasRes.data ?? []) as any[]).map((m) => [m.id as string, m.nome as string]),
+  );
+  const empresasDaFoto = new Map(
+    ((empresasRes.data ?? []) as any[]).map((e) => [
+      e.id as string,
+      (e.nome_fantasia ?? e.razao_social) as string,
+    ]),
+  );
+  const regionaisDaFoto = new Map(
+    ((regionaisRes.data ?? []) as any[]).map((r) => [r.id as string, r.nome as string]),
+  );
 
   const projetos = new Map(
     ((projetosRes.data ?? []) as any[]).map((p) => [
       p.id as string,
-      `${p.codigo} · ${p.nome}`,
+      // Só o nome: o código do projeto não aparece (27/10/2026).
+      p.nome as string,
     ]),
   );
   const contas = new Map(
@@ -267,7 +304,7 @@ export async function fotosDaAbertura(
     projetoLabel: l.projeto_financeiro_id
       ? (projetos.get(l.projeto_financeiro_id) ??
         (l.projeto_financeiro_rotulo
-          ? `${l.projeto_financeiro_rotulo} (projeto apagado)`
+          ? `${semCodigoNoRotulo(l.projeto_financeiro_rotulo)} (projeto apagado)`
           : null))
       : null,
     contaRecebimentoLabel: l.conta_recebimento_id
@@ -281,6 +318,9 @@ export async function fotosDaAbertura(
       : null,
     categoriaNome: l.categoria_id ? (dominio.get(l.categoria_id) ?? null) : null,
     servicoNome: l.servico_id ? (dominio.get(l.servico_id) ?? null) : null,
+    marcaNome: l.produto_id ? (marcas.get(l.produto_id) ?? null) : null,
+    empresaNome: l.empresa_id ? (empresasDaFoto.get(l.empresa_id) ?? null) : null,
+    regionalNome: l.regional_id ? (regionaisDaFoto.get(l.regional_id) ?? null) : null,
     competencias: Array.isArray(l.competencias)
       ? ordenarCompetencias(
           (l.competencias as any[]).map((c) => ({
@@ -303,4 +343,15 @@ export async function fotosDaAbertura(
         ? null
         : Number(l.imposto_previsto),
   }));
+}
+
+/**
+ * O rótulo gravado na foto é "CÓDIGO · nome" (decisão 119). O código do
+ * projeto não aparece para o usuário (pedido do Tiago, 27/10/2026): ele sai
+ * na hora de mostrar, sem regravar o banco — o código é tudo antes do
+ * primeiro " · ", sem espaço e terminando no ano ("F-0001/26",
+ * "AMB-F004/26").
+ */
+export function semCodigoNoRotulo(rotulo: string): string {
+  return rotulo.replace(/^\S+\/\d{2} · /, "");
 }

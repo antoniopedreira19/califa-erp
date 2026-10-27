@@ -11,6 +11,10 @@ import { pode } from "@/lib/permissoes";
 import { acimaDoOrcado, bloqueioAprovacaoPorLimites } from "@/lib/calculos/limites-orcamento";
 import { desviosDoPadrao, type LinhaDoFechamento } from "@/lib/calculos/excecao-fechamento";
 import { listarGpsParaOrcamento, listarProdutoresAtivos } from "@/lib/data/members";
+import {
+  carregarClienteDoOrcamento,
+  type OpcoesDoClienteDoOrcamento,
+} from "@/lib/data/cliente-do-orcamento";
 import type { GpParaEscolha } from "@/lib/gps-para-escolha";
 import { listarCidadesIniciais, type CidadeOpcao } from "@/lib/data/cidades";
 import {
@@ -259,6 +263,7 @@ export default async function OrcamentoDetailPage({
     regionaisRes,
     codigosDeJobRes,
     vazioRes,
+    clienteDoOrcamento,
   ] = await Promise.all([
     supabase
       .from("orcamentos")
@@ -271,7 +276,10 @@ export default async function OrcamentoDetailPage({
           // embed, e não pela lista de serviços ativos: um serviço
           // desativado continua valendo para o orçamento que o usa.
           "servico:categorias_dominio!servico_id(nome, investimento_interno), " +
-          "gp:profiles!gp_responsavel_id(nome), produtor:profiles!produtor_id(nome)",
+          "gp:profiles!gp_responsavel_id(nome), produtor:profiles!produtor_id(nome), " +
+          // Cliente e marca do orçamento (decisão 215): saíram do projeto.
+          "cliente_id, produto_id, cliente:clientes!orcamentos_cliente_id_fkey(id, nome_fantasia, percentual_honorarios_padrao, codigo_curto), " +
+          "produto:cliente_produtos!orcamentos_produto_id_fkey(nome)",
       )
       .eq("id", params.orcId)
       .eq("projeto_id", params.projetoId)
@@ -280,14 +288,9 @@ export default async function OrcamentoDetailPage({
     supabase
       .from("projetos")
       .select(
-        // `produto_id` cru além do embed `produto`: é ele que o servidor
-        // confere para deixar abrir o job, e é ele que o modal usa para
-        // decidir se a Marca está cadastrada (17/09/2026).
-        //
-        // Decisão 133: `produto` é a marca que o JOB leva — a única do
-        // projeto ou, com mais de uma, a geral do cliente. `marcas` traz
-        // as escolhidas, só para o modal avisar quando são várias.
-        "id, codigo, nome, status, campanha, cliente_id, produto_id, cliente:clientes(id, nome_fantasia, percentual_honorarios_padrao, codigo_curto), responsavel:profiles!responsavel_id(id, nome), empresa:empresas(nome_fantasia, razao_social), produto:cliente_produtos!produto_id(nome), marcas:projeto_marcas(produto_id)",
+        // Cliente e marca saíram do projeto (decisão 215): vêm do orçamento,
+        // na consulta de cima.
+        "id, codigo, nome, status, campanha, responsavel:profiles!responsavel_id(id, nome), empresa:empresas(nome_fantasia, razao_social)",
       )
       .eq("id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
@@ -399,14 +402,18 @@ export default async function OrcamentoDetailPage({
     // (decisão 114): os códigos do ano de hoje. A sigla do cliente só se
     // sabe depois do projeto, que vem nesta mesma onda — o filtro por sigla
     // fica para a hora da conta.
+    // Do registro de códigos usados, como o gerador: número de job não
+    // volta, nem o que um job teve antes de trocar de cliente (215).
     supabase
-      .from("jobs")
+      .from("codigos_de_job_usados")
       .select("codigo")
       .eq("tenant_id", session.activeTenant.id)
       .like("codigo", `%/${anoDoCodigoDeJob()}`),
     // A regra do orçamento completamente vazio, no banco (decisão 148): é
     // a mesma que a exclusão confere.
     supabase.rpc("orcamento_esta_vazio", { p_orcamento_id: params.orcId }),
+    // As listas de Cliente e Marca do "Editar orçamento" (decisão 215).
+    carregarClienteDoOrcamento(supabase, session.activeTenant.id, params.projetoId),
   ]);
 
   if (orcRes.error) console.error("[orcamentos.detail]", orcRes.error.message);
@@ -448,25 +455,24 @@ export default async function OrcamentoDetailPage({
   // se corrigem sem cancelar a aprovação.
   const jobDevolvido =
     job?.status === "rejeitado_financeiro" && orcamento.status === "job_criado";
-  // O código reservado só vale sem job vivo e com a mesma sigla: se o
-  // cliente do projeto mudou depois do cancelamento, o envio gera outro.
-  const siglaDoCliente: string | null = projetoRaw.cliente?.codigo_curto ?? null;
-  const reservado =
-    !job &&
-    reservadoRes.data &&
-    siglaDoCliente &&
-    reservadoRes.data.codigo.startsWith(`${siglaDoCliente}-`)
-      ? reservadoRes.data
+  // O job cancelado com código guardado (decisão 128): sem job vivo, o
+  // formulário nasce dele. O CÓDIGO dele só volta com a mesma sigla — o
+  // código do job segue sempre o cliente (Tiago, revisão da decisão 215).
+  const reservado = !job && reservadoRes.data ? reservadoRes.data : null;
+  const siglaDoOrcamento: string | null = orcamentoRaw.cliente?.codigo_curto ?? null;
+  const codigoReservadoValido =
+    reservado && siglaDoOrcamento && reservado.codigo.startsWith(`${siglaDoOrcamento}-`)
+      ? reservado.codigo
       : null;
 
   const orcamentoCategoriaNome: string | null = orcamentoRaw.categoria?.nome ?? null;
   // Serviço antes da categoria no cabeçalho (22/10/2026): diz de cara se o
   // orçamento é Interno ou de que serviço é.
   const orcamentoServicoNome: string | null = orcamentoRaw.servico?.nome ?? null;
-  const clienteNome: string | null = projetoRaw.cliente?.nome_fantasia ?? null;
+  const clienteNome: string | null = orcamentoRaw.cliente?.nome_fantasia ?? null;
   // Honorários de toda versão nova sai daqui — o drawer só exibe, travado.
   const honorariosCliente = Number(
-    projetoRaw.cliente?.percentual_honorarios_padrao ?? HONORARIOS_PADRAO_FALLBACK,
+    orcamentoRaw.cliente?.percentual_honorarios_padrao ?? HONORARIOS_PADRAO_FALLBACK,
   );
   const responsavelNome: string | null = projetoRaw.responsavel?.nome ?? null;
   const empresaNome: string | null =
@@ -773,12 +779,12 @@ export default async function OrcamentoDetailPage({
     SaldoDeSave[],
     Record<string, EstadoSaveDaLinha>,
   ] =
-    versaoAtiva && projetoRaw.cliente_id
+    versaoAtiva && orcamentoRaw.cliente_id
       ? await Promise.all([
           saldosDeSaveDoCliente(
             supabase,
             session.activeTenant.id,
-            projetoRaw.cliente_id as string,
+            orcamentoRaw.cliente_id as string,
           ),
           saveDaVersao(
             supabase,
@@ -852,7 +858,6 @@ export default async function OrcamentoDetailPage({
               {...faixaDoOrcamentoSemItens(
                 {
                   id: params.projetoId,
-                  codigo: projetoRaw.codigo,
                   nome: projetoRaw.nome,
                 },
                 podeCriarOrcamento,
@@ -866,7 +871,6 @@ export default async function OrcamentoDetailPage({
             tenantId={session.activeTenant.id}
             projeto={{
               id: params.projetoId,
-              codigo: projetoRaw.codigo,
               nome: projetoRaw.nome,
             }}
             orcamentoId={orcamento.id}
@@ -896,8 +900,10 @@ export default async function OrcamentoDetailPage({
               cidadeAtual={cidadeAtual}
               gps={gpsDoEnvio}
               produtores={produtoresDoEnvio}
+              clienteDoOrcamento={clienteDoOrcamento}
+              podeCadastrarCliente={pode(session.activeRole, "cadastros.clientes.inline")}
+              podeEditarCliente={pode(session.activeRole, "cadastros.clientes.editar")}
               projetoNome={projetoRaw.nome}
-              projetoCodigo={projetoRaw.codigo}
               disabled={protegido && !correcaoLiberada}
               arquivavel={!correcaoLiberada}
               excluivel={excluivel}
@@ -1085,11 +1091,11 @@ export default async function OrcamentoDetailPage({
           // Cliente sem código curto: o envio recusa com a mensagem que
           // pede o cadastro; a prévia fica em travessão.
           proximoCodigoJob={
-            reservado
-              ? reservado.codigo
-              : projetoRaw.cliente?.codigo_curto
+            codigoReservadoValido
+              ? codigoReservadoValido
+              : orcamentoRaw.cliente?.codigo_curto
               ? proximoCodigoDeJob({
-                  sigla: projetoRaw.cliente.codigo_curto,
+                  sigla: orcamentoRaw.cliente.codigo_curto,
                   ano: anoDoCodigoDeJob(),
                   codigos: (
                     (codigosDeJobRes.data ?? []) as { codigo: string }[]
@@ -1097,6 +1103,10 @@ export default async function OrcamentoDetailPage({
                 })
               : "—"
           }
+          clienteDoOrcamento={clienteDoOrcamento}
+          codigosDeJobDoAno={((codigosDeJobRes.data ?? []) as { codigo: string }[]).map(
+            (j) => j.codigo,
+          )}
           podeCriarVersao={podeCriarVersao}
           motivoBloqueio={motivoBloqueio}
           arquivado={arquivado}
@@ -1164,6 +1174,8 @@ function VersaoSelecionada({
   abrirRevisao,
   temJobAtivo,
   proximoCodigoJob,
+  clienteDoOrcamento,
+  codigosDeJobDoAno,
   podeCriarVersao,
   motivoBloqueio,
   arquivado,
@@ -1212,6 +1224,10 @@ function VersaoSelecionada({
   temJobAtivo: boolean;
   /** Prévia do código do job — o definitivo é gerado no envio. */
   proximoCodigoJob: string;
+  /** As listas de Cliente e Marca do envio (decisão 215). */
+  clienteDoOrcamento: OpcoesDoClienteDoOrcamento;
+  /** Os códigos de job do ano: a prévia segue o cliente escolhido. */
+  codigosDeJobDoAno: string[];
   podeCriarVersao: boolean;
   motivoBloqueio?: string;
   /** Orçamento ou projeto arquivado (decisão 118): a aba vira consulta. */
@@ -1405,6 +1421,9 @@ function VersaoSelecionada({
   const origemDoEnvio = job ?? reservado;
   const inicialModal = {
     nome: (devolvido ? null : job?.nome) ?? orcamento.nome,
+    // Cliente e marca do orçamento (decisão 215), que o envio deixa trocar.
+    clienteId: orcamento.cliente_id ?? "",
+    produtoId: orcamento.produto_id ?? "",
     // Cidade e regional são editáveis no modal: entram pré-preenchidas
     // com o que está hoje no orçamento.
     cidadeId: orcamento.cidade_id ?? "",
@@ -1450,7 +1469,7 @@ function VersaoSelecionada({
   // Herdados: com job já aberto valem os valores congelados nele; antes
   // disso, o que está cadastrado hoje no projeto e no orçamento.
   const herdados = {
-    produtoNome: job?.produto ?? projetoRaw?.produto?.nome ?? null,
+    produtoNome: job?.produto ?? orcamentoRaw?.produto?.nome ?? null,
     cidadeNome: job?.cidade ?? orcamentoRaw.cidade?.nome ?? null,
     regionalNome: job
       ? regionais.find((r) => r.id === job.regional_id)?.nome ?? null
@@ -1467,9 +1486,10 @@ function VersaoSelecionada({
     // Id: é ele que trava o envio no modal, nunca o nome acima (ver
     // `HerdadosJob`). Vem sempre do cadastro de hoje, que é o que o
     // servidor relê na hora de gravar.
-    produtoId: (projetoRaw?.produto_id as string | null) ?? null,
-    projetoComVariasMarcas:
-      ((projetoRaw?.marcas as { produto_id: string }[] | null) ?? []).length > 1,
+    produtoId: (orcamentoRaw?.produto_id as string | null) ?? null,
+    // A marca é do orçamento (decisão 215): o aviso de várias marcas do
+    // projeto (decisão 133) não se aplica mais.
+    projetoComVariasMarcas: false,
   };
 
   return (
@@ -1803,6 +1823,9 @@ function VersaoSelecionada({
         fechamentoDaCopia={fechamentoDaCopia}
         moeda={versao.moeda}
         clienteNome={clienteNome}
+        clientesDoEnvio={clienteDoOrcamento.clientes}
+        produtosDoEnvio={clienteDoOrcamento.produtos}
+        codigosDeJobDoAno={codigosDeJobDoAno}
         proximoCodigoJob={proximoCodigoJob}
         codigoReservado={reservado?.codigo ?? null}
         projetoNome={projetoRaw?.nome ?? "—"}

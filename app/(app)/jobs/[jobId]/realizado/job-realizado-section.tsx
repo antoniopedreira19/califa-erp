@@ -11,6 +11,7 @@
  *  duas, que é o que se quer — elas mostram a mesma planilha. */
 
 import * as React from "react";
+import type { MidiaSystemDoJob } from "@/lib/calculos/midia-system";
 import Link from "next/link";
 import {
   ArrowDownLeft,
@@ -291,6 +292,9 @@ interface Props {
   /** Decisão 189: as verbas de que o usuário presta contas — o botão do
    *  cartão da verba no painel do item. Telas de leitura não mandam. */
   ppsQuePossoPrestarContas?: string[];
+  /** Decisão 216: o job Mídia System (`null` = não é). Na auditoria a PP
+   *  vai sem NF; depois da liberação, a que foi sem nota presta contas. */
+  midiaSystem: MidiaSystemDoJob | null;
   /** Decisão 156: o CNPJ que a PP nova já traz escolhido (regional do job →
    *  empresa gerencial → principal). Repassado à tabela. */
   cnpjPadraoDaPP: string | null;
@@ -605,6 +609,7 @@ function PlanilhaDoJob({
   tomadoresDaNf,
   tomadorPorEmpresa,
   ppsQuePossoPrestarContas = [],
+  midiaSystem,
   cnpjPadraoDaPP,
   fornecedores,
   empresas,
@@ -1385,6 +1390,7 @@ function PlanilhaDoJob({
           tomadoresDaNf={tomadoresDaNf}
           tomadorPorEmpresa={tomadorPorEmpresa}
           ppsQuePossoPrestarContas={ppsQuePossoPrestarContas}
+          midiaSystem={midiaSystem}
           cnpjPadraoDaPP={cnpjPadraoDaPP}
           fornecedores={fornecedores}
           empresas={empresas}

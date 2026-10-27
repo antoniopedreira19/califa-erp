@@ -4,7 +4,7 @@ import { itensDeOrcamentos } from "@/lib/faixa-do-projeto";
 
 interface Props {
   tenantId: string;
-  projeto: { id: string; codigo: string; nome: string };
+  projeto: { id: string; nome: string };
   orcamentoId: string;
   /** Mostra o “+” de novo orçamento: quem pode criar, com o projeto ativo. */
   podeCriarOrcamento: boolean;
@@ -28,10 +28,10 @@ export async function FaixaDosOrcamentos({
   const supabase = createClient();
   const { data, error } = await supabase
     .from("orcamentos")
-    .select("id, codigo, nome, status, arquivado_em")
+    .select("id, nome, status, arquivado_em, created_at")
     .eq("tenant_id", tenantId)
     .eq("projeto_id", projeto.id)
-    .order("codigo", { ascending: true });
+    .order("created_at", { ascending: true });
 
   if (error) console.error("[orcamento.faixa]", error.message);
 
@@ -43,10 +43,10 @@ export async function FaixaDosOrcamentos({
         projeto.id,
         (data ?? []) as Array<{
           id: string;
-          codigo: string;
           nome: string;
           status: string;
           arquivado_em: string | null;
+          created_at: string;
         }>,
         orcamentoId,
       )}
@@ -58,7 +58,6 @@ export async function FaixaDosOrcamentos({
 export function faixaDoOrcamentoSemItens(
   projeto: {
     id: string;
-    codigo: string;
     nome: string;
   },
   podeCriarOrcamento: boolean,
@@ -67,7 +66,6 @@ export function faixaDoOrcamentoSemItens(
     modulo: "orcamentos" as const,
     reservaDoVoltar: `/orcamentos/${projeto.id}`,
     projeto: {
-      codigo: projeto.codigo,
       nome: projeto.nome,
       href: `/orcamentos/${projeto.id}`,
     },

@@ -142,6 +142,16 @@ test("linha que não serve: campo a menos ou formato errado", () => {
   assert.match(r.message, /"data"/);
 });
 
+test("o Ano Comp. aceita uma anotação digitada na coluna, até 120 caracteres", () => {
+  // No 3T de 2026, duas linhas trazem um texto de 26 caracteres no lugar do ano.
+  const anotacao = linhaComoObjeto("movimentos", linhaDeMovimento({ ...MOVIMENTO, ano_comp: "c.c. anotação de exemplo 1" }));
+  assert.ok(anotacao.ok);
+  assert.equal(anotacao.linha.ano_comp, "c.c. anotação de exemplo 1");
+  const longa = linhaComoObjeto("movimentos", linhaDeMovimento({ ...MOVIMENTO, ano_comp: "x".repeat(121) }));
+  assert.ok(!longa.ok);
+  assert.match(longa.message, /"ano_comp"/);
+});
+
 test("colunas do pacote: os mesmos nomes, na mesma ordem", () => {
   const nomes = COLUNAS_DO_PACOTE.rateio.map((c) => c.nome);
   assert.equal(colunasConferem("rateio", nomes), true);

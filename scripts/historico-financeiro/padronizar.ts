@@ -16,7 +16,9 @@
  *   - previsoes.csv   — linhas com data futura: previsões, para a virada do 4T;
  *   - notas.csv       — notas emitidas e previsões de faturamento;
  *   - jobs.csv        — os jobs das abas de resultado de 2021 em diante;
- *   - pendencias.csv  — o que não fecha, só da primeira carga (2023 a 30/06/2026);
+ *   - pendencias.csv  — o que não fecha, com a carga de cada pendência: as
+ *                       que vão ao banco (a primeira, de 2023 a 30/06/2026, e o
+ *                       3T de 2026) e, sem carga, as dos jobs e as de data;
  *   - propostas/*.csv — de-para proposto de plano de contas, cliente, marca,
  *                       serviço e regional (de 2023 até o corte), para aprovação;
  *   - resumo.json     — contagens por aba e por pendência.
@@ -110,12 +112,16 @@ async function lerRetrato(pasta: string) {
 
 // ---------------------------------------------------------------- pendências
 
-type Pendencia = { tipo: string; aba: string; linha: string; data: string; valor: string; encontrado: string; detalhe: string };
+type Pendencia = { tipo: string; carga: string; aba: string; linha: string; data: string; valor: string; encontrado: string; detalhe: string };
 
 const pendencias: Pendencia[] = [];
 function pendencia(p: Partial<Pendencia> & { tipo: string; aba: string }) {
-  pendencias.push({ linha: "", data: "", valor: "", encontrado: "", detalhe: "", ...p });
+  pendencias.push({ carga: "", linha: "", data: "", valor: "", encontrado: "", detalhe: "", ...p });
 }
+
+/** As cargas que vão ao banco: o que não fecha nelas vira pendência. */
+const CARGAS_COM_PENDENCIA: ReadonlySet<string> = new Set(["1ª carga", "3T 2026"]);
+const comPendencia = (carga: string | null | undefined): carga is string => !!carga && CARGAS_COM_PENDENCIA.has(carga);
 
 // ---------------------------------------------------------------- jobs
 
@@ -147,13 +153,16 @@ type Job = {
   rateio: string;
   /** A alíquota teórica do job (a coluna "Imp Real %"), em fração. */
   impostoTeorico: string;
+  /** O percentual de fee do job (a coluna logo depois de "FEE LÍQUIDO"), em fração. */
+  fee: string;
   outrasAbas: string[];
 };
 
 /**
- * As colunas da divisão do job entre as regionais: o grupo "RATEIO %" da linha
- * de títulos (do título até o próximo) com o código de cada regional na linha
- * do cabeçalho, e a coluna "Imp Real %". As abas sem o grupo não dividem.
+ * As colunas dos dados de cada job que não são totais: o grupo "RATEIO %" da
+ * linha de títulos (do título até o próximo) com o código de cada regional na
+ * linha do cabeçalho, a coluna "Imp Real %" e o percentual de fee, na coluna
+ * sem título logo depois de "FEE LÍQUIDO". As abas sem o grupo não dividem.
  */
 function colunasDoRateio(titulos: readonly string[], cabecalho: readonly string[]) {
   const inicio = titulos.findIndex((v, i) => i > 0 && normalizarTexto(v) === "RATEIO");
@@ -165,7 +174,12 @@ function colunasDoRateio(titulos: readonly string[], cabecalho: readonly string[
       if (codigo) regionais.push([i, codigo]);
     }
   }
-  return { regionais, impostoTeorico: cabecalho.findIndex((v, i) => i > 0 && normalizarTexto(v) === "IMP REAL") };
+  const feeLiquido = cabecalho.findIndex((v, i) => i > 0 && normalizarTexto(v) === "FEE LIQUIDO");
+  return {
+    regionais,
+    impostoTeorico: cabecalho.findIndex((v, i) => i > 0 && normalizarTexto(v) === "IMP REAL"),
+    fee: feeLiquido > 0 ? feeLiquido + 1 : -1,
+  };
 }
 
 function lerJobs(abasDeResultado: { nome: string; papel: AbaDeResultado; linhas: Linhas }[]): Job[] {
@@ -187,6 +201,8 @@ function lerJobs(abasDeResultado: { nome: string; papel: AbaDeResultado; linhas:
       const codigoAntigo = ehCodigoAntigo(c("codigo_antigo")) ? c("codigo_antigo") : ehCodigoAntigo(c("status")) ? c("status") : "";
       const partes = doRateio.regionais.map(([i, codigo]) => [codigo, lerNumero(l[i] ?? "")] as const);
       const impostoTeorico = doRateio.impostoTeorico > 0 ? (l[doRateio.impostoTeorico] ?? "").trim() : "";
+      const fee = doRateio.fee > 0 ? (l[doRateio.fee] ?? "").trim() : "";
+      const feeLido = lerNumero(fee);
       const id = `${papel.coluna}:${normalizarTexto(nome)}`;
       const job: Job = {
         id,
@@ -212,6 +228,7 @@ function lerJobs(abasDeResultado: { nome: string; papel: AbaDeResultado; linhas:
         imposto: c("imposto"),
         rateio: partes.filter(([, p]) => p).map(([codigo, p]) => `${codigo}:${p}`).join(";"),
         impostoTeorico: lerNumero(impostoTeorico) === null ? "" : impostoTeorico,
+        fee: feeLido === null || feeLido <= 0 || feeLido >= 1 ? "" : fee,
         outrasAbas: [],
       };
       const ja = porId.get(id);
@@ -234,6 +251,8 @@ function lerJobs(abasDeResultado: { nome: string; papel: AbaDeResultado; linhas:
         pendencia({ tipo: "Rateio do job não soma 100%", aba, linha: l[0], encontrado: job.rateio, detalhe: `Job "${nome}"` });
       if (impostoTeorico && lerNumero(impostoTeorico) === null)
         pendencia({ tipo: "Imp Real % não numérico", aba, linha: l[0], encontrado: impostoTeorico, detalhe: `Job "${nome}"` });
+      if (fee && (feeLido === null || feeLido <= 0 || feeLido >= 1))
+        pendencia({ tipo: "Fee fora de 0% a 100%", aba, linha: l[0], encontrado: fee, detalhe: `Job "${nome}"` });
     }
   }
   return [...porId.values()];
@@ -401,7 +420,7 @@ async function main() {
       }
       if (!valor.ok) {
         contar(valor.motivo);
-        if (carga === "1ª carga") pendencia({ tipo: "Valor que não fecha", aba: a.nome, linha: l[0], data, encontrado: `crédito ${c("credito")} · débito ${c("debito")}`, detalhe: valor.motivo });
+        if (comPendencia(carga)) pendencia({ tipo: "Valor que não fecha", carga, aba: a.nome, linha: l[0], data, encontrado: `crédito ${c("credito")} · débito ${c("debito")}`, detalhe: valor.motivo });
         continue;
       }
       const tipo = lerTipo(c("tipo"));
@@ -423,13 +442,13 @@ async function main() {
       const achadoEm = naPreferida ? preferida : naOutra ? `${outra} (coluna trocada)` : "";
       const futura = data > dataDaVersao;
 
-      if (carga === "1ª carga" && !futura) {
+      if (comPendencia(carga) && !futura) {
         if (tipo.classe === "invalido")
-          pendencia({ tipo: "Tipo sem padrão", aba: a.nome, linha: l[0], data, valor: String(valor.valor), encontrado: c("tipo"), detalhe: tipo.motivo });
+          pendencia({ tipo: "Tipo sem padrão", carga, aba: a.nome, linha: l[0], data, valor: String(valor.valor), encontrado: c("tipo"), detalhe: tipo.motivo });
         if (tipo.classe === "dre" && GRUPOS_DE_JOB.has(tipo.grupo) && !job && pareceJob(c(preferida)))
-          pendencia({ tipo: "Job não encontrado", aba: a.nome, linha: l[0], data, valor: String(valor.valor), encontrado: c(preferida), detalhe: `Procurado na coluna ${preferida === "job" ? "Jobs" : "Evento"} (Tipo ${c("tipo")})` });
+          pendencia({ tipo: "Job não encontrado", carga, aba: a.nome, linha: l[0], data, valor: String(valor.valor), encontrado: c(preferida), detalhe: `Procurado na coluna ${preferida === "job" ? "Jobs" : "Evento"} (Tipo ${c("tipo")})` });
         if (naPreferida && naOutra && naPreferida !== naOutra)
-          pendencia({ tipo: "Job nas duas colunas", aba: a.nome, linha: l[0], data, valor: String(valor.valor), encontrado: `${c("job")} | ${c("evento")}`, detalhe: "Jobs e Evento apontam jobs diferentes" });
+          pendencia({ tipo: "Job nas duas colunas", carga, aba: a.nome, linha: l[0], data, valor: String(valor.valor), encontrado: `${c("job")} | ${c("evento")}`, detalhe: "Jobs e Evento apontam jobs diferentes" });
       }
 
       const plano = tipo.classe === "dre" ? propostaDoPlano(tipo.grupo, c("cod")) : { tipo: "", subtipo: "", como: "" };
@@ -539,7 +558,7 @@ async function main() {
       const carga = previsao ? "previsão" : emissao ? cargaDaData(emissao) : "";
       if (!emitida && !previsao) {
         contar("sem número de nota");
-        if (valor && carga === "1ª carga") pendencia({ tipo: "Nota sem número", aba: a.nome, linha: l[0], data: emissao, valor: c("valor"), encontrado: nf, detalhe: c("job") });
+        if (valor && comPendencia(carga)) pendencia({ tipo: "Nota sem número", carga, aba: a.nome, linha: l[0], data: emissao, valor: c("valor"), encontrado: nf, detalhe: c("job") });
         continue;
       }
       if (emitida && !emissao && !valor) {
@@ -554,7 +573,7 @@ async function main() {
       }
       if (valor === null) {
         contar("valor não numérico");
-        if (carga === "1ª carga") pendencia({ tipo: "Valor que não fecha", aba: a.nome, linha: l[0], data: emissao, encontrado: c("valor"), detalhe: `NF ${nf}` });
+        if (comPendencia(carga)) pendencia({ tipo: "Valor que não fecha", carga, aba: a.nome, linha: l[0], data: emissao, encontrado: c("valor"), detalhe: `NF ${nf}` });
         continue;
       }
       const cancelada = notaCancelada(c("job"));
@@ -564,11 +583,11 @@ async function main() {
       const empresa = job?.empresa ?? (distribuicao ? fat.empresa : pelaObs) ?? "";
       const situacao = cancelada ? "cancelada" : emitida ? "emitida" : "previsão";
       const classe = job ? "job" : distribuicao ? "distribuição de lucro" : "sem job";
-      if (situacao === "emitida" && carga === "1ª carga") {
+      if (situacao === "emitida" && comPendencia(carga)) {
         if (!empresa)
-          pendencia({ tipo: "Nota sem empresa", aba: a.nome, linha: l[0], data: emissao, valor: c("valor"), encontrado: `Obs. "${c("obs")}"`, detalhe: `NF ${nf} · job "${c("job")}" não achado` });
+          pendencia({ tipo: "Nota sem empresa", carga, aba: a.nome, linha: l[0], data: emissao, valor: c("valor"), encontrado: `Obs. "${c("obs")}"`, detalhe: `NF ${nf} · job "${c("job")}" não achado` });
         if (classe === "sem job" && pareceJob(c("job")))
-          pendencia({ tipo: "Job da nota não encontrado", aba: a.nome, linha: l[0], data: emissao, valor: c("valor"), encontrado: c("job"), detalhe: `NF ${nf}` });
+          pendencia({ tipo: "Job da nota não encontrado", carga, aba: a.nome, linha: l[0], data: emissao, valor: c("valor"), encontrado: c("job"), detalhe: `NF ${nf}` });
       }
       const comp = lerCompetencia(colCompetencia >= 0 ? l[colCompetencia] ?? "" : "");
       const numero = (k: string) => {
@@ -717,7 +736,7 @@ async function main() {
       "id", "nome", "empresa", "aba_da_planilha", "aba", "ano", "linha", "trimestre", "projeto", "cliente", "marca", "servico", "gp", "data_inicio",
       "regional_planilha", "marcador", "status", "codigo_antigo", "job_sistema", "cliente_sistema", "marca_sistema", "servico_sistema", "regional",
       "regional_por", "fora_do_resultado", "outras_abas", "planilha_receita", "planilha_custo", "planilha_imposto",
-      "rateio_regional", "imposto_teorico_percentual",
+      "rateio_regional", "imposto_teorico_percentual", "fee_percentual",
     ],
     jobs.map((j) => {
       const pc = proporCliente(j.cliente, retrato.clientes);
@@ -731,19 +750,22 @@ async function main() {
         j.id, j.nome, j.empresa, j.empresaDaAba, j.aba, j.ano, j.linha, j.trimestre, j.projeto, j.cliente, j.marca, j.servico, j.gp, j.dataInicio,
         j.regional, normalizarTexto(j.regional) === "COPA" ? "Copa" : "", j.status, j.codigoAntigo, jobsDoSistema.get(normalizarTexto(j.nome)) ?? "",
         cliente, marca, servico, regional, por, foraDoResultado(j), j.outrasAbas.join(" "), j.receita, j.custo, j.imposto,
-        j.rateio, j.impostoTeorico,
+        j.rateio, j.impostoTeorico, j.fee,
       ];
     }),
   );
-  await escrever("pendencias.csv", ["tipo", "aba", "linha", "data", "valor", "encontrado", "detalhe"], pendencias.map((p) => [p.tipo, p.aba, p.linha, p.data, p.valor, p.encontrado, p.detalhe]));
+  await escrever("pendencias.csv", ["tipo", "carga", "aba", "linha", "data", "valor", "encontrado", "detalhe"], pendencias.map((p) => [p.tipo, p.carga, p.aba, p.linha, p.data, p.valor, p.encontrado, p.detalhe]));
   await escrever("propostas/plano.csv", ["grupo", "cod", "descricao_na_planilha", "linhas_2023_ate_o_corte", "saldo_saidas_menos_entradas", "subtipo_proposto", "nome_no_sistema", "como"], linhasPlano);
   await escrever("propostas/clientes.csv", ["cliente_na_planilha", "jobs", "sigla_proposta", "cliente_no_sistema", "como"], linhasClientes);
   await escrever("propostas/marcas.csv", ["cliente_na_planilha", "marca_na_planilha", "jobs", "cliente_proposto", "marca_proposta", "como"], linhasMarcas);
   await escrever("propostas/servicos.csv", ["servico_na_planilha", "jobs", "servico_proposto", "como"], linhasServicos);
   await escrever("propostas/regionais.csv", ["empresa", "regional_na_planilha", "ocorrencias", "regional_proposta", "como"], linhasRegionais);
 
-  const porTipo: Record<string, number> = {};
-  for (const p of pendencias) porTipo[p.tipo] = (porTipo[p.tipo] ?? 0) + 1;
+  const porTipo = (carga: string) => {
+    const m: Record<string, number> = {};
+    for (const p of pendencias) if (p.carga === carga) m[p.tipo] = (m[p.tipo] ?? 0) + 1;
+    return m;
+  };
   const somaComo = (linhas: (string | number)[][], i: number) => {
     const m: Record<string, number> = {};
     for (const l of linhas) m[String(l[i])] = (m[String(l[i])] ?? 0) + 1;
@@ -757,11 +779,13 @@ async function main() {
       total: notas.length,
       por_carga: Object.fromEntries(contarPor(notas, (n) => `${n.situacao} · ${n.carga}`)),
       por_classe_na_1a_carga: Object.fromEntries(contarPor(notas.filter((n) => n.carga === "1ª carga"), (n) => `${n.situacao} · ${n.classe}`)),
+      por_classe_no_3t_2026: Object.fromEntries(contarPor(notas.filter((n) => n.carga === "3T 2026"), (n) => `${n.situacao} · ${n.classe}`)),
     },
     de_para: depara
       ? { pasta: resolve(deparaArg!), textos_sem_aprovacao: Object.fromEntries(Object.entries(semAprovacao).map(([k, v]) => [k, v.size])) }
       : "só propostas",
-    pendencias_da_1a_carga: porTipo,
+    // As pendências de cada carga a carregar; "sem carga" são as dos jobs e as de data inválida.
+    pendencias: { "1ª carga": porTipo("1ª carga"), "3T 2026": porTipo("3T 2026"), "sem carga": porTipo("") },
     propostas: {
       plano: somaComo(linhasPlano, 7),
       clientes: somaComo(linhasClientes, 4),

@@ -80,7 +80,7 @@ const SELECT_JOB =
   // não para `profiles`, então o PostgREST não enxerga relação por ali.
   // O nome é buscado numa consulta à parte (profiles.id == auth.users.id).
   "aberto_por, " +
-  "projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia)), " +
+  "cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), projeto:projetos(codigo, nome), " +
   "orcamento:orcamentos(codigo), " +
   "versao:versoes_orcamento!versao_orcamento_aprovada_id(numero_versao, moeda)";
 
@@ -243,7 +243,7 @@ export async function carregarJobNoFinanceiro(
       projeto_id: raw.projeto_id,
       projeto_codigo: raw.projeto?.codigo ?? null,
       projeto_nome: raw.projeto?.nome ?? null,
-      cliente_nome: raw.projeto?.cliente?.nome_fantasia ?? null,
+      cliente_nome: raw.cliente?.nome_fantasia ?? null,
       orcamento_id: raw.orcamento_id,
       versao_numero: raw.versao?.numero_versao ?? null,
       moeda: raw.versao?.moeda ?? "BRL",

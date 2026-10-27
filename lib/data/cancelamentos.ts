@@ -18,7 +18,7 @@ export const SELECT_CANCELAMENTO =
   "id, job_id, situacao, motivo, solicitado_em, retirado_em, decidido_em, justificativa, aviso_dispensado_em, " +
   "recebimento_previsto, custo_previsto, impostos_previstos, " +
   "solicitante:profiles!solicitado_por(nome), decisor:profiles!decidido_por(nome), retirador:profiles!retirado_por(nome), " +
-  "projeto_inativado:projetos_financeiro!projeto_financeiro_inativado_id(codigo)";
+  "projeto_inativado:projetos_financeiro!projeto_financeiro_inativado_id(nome)";
 
 interface LinhaCancelamento {
   id: string;
@@ -36,7 +36,7 @@ interface LinhaCancelamento {
   solicitante: { nome: string } | null;
   decisor: { nome: string } | null;
   retirador: { nome: string } | null;
-  projeto_inativado: { codigo: string } | null;
+  projeto_inativado: { nome: string } | null;
 }
 
 function numeroOuNulo(v: number | string | null): number | null {
@@ -60,7 +60,7 @@ export function paraCancelamento(r: LinhaCancelamento): CancelamentoDoJob {
     recebimentoPrevisto: numeroOuNulo(r.recebimento_previsto),
     custoPrevisto: numeroOuNulo(r.custo_previsto),
     impostosPrevistos: numeroOuNulo(r.impostos_previstos),
-    projetoFinanceiroInativadoCodigo: r.projeto_inativado?.codigo ?? null,
+    projetoFinanceiroInativadoNome: r.projeto_inativado?.nome ?? null,
   };
 }
 
@@ -252,7 +252,7 @@ export async function montarRastroDoCancelamento(
           recebimento: aprovado.recebimentoPrevisto ?? 0,
           custo: aprovado.custoPrevisto ?? 0,
           impostos: aprovado.impostosPrevistos ?? 0,
-          projetoFinanceiroInativado: aprovado.projetoFinanceiroInativadoCodigo,
+          projetoFinanceiroInativado: aprovado.projetoFinanceiroInativadoNome,
         }
       : null,
   };

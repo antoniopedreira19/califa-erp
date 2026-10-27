@@ -29,7 +29,9 @@ export type MotivoNaEquipe =
   | { tipo: "gp_projeto" }
   | { tipo: "gp_job"; codigos: string[] }
   | { tipo: "produtor_job"; codigos: string[] }
-  | { tipo: "produtor_orcamento"; codigos: string[] }
+  // Pelo NOME do orçamento: o código do orçamento leva o do projeto, que
+  // não aparece para o usuário (pedido do Tiago, 27/10/2026).
+  | { tipo: "produtor_orcamento"; nomes: string[] }
   | { tipo: "acrescimo" };
 
 export interface MembroDaEquipe {
@@ -59,7 +61,6 @@ export interface JobNaEquipe {
 
 export interface EquipeDoProjeto {
   projetoId: string;
-  projetoCodigo: string;
   projetoNome: string;
   membros: MembroDaEquipe[];
   /** Os jobs vivos do projeto, na ordem de criação. */
@@ -104,10 +105,11 @@ export async function carregarEquipeDoProjeto(
         .eq("tenant_id", tenantId),
       supabase
         .from("orcamentos")
-        .select("codigo, produtor_id")
+        .select("nome, produtor_id")
         .eq("projeto_id", projetoId)
         .eq("tenant_id", tenantId)
-        .not("produtor_id", "is", null),
+        .not("produtor_id", "is", null)
+        .order("created_at", { ascending: true }),
       supabase
         .from("jobs")
         .select(
@@ -139,7 +141,7 @@ export async function carregarEquipeDoProjeto(
     papel: "gp" | "equipe";
   }>;
   const orcamentos = (orcsRes.data ?? []) as Array<{
-    codigo: string | null;
+    nome: string | null;
     produtor_id: string;
   }>;
   const jobsBrutos = (jobsRes.data ?? []) as Array<{
@@ -195,10 +197,10 @@ export async function carregarEquipeDoProjeto(
   )) {
     add(id, { tipo: "produtor_job", codigos });
   }
-  for (const [id, codigos] of porPessoa(
-    orcamentos.map((o) => [o.produtor_id, o.codigo ?? ""]),
+  for (const [id, nomes] of porPessoa(
+    orcamentos.map((o) => [o.produtor_id, o.nome ?? ""]),
   )) {
-    add(id, { tipo: "produtor_orcamento", codigos: codigos.filter(Boolean) });
+    add(id, { tipo: "produtor_orcamento", nomes: nomes.filter(Boolean) });
   }
   const acrescimos = vinculos
     .filter((v) => v.papel === "equipe")
@@ -235,7 +237,6 @@ export async function carregarEquipeDoProjeto(
 
   return {
     projetoId: projeto.id,
-    projetoCodigo: projeto.codigo,
     projetoNome: projeto.nome,
     membros,
     jobs: jobsBrutos.map((j) => ({

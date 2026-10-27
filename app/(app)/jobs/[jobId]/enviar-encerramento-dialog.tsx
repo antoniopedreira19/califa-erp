@@ -42,6 +42,9 @@ export interface FechamentoDoJob {
   ppsAEmitir: { item: string }[];
   /** Verbas de produção pagas que ainda não fecharam (decisão 081 §7). */
   verbasEmAberto: { codigo: string; situacao: Exclude<SituacaoVerba, "concluida"> }[];
+  /** PPs que foram sem NF na auditoria da Mídia System sem a prestação da
+   *  nota aprovada (decisão 216). */
+  nfsDaAuditoria: { codigo: string }[];
   bvsEmAberto: { item: string; situacao: string }[];
   /** Itens de custo que ainda não disseram se sai mais PP (decisão 052). */
   itensSemMarcacao: { item: string }[];
@@ -82,6 +85,7 @@ export function pendenciasDoFechamento(f: FechamentoDoJob): number {
     f.ppsEmAberto.length +
     f.ppsAEmitir.length +
     f.verbasEmAberto.length +
+    f.nfsDaAuditoria.length +
     f.bvsEmAberto.length +
     f.itensSemMarcacao.length
   );
@@ -144,6 +148,7 @@ export function EnviarEncerramentoDialog({
     ppsEmAberto,
     ppsAEmitir,
     verbasEmAberto,
+    nfsDaAuditoria,
     bvsEmAberto,
     itensSemMarcacao,
     semEnvio,
@@ -259,6 +264,14 @@ export function EnviarEncerramentoDialog({
                     .
                   </p>
                 )}
+                {nfsDaAuditoria.length > 0 && (
+                  <p className="text-muted-foreground">
+                    {nfsDaAuditoria.length === 1
+                      ? "1 PP sem NF da Mídia System"
+                      : `${nfsDaAuditoria.length} PPs sem NF da Mídia System`}
+                    : {nfsDaAuditoria.map((p) => p.codigo).join(", ")}.
+                  </p>
+                )}
                 {itensSemMarcacao.length > 0 && (
                   <p className="text-muted-foreground">
                     {itensSemMarcacao.length === 1
@@ -279,6 +292,12 @@ export function EnviarEncerramentoDialog({
                     A produção presta contas da verba pelo PPs da planilha ou
                     pela aba de PPs, e o financeiro aprova a prestação. A baixa do estorno do que não
                     foi gasto fica com o financeiro e não trava o encerramento.
+                  </p>
+                )}
+                {nfsDaAuditoria.length > 0 && (
+                  <p className="text-muted-foreground">
+                    Depois que o financeiro liberar as NFs, a produção presta
+                    contas da nota de cada PP, e o financeiro aprova a prestação.
                   </p>
                 )}
                 {ppsAEmitir.length > 0 && (

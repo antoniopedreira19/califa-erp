@@ -8,6 +8,7 @@ import {
 } from "@/lib/types";
 import { TIPOS_QUE_GERAM_PP } from "@/lib/calculos/pps-item";
 import { devolucaoDaVerba, prestacaoDaVerba } from "@/lib/data/prestacao-da-verba";
+import { midiaPendenteNoEncerramento } from "@/lib/calculos/midia-system";
 
 /**
  * O que impede o encerramento de um job AGORA. Vazio = pode encerrar.
@@ -44,6 +45,10 @@ export interface ImpedimentosEncerramento {
   ppsAEmitir: { item: string }[];
   /** Verbas pagas que ainda não fecharam (decisão 081, pergunta 10a). */
   verbasEmAberto: { codigo: string; situacao: Exclude<SituacaoVerba, "concluida"> }[];
+  /** PPs que foram sem NF na auditoria da Mídia System (decisão 216) e
+   *  ainda não têm a prestação da nota aprovada. Travam também durante a
+   *  auditoria. */
+  nfsDaAuditoria: { codigo: string }[];
   bvsEmAberto: { item: string; situacao: string }[];
   /** Itens de custo que ainda não disseram se sairá mais PP deles
    *  (decisão 052). Só as linhas de calha PP fora do save — A e D não
@@ -64,6 +69,7 @@ export function podeEncerrar(imp: ImpedimentosEncerramento): boolean {
     imp.ppsEmAberto.length === 0 &&
     imp.ppsAEmitir.length === 0 &&
     imp.verbasEmAberto.length === 0 &&
+    imp.nfsDaAuditoria.length === 0 &&
     imp.bvsEmAberto.length === 0 &&
     imp.itensSemMarcacao.length === 0 &&
     imp.savesAguardando.length === 0 &&
@@ -78,6 +84,7 @@ function vazio(): ImpedimentosEncerramento {
     ppsEmAberto: [],
     ppsAEmitir: [],
     verbasEmAberto: [],
+    nfsDaAuditoria: [],
     bvsEmAberto: [],
     itensSemMarcacao: [],
     savesAguardando: [],
@@ -113,6 +120,7 @@ export async function impedimentosDosJobs(
     pedidosSaveRes,
     linhasComSaveRes,
     aEmitirRes,
+    auditoriaRes,
   ] = await Promise.all([
     supabase
       .from("jobs")
@@ -182,6 +190,18 @@ export async function impedimentosDosJobs(
       .in("job_id", jobIds)
       .is("pp_id", null)
       .is("excluida_em", null),
+    // PPs que foram sem NF na auditoria da Mídia System (decisão 216): a
+    // prestação da nota precisa estar aprovada. Mesmas dicas de FK da
+    // leitura das verbas.
+    supabase
+      .from("pedidos_compra")
+      .select(
+        "job_id, codigo, status, verba_producao, sem_nf_na_auditoria, " +
+          "prestacao:pp_verba_prestacoes!pp_verba_prestacoes_pedido_compra_id_fkey(status, valor_devolvido)",
+      )
+      .eq("tenant_id", tenantId)
+      .in("job_id", jobIds)
+      .eq("sem_nf_na_auditoria", true),
   ]);
 
   const de = (jobId: string | null | undefined) =>
@@ -237,6 +257,21 @@ export async function impedimentosDosJobs(
       if (verbaPendenteNoEncerramento(situacao)) {
         de(pp.job_id)?.verbasEmAberto.push({ codigo: pp.codigo as string, situacao });
       }
+    }
+  }
+
+  if (auditoriaRes.error) {
+    console.error("[impedimentos.auditoria]", auditoriaRes.error.message);
+    for (const imp of mapa.values()) imp.nfsDaAuditoria.push({ codigo: "PPs sem NF" });
+  } else {
+    for (const pp of (auditoriaRes.data ?? []) as any[]) {
+      const pendente = midiaPendenteNoEncerramento({
+        sem_nf_na_auditoria: pp.sem_nf_na_auditoria === true,
+        verba_producao: pp.verba_producao === true,
+        status: pp.status,
+        prestacao: prestacaoDaVerba(pp.prestacao),
+      });
+      if (pendente) de(pp.job_id)?.nfsDaAuditoria.push({ codigo: pp.codigo as string });
     }
   }
 

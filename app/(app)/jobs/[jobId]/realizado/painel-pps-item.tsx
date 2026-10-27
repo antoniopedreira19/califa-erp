@@ -54,6 +54,12 @@
  */
 
 import * as React from "react";
+import {
+  envioDispensaNf,
+  midiaAguardaProducao,
+  type MidiaSystemDoJob,
+  type SituacaoMidia,
+} from "@/lib/calculos/midia-system";
 import { useRouter } from "next/navigation";
 import {
   X,
@@ -161,6 +167,9 @@ export interface PPDoItem {
   devolucao: DevolucaoDaVerba | null;
   /** O papel presta contas desta verba (decisões 164 e 171). */
   podePrestarContas: boolean;
+  /** Decisão 216: a PP que foi sem NF na auditoria da Mídia System, e onde
+   *  a prestação da nota está. Null fora disso. */
+  situacaoMidia: SituacaoMidia | null;
   /** Decisões 152 e 153 — obrigatórios pelo mesmo motivo do trio. */
   fornecedorId: string | null;
   empresaId: string;
@@ -272,6 +281,9 @@ interface Props {
   /** Decisão 189: abre a gaveta da prestação de contas da verba, a mesma
    *  da aba de PPs. Null onde o painel só lê. */
   onPrestarContas: ((pp: PPDoItem) => void) | null;
+  /** Decisão 216: o job Mídia System — na auditoria a PP vai sem NF.
+   *  `null` = o job não é Mídia System. */
+  midiaSystem: MidiaSystemDoJob | null;
 }
 
 export function PainelPPsItem({
@@ -310,6 +322,7 @@ export function PainelPPsItem({
   cnpjPadraoDaPP,
   podeCorrigirNf,
   onPrestarContas,
+  midiaSystem,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -630,6 +643,8 @@ export function PainelPPsItem({
                     diasMeses: a.dados.dias_meses,
                     valor: a.valor,
                     verbaProducao: a.verba_producao,
+                    // A PP a emitir ainda não foi ao financeiro.
+                    situacaoMidia: null,
                     reembolsoTipo:
                       a.tipo_verba === "reembolso" ? (a.dados.reembolso_tipo ?? "despesas") : null,
                     temAnexo: a.anexos.length > 0,
@@ -867,7 +882,10 @@ export function PainelPPsItem({
                           {semNF && (
                             <span className="flex items-start gap-1.5 text-[11px] leading-snug text-amber-800">
                               <Paperclip className="mt-0.5 h-3 w-3 shrink-0" />
-                              Ainda sem a nota do fornecedor: ela e os dados dela entram no envio.
+                              {/* Decisão 216: na auditoria, a nota pode ir depois. */}
+                              {envioDispensaNf(midiaSystem)
+                                ? "Job Mídia System em auditoria: a nota pode ir depois."
+                                : "Ainda sem a nota do fornecedor: ela e os dados dela entram no envio."}
                             </span>
                           )}
                         </span>
@@ -1131,6 +1149,7 @@ export function PainelPPsItem({
             tomadorPorEmpresa={tomadorPorEmpresa}
             nomeDaEmpresaDe={nomeDaEmpresa}
             moeda={moeda}
+            envioSemNf={envioDispensaNf(midiaSystem)}
             onEnviada={(codigo, emissora) => {
               setEnviando(null);
               onMensagem?.(
@@ -1354,6 +1373,9 @@ function CartaoPP({
 /** A verba enviada ao financeiro: o cartão mostra a prestação (decisão
  *  189). O reembolso não presta contas (decisão 187). */
 function verbaComPrestacao(pp: PPDoItem): boolean {
+  // Decisão 216: a PP que foi sem NF mostra a prestação da nota, no mesmo
+  // lugar e com o mesmo botão.
+  if (pp.situacaoMidia !== null) return true;
   return (
     pp.verbaProducao &&
     pp.reembolsoTipo === null &&
@@ -1381,12 +1403,13 @@ function PrestacaoNoCartao({
   const age =
     onAbrir !== null &&
     pp.podePrestarContas &&
-    producaoEditaPrestacao({
-      verba_producao: pp.verbaProducao,
-      tipo_verba: pp.reembolsoTipo ? "reembolso" : null,
-      status: pp.status,
-      prestacao: pr,
-    });
+    (midiaAguardaProducao(pp.situacaoMidia) ||
+      producaoEditaPrestacao({
+        verba_producao: pp.verbaProducao,
+        tipo_verba: pp.reembolsoTipo ? "reembolso" : null,
+        status: pp.status,
+        prestacao: pr,
+      }));
   const linha =
     pp.situacaoVerba === "concluida"
       ? "Prestação concluída."
@@ -1405,6 +1428,22 @@ function PrestacaoNoCartao({
               : pp.status === "pago"
                 ? `${qtd} salvo${n === 1 ? "" : "s"}, a enviar.`
                 : `${n === 1 ? "1 salvo" : `${n} salvos`} · envio após pagar.`;
+  // Decisão 216: a PP que foi sem NF não espera o pagamento para mandar a
+  // nota, e na auditoria ainda não há o que mandar.
+  const linhaMidia =
+    pp.situacaoMidia === null
+      ? null
+      : pp.situacaoMidia === "sem_nf"
+        ? "Foi sem NF · a nota entra depois da liberação."
+        : pp.situacaoMidia === "aprovada"
+          ? "NF conferida pelo financeiro."
+          : pr?.status === "em_avaliacao"
+            ? `${qtd} · com o financeiro.`
+            : pr?.status === "reprovada"
+              ? "Reprovada pelo financeiro · corrija e reenvie."
+              : n === 0
+                ? "Foi sem NF · anexe a nota do fornecedor."
+                : `${qtd} salvo${n === 1 ? "" : "s"}, a enviar.`;
   const verBotao = onAbrir !== null && !age && pr !== null && pr.status !== "rascunho";
   return (
     <span className="flex flex-col gap-2">
@@ -1414,14 +1453,15 @@ function PrestacaoNoCartao({
           comprovado={comprovado}
           verba={pp.valor}
           devolucao={pp.devolucao}
+          semSaldo={pp.situacaoMidia !== null}
           compacta
         />
       )}
       <span className="flex items-center gap-2">
         <span className="flex min-w-0 items-center gap-1.5 text-[11px] leading-snug text-muted-foreground">
           <Info className="h-3 w-3 flex-none" />
-          <span className="truncate" title={linha}>
-            {linha}
+          <span className="truncate" title={linhaMidia ?? linha}>
+            {linhaMidia ?? linha}
           </span>
         </span>
         <span className="flex-1" />

@@ -41,6 +41,7 @@ import {
   verbaPendenteNoEncerramento,
   BV_SITUACAO_EM_ABERTO,
 } from "@/lib/types";
+import { midiaPendenteNoEncerramento, midiaSystemDoJob } from "@/lib/calculos/midia-system";
 import type {
   SessionContext,
   Job,
@@ -81,6 +82,7 @@ import {
 } from "@/lib/calculos/faturamento-por-mes";
 import type { EtapasDaFicha } from "./ficha-job";
 import { formatarCnpj } from "@/lib/fiscal/cadastro";
+import { listarApresentacoesDoProjeto } from "@/lib/data/apresentacoes-do-projeto";
 import { tomadoresPadrao } from "@/lib/fiscal/nf-da-pp";
 import { cnpjPadraoDaPP } from "@/lib/fiscal/cnpj-da-pp";
 import type { AnexoDaPPNaLista, PPAEmitir } from "@/lib/types";
@@ -145,7 +147,7 @@ export async function carregarDetalheDoJob(
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, recebimento_previsto_por_mes, observacoes, responsavel_id, produtor_id, produtor_envia_pp, produtor_envia_pp_por, produtor_envia_pp_em, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, devolvido_em, enviado_abertura_por, enviado_abertura_em, codigo_reservado, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), enviado_abertura_perfil:profiles!enviado_abertura_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome, investimento_interno), categoria:categorias_dominio!categoria_id(nome, modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, percentual_veiculo, base_honorarios), projeto:projetos(id, codigo, nome, cliente_id, data_inicio_prevista, data_fim_prevista, cliente:clientes(id, nome_fantasia, cnpj))",
+        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, recebimento_previsto_por_mes, observacoes, responsavel_id, produtor_id, produtor_envia_pp, produtor_envia_pp_por, produtor_envia_pp_em, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, midia_system, midia_system_liberado_em, midia_system_liberado_por, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, devolvido_em, enviado_abertura_por, enviado_abertura_em, codigo_reservado, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), enviado_abertura_perfil:profiles!enviado_abertura_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome, investimento_interno), categoria:categorias_dominio!categoria_id(nome, modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, percentual_veiculo, base_honorarios), cliente_id, cliente:clientes!jobs_cliente_id_fkey(id, nome_fantasia, cnpj), projeto:projetos(id, codigo, nome, data_inicio_prevista, data_fim_prevista)",
       )
       .eq("id", jobId)
       .eq("tenant_id", session.activeTenant.id)
@@ -201,6 +203,7 @@ export async function carregarDetalheDoJob(
     meiosDaVersaoRes,
     veiculosRes,
     ultimoRegistroRes,
+    apresentacoesDoProjeto,
   ] = await Promise.all([
     // Os agrupamentos do JOB (decisão 162): a cópia dos da versão, com o
     // que as erratas renomearam, criaram e tiraram. O removido não aparece.
@@ -494,6 +497,8 @@ export async function carregarDetalheDoJob(
     raw.abertura_em_revisao === true
       ? ultimoRegistroDaAbertura(supabase, session.activeTenant.id, raw.id)
       : Promise.resolve({ data: null, error: null }),
+    // As apresentações do projeto, no card PROJETO da ficha (decisão 213).
+    listarApresentacoesDoProjeto(supabase, session.activeTenant.id, raw.projeto_id),
   ]);
 
   if (mesesRes.error) console.error("[job.meses]", mesesRes.error.message);
@@ -554,7 +559,7 @@ export async function carregarDetalheDoJob(
   // Só os portais do cliente DESTE job — a consulta traz os do tenant e o
   // filtro por cliente é feito aqui, com o id que já veio no `raw`.
   const portaisDoCliente = ((portaisRes.data ?? []) as any[])
-    .filter((p) => p.cliente?.id === raw.projeto?.cliente_id)
+    .filter((p) => p.cliente?.id === raw.cliente_id)
     .map((p) => ({ id: p.id, nome: p.nome, url: p.url }));
 
   // Indexado pela CÓPIA do job: a calha consulta uma chave por linha, e
@@ -1000,6 +1005,10 @@ export async function carregarDetalheDoJob(
     abertura_em_revisao: raw.abertura_em_revisao === true,
     abertura_revisao_desde: raw.abertura_revisao_desde ?? null,
     abertura_revisao_errata_id: raw.abertura_revisao_errata_id ?? null,
+    // Decisão 216: o job Mídia System.
+    midia_system: raw.midia_system === true,
+    midia_system_liberado_em: raw.midia_system_liberado_em ?? null,
+    midia_system_liberado_por: raw.midia_system_liberado_por ?? null,
     id: raw.id,
     tenant_id: raw.tenant_id,
     empresa_id: raw.empresa_id,
@@ -1434,6 +1443,10 @@ export async function carregarDetalheDoJob(
     const situacao = situacaoDaVerba(pp);
     return verbaPendenteNoEncerramento(situacao) ? [{ codigo: pp.codigo, situacao }] : [];
   });
+  // Decisão 216: a PP que foi sem NF trava até a prestação da nota aprovada.
+  const nfsDaAuditoria = ppsDoJob
+    .filter((pp) => midiaPendenteNoEncerramento(pp))
+    .map((pp) => ({ codigo: pp.codigo }));
   const nomeDoItem = new Map(itens.map((it) => [it.id, it.item]));
   // Um item pode ter vários BVs (decisão 062): cada um em aberto vira uma
   // pendência própria no diálogo de encerramento, com o nome do item
@@ -1483,6 +1496,7 @@ export async function carregarDetalheDoJob(
           ppsEmAberto,
           ppsAEmitir,
           verbasEmAberto,
+          nfsDaAuditoria,
           bvsEmAberto,
           itensSemMarcacao,
           semEnvio:
@@ -1556,10 +1570,13 @@ export async function carregarDetalheDoJob(
   // projeto). O responsável da verba de produção anterior à 171 segue
   // prestando a dele. A função do banco checa de novo; aqui é só para
   // mostrar o botão a quem pode.
+  // Decisão 216: a PP que foi sem NF na auditoria da Mídia System presta
+  // contas da nota com as mesmas pessoas (a função do banco confere a
+  // liberação das NFs).
   const ppsQuePossoPrestarContas = ppsDoJob
     .filter(
       (pp) =>
-        pp.verba_producao &&
+        (pp.verba_producao || (pp.sem_nf_na_auditoria && job.midia_system_liberado_em !== null)) &&
         (session.activeRole === "administrador" ||
           session.activeRole === "gerente_producao" ||
           session.activeRole === "produtor" ||
@@ -1601,7 +1618,7 @@ export async function carregarDetalheDoJob(
           ];
   // SAVE — o crédito entre jobs. As duas leituras vão juntas: uma em
   // série apareceria no TTFB da tela mais pesada do job.
-  const clienteIdDoJob: string = raw.projeto?.cliente_id ?? "";
+  const clienteIdDoJob: string = raw.cliente_id ?? "";
   const [savePorItem, saldosDeSave] = await Promise.all([
     saveDoJob(supabase, session.activeTenant.id, jobId, itens),
     clienteIdDoJob
@@ -1678,12 +1695,14 @@ export async function carregarDetalheDoJob(
   return {
     raw,
     midia,
+    // Decisão 216: o job Mídia System, para o selo, o envio e a aba PPs.
+    midiaSystem: midiaSystemDoJob(job),
     savePorItem,
     saldosDeSave,
-    clienteNome: raw.projeto?.cliente?.nome_fantasia ?? "—",
+    clienteNome: raw.cliente?.nome_fantasia ?? "—",
     // O CNPJ do cadastro do cliente: cada nota do envio para faturamento
     // nasce com ele (decisão 123).
-    cnpjCliente: (raw.projeto?.cliente as { cnpj?: string | null } | null)?.cnpj ?? null,
+    cnpjCliente: (raw.cliente as { cnpj?: string | null } | null)?.cnpj ?? null,
     job,
     grupos,
     itens,
@@ -1723,6 +1742,7 @@ export async function carregarDetalheDoJob(
         ?.servico?.investimento_interno === true,
     portaisDoCliente,
     jobsDoProjeto,
+    apresentacoesDoProjeto,
     abertoPorNome,
     etapasDoJob,
     competencias,

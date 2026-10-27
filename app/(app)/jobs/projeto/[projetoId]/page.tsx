@@ -37,7 +37,7 @@ export default async function ProjetoAgregadoPage({
   const { data: projeto } = await supabase
     .from("projetos")
     .select(
-      "id, codigo, nome, cliente:clientes(nome_fantasia), responsavel:profiles!responsavel_id(nome)",
+      "id, codigo, nome, responsavel:profiles!responsavel_id(nome)",
     )
     .eq("id", params.projetoId)
     .eq("tenant_id", session.activeTenant.id)
@@ -52,6 +52,8 @@ export default async function ProjetoAgregadoPage({
       .select(
         "id, codigo, nome, status, faturamento_enviado_em, versao_orcamento_aprovada_id, " +
           "responsavel:profiles!responsavel_id(nome), " +
+          // O cliente é do job (decisão 215): o cabeçalho mostra os dos jobs.
+          "cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), " +
           "versao:versoes_orcamento!versao_orcamento_aprovada_id(moeda, percentual_honorarios, percentual_imposto)",
       )
       .eq("tenant_id", session.activeTenant.id)
@@ -134,7 +136,15 @@ export default async function ProjetoAgregadoPage({
   }, {});
 
   const projetoTyped = projeto as any;
-  const clienteNome = projetoTyped.cliente?.nome_fantasia ?? "—";
+  // Os clientes dos jobs do projeto, sem repetir (decisão 215).
+  const nomesDosClientes = Array.from(
+    new Set(
+      ((jobsRaw ?? []) as any[])
+        .map((j) => j.cliente?.nome_fantasia as string | undefined)
+        .filter((n): n is string => !!n),
+    ),
+  );
+  const clienteNome = nomesDosClientes.length > 0 ? nomesDosClientes.join(", ") : "—";
   const responsavelNome = projetoTyped.responsavel?.nome ?? "—";
 
   return (
@@ -144,7 +154,7 @@ export default async function ProjetoAgregadoPage({
         <FaixaDoProjeto
           modulo="jobs"
           reservaDoVoltar="/jobs"
-          projeto={{ codigo: projetoTyped.codigo, nome: projetoTyped.nome }}
+          projeto={{ nome: projetoTyped.nome }}
           agregadaHref={`/jobs/projeto/${params.projetoId}`}
           itens={itensDeJobs("/jobs/", jobs, null, () => true)}
           ativo={AGREGADA}
@@ -159,9 +169,6 @@ export default async function ProjetoAgregadoPage({
               <FolderKanban className="h-5 w-5 text-california-red" />
             </div>
             <div className="min-w-0">
-              <p className="font-mono text-xs font-semibold text-muted-foreground">
-                {projetoTyped.codigo}
-              </p>
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="text-2xl font-bold tracking-tight">
                   {projetoTyped.nome}

@@ -226,8 +226,8 @@ function textoDoMotivo(m: MotivoNaEquipe, jobAtual: string | null): string {
     case "produtor_job":
       return `Responsável do ${lista(m.codigos)}`;
     case "produtor_orcamento":
-      return m.codigos.length
-        ? `Produtor do orçamento ${lista(m.codigos)}`
+      return m.nomes.length
+        ? `Produtor do orçamento ${lista(m.nomes)}`
         : "Produtor de orçamento";
     default:
       return "Adicionado à equipe";
@@ -626,7 +626,7 @@ function ConteudoDaEquipe({
             )}
           </DialogTitle>
           <DialogDescription>
-            {equipe.projetoCodigo} · {equipe.projetoNome} · {membros.length}{" "}
+            {equipe.projetoNome} · {membros.length}{" "}
             {membros.length === 1 ? "pessoa" : "pessoas"}
           </DialogDescription>
         </div>

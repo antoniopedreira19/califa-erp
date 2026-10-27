@@ -153,11 +153,22 @@ repactua a de pagamento.
 - **Os outros caminhos já tinham data:** recebimento avulso, transferência
   e rendimento a exigem no formulário; recorrência, folha e 13º nascem com
   ela; PP e desembolso a recebem na aprovação, que a exige.
-- **A AV-00003 e a AV-00004** continuam sem data até o Tiago decidir o que
-  fazer com elas: dar baixa, se foram pagas (estão também nas remessas 25
-  e 32), ou cancelar. Editá-las agora pede a data.
-- **A trava no banco** — recusar avulsa a pagar sem data — fica para
-  depois de resolvidas as duas.
+- **A AV-00003 e a AV-00004 foram excluídas** pela tela em 26/10/2026, com
+  a autorização do Tiago: não foram pagas, e avulsa não tem status de
+  cancelada (só aprovada e baixada), então "Excluir" é o caminho. A
+  auditoria guarda as duas exclusões; os 8 itens delas nas remessas 17,
+  18, 21, 22, 25 e 32 ficam como histórico (o item aponta por
+  `origem_tipo`/`origem_id`, sem chave estrangeira, e a conciliação
+  automática pula a remessa cujo título não existe mais). Desde então,
+  nenhuma avulsa em aberto está sem data.
+- **A trava no banco** (Tiago, 26/10/2026): o CHECK
+  `chk_avulsa_a_pagar_tem_data` em `contas_avulsas` recusa a avulsa a pagar
+  fora do cartão sem data — `coalesce(data_pagamento,
+  data_prevista_pagamento)`, a mesma que a tela lê. Fica de fora o cartão
+  (a data vem da fatura) e a avulsa a receber (`tipo_entrada` preenchido).
+  Todos os caminhos que criam avulsa a pagar já mandavam a data (formulário,
+  folha, 13º do RH, recorrência), e nenhuma função do banco a zera; nenhuma
+  linha violava ao aplicar. Migration `20261026700001`.
 
 **No código:** `aplicarRefinementFormaPagamento` em
 `lib/validations/conta-avulsa.ts` (criar e editar), com o teste
@@ -169,4 +180,6 @@ AV-00003 sem data recusado, com "Informe a data prevista de pagamento."
 embaixo do campo; `criarContaAvulsa` chamada direto do console sem data
 recusada pelo servidor, e com data seguindo até a checagem seguinte
 (subtipo inexistente de propósito, nada criado); "Nova conta avulsa" com o
-campo vazio e o asterisco.
+campo vazio e o asterisco. A trava, em transação desfeita: avulsa no PIX
+sem data recusada, a mesma com data aceita, e apagar a data de uma avulsa
+existente recusado; depois, as 3 avulsas do banco intactas.

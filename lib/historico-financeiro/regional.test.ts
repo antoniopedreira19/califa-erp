@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import { montarDre } from "./dre";
 import {
   arredondarComTotal,
+  descricaoDosProjetos,
   montarRegional,
   partesDoJob,
   type AgregadoRegional,
@@ -27,7 +28,7 @@ const g = (
   debito: number,
   extra: Partial<AgregadoRegional> = {},
 ): AgregadoRegional => ({
-  sigla: "", grupo, trimestre, aba: "Conta Exemplo", regional, todas: false, peloJob: false, credito, debito, teorico: 0, ...extra,
+  sigla: "", grupo, trimestre, aba: "Conta Exemplo", regional, todas: false, peloJob: false, regionalDoJob: null, credito, debito, teorico: 0, ...extra,
 });
 /** Uma parte do job: o faturamento ou o custo já dividido, com o imposto teórico no faturamento. */
 const job = (grupo: string, trimestre: number, regional: string, credito: number, debito: number, teorico = 0, extra: Partial<AgregadoRegional> = {}) =>
@@ -235,4 +236,87 @@ test("nas linhas da CMH, NE é a Doca e SP é a Agency; na divisão de um job, n
   assert.deepEqual(r.colunas, ["Agency", "Doca"]);
   assert.deepEqual(linha(r, "CFR").regionais, [-5, -80]);
   assert.equal(linha(r, "CO").semRegional, -40);
+});
+
+test("os projetos proprietários saem das linhas de cima e entram no bloco, divididos como o Fechamento", () => {
+  const RATEIO_2026 = rateio(2026, { NE: 15, NO: 15, SP: 40, RJ: 25, SS: 5 });
+  const somas = [
+    job("REC", 2, "NE", 1000, 0, 195.3),
+    // A Copa: o faturamento marcado SP e o custo marcado NE no lançamento; o job tem "COPA" na regional.
+    g("REC", 2, "SP", 400, 0, { regionalDoJob: "COPA", teorico: 78.12 }),
+    g("CO", 2, "NE", 0, 600, { regionalDoJob: "COPA" }),
+    g("CT", 2, null, 0, 100),
+  ];
+  const r = montarRegional("Agência California", 2026, null, somas, [], RATEIO_2026);
+  assert.equal(r.temProjetos, true);
+  assert.equal(linha(r, "REC").total, 1000);
+  assert.equal(daRegional(r, "REC", "SP"), 0);
+  assert.equal(linha(r, "CO").total, 0);
+  assert.deepEqual([daRegional(r, "PREC", "NE"), daRegional(r, "PREC", "SP")], [200, 200]);
+  assert.deepEqual([daRegional(r, "PCO", "NE"), daRegional(r, "PCO", "SP")], [-300, -300]);
+  assert.deepEqual([daRegional(r, "PIMP", "NE"), daRegional(r, "PIMP", "SP")], [-39.06, -39.06]);
+  // O benefício (273,42 − 100) se divide pelo faturamento: 1.000 da operação e 400 dos projetos.
+  assert.equal(linha(r, "BEN").total, 123.87);
+  assert.equal(linha(r, "PBEN").total, 49.55);
+  const imposto = ["IMP", "PIMP", "BEN", "PBEN"].reduce((s, c) => s + Math.round(linha(r, c).total * 100), 0) / 100;
+  assert.equal(imposto, -100);
+  // O bloco vem depois do resultado e só entra no lucro após investimento, que fecha com a DRE.
+  const chaves = r.linhas.map((l) => l.chave);
+  assert.ok(chaves.indexOf("PL") < chaves.indexOf("PROJ") && chaves.indexOf("PROJ") < chaves.indexOf("LLI"));
+  assert.equal(linha(r, "PROJ").total, -228.57);
+  const dre = montarDre("Agência California", somas, []);
+  assert.equal(linha(r, "LLI").total, dre.find((l) => l.chave === "LL")!.ano);
+  assert.equal(r.faturamentoSemDivisao, 0);
+});
+
+test("os projetos da CCH vão para a Doca, e sem projeto no período o bloco não aparece", () => {
+  const somas = [
+    g("CO", 1, "Agency", 0, 50, { sigla: "CMH", regionalDoJob: "CMH" }),
+    g("REC", 1, "NE", 30, 0, { sigla: "CMH", regionalDoJob: "CMH" }),
+    job("REC", 2, "AGE", 100, 0, 0, { sigla: "CMH" }),
+  ];
+  const r = montarRegional("CCH", 2026, 1, somas, [], []);
+  // As colunas são as regionais com lançamento no ano (a Agency, pelo job do 2T).
+  assert.deepEqual(r.colunas, ["Agency", "Doca"]);
+  assert.deepEqual(linha(r, "PCO").regionais, [0, -50]);
+  assert.deepEqual(linha(r, "PREC").regionais, [0, 30]);
+  assert.equal(r.linhas.find((l) => l.chave === "REC")!.total, 0);
+  const semProjeto = montarRegional("CCH", 2026, 2, somas, [], []);
+  assert.equal(semProjeto.temProjetos, false);
+  assert.ok(!semProjeto.linhas.some((l) => ["PROJ", "PREC", "PIMP", "PCO", "PBEN"].includes(l.chave)));
+  // O texto de outra marca na regional do job não é projeto: segue a regional do lançamento.
+  const outro = montarRegional("CCH", 2026, 1, [g("REC", 1, "Doca", 10, 0, { sigla: "CMH", regionalDoJob: "COPA" })], [], []);
+  assert.equal(outro.temProjetos, false);
+  assert.equal(daRegional(outro, "REC", "Doca"), 10);
+});
+
+test("a descrição dos projetos de cada empresa", () => {
+  assert.equal(descricaoDosProjetos("Agência California"), "Copa (NE 50% e SP 50%)");
+  assert.equal(descricaoDosProjetos("CCH"), "Projetos da CCH (Doca 100%)");
+});
+
+test("o imposto teórico e o benefício, com os dos projetos, fecham o imposto pago no centavo", () => {
+  // Valores quebrados em vários trimestres e regionais (gerador fixo, para o teste se repetir igual).
+  let semente = 7;
+  const aleatorio = () => ((semente = (semente * 48271) % 2147483647) / 2147483647);
+  const RATEIO_2026 = rateio(2026, { NE: 15, NO: 15, SP: 40, RJ: 25, SS: 5 });
+  for (let caso = 0; caso < 200; caso++) {
+    const somas: AgregadoRegional[] = [];
+    for (const t of [1, 2]) {
+      for (const r of ["NE", "SP", "RJ"]) {
+        const v = Math.round(aleatorio() * 1e7) / 100;
+        somas.push(job("REC", t, r, v, 0, v * (0.1 + aleatorio() * 0.1)));
+      }
+      const copa = Math.round(aleatorio() * 1e7) / 100;
+      somas.push(g("REC", t, "SP", copa, 0, { regionalDoJob: "COPA", teorico: copa * 0.1953 }));
+      somas.push(g("CO", t, "NE", 0, Math.round(aleatorio() * 1e7) / 100, { regionalDoJob: "COPA" }));
+      somas.push(g("CT", t, null, 0, Math.round(aleatorio() * 1e6) / 100));
+    }
+    const r = montarRegional("Agência California", 2026, null, somas, [], RATEIO_2026);
+    const imposto = ["IMP", "PIMP", "BEN", "PBEN"].reduce((s, c) => s + Math.round(linha(r, c).total * 100), 0);
+    const pago = somas.filter((a) => a.grupo === "CT").reduce((s, a) => s + Math.round(a.debito * 100), 0);
+    assert.equal(imposto, -pago, `caso ${caso}`);
+    const dre = montarDre("Agência California", somas, []);
+    assert.equal(linha(r, "LLI").total, dre.find((l) => l.chave === "LL")!.ano, `caso ${caso}`);
+  }
 });

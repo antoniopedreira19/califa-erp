@@ -8,8 +8,8 @@ import { diaIsoBr } from "@/lib/formatar-data-hora";
  * "Exportar" das listas Visualizar Jobs e Resultado de Job (pedido do Tiago,
  * 16/10/2026; as duas telas desde a decisão 207): a
  * lista em Excel, um job por linha e cada informação numa coluna — o que
- * na tela divide a mesma célula (nome e nome da produção, código e nome
- * do projeto, valor e situação do faturamento, rentabilidade em R$ e em %) sai em
+ * na tela divide a mesma célula (nome e nome da produção, valor e situação
+ * do faturamento, rentabilidade em R$ e em %) sai em
  * colunas separadas, para filtrar e somar no Excel.
  *
  * Sai o que a tela mostra: os filtros de cima e os dos títulos aplicados,
@@ -41,12 +41,8 @@ const COLUNAS: Coluna[] = [
     valor: (j) => jobStatusLabel(jobStatusExibido(j.status, null, j.cancelamento_pendente)),
   },
   // O projeto do FINANCEIRO, com o da produção de reserva — o mesmo da faixa.
-  {
-    cabecalho: "Código do projeto",
-    largura: 15,
-    tipo: "texto",
-    valor: (j) => j.projeto_financeiro_codigo ?? j.projeto_codigo,
-  },
+  // Só o nome: a coluna "Código do projeto" saiu com o código das telas
+  // (pedido do Tiago, 27/10/2026).
   {
     cabecalho: "Projeto",
     largura: 36,

@@ -5876,15 +5876,15 @@ sistema em R$ 314.064,17. Protótipo aprovado pelo Tiago (forma A, aviso A).
 
 ## Código do projeto sem a sigla do cliente — 23/10/2026 (decisão 210)
 
-⚠️ Aguardando a hora combinada com a frente do Antonio: a migration
-`20261023950001` é destrutiva e o código só sobe junto dela.
+Aplicada em 26/10/2026, ~17h10, na hora combinada com a frente do
+Antonio, e publicada em seguida (`d413ac31`).
 
 - **Formato:** projeto `P-NNNN/AA` (`AMB-P004/26` → `P-0002/26`), orçamento
   `P-NNNN/AA-NN`, projeto do financeiro `F-NNNN/AA`. Sequencial por letra e
   ano da criação; número nunca volta (registro de códigos usados, agora
   também no financeiro). Código de job não muda.
-- **Conversão:** 104 projetos, 179 orçamentos, 73 projetos do financeiro e
-  141 rótulos da abertura, pela ordem de criação; um evento
+- **Conversão (26/10):** 107 projetos, 185 orçamentos, 80 projetos do
+  financeiro e 152 rótulos da abertura, pela ordem de criação; um evento
   `*.codigo_trocado` por linha, com `decisao = '210'`. O projeto de teste
   `TES-P001/26` vira `P-0006/26`.
 - **Troca de cliente:** não troca mais o código; saiu o aviso "o projeto
@@ -5892,4 +5892,92 @@ sistema em R$ 314.064,17. Protótipo aprovado pelo Tiago (forma A, aviso A).
 - **`/orcamentos/novo`:** subtítulo `P-NNNN/AA`.
 - **Conferência:** ensaio por SELECT com o de-para inteiro (sem repetição,
   todo orçamento com o prefixo do projeto). Testes do gerador, tsc, lint e
-  build no worktree. Navegador só depois de aplicar.
+  build no worktree; banco conferido depois da troca (ver a decisão 210,
+  §6).
+
+## Apresentações do projeto e "Editar orçamento" em pop-up — 26/10/2026 (decisão 213)
+
+Primeira entrega do protótipo aprovado em 26/10
+(https://claude.ai/artifact/UxASwkRtQgA4GzFEinYTtQ).
+
+- **Campo "Apresentação"** no formulário do projeto, opcional, ao lado da
+  Equipe: PDF, PowerPoint ou Keynote, até 50 MB cada, quantos forem.
+  Escolher sobe na hora; o que subiu e não foi salvo sai do bucket. Tirar
+  um arquivo já gravado e salvar apaga o arquivo. Ver a decisão 213.
+- **"Editar orçamento" virou pop-up centralizado**, no desenho do "Novo
+  orçamento", em vez do painel lateral. Campos, rodapé (status, Arquivar,
+  Excluir) e regras não mudaram.
+- **Conferência:** no P-0006/26, como administrador: anexar um PDF e um
+  `.xlsx` (recusado com o motivo), salvar (linha e arquivo no bucket),
+  anexar outro e fechar sem salvar (saiu do bucket), abrir pela ficha do
+  job. "Editar" do `P-0006/26-33` abre o pop-up. tsc e lint limpos.
+
+## Cliente e marca no orçamento — 26/10/2026 (decisão 215)
+
+Terceira entrega do protótipo aprovado em 26/10
+(https://claude.ai/artifact/UxASwkRtQgA4GzFEinYTtQ).
+
+- **Projeto sem Cliente e Marcas.** Empresa e Regionais ficam. A coluna
+  `projetos.cliente_id` virou opcional e legado (resposta do Tiago:
+  opção 1).
+- **Orçamento com Cliente e Marca** (Novo, Editar e o da agregada), com o
+  "+" da marca e a sugestão do último orçamento do projeto.
+- **Envio para abertura:** Serviço e Categoria sobem; Cliente e Marca
+  descem e ficam editáveis, e voltam para o orçamento na confirmação. O
+  código do job segue a sigla do cliente escolhido (a prévia muda na hora);
+  o reenvio mantém o código, inclusive o código guardado do job devolvido.
+  ⚠️ Revisto no mesmo dia — ver a nota seguinte.
+- **Projeto com vários clientes:** lista, filtro, cabeçalho, agregada e a
+  planilha exportada mostram os clientes dos orçamentos.
+- **Conferência:** no P-0006/26, como administrador: Editar projeto salvo
+  sem cliente (o antigo ficou guardado); "Novo orçamento" nasce com o
+  cliente e a marca do último; o rascunho "ZZ Teste 158 planilha de um
+  mês" passou para o cliente de teste "Teste 22" (TET) pelo Editar — o
+  projeto passou a mostrar "Teste, Teste 22" no cabeçalho e na lista;
+  envio do "Teste Interno 105 · nacional" aberto e fechado sem enviar,
+  com o código indo de TES-1033/26 para TET-1001/26 ao trocar o cliente.
+  Não criei orçamento novo: não há produtor de teste na lista, e uma pessoa
+  real entraria na lista "Meus" dela. Views de rentabilidade, saves,
+  faturamento pendente e fluxo de caixa conferidas por hash antes e depois.
+
+## ⚠️ Nota de 2026-10-26 — O código do job segue sempre o cliente (revisão da decisão 215)
+
+- O Tiago reviu a resposta do reenvio: "Se o cliente mudar o codigo sempre
+  deve mudar para ficar de acordo com o novo cliente". O job devolvido
+  reenviado com cliente de outra sigla ganha código novo (audit
+  `job.codigo_trocado`); com a mesma sigla, fica. O código guardado do job
+  cancelado (decisão 128) volta só com a mesma sigla, como antes.
+- Novo registro `codigos_de_job_usados` (migration `20261026800006`): o
+  número antigo fica queimado. O gerador e a prévia leem dele.
+- **Conferência:** prévia do envio do "Teste Interno 105 · nacional" no
+  P-0006/26 (TES-1033/26 → TET-1001/26 ao trocar o cliente), sem enviar.
+  Em 27/10, com autorização do Tiago, o reenvio foi exercido no mesmo
+  orçamento: enviado como TES-1033/26 (cliente Teste), reprovado pelo
+  financeiro, reenviado com o cliente Teste 22 → TET-1001/26 (audit
+  `job.codigo_trocado`); reprovado de novo e reenviado com o cliente Teste →
+  TES-1034/26 (o 1033 não voltou). Os três códigos ficaram no registro. No
+  fim, "Cancelar envio à abertura": o job ficou cancelado e o orçamento
+  voltou a Aprovado. A confirmação do reenvio diz "com código novo, porque
+  o cliente mudou" quando o código troca.
+
+## O código do projeto sai das telas — 27/10/2026 (decisão 217)
+
+- O código do projeto e o do orçamento deixam de aparecer: sai a coluna
+  "Código" da lista de projetos (com o funil e a ordem dela; o nome virou o
+  link), a linha do código acima do título na página do projeto e na
+  agregada, "Código do projeto:" no Editar projeto, os subtítulos de Novo
+  projeto e Novo orçamento, o código do campo travado "Projeto" e do cartão
+  "Descritivo". A busca da lista casa nome, campanha e cliente.
+- A faixa do projeto (comum às 8 telas) mostra só o nome no chip, nas dicas,
+  no menu "Todos" e no balão do Voltar ("Voltar para Teste").
+- A faixa "Job cancelado" diz o nome do projeto do financeiro inativado.
+- Planilha exportada: A1 só com o nome e arquivo `orcamentos-<nome>.xlsx` /
+  `interna-<nome>.xlsx`.
+- Abas da faixa, cartões da agregada e seções da planilha exportada seguem a
+  criação (era o código, mesma ordem).
+- **Conferência (27/10/2026):** no Chrome, logado como administrador, no
+  `P-0006/26 · Teste` e nos jobs TES do projeto: um verificador procurou
+  `P-`/`F-NNNN/AA`, "código do projeto" e "nome ou o código" no texto
+  visível, nas dicas e nos placeholders de cada tela e pop-up — zero em
+  todas. Prints de antes e depois na página
+  https://claude.ai/artifact/V2i6P4pthYtNJahKEAnWJG.

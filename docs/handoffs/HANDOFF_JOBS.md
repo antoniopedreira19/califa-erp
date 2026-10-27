@@ -6423,3 +6423,68 @@ Protótipo aprovado em 17/10. Regra completa na decisão 192.
   (errata de teste do Item 4: histórico recarregado com 7 momentos).
 - Possibilidade futura registrada na 186: atalho "ver esta versão" nos cards
   de Erratas e de Alterações do Financeiro.
+
+## ⚠️ Nota de 2026-10-26 (2) — o tipo de conta no PDF da PP
+
+- O "Tipo de Conta" do PDF saía como o banco grava: "corrente", "poupanca"
+  (sem cedilha), "pagamento". Agora sai "Conta corrente", "Conta poupança" e
+  "Conta de pagamento" (`fmtTipoConta` em `lib/pdf/pedido-compra.ts`), no
+  bloco do titular da verba e no do fornecedor. Sem tipo, fica em branco —
+  o PDF não supõe "corrente".
+- Vale para os PDFs gerados daqui em diante; os já arquivados ficam como
+  foram emitidos.
+- Conferido montando o PDF com dados fictícios (titular com poupança,
+  fornecedor com conta de pagamento e sem tipo).
+- O "Tipo de Chave PIX" também: sai com o rótulo das telas (`PIX_TIPOS` de
+  `lib/pix`) — "CPF", "CNPJ", "E-mail", "Telefone", "Chave aleatória" — em
+  vez de "email" e "aleatoria" (`fmtTipoPix`). Conferido do mesmo jeito,
+  com os cinco tipos e sem PIX.
+
+## ⚠️ Nota de 2026-10-26 (3) — As apresentações do projeto na ficha do job (decisão 213)
+
+O card PROJETO da aba "Informações do Job" ganha "Apresentação", depois do
+período do projeto: os arquivos anexados no formulário do projeto. Cada
+nome abre o arquivo numa aba nova; sem nenhum, "Nenhuma anexada". Vale nas
+três telas da ficha (Jobs, Financeiro › Jobs e Abertura de Job), lido em
+`carregarDetalheDoJob` junto das outras consultas.
+
+## ⚠️ Nota de 2026-10-26 (4) — O cliente é do job, que o leva do orçamento (decisão 215)
+
+- O card JOB da ficha mostra "Cliente · Marca"; o cliente saiu do card
+  PROJETO.
+- `jobs.cliente_id` é o cliente do job (o do orçamento, mantido pelo
+  banco). Ficha, PDF da PP, saves, envio para faturamento (portal, CNPJ,
+  envio em lote) e o chat das PPs leem dele. Jobs › projeto mostra os
+  clientes dos jobs do projeto.
+
+## ⚠️ Nota de 2026-10-26 (5) — Mídia System: a PP vai sem NF durante a auditoria do cliente (decisão 216)
+
+- **Por quê:** o job que o cliente manda para a auditoria da Mídia System
+  não tem NF enquanto ela corre, e o envio da PP exigia a nota.
+- **O que mudou na produção:** o selo "Mídia System · em auditoria / NFs
+  liberadas" no cabeçalho do job. Em auditoria, o envio da PP comum aceita
+  zero anexo ("Anexos · opcionais na auditoria") e a PP mostra "Sem NF"
+  embaixo do status. Depois que o financeiro libera as NFs, ela fica
+  "Aguardando prestação" e a NF vai pelo mesmo "Prestar contas" da verba
+  (aba PPs e painel "PPs" do item), na mesma gaveta, sem "Não houve gasto"
+  nem saldo. As próximas PPs voltam a exigir a NF.
+- **Encerramento:** trava até a prestação aprovada, também durante a
+  auditoria ("1 PP sem NF da Mídia System: PP-…").
+- **Conferido** no TES-1029/26 (P-0006/26): PP-00572 do envio sem anexo à
+  prestação aprovada. Ver [decisão 216](../decisions/216-midia-system.md).
+
+## O código do projeto sai das telas — 27/10/2026 (decisão 217)
+
+- Lista de Jobs: o cabeçalho do grupo e o cartão "Descritivo do projeto"
+  ficam só com o nome. A agregada perde a linha do código acima do título.
+- Ficha do job: o código saiu do cabeçalho da coluna "Projeto"; o link do
+  projeto passou para "Nome do projeto". O card "Origem" mostra só o nome.
+- Equipe: subtítulo "Teste · 4 pessoas"; o motivo "Produtor do orçamento"
+  usa o nome do orçamento.
+- Tela da PP (Origem no job): "projeto · cliente", sem código.
+- **Conferência (27/10/2026):** no Chrome, logado como administrador, no
+  `P-0006/26 · Teste` e nos jobs TES do projeto: um verificador procurou
+  `P-`/`F-NNNN/AA`, "código do projeto" e "nome ou o código" no texto
+  visível, nas dicas e nos placeholders de cada tela e pop-up — zero em
+  todas. Prints de antes e depois na página
+  https://claude.ai/artifact/V2i6P4pthYtNJahKEAnWJG.

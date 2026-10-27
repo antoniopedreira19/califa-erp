@@ -61,6 +61,7 @@ export function BarraDoComprovado({
   comprovado,
   verba,
   devolucao,
+  semSaldo,
   compacta = false,
 }: {
   /** O status da prestação (null = nada salvo ainda). */
@@ -69,6 +70,9 @@ export function BarraDoComprovado({
   comprovado: number;
   verba: number;
   devolucao: Pick<DevolucaoDaVerba, "valor" | "pago_em"> | null;
+  /** Decisão 216: a PP da Mídia System não tem saldo a devolver — o que
+   *  sobra é a NF que ainda falta. */
+  semSaldo: boolean;
   compacta?: boolean;
 }) {
   const brl = (n: number) => formatCurrency(n, "BRL");
@@ -87,9 +91,13 @@ export function BarraDoComprovado({
             ? devolucao.pago_em
               ? `devolvido ${brl(devolucao.valor)}`
               : `estorno ${brl(devolucao.valor)} a receber`
-            : saldo >= 0
-              ? `saldo ${brl(saldo)}`
-              : `passa ${brl(-saldo)}`}
+            : saldo < 0
+              ? `passa ${brl(-saldo)}`
+              : !semSaldo
+                ? `saldo ${brl(saldo)}`
+                : saldo > 0
+                  ? `falta ${brl(saldo)}`
+                  : "completo"}
         </span>
       </div>
       <div className={cn("flex w-full overflow-hidden rounded-full bg-muted", compacta ? "h-1.5" : "h-2")}>

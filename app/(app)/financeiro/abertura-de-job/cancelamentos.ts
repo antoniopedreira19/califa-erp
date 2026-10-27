@@ -20,7 +20,6 @@ export interface CancelamentoNaFila {
   codigo: string;
   /** O nome que o financeiro vê (`nome_financeiro`, com o da produção). */
   nome: string;
-  projetoCodigo: string | null;
   projetoNome: string | null;
   /** A empresa do job, como na conferência da fila (`JobNaFila.empresa_nome`). */
   empresaNome: string | null;
@@ -32,7 +31,8 @@ export interface CancelamentoNaFila {
   /** ISO. */
   abertoEm: string | null;
   abertoPorNome: string | null;
-  projetoFinanceiroCodigo: string | null;
+  /** O nome: o código do projeto não aparece (27/10/2026). */
+  projetoFinanceiroNome: string | null;
   /** Sem outro job vivo, a aprovação deixa o projeto financeiro inativo. */
   projetoFinanceiroFicaInativo: boolean;
   /** O que sai do fluxo de caixa: as previsões gravadas na abertura. */
@@ -53,11 +53,12 @@ interface LinhaComJob {
     data_abertura_financeiro: string | null;
     aberto_por: string | null;
     projeto_financeiro_id: string | null;
-    projeto: { codigo: string; nome: string; cliente: { nome_fantasia: string } | null } | null;
+    cliente: { nome_fantasia: string } | null;
+    projeto: { nome: string } | null;
     empresa: { nome_fantasia: string | null; razao_social: string | null } | null;
     responsavel: { nome: string } | null;
     regional: { nome: string } | null;
-    projeto_financeiro: { codigo: string } | null;
+    projeto_financeiro: { nome: string } | null;
   };
 }
 
@@ -71,10 +72,10 @@ export async function listarCancelamentosNaFila(
       // `aberto_por` aponta para `auth.users`, não para `profiles`: o nome
       // vem numa leitura à parte, na segunda onda.
       `${SELECT_CANCELAMENTO}, job:jobs!inner(id, codigo, nome, nome_financeiro, produto, valor_total, data_abertura_financeiro, aberto_por, projeto_financeiro_id, ` +
-        "projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia)), " +
+        "cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), projeto:projetos(nome), " +
         "empresa:empresas!jobs_empresa_id_fkey(nome_fantasia, razao_social), " +
         "responsavel:profiles!responsavel_id(nome), " +
-        "regional:regionais(nome), projeto_financeiro:projetos_financeiro(codigo))",
+        "regional:regionais(nome), projeto_financeiro:projetos_financeiro(nome))",
     )
     .eq("tenant_id", tenantId)
     .eq("situacao", "pendente")
@@ -170,17 +171,16 @@ export async function listarCancelamentosNaFila(
       jobId: j.id,
       codigo: j.codigo,
       nome: j.nome_financeiro?.trim() || j.nome,
-      projetoCodigo: j.projeto?.codigo ?? null,
       projetoNome: j.projeto?.nome ?? null,
       empresaNome: j.empresa?.nome_fantasia ?? j.empresa?.razao_social ?? null,
-      clienteNome: j.projeto?.cliente?.nome_fantasia ?? null,
+      clienteNome: j.cliente?.nome_fantasia ?? null,
       produto: j.produto,
       responsavelNome: j.responsavel?.nome ?? null,
       regionalNome: j.regional?.nome ?? null,
       valorTotal: Number(j.valor_total ?? 0),
       abertoEm: j.data_abertura_financeiro,
       abertoPorNome: j.aberto_por ? nomePorId.get(j.aberto_por) ?? null : null,
-      projetoFinanceiroCodigo: j.projeto_financeiro?.codigo ?? null,
+      projetoFinanceiroNome: j.projeto_financeiro?.nome ?? null,
       // O próprio job ainda está vivo: "outro" é mais de um.
       projetoFinanceiroFicaInativo: pf !== null && (vivosPorProjeto.get(pf) ?? 0) <= 1,
       recebimentoPrevisto: centavos(receb.get(j.id) ?? 0),

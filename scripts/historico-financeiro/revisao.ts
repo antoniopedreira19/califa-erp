@@ -88,6 +88,7 @@ async function main() {
     "Pendências de \"Corrigir na planilha\" se resolvem no Google Sheets: a próxima versão já chega corrigida.",
     "",
     `Primeira carga (01/01/2023 a 30/06/2026): ${resumo.movimentos.por_carga["1ª carga"]} movimentos e ${resumo.notas.por_carga["emitida · 1ª carga"]} notas emitidas.`,
+    `3T de 2026 (01/07 a 30/09/2026): ${resumo.movimentos.por_carga["3T 2026"] ?? 0} movimentos e ${resumo.notas.por_carga["emitida · 3T 2026"] ?? 0} notas emitidas.`,
     `Pendências: ${pendencias.length}. Propostas: ${plano.length} contas do plano, ${clientes.length} clientes, ${marcas.length} marcas, ${servicos.length} serviços e ${regionais.length} regionais.`,
   ];
   textos.forEach((t, i) => {
@@ -97,6 +98,7 @@ async function main() {
 
   aba(livro, "Pendências", [
     { titulo: "Tipo", campo: "tipo", largura: 30 },
+    { titulo: "Carga", campo: "carga", largura: 12 },
     { titulo: "Aba", campo: "aba", largura: 26 },
     { titulo: "Linha", campo: "linha", largura: 8 },
     { titulo: "Data", campo: "data", largura: 12 },

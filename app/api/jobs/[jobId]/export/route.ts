@@ -61,7 +61,7 @@ export async function GET(
         "orcamento:orcamentos(id, codigo, nome, categoria:categorias_dominio!categoria_id(modelo_planilha)), " +
         "versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, percentual_honorarios, percentual_imposto, " +
         "percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, cambio_cotacao, cambio_venda, cambio_data), " +
-        "projeto:projetos(cliente:clientes(nome_fantasia))",
+        "cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia)",
     )
     .eq("id", params.jobId)
     .eq("tenant_id", tenantId)
@@ -282,7 +282,7 @@ export async function GET(
 
   adicionarAbaInterna(wb, "Interna", {
     identificacao: `${raw.codigo} · ${raw.nome}`,
-    clienteNome: primeiro<any>(primeiro<any>(raw.projeto)?.cliente)?.nome_fantasia ?? "—",
+    clienteNome: primeiro<any>(raw.cliente)?.nome_fantasia ?? "—",
     titulo: "Planilha interna do job",
     marca: "interna:job",
     modelo: modelo === "mensal" ? "mensal" : config.internacional ? "internacional" : "nacional",

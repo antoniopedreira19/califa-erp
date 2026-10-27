@@ -70,7 +70,7 @@ export async function listarConversasPPs(
   const { data: jobs, error: jobsErr } = await supabase
     .from("jobs")
     .select(
-      "id, codigo, nome, projeto:projetos(nome, cliente:clientes(nome_fantasia))",
+      "id, codigo, nome, cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), projeto:projetos(nome)",
     )
     .eq("tenant_id", tenantId)
     .in(
@@ -92,7 +92,7 @@ export async function listarConversasPPs(
     // de virar uma linha "—" sem sentido.
     if (!job) continue;
 
-    const cliente = job.projeto?.cliente?.nome_fantasia ?? null;
+    const cliente = job.cliente?.nome_fantasia ?? null;
     const projeto = job.projeto?.nome ?? null;
 
     conversas.push({

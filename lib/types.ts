@@ -290,8 +290,12 @@ export interface Projeto {
    *  gravados continuam (a busca da lista ainda casa por campanha). */
   campanha: string | null;
   categoria_id: string | null;
-  cliente_id: string;
-  /** Marca que o JOB leva ao financeiro (`cliente_produtos`), copiada para
+  /** LEGADO desde a decisão 215 (26/10/2026): o cliente é do orçamento
+   *  (`Orcamento.cliente_id`) e do job. Os projetos anteriores guardam o
+   *  que tinham; os novos ficam sem. Não ler para saber o cliente de um
+   *  job ou orçamento. */
+  cliente_id: string | null;
+  /** LEGADO desde a decisão 215, como `cliente_id`. Marca que o JOB leva ao financeiro (`cliente_produtos`), copiada para
    *  `jobs.produto` no envio para abertura. Desde a decisão 133
    *  (30/09/2026) o projeto aceita mais de uma marca: as escolhidas vivem
    *  em `projeto_marcas`, e esta coluna guarda a única escolhida ou, com
@@ -348,6 +352,11 @@ export interface Orcamento {
   status: OrcamentoStatus;
   versao_aprovada_id: string | null;
   categoria_id: string | null;
+  /** Cliente e marca do orçamento (decisão 215): saíram do projeto. O job
+   *  herda os dois (`jobs.cliente_id`, mantido pelo banco, e
+   *  `jobs.produto_id`). */
+  cliente_id: string;
+  produto_id: string | null;
   /** Serviço do job deste orçamento. Desceu do projeto em 02/09/2026 e lê
    *  `categorias_dominio` com escopo `projeto` — lista diferente da
    *  `categoria_id` acima, que usa escopo `orcamento`. */
@@ -1069,6 +1078,12 @@ export interface Job {
   abertura_revisao_desde: string | null;
   /** Errata que devolveu o job ao mural. */
   abertura_revisao_errata_id: string | null;
+  /** Decisão 216: job auditado pelo cliente pela Mídia System. Enquanto
+   *  `midia_system_liberado_em` é nulo, a PP vai ao financeiro sem NF; só
+   *  o financeiro marca e libera. */
+  midia_system: boolean;
+  midia_system_liberado_em: string | null;
+  midia_system_liberado_por: string | null;
   /** Data do EVENTO, informada no envio do job. Obrigatória no
    *  formulário desde 27/08/2026; nula nos jobs abertos antes disso e, desde
    *  a decisão 149, no Fee e no Always On, que não têm evento. */
@@ -1499,6 +1514,11 @@ export interface FotoDaAbertura {
   contaImpostosLabel: string | null;
   categoriaNome: string | null;
   servicoNome: string | null;
+  /** Marca, empresa e regional registradas (decisão 214). Nulas nas fotos
+   *  anteriores a 26/10/2026. */
+  marcaNome: string | null;
+  empresaNome: string | null;
+  regionalNome: string | null;
   competencias: JobCompetencia[];
   curva: LinhaPrevisaoFoto[];
   recebimento: LinhaPrevisaoFoto[];
@@ -2042,6 +2062,10 @@ export interface PedidoCompra {
   cartao_corporativo: boolean;
   cartao_plataforma: string | null;
   cartao_link: string | null;
+  /** Decisão 216: foi ao financeiro sem anexo com o job Mídia System em
+   *  auditoria. Depois da liberação, presta contas da NF na prestação da
+   *  verba (`lib/calculos/midia-system.ts`). */
+  sem_nf_na_auditoria: boolean;
   // Verba (subtipo de PP — adiantamento com prestação de contas). Desde a
   // decisão 164 o booleano vale para os três tipos de verba.
   verba_producao: boolean;
@@ -2597,7 +2621,8 @@ export interface CancelamentoDoJob {
   recebimentoPrevisto: number | null;
   custoPrevisto: number | null;
   impostosPrevistos: number | null;
-  projetoFinanceiroInativadoCodigo: string | null;
+  /** O nome, não o código: o código do projeto não aparece (27/10/2026). */
+  projetoFinanceiroInativadoNome: string | null;
 }
 
 // ---------- Alterações do financeiro (decisão 115) ----------
@@ -3956,6 +3981,8 @@ export interface HistoricoJob {
   rateio_regional: Record<string, number> | null;
   /** A alíquota teórica do job ("Imp Real %"), em fração. */
   imposto_teorico_percentual: number | null;
+  /** O percentual de fee do job na planilha (a coluna depois de "FEE LÍQUIDO"), em fração. */
+  fee_percentual: number | null;
   created_at: string;
 }
 

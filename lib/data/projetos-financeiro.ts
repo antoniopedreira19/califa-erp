@@ -38,7 +38,9 @@ export async function listarProjetosFinanceiro(
     .select("id, codigo, nome, cliente_id, cliente:clientes(nome_fantasia)")
     .eq("tenant_id", tenantId)
     .eq("ativo", true)
-    .order("codigo", { ascending: true });
+    // Pela criação: era pelo código, que saiu das telas (27/10/2026) e dava
+    // a mesma ordem dentro do ano.
+    .order("created_at", { ascending: true });
 
   if (clienteId) query = query.eq("cliente_id", clienteId);
 

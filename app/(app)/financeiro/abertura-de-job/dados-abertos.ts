@@ -57,7 +57,6 @@ export interface JobAberto {
   competencia_anos: number[];
   categoria_nome: string | null;
   projeto_id: string;
-  projeto_codigo: string | null;
   projeto_nome: string | null;
   /**
    * Projeto do job na visão do financeiro. É por ele que a aba
@@ -67,8 +66,14 @@ export interface JobAberto {
    * tela cai no projeto da produção.
    */
   projeto_financeiro_id: string | null;
-  projeto_financeiro_codigo: string | null;
   projeto_financeiro_nome: string | null;
+  /**
+   * Criação do projeto pelo qual a lista agrupa (o do financeiro; o da
+   * produção no fallback). É a ordem padrão dos grupos desde que o código
+   * do projeto saiu das telas (pedido do Tiago, 27/10/2026) — a mesma
+   * ordem que o código dava.
+   */
+  projeto_criado_em: string | null;
   cliente_nome: string | null;
   responsavel_nome: string | null;
   regional_nome: string | null;
@@ -167,13 +172,13 @@ const SELECT_JOB_ABERTO =
   // embed ambíguo derruba a query inteira em vez de só a coluna.
   "servico_id, orcamento_id, " +
   "projeto_financeiro_id, " +
-  "projeto_financeiro:projetos_financeiro(codigo, nome), " +
+  "projeto_financeiro:projetos_financeiro(nome, created_at), " +
   // `!categoria_id`: `jobs` também tem duas FKs para `categorias_dominio`
   // desde a decisão 055.
   "categoria:categorias_dominio!categoria_id(nome), " +
   "regional:regionais(nome), " +
   "responsavel:profiles!responsavel_id(nome), " +
-  "projeto:projetos(codigo, nome, cliente:clientes(nome_fantasia))";
+  "cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), projeto:projetos(nome, created_at)";
 
 /**
  * Status que a aba "Visualizar Jobs" lista: tudo que já passou pela
@@ -303,12 +308,13 @@ export async function listarJobsDoFinanceiro(
       competencia_anos: (anosDoRateio.get(j.id) ?? []).sort((a, b) => a - b),
       categoria_nome: j.categoria?.nome ?? null,
       projeto_id: j.projeto_id,
-      projeto_codigo: j.projeto?.codigo ?? null,
       projeto_nome: j.projeto?.nome ?? null,
       projeto_financeiro_id: j.projeto_financeiro_id ?? null,
-      projeto_financeiro_codigo: j.projeto_financeiro?.codigo ?? null,
       projeto_financeiro_nome: j.projeto_financeiro?.nome ?? null,
-      cliente_nome: j.projeto?.cliente?.nome_fantasia ?? null,
+      projeto_criado_em: j.projeto_financeiro_id
+        ? j.projeto_financeiro?.created_at ?? null
+        : j.projeto?.created_at ?? null,
+      cliente_nome: j.cliente?.nome_fantasia ?? null,
       responsavel_nome: j.responsavel?.nome ?? null,
       regional_nome: j.regional?.nome ?? null,
       produto: j.produto,

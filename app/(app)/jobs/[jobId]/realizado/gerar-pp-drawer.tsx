@@ -172,6 +172,7 @@ import {
   type CartaoCorporativoEstado,
 } from "./cartao-corporativo-field";
 import { NovoFornecedorDialog } from "@/app/(app)/fornecedores/novo-fornecedor-dialog";
+import { envioDispensaNf, type MidiaSystemDoJob } from "@/lib/calculos/midia-system";
 import type { FornecedorResumo } from "@/app/(app)/fornecedores/actions";
 import {
   PAGAMENTO_PELO_CADASTRO,
@@ -246,6 +247,9 @@ interface Props {
    *  empresa gerencial → principal). A lista de "Empresa emissora" são os
    *  CNPJs (`tomadores`); a empresa gerencial é a do job. */
   cnpjPadraoDaPP: string | null;
+  /** Decisão 216: com o job Mídia System em auditoria, os anexos não são
+   *  exigidos no envio. */
+  midiaSystem: MidiaSystemDoJob | null;
   /** "salva": guardou a PP a emitir. "revisar": guardou e o painel abre a
    *  revisão antes de gerar (o "Gerar PP"). "editada": salvou a edição da
    *  PP gerada — o segundo argumento é o código dela. */
@@ -398,6 +402,7 @@ export function GerarPPDrawer({
   statusDoJob,
   tomadores,
   cnpjPadraoDaPP,
+  midiaSystem,
   onSuccess,
 }: Props) {
   const editando = aEmitirEditando !== null;
@@ -2216,6 +2221,8 @@ export function GerarPPDrawer({
                   ? `Anexos (não exigidos na ${rotuloDaVerbaMinusculo(tipoVerba)})`
                   : cartao
                   ? "Anexos (não exigidos no cartão corporativo)"
+                  : envioDispensaNf(midiaSystem)
+                  ? "Anexos (opcionais na auditoria da Mídia System)"
                   : "Anexos (obrigatórios para o envio ao financeiro)"}
               </h3>
               {tipoVerba && !reembolso ? (

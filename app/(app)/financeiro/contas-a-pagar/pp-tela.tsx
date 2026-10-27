@@ -177,8 +177,10 @@ export function PPTela(
   // prestação: a PP de verba não tem anexo próprio (decisão 081). Com as
   // correções do financeiro por cima (decisão 189).
   const correcoesDestaPP = prestacaoEditada?.ppId === pp?.id ? prestacaoEditada?.porDoc : undefined;
+  // Decisão 216: a PP que foi sem NF na auditoria da Mídia System presta
+  // contas da nota na mesma prestação.
   const documentosDaPrestacao =
-    pp?.verba_producao && pp.prestacao
+    (pp?.verba_producao || pp?.sem_nf_na_auditoria) && pp.prestacao
       ? pp.prestacao.documentos.map((d) => aplicarCampos(d, correcoesDestaPP?.[d.id]))
       : null;
   const ehPrestacao = documentosDaPrestacao != null;
@@ -267,7 +269,10 @@ export function PPTela(
   const aprovada = pp.status === "aprovada";
   const situacao = situacaoDaVerba(pp);
   const prestacaoEmAvaliacao =
-    pp.verba_producao && pp.prestacao?.status === "em_avaliacao";
+    (pp.verba_producao || pp.sem_nf_na_auditoria) && pp.prestacao?.status === "em_avaliacao";
+  // Mídia System (decisão 216): a NF pode chegar com a PP ainda em
+  // avaliação. Primeiro a PP, depois a prestação — o banco confere de novo.
+  const prestacaoEsperaAPP = prestacaoEmAvaliacao && !pp.verba_producao && emAvaliacao;
   // O gasto da prestação como está na conferência (decisão 189): boleto e
   // contrato não somam.
   const gastoDaPrestacao = documentosDaPrestacao
@@ -546,7 +551,9 @@ export function PPTela(
                       ? "Sem gasto: a produção devolve a verba inteira."
                       : pp?.cartao_corporativo
                         ? "Cartão corporativo: a PP vai sem nota."
-                        : "A produção não enviou documento nesta PP."
+                        : pp?.sem_nf_na_auditoria
+                          ? "A PP foi sem NF na auditoria da Mídia System. A nota entra na prestação de contas."
+                          : "A produção não enviou documento nesta PP."
                   }
                 />
               ) : urlAnexo ? (
@@ -669,7 +676,7 @@ export function PPTela(
               <span className="mr-auto text-xs text-white/70">
                 Prestação enviada
                 {pp.prestacao.enviada_por_nome ? ` por ${pp.prestacao.enviada_por_nome}` : ""} ·
-                gasto{" "}
+                {" "}{pp.verba_producao ? "gasto" : "NFs"}{" "}
                 <strong className="font-semibold text-white">
                   {formatCurrency(gastoDaPrestacao, "BRL")}
                 </strong>{" "}
@@ -684,15 +691,21 @@ export function PPTela(
                 <Ban className="h-3.5 w-3.5" />
                 Reprovar prestação
               </button>
-              <button
-                type="button"
-                onClick={() => setAprovarPrestacaoAberto(true)}
-                disabled={pending}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
-              >
-                <CheckCircle2 className="h-3.5 w-3.5" />
-                Seguir para a aprovação
-              </button>
+              {prestacaoEsperaAPP ? (
+                <span className="rounded-lg border border-white/20 px-3.5 py-2 text-xs font-semibold text-white/80">
+                  Aprove a PP antes da prestação
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setAprovarPrestacaoAberto(true)}
+                  disabled={pending}
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  Seguir para a aprovação
+                </button>
+              )}
             </div>
           )}
 
@@ -791,7 +804,9 @@ export function PPTela(
                     codigo: pp.codigo,
                     valor: pp.valor,
                     gasto: gastoDaPrestacao,
-                    saldo: Math.round((pp.valor - gastoDaPrestacao) * 100) / 100,
+                    // Decisão 216: a PP da auditoria foi paga cheia: sem saldo.
+                    saldo: pp.sem_nf_na_auditoria ? 0 : Math.round((pp.valor - gastoDaPrestacao) * 100) / 100,
+                    midiaSystem: pp.sem_nf_na_auditoria && !pp.verba_producao,
                     documentos: pp.prestacao.documentos.length,
                     // Decisão 189: as NFs que vão para o cadastro de notas.
                     nfs: (documentosDaPrestacao ?? [])
@@ -813,8 +828,13 @@ export function PPTela(
                       em: pp.prestacao.enviada_em,
                       reenviada: false,
                     },
-                    responsavelVerbaNome: pp.responsavel_nome,
-                    rotuloQuemRecebe: verbaDeResponsavel(pp) ? "Responsável pela verba" : "Titular da verba",
+                    responsavelVerbaNome: pp.sem_nf_na_auditoria && !pp.verba_producao ? pp.fornecedor_nome : pp.responsavel_nome,
+                    rotuloQuemRecebe:
+                      pp.sem_nf_na_auditoria && !pp.verba_producao
+                        ? "Fornecedor"
+                        : verbaDeResponsavel(pp)
+                          ? "Responsável pela verba"
+                          : "Titular da verba",
                     gpResponsavelNome: pp.job_responsavel_nome,
                   }
                 : null

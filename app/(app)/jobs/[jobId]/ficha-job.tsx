@@ -10,6 +10,8 @@ import {
 } from "@/lib/types";
 import type { JobCompetencia, JobStatus, JobStatusExibido } from "@/lib/types";
 import type { ContatoCobranca } from "@/lib/data/contatos-cobranca";
+import type { ApresentacaoDoProjeto } from "@/lib/apresentacoes-do-projeto";
+import { ApresentacoesDaFicha } from "@/components/apresentacoes-do-projeto";
 
 /** "17/08/2026" a partir de um `date` ou de um `timestamptz` do banco. */
 function formatData(iso: string | null): string {
@@ -54,6 +56,8 @@ function formatPeriodo(inicio: string | null, fim: string | null): string {
 export interface JobDaFicha {
   codigo: string;
   nome: string;
+  /** O cliente do job (decisão 215): o do orçamento dele. */
+  clienteNome: string | null;
   categoriaNome: string | null;
   /**
    * Serviço do job — `jobs.servico_id` desde a decisão 055 (gravado na
@@ -89,11 +93,11 @@ export interface JobDaFicha {
 
 export interface ProjetoDaFicha {
   id: string;
-  codigo: string;
   nome: string;
-  clienteNome: string | null;
   dataInicio: string | null;
   dataFim: string | null;
+  /** As apresentações mostradas ao cliente (decisão 213). */
+  apresentacoes: ApresentacaoDoProjeto[];
 }
 
 export interface JobIrmao {
@@ -225,7 +229,11 @@ export function FichaJob({
                   .filter(Boolean)
                   .join(" · ") || "—"}
               </Campo>
-              <Campo rotulo="Marca">{job.produto ?? "—"}</Campo>
+              {/* O cliente é do job, que o leva do orçamento (decisão 215),
+                  e não mais do projeto. */}
+              <Campo rotulo="Cliente · Marca">
+                {[job.clienteNome, job.produto].filter(Boolean).join(" · ") || "—"}
+              </Campo>
               <Campo rotulo="Regional · Cidade">
                 {[job.regionalNome, job.cidade].filter(Boolean).join(" · ") ||
                   "—"}
@@ -305,23 +313,28 @@ export function FichaJob({
             </div>
 
             <div className="flex flex-col border-l border-border">
-              <CabecalhoColuna titulo="Projeto">
+              {/* O código do projeto não aparece para o usuário (pedido do
+                  Tiago, 27/10/2026): o link do cabeçalho passou para o nome. */}
+              <CabecalhoColuna titulo="Projeto" />
+              <Campo rotulo="Nome do projeto" destaque>
                 <LinkDoProjeto
                   href={origem.projetoHref}
                   saiDoModulo={saiDoModuloPeloProjeto}
                   projeto={projeto}
-                  className="font-mono text-[11.5px] font-semibold text-california-red hover:underline"
+                  className="text-california-red hover:underline"
                 >
-                  {projeto.codigo}
+                  {projeto.nome}
                 </LinkDoProjeto>
-              </CabecalhoColuna>
-              <Campo rotulo="Nome do projeto" destaque>
-                {projeto.nome}
               </Campo>
-              <Campo rotulo="Cliente">{projeto.clienteNome ?? "—"}</Campo>
-              <Campo rotulo="Período do projeto" mono ultimo>
+              <Campo rotulo="Período do projeto" mono>
                 {formatPeriodo(projeto.dataInicio, projeto.dataFim)}
               </Campo>
+              {/* As apresentações do projeto (decisão 213): cada uma abre
+                  numa aba nova. */}
+              <div className="px-[26px] pb-3 pt-[9px]">
+                <p className="text-[11px] text-muted-foreground">Apresentação</p>
+                <ApresentacoesDaFicha apresentacoes={projeto.apresentacoes} />
+              </div>
 
               <div className="flex items-baseline justify-between gap-3 border-t border-border px-[26px] pb-2 pt-3">
                 <p className="text-[10.5px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
@@ -404,7 +417,6 @@ export function FichaJob({
                 projeto={projeto}
                 className="text-california-red hover:underline"
               >
-                <span className="font-mono text-[13px]">{projeto.codigo}</span> ·{" "}
                 {projeto.nome}
               </LinkDoProjeto>
             </CampoLateral>
@@ -510,8 +522,7 @@ function LinkDoProjeto({
         modulo="Orçamentos"
         descricao={
           <>
-            O projeto <span className="font-mono">{projeto.codigo}</span> ·{" "}
-            {projeto.nome} mora no módulo de Orçamentos, e este job não tem
+            O projeto {projeto.nome} mora no módulo de Orçamentos, e este job não tem
             projeto no financeiro. Você sai desta tela para abri-lo.
           </>
         }
@@ -533,7 +544,7 @@ function CabecalhoColuna({
   children,
 }: {
   titulo: string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/30 px-[26px] py-[13px]">

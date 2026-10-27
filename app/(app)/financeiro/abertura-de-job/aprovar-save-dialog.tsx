@@ -134,9 +134,7 @@ export function AprovarSaveDialog({
     { rotulo: "Código", valor: save.jobCodigo, mono: true },
     {
       rotulo: "Projeto",
-      valor:
-        [save.projetoNome, save.projetoCodigo].filter(Boolean).join(" · ") ||
-        "—",
+      valor: save.projetoNome || "—",
     },
     { rotulo: "Empresa", valor: save.empresaNome ?? "—" },
     { rotulo: "Cliente", valor: save.clienteNome ?? "—" },

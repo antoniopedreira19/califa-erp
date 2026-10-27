@@ -59,6 +59,8 @@ export async function lerPlanilhaEmLeitura(jobId: string): Promise<ResultadoDaPl
     props: {
       papelEnviaPP: false,
       podeGerarAcimaDoOrcado: false,
+      // A planilha da conferência só lê: sem marca da Mídia System.
+      midiaSystem: null,
       papelCorrigeNf: false,
       confirmarSaidaParaOrcamento: true,
       edicaoDoFinanceiro: null,

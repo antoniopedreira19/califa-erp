@@ -110,6 +110,66 @@ async function conferirServico(
 }
 
 /**
+ * Marca, empresa e regional do job no registro (decisão 214). A marca é do
+ * cliente do job e está ativa (ou é a que o job já tem); a empresa é do
+ * tenant e está ativa; a regional é da empresa escolhida, ativa e de
+ * projeto. Os gatilhos `ck_empresa_bate_regional` e
+ * `ck_regional_disponivel_em_projetos` recusam o mesmo no banco — aqui a
+ * mensagem chega inteira. Devolve o nome da marca, que vai para
+ * `jobs.produto`.
+ */
+async function conferirMarcaEmpresaRegional(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  clienteId: string | null,
+  marcaAtualId: string | null,
+  escolha: { produto_id: string; empresa_id: string; regional_id: string },
+): Promise<{ ok: true; marcaNome: string } | { ok: false; message: string }> {
+  const [{ data: marca }, { data: empresa }, { data: regional }] = await Promise.all([
+    supabase
+      .from("cliente_produtos")
+      .select("id, nome, cliente_id, ativo")
+      .eq("id", escolha.produto_id)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<{ id: string; nome: string; cliente_id: string; ativo: boolean }>(),
+    supabase
+      .from("empresas")
+      .select("id, ativo")
+      .eq("id", escolha.empresa_id)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<{ id: string; ativo: boolean }>(),
+    supabase
+      .from("regionais")
+      .select("id, empresa_id, ativo, disponivel_em_projetos")
+      .eq("id", escolha.regional_id)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<{
+        id: string;
+        empresa_id: string;
+        ativo: boolean;
+        disponivel_em_projetos: boolean;
+      }>(),
+  ]);
+
+  if (!marca || marca.cliente_id !== clienteId) {
+    return { ok: false, message: "A marca escolhida não é do cliente deste job." };
+  }
+  if (!marca.ativo && marca.id !== marcaAtualId) {
+    return { ok: false, message: "Esta marca foi inativada. Escolha outra." };
+  }
+  if (!empresa || !empresa.ativo) {
+    return { ok: false, message: "Empresa do job inválida. Escolha outra." };
+  }
+  if (!regional || regional.empresa_id !== escolha.empresa_id) {
+    return { ok: false, message: "A regional escolhida não é da empresa do job." };
+  }
+  if (!regional.ativo || !regional.disponivel_em_projetos) {
+    return { ok: false, message: "Esta regional não está disponível para jobs. Escolha outra." };
+  }
+  return { ok: true, marcaNome: marca.nome };
+}
+
+/**
  * Confere a categoria escolhida para o job na abertura.
  *
  * Além do escopo e do `ativo`, checa o **modelo de planilha**: ele tem que
@@ -385,7 +445,7 @@ export async function abrirJobNoFinanceiro(
   const { data: job } = await supabase
     .from("jobs")
     .select(
-      "id, status, projeto_id, orcamento_id, faturamento_previsto, valor_total, data_inicio_prevista, projeto:projetos(cliente_id)",
+      "id, status, projeto_id, orcamento_id, faturamento_previsto, valor_total, data_inicio_prevista, produto_id, cliente_id",
     )
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)
@@ -397,7 +457,8 @@ export async function abrirJobNoFinanceiro(
       faturamento_previsto: number | string | null;
       valor_total: number | string | null;
       data_inicio_prevista: string | null;
-      projeto: { cliente_id: string } | null;
+      produto_id: string | null;
+      cliente_id: string;
     }>();
 
   if (!job) return { ok: false, message: "Job não encontrado." };
@@ -427,6 +488,16 @@ export async function abrirJobNoFinanceiro(
   );
   if (servicoErro) return { ok: false, message: servicoErro };
 
+  // Marca, empresa e regional do job (decisão 214).
+  const marcaEmpresaRegional = await conferirMarcaEmpresaRegional(
+    supabase,
+    session.activeTenant.id,
+    job.cliente_id ?? null,
+    job.produto_id ?? null,
+    parsed.data,
+  );
+  if (!marcaEmpresaRegional.ok) return marcaEmpresaRegional;
+
   // A primeira competência do rateio é a que `jobs` guarda (decisão 055).
   const rateio = ordenarCompetencias(parsed.data.competencias);
   const primeiraCompetencia = rateio[0];
@@ -434,7 +505,7 @@ export async function abrirJobNoFinanceiro(
   const refsErro = await conferirProjetoEContas(
     supabase,
     session.activeTenant.id,
-    job.projeto?.cliente_id ?? null,
+    job.cliente_id ?? null,
     parsed.data,
   );
   if (refsErro) return { ok: false, message: refsErro };
@@ -593,7 +664,7 @@ export async function abrirJobNoFinanceiro(
         tenantId: session.activeTenant.id,
         profileId: session.profile.id,
         // Conferido em `conferirProjetoEContas`: projeto novo exige cliente.
-        clienteId: job.projeto?.cliente_id ?? "",
+        clienteId: job.cliente_id ?? "",
         nome: parsed.data.projeto_financeiro_novo,
       })
     : null;
@@ -620,6 +691,14 @@ export async function abrirJobNoFinanceiro(
       conta_impostos_id: parsed.data.conta_impostos_id,
       categoria_id: parsed.data.categoria_id,
       servico_id: parsed.data.servico_id,
+      // Decisão 214: vale para o job inteiro, também na produção.
+      produto_id: parsed.data.produto_id,
+      produto: marcaEmpresaRegional.marcaNome,
+      empresa_id: parsed.data.empresa_id,
+      regional_id: parsed.data.regional_id,
+      // Decisão 216: o job Mídia System dispensa a NF no envio da PP até o
+      // financeiro liberar as notas.
+      midia_system: parsed.data.midia_system,
       competencia_trimestre: primeiraCompetencia.trimestre,
       competencia_ano: primeiraCompetencia.ano,
       custo_previsto_total: custoPrevisto,
@@ -862,6 +941,10 @@ export async function abrirJobNoFinanceiro(
       conta_pagamento_id: parsed.data.conta_pagamento_id,
       categoria_id: parsed.data.categoria_id,
       servico_id: parsed.data.servico_id,
+      produto_id: parsed.data.produto_id,
+      empresa_id: parsed.data.empresa_id,
+      regional_id: parsed.data.regional_id,
+      midia_system: parsed.data.midia_system,
       competencia: rateioLabel(rateio),
       competencias: rateio,
       custo_previsto_total: custoPrevisto,
@@ -893,6 +976,9 @@ export async function abrirJobNoFinanceiro(
       conta_impostos_id: parsed.data.conta_impostos_id,
       categoria_id: parsed.data.categoria_id,
       servico_id: parsed.data.servico_id,
+      produto_id: parsed.data.produto_id,
+      empresa_id: parsed.data.empresa_id,
+      regional_id: parsed.data.regional_id,
       competencias: rateio,
       curva: parsed.data.curva,
       recebimento: parsed.data.recebimento,
@@ -1126,8 +1212,9 @@ async function projetoComONome(
 /** Diz qual projeto já tem o nome — e de que cliente, porque a unicidade
  *  vale no sistema inteiro e o combo só mostra os do cliente do job. */
 function mensagemDeNomeRepetido(p: ProjetoDeMesmoNome): string {
-  const cliente = p.cliente_nome ? `, de ${p.cliente_nome}` : "";
-  return `Já existe um projeto com este nome: ${p.codigo} · ${p.nome}${cliente}. Use outro nome.`;
+  // Sem o código do projeto, que não aparece para o usuário (27/10/2026).
+  const cliente = p.cliente_nome ? ` no cliente ${p.cliente_nome}` : "";
+  return `Já existe um projeto com este nome${cliente}. Use outro nome.`;
 }
 
 /** O 23505 do insert/update: o nome repetido, ou a corrida do código. */
@@ -1445,13 +1532,38 @@ export async function editarRegistroDaAbertura(
         "nome_financeiro, projeto_financeiro_id, conta_recebimento_id, " +
         "conta_pagamento_id, conta_impostos_id, categoria_id, servico_id, competencia_trimestre, " +
         "competencia_ano, abertura_em_revisao, abertura_revisao_errata_id, " +
-        "data_inicio_prevista, projeto:projetos(cliente_id)",
+        "data_inicio_prevista, produto_id, empresa_id, regional_id, cliente_id, " +
+        "midia_system, midia_system_liberado_em",
     )
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle<any>();
 
   if (!job) return { ok: false, message: "Job não encontrado." };
+
+  // Decisão 216: a Mídia System não volta atrás depois da liberação das
+  // NFs, e o job com PP já enviada sem NF só sai da auditoria pelo
+  // "Liberar NFs". O gatilho `jobs_guarda_midia_system` confere de novo.
+  if (parsed.data.midia_system !== (job.midia_system === true)) {
+    if (job.midia_system_liberado_em) {
+      return { ok: false, message: "As NFs deste job já foram liberadas: a marcação Mídia System não muda mais." };
+    }
+    if (!parsed.data.midia_system) {
+      const { count: semNf } = await supabase
+        .from("pedidos_compra")
+        .select("id", { count: "exact", head: true })
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("job_id", jobId)
+        .eq("sem_nf_na_auditoria", true)
+        .neq("status", "cancelada");
+      if ((semNf ?? 0) > 0) {
+        return {
+          ok: false,
+          message: "Este job já tem PP enviada sem NF. Para encerrar a auditoria, use “Liberar NFs”.",
+        };
+      }
+    }
+  }
   if (!jobEstaAberto(job.status)) {
     return {
       ok: false,
@@ -1583,13 +1695,23 @@ export async function editarRegistroDaAbertura(
   );
   if (servicoErro) return { ok: false, message: servicoErro };
 
+  // Marca, empresa e regional do job (decisão 214).
+  const marcaEmpresaRegional = await conferirMarcaEmpresaRegional(
+    supabase,
+    session.activeTenant.id,
+    job.cliente_id ?? null,
+    job.produto_id ?? null,
+    parsed.data,
+  );
+  if (!marcaEmpresaRegional.ok) return marcaEmpresaRegional;
+
   const rateio = ordenarCompetencias(parsed.data.competencias);
   const primeiraCompetencia = rateio[0];
 
   const refsErro = await conferirProjetoEContas(
     supabase,
     session.activeTenant.id,
-    job.projeto?.cliente_id ?? null,
+    job.cliente_id ?? null,
     parsed.data,
   );
   if (refsErro) return { ok: false, message: refsErro };
@@ -1790,7 +1912,7 @@ export async function editarRegistroDaAbertura(
     ? await criarProjetoDoJob(supabase, {
         tenantId: session.activeTenant.id,
         profileId: session.profile.id,
-        clienteId: job.projeto?.cliente_id ?? "",
+        clienteId: job.cliente_id ?? "",
         nome: parsed.data.projeto_financeiro_novo,
       })
     : null;
@@ -1864,6 +1986,12 @@ export async function editarRegistroDaAbertura(
       conta_impostos_id: parsed.data.conta_impostos_id,
       categoria_id: parsed.data.categoria_id,
       servico_id: parsed.data.servico_id,
+      // Decisão 214: vale para o job inteiro, também na produção.
+      produto_id: parsed.data.produto_id,
+      produto: marcaEmpresaRegional.marcaNome,
+      empresa_id: parsed.data.empresa_id,
+      regional_id: parsed.data.regional_id,
+      midia_system: parsed.data.midia_system,
       competencia_trimestre: primeiraCompetencia.trimestre,
       competencia_ano: primeiraCompetencia.ano,
       custo_previsto_total: custoPrevisto,
@@ -2054,6 +2182,10 @@ export async function editarRegistroDaAbertura(
         conta_pagamento_id: job.conta_pagamento_id,
         categoria_id: job.categoria_id,
         servico_id: job.servico_id,
+        produto_id: job.produto_id ?? null,
+        empresa_id: job.empresa_id ?? null,
+        regional_id: job.regional_id ?? null,
+        midia_system: job.midia_system === true,
         competencia: rateioLabel(rateioGuardado),
         competencias: ordenarCompetencias(rateioGuardado),
         curva: curvaGuardada,
@@ -2068,6 +2200,10 @@ export async function editarRegistroDaAbertura(
         conta_pagamento_id: parsed.data.conta_pagamento_id,
         categoria_id: parsed.data.categoria_id,
         servico_id: parsed.data.servico_id,
+        produto_id: parsed.data.produto_id,
+        empresa_id: parsed.data.empresa_id,
+        regional_id: parsed.data.regional_id,
+        midia_system: parsed.data.midia_system,
         competencia: rateioLabel(rateio),
         competencias: rateio,
         curva: parsed.data.curva,
@@ -2096,6 +2232,9 @@ export async function editarRegistroDaAbertura(
       conta_impostos_id: parsed.data.conta_impostos_id,
       categoria_id: parsed.data.categoria_id,
       servico_id: parsed.data.servico_id,
+      produto_id: parsed.data.produto_id,
+      empresa_id: parsed.data.empresa_id,
+      regional_id: parsed.data.regional_id,
       competencias: rateio,
       curva: parsed.data.curva,
       recebimento: parsed.data.recebimento,

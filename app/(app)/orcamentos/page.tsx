@@ -37,7 +37,7 @@ export default async function ProjetosPage({
       let q = supabase
         .from("projetos")
         .select(
-          "id, codigo, nome, campanha, status, cliente_id, produto_id, " +
+          "id, codigo, nome, campanha, status, " +
             "data_inicio_prevista, created_at, " +
             // Descrição do projeto: alimenta o cartão do ícone na coluna
             // Nome (handoff "Descritivos nas Listas", 04/09/2026). É texto
@@ -47,10 +47,8 @@ export default async function ProjetosPage({
             // Vínculos do recorte "Meus" (decisão 036, ampliada em
             // 02/09/2026): designado OU criador.
             "responsavel_id, created_by, " +
-            "cliente:clientes(id, nome_fantasia), " +
-            // `!produto_id` deixa o caminho dito (decisão 133). É a marca
-            // que o JOB leva; as escolhidas vêm de `projeto_marcas`, abaixo.
-            "produto:cliente_produtos!produto_id(id, nome), " +
+            // Cliente e marcas saíram do projeto (decisão 215): vêm dos
+            // orçamentos, abaixo.
             "categoria:categorias_dominio(nome)",
         )
         .eq("tenant_id", session.activeTenant.id);
@@ -83,7 +81,9 @@ export default async function ProjetosPage({
   // Regionais do projeto: N:N, então vêm numa query própria em vez de
   // embed na listagem (o embed devolveria a linha do projeto repetida).
   const regionaisMap = new Map<string, { id: string; nome: string }[]>();
-  // Marcas do projeto (decisão 133): N:N também, mesma saída.
+  // Clientes e marcas do projeto: os dos orçamentos dele (decisão 215 e
+  // resposta do Tiago, 26/10), sem repetir.
+  const clientesMap = new Map<string, { id: string; nome: string }[]>();
   const marcasMap = new Map<string, { id: string; nome: string; codigo: string }[]>();
   /**
    * Projetos do recorte "Meus" — decisão 036, ampliada pelo Tiago em
@@ -170,13 +170,18 @@ export default async function ProjetosPage({
         .select("orcamento_id")
         .eq("created_by", session.profile.id)
         .eq("tenant_id", session.activeTenant.id),
-      // Marcas de cada projeto (decisão 133): uma linha por par, poucas
-      // por projeto. Alimenta a coluna e o filtro de Marca.
+      // Cliente e marca de cada orçamento (decisão 215): alimentam as
+      // colunas e os filtros de Cliente e Marca. Sem o filtro de
+      // aterrissagem da consulta de cima: a coluna mostra todos.
       supabase
-        .from("projeto_marcas")
-        .select("projeto_id, produto:cliente_produtos(id, nome, codigo)")
+        .from("orcamentos")
+        .select(
+          "projeto_id, cliente:clientes!orcamentos_cliente_id_fkey(id, nome_fantasia), " +
+            "produto:cliente_produtos!orcamentos_produto_id_fkey(id, nome, codigo)",
+        )
         .in("projeto_id", projetoIds)
-        .eq("tenant_id", session.activeTenant.id),
+        .eq("tenant_id", session.activeTenant.id)
+        .is("arquivado_em", null),
     ]);
     if (marcasRes.error) console.error("[projetos.marcas]", marcasRes.error.message);
     if (jobsRes.error) console.error("[projetos.jobs]", jobsRes.error.message);
@@ -250,10 +255,21 @@ export default async function ProjetosPage({
     }
 
     for (const v of ((marcasRes.data ?? []) as any[])) {
+      if (v.cliente) {
+        const clientes = clientesMap.get(v.projeto_id) ?? [];
+        if (!clientes.some((c) => c.id === v.cliente.id)) {
+          clientes.push({ id: v.cliente.id, nome: v.cliente.nome_fantasia });
+        }
+        clientesMap.set(v.projeto_id, clientes);
+      }
       if (!v.produto) continue;
       const atuais = marcasMap.get(v.projeto_id) ?? [];
+      if (atuais.some((m) => m.id === v.produto.id)) continue;
       atuais.push({ id: v.produto.id, nome: v.produto.nome, codigo: v.produto.codigo });
       marcasMap.set(v.projeto_id, atuais);
+    }
+    for (const lista of clientesMap.values()) {
+      lista.sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
     }
     // Na ordem do código: a geral (PRD-01) primeiro, quando está entre elas.
     for (const lista of marcasMap.values()) {
@@ -278,13 +294,10 @@ export default async function ProjetosPage({
       a.localeCompare(b, "pt-BR"),
     ),
     status: p.status as Projeto["status"],
-    cliente_id: p.cliente_id,
-    cliente_nome: p.cliente?.nome_fantasia ?? null,
-    // Sem vínculo gravado — projeto salvo pela versão anterior do app —,
-    // vale a marca do projeto.
-    marcas:
-      marcasMap.get(p.id)?.map((m) => ({ id: m.id, nome: m.nome })) ??
-      (p.produto ? [{ id: p.produto.id, nome: p.produto.nome }] : []),
+    cliente_ids: (clientesMap.get(p.id) ?? []).map((c) => c.id),
+    cliente_nome:
+      (clientesMap.get(p.id) ?? []).map((c) => c.nome).join(", ") || null,
+    marcas: (marcasMap.get(p.id) ?? []).map((m) => ({ id: m.id, nome: m.nome })),
     regionais: regionaisMap.get(p.id) ?? [],
     data_inicio_prevista: p.data_inicio_prevista,
     orcamentos_count: orcamentosCountMap.get(p.id) ?? 0,

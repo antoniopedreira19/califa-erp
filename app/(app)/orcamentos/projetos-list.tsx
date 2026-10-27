@@ -46,7 +46,9 @@ export interface ProjetoRow {
    *  e o que a lista de projetos precisa mostrar é quem responde por ele. */
   gps: string[];
   status: ProjetoStatus;
-  cliente_id: string;
+  /** Os clientes dos orçamentos do projeto (decisão 215). */
+  cliente_ids: string[];
+  /** Os nomes deles, separados por vírgula. */
   cliente_nome: string | null;
   /** Marcas escolhidas no projeto, na ordem do código (decisão 133). Uma
    *  ou mais; vazia só nos projetos anteriores ao campo. */
@@ -104,9 +106,8 @@ function anoDoProjeto(p: ProjetoRow): string {
 function ColunasDaLista() {
   return (
     <colgroup>
-      {/* Código */}
-      <col className="w-[112px]" />
-      {/* Nome: absorve a sobra. */}
+      {/* Sem coluna de código: o código do projeto não aparece para o
+          usuário (pedido do Tiago, 27/10/2026). Nome: absorve a sobra. */}
       <col />
       {/* Cliente */}
       <col className="w-[156px]" />
@@ -154,7 +155,6 @@ function contagem(n: number): CelulaDaColuna {
 /** As colunas que filtram e ordenam pelo título, como no Excel (pedido do
  *  Tiago, 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do job). */
 const COLUNAS: ColunaFiltravel<ProjetoRow>[] = [
-  { chave: "codigo", rotulo: "Código", tipo: "texto", celula: (p) => celulaTexto(p.codigo) },
   { chave: "nome", rotulo: "Nome", tipo: "texto", celula: (p) => celulaTexto(p.nome) },
   { chave: "cliente", rotulo: "Cliente", tipo: "texto", celula: (p) => celulaTexto(p.cliente_nome) },
   { chave: "marca", rotulo: "Marca", tipo: "texto", celula: (p) => varios(p.marcas.map((m) => m.nome)) },
@@ -256,7 +256,8 @@ export function ProjetosList({
     const q = busca.trim().toLowerCase();
     return projetos.filter((p) => {
       if (meus && !meusIds.has(p.id)) return false;
-      if (clienteFiltro !== "todos" && p.cliente_id !== clienteFiltro) return false;
+      // O projeto entra se algum orçamento for do cliente (decisão 215).
+      if (clienteFiltro !== "todos" && !p.cliente_ids.includes(clienteFiltro)) return false;
       if (
         produtoFiltro !== "todos" &&
         !p.marcas.some((m) => m.id === produtoFiltro)
@@ -273,7 +274,7 @@ export function ProjetosList({
       if (statusFiltro === "ativos" && p.status !== "ativo") return false;
       if (statusFiltro === "arquivados" && p.status !== "arquivado") return false;
       if (q) {
-        const hay = `${p.codigo} ${p.nome} ${p.campanha ?? ""} ${p.cliente_nome ?? ""}`.toLowerCase();
+        const hay = `${p.nome} ${p.campanha ?? ""} ${p.cliente_nome ?? ""}`.toLowerCase();
         if (!hay.includes(q)) return false;
       }
       return true;
@@ -308,7 +309,7 @@ export function ProjetosList({
           <Input
             value={busca}
             onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por código, nome, campanha ou cliente..."
+            placeholder="Buscar por nome, campanha ou cliente..."
             className="pl-9"
           />
         </div>
@@ -391,7 +392,6 @@ export function ProjetosList({
           <ColunasDaLista />
           <thead>
             <tr className="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wider text-muted-foreground">
-              <th className="px-4 py-3 font-semibold">{colunas.titulo("codigo")}</th>
               <th className="px-4 py-3 font-semibold">{colunas.titulo("nome")}</th>
               <th className="px-4 py-3 font-semibold">{colunas.titulo("cliente")}</th>
               <th className="px-4 py-3 font-semibold">{colunas.titulo("marca")}</th>
@@ -420,31 +420,27 @@ export function ProjetosList({
                   }
                 }}
               >
-                {/* Sem quebra: o código partia no hífen ("AMB-" em cima,
-                    "P019/26" embaixo). */}
-                <td className="whitespace-nowrap px-4 py-3 font-mono text-xs">
-                  <Link
-                    href={`/orcamentos/${p.id}`}
-                    prefetch={false}
-                    className="hover:text-california-red"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {p.codigo}
-                  </Link>
-                </td>
                 {/* Nome, Cliente, Marca e GP Responsável quebram até duas
                     linhas; o que passar termina em "…" e aparece inteiro ao
-                    passar o mouse. Mesmo teto da lista de Jobs. */}
+                    passar o mouse. Mesmo teto da lista de Jobs. O nome é o
+                    link do projeto desde que a coluna do código saiu. */}
                 <td className="px-4 py-3">
                   <span className="flex min-w-0 items-center gap-1.5">
-                    <TruncateTooltip
-                      linhas={2}
-                      text={p.nome}
-                      className="min-w-0 font-medium"
-                    />
+                    <Link
+                      href={`/orcamentos/${p.id}`}
+                      prefetch={false}
+                      className="min-w-0 hover:text-california-red"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <TruncateTooltip
+                        linhas={2}
+                        text={p.nome}
+                        className="min-w-0 font-medium"
+                      />
+                    </Link>
                     <DescritivoPopover
                       rotulo="Descritivo do projeto"
-                      codigo={p.codigo}
+                      codigo={null}
                       nome={p.nome}
                       texto={p.descricao}
                       aberto={descritivoAberto === p.id}

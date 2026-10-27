@@ -74,6 +74,13 @@ import {
   type ColunaFiltravel,
 } from "@/components/ui/filtro-de-coluna";
 import { PrestarContasDrawer } from "./prestar-contas-drawer";
+import { MarcaMidiaNaPP } from "../../_midia-system/midia-system";
+import {
+  envioDispensaNf,
+  midiaAguardaProducao,
+  situacaoMidiaDaPP,
+  type MidiaSystemDoJob,
+} from "@/lib/calculos/midia-system";
 import {
   producaoEditaPrestacao,
   rotuloDoBotaoDaPrestacao,
@@ -124,6 +131,10 @@ interface Props {
   /** Decisão 173: a PP gerada se edita também pela aba, no MESMO formulário
    *  do painel do item. Null = sem edição (quem só lê usa a ficha). */
   edicaoDaPP: EdicaoDaPPNaAba | null;
+  /** Decisão 216: o job Mídia System. Na auditoria a PP vai sem NF; depois
+   *  da liberação, a que foi sem nota presta contas dela. `null` = o job
+   *  não é Mídia System. */
+  midiaSystem: MidiaSystemDoJob | null;
 }
 
 /** O que o formulário da PP precisa e a aba não tinha (decisão 173). */
@@ -302,6 +313,7 @@ export function JobPPsSection({
   empresas,
   planejadoPorItem,
   edicaoDaPP,
+  midiaSystem,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -399,9 +411,16 @@ export function JobPPsSection({
     return () => clearTimeout(t);
   }, [toast]);
 
+  // Decisão 216: a PP que foi sem NF entra no "Aguardando prestação" junto
+  // da verba, quando a próxima ação é da produção.
   const aguardandoPrestacao = React.useMemo(
-    () => pps.filter((pp) => verbaAguardaProducao(situacaoDaVerba(pp))).length,
-    [pps],
+    () =>
+      pps.filter(
+        (pp) =>
+          verbaAguardaProducao(situacaoDaVerba(pp)) ||
+          midiaAguardaProducao(situacaoMidiaDaPP(pp, midiaSystem)),
+      ).length,
+    [pps, midiaSystem],
   );
   const prontas = React.useMemo(() => pps.filter(prontaParaEnvio).length, [pps]);
 
@@ -409,7 +428,12 @@ export function JobPPsSection({
     const termo = busca.trim().toLowerCase();
     return pps.filter((pp) => {
       if (filtro === "aguardando_prestacao") {
-        if (!verbaAguardaProducao(situacaoDaVerba(pp))) return false;
+        if (
+          !verbaAguardaProducao(situacaoDaVerba(pp)) &&
+          !midiaAguardaProducao(situacaoMidiaDaPP(pp, midiaSystem))
+        ) {
+          return false;
+        }
       } else if (filtro === "pronta_para_envio") {
         if (!prontaParaEnvio(pp)) return false;
       } else if (filtro !== "todas" && pp.status !== filtro) {
@@ -429,7 +453,7 @@ export function JobPPsSection({
       );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pps, filtro, busca, fornecedoresPorId]);
+  }, [pps, filtro, busca, fornecedoresPorId, midiaSystem]);
 
   /**
    * Uma linha por PARCELA (decisão do Tiago, 17/08/2026): cada parcela é
@@ -1006,6 +1030,9 @@ export function JobPPsSection({
                       ) : (
                         <div className="flex flex-col items-start gap-1">
                           <PPStatusChip status={pp.status} className={SELO_QUE_QUEBRA} />
+                          {/* Decisão 216: foi sem NF na auditoria da Mídia
+                              System, e onde a prestação da nota está. */}
+                          <MarcaMidiaNaPP situacao={situacaoMidiaDaPP(pp, midiaSystem)} />
                           {/* O gatilho do GP (08/10/2026): o produtor
                               conferiu os documentos e deixou a PP pronta. */}
                           {prontaParaEnvio(pp) && (
@@ -1075,7 +1102,11 @@ export function JobPPsSection({
             // Decisão 189: a prestação abre desde o envio da PP ao
             // financeiro (os documentos ficam salvos), não só com a verba
             // paga; e volta a abrir quando o financeiro reprova.
-            const prestar = podePrestarContas.includes(pp.id) && producaoEditaPrestacao(pp);
+            // Decisão 216: a PP que foi sem NF presta contas da nota com o
+            // MESMO botão e a mesma gaveta, depois da liberação das NFs.
+            const prestar =
+              podePrestarContas.includes(pp.id) &&
+              (producaoEditaPrestacao(pp) || midiaAguardaProducao(situacaoMidiaDaPP(pp, midiaSystem)));
             const cancelar =
               editable &&
               podeCancelarPP(pp.status) &&
@@ -1287,6 +1318,7 @@ export function JobPPsSection({
           tomadorPorEmpresa={tomadorPorEmpresa}
           nomeDaEmpresaDe={nomeDaEmpresa}
           moeda="BRL"
+          envioSemNf={envioDispensaNf(midiaSystem)}
           onEnviada={(codigo, emissora) => {
             setPpEnviando(null);
             setToast(
@@ -1394,6 +1426,7 @@ export function JobPPsSection({
             tomadores={tomadoresDaNf}
             tomadorPorEmpresa={tomadorPorEmpresa}
             cnpjPadraoDaPP={edicaoDaPP.cnpjPadraoDaPP}
+            midiaSystem={midiaSystem}
             onSuccess={(modo, idOuCodigo) => {
               if (modo === "editada") {
                 setToast(`${idOuCodigo} atualizada. O PDF foi refeito com os dados novos.`);
@@ -1488,6 +1521,16 @@ export function JobPPsSection({
         tomadores={tomadoresDaNf}
         podeEditar={ppPrestando !== null && podePrestarContas.includes(ppPrestando.id)}
         onSuccess={setToast}
+        fornecedor={(() => {
+          const id = ppPrestando?.fornecedor_id;
+          if (!id) return null;
+          const f = edicaoDaPP?.fornecedores.find((x) => x.id === id);
+          return {
+            nome: f?.nome ?? fornecedoresPorId[id] ?? "—",
+            razao_social: f?.razao_social ?? null,
+            cpf_cnpj: f?.cpf_cnpj ?? null,
+          };
+        })()}
       />
 
       <ConfirmDialog

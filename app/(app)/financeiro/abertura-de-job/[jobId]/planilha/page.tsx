@@ -59,7 +59,7 @@ export default async function PlanilhaDaAberturaPage({
         // O nome do cliente é do pop-up de save: os textos dele falam do
         // crédito "de {cliente}", e sem o nome diziam "do cliente"
         // (decisão 099, revisão de 22/09/2026).
-        "projeto:projetos(cliente:clientes(nome_fantasia))",
+        "cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia)",
     )
     .eq("id", params.jobId)
     .eq("tenant_id", session.activeTenant.id)
@@ -305,7 +305,7 @@ export default async function PlanilhaDaAberturaPage({
         interno={
           (raw as any).orcamento?.servico?.investimento_interno === true
         }
-        clienteNome={(raw as any).projeto?.cliente?.nome_fantasia ?? null}
+        clienteNome={(raw as any).cliente?.nome_fantasia ?? null}
         versaoLabel={`v${versao?.numero_versao ?? 1}`}
         moeda={versao?.moeda ?? "BRL"}
         percentualHonorarios={Number(versao?.percentual_honorarios ?? 0)}

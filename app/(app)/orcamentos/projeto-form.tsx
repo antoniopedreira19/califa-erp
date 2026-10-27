@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AlertCircle, Info, Plus, Save } from "lucide-react";
+import { AlertCircle, Save } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -15,16 +15,10 @@ import {
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { MultiSelect } from "@/components/ui/multi-select";
-import {
-  CampoCliente,
-  type ClienteDoCampo,
-  type MarcaNova,
-} from "@/app/(app)/clientes/campo-cliente";
 import { Textarea } from "@/components/ui/textarea";
 import { DESCRICAO_MAX } from "@/lib/validations/projetos";
 import type {
   CategoriaDominio,
-  Cliente,
   Profile,
   Projeto,
   Regional,
@@ -35,6 +29,11 @@ import {
   type ActionResult,
 } from "./actions";
 import { ConfirmTrocaEmpresaDialog } from "@/components/ui/confirm-troca-empresa-dialog";
+import {
+  CampoApresentacao,
+  useApresentacoesDoProjeto,
+} from "@/components/apresentacoes-do-projeto";
+import type { ApresentacaoDoProjeto } from "@/lib/apresentacoes-do-projeto";
 
 /** Produto do cadastro do cliente. Vem com `cliente_id` porque a lista
  *  chega inteira e é filtrada no cliente conforme a seleção. */
@@ -52,7 +51,6 @@ interface Props {
   projeto?: Projeto;
   empresas: { id: string; razao_social: string; nome_fantasia: string | null; principal: boolean }[];
   empresaPrincipalId?: string;
-  clientes: Pick<Cliente, "id" | "nome_fantasia" | "codigo_curto">[];
   /** Todos os membros ativos: a lista da Equipe. */
   responsaveis: Pick<Profile, "id" | "nome">[];
   /** Quem pode ser GP — papel GP ou Administrador (decisão 170): a lista
@@ -60,16 +58,15 @@ interface Props {
    *  aparecendo, para quem edita poder tirá-lo. */
   gps: Pick<Profile, "id" | "nome">[];
   regionais: Pick<Regional, "id" | "nome" | "empresa_id">[];
-  produtos: ProdutoOption[];
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
   /** Ids já vinculados ao projeto, na ordem gravada. */
   regionaisSelecionadas?: string[];
   responsaveisSelecionados?: string[];
-  /** Marcas já gravadas no projeto (`projeto_marcas`, decisão 133). */
-  marcasSelecionadas?: string[];
   /** Acréscimos manuais à Equipe já gravados (papel `equipe`). Os
    *  automáticos NÃO vêm aqui: são derivados na hora. */
   equipeSelecionada?: string[];
+  /** As apresentações já gravadas no projeto (decisão 213). */
+  apresentacoes?: ApresentacaoDoProjeto[];
   /** Quem já é produtor de algum orçamento do projeto — e, desde a decisão
    *  174, o GP e o Produtor Responsáveis de cada job vivo. Entra na Equipe
    *  travado, junto do criador e dos GPs. Vazio na criação — o projeto
@@ -77,16 +74,9 @@ interface Props {
   produtoresDosOrcamentos?: string[];
   /** Quem criou o projeto. Na criação é quem está logado. */
   criadorId?: string;
-  /** `cadastros.clientes.editar`. Sem ela, o campo Cliente não oferece
-   *  cadastrar nem editar, e a Marca perde o "+" (18/09/2026). */
-  podeCadastrarCliente?: boolean;
-  podeEditarCliente?: boolean;
   /** Conteúdo à esquerda de Cancelar/Salvar, na mesma linha do pé. O
    *  "Editar projeto" põe ali o status e o Arquivar (29/09/2026). */
   rodapeEsquerda?: React.ReactNode;
-  /** Decisão 122: com orçamento aprovado (ou job), o cliente não muda —
-   *  o campo trava. A criação não passa: lá nada foi aprovado. */
-  clienteTravado?: boolean;
   onSuccess?: () => void;
   onCancel?: () => void;
 }
@@ -95,22 +85,17 @@ export function ProjetoForm({
   projeto,
   empresas,
   empresaPrincipalId,
-  clientes,
   responsaveis,
   gps,
   regionais,
-  produtos,
   categorias,
   regionaisSelecionadas,
   responsaveisSelecionados,
-  marcasSelecionadas,
   equipeSelecionada,
+  apresentacoes,
   produtoresDosOrcamentos,
   criadorId,
-  podeCadastrarCliente = false,
-  podeEditarCliente = false,
   rodapeEsquerda,
-  clienteTravado = false,
   onSuccess,
   onCancel,
 }: Props) {
@@ -123,17 +108,10 @@ export function ProjetoForm({
     projeto?.empresa_id ?? empresaPrincipalId ?? "",
   );
   const [dialogTrocaEmpresa, setDialogTrocaEmpresa] = React.useState(false);
+  // As apresentações (decisão 213): sobem ao escolher; a lista vai no
+  // campo oculto `apresentacoes`.
+  const campoApresentacao = useApresentacoesDoProjeto(apresentacoes ?? []);
   const [empresaPendente, setEmpresaPendente] = React.useState<string>("");
-  const [clienteId, setClienteId] = React.useState(projeto?.cliente_id ?? "");
-  // Marcas do projeto — uma ou mais (decisão 133). Sem vínculo gravado
-  // (projeto salvo pela versão anterior do app), vale a marca do projeto.
-  const [produtoIds, setProdutoIds] = React.useState<string[]>(
-    marcasSelecionadas && marcasSelecionadas.length > 0
-      ? marcasSelecionadas
-      : projeto?.produto_id
-        ? [projeto.produto_id]
-        : [],
-  );
   const [responsavelIds, setResponsavelIds] = React.useState<string[]>(
     responsaveisSelecionados ?? (projeto ? [projeto.responsavel_id] : []),
   );
@@ -196,88 +174,6 @@ export function ProjetoForm({
     setRegionalIds([]);
   };
 
-  /**
-   * Cliente e marcas viram estado porque o cadastro rápido grava sem
-   * recarregar a tela: o cliente criado no dialog precisa entrar na lista
-   * e a marca que nasceu com ele precisa estar no campo Marca na mesma
-   * hora (17/09/2026). `router.refresh()` resolveria — e zeraria o
-   * formulário no meio do preenchimento.
-   */
-  const [clientesLocais, setClientesLocais] = React.useState<ClienteDoCampo[]>(
-    () => clientes,
-  );
-  const [produtosLocais, setProdutosLocais] = React.useState<ProdutoOption[]>(
-    () => produtos,
-  );
-  /** Ligado pelo "+" do campo Marca; o CampoCliente desliga ao abrir. */
-  const [abrirMarcasDoCliente, setAbrirMarcasDoCliente] = React.useState(false);
-
-  React.useEffect(() => setClientesLocais(clientes), [clientes]);
-  React.useEffect(() => setProdutosLocais(produtos), [produtos]);
-
-  function absorverCadastro(cliente: ClienteDoCampo, marcas: MarcaNova[]) {
-    setClientesLocais((atual) =>
-      atual.some((c) => c.id === cliente.id)
-        ? atual.map((c) => (c.id === cliente.id ? { ...c, ...cliente } : c))
-        : [...atual, cliente].sort((a, b) =>
-            a.nome_fantasia.localeCompare(b.nome_fantasia, "pt-BR"),
-          ),
-    );
-    setProdutosLocais((atual) => [
-      ...atual.filter((p) => p.cliente_id !== cliente.id),
-      ...marcas.map((m) => ({
-        id: m.id,
-        nome: m.nome,
-        codigo: m.codigo,
-        cliente_id: cliente.id,
-        padrao: m.padrao,
-      })),
-    ]);
-  }
-
-  /** A marca criada pelo "+" ao lado do campo Marcas. Entra na lista e
-   *  SOMA às já escolhidas — quem clicou ali queria usá-la agora. Nunca é
-   *  a geral: essa nasce com o cliente. */
-  function absorverMarca(marca: { id: string; nome: string; codigo: string }) {
-    if (!clienteId) return;
-    setProdutosLocais((atual) => [
-      ...atual,
-      { ...marca, cliente_id: clienteId, padrao: false },
-    ]);
-    setProdutoIds((atual) =>
-      atual.includes(marca.id) ? atual : [...atual, marca.id],
-    );
-  }
-
-  // Produto é cadastrado por cliente: trocar de cliente invalida a escolha.
-  const produtosDoCliente = React.useMemo(
-    () => produtosLocais.filter((p) => p.cliente_id === clienteId),
-    [produtosLocais, clienteId],
-  );
-
-  /** O que de fato está escolhido: só marca ATIVA do cliente atual. Uma
-   *  marca inativada depois de gravada no projeto não aparece na lista —
-   *  e, num campo de várias, ficaria escondida no estado e reprovaria o
-   *  envio sem o usuário ter como tirá-la. Derivar resolve: ela some daqui
-   *  e sai do projeto no próximo salvar. */
-  const marcasEscolhidas = React.useMemo(
-    () => produtoIds.filter((id) => produtosDoCliente.some((p) => p.id === id)),
-    [produtoIds, produtosDoCliente],
-  );
-
-  /** A marca geral do cliente escolhido (PRD-01). Com mais de uma marca no
-   *  projeto, é ela que o job leva ao financeiro — esteja entre as
-   *  escolhidas ou não (decisão 133). */
-  const marcaGeral = React.useMemo(
-    () => produtosDoCliente.find((p) => p.padrao) ?? null,
-    [produtosDoCliente],
-  );
-
-  function handleClienteChange(novoClienteId: string) {
-    setClienteId(novoClienteId);
-    if (novoClienteId !== clienteId) setProdutoIds([]);
-  }
-
   /** Realce do campo com erro, como no handoff: borda vermelha + halo.
    *  Os Selects NÃO usam `required`: o Radix monta um <select> nativo
    *  escondido e o navegador barraria o envio com tooltip em inglês,
@@ -294,8 +190,6 @@ export function ProjetoForm({
 
     const formData = new FormData(e.currentTarget);
     formData.set("empresa_id", empresaId);
-    formData.set("cliente_id", clienteId);
-    for (const id of marcasEscolhidas) formData.append("produto_ids", id);
     // Só os acréscimos manuais vão ao servidor: os travados ele deriva de
     // novo, e mandá-los daqui abriria caminho para um payload adulterado
     // gravar alguém como equipe manual.
@@ -305,12 +199,21 @@ export function ProjetoForm({
     for (const id of responsavelIds) formData.append("responsavel_ids", id);
     for (const id of regionalIds) formData.append("regional_ids", id);
 
+    if (campoApresentacao.enviando.length > 0) {
+      setError("Espere as apresentações terminarem de subir.");
+      return;
+    }
+    // Daqui em diante os arquivos que subiram são do projeto: a criação
+    // redireciona e desmontaria o campo com eles na lista de soltos.
+    const anexos = campoApresentacao.gravando();
+
     startTransition(async () => {
       const res: ActionResult = isEdit
         ? await atualizarProjeto(projeto!.id, formData)
         : await criarProjeto(formData);
 
       if (!res.ok) {
+        anexos.naoGravou();
         setError(res.message);
         if (res.fieldErrors) setFieldErrors(res.fieldErrors);
         return;
@@ -358,119 +261,6 @@ export function ProjetoForm({
             autoFocus
             placeholder="Ex.: Carnaval Anitta"
           />
-        </Field>
-
-        {/* Combobox, não Select: são 157 clientes ativos e a lista rolada
-            era o que mais custava tempo aqui. A busca ignora acento e
-            olha também o código curto, que é o prefixo do número do
-            projeto — quem lembra "AMBEV" acha pelo código. */}
-        {/* Busca por nome ou código, e o botão ao lado cadastra (campo
-            vazio) ou edita (cliente escolhido) sem sair do formulário —
-            decisão 089, no molde do campo de fornecedor da PP. */}
-        <Field label="Cliente" name="cliente_id" required errors={fieldErrors}>
-          <CampoCliente
-            value={clienteId || null}
-            onChange={(v) => handleClienteChange(v ?? "")}
-            clientes={clientesLocais}
-            onCadastroMudou={absorverCadastro}
-            podeCadastrar={podeCadastrarCliente}
-            podeEditar={podeEditarCliente}
-            disabled={clienteTravado}
-            className={erroClasses("cliente_id")}
-            abrirMarcas={abrirMarcasDoCliente}
-            onAbrirMarcasResolvido={() => setAbrirMarcasDoCliente(false)}
-            onMarcaCriada={absorverMarca}
-          />
-          {/* Decisão 122: o cliente trava na primeira aprovação. Desde a
-              decisão 210 a troca não muda o código do projeto. */}
-          {clienteTravado && (
-            <p className="text-xs text-muted-foreground">
-              O cliente não muda depois que um orçamento do projeto é aprovado.
-            </p>
-          )}
-        </Field>
-
-        <Field label="Marcas" name="produto_ids" required errors={fieldErrors}>
-          {/* Uma ou mais marcas do cliente (decisão 133, 30/09/2026) — o
-              mesmo campo das Regionais. Até então era um Select de uma
-              marca só.
-
-              O "+" ao lado abre um dialog de UMA marca — não a ficha do
-              cliente, como abria até 18/09/2026. Ele aparece assim que há
-              cliente escolhido, e não só quando a lista está vazia.
-
-              Gate `podeCadastrarCliente` (`cadastros.clientes.inline`,
-              Admin/GP/Produtor): a gravação é `adicionarMarcaAoCliente`,
-              que só INSERE. Renomear e inativar marca continuam no
-              cadastro do cliente, com o administrador — decisão 089 §6. */}
-          <div className="flex items-start gap-2">
-            <div className="min-w-0 flex-1">
-              <MultiSelect
-                items={produtosDoCliente.map((p) => ({
-                  value: p.id,
-                  label: p.nome,
-                  detalhe: p.codigo,
-                }))}
-                value={marcasEscolhidas}
-                onChange={setProdutoIds}
-                placeholder={
-                  !clienteId
-                    ? "Selecione o cliente primeiro"
-                    : produtosDoCliente.length === 0
-                      ? "Nenhuma marca cadastrada"
-                      : "Selecione uma ou mais marcas"
-                }
-                vazio="Nenhuma marca cadastrada."
-                disabled={!clienteId || produtosDoCliente.length === 0}
-                className={erroClasses("produto_ids")}
-              />
-            </div>
-            {clienteId && podeCadastrarCliente && (
-              <button
-                type="button"
-                onClick={() => setAbrirMarcasDoCliente(true)}
-                title="Cadastrar marca deste cliente"
-                aria-label="Cadastrar marca deste cliente"
-                className="inline-flex h-10 w-10 flex-none items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:border-california-red/40 hover:bg-california-red/[0.06]"
-              >
-                <Plus className="h-[17px] w-[17px]" />
-              </button>
-            )}
-          </div>
-          {/* A regra da decisão 133 dita na hora em que ela passa a valer:
-              com mais de uma marca, o job leva a geral do cliente — que
-              pode nem estar entre as escolhidas. */}
-          {marcasEscolhidas.length > 1 && marcaGeral && (
-            <p className="flex items-start gap-1.5 text-xs text-muted-foreground">
-              <Info className="mt-px h-3.5 w-3.5 flex-none" />
-              <span>
-                Com mais de uma marca, os jobs deste projeto seguem para o
-                financeiro com a marca geral do cliente:{" "}
-                <span className="font-medium text-foreground">
-                  {marcaGeral.nome}
-                </span>{" "}
-                <span className="font-mono">{marcaGeral.codigo}</span>.
-              </span>
-            </p>
-          )}
-          {clienteId && produtosDoCliente.length === 0 && (
-            <p className="text-xs text-muted-foreground">
-              Este cliente ainda não tem marcas.{" "}
-              {podeCadastrarCliente ? (
-                <button
-                  type="button"
-                  onClick={() => setAbrirMarcasDoCliente(true)}
-                  className="font-medium text-california-red hover:underline"
-                >
-                  Cadastrar agora
-                </button>
-              ) : (
-                <span className="font-medium">
-                  Peça a um administrador para cadastrar.
-                </span>
-              )}
-            </p>
-          )}
         </Field>
 
         <Field label="Regionais" name="regional_ids" required errors={fieldErrors}>
@@ -563,6 +353,13 @@ export function ProjetoForm({
             responsáveis de cada job entram automaticamente e não podem ser
             removidos.
           </p>
+        </Field>
+
+        {/* As apresentações mostradas ao cliente (decisão 213): opcionais,
+            quantas forem, ao lado da Equipe. Abrem no card PROJETO da
+            ficha de cada job. */}
+        <Field label="Apresentação" name="apresentacoes" opcional errors={fieldErrors}>
+          <CampoApresentacao campo={campoApresentacao} disabled={pending} />
         </Field>
 
         <div className="md:col-span-2">

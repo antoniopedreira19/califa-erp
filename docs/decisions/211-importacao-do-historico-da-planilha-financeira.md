@@ -7,10 +7,11 @@ e E3 (validação, com as DREs e as abas Gerencial) implementadas em
 dia. A1 (as tabelas de histórico, com a do rateio, e a tela de carga) e A2
 (a primeira carga, de 01/01/2023 a 30/06/2026, com as contas Fundo Fixo
 California e BB Americas criadas antes) feitas e conferidas em 26/10/2026,
-A3 (o histórico de cada conta no Extrato da Conciliação) e duas entregas da
-A4 (a DRE do histórico e o resultado por regional, em Relatórios) no mesmo
-dia. Próxima entrega: a rentabilidade e o faturamento dos jobs do histórico
-(A4).
+A3 (o histórico de cada conta no Extrato da Conciliação) e a A4 (a DRE do
+histórico, o resultado por regional, a rentabilidade e o faturamento dos jobs
+do histórico, em Relatórios) no mesmo dia. A5: o 3T carregado em 27/10/2026,
+da versão de 25/10. Próximo: o saldo inicial das contas em 01/10, pelo
+extrato de 30/09, e a trilha do 4T no sistema.
 **Quem decidiu:** Tiago, no plano "Importação do histórico financeiro"
 (página privada de 25/10/2026), com as respostas D1, D2 e D3 dadas no mesmo
 dia: "Aprovo D1, D2 e D3 como você recomendou".
@@ -326,14 +327,16 @@ não existem: a tela não deixa carregar enquanto elas não forem criadas (A2).
   gastos fixos gerais (o custo fixo e o pessoal do TD rateados, e o marketing,
   a administrativa, a comercial e a trabalhista); juros e empréstimos; a perda
   da FitDance (lucro líquido); o benefício tributário do ISS e do PERSE e a
-  receita financeira (resultado após o benefício); imobilizado e participação
-  nos lucros (lucro após investimento). Na CCH, também o investimento da Doca
-  e a Makkna.
+  receita financeira (resultado após o benefício); imobilizado, participação
+  nos lucros e o bloco dos projetos proprietários (lucro após investimento).
+  Na CCH, também o investimento da Doca e a Makkna.
 - **Uma regra só (Tiago, 26/10/2026):**
   - o faturamento e o custo operacional do job se dividem pelas partes dele
     (abaixo); o imposto é o teórico, com a mesma divisão;
+  - os projetos proprietários (a Copa e os projetos da CCH) saem dessas linhas
+    e entram num bloco abaixo do resultado, como no Fechamento (abaixo);
   - o benefício do ISS e do PERSE se rateia, trimestre a trimestre, pelo
-    faturamento de cada regional;
+    faturamento de cada regional e dos projetos;
   - os demais lançamentos entram na regional deles; o TD se rateia pelo
     percentual do ano da planilha (no 4T 2024, o imobilizado e o PL pela linha
     147, que a tabela registra); o que não tem regional fica em "Sem regional".
@@ -359,8 +362,9 @@ não existem: a tela não deixa carregar enquanto elas não forem criadas (A2).
   para o futuro, sem perder o registro da planilha.
 - A leitura é a função `historico_regional` (migrations
   `20261026100005_historico_regional.sql`, reaplicada pela 100006 e pela
-  100007, e `20261026100008_historico_regional_pelos_jobs.sql`, reaplicada
-  pela 100009). Ela confere admin e financeiro uma vez e leva 0,18 s num ano.
+  100007; `20261026100008_historico_regional_pelos_jobs.sql`, reaplicada
+  pela 100009; e `20261026100010_historico_regional_projetos_proprietarios.sql`).
+  Ela confere admin e financeiro uma vez e leva cerca de 0,2 s num ano.
 
 #### A divisão pelos jobs e o benefício (A4, revisão de 26/10/2026)
 
@@ -408,16 +412,48 @@ célula):
   cada regional no trimestre, inclusive "Sem regional". Sem faturamento no
   trimestre, o benefício fica em "Sem regional". O ano é a soma dos
   trimestres, como a planilha.
-- **O job que a planilha não divide fica na regional do lançamento,** como a
-  regra da Copa desta decisão (os lançamentos da Copa trazem a regional de
-  verdade). A tela diz quanto do faturamento ficou assim. De 2023 a 2025 não
-  há nenhum; na 1ª carga, só a Copa no 2T 2026 (custo de R$ 7.652.740,59, em
-  NE, SP e NO, e faturamento de R$ 643.942,46, em SP e NE) e três jobs da CCH
-  no 1T 2026 (custo de R$ 1.172.449,99 e faturamento de R$ 502.981,70, quase
-  tudo na Doca). A aba Res. Jobs CMH 2026 tem seis jobs sem divisão, todos com
-  "CMH" na regional e o RATEIO % zerado; os outros três só têm lançamento
-  depois de 30/06. A planilha os deixa fora da DRE regional. **Aguarda a
-  confirmação do Tiago.**
+- **O job que a planilha não divide e não é projeto proprietário fica na
+  regional do lançamento,** como a regra da Copa desta decisão. A tela diz
+  quanto do faturamento ficou assim. Na 1ª carga não há nenhum: os jobs sem
+  divisão são os projetos proprietários (abaixo).
+
+#### Os projetos proprietários (A4, 26/10/2026)
+
+**Decidido (Tiago, 26/10/2026):** "Siga o Fechamento: tire os projetos
+proprietários (a Copa e os da CCH) das linhas de cima e mostre-os num bloco
+abaixo do resultado, com a Copa metade NE e metade SP e os da CCH na Doca,
+somados só no lucro após investimento." O motivo, como o Tiago ouviu da
+equipe: com eles nas linhas de cima, a rentabilidade dos outros jobs fica
+mascarada.
+
+**Onde está no Fechamento:**
+
+| Aba | Linhas | O que faz |
+|---|---|---|
+| DRE Califa + CCH + Hit + Vet (bloco de 2026, da linha 127) | 182 a 186; 187; 194 a 197 | "Projeto Proprietários" (receita, impostos, custo operacional e benefício dos projetos), puxado das abas regionais; o lucro líquido após investimentos (linha 179 + 181 + 182); o resultado de cada projeto da CCH no 1T 2026. As notas de N194 a P201 tratam a Copa Arena N1 como projeto proprietário. O faturamento da linha 133 já vem sem os projetos. |
+| DRE Califa Regional (bloco de 2026, da linha 252) | 299 a 303; 304 | "Resultado Proprietários": as fórmulas de K300 a K302 e M300 a M302 somam os jobs com "COPA" na coluna AC (REGIONAL) da Res. Jobs 2026, no 2T, e dividem por 2 (NE e SP); o benefício (I303, R$ 1.520.000,00) está digitado. |
+| DRE CMH Regional (bloco de 2026, da linha 206) | 249 a 253; 254 | "Projetos": as fórmulas de E250 a E252 somam os jobs com "CMH" na coluna AC da Res. Jobs CMH 2026, no 1T, tudo na coluna E (a Doca); o benefício fica em zero. |
+
+**O que o histórico faz:**
+
+- O projeto proprietário é o job sem divisão com "COPA" (na California) ou
+  "CMH" (na CCH) na coluna REGIONAL das abas Res. Jobs. Na 1ª carga são os 25
+  jobs da Copa (projeto Arena N1) e os seis da aba Res. Jobs CMH 2026 (Palco
+  Arara, Academy, Festival de Gastronomia, Programa Youtube Capitão e os dois
+  do M&M - Depois do Like). A função devolve esse texto
+  (`regional_do_job`); a regra e a divisão ficam em
+  `lib/historico-financeiro/regional.ts` (`EMPRESAS_DO_REGIONAL`, `projetos`).
+- O faturamento, o imposto teórico e o custo operacional dos projetos saem das
+  linhas de cima e entram no bloco "Projetos proprietários", abaixo da
+  participação nos lucros: a Copa metade no NE e metade no SP, os da CCH na
+  Doca. O bloco entra só no lucro após investimento, que continua fechando com
+  a DRE do histórico. Sem projeto no período, o bloco não aparece.
+- O benefício do trimestre se rateia pelo faturamento das regionais e dos
+  projetos; a parte dos projetos vai para "Benefício tributário dos projetos".
+  O imposto e o benefício, com os dos projetos, fecham o imposto pago no
+  centavo (a linha do benefício da operação leva o centavo que sobra).
+- Projeto novo (outra marca na coluna REGIONAL, ou outra divisão) precisa
+  entrar em `projetos`, com a divisão que o Fechamento usar.
 
 **Onde a planilha não segue a regra (documentado, não se reproduz):**
 
@@ -428,6 +464,127 @@ célula):
 | CCH, 1T e 2T 2023 | Faturamento, imposto, custo e benefício todos na Agency, sem olhar a divisão dos jobs |
 | CCH, 3T 2023 | O benefício job a job |
 | CCH, 4T 2023 | O custo tributário que a DRE da planilha lança no crédito (R$ 58.426,48, uma das quatro células da E3) e dois jobs da Doca sem o imposto teórico (R$ 484,35) |
+| California, 2T 2026, projetos | O imposto teórico da Copa digitado: na linha 85 da Res. Jobs 2026, R$ 777.334,87 ("777312.87+22") em vez de 19,53% de R$ 15.715.411,29, e o mesmo valor na linha 91, sem receita (R$ 1.514.550,08 a menos); o benefício da Copa digitado (R$ 1.520.000,00), e por isso o benefício das regionais também difere |
+| CCH, 1T 2026, projetos | O imposto real dos projetos (a coluna IMPOSTO, R$ 61.906,05), e não o teórico, e o benefício deles em zero; o benefício das regionais é o teórico delas menos todo o imposto pago, e a aba conta o imposto dos projetos duas vezes (a DRE consolidada, não: a linha 184 fica em zero no 1T) |
+
+### A rentabilidade dos jobs em Relatórios (A4, 26/10/2026)
+
+**Decidido (Tiago, 26/10/2026, na sessão bifurcada):** "Vamos fazer os dois
+[...] faremos assim com esses dados historicos que estamos importando, com os
+novos jobs continuaremos utilizando os dados de suas respectivas planilhas
+internas." O relatório mostra as duas contas das abas Res. Jobs:
+
+| Coluna | Na aba Res. Jobs | No histórico |
+|---|---|---|
+| Receita | TOTAL RECEITA: o que o job recebeu nas contas | Tipo REC do job, crédito − débito |
+| Imposto | IMPOSTO: os impostos das notas do job | as notas emitidas do job |
+| Custo | TOTAL CO | Tipo CO do job, débito − crédito |
+| Resultado | RESULTADO = receita − imposto − custo | igual; é o Result. Op da Rentabilidade de Jobs |
+| Fee (planilha) | FEE LÍQUIDO = (receita − imposto) × fee ÷ (1 + fee) | igual, com o percentual de cada job |
+| Rentabilidade | RENTABILIDADE = resultado − fee líquido | igual |
+| Período | a aba do ano e a coluna T | o ano e o trimestre do job |
+
+- **Onde:** Relatórios › "Rentabilidade dos jobs do histórico"
+  (`/relatorios/rentabilidade-historico`), cartão só para admin e
+  financeiro. Escolhe-se a empresa (Agência California, CCH, Hitlab ou
+  Ventura), o ano, o período (o ano ou um trimestre, pela coluna T) e a
+  visão (cliente, marca ou job). O cliente e a marca são os do cadastro
+  quando o de-para achou; senão, o texto da planilha. O job sem cliente ou sem
+  marca entra num grupo próprio, para o total ser o mesmo nas três visões.
+- **O fee é o da planilha, por dentro:** ela supõe que a receita menos o
+  imposto já traz o fee e o separa com o percentual de cada job, que a carga
+  traz da coluna logo depois de "FEE LÍQUIDO" (`historico_jobs.fee_percentual`):
+  12% na California e na Go Crazy, 15% na CCH, na Hitlab e na Ventura, e 13% em
+  alguns jobs de 2021 a 2023. Não é o honorário orçado: as planilhas internas
+  somam o honorário por fora (custo de 100 com 12% dá 112), e a planilha
+  financeira aplica o fee sobre toda a receita líquida, que pode incluir margem.
+  Na tela, a coluna se chama "Fee (planilha)", com essa dica. Vale só para o
+  histórico.
+- **Cada job soma tudo o que é dele no histórico, em qualquer data,** como as
+  colunas das abas Res. Jobs. O job que aparece em mais de uma aba fica na mais
+  nova (a do ano em que a planilha o lista por último). Só o realizado: as
+  previsões e as notas a emitir, que a planilha soma, não entram.
+- **O custo do job é o Tipo CO,** como na DRE. A aba Res. Jobs CMH lista também
+  investimentos como se fossem jobs e soma os débitos deles como custo: sete
+  linhas de 2023 e 2024 com Tipo CMH DOC (R$ 2.201.119,99, o Investimento
+  Doca) e CMH MK (R$ 344.768,28, a Makkna). No histórico eles ficam com custo
+  zero no relatório dos jobs, e o valor aparece na DRE como "Investimento Doca"
+  e "Makkna". **Decidido (Tiago, 26/10/2026):** "São investimentos internos
+  mesmo, vamos fazer Fora (como está hoje), com esta na DRE."
+- **Onde as abas fogem da regra (documentado, não se reproduz):** a CCH de 2025
+  calcula o resultado sem o imposto e o fee sobre a receita contada duas vezes
+  (a soma das contas mais o TOTAL RECEITA); a CCH de 2026 também conta a
+  receita duas vezes no fee; as abas da Hitlab fazem o resultado só com
+  algumas contas, e não com o TOTAL RECEITA e o TOTAL CO; e duas linhas da
+  California estão em branco (a rentabilidade da linha 30 de 2024; o fee e a
+  rentabilidade da linha 457 de 2025).
+- A leitura é a função `historico_rentabilidade_jobs` (migration
+  `20261026100011_historico_rentabilidade_dos_jobs.sql`), que confere admin e
+  financeiro uma vez. A conta fica em
+  `lib/historico-financeiro/rentabilidade.ts`.
+
+### O faturamento dos jobs em Relatórios (A4, 26/10/2026)
+
+**Decidido (Tiago, 26/10/2026):** a planilha usa "faturamento" em dois
+sentidos — o valor das notas e o que entrou no banco (a aba "Fat por cliente"
+soma o TOTAL RECEITA das abas Res. Jobs, a receita da rentabilidade). Entre
+três leituras (as notas do job; a aba "Fat por cliente"; as notas pela data de
+emissão), o Tiago escolheu a das notas do job, o par do Faturamento de Jobs do
+sistema. O histórico não tem o valor contratado do job, então a comparação é o
+faturado com o recebido:
+
+| Coluna | De onde vem |
+|---|---|
+| Notas | as notas emitidas do job nas abas de Faturamento (as canceladas e as previsões não entram no histórico) |
+| Faturado | o valor dessas notas, em qualquer data |
+| Recebido | as notas com data de recebimento na planilha |
+| A receber | as notas sem essa data |
+| Situação (só na visão por job) | Recebido, Parcial, A receber ou Sem nota |
+| Período | o ano e o trimestre do job (a aba Res. Jobs e a coluna T) |
+
+- **Onde:** Relatórios › "Faturamento dos jobs do histórico"
+  (`/relatorios/faturamento-historico`), cartão só para admin e financeiro,
+  com os filtros da rentabilidade (empresa, ano, período e visão por cliente,
+  marca ou job), que agora moram em `app/(app)/relatorios/_historico/jobs.ts`.
+- **O job sem nota entra com zero e a situação "Sem nota",** para o total de
+  jobs ser o mesmo da rentabilidade: 51 dos 634 jobs da California em 2025,
+  36 deles sem receita nem custo no histórico.
+- **O recebimento é o que a planilha registra,** na versão da carga
+  (25/10/2026): a nota emitida até 30/06/2026 e recebida depois aparece como
+  recebida (R$ 282.715,12 nos jobs da California de 2025). Não é o banco: nos
+  jobs da California de 2025, as notas recebidas até 30/06/2026 somam
+  R$ 89.989.740,52 e a receita do Tipo REC, R$ 86.063.648,05. Os dois batem em
+  544 dos 634 jobs; em 82, a nota está recebida e o banco do job tem
+  R$ 4.024.261,90 a menos, e em 8 o banco tem R$ 98.169,97 a mais (o Tiago
+  viu a diferença antes de escolher).
+- A leitura é a função `historico_faturamento_jobs` (migration
+  `20261026100012_historico_faturamento_dos_jobs.sql`), que confere admin e
+  financeiro uma vez e leva cerca de 30 ms. A situação e as somas ficam em
+  `lib/historico-financeiro/faturamento.ts`.
+
+#### A visão por CNPJ, padrão do relatório (26/10/2026)
+
+**Decidido (Tiago, 26/10/2026):** "Quero os dois. E quero que a visão padrão
+seja a de relatório por CNPJ de forma equivalente à planilha." As visões por
+job agrupam pela empresa do job, não pelo CNPJ que emitiu a nota. A CCH e a
+Hitlab emitem também pelo CNPJ da California, e a CCH pela Go Crazy. Por isso
+o relatório ganhou:
+- **A visão "CNPJ", padrão:** uma linha por emissor, que é uma aba de
+  Faturamento da planilha: California Salvador, Fortaleza e SP; Go Crazy,
+  Santo André e SP; Hitlab Salvador. Cada linha traz o valor emitido em cada
+  mês, o faturado, o recebido e o a receber do ano. As respostas do Tiago:
+  - a nota cai no mês da **data de emissão**;
+  - as notas **sem job e de distribuição de lucro entram no total**, com o
+    valor marcado à parte; as canceladas ficam fora;
+  - o CNPJ abre a **lista das notas** dele no ano, como a aba (NF, job,
+    cliente, emissão, vencimento, recebimento, valor e impostos).
+- **O filtro "Emissor"** nas visões por cliente, marca e job: só os jobs com
+  nota daquele CNPJ, e só as notas dele.
+- A leitura é a função `historico_faturamento_notas`, e
+  `historico_faturamento_jobs` passou a trazer as somas de cada job por
+  emissor (migration `20261026100013_historico_faturamento_por_cnpj.sql`). A
+  conta fica em `montarPorCnpj` e `jobsDoEmissor`, em
+  `lib/historico-financeiro/faturamento.ts`.
 
 ## O pipeline (E1, E2 e E3)
 
@@ -439,9 +596,9 @@ Código em `lib/historico-financeiro/` (regras puras, com teste) e
   do arquivo e as contagens. Leitura em fluxo, sem dependência nova: as 82 abas
   saem em cerca de 10 segundos.
 - **E2 — padronização** (`padronizar.ts`): movimentos, previsões, notas e jobs
-  num formato único, a carga de cada linha, a lista de pendências da primeira
-  carga e as propostas de de-para (plano de contas, cliente, marca, serviço e
-  regional).
+  num formato único, a carga de cada linha, a lista de pendências das cargas
+  que vão ao banco (a primeira e o 3T), com a carga de cada pendência, e as
+  propostas de de-para (plano de contas, cliente, marca, serviço e regional).
 - **Revisão** (`revisao.ts`): um .xlsx com uma aba por assunto e a coluna "Sua
   decisão"; vazia, vale a proposta.
 - **Aprovação do de-para** (`aprovar-depara.ts`): leva as propostas para a
@@ -671,6 +828,16 @@ Fechamento. A soma dos movimentos repete a da função do banco.
   movimentos por job antes, com a mesma resposta nas 1.774 linhas de 2023 a
   2026.
 - Typecheck, lint e os 68 testes da pasta limpos.
+- **Projetos proprietários** (mesmo dia): de 2023 a 2025 nada muda (não há
+  projeto). Em 2026, com as previsões, o faturamento, o imposto e o custo das
+  regionais e o faturamento e o custo dos projetos batem com o Fechamento no
+  1T e no 2T, nas duas empresas; diferem só o imposto e o benefício digitados
+  da tabela acima, e o benefício do 1T, pelo custo tributário que a DRE da
+  planilha conta R$ 10.250,24 a menos. Na tela, a California do 2T 2026, a CCH
+  do 1T 2026, a California de 2025 e a CCH de 2024 batem linha a linha com o
+  cálculo do script, e a última linha fecha com a DRE do histórico em todos os
+  trimestres de 2023 a 2026 (a diferença do 1T 2024 é a perda da FitDance, que
+  o relatório soma e a DRE põe depois do lucro). 72 testes.
 - **"NE" e "SP" da CMH na Doca e na Agency** (mesmo dia): de 2023 a 2025 a
   conferência com a DRE regional do Fechamento não muda. Saem de "Sem
   regional" R$ 122.952,46 de pessoal da CMH marcados SP no 1T 2023 (vão para a
@@ -680,19 +847,200 @@ Fechamento. A soma dos movimentos repete a da função do banco.
   Agency R$ 7.000,00 de pessoal da CMH marcados SP no 4T 2026; o histórico os
   põe na Agency. 69 testes.
 
+## Conferido em 26/10/2026 (A4, rentabilidade dos jobs)
+
+`scripts/historico-financeiro/conferir-rentabilidade.ts` compara, job a job,
+as seis colunas de cada linha das abas Res. Jobs (a da aba mais nova do job)
+com a conta do histórico. Com o padronizado, as previsões e as notas a emitir
+(a mesma base da planilha), de 2023 a 2025:
+
+| Aba | Receita | Imposto | Custo | Resultado | Rentabilidade |
+|---|---|---|---|---|---|
+| California 2023 | 364/364 | 362/364 | 364/364 | 362/364 | 362/364 |
+| California 2024 | 450/450 | 450/450 | 450/450 | 450/450 | 449/450 |
+| California 2025 | 588/588 | 585/588 | 587/588 | 585/588 | 584/588 |
+| Go Crazy 2024 e 2025 | 63/63 | 61/63 | 63/63 | 61/63 | 61/63 |
+| CCH 2023 e 2024 | 261/261 | 256/261 | 254/261 | 249/261 | 249/261 |
+
+Os jobs que diferem são os da lista acima: as notas que o histórico liga ao job
+e a planilha não soma (nome diferente), os investimentos da CCH e as linhas em
+branco. A CCH de 2025 bate na receita (108/108), no imposto (98) e no custo
+(108), e não no resultado, pela fórmula dela. "Batem" inclui os centavos das
+frações da planilha.
+
+## Conferido em 26/10/2026 (A4, faturamento dos jobs)
+
+As abas Res. Jobs não têm coluna de faturado. A coluna IMPOSTO de cada job
+soma, por SUMIFS, o Total Impostos das abas de Faturamento cujo JOB é o nome
+do job. `scripts/historico-financeiro/conferir-faturamento.ts` refaz esse
+SUMIFS em cada linha de job de 2023 a 2026, com as mesmas abas e o mesmo
+critério. No lugar do Total Impostos, soma o Valor das notas emitidas no
+período da carga (o faturado) e o das que têm data de recebimento (o
+recebido), e compara com as notas do pacote:
+
+| Aba | Notas | Faturado | Recebido |
+|---|---|---|---|
+| California 2023 | 362/364 | 362/364 | 362/364 |
+| California 2024 | 450/450 | 450/450 | 450/450 |
+| California 2025 | 586/588 | 586/588 | 586/588 |
+| California 2026 | 634/635 | 634/635 | 634/635 |
+| Go Crazy 2024 a 2026 | 93/94 | 93/94 | 93/94 |
+| CCH 2023 a 2026 | 507/524 | 507/524 | 513/524 |
+| Hitlab 2024 a 2026 | 54/55 | 54/55 | 54/55 |
+| Ventura 2026 | 2/2 | 2/2 | 2/2 |
+
+Os 24 jobs que diferem, de 2.712, são os mesmos motivos do imposto na
+rentabilidade:
+- **19 jobs:** o histórico liga ao job uma nota de uma aba de Faturamento que
+  a fórmula dele não soma. Quase todos são da CCH faturados pelo CNPJ da Go
+  Crazy, que a coluna IMPOSTO da CMH não olha.
+- **4 jobs:** o JOB da nota tem espaço sobrando ou acento diferente. O SUMIFS
+  conta essa diferença; o histórico apara o texto.
+- **1 job:** o mesmo nome está na aba da CCH e na da California. A planilha
+  soma as mesmas duas notas nas duas linhas; o histórico as liga a um job só.
+
+Uma linha da Hitlab de 2024 não tem a fórmula.
+
+- **Na tela**, os totais são os das notas do pacote. Na California de 2025:
+  634 jobs, 865 notas, R$ 92.542.399,09 faturados, R$ 90.272.455,64
+  recebidos e R$ 2.269.943,45 a receber, com 570 jobs recebidos, 10 parciais,
+  3 a receber e 51 sem nota. Na CCH de 2024: 166 jobs, 184 notas e
+  R$ 6.250.984,77 faturados.
+- **Somas e acesso:** a soma das linhas fecha com o total nas três visões e
+  num trimestre (2T de 2025). Para um usuário produtor, a função devolve nulo.
+- **Ambiente:** sem erro no console nem no servidor, e build OK.
+
+## Conferido em 26/10/2026 (A4, faturamento por CNPJ)
+
+- **Por CNPJ e mês:** em 2025, os 41 valores da tela são iguais à soma das
+  notas emitidas no banco. O faturamento de cada aba em cada mês já batia
+  entre a planilha e o padronizado (E3) e entre o pacote e o banco (A2).
+- **Lista e filtro:** a lista da aba Go Crazy de 2025 traz as 85 notas (58 de
+  job, 25 de distribuição de lucro e 2 sem job), com os mesmos totais da
+  linha. O filtro do emissor Go Crazy na CCH de 2025 dá os 7 jobs, com
+  R$ 1.723.000,00 faturados e R$ 1.276.400,00 recebidos, como o banco.
+- **Visões por job:** os totais sem filtro não mudaram.
+- **Ambiente:** sem erro no console nem no servidor, e build OK.
+
+## Conferido em 26/10/2026 (A5, o 3T na versão de 25/10, sem carga)
+
+- **O limite do Ano Comp.:** em toda a planilha a coluna tem até 6
+  caracteres. Só duas linhas do 3T da Conta California BB trazem uma anotação
+  de 26 caracteres digitada nela. O contrato do pacote
+  (`lib/historico-financeiro/pacote.ts`) aceitava 20 e passa a aceitar 120,
+  como a coluna "DRE extra". O banco guarda `text` sem limite, então não houve
+  migration. A tela de carga só aceita o pacote do 3T depois do deploy desse
+  contrato.
+- **E1:** as 82 abas saíram idênticas, byte a byte. Só o manifesto muda, pela
+  hora da extração.
+- **E2:** movimentos, notas, jobs, previsões e propostas de de-para saíram
+  idênticos aos de antes, e os textos sem de-para aprovado são os mesmos 191.
+  A lista de pendências ganhou a coluna da carga e passou a cobrir o 3T: 16 da
+  1ª carga, 9 do 3T e 4 sem carga (as dos jobs e as de data). As 20 de antes
+  são as mesmas (16 + 4).
+- **E3:** idêntica à de 25/10, que já cobria 2026 inteiro. Só no 3T:
+  - Das 610 células das abas DRE e Gerencial com critério do 3T 2026, 608
+    batem. A linha "Empréstimo a CMH" do 3T na DRE da California soma
+    R$ 9.759,00 a mais no histórico: é um lançamento com espaço sobrando no
+    texto, que o SUMIFS da planilha deixa de fora. A linha FIT do 3T na DRE CMH
+    é um `#REF!` da própria planilha.
+  - Os saldos de julho a setembro (30 contas × mês) batem e encadeiam.
+  - O faturamento (14 abas × mês) bate, com 2 centavos de fração na Go Crazy
+    St André em julho.
+- **O pacote do 3T** (`cargas/3t-2026.json`, 4,3 MB): 7.325 movimentos (soma
+  R$ 9.203.359,58), 385 notas (R$ 44.639.771,23), 3.586 jobs, 40 linhas de
+  rateio e 41 saldos. Foi conferido pelo contrato, como a tela e o servidor
+  conferem, e não foi carregado.
+- **O período já carregado não muda:** o pacote da 1ª carga refeito agora é
+  idêntico, tabela por tabela, ao que está no banco.
+- **As 9 pendências do 3T são de um job só:** um nome de job do 3T de 2026 que
+  não está em nenhuma aba Res. Jobs da versão de 25/10. Ele aparece em 8
+  lançamentos da Conta Santander Califórnia (R$ 43.216,48) e em 1 nota da aba
+  Faturamento California (R$ 31.876,48). Corrige-se na planilha. Se o 3T for
+  carregado assim, os lançamentos e a nota entram sem job.
+
+## Conferido em 27/10/2026 (A5, a carga do 3T)
+
+- **A carga:** o pacote do 3T entrou pela tela, pela sessão do Tiago, a
+  pedido dele ("Sim, carregue o 3T pela tela agora"), em 6 segundos:
+  7.325 movimentos (R$ 9.203.359,58), 385 notas (R$ 44.639.771,23), 3.586
+  jobs, 41 saldos e 40 linhas de rateio. O banco conferiu com o pacote ao
+  concluir. A carga "3T 2026" ficou ativa ao lado da 1ª carga, que não mudou.
+- **Mês a mês:** os 26 grupos de conta por mês (julho a setembro) saem do
+  banco iguais aos do pacote.
+- **Telas:** os quatro relatórios do histórico abrem em 2026 sem erro, e a
+  cobertura vai até 30/09/2026. Na DRE da California de 2026, o 3º trimestre
+  tem R$ 8.647.743,05 de receita. A coluna do 4º trimestre mostra o que já
+  tinha competência do 4T e foi lançado até 30/09: R$ 5.364.811,56 de receita
+  e R$ 1.542.869,99 de custo operacional. No Extrato da BB California, agosto
+  mostra as 136 linhas do histórico.
+- **O que ainda não aparece:** o Extrato mostra o histórico só antes da data
+  do saldo inicial da conta (01/08 na California Santander, 11/09 em oito
+  contas). O fim do 3T aparece quando o saldo inicial passar para 01/10.
+
+## Saldo inicial das contas correntes em 01/10 (A5, 27/10/2026)
+
+- **A aplicação automática é conta à parte.** Os extratos de outubro mostram
+  a conta corrente em R$ 0,00 todo dia nas duas contas mais movimentadas: o
+  banco aplica o que sobra (Rende Fácil no BB, ContaMax na Santander), e a
+  planilha soma a aplicação no saldo da conta. **Decidido (Tiago, 27/10/2026,
+  na sessão bifurcada):** "Ok, concordo com a recomendação vamos fazer as duas
+  contas para ter as contas de aplicação."
+  - Cada aplicação e cada resgate do extrato vira transferência entre a
+    corrente e a aplicação, por regra, e o rendimento entra na aplicação como
+    receita financeira (RF).
+  - A conta corrente começa em 01/10 com R$ 0,00, como o banco.
+  - A aplicação começa com o saldo de 30/09, conferido com o extrato dela.
+    As duas contas de aplicação ainda não foram criadas: o saldo inicial trava
+    no primeiro lançamento.
+- **Conta bancária e conciliação passaram para o Tiago** ("Eu tomei frente da
+  conta bancaria e conciliação, então isso passa por mim mesmo"). Antes eram
+  da frente do Antonio.
+- **BB California:** a data do saldo inicial foi de 11/09 para 01/10 pela tela
+  de contas bancárias, com R$ 0,00.
+- **California Santander:** a tela não deixa mudar o saldo inicial de conta
+  com lançamento, e esta tem 25 baixas de PP. Por isso a mudança foi pela
+  migration `20261027100001`: de R$ 100.000,00 em 01/08 para R$ 0,00 em 01/10.
+  Ela é destrutiva e foi confirmada pelo Tiago ("a California Santander
+  direto no banco por causa da trava"). As 8 baixas de agosto e setembro
+  ficaram antes do início, e estão no histórico. A troca está na auditoria,
+  como a edição pela tela.
+- **Conferido no Extrato:** em setembro, as duas contas mostram o histórico
+  com "A conta começa no sistema em 01/10/2026". O saldo final de setembro dá
+  R$ 132.975,94 no BB, igual à planilha, e R$ 14.645,67 na Santander, contra
+  R$ 14.648,11 na planilha. Os R$ 2,44 são as frações de centavo que a
+  planilha guarda e o histórico arredonda. Outubro começa em R$ 0,00.
+
 ## O que fica para depois
-- A4: os jobs que a planilha não divide (a Copa no 2T 2026 e três jobs da CCH
-  no 1T 2026) ficam na regional do lançamento; a planilha os deixa fora da DRE
-  regional. Aguarda a confirmação do Tiago.
-- A4: a rentabilidade e o faturamento dos jobs do histórico.
+- A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas
+  85 e 91 da Res. Jobs 2026; R$ 1.520.000,00 de benefício): o histórico segue a
+  alíquota e o faturamento. A carga do 3T trouxe a receita da Copa: falta
+  confirmar com o Tiago se o imposto da Copa deve seguir o digitado.
 - Revisar o rateio de um ano, mantendo o registro da planilha dos anos
   fechados. O RH tem a própria tabela de rateio
   (`empresas_rateios_regionais`, do Antonio), com percentuais diferentes dos
   da planilha em 2023, 2024 e 2026: um lugar só se decide com ele.
-- A5: o pacote do 3T não fecha na versão de 25/10/2026 — duas linhas da Conta
-  California BB têm a coluna "Ano Comp." com 26 caracteres, e o contrato do
-  pacote aceita 20.
+- A5, o que sobrou da carga do 3T:
+  - As contas de aplicação (Santander ContaMax e BB Rende Fácil), com o saldo
+    de 30/09 do extrato da aplicação, que o Tiago vai mandar.
+  - As outras 9 contas: o saldo inicial em 01/10 com o saldo do extrato de
+    30/09, comparado com a planilha. É o critério de "3T fechado".
+  - Corrigir na planilha o job do 3T que falta nas abas Res. Jobs (as 9
+    pendências) e recarregar o 3T. Numa versão nova, E1, E2, E3 e o pacote
+    rodam de novo, e o pacote da 1ª carga se compara com o do banco.
 - As 20 pendências: as de data e de nome de job se corrigem na planilha e
-  entram na versão do 3T.
-- A trilha do 4T no sistema: os jobs do 4T que só estão na planilha, as notas de
-  outubro, a virada de 30/09 e a conciliação de outubro pelo OFX.
+  entram numa versão nova.
+- A trilha do 4T no sistema. **Decidido (Tiago, 26/10/2026):** o corte fica em
+  30/09, em duas etapas — "Vamos primeiro até 30/09, e depois vamos tentar
+  subir as movimentações no sistema [...] O ideal seria termos 4T inteiro no
+  sistema, e acho que vale a tentativa", para o sistema bater com a planilha e
+  ela poder ser largada.
+  - **Primeiro, um inventário** de tudo do 4T que não está no sistema, sem
+    lançar nada, separado pelo jeito de entrar: job a subir, nota a faturar,
+    título a receber, PP, avulsa, folha, imposto ou transferência. Inclui o
+    que tem competência do 4T e foi lançado até 30/09.
+  - **Os extratos até 25/10**, que o Tiago já tem, entram para casar cada
+    linha do banco com a da planilha.
+  - **A relação de recorrências** que o Tiago vai mandar serve para cadastrar
+    os custos fixos no sistema e ajudar a achar o título de cada baixa do OFX
+    depois de 30/09.

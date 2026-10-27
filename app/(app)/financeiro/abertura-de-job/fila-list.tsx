@@ -85,11 +85,11 @@ const COLUNAS: ColunaFiltravel<LinhaDaFila>[] = [
     tipo: "texto",
     // Árvore cliente ▸ projeto: o cliente marca todos os projetos dele.
     celula: (x) => {
-      const [codigo, nome, cliente] =
+      const [nome, cliente] =
         x.tipo === "save"
-          ? [x.s.projetoCodigo, x.s.projetoNome, x.s.clienteNome]
-          : [x.l.projeto_codigo, x.l.projeto_nome, x.l.cliente_nome];
-      return { ...celulaTexto(`${codigo ?? ""} ${nome ?? ""}`.trim()), grupo: cliente ?? "" };
+          ? [x.s.projetoNome, x.s.clienteNome]
+          : [x.l.projeto_nome, x.l.cliente_nome];
+      return { ...celulaTexto(nome ?? ""), grupo: cliente ?? "" };
     },
     rotuloSemGrupo: "(sem cliente)",
   },
@@ -166,7 +166,7 @@ export function FilaAbertura({
   const jobsDaBusca = React.useMemo(() => {
     if (!q) return linhas;
     return linhas.filter((l) =>
-      [l.codigo, l.nome, l.projeto_codigo, l.projeto_nome, l.cliente_nome]
+      [l.codigo, l.nome, l.projeto_nome, l.cliente_nome]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
@@ -182,7 +182,6 @@ export function FilaAbertura({
       [
         s.jobCodigo,
         s.jobNome,
-        s.projetoCodigo,
         s.projetoNome,
         s.clienteNome,
         s.itemDescricao,
@@ -291,7 +290,6 @@ export function FilaAbertura({
         </td>
         <td className={CLASSE_DA_CELULA}>
           <CelulaProjeto
-            codigo={l.projeto_codigo}
             nome={l.projeto_nome}
             cliente={[l.cliente_nome, l.produto].filter(Boolean).join(" · ") || "—"}
           />
@@ -351,7 +349,6 @@ export function FilaAbertura({
         </td>
         <td className={CLASSE_DA_CELULA}>
           <CelulaProjeto
-            codigo={s.projetoCodigo}
             nome={s.projetoNome}
             cliente={[s.clienteNome, s.produto].filter(Boolean).join(" · ") || "—"}
           />

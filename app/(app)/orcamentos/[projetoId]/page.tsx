@@ -17,7 +17,6 @@ import { chaveDoCambio } from "@/app/(app)/_planilha/moeda-estrangeira";
 import type {
   CategoriaDominio,
   CategoriaModeloPlanilha,
-  Cliente,
   JobStatus,
   Orcamento,
   Profile,
@@ -29,7 +28,7 @@ import { projetoStatusLabel } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ProjetoEditorDrawer } from "../projeto-editor-drawer";
-import type { ProdutoOption } from "../projeto-form";
+import { listarApresentacoesDoProjeto } from "@/lib/data/apresentacoes-do-projeto";
 import { OrcamentosList, type OrcamentoRow } from "./orcamentos-list";
 import { ImportarOrcamentosDrawer } from "../_selecao/importar-orcamentos-drawer";
 import {
@@ -63,11 +62,11 @@ export default async function ProjetoDetailPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [projRes, orcsRes, clientesRes, responsaveis, gps, regionaisRes, categoriasProjRes, empresas, produtosRes, vinculosRegRes, vinculosRespRes, vinculosMarcasRes] = await Promise.all([
+  const [projRes, orcsRes, responsaveis, gps, regionaisRes, categoriasProjRes, empresas, vinculosRegRes, vinculosRespRes, apresentacoes] = await Promise.all([
     supabase
       .from("projetos")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, campanha, status, cliente_id, produto_id, responsavel_id, regional_id, cidade_id, categoria_id, data_inicio_prevista, data_fim_prevista, descricao, created_by, created_at, updated_at, cliente:clientes(id, nome_fantasia), produto:cliente_produtos!produto_id(id, nome), empresa:empresas(id, razao_social, nome_fantasia)",
+        "id, tenant_id, empresa_id, codigo, nome, campanha, status, cliente_id, produto_id, responsavel_id, regional_id, cidade_id, categoria_id, data_inicio_prevista, data_fim_prevista, descricao, created_by, created_at, updated_at, empresa:empresas(id, razao_social, nome_fantasia)",
       )
       .eq("id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
@@ -80,17 +79,15 @@ export default async function ProjetoDetailPage({
         // sem desambiguar o PostgREST recusa o embed e devolve zero linhas.
         "id, codigo, nome, status, arquivado_em, versao_aprovada_id, produtor_id, data_inicio_prevista, data_fim_prevista, created_at, " +
           "categoria:categorias_dominio!categoria_id(nome, modelo_planilha), " +
-          "servico:categorias_dominio!servico_id(nome)",
+          "servico:categorias_dominio!servico_id(nome), " +
+          // Cliente e marca são do orçamento (decisão 215): o cabeçalho do
+          // projeto mostra os de todos os orçamentos.
+          "cliente:clientes!orcamentos_cliente_id_fkey(id, nome_fantasia), " +
+          "produto:cliente_produtos!orcamentos_produto_id_fkey(id, nome, codigo)",
       )
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
       .order("created_at", { ascending: false }),
-    supabase
-      .from("clientes")
-      .select("id, nome_fantasia, codigo_curto")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("status", "ativo")
-      .order("nome_fantasia"),
     listActiveMembers(session.activeTenant.id),
     // GPs Responsáveis: só quem pode ser GP (decisão 170).
     listarGpsAtivos(session.activeTenant.id),
@@ -111,12 +108,6 @@ export default async function ProjetoDetailPage({
       .order("nome"),
     listEmpresasAtivas(session.activeTenant.id),
     supabase
-      .from("cliente_produtos")
-      .select("id, nome, codigo, cliente_id, padrao")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true)
-      .order("codigo"),
-    supabase
       .from("projeto_regionais")
       .select("regional_id, regional:regionais(id, nome)")
       .eq("projeto_id", params.projetoId)
@@ -126,14 +117,8 @@ export default async function ProjetoDetailPage({
       .select("profile_id, papel, profile:profiles(id, nome)")
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id),
-    // Marcas escolhidas no projeto (decisão 133). O embed `produto` do
-    // projeto, acima, é a marca que o JOB leva — com mais de uma
-    // escolhida, é a geral do cliente, e não uma delas.
-    supabase
-      .from("projeto_marcas")
-      .select("produto_id, produto:cliente_produtos(id, nome, codigo)")
-      .eq("projeto_id", params.projetoId)
-      .eq("tenant_id", session.activeTenant.id),
+    // As apresentações do projeto, para o "Editar projeto" (decisão 213).
+    listarApresentacoesDoProjeto(supabase, session.activeTenant.id, params.projetoId),
   ]);
 
   if (projRes.error) console.error("[projeto.detail]", projRes.error.message);
@@ -161,31 +146,23 @@ export default async function ProjetoDetailPage({
     created_at: raw.created_at,
     updated_at: raw.updated_at,
   };
-  const clienteNome: string | null = raw.cliente?.nome_fantasia ?? null;
-  if (vinculosMarcasRes.error) {
-    console.error("[projeto.detail.marcas]", vinculosMarcasRes.error.message);
-  }
-  // Marcas do projeto, na ordem do código (PRD-01 primeiro). Sem vínculo
-  // gravado — projeto salvo pela versão anterior do app —, vale a marca
-  // do projeto.
-  const marcasDoVinculo = ((vinculosMarcasRes.data ?? []) as any[])
-    .filter((v) => v.produto)
-    .map((v) => ({
-      id: v.produto.id as string,
-      nome: v.produto.nome as string,
-      codigo: v.produto.codigo as string,
-    }))
-    .sort((a, b) => a.codigo.localeCompare(b.codigo, "pt-BR"));
-  const marcasDoProjeto: { id: string; nome: string }[] =
-    marcasDoVinculo.length > 0
-      ? marcasDoVinculo
-      : raw.produto
-        ? [{ id: raw.produto.id as string, nome: raw.produto.nome as string }]
-        : [];
+  // Os clientes e as marcas dos orçamentos do projeto (decisão 215 e
+  // resposta do Tiago, 26/10): um projeto pode ter jobs de clientes
+  // diferentes. Sem orçamento, "—".
+  const unicos = <T extends { id: string }>(lista: (T | null | undefined)[]) =>
+    Array.from(new Map(lista.filter((x): x is T => !!x).map((x) => [x.id, x])).values());
+  const orcamentosDoCabecalho = (orcsRes.data ?? []) as any[];
+  const clientesDoProjeto = unicos<{ id: string; nome_fantasia: string }>(
+    orcamentosDoCabecalho.map((o) => o.cliente),
+  );
+  const clienteNome: string | null =
+    clientesDoProjeto.length > 0 ? clientesDoProjeto.map((c) => c.nome_fantasia).join(", ") : null;
+  const marcasDoProjeto = unicos<{ id: string; nome: string; codigo: string }>(
+    orcamentosDoCabecalho.map((o) => o.produto),
+  ).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
   const empresaNome: string | null = raw.empresa?.nome_fantasia ?? raw.empresa?.razao_social ?? null;
 
   const regionais = (regionaisRes.data ?? []) as Pick<Regional, "id" | "nome" | "empresa_id">[];
-  const produtos = (produtosRes.data ?? []) as ProdutoOption[];
   const categoriasProjeto = (categoriasProjRes.data ?? []) as Pick<CategoriaDominio, "id" | "nome">[];
 
   // Regionais e responsáveis do projeto: alimentam o cabeçalho, o editor
@@ -446,24 +423,12 @@ export default async function ProjetoDetailPage({
       chaveCambio: exportavelMap.get(o.id)?.chaveCambio ?? null,
     }));
 
-  const clientes = (clientesRes.data ?? []) as Pick<
-    Cliente,
-    "id" | "nome_fantasia" | "codigo_curto"
-  >[];
 
   // Decisão 118: projeto arquivado é só leitura. Somem "Editar projeto",
   // "Importar" e "Novo orçamento"; ficam o Exportar, a visão agregada e o
   // Reativar do aviso.
   const projetoArquivado = projeto.status === "arquivado";
 
-  // Decisão 122: com orçamento aprovado ou job, o cliente do projeto não
-  // muda mais. A mesma régua do arquivar (`projetoTemAprovacao`) — o
-  // cancelado antes da abertura não conta; o banco recusa por trás.
-  const clienteTravado =
-    orcamentosBrutos.some((o) => o.status === "aprovado" || o.status === "job_criado") ||
-    Array.from(jobsPorOrcamento.values()).some((jobs) =>
-      jobs.some((j) => j.status !== "cancelado" || j.aberto_no_financeiro),
-    );
   const temOrcamentoAtivo = orcamentos.some((o) => !o.arquivado);
 
   return (
@@ -485,50 +450,36 @@ export default async function ProjetoDetailPage({
             projeto.id,
             orcamentosBrutos as Array<{
               id: string;
-              codigo: string;
               nome: string;
               status: string;
               arquivado_em: string | null;
+              created_at: string;
             }>,
             null,
           )}
         />
 
         <div className="mt-5">
-          <p className="font-mono text-xs font-semibold text-muted-foreground">
-            {projeto.codigo}
-          </p>
-          <div className="mt-1 flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-bold tracking-tight">{projeto.nome}</h1>
             <Badge className={cn("border", projetoBadgeClasses(projeto.status))}>
               {projetoStatusLabel(projeto.status)}
             </Badge>
             {!projetoArquivado && (
             <ProjetoEditorDrawer
-              podeCadastrarCliente={pode(
-                session.activeRole,
-                "cadastros.clientes.inline",
-              )}
-              podeEditarCliente={pode(
-                session.activeRole,
-                "cadastros.clientes.editar",
-              )}
               projeto={projeto}
               empresas={empresas}
-              clientes={clientes}
               responsaveis={responsaveis}
               gps={gps}
               regionais={regionais}
-              produtos={produtos}
               categorias={categoriasProjeto}
               regionaisSelecionadas={regionaisDoProjeto.map((r) => r.id)}
               responsaveisSelecionados={responsaveisDoProjeto.map((r) => r.id)}
-              marcasSelecionadas={marcasDoProjeto.map((m) => m.id)}
               equipeSelecionada={equipeManualDoProjeto}
+              apresentacoes={apresentacoes}
               produtoresDosOrcamentos={Array.from(
                 new Set([...produtoresDosOrcamentos, ...responsaveisDosJobs]),
               )}
-              clienteTravado={clienteTravado}
             />
             )}
             {/* Importar e Exportar logo depois de "Editar projeto", como no

@@ -632,6 +632,9 @@ export function FotoDaAberturaDialog({
                 <Linha rotulo="Projeto" valor={foto.projetoLabel ?? "—"} />
                 <Linha rotulo="Categoria" valor={foto.categoriaNome ?? "—"} />
                 <Linha rotulo="Serviço" valor={foto.servicoNome ?? "—"} />
+                <Linha rotulo="Marca" valor={foto.marcaNome ?? "—"} />
+                <Linha rotulo="Empresa" valor={foto.empresaNome ?? "—"} />
+                <Linha rotulo="Regional" valor={foto.regionalNome ?? "—"} />
                 <Linha
                   rotulo="Competência"
                   valor={rateioLabel(foto.competencias)}

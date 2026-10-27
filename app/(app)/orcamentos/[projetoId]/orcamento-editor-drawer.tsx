@@ -7,7 +7,7 @@ import {
   Dialog,
   DialogHeader,
   DialogTitle,
-  DrawerContent,
+  DialogContent,
 } from "@/components/ui/dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import {
@@ -24,6 +24,7 @@ import type { CategoriaParaServico } from "@/lib/categorias-do-servico";
 import type { CidadeOption } from "../cidade-combobox";
 import { OrcamentoForm } from "./orcamento-form";
 import type { GpParaEscolha } from "@/lib/gps-para-escolha";
+import type { OpcoesDoClienteDoOrcamento } from "@/lib/data/cliente-do-orcamento";
 
 interface Props {
   projetoId: string;
@@ -42,9 +43,12 @@ interface Props {
   /** Quem pode ser GP: os do projeto e os outros (decisão 176). */
   gps: GpParaEscolha[];
   produtores: Pick<Profile, "id" | "nome">[];
+  /** Cliente e marca do orçamento (decisão 215): as listas do formulário. */
+  clienteDoOrcamento: OpcoesDoClienteDoOrcamento;
+  podeCadastrarCliente: boolean;
+  podeEditarCliente: boolean;
   /** O projeto, travado no formulário como na criação. */
   projetoNome: string;
-  projetoCodigo: string;
   disabled?: boolean;
   disabledReason?: string;
   /** Com o job devolvido (decisão 128) o editor abre para corrigir, mas o
@@ -67,8 +71,10 @@ export function OrcamentoEditorDrawer({
   cidadeAtual,
   gps,
   produtores,
+  clienteDoOrcamento,
+  podeCadastrarCliente,
+  podeEditarCliente,
   projetoNome,
-  projetoCodigo,
   disabled,
   disabledReason,
   arquivavel,
@@ -139,7 +145,9 @@ export function OrcamentoEditorDrawer({
       </button>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DrawerContent>
+        {/* Pop-up centralizado, como o "Novo orçamento de job" da visão
+            agregada — não mais o painel lateral (Tiago, 26/10/2026). */}
+        <DialogContent className="flex max-h-[88vh] max-w-3xl flex-col gap-0 overflow-hidden p-0">
           <DialogHeader className="border-b border-border px-6 py-4">
             <DialogTitle>Editar orçamento</DialogTitle>
           </DialogHeader>
@@ -156,8 +164,13 @@ export function OrcamentoEditorDrawer({
               cidadeAtual={cidadeAtual}
               gps={gps}
               produtores={produtores}
+              clientes={clienteDoOrcamento.clientes}
+              produtos={clienteDoOrcamento.produtos}
+              // A edição mostra o que está gravado, sem sugestão.
+              sugestao={null}
+              podeCadastrarCliente={podeCadastrarCliente}
+              podeEditarCliente={podeEditarCliente}
               projetoNome={projetoNome}
-              projetoCodigo={projetoCodigo}
               onSuccess={() => setOpen(false)}
               onCancel={() => setOpen(false)}
             />
@@ -203,7 +216,7 @@ export function OrcamentoEditorDrawer({
               )}
             </div>
           </div>
-        </DrawerContent>
+        </DialogContent>
       </Dialog>
 
       <ConfirmDialog

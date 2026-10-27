@@ -19,7 +19,8 @@ tmp/historico-planilha/
     bruto/                 E1: um CSV por aba + manifesto.json
     padronizado/           E2: movimentos, previsões, notas, jobs, pendências, propostas/
     validacao/             E3: relatorios.csv, saldos.csv, faturamento.csv, resumo.json;
-                           A4: dre.csv, regional.csv e regional-fechamento.csv
+                           A4: dre.csv, regional.csv, regional-fechamento.csv,
+                           rentabilidade.csv e faturamento-dos-jobs.csv
                            (e as variantes do padronizado)
     revisao-e2.xlsx        pendências e de-para para revisar
     cargas/                A1: os pacotes de carga (.json) para a tela
@@ -38,6 +39,8 @@ npx tsx scripts/historico-financeiro/validar.ts "$V"
 npx tsx scripts/historico-financeiro/revisao.ts "$V"
 npx tsx scripts/historico-financeiro/empacotar.ts "$V" --carga "1ª carga"
 npx tsx scripts/historico-financeiro/conferir-dre.ts "$V"
+npx tsx scripts/historico-financeiro/conferir-rentabilidade.ts "$V" --padronizado --com-previsoes
+npx tsx scripts/historico-financeiro/conferir-faturamento.ts "$V"
 npx tsx scripts/historico-financeiro/conferir-regional.ts "$V" --padronizado --com-previsoes \
   --fechamento "$T/fechamento-2026-10-26/origem.xlsx"
 ```
@@ -69,9 +72,12 @@ marcas, plano de contas, serviços, regionais, contas e os jobs abertos. O
   - `notas.csv` (com a classe: job, distribuição de lucro ou sem job) e
     `jobs.csv` (com `fora_do_resultado`: a Copa sem lançamento; e, desde a
     A4, a divisão do job entre as regionais, `rateio_regional`, do grupo
-    "RATEIO %", e a alíquota teórica, `imposto_teorico_percentual`, da coluna
-    "Imp Real %");
-  - `pendencias.csv` — o que não fecha na primeira carga;
+    "RATEIO %", a alíquota teórica, `imposto_teorico_percentual`, da coluna
+    "Imp Real %", e o percentual de fee, `fee_percentual`, da coluna logo
+    depois de "FEE LÍQUIDO");
+  - `pendencias.csv` — o que não fecha nas cargas que vão ao banco (a
+    primeira e o 3T), com a carga de cada pendência; as dos jobs e as de data
+    inválida ficam sem carga;
   - `propostas/` — de-para proposto, com a forma como foi achado (igual,
     parecido, ambíguo, sem par);
   - `resumo.json` — contagens por aba, carga e pendência.
@@ -116,12 +122,25 @@ marcas, plano de contas, serviços, regionais, contas e os jobs abertos. O
   trimestres em que a planilha divide o TD por 4. Com `--fechamento`, compara
   também o faturamento, o imposto teórico, o custo operacional e o benefício
   de cada regional com a DRE regional do Fechamento (as abas "DRE Califa
-  Regional" e "DRE CMH Regional"); a soma divide o REC e o CO pelos jobs como
-  a função do banco. As opções de fonte das duas conferências estão em
-  `movimentos-para-conferir.ts`, que traz também os jobs da mesma fonte.
+  Regional" e "DRE CMH Regional"), e as linhas do bloco dos projetos
+  proprietários; a soma divide o REC e o CO pelos jobs e marca os projetos
+  como a função do banco.
+- **Rentabilidade dos jobs, `conferir-rentabilidade.ts`:** refaz, job a job,
+  as colunas TOTAL RECEITA, IMPOSTO, TOTAL CO, RESULTADO, FEE LÍQUIDO e
+  RENTABILIDADE das abas Res. Jobs (`lib/historico-financeiro/rentabilidade.ts`)
+  e compara com a linha do job na aba mais nova dele. Com `--com-previsoes`,
+  o imposto conta também as notas a emitir, como a planilha.
+- **Faturamento dos jobs, `conferir-faturamento.ts`:** a planilha não tem
+  coluna de faturado; o script refaz, em cada linha de job, o SUMIFS da coluna
+  IMPOSTO (as mesmas abas de Faturamento e o mesmo critério) com o Valor das
+  notas emitidas no período da carga e com o das que têm data de recebimento,
+  e compara com as notas do pacote ligadas ao job
+  (`lib/historico-financeiro/faturamento.ts`).
+- As opções de fonte das conferências estão em `movimentos-para-conferir.ts`,
+  que traz também os jobs e os impostos das notas da mesma fonte.
 
 ## Testes
 
 ```bash
-node --import tsx --test lib/historico-financeiro/extracao.test.ts lib/historico-financeiro/regras.test.ts lib/historico-financeiro/formulas.test.ts lib/historico-financeiro/pacote.test.ts lib/historico-financeiro/dre.test.ts lib/historico-financeiro/regional.test.ts
+node --import tsx --test lib/historico-financeiro/extracao.test.ts lib/historico-financeiro/regras.test.ts lib/historico-financeiro/formulas.test.ts lib/historico-financeiro/pacote.test.ts lib/historico-financeiro/dre.test.ts lib/historico-financeiro/regional.test.ts lib/historico-financeiro/rentabilidade.test.ts lib/historico-financeiro/faturamento.test.ts
 ```

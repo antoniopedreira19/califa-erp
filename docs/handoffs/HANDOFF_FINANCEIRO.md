@@ -8199,9 +8199,12 @@ os arquivos da frente do Antonio.
   A 1ª carga foi refeita pela tela com o pacote novo.
 - **Pacote:** a tabela de jobs tem duas colunas a mais: o pacote antigo não
   passa mais na tela (gere de novo pelo `empacotar.ts`).
-- **Aguarda o Tiago:** o job que a planilha não divide (a Copa no 2T 2026 e
-  três jobs da CCH no 1T 2026) fica na regional do lançamento; a planilha o
-  deixa fora da DRE regional.
+- **Projetos proprietários (Tiago, 26/10/2026):** a Copa (jobs com "COPA" na
+  coluna REGIONAL da Res. Jobs 2026) e os projetos da CCH ("CMH" na Res. Jobs
+  CMH 2026) saem das linhas de cima e entram num bloco abaixo do resultado,
+  somados só no lucro após investimento, como no Fechamento: a Copa metade NE
+  e metade SP, os da CCH na Doca. Migration `20261026100010`; a divisão fica em
+  `EMPRESAS_DO_REGIONAL.projetos`. Projeto novo precisa entrar lá.
 - **Conferência:** `conferir-regional.ts --fechamento`. De 2023 a 2025, as duas
   empresas batem com a DRE regional do Fechamento, menos os trimestres em que a
   planilha faz o benefício job a job e a CCH de 2023. Ver
@@ -8221,19 +8224,207 @@ os arquivos da frente do Antonio.
   formulário segue vindo com a data da linha do banco.
 - **Por quê:** era o único caminho de um título a pagar ficar sem data (nota
   6 deste dia). As outras origens nascem com data ou a recebem na aprovação.
-- **Pendente:** a AV-00003 e a AV-00004 (testes da remessa Santander, R$ 0,05)
-  seguem sem data e entram em toda remessa nova — já estão nas remessas
-  reais 25 e 32. O Tiago decide se dá baixa ou cancela; depois, a trava no
-  banco.
+- **A AV-00003 e a AV-00004** (testes da remessa Santander, R$ 0,05, sem
+  data) entravam em toda remessa nova — estavam até nas remessas reais 25 e
+  32. Não foram pagas: excluídas pela tela em 26/10/2026, com a autorização
+  do Tiago (avulsa não tem "cancelar"). Os itens das remessas ficam como
+  histórico.
+- **Trava no banco (Tiago, 26/10/2026):** o CHECK
+  `chk_avulsa_a_pagar_tem_data` em `contas_avulsas` recusa a avulsa a pagar
+  fora do cartão sem data (migration `20261026700001`). Testado em
+  transação desfeita: sem data recusada, com data aceita, apagar a data
+  recusado.
 - **Código:** `lib/validations/conta-avulsa.ts`, com teste novo, e
   `conta-avulsa-drawer.tsx`. Ver a "Revisão de 26/10/2026" da
   [decisão 082](../decisions/082-a-despesa-sem-job-nasce-com-rateio-e-a-recorrencia-vira-titulo-30-dias-antes.md).
+## ⚠️ Nota de 2026-10-26 (10) — a rentabilidade dos jobs do histórico em Relatórios (decisão 211, A4)
+
+- **Onde:** Relatórios › "Rentabilidade dos jobs do histórico"
+  (`/relatorios/rentabilidade-historico`), cartão só para admin e financeiro.
+  Empresa, ano, período (o ano ou a coluna T) e visão (cliente, marca ou job)
+  pela URL.
+- **Regra (Tiago, 26/10/2026):** as duas contas das abas Res. Jobs. O resultado
+  é a receita do job (Tipo REC) menos o imposto das notas emitidas e o custo
+  (Tipo CO); a rentabilidade é o resultado menos o fee líquido, que a planilha
+  separa por dentro da receita menos o imposto, pelo percentual de cada job
+  (12% na California, 15% na CCH). A coluna se chama "Fee (planilha)": não é o
+  honorário orçado. Vale só para o histórico; os jobs novos seguem os
+  honorários das planilhas internas.
+- **Banco:** `historico_jobs.fee_percentual`, o índice
+  `idx_historico_movimentos_job` e a função `historico_rentabilidade_jobs`
+  (migration `20261026100011`). A 1ª carga foi refeita pela tela com o fee de
+  cada job; a recarga levou também o de-para da CMH (Reg "NE" = Doca, "SP" =
+  Agency).
+- **Investimentos da CCH fora (Tiago, 26/10/2026):** as sete linhas da aba Res.
+  Jobs CMH que são investimentos (Doca, Tipo CMH DOC; Makkna, Tipo CMH MK)
+  ficam com custo zero no relatório dos jobs; o valor segue na DRE como
+  "Investimento Doca" e "Makkna". O custo do job é o Tipo CO.
+- **Código e conferência:** `lib/historico-financeiro/rentabilidade.ts` (com
+  testes) e `scripts/historico-financeiro/conferir-rentabilidade.ts`. De 2023 a
+  2025, a California bate com as abas Res. Jobs em quase todos os jobs; as
+  exceções da planilha (os investimentos da CCH listados como jobs, as fórmulas
+  da CCH de 2025 e 2026 e da Hitlab) estão na
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
+## ⚠️ Nota de 2026-10-26 (11) — o faturamento dos jobs do histórico em Relatórios (decisão 211, A4)
+
+- **Onde:** Relatórios › "Faturamento dos jobs do histórico"
+  (`/relatorios/faturamento-historico`), cartão só para admin e financeiro,
+  com os filtros da rentabilidade do histórico (agora em
+  `app/(app)/relatorios/_historico/jobs.ts`).
+- **Regra (Tiago, 26/10/2026):** as notas do job, o par do Faturamento de
+  Jobs. O histórico não tem o valor contratado, então a tela compara o
+  faturado (as notas emitidas do job, em qualquer data) com o recebido (as
+  notas com data de recebimento na planilha) e mostra o a receber. Na visão
+  por job, a situação: Recebido, Parcial, A receber ou Sem nota. O recebido é
+  o da nota, não o banco: a receita do banco por job está na rentabilidade.
+- **Banco:** a função `historico_faturamento_jobs` (migration
+  `20261026100012`), só de leitura, com a trava de admin e financeiro.
+- **Código e conferência:** `lib/historico-financeiro/faturamento.ts` (com
+  testes) e `scripts/historico-financeiro/conferir-faturamento.ts`, que refaz o
+  SUMIFS da coluna IMPOSTO com o valor da nota. Batem 2.688 de 2.712 jobs; os
+  24 que diferem estão na
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
+## ⚠️ Nota de 2026-10-26 (12) — o faturamento do histórico por CNPJ emissor (decisão 211, A4)
+
+- **Visão padrão "CNPJ"** em `/relatorios/faturamento-historico`, como as abas
+  de Faturamento da planilha:
+  - uma linha por emissor, com o valor de cada mês pela data de emissão e o
+    faturado, o recebido e o a receber do ano;
+  - as notas fora de job somam no total e aparecem marcadas;
+  - o CNPJ abre a lista das notas dele.
+- **Filtro "Emissor"** nas visões por cliente, marca e job.
+- **Banco:** `historico_faturamento_notas` e o `historico_faturamento_jobs`
+  com as somas por emissor (migration `20261026100013`).
+- Detalhes na
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
+## ⚠️ Nota de 2026-10-26 (13) — o pacote do 3T do histórico, preparado e sem carga (decisão 211, A5)
+
+- **Contrato do pacote:** a coluna "Ano Comp." dos movimentos passa de 20
+  para 120 caracteres (`lib/historico-financeiro/pacote.ts`), porque duas
+  linhas do 3T trazem uma anotação digitada nela. Sem migration: o banco
+  guarda `text`. A tela de carga só aceita o pacote do 3T depois do deploy.
+- **Pipeline:** a lista de pendências da padronização cobre a 1ª carga e o 3T,
+  com a carga de cada uma, e a planilha de revisão mostra a carga.
+- **3T na versão de 25/10:** E1, E2 e E3 rodadas e o pacote montado
+  (7.325 movimentos, 385 notas), sem carga. A 1ª carga não muda. As 9
+  pendências do 3T são de um job que falta nas abas Res. Jobs. Detalhes na
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
 ## Código do projeto do financeiro sem a sigla — 23/10/2026 (decisão 210)
 
-⚠️ Aguardando a hora combinada com a frente do Antonio (migration
-`20261023950001`, destrutiva). O projeto do financeiro passa a `F-NNNN/AA`
+Aplicada em 26/10/2026 (migration `20261023950001`, destrutiva, na hora
+combinada com a frente do Antonio). O projeto do financeiro passa a `F-NNNN/AA`
 (`AMB-F004/26` → `F-0001/26`), pela ordem de criação; ano = o da criação do
 projeto, não mais o do início do job. Os rótulos da foto da abertura trocam
-o código (141 de 143; os 2 de projeto apagado ficam). Novo registro
+o código (152 de 154; os 2 de projeto apagado ficam). 80 projetos viraram
+`F-0001/26` … `F-0080/26`. Novo registro
 `codigos_de_projeto_financeiro_usados`: o número de projeto apagado sem job
 não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
+
+## Marca, empresa e regional no registro da abertura — 26/10/2026 (decisão 214)
+
+- **Registro no financeiro:** duas linhas novas depois de Categoria e
+  Serviço — Empresa | Regional e Cliente (travado) | Marca. Marca, empresa
+  e regional chegam com as do job; o financeiro troca na abertura e no
+  "Editar registro", e a troca vale para o job inteiro. A regional segue a
+  empresa; a marca tem o "+" para cadastrar outra do cliente.
+- **Empresa do job ≠ empresa do projeto** passa a ser possível (resposta
+  do Tiago: "Só o job"). Trocar a empresa do projeto não mexe mais em job
+  já aberto.
+- **Resumo lateral, conferência e foto do histórico** mostram marca,
+  empresa e regional.
+- **Relatórios de Rentabilidade e Faturamento** filtram pela marca do job
+  (`jobs.produto_id`), não mais pela do projeto; com o preenchimento, o
+  resultado de hoje não mudou.
+- **Conferência:** no TES-1030/26 (P-0006/26), como administrador: troca
+  para Hitlab (regional escolhida sozinha), salvar (job Hitlab com projeto
+  em Empresa Teste; foto nº 2 com os três campos), volta para Empresa Teste
+  (regional em branco até escolher "Teste"), salvar (foto nº 3). "+" da
+  marca aberto e fechado sem cadastrar. Fila do TES-1029/26 com os campos
+  preenchidos. Relatório de Rentabilidade abre normal. tsc limpo.
+
+## Cliente do job no financeiro — 26/10/2026 (decisão 215)
+
+- O cliente que a fila, a abertura, os jobs abertos, contas a pagar e a
+  receber, o fluxo de caixa e os relatórios mostram é o do job
+  (`jobs.cliente_id`, o do orçamento), e não mais o do projeto. Hoje os
+  dois são iguais em todos os jobs; passam a diferir em projeto com
+  orçamentos de clientes diferentes.
+- `emitir_faturamento`, `enviar_job_para_faturamento`,
+  `enviar_lote_para_faturamento`, `vw_faturamento_pendente` e
+  `vw_fluxo_caixa` leem o cliente do job (mesmo resultado de antes,
+  conferido).
+
+## ⚠️ Nota de 2026-10-26 (14) — Mídia System: marcar na abertura, "Liberar NFs" e conferir a NF na prestação (decisão 216)
+
+- **Abertura:** caixa "Mídia System" no fim do "Registro no financeiro"
+  (também no "Editar registro"; trava depois que há PP sem NF ou depois da
+  liberação). No job aberto, o mesmo campo mostra o estado e o botão
+  **"Liberar NFs"**, com a lista das PPs que foram sem NF. Não volta atrás.
+- **Contas a Pagar:** a PP sem NF é aprovada e paga como qualquer PP. Depois
+  da liberação, a NF chega pelo chip "Prestação de Contas", com aprovar e
+  reprovar da verba — **sem saldo nem estorno** (`valor_devolvido = 0`).
+  **Primeiro a PP, depois a prestação:** com a PP ainda em avaliação, a tela
+  diz "Aprove a PP antes da prestação" e o banco recusa a ordem inversa.
+- **Fiscal:** a NF entra no cadastro de notas na aprovação da prestação,
+  como a NF da verba (crédito de PIS/COFINS no mês da emissão). A PP paga
+  sem NF **sai sem retenção** — risco aceito pelo Tiago.
+- **Conferido** no TES-1029/26 (P-0006/26): NF 9216 da PP-00572 no cadastro
+  de notas, realizado do item intacto. Ver
+  [decisão 216](../decisions/216-midia-system.md).
+
+## ⚠️ Nota de 2026-10-27 (1) — o 3T de 2026 carregado no histórico (decisão 211, A5)
+
+- **Carga "3T 2026"** (01/07 a 30/09/2026, planilha de 25/10) feita pela
+  tela, a pedido do Tiago: 7.325 movimentos, 385 notas, 3.586 jobs, 41 saldos
+  e 40 linhas de rateio, ativa ao lado da 1ª carga. O banco conferiu com o
+  pacote, e os 26 grupos de conta por mês são iguais.
+- **Relatórios do histórico:** passam a ir até 30/09/2026. Os números dos
+  anos anteriores podem mudar: o job soma o que recebeu e pagou em qualquer
+  data, e a DRE soma pela competência.
+- **Extrato da Conciliação:** o histórico aparece antes da data do saldo
+  inicial de cada conta. Hoje essa data é 01/08 na California Santander e
+  11/09 em oito contas, então o fim do 3T fica escondido até o saldo inicial
+  passar para 01/10, com o saldo do extrato de 30/09 (próximo passo, com os
+  saldos que o Tiago vai mandar).
+
+## ⚠️ Nota de 2026-10-27 (2) — saldo inicial da BB California e da California Santander em 01/10 (decisão 211, A5)
+
+- **Conta bancária e conciliação** agora respondem ao Tiago, e não à frente
+  do Antonio (Tiago, 27/10/2026).
+- **As duas contas correntes começam em 01/10/2026 com R$ 0,00,** como o
+  extrato do banco: a aplicação automática (Rende Fácil e ContaMax) vai virar
+  conta de investimento à parte. A BB California mudou pela tela. A California
+  Santander mudou pela migration `20261027100001`, porque a tela trava saldo
+  inicial de conta com lançamento. Era R$ 100.000,00 em 01/08. Na Santander,
+  as 8 baixas de PP de agosto e setembro ficaram antes do início.
+- **No Extrato,** setembro mostra o histórico da planilha até 30/09 e outubro
+  começa em R$ 0,00. Detalhes na
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
+## O código do projeto sai das telas — 27/10/2026 (decisão 217)
+
+- Fila de abertura: a coluna "Projeto · Cliente", o funil e o "Ordenar de A
+  a Z" usam só o nome; a busca deixa de casar o código do projeto (continua
+  com o do job). "Aprovar save" e "Cancelar o job" mostram o nome do
+  projeto (o do financeiro, no cancelamento).
+- Visualizar Jobs e Resultado de Job: grupo e coluna "Projeto" só com o
+  nome, que é o link para o projeto do financeiro; funil e ordem pelo nome;
+  grupos na ordem de criação do projeto (`projeto_criado_em`, era o código).
+  O Excel perde a coluna "Código do projeto".
+- Formulário da abertura: campo, opções do combo (ordenadas pela criação),
+  lápis, "+", dica, resumo e diálogo de confirmação sem código; busca do
+  combo só pelo nome; erro de nome repetido "…com este nome no cliente X".
+- Histórico da abertura: a foto mostra só o nome; no projeto apagado, o
+  código do rótulo gravado é cortado na hora de mostrar (`semCodigoNoRotulo`).
+- Página do projeto do financeiro e faixa do job no financeiro: só o nome.
+- Contas a Pagar, tela da PP (Origem no job): "projeto · cliente".
+- **Conferência (27/10/2026):** no Chrome, logado como administrador, no
+  `P-0006/26 · Teste` e nos jobs TES do projeto: um verificador procurou
+  `P-`/`F-NNNN/AA`, "código do projeto" e "nome ou o código" no texto
+  visível, nas dicas e nos placeholders de cada tela e pop-up — zero em
+  todas. Prints de antes e depois na página
+  https://claude.ai/artifact/V2i6P4pthYtNJahKEAnWJG.

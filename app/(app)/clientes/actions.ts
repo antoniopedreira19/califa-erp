@@ -636,7 +636,9 @@ export async function carregarCliente(id: string): Promise<
       .order("nome"),
     // `head: true` — interessa só se existe alguma, não quais.
     supabase
-      .from("projetos")
+      // Desde a decisão 215 o cliente é do orçamento: é ele que diz se o
+      // cliente já tem trabalho (e código de job com a sigla dele).
+      .from("orcamentos")
       .select("id", { count: "exact", head: true })
       .eq("cliente_id", id)
       .eq("tenant_id", session.activeTenant.id),

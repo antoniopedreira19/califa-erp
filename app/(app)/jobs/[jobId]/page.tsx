@@ -61,6 +61,7 @@ import type {
   Categoria,
   ItemBv,
 } from "@/lib/types";
+import { SeloMidiaSystem } from "../_midia-system/midia-system";
 
 export const dynamic = "force-dynamic";
 
@@ -213,7 +214,6 @@ export default async function JobDetailPage({
           modulo="jobs"
           reservaDoVoltar={reservaDoVoltar}
           projeto={{
-            codigo: raw.projeto?.codigo ?? "",
             nome: raw.projeto?.nome ?? "",
           }}
           agregadaHref={`/jobs/projeto/${raw.projeto_id}`}
@@ -239,6 +239,8 @@ export default async function JobDetailPage({
               <Badge className={cn("border", statusBadgeClasses(statusExibido))}>
                 {jobStatusLabel(statusExibido)}
               </Badge>
+              {/* Decisão 216: o job auditado pelo cliente. */}
+              <SeloMidiaSystem midia={detalhe.midiaSystem} />
               {/* O "Editar" saiu na decisão 174: depois da abertura, o job
                   não muda. No lugar dele, a Equipe — membros do projeto,
                   responsáveis do job e a chave do envio de PP pelo
@@ -353,6 +355,9 @@ export default async function JobDetailPage({
               job={{
                 codigo: job.codigo,
                 nome: job.nome,
+                // O cliente do job (decisão 215): o do orçamento, do
+                // cadastro de clientes.
+                clienteNome: raw.cliente?.nome_fantasia ?? null,
                 // Categoria do job = `jobs.categoria_id`, que só é gravado
                 // quando o financeiro abre o job (e a abertura a exige).
                 // Na fila, ou devolvido, vale a do orçamento — a mesma
@@ -381,13 +386,10 @@ export default async function JobDetailPage({
               }}
               projeto={{
                 id: raw.projeto_id,
-                codigo: raw.projeto?.codigo ?? "—",
                 nome: raw.projeto?.nome ?? "—",
-                // Cliente de verdade, do cadastro — antes desta tela o card
-                // rotulava "Cliente" e mostrava o nome do PROJETO.
-                clienteNome: raw.projeto?.cliente?.nome_fantasia ?? null,
                 dataInicio: raw.projeto?.data_inicio_prevista ?? null,
                 dataFim: raw.projeto?.data_fim_prevista ?? null,
+                apresentacoes: detalhe.apresentacoesDoProjeto,
               }}
               jobsDoProjeto={
                 comPedido
@@ -520,6 +522,7 @@ export default async function JobDetailPage({
             papelEnviaPP={papelEnviaPP && !comPedido}
             papelCorrigeNf={papelCorrigeNf}
             ppsQuePossoPrestarContas={ppsQuePossoPrestarContas}
+            midiaSystem={detalhe.midiaSystem}
             podeConfirmarBv={podeConfirmarBv && !comPedido}
             jaEnviadoParaFaturamento={envioFaturamento !== null}
             linhasComEnvioTravado={linhasComEnvioTravado}
@@ -543,6 +546,7 @@ export default async function JobDetailPage({
             podeEnviar={podeEnviarPP && !comPedido}
             papelEnviaPP={papelEnviaPP && !comPedido}
             podePrestarContas={ppsQuePossoPrestarContas}
+            midiaSystem={detalhe.midiaSystem}
             // Decisão 160: o envio, o formulário e a PP ao lado dos
             // documentos também pela aba — com o que o painel do item usa.
             statusDoJob={job.status}

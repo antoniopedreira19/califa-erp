@@ -38,6 +38,7 @@ import {
 } from "@/lib/calculos/midia-off";
 import type { OrcamentoRascunho } from "../../_rascunho/tipos";
 import type { OrcamentoExportavel } from "../../_selecao/exportar-orcamentos-menu";
+import { carregarClienteDoOrcamento } from "@/lib/data/cliente-do-orcamento";
 
 export const dynamic = "force-dynamic";
 
@@ -100,7 +101,7 @@ export default async function OrcamentosAgregadoPage({
     supabase
       .from("projetos")
       .select(
-        "id, codigo, nome, status, cliente_id, cliente:clientes(nome_fantasia, percentual_honorarios_padrao), responsavel:profiles!responsavel_id(nome)",
+        "id, codigo, nome, status, responsavel:profiles!responsavel_id(nome)",
       )
       .eq("id", params.projetoId)
       .eq("tenant_id", tenantId)
@@ -108,12 +109,14 @@ export default async function OrcamentosAgregadoPage({
     supabase
       .from("orcamentos")
       .select(
-        "id, codigo, nome, status, arquivado_em, versao_aprovada_id, categoria_id, servico_id, descritivo, regional_id, " +
+        "id, codigo, nome, status, arquivado_em, created_at, versao_aprovada_id, categoria_id, servico_id, descritivo, regional_id, " +
         // `!categoria_id`: `orcamentos` tem duas FKs para
         // `categorias_dominio`, e o embed ambíguo derruba a query inteira.
         "categoria:categorias_dominio!categoria_id(modelo_planilha), " +
           "cidade_id, cidade:cidades(nome), gp_responsavel_id, produtor_id, " +
-          "data_inicio_prevista, data_fim_prevista",
+          "data_inicio_prevista, data_fim_prevista, " +
+          // O cliente é do orçamento (decisão 215).
+          "cliente_id, cliente:clientes!orcamentos_cliente_id_fkey(id, nome_fantasia)",
       )
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", tenantId)
@@ -121,7 +124,9 @@ export default async function OrcamentosAgregadoPage({
       // Arquivado (decisão 118) não entra na agregada: saiu da mesa como o
       // cancelado, e só volta pelo filtro da lista do projeto.
       .is("arquivado_em", null)
-      .order("codigo", { ascending: true }),
+      // Pela criação: era pelo código do orçamento, que dava a mesma ordem
+      // e saiu das telas (27/10/2026).
+      .order("created_at", { ascending: true }),
     supabase
       .from("categorias_dominio")
       // `modelo_planilha` vem junto: é ele que diz como o orçamento criado
@@ -183,6 +188,7 @@ export default async function OrcamentosAgregadoPage({
     nome: string;
     status: string;
     arquivado_em: string | null;
+    created_at: string;
     versao_aprovada_id: string | null;
     categoria_id: string | null;
     /** Só o modelo: é ele que diz como este orçamento fecha (decisão 072). */
@@ -196,6 +202,8 @@ export default async function OrcamentosAgregadoPage({
     produtor_id: string;
     data_inicio_prevista: string | null;
     data_fim_prevista: string | null;
+    cliente_id: string;
+    cliente: { id: string; nome_fantasia: string } | null;
   }>;
 
   // Versões utilizáveis de todos os orçamentos em uma consulta só — a
@@ -408,16 +416,26 @@ export default async function OrcamentosAgregadoPage({
     EstadoSaveDaLinha
   >;
 
-  // Os saldos que este cliente tem para gastar. É o que alimenta o
-  // "consumir save de outro job" do formulário — sem eles a aba abre
-  // vazia e a linha só consegue GERAR crédito.
-  const saldosDeSave: SaldoDeSave[] = (projeto as any).cliente_id
-    ? await saldosDeSaveDoCliente(
-        supabase,
-        tenantId,
-        (projeto as any).cliente_id as string,
-      )
-    : [];
+  // Os saldos que cada cliente dos orçamentos tem para gastar. É o que
+  // alimenta o "consumir save de outro job" do formulário — sem eles a aba
+  // abre vazia e a linha só consegue GERAR crédito. Save só se consome
+  // entre jobs do mesmo cliente, e o cliente é do orçamento (decisão 215).
+  const clientePorOrcamento: Record<string, { id: string; nome: string }> = {};
+  for (const o of orcamentos) {
+    if (o.cliente) clientePorOrcamento[o.id] = { id: o.cliente.id, nome: o.cliente.nome_fantasia };
+  }
+  const clientesDosOrcamentos = Array.from(
+    new Map(orcamentos.filter((o) => o.cliente).map((o) => [o.cliente!.id, o.cliente!.nome_fantasia])),
+  );
+  const [saldosDosClientes, clienteDoOrcamento] = await Promise.all([
+    Promise.all(
+      clientesDosOrcamentos.map(([id]) => saldosDeSaveDoCliente(supabase, tenantId, id)),
+    ),
+    carregarClienteDoOrcamento(supabase, tenantId, params.projetoId),
+  ]);
+  const saldosPorCliente: Record<string, SaldoDeSave[]> = Object.fromEntries(
+    clientesDosOrcamentos.map(([id], i) => [id, saldosDosClientes[i]]),
+  );
 
   // O formulário mostra de qual grupo a linha veio; aqui a tela tem
   // vários orçamentos, então o mapa cobre os grupos de todos eles.
@@ -666,14 +684,12 @@ export default async function OrcamentosAgregadoPage({
       )}
       savePorItem={savePorItem}
       bvsPorItem={bvsPorItem}
-      saldosDeSave={saldosDeSave}
       nomeDoGrupo={nomeDoGrupo}
       faixa={
         <FaixaDoProjeto
           modulo="orcamentos"
           reservaDoVoltar={`/orcamentos/${projeto.id}`}
           projeto={{
-            codigo: projeto.codigo,
             nome: projeto.nome,
             href: `/orcamentos/${projeto.id}`,
           }}
@@ -694,7 +710,11 @@ export default async function OrcamentosAgregadoPage({
         id: projeto.id,
         codigo: projeto.codigo,
         nome: projeto.nome,
-        cliente: projeto.cliente?.nome_fantasia ?? null,
+        // Os clientes dos orçamentos (resposta do Tiago, 26/10).
+        cliente:
+          clientesDosOrcamentos.length > 0
+            ? clientesDosOrcamentos.map(([, nome]) => nome).join(", ")
+            : null,
         responsavel: projeto.responsavel?.nome ?? null,
       }}
       projetoArquivado={projetoArquivado}
@@ -703,10 +723,12 @@ export default async function OrcamentosAgregadoPage({
       podeExcluir={podeExcluir}
       podeEditarImpostos={pode(session.activeRole, "orcamentos.editar_impostos")}
       podeMarcarSave={pode(session.activeRole, "orcamentos.marcar_em_save")}
-      honorariosCliente={Number(
-        projeto.cliente?.percentual_honorarios_padrao ??
-          HONORARIOS_PADRAO_FALLBACK,
-      )}
+      honorariosCliente={HONORARIOS_PADRAO_FALLBACK}
+      clienteDoOrcamento={clienteDoOrcamento}
+      podeCadastrarCliente={pode(session.activeRole, "cadastros.clientes.inline")}
+      podeEditarCliente={pode(session.activeRole, "cadastros.clientes.editar")}
+      saldosPorCliente={saldosPorCliente}
+      clientePorOrcamento={clientePorOrcamento}
       inicial={inicial}
       midias={midias}
       exportaveis={exportaveis}

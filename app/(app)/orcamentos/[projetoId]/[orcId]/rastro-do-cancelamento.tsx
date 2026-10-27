@@ -114,7 +114,7 @@ export function FaixaJobCancelado({ rastro }: { rastro: RastroDoCancelamento }) 
                         <>
                           {" "}
                           O projeto financeiro{" "}
-                          <span className="font-mono">{rastro.saida.projetoFinanceiroInativado}</span>{" "}
+                          <span className="font-medium text-foreground">{rastro.saida.projetoFinanceiroInativado}</span>{" "}
                           ficou inativo.
                         </>
                       )}

@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils";
 export interface DescritivoPopoverProps {
   /** Rótulo do cartão: "Descritivo do projeto" ou "Descritivo do job". */
   rotulo: string;
+  /** Código do job ou da PP. O do projeto não aparece: vem nulo. */
   codigo: string | null;
   nome: string | null;
   /**
@@ -140,9 +141,13 @@ export function DescritivoPopover({
             </button>
           </div>
           <div className="flex items-baseline gap-2">
-            <span className="font-mono text-[11.5px] text-california-red">
-              {codigo ?? "—"}
-            </span>
+            {/* O projeto não mostra código (pedido do Tiago, 27/10/2026):
+                ele chega nulo e o cartão fica só com o nome. */}
+            {codigo && (
+              <span className="font-mono text-[11.5px] text-california-red">
+                {codigo}
+              </span>
+            )}
             <span className="text-[13.5px] font-semibold">{nome ?? "—"}</span>
           </div>
           {/* `whitespace-pre-wrap` porque o campo é um textarea: as quebras

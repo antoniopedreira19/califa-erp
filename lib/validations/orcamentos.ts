@@ -22,6 +22,10 @@ export const orcamentoSchema = z
     // `categorias_dominio` com escopo `projeto` — lista diferente da
     // Categoria acima, que usa escopo `orcamento`.
     servico_id: z.string().uuid("Selecione o serviço."),
+    // Cliente e marca do orçamento (decisão 215): saíram do projeto. A
+    // server action confere que a marca é do cliente.
+    cliente_id: z.string().uuid("Selecione o cliente."),
+    produto_id: z.string().uuid("Selecione a marca."),
     // Obrigatórios desde 06/08/2026. Nullable no banco por causa dos
     // orçamentos gravados antes desta mudança — a exigência vive aqui.
     // `regional_id` precisa ser uma das regionais do projeto; isso a

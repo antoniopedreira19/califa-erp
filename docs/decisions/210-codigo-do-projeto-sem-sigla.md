@@ -2,8 +2,10 @@
 
 **Data:** 2026-10-23
 **Decidido por:** Tiago
-**Status:** aceita; código e migration prontos na branch, **aguardando a
-hora combinada com a frente do Antonio** para aplicar e publicar.
+**Status:** aceita e aplicada em 26/10/2026, ~17h10, na hora combinada com
+a frente do Antonio; código publicado logo em seguida (`d413ac31`).
+**Revista por:** a [217](217-codigo-do-projeto-fora-das-telas.md) (27/10/2026): o
+código continua gerado como aqui, mas não aparece mais nas telas.
 **Migration:** ⚠️ destrutiva — `20261023950001_codigo_do_projeto_sem_sigla.sql`
 (sobrescreve `projetos.codigo`, `orcamentos.codigo`,
 `projetos_financeiro.codigo` e `jobs_aberturas.projeto_financeiro_rotulo`;
@@ -112,3 +114,28 @@ não existe mais. Então, numa hora sem uso e combinada com o Antonio:
 5. conferir no navegador: lista e página do projeto, criação de projeto e
    orçamento no `P-0006/26 · Teste`, campo Projeto da abertura, página do
    projeto do financeiro.
+
+## 6. Aplicada em 26/10/2026
+
+Antes de aplicar, o estado foi relido: nenhuma migration desde 23/10 tocou
+projeto, orçamento, abertura ou os registros de códigos; gatilhos e
+`trocar_cliente_do_projeto` iguais aos do ensaio; nenhum projeto ou
+orçamento sendo criado na auditoria (havia PPs sendo geradas). Os números
+cresceram desde o ensaio de 23/10 e a troca usou os do dia:
+
+- **107 projetos** → `P-0001/26` … `P-0107/26` (os 3 criados depois do
+  ensaio são `P-0105` a `P-0107`);
+- **185 orçamentos** com o prefixo novo;
+- **80 projetos do financeiro** → `F-0001/26` … `F-0080/26`;
+- **152 de 154 rótulos** da abertura (os 2 de projeto apagado ficam);
+- **226 códigos** de orçamento usados ganharam a versão com o prefixo novo;
+- **372 eventos** `*.codigo_trocado` com `decisao = '210'` (107 + 185 + 80).
+
+Conferido no banco depois: nada fora do formato novo, todo orçamento com o
+prefixo do projeto, `updated_at` intocado e os gatilhos religados,
+`codigos_de_projeto_financeiro_usados` com RLS, leitura para
+`authenticated` e nada para `anon`, e só a versão de 3 argumentos da RPC.
+
+Fica de fora: uma solicitação de freelancer importada do sistema antigo
+(módulo do Antonio) cita um código antigo de projeto no nome do job, que é
+texto livre copiado. Não é trocada.

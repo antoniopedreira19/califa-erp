@@ -13,57 +13,44 @@ import {
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type {
   CategoriaDominio,
-  Cliente,
   Profile,
   Projeto,
   Regional,
 } from "@/lib/types";
-import { ProjetoForm, type ProdutoOption } from "./projeto-form";
+import { ProjetoForm } from "./projeto-form";
 import { arquivarProjeto, reativarProjeto } from "./actions";
+import type { ApresentacaoDoProjeto } from "@/lib/apresentacoes-do-projeto";
 
 interface Props {
   projeto: Projeto;
   empresas: { id: string; razao_social: string; nome_fantasia: string | null; principal: boolean }[];
-  clientes: Pick<Cliente, "id" | "nome_fantasia" | "codigo_curto">[];
   responsaveis: Pick<Profile, "id" | "nome">[];
   /** Quem pode ser GP (decisão 170) — ver o ProjetoForm. */
   gps: Pick<Profile, "id" | "nome">[];
   regionais: Pick<Regional, "id" | "nome" | "empresa_id">[];
-  produtos: ProdutoOption[];
   categorias: Pick<CategoriaDominio, "id" | "nome">[];
   regionaisSelecionadas: string[];
   responsaveisSelecionados: string[];
-  /** Marcas gravadas no projeto (`projeto_marcas`, decisão 133). */
-  marcasSelecionadas: string[];
   /** Acréscimos manuais à Equipe já gravados (papel `equipe`). */
   equipeSelecionada?: string[];
+  /** As apresentações gravadas no projeto (decisão 213). */
+  apresentacoes?: ApresentacaoDoProjeto[];
   /** Produtores dos orçamentos do projeto — entram na Equipe travados. */
   produtoresDosOrcamentos?: string[];
-  /** Decisão 122: o projeto já tem orçamento aprovado ou job, e o
-   *  cliente não muda mais. */
-  clienteTravado: boolean;
-  /** `cadastros.clientes.editar` — ver o ProjetoForm. */
-  podeCadastrarCliente?: boolean;
-  podeEditarCliente?: boolean;
 }
 
 export function ProjetoEditorDrawer({
   projeto,
   empresas,
-  clientes,
   responsaveis,
   gps,
   regionais,
-  produtos,
   categorias,
   regionaisSelecionadas,
   responsaveisSelecionados,
-  marcasSelecionadas,
   equipeSelecionada,
+  apresentacoes,
   produtoresDosOrcamentos,
-  clienteTravado,
-  podeCadastrarCliente,
-  podeEditarCliente,
 }: Props) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -155,30 +142,27 @@ export function ProjetoEditorDrawer({
             <DialogTitle className="text-3xl font-bold leading-tight tracking-tight">
               Editar projeto
             </DialogTitle>
-            <DialogDescription className="mt-1">
-              Código do projeto: <span className="font-mono">{projeto.codigo}</span>
+            {/* Só para leitor de tela: o código do projeto não aparece
+                (pedido do Tiago, 27/10/2026). */}
+            <DialogDescription className="sr-only">
+              Altere os dados do projeto {projeto.nome}.
             </DialogDescription>
           </DialogHeader>
 
           <ProjetoForm
-            podeCadastrarCliente={podeCadastrarCliente}
-            podeEditarCliente={podeEditarCliente}
             projeto={projeto}
             empresas={empresas}
-            clientes={clientes}
             responsaveis={responsaveis}
             gps={gps}
             regionais={regionais}
-            produtos={produtos}
             categorias={categorias}
             regionaisSelecionadas={regionaisSelecionadas}
             responsaveisSelecionados={responsaveisSelecionados}
-            marcasSelecionadas={marcasSelecionadas}
             equipeSelecionada={equipeSelecionada}
+            apresentacoes={apresentacoes}
             produtoresDosOrcamentos={produtoresDosOrcamentos}
             criadorId={projeto.created_by ?? undefined}
             rodapeEsquerda={statusEArquivar}
-            clienteTravado={clienteTravado}
             onSuccess={() => setOpen(false)}
             onCancel={() => setOpen(false)}
           />

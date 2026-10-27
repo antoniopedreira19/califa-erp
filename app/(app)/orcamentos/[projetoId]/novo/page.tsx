@@ -3,6 +3,8 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { listarGpsParaOrcamento, listarProdutoresAtivos } from "@/lib/data/members";
 import { listarCidadesIniciais } from "@/lib/data/cidades";
+import { carregarClienteDoOrcamento } from "@/lib/data/cliente-do-orcamento";
+import { pode } from "@/lib/permissoes";
 import type { CategoriaDominio, Regional } from "@/lib/types";
 import { OrcamentoForm } from "../orcamento-form";
 import type { CategoriaParaServico } from "@/lib/categorias-do-servico";
@@ -26,6 +28,7 @@ export default async function NovoOrcamentoPage({
     gps,
     cidadesIniciais,
     produtores,
+    clienteDoOrcamento,
   ] = await Promise.all([
       supabase
         .from("projetos")
@@ -68,6 +71,8 @@ export default async function NovoOrcamentoPage({
       listarCidadesIniciais(session.activeTenant.id),
       // Só quem tem o papel Produtor (13/10/2026).
       listarProdutoresAtivos(session.activeTenant.id),
+      // Cliente e Marca do orçamento (decisão 215).
+      carregarClienteDoOrcamento(supabase, session.activeTenant.id, params.projetoId),
     ]);
 
   if (!projeto) notFound();
@@ -89,10 +94,6 @@ export default async function NovoOrcamentoPage({
       <div>
         <BotaoVoltar reserva={`/orcamentos/${params.projetoId}`} />
         <h1 className="mt-3 text-3xl font-bold tracking-tight">Novo orçamento</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          O código será gerado no formato{" "}
-          <span className="font-mono">{projeto.codigo}-NN</span>.
-        </p>
       </div>
 
       <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
@@ -101,11 +102,15 @@ export default async function NovoOrcamentoPage({
           categorias={categorias}
           servicos={servicos}
           projetoNome={projeto.nome}
-          projetoCodigo={projeto.codigo}
           regionaisDoProjeto={regionaisDoProjeto}
           cidadesIniciais={cidadesIniciais}
           gps={gps}
           produtores={produtores}
+          clientes={clienteDoOrcamento.clientes}
+          produtos={clienteDoOrcamento.produtos}
+          sugestao={clienteDoOrcamento.sugestao}
+          podeCadastrarCliente={pode(session.activeRole, "cadastros.clientes.inline")}
+          podeEditarCliente={pode(session.activeRole, "cadastros.clientes.editar")}
         />
       </div>
     </div>

@@ -112,7 +112,6 @@ export function LinhaCancelamentoNaFila({
       </td>
       <td className={CLASSE_DA_CELULA}>
         <CelulaProjeto
-          codigo={c.projetoCodigo}
           nome={c.projetoNome}
           cliente={[c.clienteNome, c.produto].filter(Boolean).join(" · ") || "—"}
         />
@@ -173,7 +172,8 @@ export function RevisarCancelamentoDialog({
     { rotulo: "Regional", valor: c.regionalNome ?? "—" },
   ];
 
-  const desfaz: { rotulo: string; detalhe: string; valor: string }[] = [
+  // `texto`: o nome do projeto, que não é valor e não vai em fonte mono.
+  const desfaz: { rotulo: string; detalhe: string; valor: string; texto?: boolean }[] = [
     {
       rotulo: "Recebimento previsto",
       detalhe: "sai do fluxo de caixa",
@@ -189,14 +189,15 @@ export function RevisarCancelamentoDialog({
       detalhe: "saem da previsão de impostos",
       valor: formatCurrency(c.impostosPrevistos),
     },
-    ...(c.projetoFinanceiroCodigo
+    ...(c.projetoFinanceiroNome
       ? [
           {
             rotulo: "Projeto financeiro",
             detalhe: c.projetoFinanceiroFicaInativo
               ? "fica inativo: só tinha este job"
               : "continua ativo: tem outros jobs",
-            valor: c.projetoFinanceiroCodigo,
+            valor: c.projetoFinanceiroNome,
+            texto: true,
           },
         ]
       : []),
@@ -274,7 +275,9 @@ export function RevisarCancelamentoDialog({
                     <span className="min-w-0 text-foreground">
                       {l.rotulo} <span className="text-muted-foreground">· {l.detalhe}</span>
                     </span>
-                    <span className="shrink-0 font-mono font-semibold">{l.valor}</span>
+                    <span className={l.texto ? "min-w-0 text-right font-semibold" : "shrink-0 font-mono font-semibold"}>
+                      {l.valor}
+                    </span>
                   </div>
                 ))}
               </div>

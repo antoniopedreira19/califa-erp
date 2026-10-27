@@ -102,7 +102,7 @@ export default async function JobsPage({
         // jeito, sem query nova.
         "observacoes, " +
         "regional:regionais(nome), " +
-        "projeto:projetos(codigo, nome, descricao, cliente_id, cliente:clientes(nome_fantasia)), " +
+        "cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), projeto:projetos(codigo, nome, descricao), " +
         "responsavel:profiles!responsavel_id(nome), " +
         "empresa:empresas(id, razao_social, nome_fantasia)",
     )
@@ -213,11 +213,11 @@ export default async function JobsPage({
     projeto_codigo: r.projeto?.codigo ?? null,
     projeto_nome: r.projeto?.nome ?? null,
     projeto_descricao: r.projeto?.descricao ?? null,
-    cliente_nome: r.projeto?.cliente?.nome_fantasia ?? null,
+    cliente_nome: r.cliente?.nome_fantasia ?? null,
     responsavel_nome: r.responsavel?.nome ?? null,
     empresa_id: r.empresa_id ?? null,
     empresa_nome: r.empresa?.nome_fantasia ?? r.empresa?.razao_social ?? null,
-    cliente_id: r.projeto?.cliente_id ?? null,
+    cliente_id: r.cliente_id ?? null,
     motivo_fora_do_lote: motivoForaDoLote(r, comPedidoDeCancelamento.has(r.id)),
   }));
 

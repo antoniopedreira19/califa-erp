@@ -27,6 +27,7 @@ import {
   faturamentoPorJob,
 } from "@/lib/data/faturamento-por-job";
 import { listarProjetosFinanceiro } from "@/lib/data/projetos-financeiro";
+import { carregarOpcoesDoRegistro } from "@/lib/data/opcoes-do-registro";
 import { listarContasBancarias } from "@/lib/data/contas-bancarias";
 import { carregarDetalheDoJob } from "@/app/(app)/jobs/[jobId]/carregar-detalhe";
 import { FichaJob } from "@/app/(app)/jobs/[jobId]/ficha-job";
@@ -68,6 +69,9 @@ import { abaDaUrl } from "./abas";
 import { impostoDoJob } from "../../abertura-de-job/imposto-previsto";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { linhasAlteradasNaRevisao } from "@/lib/data/linhas-da-revisao";
+import { midiaSystemDoJob, situacaoMidiaDaPP } from "@/lib/calculos/midia-system";
+import { SeloMidiaSystem } from "@/app/(app)/jobs/_midia-system/midia-system";
+import type { PPSemNfNaAuditoria } from "../../abertura-de-job/[jobId]/campo-midia-system";
 
 export const dynamic = "force-dynamic";
 
@@ -275,7 +279,30 @@ export default async function JobNoFinanceiroPage({
   // painel "Dados da produção" do formulário.
   const nomeNoFinanceiro = nomeDoJobNoFinanceiro(jobNaFila);
 
-  const [projetos, irmaosRes] = await Promise.all([
+  // Decisão 216: o job Mídia System e as PPs que foram sem NF — o selo do
+  // cabeçalho, o campo do registro e a confirmação do "Liberar NFs".
+  const midiaDoJob = midiaSystemDoJob(jobNaFila);
+  const nomeDoFornecedorDoJob = new Map(detalhe.fornecedores.map((f) => [f.id, f.nome]));
+  const ppsDaAuditoria: PPSemNfNaAuditoria[] = midiaDoJob
+    ? [...detalhe.ppsPorItemId.values()].flat().flatMap((pp) => {
+        const situacao = situacaoMidiaDaPP(pp, midiaDoJob);
+        return situacao
+          ? [
+              {
+                id: pp.id,
+                codigo: pp.codigo,
+                item: pp.item_nome,
+                fornecedor: pp.fornecedor_id ? (nomeDoFornecedorDoJob.get(pp.fornecedor_id) ?? null) : null,
+                status: pp.status,
+                valor: Number(pp.valor),
+                situacao,
+              },
+            ]
+          : [];
+      })
+    : [];
+
+  const [projetos, irmaosRes, opcoesDoRegistro] = await Promise.all([
     listarProjetosFinanceiro(tenantId, jobNaFila.cliente_id),
     // Irmãos no projeto do FINANCEIRO — não os do projeto da produção,
     // que é outro agrupamento. Sem projeto do financeiro (job aberto
@@ -291,6 +318,8 @@ export default async function JobNoFinanceiroPage({
           // começa pela sigla do cliente, e o texto não diz mais a ordem.
           .order("created_at", { ascending: true })
       : Promise.resolve({ data: [], error: null }),
+    // Marca, empresa e regional do registro (decisão 214).
+    carregarOpcoesDoRegistro(supabase, tenantId, jobNaFila.cliente_id, jobNaFila.produto_id),
   ]);
 
   const jobsDoProjetoFinanceiro = ((irmaosRes.data ?? []) as any[]).map((j) => ({
@@ -462,7 +491,6 @@ export default async function JobNoFinanceiroPage({
             modulo="financeiro"
             reservaDoVoltar="/financeiro/abertura-de-job?aba=abertos"
             projeto={{
-              codigo: jobNaFila.projeto_financeiro_codigo ?? "—",
               nome: jobNaFila.projeto_financeiro_nome ?? "—",
             }}
             agregadaHref={`/financeiro/projetos/${jobNaFila.projeto_financeiro_id}`}
@@ -499,6 +527,7 @@ export default async function JobNoFinanceiroPage({
               <Badge className={cn("border", situacaoMeta.classes)}>
                 {situacaoMeta.rotulo}
               </Badge>
+              <SeloMidiaSystem midia={midiaDoJob} />
               {/* Quem mandou para faturamento, e quando (decisão 136). */}
               {detalhe.etapasDoJob.envioFaturamentoEm && (
                 <span className="text-[12px] text-muted-foreground">
@@ -582,6 +611,12 @@ export default async function JobNoFinanceiroPage({
         abertura={
           <AberturaForm
             job={jobNaFila}
+            opcoesDoRegistro={opcoesDoRegistro}
+            midiaSystem={{
+              liberadoEm: jobNaFila.midia_system_liberado_em,
+              liberadoPorNome: jobNaFila.midia_system_liberado_por_nome,
+              pps: ppsDaAuditoria,
+            }}
             modo={formularioEmRevisao ? "revisao" : "leitura"}
             fotos={fotos}
             revisao={revisao}
@@ -656,6 +691,8 @@ export default async function JobNoFinanceiroPage({
               job={{
                 codigo: job.codigo,
                 nome: nomeNoFinanceiro,
+                // O cliente do job (decisão 215): o do orçamento.
+                clienteNome: detalhe.raw.cliente?.nome_fantasia ?? null,
                 categoriaNome: detalhe.raw.categoria?.nome ?? null,
                 // O serviço do JOB, com o do orçamento como fallback —
                 // `dados.ts` da abertura já resolve (decisão 055).
@@ -678,18 +715,13 @@ export default async function JobNoFinanceiroPage({
                 // para job anterior à migration 20260820000011. As datas
                 // continuam vindo do projeto da produção: só existem lá.
                 id: jobNaFila.projeto_financeiro_id ?? detalhe.raw.projeto_id,
-                codigo:
-                  jobNaFila.projeto_financeiro_codigo ??
-                  detalhe.raw.projeto?.codigo ??
-                  "—",
                 nome:
                   jobNaFila.projeto_financeiro_nome ??
                   detalhe.raw.projeto?.nome ??
                   "—",
-                clienteNome:
-                  detalhe.raw.projeto?.cliente?.nome_fantasia ?? null,
                 dataInicio: detalhe.raw.projeto?.data_inicio_prevista ?? null,
                 dataFim: detalhe.raw.projeto?.data_fim_prevista ?? null,
+                apresentacoes: detalhe.apresentacoesDoProjeto,
               }}
               // Os mesmos da faixa acima (decisão 113): só o que passou pela
               // abertura — o job na fila, o devolvido e o cancelado não
@@ -808,6 +840,7 @@ export default async function JobNoFinanceiroPage({
               </div>
             )}
             <JobRealizadoSection
+              midiaSystem={midiaDoJob}
               // Tela do financeiro: só leitura, não gera nem envia PP.
               podeGerarAcimaDoOrcado={false}
               papelEnviaPP={false}

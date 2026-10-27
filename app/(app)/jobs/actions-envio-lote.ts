@@ -129,13 +129,13 @@ async function lerEnviosAnteriores(
       .from("jobs_envio_faturamento")
       .select(
         "id, mes, enviado_em, enviado_por, " +
-          "job:jobs!jobs_envio_faturamento_job_id_fkey!inner(id, codigo, nome, projeto:projetos!jobs_projeto_id_fkey!inner(cliente_id)), " +
+          "job:jobs!jobs_envio_faturamento_job_id_fkey!inner(id, codigo, nome, cliente_id), " +
           "notas:jobs_envio_faturamento_notas!jobs_envio_faturamento_notas_envio_id_fkey(id, ordem, cnpj, tomador_exterior, descritivo), " +
           "parcelas:jobs_envio_faturamento_parcelas!jobs_envio_faturamento_parcelas_envio_id_fkey(nota_id, valor)",
       )
       .eq("tenant_id", tenantId)
       .is("lote_id", null)
-      .eq("job.projeto.cliente_id", cliente.id)
+      .eq("job.cliente_id", cliente.id)
       .not("enviado_em", "is", null)
       .order("enviado_em", { ascending: false })
       .limit(LIMITE_DE_ANTERIORES)
@@ -223,7 +223,9 @@ interface JobLido {
   empresa_id: string | null;
   data_prevista_faturamento: string | null;
   versao_orcamento_aprovada_id: string;
-  projeto: { cliente_id: string; cliente: { nome_fantasia: string | null; razao_social: string | null; cnpj: string | null } | null } | null;
+  /** O cliente do job (decisão 215): o do orçamento dele. */
+  cliente_id: string;
+  cliente: { nome_fantasia: string | null; razao_social: string | null; cnpj: string | null } | null;
   empresa: { nome_fantasia: string | null; razao_social: string | null } | null;
   orcamento: { categoria: { modelo_planilha: string } | null } | null;
   versao: { percentual_honorarios: number | string; percentual_imposto: number | string } | null;
@@ -267,7 +269,7 @@ async function lerJobs(supabase: ReturnType<typeof createClient>, tenantId: stri
     .from("jobs")
     .select(
       "id, codigo, nome, status, empresa_id, data_prevista_faturamento, versao_orcamento_aprovada_id, " +
-        "projeto:projetos(cliente_id, cliente:clientes(nome_fantasia, razao_social, cnpj)), " +
+        "cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia, razao_social, cnpj), " +
         "empresa:empresas(nome_fantasia, razao_social), " +
         "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), " +
         "versao:versoes_orcamento!versao_orcamento_aprovada_id(percentual_honorarios, percentual_imposto)",
@@ -279,7 +281,7 @@ async function lerJobs(supabase: ReturnType<typeof createClient>, tenantId: stri
 
 /** Mesmo cliente e mesma empresa — a regra do lote (Tiago, 19/10/2026). */
 function conferirClienteEEmpresa(jobs: JobLido[]): string | null {
-  const clientes = new Set(jobs.map((j) => j.projeto?.cliente_id ?? ""));
+  const clientes = new Set(jobs.map((j) => j.cliente_id ?? ""));
   const empresas = new Set(jobs.map((j) => j.empresa_id ?? ""));
   if (clientes.size !== 1 || clientes.has("")) return "O envio em lote é de jobs de um mesmo cliente.";
   if (empresas.size !== 1 || empresas.has("")) return "O envio em lote é de jobs de uma mesma empresa.";
@@ -358,9 +360,9 @@ export async function carregarEnvioEmLote(jobIds: string[]): Promise<CarregarLot
     return true;
   });
 
-  const cli = jobs[0].projeto!.cliente;
+  const cli = jobs[0].cliente;
   const cliente = {
-    id: jobs[0].projeto!.cliente_id,
+    id: jobs[0].cliente_id,
     nome: cli?.nome_fantasia ?? cli?.razao_social ?? "Cliente",
     cnpj: cli?.cnpj ? cli.cnpj.replace(/\D/g, "") : null,
   };
@@ -385,7 +387,7 @@ export async function carregarEnvioEmLote(jobIds: string[]): Promise<CarregarLot
       .from("cliente_portais")
       .select("id, nome, url")
       .eq("tenant_id", tenantId)
-      .eq("cliente_id", jobs[0].projeto!.cliente_id)
+      .eq("cliente_id", jobs[0].cliente_id)
       .eq("ativo", true)
       .order("nome")
       .returns<{ id: string; nome: string; url: string }[]>(),
@@ -558,7 +560,7 @@ export async function enviarLoteParaFaturamento(input: EnvioEmLoteInput): Promis
 
   // O portal precisa ser do cliente do lote; a URL fica guardada, como no
   // envio de um job.
-  const clienteId = lidos[0].projeto!.cliente_id;
+  const clienteId = lidos[0].cliente_id;
   let portalUrl: string | null = null;
   if (dados.portal_id) {
     const { data: portal } = await supabase

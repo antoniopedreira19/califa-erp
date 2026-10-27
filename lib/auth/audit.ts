@@ -157,6 +157,9 @@ export type AuditAction =
   // porque ela fecha a revisão (`abertura_em_revisao`) e libera o envio de
   // PP e o faturamento; o metadata traz o de/para e a errata.
   | "job.abertura_revisada"
+  // Decisão 216: o financeiro libera as NFs do job Mídia System (fim da
+  // auditoria do cliente). As PPs que foram sem NF entram na prestação.
+  | "job.midia_system_nfs_liberadas"
   // Projeto criado pela própria tela de abertura, na tabela
   // `projetos_financeiro`. Não é `projeto.criado`: aquele é o projeto da
   // produção, que nasce do orçamento e a produção enxerga. Desde a decisão

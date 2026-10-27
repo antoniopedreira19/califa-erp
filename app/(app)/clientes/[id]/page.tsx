@@ -45,7 +45,9 @@ export default async function EditarClientePage({
     // Só interessa se existe algum: é o que congela o código curto, que
     // virou a sigla dos códigos de projeto já emitidos (18/09/2026).
     supabase
-      .from("projetos")
+      // Desde a decisão 215 o cliente é do orçamento: é ele que diz se o
+      // cliente já tem trabalho (e código de job com a sigla dele).
+      .from("orcamentos")
       .select("id", { count: "exact", head: true })
       .eq("cliente_id", params.id)
       .eq("tenant_id", session.activeTenant.id),

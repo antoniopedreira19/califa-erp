@@ -76,7 +76,7 @@ export async function GET(
       .from("orcamentos")
       // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
       .select(
-        "id, nome, projeto:projetos(cliente:clientes(nome_fantasia)), categoria:categorias_dominio!categoria_id(modelo_planilha)",
+        "id, nome, cliente:clientes!orcamentos_cliente_id_fkey(nome_fantasia), categoria:categorias_dominio!categoria_id(modelo_planilha)",
       )
       .eq("id", params.orcId)
       .eq("projeto_id", params.projetoId)
@@ -84,7 +84,7 @@ export async function GET(
       .maybeSingle<{
         id: string;
         nome: string;
-        projeto: { cliente: { nome_fantasia: string } | null } | null;
+        cliente: { nome_fantasia: string } | null;
         categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
       }>(),
     supabase
@@ -134,8 +134,8 @@ export async function GET(
     total_planejado: Number(it.total_planejado ?? 0),
   })) as VersaoOrcamentoItem[];
 
-  // Nome do cliente via embed projeto → cliente
-  const clienteNome = orcamento.projeto?.cliente?.nome_fantasia ?? "—";
+  // O cliente é do orçamento (decisão 215).
+  const clienteNome = orcamento.cliente?.nome_fantasia ?? "—";
 
   // ---------- monta workbook ----------
   const wb = new ExcelJS.Workbook();
