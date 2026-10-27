@@ -142,12 +142,11 @@ const PROJETO_NOVO = "novo";
 /** Uma linha do combo de projeto: as do servidor e a do projeto novo. */
 type OpcaoDeProjeto = ProjetoFinanceiroOpcao & { novo: boolean };
 
-/** "Novo" no lugar do código: o projeto ainda não existe, e o código só
- *  sai quando ele nasce, com o job. */
+/** "Novo": o projeto ainda não existe, e só nasce com o job. */
 function SeloProjetoNovo() {
   return (
     <span
-      title="Criado ao gravar, com o código gerado pelo sistema"
+      title="Criado ao gravar"
       className="shrink-0 rounded-full bg-california-red/10 px-1.5 py-px text-[10px] font-bold uppercase tracking-[0.06em] text-california-red"
     >
       Novo
@@ -978,8 +977,8 @@ export function AberturaForm({
     if (!q) return projetosVisiveis;
     return projetosVisiveis.filter(
       (p) =>
-        normalizar(p.nome).includes(q) ||
-        normalizar(p.codigo).includes(q),
+        // Só pelo nome: o código do projeto não aparece (27/10/2026).
+        normalizar(p.nome).includes(q),
     );
   }, [projetosVisiveis, buscaProjeto]);
   function escolherProjeto(id: string) {
@@ -994,9 +993,12 @@ export function AberturaForm({
     setProjetoId("");
   }
   const projetoLabel = projetoSel?.nome ?? "Selecione o projeto";
-  const projetoCodigo = projetoSel && !projetoSel.novo ? projetoSel.codigo : "";
+  // Sem o código do projeto, que não aparece para o usuário (pedido do
+  // Tiago, 27/10/2026).
   const projetoResumo = projetoSel
-    ? `${projetoSel.nome} · ${projetoSel.novo ? "projeto novo" : projetoSel.codigo}`
+    ? projetoSel.novo
+      ? `${projetoSel.nome} · projeto novo`
+      : projetoSel.nome
     : "— não informado";
   // Quando o projeto novo passa a existir: é o que o "+" explica.
   const quandoNasceProjeto =
@@ -1007,7 +1009,7 @@ export function AberturaForm({
         : "quando o registro for salvo";
   // O projeto da produção fica como referência, e é explicitamente outra
   // coisa: mexer aqui não move o job em Orçamentos.
-  const projetoDica = `Arrumação do financeiro. Na produção, o job segue em ${job.projeto_codigo ?? "—"}.`;
+  const projetoDica = `Arrumação do financeiro. Na produção, o job segue no projeto ${job.projeto_nome ?? "—"}.`;
 
   // ---------- Contas bancárias ----------
   const contaReceb = contas.find((c) => c.id === contaRecebId) ?? null;
@@ -1750,13 +1752,7 @@ export function AberturaForm({
                           >
                             {projetoLabel}
                           </span>
-                          {projetoSel?.novo ? (
-                            <SeloProjetoNovo />
-                          ) : (
-                            <span className="shrink-0 font-mono text-[11.5px] text-muted-foreground">
-                              {projetoCodigo}
-                            </span>
-                          )}
+                          {projetoSel?.novo && <SeloProjetoNovo />}
                         </span>
                         {/* Zerar a escolha devolve o "+" (decisão 119), como
                             o ✕ do campo de fornecedor. <span> e não
@@ -1815,7 +1811,7 @@ export function AberturaForm({
                           placeholder={
                             sugestaoDeProjeto
                               ? `Sugestão: ${sugestaoDeProjeto.nome} — último job deste projeto (${sugestaoDeProjeto.jobCodigo})`
-                              : "Digite o nome ou o código do projeto"
+                              : "Digite o nome do projeto"
                           }
                           className="h-9 text-[13px]"
                         />
@@ -1852,13 +1848,7 @@ export function AberturaForm({
                                 <span className="truncate font-semibold">
                                   {pr.nome}
                                 </span>
-                                {pr.novo ? (
-                                  <SeloProjetoNovo />
-                                ) : (
-                                  <span className="shrink-0 font-mono text-[11px] text-[#8a8a8a]">
-                                    {pr.codigo}
-                                  </span>
-                                )}
+                                {pr.novo && <SeloProjetoNovo />}
                               </span>
                               <span className="mt-0.5 block text-[11px] text-muted-foreground">
                                 {pr.cliente_nome ?? "—"}
@@ -1904,13 +1894,8 @@ export function AberturaForm({
                         className="w-[420px] border-california-red/30 p-4"
                         align="end"
                       >
-                        <p className="flex items-baseline justify-between gap-3 text-[12.5px] font-semibold">
+                        <p className="text-[12.5px] font-semibold">
                           {projetoSel ? "Editar nome do projeto" : "Criar projeto para este job"}
-                          {projetoSel && !projetoSel.novo && (
-                            <span className="font-mono text-[11px] font-normal text-muted-foreground">
-                              {projetoSel.codigo}
-                            </span>
-                          )}
                         </p>
                         <div className="mt-2.5 flex flex-wrap items-center gap-2">
                           <input
@@ -1963,19 +1948,15 @@ export function AberturaForm({
                             <>
                               O nome muda na hora, para todos os jobs deste
                               projeto — não espera o resto do formulário. O
-                              código e o cliente não mudam.
+                              cliente não muda.
                             </>
                           ) : (
                             <>
                               O projeto é criado {quandoNasceProjeto}, junto com
-                              o job — nenhum projeto fica sem job. O código é
-                              gerado pelo sistema e o cliente vem do orçamento
-                              de origem. Vale só no financeiro: a produção
-                              continua vendo o job em{" "}
-                              <span className="font-mono">
-                                {job.projeto_codigo ?? "—"}
-                              </span>
-                              .
+                              o job — nenhum projeto fica sem job. O cliente
+                              vem do orçamento de origem. Vale só no
+                              financeiro: a produção continua vendo o job no
+                              projeto {job.projeto_nome ?? "—"}.
                             </>
                           )}
                         </p>

@@ -491,7 +491,6 @@ export default async function JobNoFinanceiroPage({
             modulo="financeiro"
             reservaDoVoltar="/financeiro/abertura-de-job?aba=abertos"
             projeto={{
-              codigo: jobNaFila.projeto_financeiro_codigo ?? "—",
               nome: jobNaFila.projeto_financeiro_nome ?? "—",
             }}
             agregadaHref={`/financeiro/projetos/${jobNaFila.projeto_financeiro_id}`}
@@ -716,10 +715,6 @@ export default async function JobNoFinanceiroPage({
                 // para job anterior à migration 20260820000011. As datas
                 // continuam vindo do projeto da produção: só existem lá.
                 id: jobNaFila.projeto_financeiro_id ?? detalhe.raw.projeto_id,
-                codigo:
-                  jobNaFila.projeto_financeiro_codigo ??
-                  detalhe.raw.projeto?.codigo ??
-                  "—",
                 nome:
                   jobNaFila.projeto_financeiro_nome ??
                   detalhe.raw.projeto?.nome ??

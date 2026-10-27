@@ -142,8 +142,10 @@ export function ProjetoEditorDrawer({
             <DialogTitle className="text-3xl font-bold leading-tight tracking-tight">
               Editar projeto
             </DialogTitle>
-            <DialogDescription className="mt-1">
-              Código do projeto: <span className="font-mono">{projeto.codigo}</span>
+            {/* Só para leitor de tela: o código do projeto não aparece
+                (pedido do Tiago, 27/10/2026). */}
+            <DialogDescription className="sr-only">
+              Altere os dados do projeto {projeto.nome}.
             </DialogDescription>
           </DialogHeader>
 

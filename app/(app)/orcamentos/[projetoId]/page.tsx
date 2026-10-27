@@ -450,20 +450,17 @@ export default async function ProjetoDetailPage({
             projeto.id,
             orcamentosBrutos as Array<{
               id: string;
-              codigo: string;
               nome: string;
               status: string;
               arquivado_em: string | null;
+              created_at: string;
             }>,
             null,
           )}
         />
 
         <div className="mt-5">
-          <p className="font-mono text-xs font-semibold text-muted-foreground">
-            {projeto.codigo}
-          </p>
-          <div className="mt-1 flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-3xl font-bold tracking-tight">{projeto.nome}</h1>
             <Badge className={cn("border", projetoBadgeClasses(projeto.status))}>
               {projetoStatusLabel(projeto.status)}

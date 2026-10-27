@@ -113,10 +113,10 @@ export function itensDeOrcamentos(
   projetoId: string,
   orcamentos: Array<{
     id: string;
-    codigo: string;
     nome: string;
     status: string;
     arquivado_em: string | null;
+    created_at: string;
   }>,
   atualId: string | null,
 ): ItemDaFaixa[] {
@@ -126,8 +126,9 @@ export function itensDeOrcamentos(
         o.id === atualId ||
         (!o.arquivado_em && o.status !== "cancelado" && o.status !== "recusado"),
     )
-    // A ordem segue a do código (a de criação), mesmo sem mostrá-lo.
-    .sort((a, b) => a.codigo.localeCompare(b.codigo))
+    // A ordem de criação. Era a do código do orçamento, que dava a mesma
+    // ordem; o código saiu das telas (pedido do Tiago, 27/10/2026).
+    .sort((a, b) => a.created_at.localeCompare(b.created_at))
     .map((o) => ({
       id: o.id,
       codigo: null,

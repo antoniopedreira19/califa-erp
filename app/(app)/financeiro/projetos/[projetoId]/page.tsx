@@ -164,7 +164,7 @@ export default async function ProjetoNoFinanceiroPage({
         <FaixaDoProjeto
           modulo="financeiro"
           reservaDoVoltar="/financeiro/abertura-de-job?aba=abertos"
-          projeto={{ codigo: projeto.codigo, nome: projeto.nome }}
+          projeto={{ nome: projeto.nome }}
           agregadaHref={`/financeiro/projetos/${projeto.id}`}
           itens={itensDeJobs("/financeiro/jobs/", jobsDoProjeto, null, () => true)}
           ativo={AGREGADA}
@@ -176,9 +176,6 @@ export default async function ProjetoNoFinanceiroPage({
               <FolderKanban className="h-5 w-5 text-california-red" />
             </div>
             <div className="min-w-0">
-              <p className="font-mono text-xs font-semibold text-muted-foreground">
-                {projeto.codigo}
-              </p>
               <h1 className="text-2xl font-bold tracking-tight">
                 {projeto.nome}
               </h1>

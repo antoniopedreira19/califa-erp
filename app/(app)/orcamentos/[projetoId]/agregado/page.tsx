@@ -109,7 +109,7 @@ export default async function OrcamentosAgregadoPage({
     supabase
       .from("orcamentos")
       .select(
-        "id, codigo, nome, status, arquivado_em, versao_aprovada_id, categoria_id, servico_id, descritivo, regional_id, " +
+        "id, codigo, nome, status, arquivado_em, created_at, versao_aprovada_id, categoria_id, servico_id, descritivo, regional_id, " +
         // `!categoria_id`: `orcamentos` tem duas FKs para
         // `categorias_dominio`, e o embed ambíguo derruba a query inteira.
         "categoria:categorias_dominio!categoria_id(modelo_planilha), " +
@@ -124,7 +124,9 @@ export default async function OrcamentosAgregadoPage({
       // Arquivado (decisão 118) não entra na agregada: saiu da mesa como o
       // cancelado, e só volta pelo filtro da lista do projeto.
       .is("arquivado_em", null)
-      .order("codigo", { ascending: true }),
+      // Pela criação: era pelo código do orçamento, que dava a mesma ordem
+      // e saiu das telas (27/10/2026).
+      .order("created_at", { ascending: true }),
     supabase
       .from("categorias_dominio")
       // `modelo_planilha` vem junto: é ele que diz como o orçamento criado
@@ -186,6 +188,7 @@ export default async function OrcamentosAgregadoPage({
     nome: string;
     status: string;
     arquivado_em: string | null;
+    created_at: string;
     versao_aprovada_id: string | null;
     categoria_id: string | null;
     /** Só o modelo: é ele que diz como este orçamento fecha (decisão 072). */
@@ -687,7 +690,6 @@ export default async function OrcamentosAgregadoPage({
           modulo="orcamentos"
           reservaDoVoltar={`/orcamentos/${projeto.id}`}
           projeto={{
-            codigo: projeto.codigo,
             nome: projeto.nome,
             href: `/orcamentos/${projeto.id}`,
           }}

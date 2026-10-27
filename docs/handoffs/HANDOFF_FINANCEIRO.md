@@ -8390,3 +8390,27 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   11/09 em oito contas, então o fim do 3T fica escondido até o saldo inicial
   passar para 01/10, com o saldo do extrato de 30/09 (próximo passo, com os
   saldos que o Tiago vai mandar).
+
+## O código do projeto sai das telas — 27/10/2026 (decisão 217)
+
+- Fila de abertura: a coluna "Projeto · Cliente", o funil e o "Ordenar de A
+  a Z" usam só o nome; a busca deixa de casar o código do projeto (continua
+  com o do job). "Aprovar save" e "Cancelar o job" mostram o nome do
+  projeto (o do financeiro, no cancelamento).
+- Visualizar Jobs e Resultado de Job: grupo e coluna "Projeto" só com o
+  nome, que é o link para o projeto do financeiro; funil e ordem pelo nome;
+  grupos na ordem de criação do projeto (`projeto_criado_em`, era o código).
+  O Excel perde a coluna "Código do projeto".
+- Formulário da abertura: campo, opções do combo (ordenadas pela criação),
+  lápis, "+", dica, resumo e diálogo de confirmação sem código; busca do
+  combo só pelo nome; erro de nome repetido "…com este nome no cliente X".
+- Histórico da abertura: a foto mostra só o nome; no projeto apagado, o
+  código do rótulo gravado é cortado na hora de mostrar (`semCodigoNoRotulo`).
+- Página do projeto do financeiro e faixa do job no financeiro: só o nome.
+- Contas a Pagar, tela da PP (Origem no job): "projeto · cliente".
+- **Conferência (27/10/2026):** no Chrome, logado como administrador, no
+  `P-0006/26 · Teste` e nos jobs TES do projeto: um verificador procurou
+  `P-`/`F-NNNN/AA`, "código do projeto" e "nome ou o código" no texto
+  visível, nas dicas e nos placeholders de cada tela e pop-up — zero em
+  todas. Prints de antes e depois na página
+  https://claude.ai/artifact/V2i6P4pthYtNJahKEAnWJG.

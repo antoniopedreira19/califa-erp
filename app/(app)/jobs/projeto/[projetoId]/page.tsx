@@ -154,7 +154,7 @@ export default async function ProjetoAgregadoPage({
         <FaixaDoProjeto
           modulo="jobs"
           reservaDoVoltar="/jobs"
-          projeto={{ codigo: projetoTyped.codigo, nome: projetoTyped.nome }}
+          projeto={{ nome: projetoTyped.nome }}
           agregadaHref={`/jobs/projeto/${params.projetoId}`}
           itens={itensDeJobs("/jobs/", jobs, null, () => true)}
           ativo={AGREGADA}
@@ -169,9 +169,6 @@ export default async function ProjetoAgregadoPage({
               <FolderKanban className="h-5 w-5 text-california-red" />
             </div>
             <div className="min-w-0">
-              <p className="font-mono text-xs font-semibold text-muted-foreground">
-                {projetoTyped.codigo}
-              </p>
               <div className="flex flex-wrap items-center gap-3">
                 <h1 className="text-2xl font-bold tracking-tight">
                   {projetoTyped.nome}

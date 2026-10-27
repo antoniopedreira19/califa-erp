@@ -214,7 +214,6 @@ export default async function JobDetailPage({
           modulo="jobs"
           reservaDoVoltar={reservaDoVoltar}
           projeto={{
-            codigo: raw.projeto?.codigo ?? "",
             nome: raw.projeto?.nome ?? "",
           }}
           agregadaHref={`/jobs/projeto/${raw.projeto_id}`}
@@ -387,7 +386,6 @@ export default async function JobDetailPage({
               }}
               projeto={{
                 id: raw.projeto_id,
-                codigo: raw.projeto?.codigo ?? "—",
                 nome: raw.projeto?.nome ?? "—",
                 dataInicio: raw.projeto?.data_inicio_prevista ?? null,
                 dataFim: raw.projeto?.data_fim_prevista ?? null,

@@ -318,8 +318,8 @@ export function PPDossie({
               <ExternalLink className="h-3 w-3 flex-none" />
             </Link>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
-              <span className="font-mono">{pp.projeto_codigo ?? "—"}</span>{" "}
-              {pp.projeto_nome ?? ""}
+              {/* Sem o código do projeto (pedido do Tiago, 27/10/2026). */}
+              {pp.projeto_nome ?? "—"}
               {pp.cliente_nome ? ` · ${pp.cliente_nome}` : ""}
             </p>
           </Grupo>

@@ -241,7 +241,8 @@ export async function fotosDaAbertura(
   const projetos = new Map(
     ((projetosRes.data ?? []) as any[]).map((p) => [
       p.id as string,
-      `${p.codigo} · ${p.nome}`,
+      // Só o nome: o código do projeto não aparece (27/10/2026).
+      p.nome as string,
     ]),
   );
   const contas = new Map(
@@ -303,7 +304,7 @@ export async function fotosDaAbertura(
     projetoLabel: l.projeto_financeiro_id
       ? (projetos.get(l.projeto_financeiro_id) ??
         (l.projeto_financeiro_rotulo
-          ? `${l.projeto_financeiro_rotulo} (projeto apagado)`
+          ? `${semCodigoNoRotulo(l.projeto_financeiro_rotulo)} (projeto apagado)`
           : null))
       : null,
     contaRecebimentoLabel: l.conta_recebimento_id
@@ -342,4 +343,15 @@ export async function fotosDaAbertura(
         ? null
         : Number(l.imposto_previsto),
   }));
+}
+
+/**
+ * O rótulo gravado na foto é "CÓDIGO · nome" (decisão 119). O código do
+ * projeto não aparece para o usuário (pedido do Tiago, 27/10/2026): ele sai
+ * na hora de mostrar, sem regravar o banco — o código é tudo antes do
+ * primeiro " · ", sem espaço e terminando no ano ("F-0001/26",
+ * "AMB-F004/26").
+ */
+export function semCodigoNoRotulo(rotulo: string): string {
+  return rotulo.replace(/^\S+\/\d{2} · /, "");
 }

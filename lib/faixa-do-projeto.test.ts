@@ -90,13 +90,13 @@ test("Orçamentos: fora arquivados, cancelados e recusados, menos o aberto; cade
   const itens = itensDeOrcamentos(
     "p",
     [
-      { id: "o3", codigo: "TES-0002/26-03", nome: "Teste 3", status: "job_criado", arquivado_em: null },
-      { id: "o1", codigo: "TES-0002/26-01", nome: "Teste 1", status: "aprovado", arquivado_em: null },
-      { id: "o2", codigo: "TES-0002/26-02", nome: "Teste 2", status: "rascunho", arquivado_em: null },
-      { id: "o4", codigo: "TES-0002/26-04", nome: "Cancelado", status: "cancelado", arquivado_em: null },
-      { id: "o5", codigo: "TES-0002/26-05", nome: "Recusado aberto", status: "recusado", arquivado_em: null },
-      { id: "o6", codigo: "TES-0002/26-06", nome: "Revisão", status: "em_revisao", arquivado_em: null },
-      { id: "o7", codigo: "TES-0002/26-07", nome: "Arquivado", status: "rascunho", arquivado_em: "2026-09-28T12:00:00Z" },
+      { id: "o3", created_at: "2026-09-03T10:00:00Z", nome: "Teste 3", status: "job_criado", arquivado_em: null },
+      { id: "o1", created_at: "2026-09-01T10:00:00Z", nome: "Teste 1", status: "aprovado", arquivado_em: null },
+      { id: "o2", created_at: "2026-09-02T10:00:00Z", nome: "Teste 2", status: "rascunho", arquivado_em: null },
+      { id: "o4", created_at: "2026-09-04T10:00:00Z", nome: "Cancelado", status: "cancelado", arquivado_em: null },
+      { id: "o5", created_at: "2026-09-05T10:00:00Z", nome: "Recusado aberto", status: "recusado", arquivado_em: null },
+      { id: "o6", created_at: "2026-09-06T10:00:00Z", nome: "Revisão", status: "em_revisao", arquivado_em: null },
+      { id: "o7", created_at: "2026-09-07T10:00:00Z", nome: "Arquivado", status: "rascunho", arquivado_em: "2026-09-28T12:00:00Z" },
     ],
     "o5",
   );
@@ -105,7 +105,7 @@ test("Orçamentos: fora arquivados, cancelados e recusados, menos o aberto; cade
   assert.equal(itens.find((i) => i.id === "o6")?.emRevisao, true);
   assert.equal(itens[0].href, "/orcamentos/p/o1");
   // O código do orçamento não vai para a aba (29/09/2026): só da base de
-  // dados. A ordem continua a dele, que é a de criação.
+  // dados. A ordem é a de criação (27/10/2026).
   assert.ok(itens.every((i) => i.codigo === null));
 });
 

@@ -2621,7 +2621,8 @@ export interface CancelamentoDoJob {
   recebimentoPrevisto: number | null;
   custoPrevisto: number | null;
   impostosPrevistos: number | null;
-  projetoFinanceiroInativadoCodigo: string | null;
+  /** O nome, não o código: o código do projeto não aparece (27/10/2026). */
+  projetoFinanceiroInativadoNome: string | null;
 }
 
 // ---------- Alterações do financeiro (decisão 115) ----------

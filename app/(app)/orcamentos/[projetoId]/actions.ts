@@ -65,7 +65,7 @@ function mapDbError(msg: string): string {
   // Decisão 215: o banco trava o cliente quando o job já abriu.
   if (msg.includes("O cliente do orçamento não muda")) return msg;
   if (msg.includes("uniq_orcamentos_codigo_por_tenant")) {
-    return "Já existe um orçamento com este código neste tenant.";
+    return "Não foi possível criar o orçamento agora — tente novamente.";
   }
   if (msg.includes("orcamentos_datas_ordem")) {
     return "Data fim precisa ser igual ou posterior à data início.";

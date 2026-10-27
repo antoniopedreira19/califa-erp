@@ -89,10 +89,10 @@ interface Props {
    *  e é comparando com ele que o formulário pede a confirmação da troca
    *  de planilha. Ausente na criação. */
   modeloPlanilhaAtual?: CategoriaModeloPlanilha;
-  /** Nome e código do projeto de origem. O campo aparece travado no
-   *  formulário: quem chegou aqui já escolheu o projeto. */
+  /** Nome do projeto de origem. O campo aparece travado no formulário:
+   *  quem chegou aqui já escolheu o projeto. Sem o código do projeto, que
+   *  não aparece para o usuário (pedido do Tiago, 27/10/2026). */
   projetoNome?: string;
-  projetoCodigo?: string;
   /** Só as regionais cadastradas no projeto — a peça não sai da praça
    *  que a iniciativa cobre. */
   regionaisDoProjeto: Pick<Regional, "id" | "nome">[];
@@ -160,7 +160,6 @@ export function OrcamentoForm({
   servicos,
   modeloPlanilhaAtual,
   projetoNome,
-  projetoCodigo,
   regionaisDoProjeto,
   clientes,
   produtos,
@@ -494,14 +493,7 @@ export function OrcamentoForm({
         {projetoNome && (
           <Field label="Projeto" name="projeto_id" errors={fieldErrors}>
             <div className="flex h-10 items-center justify-between gap-2 rounded-md border border-border bg-muted/50 px-3 text-sm font-medium text-muted-foreground">
-              <span className="truncate">
-                {projetoNome}
-                {projetoCodigo ? (
-                  <span className="ml-1.5 font-mono text-xs">
-                    {projetoCodigo}
-                  </span>
-                ) : null}
-              </span>
+              <span className="truncate">{projetoNome}</span>
               <Lock className="h-3.5 w-3.5 flex-none" aria-hidden="true" />
             </div>
             <p className="text-xs text-muted-foreground">

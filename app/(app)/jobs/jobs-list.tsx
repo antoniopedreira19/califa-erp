@@ -612,16 +612,15 @@ export function JobsList({
                           <ChevronRight className="h-4 w-4" />
                         </span>
                       </div>
+                      {/* Só o nome: o código do projeto não aparece para o
+                          usuário (pedido do Tiago, 27/10/2026). */}
                       <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-                        <span className="font-mono text-xs font-semibold text-[#b3323c]">
-                          {g.codigo ?? "—"}
-                        </span>
                         <span className="text-[13.5px] font-semibold">
                           {g.nome ?? "Projeto"}
                         </span>
                         <DescritivoPopover
                           rotulo="Descritivo do projeto"
-                          codigo={g.codigo}
+                          codigo={null}
                           nome={g.nome}
                           texto={g.descricao}
                           aberto={descritivoAberto === `g:${g.projetoId}`}

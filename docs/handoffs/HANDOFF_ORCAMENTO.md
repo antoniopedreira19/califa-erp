@@ -5959,3 +5959,25 @@ Terceira entrega do protótipo aprovado em 26/10
   fim, "Cancelar envio à abertura": o job ficou cancelado e o orçamento
   voltou a Aprovado. A confirmação do reenvio diz "com código novo, porque
   o cliente mudou" quando o código troca.
+
+## O código do projeto sai das telas — 27/10/2026 (decisão 217)
+
+- O código do projeto e o do orçamento deixam de aparecer: sai a coluna
+  "Código" da lista de projetos (com o funil e a ordem dela; o nome virou o
+  link), a linha do código acima do título na página do projeto e na
+  agregada, "Código do projeto:" no Editar projeto, os subtítulos de Novo
+  projeto e Novo orçamento, o código do campo travado "Projeto" e do cartão
+  "Descritivo". A busca da lista casa nome, campanha e cliente.
+- A faixa do projeto (comum às 8 telas) mostra só o nome no chip, nas dicas,
+  no menu "Todos" e no balão do Voltar ("Voltar para Teste").
+- A faixa "Job cancelado" diz o nome do projeto do financeiro inativado.
+- Planilha exportada: A1 só com o nome e arquivo `orcamentos-<nome>.xlsx` /
+  `interna-<nome>.xlsx`.
+- Abas da faixa, cartões da agregada e seções da planilha exportada seguem a
+  criação (era o código, mesma ordem).
+- **Conferência (27/10/2026):** no Chrome, logado como administrador, no
+  `P-0006/26 · Teste` e nos jobs TES do projeto: um verificador procurou
+  `P-`/`F-NNNN/AA`, "código do projeto" e "nome ou o código" no texto
+  visível, nas dicas e nos placeholders de cada tela e pop-up — zero em
+  todas. Prints de antes e depois na página
+  https://claude.ai/artifact/V2i6P4pthYtNJahKEAnWJG.

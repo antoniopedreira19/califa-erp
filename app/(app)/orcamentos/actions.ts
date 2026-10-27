@@ -41,7 +41,7 @@ function mapDbError(msg: string): string {
     return "Empresa inválida.";
   }
   if (msg.includes("uniq_projetos_codigo_por_tenant")) {
-    return "Já existe um projeto com este código — tente novamente.";
+    return "Não foi possível criar o projeto agora — tente novamente.";
   }
   if (msg.includes("projetos_cliente_id_fkey")) {
     return "Cliente inválido.";

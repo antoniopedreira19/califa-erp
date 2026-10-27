@@ -49,7 +49,6 @@ interface Props {
   podeEditarCliente: boolean;
   /** O projeto, travado no formulário como na criação. */
   projetoNome: string;
-  projetoCodigo: string;
   disabled?: boolean;
   disabledReason?: string;
   /** Com o job devolvido (decisão 128) o editor abre para corrigir, mas o
@@ -76,7 +75,6 @@ export function OrcamentoEditorDrawer({
   podeCadastrarCliente,
   podeEditarCliente,
   projetoNome,
-  projetoCodigo,
   disabled,
   disabledReason,
   arquivavel,
@@ -173,7 +171,6 @@ export function OrcamentoEditorDrawer({
               podeCadastrarCliente={podeCadastrarCliente}
               podeEditarCliente={podeEditarCliente}
               projetoNome={projetoNome}
-              projetoCodigo={projetoCodigo}
               onSuccess={() => setOpen(false)}
               onCancel={() => setOpen(false)}
             />

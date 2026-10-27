@@ -1109,10 +1109,7 @@ export function EditorAgregado({
 
         <div className="mt-5 flex flex-wrap items-start justify-between gap-6">
           <div className="min-w-0">
-            <p className="font-mono text-xs font-semibold text-muted-foreground">
-              {projeto.codigo}
-            </p>
-            <div className="mt-1 flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-3">
               <FolderKanban className="h-6 w-6 text-california-red" />
               <h1 className="text-3xl font-bold tracking-tight">
                 {projeto.nome}

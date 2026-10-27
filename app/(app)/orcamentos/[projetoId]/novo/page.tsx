@@ -94,10 +94,6 @@ export default async function NovoOrcamentoPage({
       <div>
         <BotaoVoltar reserva={`/orcamentos/${params.projetoId}`} />
         <h1 className="mt-3 text-3xl font-bold tracking-tight">Novo orçamento</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          O código será gerado no formato{" "}
-          <span className="font-mono">{projeto.codigo}-NN</span>.
-        </p>
       </div>
 
       <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
@@ -106,7 +102,6 @@ export default async function NovoOrcamentoPage({
           categorias={categorias}
           servicos={servicos}
           projetoNome={projeto.nome}
-          projetoCodigo={projeto.codigo}
           regionaisDoProjeto={regionaisDoProjeto}
           cidadesIniciais={cidadesIniciais}
           gps={gps}

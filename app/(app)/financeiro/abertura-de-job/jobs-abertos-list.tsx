@@ -82,11 +82,10 @@ function noChip(j: JobAberto, chip: Chip): boolean {
   return j.situacao_faturamento === chip;
 }
 
-/** O projeto do FINANCEIRO, com o da produção de reserva — o mesmo da faixa. */
+/** O projeto do FINANCEIRO, com o da produção de reserva — o mesmo da faixa.
+ *  Só o nome: o código do projeto não aparece (pedido do Tiago, 27/10/2026). */
 function projetoDoJob(j: JobAberto): string {
-  const codigo = j.projeto_financeiro_codigo ?? j.projeto_codigo ?? "";
-  const nome = j.projeto_financeiro_nome ?? j.projeto_nome ?? "";
-  return `${codigo} ${nome}`.trim();
+  return (j.projeto_financeiro_nome ?? j.projeto_nome ?? "").trim();
 }
 
 /**
@@ -146,8 +145,9 @@ const COLUNAS: ColunaFiltravel<JobAberto>[] = [
 interface GrupoProjeto {
   /** Id do projeto DO FINANCEIRO (ou do de produção, no fallback). */
   projetoId: string;
-  codigo: string | null;
   nome: string | null;
+  /** Ordem padrão dos grupos: a criação do projeto. */
+  criadoEm: string | null;
   cliente: string | null;
   jobs: JobAberto[];
   total: number;
@@ -404,8 +404,8 @@ export function JobsAbertosList({
       const primeiro = jobs[0];
       out.push({
         projetoId,
-        codigo: primeiro.projeto_financeiro_codigo ?? primeiro.projeto_codigo,
         nome: primeiro.projeto_financeiro_nome ?? primeiro.projeto_nome,
+        criadoEm: primeiro.projeto_criado_em,
         cliente: primeiro.cliente_nome,
         jobs,
         total: jobs.reduce((s, j) => s + (j.valor_total ?? 0), 0),
@@ -418,9 +418,8 @@ export function JobsAbertosList({
       });
     }
     if (colunas.ordenacao) return out;
-    return out.sort((a, b) =>
-      (a.codigo ?? "").localeCompare(b.codigo ?? "", "pt-BR"),
-    );
+    // A criação do projeto: a mesma ordem que o código dava, sem ele.
+    return out.sort((a, b) => (a.criadoEm ?? "").localeCompare(b.criadoEm ?? ""));
   }, [visiveis, filtroAtivo, fechados, colunas.ordenacao]);
 
   /**
@@ -801,9 +800,6 @@ export function JobsAbertosList({
                           </span>
                         </div>
                         <div className="flex min-w-0 flex-wrap items-center gap-2.5">
-                          <span className="font-mono text-xs font-semibold text-[#b3323c]">
-                            {g.codigo ?? "—"}
-                          </span>
                           <span className="text-[13.5px] font-semibold">
                             {g.nome ?? "Projeto"}
                           </span>
@@ -892,11 +888,6 @@ export function JobsAbertosList({
                             agrupa. */}
                         <td className="px-4 py-3 text-muted-foreground">
                           <div className="flex flex-col gap-0.5">
-                            <span className="whitespace-nowrap font-mono text-[11px] font-semibold text-[#b3323c]">
-                              {j.projeto_financeiro_codigo ??
-                                j.projeto_codigo ??
-                                "—"}
-                            </span>
                             <span className="text-[12px]">
                               {j.projeto_financeiro_nome ??
                                 j.projeto_nome ??
@@ -969,10 +960,11 @@ export function JobsAbertosList({
                       </span>
                     </div>
                   </td>
-                  {/* Sem a faixa do projeto, é o código que leva à visão
-                      agregada (decisão do Tiago, 24/08/2026). Job sem
-                      projeto do financeiro não tem essa tela — aí o código
-                      fica como texto. */}
+                  {/* Sem a faixa do projeto, é o nome que leva à visão
+                      agregada (decisão do Tiago, 24/08/2026; era o código,
+                      que saiu das telas em 27/10/2026). Job sem projeto do
+                      financeiro não tem essa tela — aí o nome fica como
+                      texto. */}
                   <td className="px-4 py-3">
                     <div className="flex min-w-0 flex-col gap-0.5">
                       {j.projeto_financeiro_id ? (
@@ -980,18 +972,15 @@ export function JobsAbertosList({
                           href={`/financeiro/projetos/${j.projeto_financeiro_id}`}
                           prefetch={false}
                           onClick={(e) => e.stopPropagation()}
-                          className="whitespace-nowrap font-mono text-xs font-semibold text-california-red hover:text-california-red/80"
+                          className="text-[12px] font-semibold text-california-red hover:text-california-red/80"
                         >
-                          {j.projeto_financeiro_codigo ?? "—"}
+                          {j.projeto_financeiro_nome ?? "—"}
                         </Link>
                       ) : (
-                        <span className="whitespace-nowrap font-mono text-xs font-semibold text-[#b3323c]">
-                          {j.projeto_codigo ?? "—"}
+                        <span className="text-[12px] text-muted-foreground">
+                          {j.projeto_nome ?? "—"}
                         </span>
                       )}
-                      <span className="text-[12px] text-muted-foreground">
-                        {j.projeto_financeiro_nome ?? j.projeto_nome ?? "—"}
-                      </span>
                     </div>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">

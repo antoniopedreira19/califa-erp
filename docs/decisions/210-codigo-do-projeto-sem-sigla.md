@@ -4,6 +4,8 @@
 **Decidido por:** Tiago
 **Status:** aceita e aplicada em 26/10/2026, ~17h10, na hora combinada com
 a frente do Antonio; código publicado logo em seguida (`d413ac31`).
+**Revista por:** a [217](217-codigo-do-projeto-fora-das-telas.md) (27/10/2026): o
+código continua gerado como aqui, mas não aparece mais nas telas.
 **Migration:** ⚠️ destrutiva — `20261023950001_codigo_do_projeto_sem_sigla.sql`
 (sobrescreve `projetos.codigo`, `orcamentos.codigo`,
 `projetos_financeiro.codigo` e `jobs_aberturas.projeto_financeiro_rotulo`;

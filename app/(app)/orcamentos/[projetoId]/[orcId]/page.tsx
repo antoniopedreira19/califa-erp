@@ -858,7 +858,6 @@ export default async function OrcamentoDetailPage({
               {...faixaDoOrcamentoSemItens(
                 {
                   id: params.projetoId,
-                  codigo: projetoRaw.codigo,
                   nome: projetoRaw.nome,
                 },
                 podeCriarOrcamento,
@@ -872,7 +871,6 @@ export default async function OrcamentoDetailPage({
             tenantId={session.activeTenant.id}
             projeto={{
               id: params.projetoId,
-              codigo: projetoRaw.codigo,
               nome: projetoRaw.nome,
             }}
             orcamentoId={orcamento.id}
@@ -906,7 +904,6 @@ export default async function OrcamentoDetailPage({
               podeCadastrarCliente={pode(session.activeRole, "cadastros.clientes.inline")}
               podeEditarCliente={pode(session.activeRole, "cadastros.clientes.editar")}
               projetoNome={projetoRaw.nome}
-              projetoCodigo={projetoRaw.codigo}
               disabled={protegido && !correcaoLiberada}
               arquivavel={!correcaoLiberada}
               excluivel={excluivel}

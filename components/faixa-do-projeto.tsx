@@ -29,8 +29,9 @@ interface Props {
    *  (decisão 108): o voltar fixo que cada tela tinha. */
   reservaDoVoltar: string;
   /** `href` só em Orçamentos, onde o projeto é uma página própria e o chip
-   *  leva até ela. */
-  projeto: { codigo: string; nome: string; href?: string };
+   *  leva até ela. Sem o código do projeto, da produção ou do financeiro:
+   *  ele não aparece para o usuário (pedido do Tiago, 27/10/2026). */
+  projeto: { nome: string; href?: string };
   agregadaHref: string;
   /** `null` enquanto carregam (fallback do Suspense na tela do orçamento). */
   itens: ItemDaFaixa[] | null;
@@ -92,9 +93,9 @@ export function FaixaDoProjeto({
   useMarcarPagina({
     grupo: naPaginaDoProjeto ? undefined : `${modulo}:${agregadaHref}`,
     rotulo: naPaginaDoProjeto
-      ? `${projeto.codigo} · ${projeto.nome}`
+      ? projeto.nome
       : ativo === AGREGADA
-        ? `Visão agregada · ${projeto.codigo}`
+        ? `Visão agregada · ${projeto.nome}`
         : itemAberto
           ? itemAberto.codigo
             ? `${itemAberto.codigo} · ${itemAberto.nome}`
@@ -162,14 +163,6 @@ export function FaixaDoProjeto({
       <FolderKanban className="h-4 w-4 flex-none text-california-red" />
       <span
         className={cn(
-          "font-mono text-[11.5px] font-semibold",
-          naPaginaDoProjeto ? "text-white/60" : "text-muted-foreground",
-        )}
-      >
-        {projeto.codigo}
-      </span>
-      <span
-        className={cn(
           "max-w-[240px] truncate text-[13px] font-semibold",
           naPaginaDoProjeto ? "text-white" : "text-foreground",
         )}
@@ -192,7 +185,7 @@ export function FaixaDoProjeto({
       {naPaginaDoProjeto ? (
         <span
           aria-current="page"
-          title={`${projeto.codigo} · ${projeto.nome}`}
+          title={projeto.nome}
           className="inline-flex h-8 min-w-0 flex-none items-center gap-2 rounded-lg bg-california-dark px-2"
         >
           {chipDoProjeto}
@@ -201,7 +194,7 @@ export function FaixaDoProjeto({
         <Link
           href={projeto.href}
           prefetch={false}
-          title={`${projeto.codigo} · ${projeto.nome}`}
+          title={projeto.nome}
           onClick={(e) => segurarSaida(e, projeto.href!)}
           className="inline-flex h-8 min-w-0 flex-none items-center gap-2 rounded-lg px-2 transition-colors hover:bg-muted"
         >
@@ -226,7 +219,7 @@ export function FaixaDoProjeto({
         <Aba
           href={destino(AGREGADA, agregadaHref)}
           aberta={ativo === AGREGADA}
-          titulo={`Visão agregada · ${projeto.codigo}`}
+          titulo={`Visão agregada · ${projeto.nome}`}
         >
           <LayoutGrid className="h-3.5 w-3.5" />
           Visão agregada
@@ -316,7 +309,7 @@ export function FaixaDoProjeto({
               className="absolute right-0 top-[calc(100%+0.375rem)] z-30 w-[380px] rounded-2xl border border-border bg-card p-1.5 text-left shadow-elevated"
             >
               <p className="truncate px-2.5 pb-1.5 pt-2 text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
-                {projeto.codigo} · {projeto.nome}
+                {projeto.nome}
               </p>
               <div className="flex max-h-[360px] flex-col overflow-y-auto">
                 <ItemDoMenu

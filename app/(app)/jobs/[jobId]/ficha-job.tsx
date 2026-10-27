@@ -93,7 +93,6 @@ export interface JobDaFicha {
 
 export interface ProjetoDaFicha {
   id: string;
-  codigo: string;
   nome: string;
   dataInicio: string | null;
   dataFim: string | null;
@@ -314,18 +313,18 @@ export function FichaJob({
             </div>
 
             <div className="flex flex-col border-l border-border">
-              <CabecalhoColuna titulo="Projeto">
+              {/* O código do projeto não aparece para o usuário (pedido do
+                  Tiago, 27/10/2026): o link do cabeçalho passou para o nome. */}
+              <CabecalhoColuna titulo="Projeto" />
+              <Campo rotulo="Nome do projeto" destaque>
                 <LinkDoProjeto
                   href={origem.projetoHref}
                   saiDoModulo={saiDoModuloPeloProjeto}
                   projeto={projeto}
-                  className="font-mono text-[11.5px] font-semibold text-california-red hover:underline"
+                  className="text-california-red hover:underline"
                 >
-                  {projeto.codigo}
+                  {projeto.nome}
                 </LinkDoProjeto>
-              </CabecalhoColuna>
-              <Campo rotulo="Nome do projeto" destaque>
-                {projeto.nome}
               </Campo>
               <Campo rotulo="Período do projeto" mono>
                 {formatPeriodo(projeto.dataInicio, projeto.dataFim)}
@@ -418,7 +417,6 @@ export function FichaJob({
                 projeto={projeto}
                 className="text-california-red hover:underline"
               >
-                <span className="font-mono text-[13px]">{projeto.codigo}</span> ·{" "}
                 {projeto.nome}
               </LinkDoProjeto>
             </CampoLateral>
@@ -524,8 +522,7 @@ function LinkDoProjeto({
         modulo="Orçamentos"
         descricao={
           <>
-            O projeto <span className="font-mono">{projeto.codigo}</span> ·{" "}
-            {projeto.nome} mora no módulo de Orçamentos, e este job não tem
+            O projeto {projeto.nome} mora no módulo de Orçamentos, e este job não tem
             projeto no financeiro. Você sai desta tela para abri-lo.
           </>
         }
@@ -547,7 +544,7 @@ function CabecalhoColuna({
   children,
 }: {
   titulo: string;
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }) {
   return (
     <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/30 px-[26px] py-[13px]">

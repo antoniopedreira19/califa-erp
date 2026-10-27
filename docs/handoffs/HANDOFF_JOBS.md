@@ -6472,3 +6472,19 @@ três telas da ficha (Jobs, Financeiro › Jobs e Abertura de Job), lido em
   auditoria ("1 PP sem NF da Mídia System: PP-…").
 - **Conferido** no TES-1029/26 (P-0006/26): PP-00572 do envio sem anexo à
   prestação aprovada. Ver [decisão 216](../decisions/216-midia-system.md).
+
+## O código do projeto sai das telas — 27/10/2026 (decisão 217)
+
+- Lista de Jobs: o cabeçalho do grupo e o cartão "Descritivo do projeto"
+  ficam só com o nome. A agregada perde a linha do código acima do título.
+- Ficha do job: o código saiu do cabeçalho da coluna "Projeto"; o link do
+  projeto passou para "Nome do projeto". O card "Origem" mostra só o nome.
+- Equipe: subtítulo "Teste · 4 pessoas"; o motivo "Produtor do orçamento"
+  usa o nome do orçamento.
+- Tela da PP (Origem no job): "projeto · cliente", sem código.
+- **Conferência (27/10/2026):** no Chrome, logado como administrador, no
+  `P-0006/26 · Teste` e nos jobs TES do projeto: um verificador procurou
+  `P-`/`F-NNNN/AA`, "código do projeto" e "nome ou o código" no texto
+  visível, nas dicas e nos placeholders de cada tela e pop-up — zero em
+  todas. Prints de antes e depois na página
+  https://claude.ai/artifact/V2i6P4pthYtNJahKEAnWJG.

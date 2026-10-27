@@ -433,7 +433,6 @@ export default async function AbrirJobNoFinanceiroPage({
                 // Ainda sem projeto no financeiro: o da produção, e o link
                 // dele pergunta antes de sair para Orçamentos (decisão 108).
                 id: detalhe.raw.projeto_id,
-                codigo: detalhe.raw.projeto?.codigo ?? "—",
                 nome: detalhe.raw.projeto?.nome ?? "—",
                 dataInicio: detalhe.raw.projeto?.data_inicio_prevista ?? null,
                 dataFim: detalhe.raw.projeto?.data_fim_prevista ?? null,

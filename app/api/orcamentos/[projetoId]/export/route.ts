@@ -122,7 +122,7 @@ export async function GET(
       .eq("projeto_id", params.projetoId)
       .eq("tenant_id", tenantId)
       .in("id", ids)
-      .order("codigo", { ascending: true }),
+      .order("created_at", { ascending: true }),
     supabase
       .from("jobs")
       .select("orcamento_id, status, created_at")
@@ -422,7 +422,7 @@ export async function GET(
     });
 
     adicionarAbaInterna(wb, "Interna", {
-      identificacao: `${projeto.codigo} · ${projeto.nome}`,
+      identificacao: projeto.nome,
       clienteNome,
       titulo: `Planilha interna · ${dataBr(new Date())}`,
       marca: "interna:orcamento",
@@ -454,7 +454,7 @@ export async function GET(
       wb,
       "Orçamento",
       {
-        identificacao: `${projeto.codigo} · ${projeto.nome}`,
+        identificacao: projeto.nome,
         clienteNome,
         titulo: `Orçamento · ${dataBr(new Date())}`,
         secoes: orcamentos.map((o) => {
@@ -485,7 +485,7 @@ export async function GET(
       wb,
       "Orçamento",
       {
-        nome: `${projeto.codigo} · ${projeto.nome}`,
+        nome: projeto.nome,
         cambio: cambioComum(
           orcamentos.map((o) => cambioDaVersao(versaoAlvo.get(o.id)!)),
         ),
@@ -504,7 +504,7 @@ export async function GET(
       wb,
       "Orçamento",
       {
-        identificacao: `${projeto.codigo} · ${projeto.nome}`,
+        identificacao: projeto.nome,
         clienteNome,
         titulo: `Orçamento · ${dataBr(new Date())}`,
         secoes,
@@ -515,8 +515,18 @@ export async function GET(
 
   // ---------- resposta ----------
   const buffer = await wb.xlsx.writeBuffer();
+  // O nome do projeto no lugar do código, que não aparece para o usuário
+  // (pedido do Tiago, 27/10/2026) — a planilha do cliente sai da agência
+  // com este nome. Sem acento e só ASCII, como no export da versão: o
+  // cabeçalho `Content-Disposition` não aceita qualquer caractere.
+  const nomeAscii =
+    projeto.nome
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^\x20-\x7E]/g, "")
+      .trim() || "projeto";
   const nomeArquivo = nomeDeArquivoSeguro(
-    `${interna ? "interna" : "orcamentos"}-${projeto.codigo}.xlsx`,
+    `${interna ? "interna" : "orcamentos"}-${nomeAscii}.xlsx`,
   );
 
   return new NextResponse(buffer as ArrayBuffer, {

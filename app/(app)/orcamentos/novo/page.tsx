@@ -47,10 +47,6 @@ export default async function NovoProjetoPage() {
       <div>
         <BotaoVoltar reserva="/orcamentos" />
         <h1 className="mt-3 text-3xl font-bold tracking-tight">Novo projeto</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          O código do projeto é gerado automaticamente no formato{" "}
-          <span className="font-mono">P-NNNN/AA</span>.
-        </p>
       </div>
 
       <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">

@@ -96,22 +96,19 @@ export function CelulaJob({
   );
 }
 
+/** Só o nome do projeto: o código não aparece para o usuário (pedido do
+ *  Tiago, 27/10/2026). */
 export function CelulaProjeto({
-  codigo,
   nome,
   cliente,
 }: {
-  codigo: string | null;
   nome: string | null;
   cliente: string;
 }) {
   return (
     <div className="flex min-w-0 flex-col gap-0.5">
       <span className="flex min-w-0 items-baseline gap-1 text-[13px]">
-        <span className="shrink-0 whitespace-nowrap font-mono text-xs text-muted-foreground">
-          {codigo ?? "—"}
-        </span>
-        <TruncateTooltip as="span" text={nome ?? ""} className="min-w-0" />
+        <TruncateTooltip as="span" text={nome ?? "—"} className="min-w-0" />
       </span>
       <TruncateTooltip as="span" text={cliente} className="text-xs text-muted-foreground" />
     </div>

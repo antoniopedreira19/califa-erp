@@ -233,6 +233,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 211 | [Importação do histórico da planilha financeira: como ler a planilha e o corte em 01/10/2026](211-importacao-do-historico-da-planilha-financeira.md) | 2026-10-25 |
 | 212 | [O tipo da chave PIX e o tipo de conta no cadastro do freela: PIX e conta sempre à vista, e o tipo gravado vence a dedução da 193](212-tipo-do-pix-e-da-conta-no-cadastro-do-freela.md) | 2026-10-26 |
 | 216 | [Mídia System: o job auditado pelo cliente; a PP vai sem NF até o financeiro liberar as notas, e a NF entra pela prestação de contas da verba, sem saldo](216-midia-system.md) | 2026-10-26 |
+| 217 | [O código do projeto sai das telas: só o nome, ordem pela criação, sem coluna de código no Excel](217-codigo-do-projeto-fora-das-telas.md) | 2026-10-27 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -245,4 +246,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 213**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 218**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)

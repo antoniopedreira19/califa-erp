@@ -1212,8 +1212,9 @@ async function projetoComONome(
 /** Diz qual projeto já tem o nome — e de que cliente, porque a unicidade
  *  vale no sistema inteiro e o combo só mostra os do cliente do job. */
 function mensagemDeNomeRepetido(p: ProjetoDeMesmoNome): string {
-  const cliente = p.cliente_nome ? `, de ${p.cliente_nome}` : "";
-  return `Já existe um projeto com este nome: ${p.codigo} · ${p.nome}${cliente}. Use outro nome.`;
+  // Sem o código do projeto, que não aparece para o usuário (27/10/2026).
+  const cliente = p.cliente_nome ? ` no cliente ${p.cliente_nome}` : "";
+  return `Já existe um projeto com este nome${cliente}. Use outro nome.`;
 }
 
 /** O 23505 do insert/update: o nome repetido, ou a corrida do código. */
