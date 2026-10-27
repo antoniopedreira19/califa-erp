@@ -96,6 +96,10 @@ nova foi barrada sem NF ("Anexe a nota fiscal do fornecedor") e cancelada.
 Na PP da auditoria, a barra da prestação diz "falta" ou "completo" no lugar
 de "saldo", e o financeiro lê "A PP foi sem NF na auditoria da Mídia
 System" no lugar de "A produção não enviou documento".
+No chip "Prestação de Contas" do Contas a Pagar, que junta verba e Mídia,
+as colunas passam a ser "Valor · Comprovado · Saldo" (eram "Verba · Gasto ·
+Saldo"; aprovado pelo Tiago em 27/10). Na PP da Mídia o Saldo é sempre
+R$ 0,00.
 
 ## Riscos e o que fica de fora
 
