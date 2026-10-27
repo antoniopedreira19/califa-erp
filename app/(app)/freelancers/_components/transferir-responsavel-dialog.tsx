@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Combobox, type ComboboxItem } from "@/components/ui/combobox";
 import { transferirResponsavelFreelancer } from "../actions";
 
 export interface ResponsavelOption {
@@ -135,20 +136,19 @@ export function TransferirResponsavelDialog({
 
             <div className="space-y-2">
               <Label htmlFor="novo-resp">Novo responsável</Label>
-              <select
+              <Combobox
                 id="novo-resp"
-                value={novoId}
-                onChange={(e) => setNovoId(e.target.value)}
-                disabled={loading}
-                className="flex h-10 w-full rounded-md border border-border bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-california-red/30 focus:border-california-red disabled:opacity-60"
-              >
-                <option value="">Selecione...</option>
-                {opcoes.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.nome}
-                  </option>
-                ))}
-              </select>
+                ariaLabel="Novo responsável"
+                items={opcoes.map<ComboboxItem>((g) => ({
+                  value: g.id,
+                  label: g.nome,
+                }))}
+                value={novoId || null}
+                onChange={(v) => setNovoId(v ?? "")}
+                placeholder="Selecione um responsável"
+                buscaPlaceholder="Buscar por nome..."
+                disabled={loading || opcoes.length === 0}
+              />
               {opcoes.length === 0 && (
                 <p className="text-[11px] text-muted-foreground">
                   Nenhum outro responsável ativo disponível.
