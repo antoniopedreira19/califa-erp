@@ -141,7 +141,7 @@ export function ContasPagarTabs({
           onClick={() => setTab("folhas")}
           count={folhasPendentesCount}
         >
-          Folhas de Pagamento
+          People
         </TabButton>
         <TabButton
           active={tab === "titulos"}

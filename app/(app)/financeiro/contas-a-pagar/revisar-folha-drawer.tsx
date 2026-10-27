@@ -29,7 +29,7 @@ import {
   type PagamentoDaFolhaInput,
 } from "./actions-folhas";
 import { BlocoNfDrawer } from "./_components/bloco-nf-drawer";
-import type { FolhaLinhaFinanceiro } from "./folhas-pagar-list";
+import type { FolhaLinhaFinanceiro } from "./people-list-types";
 import {
   PagamentoDaFolha,
   completarNomeDoBanco,

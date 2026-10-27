@@ -47,7 +47,8 @@ import {
 import type { FaturaDoCartao } from "./fechar-fatura-dialog";
 import { RecorrentesList, type RecorrenteRow } from "./recorrentes-list";
 import { DesembolsosContasPagarList, type DesembolsoRow } from "./desembolsos-list";
-import { FolhasPagarList, type FolhaLinhaFinanceiro } from "./folhas-pagar-list";
+import { PeopleList } from "./people-list";
+import type { PeopleAprovarItem } from "@/lib/types";
 import { carregarColaboradoresPagamento } from "@/lib/financeiro/colaboradores-pagamento";
 import { ExportarRemessaCnabDialog } from "./remessa-cnab-dialog";
 import type {
@@ -330,20 +331,21 @@ export default async function PedidosCompraFinanceiroPage({
     // Entra no mesmo `Promise.all` de propósito — em série ela somaria
     // dois round-trips ao carregamento da tela mais pesada do sistema.
     listarConversasPPs(supabase, session.activeTenant.id),
-    // Folhas de pagamento: só as que precisam da atenção do financeiro
-    // (enviada + pendente_correcao). Aprovadas já viraram contas_avulsas
-    // e aparecem em Títulos a Pagar. O colaborador vem do RPC abaixo
-    // (decisão 132): o embed em `colaboradores` volta nulo para o papel
-    // financeiro, que não passa na RLS da tabela.
-    supabase
-      .from("folhas_pagamento")
-      .select(
-        "id, competencia_ano, competencia_mes, salario_base, status, motivo_pendencia, colaborador_id, origem, alocacoes:folhas_pagamento_alocacoes(id, empresa_id, regional_id, percentual, empresa:empresas(nome_fantasia), regional:regionais(nome))",
-      )
-      .eq("tenant_id", session.activeTenant.id)
-      .in("status", ["enviada", "pendente_correcao"])
-      .order("competencia_ano", { ascending: false })
-      .order("competencia_mes", { ascending: false }),
+    // Aba People: todos os pagamentos aguardando ação do financeiro
+    // (folha mensal, férias, abono, 13°) com status=enviada a partir de 202610.
+    // A view já filtra e inclui o status da NF — fonte única da aba.
+    (() => {
+      let q = supabase
+        .from("vw_people_aprovar_financeiro")
+        .select("*")
+        .order("competencia_ano", { ascending: true })
+        .order("competencia_mes", { ascending: true });
+      if (empresaFiltroIds.length > 0) {
+        // A view não tem empresa_id diretamente; filtramos por tenant apenas.
+        // Filtro de empresa é visual na aba quando necessário.
+      }
+      return q.eq("tenant_id", session.activeTenant.id);
+    })(),
     // Aba Cartão com cartão escolhido: TODAS as faturas dele, de qualquer
     // status, para o calendário e as setas de competência. Fora dela, a
     // consulta nem sai.
@@ -728,96 +730,54 @@ export default async function PedidosCompraFinanceiroPage({
   );
 
   // -------------------------------------------------------------------
-  // Folhas de pagamento — mapeamento pra tab "Folhas de Pagamento"
+  // Aba People — mapeamento da view vw_people_aprovar_financeiro
   // -------------------------------------------------------------------
-  // NFs anexadas das competências presentes nas folhas abertas.
-  // Query separada porque colaboradores_nf_anexos não tem FK direta pra
-  // folhas_pagamento (modelagem desacoplada por (colab, ano, mes)).
-  const colabIdsFolha = Array.from(
-    new Set(((folhasRes.data ?? []) as any[]).map((l) => l.colaborador_id)),
-  );
-  let nfsPorChaveFolha = new Map<
+  const peopleItems = ((folhasRes.data ?? []) as PeopleAprovarItem[]);
+
+  // Alocações de todas as linhas da aba People: o drawer precisa delas para
+  // o editor de rateio. Linhas sem alocação (férias sem região) ficam com [].
+  const peopleLineIds = peopleItems.map((i) => i.linha_id);
+
+  let alocacoesPorFolha = new Map<
     string,
-    { id: string; arquivo_nome: string; uploaded_at: string }
+    {
+      id: string;
+      empresa_id: string;
+      regional_id: string;
+      percentual: string;
+      empresa_nome: string;
+      regional_nome: string;
+    }[]
   >();
-  if (colabIdsFolha.length > 0) {
-    const { data: nfData } = await supabase
-      .from("colaboradores_nf_anexos")
+  if (peopleLineIds.length > 0) {
+    const { data: alocData } = await supabase
+      .from("folhas_pagamento_alocacoes")
       .select(
-        "id, colaborador_id, competencia_ano, competencia_mes, arquivo_nome, uploaded_at",
+        "id, folha_id, empresa_id, regional_id, percentual, empresa:empresas(nome_fantasia), regional:regionais(nome)",
       )
       .eq("tenant_id", session.activeTenant.id)
-      .in("colaborador_id", colabIdsFolha);
-    for (const n of (nfData ?? []) as Array<{
-      id: string;
-      colaborador_id: string;
-      competencia_ano: number;
-      competencia_mes: number;
-      arquivo_nome: string;
-      uploaded_at: string;
-    }>) {
-      nfsPorChaveFolha.set(
-        `${n.colaborador_id}|${n.competencia_ano}|${n.competencia_mes}`,
-        {
-          id: n.id,
-          arquivo_nome: n.arquivo_nome,
-          uploaded_at: n.uploaded_at,
-        },
-      );
-    }
-  }
-
-  const folhasParaTab: FolhaLinhaFinanceiro[] = ((folhasRes.data ?? []) as any[]).map(
-    (l) => ({
-      id: l.id,
-      competencia_ano: l.competencia_ano,
-      competencia_mes: l.competencia_mes,
-      salario_base: String(l.salario_base),
-      status: l.status,
-      motivo_pendencia: l.motivo_pendencia,
-      origem: l.origem,
-      nf:
-        nfsPorChaveFolha.get(
-          `${l.colaborador_id}|${l.competencia_ano}|${l.competencia_mes}`,
-        ) ?? null,
-      // Sem o colaborador no RPC, a linha aparece com travessão e sem
-      // pagamento — nunca com dado inventado.
-      colaborador: cnabColaboradoresRes.get(l.colaborador_id) ?? {
-        id: l.colaborador_id,
-        nome: "—",
-        funcao: "—",
-        tipo_contratacao: "pj",
-        status: "ativo",
-        cpf: null,
-        cnpj: null,
-        razao_social: null,
-        pix_tipo: null,
-        pix_chave: null,
-        banco_codigo: null,
-        banco_nome: null,
-        agencia: null,
-        agencia_dv: null,
-        conta: null,
-        conta_dv: null,
-        tipo_conta: null,
-      },
-      alocacoes: ((l.alocacoes ?? []) as any[]).map((a) => ({
+      .in("folha_id", peopleLineIds);
+    for (const a of ((alocData ?? []) as any[])) {
+      const lista = alocacoesPorFolha.get(a.folha_id) ?? [];
+      lista.push({
         id: a.id,
         empresa_id: a.empresa_id,
         regional_id: a.regional_id,
         percentual: String(a.percentual),
         empresa_nome: a.empresa?.nome_fantasia ?? "",
         regional_nome: a.regional?.nome ?? "",
-      })),
-    }),
-  );
-  const empresasParaFolha = (empresasRes.data ?? []).map(
+      });
+      alocacoesPorFolha.set(a.folha_id, lista);
+    }
+  }
+
+  const empresasParaPeople = (empresasRes.data ?? []).map(
     (e: { id: string; nome_fantasia: string | null; razao_social: string | null }) => ({
       id: e.id,
       nome_fantasia: e.nome_fantasia ?? e.razao_social ?? "",
     }),
   );
-  const regionaisParaFolha = (regionaisRes.data ?? []).map(
+  const regionaisParaPeople = (regionaisRes.data ?? []).map(
     (r: { id: string; nome: string; empresa_id: string }) => ({
       id: r.id,
       nome: r.nome,
@@ -992,13 +952,15 @@ export default async function PedidosCompraFinanceiroPage({
           }
           recorrentesAtivasCount={recorrentesAtivasCountRes.count ?? 0}
           folhas={
-            <FolhasPagarList
-              linhas={folhasParaTab}
-              empresas={empresasParaFolha}
-              regionais={regionaisParaFolha}
+            <PeopleList
+              items={peopleItems}
+              colaboradores={Object.fromEntries(cnabColaboradoresRes)}
+              alocacoesPorFolha={Object.fromEntries(alocacoesPorFolha)}
+              empresas={empresasParaPeople}
+              regionais={regionaisParaPeople}
             />
           }
-          folhasPendentesCount={folhasParaTab.length}
+          folhasPendentesCount={peopleItems.length}
           titulosCartao={
             <CartaoTab
               cartoes={cartoesList}
