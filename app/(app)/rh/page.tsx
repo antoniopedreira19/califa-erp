@@ -100,8 +100,7 @@ export default async function CentralRHPage() {
   return (
     <div className="space-y-8">
       <PageHeader
-        eyebrow="RH"
-        title="Recursos Humanos"
+        title="People"
         description="Pipeline de contratação, cadastro de colaboradores, alocação por empresa e regional, histórico salarial e folha mensal."
         icon={Users}
       />

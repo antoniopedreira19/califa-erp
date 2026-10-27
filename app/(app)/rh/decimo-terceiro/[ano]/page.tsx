@@ -175,7 +175,6 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
       <BotaoVoltar reserva="/rh/decimo-terceiro" />
 
       <PageHeader
-        eyebrow="RH · 13º Salário"
         title={`13º ${folha.ano}`}
         description={descricaoDoStatus(folha.status, totalLinhas)}
         icon={Gift}

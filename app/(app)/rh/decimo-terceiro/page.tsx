@@ -102,7 +102,6 @@ export default async function DecimoTerceiroPage() {
     <div className="space-y-6 max-w-[1480px] mx-auto">
       <BotaoVoltar reserva="/rh" />
       <PageHeader
-        eyebrow="RH"
         title="13º Salário"
         description="Folha anual de 13º com snapshot do cadastro, cálculo automático de avos, parcelas e descontos. Uma folha por ano."
         icon={Gift}

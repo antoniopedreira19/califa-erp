@@ -148,7 +148,6 @@ export default async function FolhasPage() {
       <BotaoVoltar reserva="/rh" />
 
       <PageHeader
-        eyebrow="RH"
         title="Folhas de pagamento"
         description="Uma folha por competência. Cada linha é um colaborador; carrega salário base e rateio de alocação. RH gera, financeiro aprova."
         icon={Receipt}

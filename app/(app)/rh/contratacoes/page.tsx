@@ -75,7 +75,6 @@ export default async function ContratacoesPage() {
       <BotaoVoltar reserva="/rh" />
 
       <PageHeader
-        eyebrow="RH"
         title="Contratações"
         description="Pipeline dos candidatos: da proposta ao contrato assinado. Ao efetivar, vira colaborador ativo."
         icon={FileSignature}

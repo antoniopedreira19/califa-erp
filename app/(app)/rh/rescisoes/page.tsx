@@ -77,7 +77,6 @@ export default async function RescisoesPage({
     <div className="space-y-6 max-w-[1480px] mx-auto">
       <BotaoVoltar reserva="/rh" />
       <PageHeader
-        eyebrow="RH"
         title="Rescisões"
         description="Cálculo de verbas rescisórias (saldo de salário, férias proporcionais pela regra dos avós, 1/3 constitucional, 13º proporcional). Base para gerar o título em Contas a Pagar."
         icon={FileSignature}

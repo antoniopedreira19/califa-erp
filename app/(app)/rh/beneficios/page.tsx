@@ -124,7 +124,6 @@ export default async function BeneficiosPage({
     <div className="space-y-6 max-w-[1480px] mx-auto">
       <BotaoVoltar reserva="/rh" />
       <PageHeader
-        eyebrow="RH"
         title="Gestão de Benefícios"
         description="Planos de saúde, dental e dependentes dos colaboradores. Custo mensal calculado por faixa etária e modo de custeio."
         icon={ShieldPlus}

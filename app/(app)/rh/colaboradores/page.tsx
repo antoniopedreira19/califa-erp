@@ -314,7 +314,6 @@ export default async function ColaboradoresPage() {
       <BotaoVoltar reserva="/rh" />
 
       <PageHeader
-        eyebrow="RH"
         title="Colaboradores"
         description="Quadro atual da agência, valor total da folha e alocação por empresa e regional. Clique em um colaborador para ver o detalhe."
         icon={Users}

@@ -51,7 +51,6 @@ export default async function FechamentoDetalhePage({
       <BotaoVoltar reserva="/rh/beneficios?tab=fechamentos" />
 
       <PageHeader
-        eyebrow="RH · BENEFÍCIOS · FECHAMENTOS"
         title={label}
         description={
           detalhe.cabecalho.fechado_por_nome

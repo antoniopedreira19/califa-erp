@@ -44,7 +44,6 @@ export default async function FeriasPage({
     <div className="space-y-6 max-w-[1480px] mx-auto">
       <BotaoVoltar reserva="/rh" />
       <PageHeader
-        eyebrow="RH"
         title="Gestão de Férias"
         description="Painel de solicitações, concessivos vencendo e acompanhamento do quadro."
         icon={Palmtree}
