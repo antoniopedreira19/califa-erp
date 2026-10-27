@@ -6,6 +6,7 @@ import type {
   TipoContratacao,
 } from "@/lib/types";
 import { SolicitarFeriasModal } from "./solicitar-ferias-modal";
+import { LinhaHistoricoLancamento } from "./linha-historico-lancamento";
 
 type Props = {
   periodos: ColaboradorFeriasPeriodo[];
@@ -73,6 +74,25 @@ export function CardMinhasFerias({
     }));
 
   const saldoDisponivel = periodosComSaldo.reduce((a, p) => a + p.saldo, 0);
+
+  // Lançamentos ordenados: ativos primeiro (pendente > em_analise > ag_financeiro
+  // > aprovado), depois concluídos/finalizados mais recentes. Dentro de cada
+  // grupo, ordem por created_at desc.
+  const prioridadeStatus: Record<string, number> = {
+    pendente_aprovacao: 0,
+    em_analise: 1,
+    aguardando_financeiro: 2,
+    aprovado: 3,
+    concluido: 4,
+    reprovado: 5,
+    cancelado: 6,
+  };
+  const lancamentosOrdenados = [...lancamentos].sort((a, b) => {
+    const pa = prioridadeStatus[a.status] ?? 99;
+    const pb = prioridadeStatus[b.status] ?? 99;
+    if (pa !== pb) return pa - pb;
+    return (b.created_at ?? "").localeCompare(a.created_at ?? "");
+  });
 
   // Status principal: pega o pior entre "vencido", "em_alerta", "apto".
   const temVencido = periodos.some((p) => p.status === "vencido");
@@ -235,6 +255,24 @@ export function CardMinhasFerias({
                 </li>
               );
             })}
+          </ul>
+        )}
+      </div>
+
+      {/* Minhas solicitações */}
+      <div className="mt-6">
+        <p className="mb-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Minhas solicitações
+        </p>
+        {lancamentosOrdenados.length === 0 ? (
+          <p className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground text-center">
+            Nenhuma solicitação ainda.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border rounded-lg border border-border bg-background overflow-hidden">
+            {lancamentosOrdenados.map((l) => (
+              <LinhaHistoricoLancamento key={l.id} lancamento={l} />
+            ))}
           </ul>
         )}
       </div>
