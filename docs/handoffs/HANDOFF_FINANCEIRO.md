@@ -8518,3 +8518,25 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   aberto com esses números; câmbio 5,40 → 5,60 na fila e 5,60 → 5,65 depois
   da abertura. Mudar o fee depois da abertura: recusado pela função do banco
   (simulação desfeita).
+
+## ⚠️ Nota de 2026-10-28 (2) — a regra do histórico antes do título (decisão 199)
+
+- Motor (`lib/conciliacao/motor.ts`): a regra do histórico passou de passo 6
+  (depois dos títulos) para 2b, logo depois de "saiu e voltou". A linha cujo
+  histórico casa com uma regra vai pela regra mesmo quando um título tem o
+  mesmo valor; a baixa feita à mão que bate continua antes da regra.
+- O caso: duas tarifas de R$ 250,00 na California Santander ("TAR PIX PGTO
+  FORNEC", 21/10) recebiam a sugestão de duas PPs de verba de R$ 250,00, e a
+  regra "TAR" não chegava a elas. Lançadas pela regra depois da mudança.
+- Regras novas, criadas pela tela com o Tiago:
+  - BB California, "TAR" → 04 · Custo Fixo · Tarifa bancária, Agência
+    California: três tarifas de outubro, R$ 738,60;
+  - BB California, "COBRANCA DE I.O.F." → 07 · Despesa Administrativa ·
+    Outros, Agência California, onde a planilha lançou o IOF de outubro
+    (R$ 5.599,01);
+  - Santander GoCrazy, "TAR" → 04 · Custo Fixo · Tarifa bancária, Agência
+    California: 12 tarifas, R$ 406,00.
+- A regra não grava regional, e assim fica: nas contas da California e da
+  GoCrazy a despesa administrativa é da gerencial California, rateada como
+  "TD" pela regra de rateio (Tiago, 28/10/2026). Na Hitlab, Hitlab. CCH não
+  tem conta.

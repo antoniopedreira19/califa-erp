@@ -12,13 +12,14 @@
  *       que debita a remessa inteira numa linha);
  *   1b. a baixa feita à mão que diverge (até R$ 1 ou 1%, até 3 dias);
  *   2.  saiu e voltou (a devolução e a saída de mesmo valor no mesmo dia);
+ *   2b. a regra do histórico (antes dos títulos: uma tarifa de R$ 250 não
+ *       é a PP de R$ 250 que vence na semana — Tiago, 28/10/2026);
  *   3.  o título pelo valor exato, por pontos (data, forma, CNPJ);
  *   3a. linhas iguais em número igual ao de títulos empatados;
  *   3b. a retenção na fonte que explica o banco ter menos;
  *   4.  a remessa (lote) que soma centavo a centavo;
  *   4b. de 2 a 4 títulos da mesma contraparte que somam a linha;
  *   5.  juros e multa no boleto e na guia;
- *   6.  a regra do histórico;
  *   7.  sem correspondência.
  *
  * Função pura: recebe o que o sistema tem e devolve, para cada linha, o
@@ -356,6 +357,20 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
     }
   });
 
+  // 2b. Regras do histórico, antes dos títulos (Tiago, 28/10/2026): a linha
+  //     cujo histórico casa com uma regra (tarifa, IOF, aplicação) não é
+  //     pagamento de título, mesmo quando algum título tem o mesmo valor.
+  res.forEach((r) => {
+    if (r.estado !== "sem_par") return;
+    const regra = regras.find((g) => normalizar(r.mov.historico).startsWith(normalizar(g.padrao)));
+    if (regra) {
+      r.estado = "regra";
+      r.regra = regra;
+      r.confianca = "alta";
+      r.motivo = `Regra "${regra.padrao}…" → ${regra.centro}. Criada em ${regra.criadaEm}, usada ${regra.usos} ${regra.usos === 1 ? "vez" : "vezes"}.`;
+    }
+  });
+
   // O título da remessa fica guardado para o passo 4 só quando alguma linha
   // de saída ainda sem par tem o total exato da remessa; senão, ele casa
   // pelo valor dele, linha a linha (decisão 202).
@@ -538,18 +553,6 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
         t.lado === "imposto"
           ? `Guia paga ${atraso} ${atraso === 1 ? "dia" : "dias"} depois do vencimento: os ${fmt(r.diferenca)} a mais entram como multa e juros (11 · Despesa com Juros).`
           : `O banco pagou ${fmt(r.diferenca)} a mais que o título: entra como juros e multa (11 · Despesa com Juros).`;
-    }
-  });
-
-  // 6. Regras do histórico.
-  res.forEach((r) => {
-    if (r.estado !== "sem_par") return;
-    const regra = regras.find((g) => normalizar(r.mov.historico).startsWith(normalizar(g.padrao)));
-    if (regra) {
-      r.estado = "regra";
-      r.regra = regra;
-      r.confianca = "alta";
-      r.motivo = `Regra "${regra.padrao}…" → ${regra.centro}. Criada em ${regra.criadaEm}, usada ${regra.usos} ${regra.usos === 1 ? "vez" : "vezes"}.`;
     }
   });
 

@@ -4,6 +4,7 @@
 **Status:** aceita; entrega 3A implementada em 21/10/2026 (task 029, fase 3):
 o motor, o vínculo e as seções para ver. As ações de cada linha chegam com a
 entrega 3B (decisão 200) e a automação na importação com a 3C (decisão 201).
+Revista em 28/10/2026: a regra do histórico passa a vir antes dos títulos.
 **Quem decidiu:** Tiago, no protótipo "Conciliação com o banco", versão
 **Alternativa** (`docs/handoffs/2026-10-21-conciliacao-com-o-banco/`, seções
 4.5 e 4.6 da especificação), e nos pontos M3.3 e M3.8 de 21/10/2026 (opção A
@@ -27,6 +28,8 @@ remessa, a tarifa — e guardar que a linha foi conciliada.
    1. a baixa feita à mão que bate (mesmo valor e sinal, até 3 dias);
    2. 1b. a que diverge (até R$ 1 ou 1%, até 3 dias);
    3. saiu e voltou (a devolução e a saída de mesmo valor no mesmo dia);
+   3. 2b. a regra do histórico — **antes dos títulos desde 28/10/2026** (ver
+      a revisão no fim do item);
    4. o título pelo valor exato, por pontos (base 60; data igual +20, até 3
       dias +15, até 7 +5, mais de 20 −25; forma igual +10, o boleto aceita a
       guia; o CNPJ do histórico igual ao do título +30): **alta** com 90 ou
@@ -37,8 +40,16 @@ remessa, a tarifa — e guardar que a linha foi conciliada.
    7. a remessa que soma centavo a centavo;
    8. 4b. de 2 a 4 títulos da mesma contraparte que somam a linha;
    9. juros e multa no boleto e na guia;
-   10. a regra do histórico;
-   11. sem correspondência.
+   10. sem correspondência.
+
+   ⚠️ **Revisão de 28/10/2026 (Tiago).** A regra do histórico era o passo 10,
+   depois dos títulos. Nos extratos de outubro, duas tarifas de R$ 250,00 da
+   California Santander ("TAR PIX PGTO FORNEC") receberam como sugestão duas
+   PPs de verba de R$ 250,00 que venciam na semana seguinte, e a regra "TAR"
+   nunca chegou a elas. Agora a regra vem logo depois de "saiu e voltou": a
+   linha cujo histórico casa com uma regra vai pela regra, mesmo com título
+   de mesmo valor. A baixa feita à mão que bate (passos 1, 1c e 1b) continua
+   antes da regra.
 2. **"Certo" é confiança alta com centro de custo.** O que precisa de
    decisão fica para alguém.
 3. **Uma diferença deliberada do protótipo:** a remessa só casa com uma
