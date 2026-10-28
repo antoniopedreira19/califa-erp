@@ -76,6 +76,8 @@ export default async function FolhaCompetenciaPage({
   // sem embed aninhado (docs/PERFORMANCE.md §C).
   const [linhasRes, empresasRes, regionaisRes, linhasPrevRes, rateiosRes] = await Promise.all(
     [
+      // Folha Mensal lista APENAS tipo='salario'. Férias e 13 têm fluxos
+      // próprios e não devem aparecer aqui.
       supabase
         .from("folhas_pagamento")
         .select(
@@ -84,6 +86,7 @@ export default async function FolhaCompetenciaPage({
         .eq("tenant_id", session.activeTenant.id)
         .eq("competencia_ano", ano)
         .eq("competencia_mes", mes)
+        .eq("tipo", "salario")
         .order("created_at", { ascending: true }),
       supabase
         .from("empresas")
@@ -102,7 +105,8 @@ export default async function FolhaCompetenciaPage({
         .select("salario_base")
         .eq("tenant_id", session.activeTenant.id)
         .eq("competencia_ano", prev.ano)
-        .eq("competencia_mes", prev.mes),
+        .eq("competencia_mes", prev.mes)
+        .eq("tipo", "salario"),
       // Rateio padrão por empresa do ANO da competência. Usado pra detectar
       // "Hub" quando a alocação de uma linha bate exatamente com o padrão.
       supabase

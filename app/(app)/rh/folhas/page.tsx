@@ -43,10 +43,13 @@ export default async function FolhasPage() {
   }
 
   const supabase = createClient();
+  // Folha Mensal lista APENAS tipo='salario'. Férias e 13 têm fluxos
+  // próprios (/rh/ferias, /rh/decimo-terceiro) e não devem aparecer aqui.
   const { data, error } = await supabase
     .from("folhas_pagamento")
     .select("competencia_ano, competencia_mes, status, salario_base")
-    .eq("tenant_id", session.activeTenant.id);
+    .eq("tenant_id", session.activeTenant.id)
+    .eq("tipo", "salario");
 
   if (error) {
     console.error("[rh.folhas.page]", error.message);

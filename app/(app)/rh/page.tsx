@@ -54,6 +54,7 @@ export default async function CentralRHPage() {
       .eq("tenant_id", session.activeTenant.id)
       .eq("competencia_ano", anoAtual)
       .eq("competencia_mes", mesAtual)
+      .eq("tipo", "salario") // painel RH conta só folha mensal
       .eq("status", "pendente_correcao"),
     supabase
       .from("contratacoes")

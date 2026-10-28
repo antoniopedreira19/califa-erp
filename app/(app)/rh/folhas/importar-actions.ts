@@ -165,14 +165,17 @@ export async function importarFolhaContabilidade(input: {
       ]),
   );
 
-  // Linhas já gravadas nesta competência com origem='contabilidade' (pra decidir criar/atualizar/ignorar).
+  // Linhas já gravadas nesta competência com origem='contabilidade' e
+  // tipo='salario' (pra decidir criar/atualizar/ignorar). Importação de CLT
+  // não deve enxergar folhas de férias contabilidade do mesmo mês.
   const { data: existentes } = await supabase
     .from("folhas_pagamento")
     .select("id, colaborador_id, status")
     .eq("tenant_id", tenantId)
     .eq("competencia_ano", input.ano)
     .eq("competencia_mes", input.mes)
-    .eq("origem", "contabilidade");
+    .eq("origem", "contabilidade")
+    .eq("tipo", "salario");
   const porColabId = new Map(
     (existentes ?? []).map((f) => [
       f.colaborador_id as string,
@@ -502,6 +505,7 @@ export async function enviarCompetencia(input: {
   const tenantId = session.activeTenant.id;
 
   // Confirma que os dois fluxos têm alguma linha nessa competência.
+  // Só olha tipo='salario' — folhas de férias/13 não contam pro checklist mensal.
   const [{ count: linhasPj }, { count: linhasClt }] = await Promise.all([
     supabase
       .from("folhas_pagamento")
@@ -509,6 +513,7 @@ export async function enviarCompetencia(input: {
       .eq("tenant_id", tenantId)
       .eq("competencia_ano", input.ano)
       .eq("competencia_mes", input.mes)
+      .eq("tipo", "salario")
       .eq("origem", "california"),
     supabase
       .from("folhas_pagamento")
@@ -516,6 +521,7 @@ export async function enviarCompetencia(input: {
       .eq("tenant_id", tenantId)
       .eq("competencia_ano", input.ano)
       .eq("competencia_mes", input.mes)
+      .eq("tipo", "salario")
       .eq("origem", "contabilidade"),
   ]);
 

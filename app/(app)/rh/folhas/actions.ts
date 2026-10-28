@@ -334,6 +334,7 @@ export async function enviarFolhaInteira(
     .eq("tenant_id", tenantId)
     .eq("competencia_ano", ano)
     .eq("competencia_mes", mes)
+    .eq("tipo", "salario") // Folha Mensal: nunca mexer em férias/13 por lote
     .in("status", ["rascunho", "pendente_correcao"]);
 
   if (error) {
