@@ -11,7 +11,9 @@ de 08/10/2026 (o tipo de custo), `20261008800001_alteracao_financeiro_troca_tipo
 e, na revisão de 13/10/2026 (a edição na fila entra no valor inicial),
 `20261013800001_alteracao_na_fila_entra_na_abertura.sql`; na de 14/10/2026
 (o planejado na fila), `20261014600001_financeiro_edita_planejado_na_fila.sql`
-e a correção do AMB-1008/26, `20261014600002_amb_1008_planejado_das_influenciadoras.sql`.
+e a correção do AMB-1008/26, `20261014600002_amb_1008_planejado_das_influenciadoras.sql`;
+na de 28/10/2026 (o tipo da linha com PP e a data do faturamento que nasce),
+`20261028600001_editar_orcado_tipo_com_pp_e_recebimento_novo.sql`.
 
 > ⚠️ **Revisada em 08/10/2026 — o financeiro também troca o tipo de
 > custo.** Até aqui o "Editar orçado" mexia só em R$ Unit., QT e D/M, e o
@@ -30,6 +32,14 @@ e a correção do AMB-1008/26, `20261014600002_amb_1008_planejado_das_influencia
 > fila.** Até aqui o planejado não era do financeiro (§3, item 8). Agora,
 > com o job em `aguardando_abertura`, o "Editar orçado" abre também o
 > planejado; depois da abertura ele continua travado. Ver §11.
+
+> ⚠️ **Revisada em 28/10/2026 — a linha com PP troca de tipo, entre os
+> tipos com PP, e o faturamento sem previsão pede a data.** Até aqui o tipo
+> só mudava sem nada lançado no item (§9), e o job que abriu sem faturamento
+> recusava a alteração que cria faturamento, mandando pedir errata (§4).
+> Agora a linha com PP ou PP a emitir troca entre AR, B, C, F e FI (o BV
+> segue travando), e o pop-up pede a data de recebimento do valor que entra
+> sem previsão para acompanhar. Ver §12.
 
 ---
 
@@ -201,9 +211,11 @@ em produção) e a das parcelas do envio que já viraram nota:
 | Linha com save | "\"Item\" tem save. Linha com save não entra na edição do orçado — o save muda pelo pop-up da coluna Save." |
 | Parcela do envio que já virou nota (no banco) | "Uma parcela do envio já virou nota emitida: o orçado desse faturamento não muda mais." |
 | Status fora da janela (no banco) | "O orçado só é editado pelo financeiro na abertura do job ou com o job aberto: depois do encerramento, não muda mais." |
-| Previsão de recebimento vazia que precisaria andar | "O job abriu sem faturamento previsto e não tem previsão de recebimento para acompanhar a alteração. Valor novo precisa de data: peça a errata à produção, que devolve o job para a revisão da abertura." (e a variante do mês, no mensal) |
+| Previsão de recebimento vazia que precisaria andar | "O job abriu sem faturamento previsto e não tem previsão de recebimento para acompanhar a alteração. Valor novo precisa de data: peça a errata à produção, que devolve o job para a revisão da abertura." (e a variante do mês, no mensal). ⚠️ Desde 28/10/2026, só quando o faturamento DIMINUI; quando ele entra, o pop-up pede a data (§12) |
+| Faturamento que entra sem previsão e sem a data do pop-up (28/10/2026) | "Novembro não tem previsão de recebimento para acompanhar a alteração: informe a data de recebimento no pop-up da alteração." (ou "O job …") |
 | Parcela do envio que zeraria | "Com essa alteração, uma parcela do envio para faturamento ficaria zerada ou negativa, e o envio não aceita parcela sem valor." |
-| Troca de tipo em linha com PP, PP a emitir ou BV (na action e no banco; 08/10/2026) | "\"Item\" já tem Pedido de Produção: o tipo de custo só muda enquanto nada foi lançado no item." (ou "PP a emitir", ou "BV") |
+| Troca de tipo em linha com PP, PP a emitir ou BV (na action e no banco; 08/10/2026) | "\"Item\" já tem Pedido de Produção: o tipo de custo só muda enquanto nada foi lançado no item." (ou "PP a emitir", ou "BV"). ⚠️ Desde 28/10/2026 vale só para o BV e para a PP em linha A ou D (dado antigo) |
+| Troca de tipo em linha com PP ou PP a emitir para A ou D (na action e no banco; 28/10/2026) | "\"Item\" já tem Pedido de Produção: o tipo de custo só muda entre os tipos que geram PP (A · Repasse, B, C, F · Externo e F · Interno)." (ou "PP a emitir") |
 | Troca de tipo no serviço Interno (no banco; 08/10/2026) | "No serviço Interno o tipo de custo é sempre F · Interno." |
 
 Na tela, o botão fica desabilitado, com o motivo, no job encerrado e no
@@ -617,3 +629,81 @@ na linha de parâmetros da Planilha Interna. Na fila tudo se edita; depois da
 abertura, só o câmbio. A alteração só de parâmetros chega ao card como
 "Parâmetros do job" e não entra no Histórico da planilha. Ver a
 [224](224-parametros-do-job-na-abertura.md).
+
+## 12. A revisão de 28/10/2026: o tipo da linha com PP e a data do faturamento que nasce
+
+### O pedido
+
+O UER-1002/26 (Always On da Universal, aberto no financeiro, com PPs) nasceu
+com as 35 linhas em F · Interno, e devia ser A · Repasse com os honorários
+zerados. A errata da produção não serve: ela não mexe em linha com PP no
+financeiro (decisão 040), e 9 das 35 linhas tinham. O "Editar orçado"
+também não: travava o tipo em linha com PP (§9) e recusava a alteração que
+cria faturamento num job que abriu sem faturamento (§4). O Tiago pediu para
+"liberar que o financeiro possa alterar o tipo de custo em sua função
+alterar orçado", e respondeu às duas perguntas que isso abria:
+
+- **Linha com PP:** troca "só entre tipos com PP" — AR, B, C, F e FI, a
+  calha PP da decisão 004. A e D continuam fora: neles o cliente paga o
+  fornecedor direto, e a PP emitida perderia o sentido.
+- **Job sem previsão de recebimento:** "pedir a data no Salvar", em vez de
+  voltar o job à revisão da abertura.
+
+### A regra
+
+1. Sem nada lançado no item, o tipo muda para qualquer tipo, como desde
+   08/10/2026.
+2. Com PP (qualquer situação fora de cancelada, inclusive a que já chegou
+   ao financeiro) ou PP a emitir, a lista só traz AR, B, C, F e FI. A PP
+   fica como está: valor, NF e pagamento não mudam.
+3. Com BV fora de cancelado, o tipo continua travado — o BV só existe em A,
+   AR e D e não se resolve por efeito colateral. A PP numa linha A ou D
+   (dado antigo; o banco não deixa nascer) também.
+4. O job (ou o mês do mensal) sem nenhuma parcela de previsão de
+   recebimento, em que a alteração FAZ ENTRAR faturamento, mostra no pop-up
+   "Meses sem previsão de recebimento: informe a data", com um campo por
+   mês e o valor que entra. A confirmação espera todas as datas. Cada mês
+   ganha uma parcela com a data informada e o valor que entra; o
+   calendário abre no mês seguinte ao de referência, como na abertura
+   (decisão 149). Com o job na fila, nada disso: a previsão é do formulário
+   da abertura.
+5. Faturamento que DIMINUI sem previsão nenhuma segue recusado, com a frase
+   antiga (dado fora do lugar, que a errata resolve).
+6. Os recolhimentos de imposto previstos não ganham parcela nova: se o
+   imposto previsto passar a existir num job sem recolhimento, ele fica sem
+   previsão de recolhimento, como já ficava (não foi pedido; ver a
+   conferência).
+
+### Onde mora
+
+- **Regra pura:** `lib/calculos/alteracao-financeiro.ts` (`travaDoTipo`,
+  `trocaDeTipoPermitida`, `motivoDaTrocaRecusada`), com
+  `lib/calculos/alteracao-financeiro.test.ts`.
+- **Banco:** `travas_do_tipo_nas_linhas_do_job` (definer, PP / PP a emitir /
+  BV separados; a antiga `lancamentos_nas_linhas_do_job` fica, sem uso) e
+  `registrar_alteracao_do_financeiro` com a trava nova e o bloco
+  `recebimento_novo` (insere a parcela; recusa na fila e quando o mês já tem
+  previsão). Migration `20261028600001`.
+- **Action:** `registrarAlteracaoDoFinanceiro` aceita `recebimentos_novos`
+  (mês e data; o valor é a conta do servidor) e grava o "depois" da
+  previsão com a parcela nova.
+- **Tela:** a célula de tipo na Planilha Interna (`job-item-realizado-table`)
+  e o pop-up (`edicao-financeiro-confirmar-dialog`).
+
+### Conferência (28/10/2026)
+
+- **TES-1035/26** (Always On do P-0006/26, novembro com faturamento e sem
+  parcela de previsão, herança da decisão 219): no "Editar orçado", a linha
+  de novembro foi de R$ 5.000 a R$ 5.100. O pop-up pediu a data de novembro
+  (R$ 139,18) e travou o Confirmar até a data; com 21/12/2026, gravou a
+  parcela 2 (novembro, 21/12/2026, R$ 139,18), o job foi a R$ 14.057,41 e o
+  card registrou o antes → depois. Desfeito pelo mesmo caminho: a parcela
+  acompanhou (R$ 139,18 → R$ 0,00) e o job voltou a R$ 13.918,23; a parcela
+  ficou com R$ 0,00.
+- **UER-1002/26**, sem gravar: na linha com PP (Shook Na Vozz) a lista trouxe
+  só AR, B, C, F e FI, com o motivo no `title`; na linha sem PP (Artista J.),
+  os sete tipos. Saída pelo Descartar.
+- **Banco, em transação desfeita (como o Tiago):** FI → A na linha com PP
+  foi recusado com a frase nova; FI → AR na mesma linha, com
+  `recebimento_novo`, passou e criou a parcela. Depois do rollback, o job
+  seguia com 35 linhas FI e nenhuma previsão.

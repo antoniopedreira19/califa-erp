@@ -88,6 +88,7 @@ import { EdicaoFinanceiroBarra } from "./edicao-financeiro-barra";
 import {
   EdicaoFinanceiroConfirmarDialog,
   type ParcelaQueAcompanha,
+  type RecebimentoSemPrevisao,
 } from "./edicao-financeiro-confirmar-dialog";
 import { registrarAlteracaoDoFinanceiro } from "./actions-alteracao-financeiro";
 import {
@@ -860,11 +861,15 @@ function PlanilhaDoJob({
           linhasDoFinanceiro.length === 1 ? "linha alterada" : "linhas alteradas"
         }`;
 
-  async function confirmarEdicaoDoFinanceiro(motivo: string) {
+  async function confirmarEdicaoDoFinanceiro(
+    motivo: string,
+    recebimentosNovos: Array<{ mes: string | null; data_prevista: string }>,
+  ) {
     setSalvando(true);
     setErroErrata(null);
     const r = await registrarAlteracaoDoFinanceiro(job.id, {
       motivo,
+      recebimentos_novos: recebimentosNovos,
       linhas: linhasDoFinanceiro.map((l) => ({
         job_item_orcado_id: l.id,
         valor_unitario: l.valorUnitarioPara,
@@ -1354,8 +1359,13 @@ function PlanilhaDoJob({
   const acompanhamDoFinanceiro = React.useMemo(() => {
     const envio: ParcelaQueAcompanha[] = [];
     const recebimento: ParcelaQueAcompanha[] = [];
+    // O valor que entra num faturamento sem previsão para acompanhar — o job
+    // que abriu sem faturamento, ou o mês do mensal sem parcela (revisão de
+    // 28/10/2026): o pop-up pede a data. Na fila não — lá a previsão é do
+    // formulário da abertura.
+    const semPrevisao: RecebimentoSemPrevisao[] = [];
     if (!edicaoDoFinanceiro || linhasDoFinanceiro.length === 0) {
-      return { envio, recebimento };
+      return { envio, recebimento, semPrevisao };
     }
     const deltaTotal = emReais(
       emReais(totaisDepois.faturamentoPrevisto) - emReais(totaisAntes.faturamentoPrevisto),
@@ -1372,11 +1382,21 @@ function PlanilhaDoJob({
     }
     const blocosDoRecebimento = mensal
       ? [...deltaDoMes.entries()].map(([chave, delta]) => ({
+          chave: chave as string | null,
           delta,
           linhas: edicaoDoFinanceiro.recebimento.filter((r) => r.mes?.slice(0, 7) === chave),
         }))
-      : [{ delta: deltaTotal, linhas: edicaoDoFinanceiro.recebimento }];
+      : [{ chave: null, delta: deltaTotal, linhas: edicaoDoFinanceiro.recebimento }];
+    const naFila = job.status === "aguardando_abertura";
     for (const bloco of blocosDoRecebimento) {
+      if (!naFila && bloco.linhas.length === 0 && bloco.delta >= 0.005) {
+        semPrevisao.push({
+          mes: bloco.chave ? `${bloco.chave}-01` : null,
+          rotulo: bloco.chave ? nomeDoMes(`${bloco.chave}-01`) : "Faturamento do job",
+          valor: bloco.delta,
+        });
+        continue;
+      }
       const depois = distribuirDelta(bloco.linhas, bloco.delta);
       bloco.linhas.forEach((l, k) => {
         if (depois[k].valor === l.valor) return;
@@ -1401,8 +1421,9 @@ function PlanilhaDoJob({
         });
       });
     }
-    return { envio, recebimento };
+    return { envio, recebimento, semPrevisao };
   }, [
+    job.status,
     edicaoDoFinanceiro,
     linhasDoFinanceiro,
     totaisAntes,
@@ -2209,6 +2230,7 @@ function PlanilhaDoJob({
         moeda={versao.moeda}
         envio={acompanhamDoFinanceiro.envio}
         recebimento={acompanhamDoFinanceiro.recebimento}
+        recebimentoSemPrevisao={acompanhamDoFinanceiro.semPrevisao}
         planejadoAcompanha={interno}
         naAbertura={job.status === "aguardando_abertura"}
         salvando={salvando}

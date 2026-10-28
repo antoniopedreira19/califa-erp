@@ -8592,3 +8592,21 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - Usado nos 4 PIX de 14/10 da Santander Hitlab contra as 5 PPs do job
   AMB-1002/26 (dois conjuntos, R$ 197.176,80).
 
+## ⚠️ Nota de 2026-10-28 (6) — "Editar orçado": tipo da linha com PP e data do faturamento que nasce (revisão da decisão 115)
+
+- No "Editar orçado" da Planilha Interna, a linha com PP ou PP a emitir
+  passa a trocar de tipo, mas só entre AR, B, C, F e FI (a lista só mostra
+  esses, e o `title` da célula diz por quê). BV segue travando. A PP não
+  muda.
+- O job (ou o mês do mensal) sem parcela de previsão de recebimento, em que
+  a alteração faz entrar faturamento, não recusa mais: o pop-up pede a data
+  de cada mês ("Meses sem previsão de recebimento: informe a data") e cria a
+  parcela com o valor que entra. Na fila da abertura, nada muda.
+- Migration `20261028600001` (função nova `travas_do_tipo_nas_linhas_do_job`
+  e `registrar_alteracao_do_financeiro` com a trava nova e o
+  `recebimento_novo`).
+- Origem: o UER-1002/26, Always On da Universal aberto com as 35 linhas em
+  F · Interno, que o financeiro vai corrigir para A · Repasse com os
+  honorários zerados (parâmetros do job, decisão 224). Teste no TES-1035/26,
+  desfeito. Ver a §12 da
+  [decisão 115](../decisions/115-o-financeiro-edita-o-orcado-do-job.md).
