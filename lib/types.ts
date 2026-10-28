@@ -4852,9 +4852,11 @@ export interface ColaboradorAlocacao {
   id: string;
   tenant_id: string;
   colaborador_id: string;
-  empresa_id: string;
+  /** LEGADO: NULL em pacotes multi-empresa novos (empresa vive nos itens). */
+  empresa_id: string | null;
   regional_id: string | null;
-  usa_rateio_empresa: boolean;
+  /** LEGADO: NULL em pacotes multi-empresa novos (flag vive nos itens). */
+  usa_rateio_empresa: boolean | null;
   data_inicio: string;
   data_fim: string | null;
   motivo: string | null;

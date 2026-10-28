@@ -94,8 +94,8 @@ export function CardAlocacoes({
   React.useEffect(() => {
     if (!open) return;
     if (vigente) {
-      setEmpresaId(vigente.empresa_id);
-      setUsaRateio(vigente.usa_rateio_empresa);
+      setEmpresaId(vigente.empresa_id ?? "");
+      setUsaRateio(vigente.usa_rateio_empresa ?? false);
       setRegionalId(vigente.regional_id ?? "");
     } else {
       setEmpresaId("");
