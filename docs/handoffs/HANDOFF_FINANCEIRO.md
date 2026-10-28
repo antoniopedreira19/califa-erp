@@ -8560,6 +8560,8 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - O Santander escreve a volta do PIX como "DEVOLUCAO DE PIX" ou "PIX
   DEVOLVIDO". O motor (`formaDoHistorico`) e `registrar_saiu_e_voltou`
   (migration `20261028300002`) passam a aceitar os dois.
-- 27 pares "saiu e voltou" registrados pela tela na California Santander
-  (R$ 181.620,40). Duas devoluções "NAO EFETUADA" de 08/10 ficaram de fora:
-  as saídas daquele dia estão ligadas à cauda do histórico.
+- 29 pares "saiu e voltou" na California Santander (R$ 183.170,40), todas
+  as devoluções de outubro. Nas duas "NAO EFETUADA" de 08/10 (R$ 350 e
+  R$ 1.200), a saída do dia estava ligada à cauda: desfeita a ligação de
+  uma de cada valor e feito o par (o extrato não diz qual favorecido ficou
+  sem o PIX).

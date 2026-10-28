@@ -1104,15 +1104,22 @@ a BB California pela tela e a Santander Hitlab por migration".
   retorna, mesmo quando é custo de job; o custo do job vai na nova
   transação. No sistema, a saída e a volta viram par "saiu e voltou": as
   duas linhas se anulam, fora do resultado, como o estorno da planilha.
-- **27 pares na California Santander** (R$ 181.620,40), todos com a saída no
-  mesmo dia: 26 "DEVOLUCAO DE PIX" e o "PIX DEVOLVIDO" de R$ 4.200 de 02/10
+- **27 pares na California Santander** (R$ 181.620,40) pelo motor, todos com
+  a saída no mesmo dia: 26 "DEVOLUCAO DE PIX" e o "PIX DEVOLVIDO" de R$ 4.200 de 02/10
   (o estorno da planilha; o pagamento refeito em 05/10 está na cauda). Para
   esse último, o motor e `registrar_saiu_e_voltou` passaram a aceitar
   "PIX DEVOLVIDO" (migration `20261028300002`).
-- **Ficaram de fora** duas "DEVOLUCAO DE PIX NAO EFETUADA" de 08/10
-  (R$ 350 e R$ 1.200): as saídas de mesmo valor daquele dia estão todas
-  ligadas à cauda (em R$ 350 a planilha tem 11 pagamentos no dia e o banco,
-  9). As três devoluções que a planilha lançou como entrada no custo do job
+- **As duas "DEVOLUCAO DE PIX NAO EFETUADA" de 08/10** (R$ 350 e
+  R$ 1.200) também viraram par, a pedido do Tiago, depois de conferir que o
+  banco devolveu o dinheiro no mesmo dia. As saídas de mesmo valor daquele
+  dia estavam todas ligadas à cauda; uma de cada valor foi desligada
+  (Desfazer) e entrou no par. O extrato não diz qual favorecido ficou sem o
+  PIX, então a linha da planilha que ficou sem banco é uma das do dia, não
+  necessariamente a do favorecido certo. A planilha registra esses
+  pagamentos como feitos, sem estorno, e não há saída refeita na Santander:
+  em R$ 350, a planilha tem 11 pagamentos em 08/10 e o banco, 9 tentativas.
+  Fecham 29 pares, R$ 183.170,40 (todas as devoluções de outubro da conta).
+- As três devoluções que a planilha lançou como entrada no custo do job
   (R$ 15.500) já estão conciliadas pela cauda, como a planilha.
 
 ## A cauda: outubro dos jobs até o 3T (A6, 27/10/2026)
