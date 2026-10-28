@@ -1104,16 +1104,52 @@ a BB California pela tela e a Santander Hitlab por migration".
   retorna, mesmo quando é custo de job; o custo do job vai na nova
   transação. No sistema, a saída e a volta viram par "saiu e voltou": as
   duas linhas se anulam, fora do resultado, como o estorno da planilha.
-- **27 pares na California Santander** (R$ 181.620,40), todos com a saída no
-  mesmo dia: 26 "DEVOLUCAO DE PIX" e o "PIX DEVOLVIDO" de R$ 4.200 de 02/10
+- **27 pares na California Santander** (R$ 181.620,40) pelo motor, todos com
+  a saída no mesmo dia: 26 "DEVOLUCAO DE PIX" e o "PIX DEVOLVIDO" de R$ 4.200 de 02/10
   (o estorno da planilha; o pagamento refeito em 05/10 está na cauda). Para
   esse último, o motor e `registrar_saiu_e_voltou` passaram a aceitar
   "PIX DEVOLVIDO" (migration `20261028300002`).
-- **Ficaram de fora** duas "DEVOLUCAO DE PIX NAO EFETUADA" de 08/10
-  (R$ 350 e R$ 1.200): as saídas de mesmo valor daquele dia estão todas
-  ligadas à cauda (em R$ 350 a planilha tem 11 pagamentos no dia e o banco,
-  9). As três devoluções que a planilha lançou como entrada no custo do job
+- **As duas "DEVOLUCAO DE PIX NAO EFETUADA" de 08/10** (R$ 350 e
+  R$ 1.200) também viraram par, a pedido do Tiago, depois de conferir que o
+  banco devolveu o dinheiro no mesmo dia. As saídas de mesmo valor daquele
+  dia estavam todas ligadas à cauda; uma de cada valor foi desligada
+  (Desfazer) e entrou no par. O extrato não diz qual favorecido ficou sem o
+  PIX, então a linha da planilha que ficou sem banco é uma das do dia, não
+  necessariamente a do favorecido certo. A planilha registra esses
+  pagamentos como feitos, sem estorno, e não há saída refeita na Santander:
+  em R$ 350, a planilha tem 11 pagamentos em 08/10 e o banco, 9 tentativas.
+  Fecham 29 pares, R$ 183.170,40 (todas as devoluções de outubro da conta).
+- As três devoluções que a planilha lançou como entrada no custo do job
   (R$ 15.500) já estão conciliadas pela cauda, como a planilha.
+
+### A Santander Hitlab em outubro (28/10/2026)
+
+- **OFX de outubro importado** (20 linhas, 05 a 26/10, soma zero: a ContaMax
+  cobre a conta corrente todo dia). Regras criadas: APLICACAO CONTAMAX e
+  RESGATE CONTAMAX AUTOMATICO (transferência para a Santander ContaMax
+  Hitlab) e "TAR" (04.012 Tarifa bancária, gerencial Hitlab, regional Hitlab,
+  como a planilha). 8 linhas lançadas: 7 transferências e a tarifa de R$ 475.
+- **Conferido:** a Santander ContaMax Hitlab fecha em R$ 5.621,50, o saldo
+  do extrato da aplicação em 27/10 (R$ 32.827,98 em 01/10, + R$ 185.000 de
+  aplicação, − R$ 212.206,48 de resgates, sem rendimento no mês).
+- **Pendente na corrente** (sistema −R$ 170.445,32 × banco R$ 0,00): o
+  mútuo de R$ 185.000 da California (13/10); o imposto de R$ 1.822,41 (05/10,
+  competência 3T na planilha), o PIX de R$ 464,72 (09/10, sem classificação
+  na planilha), quatro PIX à Receita Federal (R$ 13.198,71, 23 e 26/10) e um
+  crédito de R$ 931,16 (23/10), que a planilha de 25/10 ainda não tem.
+- **Conciliar em conjunto** (migration `20261028300003`; Tiago, 28/10): os 4
+  PIX de 14/10 (R$ 197.176,80) pagaram as 5 PPs do job AMB-1002/26 em
+  valores que não batem um a um, mas fecham ao centavo em dois conjuntos
+  (R$ 84.990,00 + R$ 5.666,00 = PP-00166 + PP-00114; R$ 100.996,45 +
+  R$ 5.524,35 = PP-00116 + PP-00115 + PP-00113). A conciliação ganhou
+  `conciliar_em_conjunto`: várias linhas do banco com várias baixas da mesma
+  conta, soma ao centavo, ao menos uma baixa por linha; cada baixa se liga a
+  uma das linhas e todas ficam com o mesmo `grupo` (`conciliada_como =
+  'conjunto'`). O Desfazer solta o conjunto inteiro, e cancelar uma baixa
+  dele também. Na aba Banco, "Baixa no sistema, sem linha no banco" tem o
+  botão "Conciliar em conjunto com linhas do banco". As PPs e as baixas não
+  mudaram. Os dois conjuntos foram ligados pela tela; a Hitlab ficou sem
+  baixa sem linha e com 8 linhas do banco pendentes.
 
 ## A cauda: outubro dos jobs até o 3T (A6, 27/10/2026)
 

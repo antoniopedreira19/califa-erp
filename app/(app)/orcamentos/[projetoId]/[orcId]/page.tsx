@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, type ReactNode } from "react";
 import { FaixaDoProjeto } from "@/components/faixa-do-projeto";
 import { FaixaDosOrcamentos, faixaDoOrcamentoSemItens } from "../faixa-orcamentos";
 import { servicosDoOrcamentoQuery, type ServicoOption } from "@/lib/data/servicos";
@@ -54,6 +54,9 @@ import { Badge } from "@/components/ui/badge";
 import { cn, formatCurrency } from "@/lib/utils";
 import { HONORARIOS_PADRAO_FALLBACK } from "@/lib/validations/clientes";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
+import { planilhaDoJobNaVersao, versaoMostraOJob } from "@/lib/data/versao-aprovada-do-job";
+import { HistoricoDoOrcamento } from "./versoes/[versaoId]/historico-do-orcamento";
+import { PlanilhaMensalDoHistorico } from "./versoes/[versaoId]/planilha-mensal-do-historico";
 import {
   calcularTotaisVersao,
   calcularResultadoOperacional,
@@ -614,7 +617,18 @@ export default async function OrcamentoDetailPage({
   const modeloDoOrcamento: CategoriaModeloPlanilha =
     orcamentoRaw?.categoria?.modelo_planilha ?? "nacional";
   const midiaOff = modeloDoOrcamento === "midia_off";
-  const [gruposRes, itensRes, bvsRes, agregadoRes, contatosRes, mesesRes, reenvioRes, ppsRes, veiculosRes, usoRes, excecaoPorRes, comiteDaVersao, pedidoEmDecisao] = await Promise.all([
+  // Decisão 226: a versão aprovada de job aberto mostra a planilha do job —
+  // com as erratas, que são combinadas com o cliente.
+  const mostraOJob =
+    versaoAtiva !== null &&
+    versaoAtiva !== undefined &&
+    versaoMostraOJob({
+      versaoId: versaoAtiva.id,
+      versaoAprovadaId: orcamento.versao_aprovada_id ?? null,
+      jobStatus: job?.status ?? null,
+      modelo: modeloDoOrcamento,
+    });
+  const [gruposRes, itensRes, bvsRes, agregadoRes, contatosRes, mesesRes, reenvioRes, ppsRes, veiculosRes, usoRes, excecaoPorRes, comiteDaVersao, pedidoEmDecisao, planilhaDoJobRes] = await Promise.all([
     versaoAtiva
       ? supabase
           .from("versoes_orcamento_grupos")
@@ -747,7 +761,25 @@ export default async function OrcamentoDetailPage({
     versaoAtiva && pedidoDoComiteId
       ? carregarPedidoEmDecisao(supabase, session.activeTenant.id, pedidoDoComiteId, versaoAtiva.id)
       : Promise.resolve(null),
+    // Decisão 226: a planilha do job, no lugar da versão aprovada.
+    mostraOJob && job && versaoAtiva
+      ? planilhaDoJobNaVersao(supabase, session.activeTenant.id, job.id, versaoAtiva.id)
+      : Promise.resolve(null),
   ]);
+  if (planilhaDoJobRes && !planilhaDoJobRes.ok) console.error("[versao.planilha_do_job]", planilhaDoJobRes.message);
+  const planilhaDoJob = planilhaDoJobRes && planilhaDoJobRes.ok ? planilhaDoJobRes.planilha : null;
+  // O que a tela mostra: a planilha do job (decisão 226) ou a da versão.
+  const gruposDaTela = planilhaDoJob
+    ? planilhaDoJob.grupos
+    : ((gruposRes.data ?? []) as VersaoOrcamentoGrupo[]);
+  const itensDaTela = planilhaDoJob ? planilhaDoJob.itens : ((itensRes.data ?? []) as any[]);
+  // O BV da versão vai para a linha do job que a copia.
+  const bvsDaTela = planilhaDoJob
+    ? ((bvsRes.data ?? []) as any[]).flatMap((b) => {
+        const linha = planilhaDoJob.idDaLinhaDoJob[b.item_versao_id];
+        return linha ? [{ ...b, item_versao_id: linha }] : [];
+      })
+    : ((bvsRes.data ?? []) as any[]);
   if (excecaoPorRes.error) console.error("[versao.excecao_por]", excecaoPorRes.error.message);
   // Versão aguardando o Comitê: nenhuma versão nova até ele decidir ou o
   // envio ser cancelado (o Comitê decide sobre o orçamento que viu).
@@ -836,6 +868,16 @@ export default async function OrcamentoDetailPage({
         ])
       : [[], {}];
 
+  // Decisão 226: o save da versão vai para a linha do job que a copia.
+  const savePorItemDaTela: Record<string, EstadoSaveDaLinha> = planilhaDoJob
+    ? Object.fromEntries(
+        Object.entries(savePorItem).flatMap(([id, estado]) => {
+          const linha = planilhaDoJob.idDaLinhaDoJob[id];
+          return linha ? [[linha, estado]] : [];
+        }),
+      )
+    : savePorItem;
+
   const agregadoPorVersao = new Map<string, { count: number; total: number }>();
   const itensPorVersaoMidia = new Map<string, { tipo_custo: any; total_orcado: number }[]>();
   for (const it of (agregadoRes.data ?? []) as any[]) {
@@ -865,6 +907,13 @@ export default async function OrcamentoDetailPage({
     }
   }
 
+  // A aba da versão aprovada conta a planilha do job (decisão 226).
+  if (planilhaDoJob && versaoAtiva) {
+    agregadoPorVersao.set(versaoAtiva.id, {
+      count: planilhaDoJob.itens.length,
+      total: planilhaDoJob.itens.reduce((s, it) => s + Number(it.total_orcado ?? 0), 0),
+    });
+  }
   const abas: VersaoAba[] = versoesTodas.map((v) => {
     const agg = agregadoPorVersao.get(v.id) ?? { count: 0, total: 0 };
     return {
@@ -970,9 +1019,9 @@ export default async function OrcamentoDetailPage({
                 status={versaoAtiva.status}
                 nomeJob={orcamento.nome}
                 proximoNumero={proximoNumero}
-                qtdGrupos={(gruposRes.data ?? []).length}
-                qtdItens={(itensRes.data ?? []).length}
-                qtdBvs={(bvsRes.data ?? []).length}
+                qtdGrupos={gruposDaTela.length}
+                qtdItens={itensDaTela.length}
+                qtdBvs={bvsDaTela.length}
                 totalVersoes={versoesTodas.length}
                 podeCriarVersao={podeCriarVersaoAgora}
                 motivoBloqueio={motivoBloqueioAgora}
@@ -1111,9 +1160,17 @@ export default async function OrcamentoDetailPage({
           orcamentoRaw={orcamentoRaw}
           projetoRaw={projetoRaw}
           versao={versaoAtiva}
-          grupos={(gruposRes.data ?? []) as VersaoOrcamentoGrupo[]}
-          itensBrutos={(itensRes.data ?? []) as any[]}
-          bvsBrutos={(bvsRes.data ?? []) as any[]}
+          grupos={gruposDaTela}
+          itensBrutos={itensDaTela}
+          bvsBrutos={bvsDaTela}
+          historicoDoJob={
+            planilhaDoJob && versaoAtiva
+              ? {
+                  jobId: planilhaDoJob.jobId,
+                  aprovadaEm: (versaoAtiva as { aprovado_em?: string | null }).aprovado_em ?? null,
+                }
+              : null
+          }
           contatosBrutos={(contatosRes.data ?? []) as any[]}
           categorias={categorias}
           fornecedores={fornecedores}
@@ -1123,7 +1180,7 @@ export default async function OrcamentoDetailPage({
           produtoresDoEnvio={produtoresDoEnvio}
           cidadesIniciais={cidadesIniciais}
           clienteNome={clienteNome ?? "—"}
-          savePorItem={savePorItem}
+          savePorItem={savePorItemDaTela}
           saldosDeSave={saldosDeSave}
           job={job}
           reservado={reservado}
@@ -1235,6 +1292,7 @@ function VersaoSelecionada({
   excecaoPorNome,
   comite,
   emDecisao,
+  historicoDoJob,
 }: {
   params: { projetoId: string; orcId: string };
   session: Awaited<ReturnType<typeof requireSession>>;
@@ -1309,6 +1367,9 @@ function VersaoSelecionada({
   /** Aberta pela caixa do Comitê, por quem decide: a barra de decisão no
    *  lugar da de aprovação. */
   emDecisao: (PedidoEmDecisao & { embutido: boolean }) | null;
+  /** Decisão 226: a versão mostra a planilha do job, com o Histórico (a
+   *  versão que o cliente aprovou e cada errata depois dela). */
+  historicoDoJob: { jobId: string; aprovadaEm: string | null } | null;
 }) {
   // Orçamento de serviço Interno (decisão 105): tipo F · Interno travado,
   // planejado igual ao orçado e sem save.
@@ -1547,6 +1608,27 @@ function VersaoSelecionada({
     projetoComVariasMarcas: false,
   };
 
+  // Decisão 226: com job aberto, a versão aprovada mostra a planilha do job
+  // e ganha o Histórico (a versão do cliente e cada errata depois dela).
+  const comHistorico = (conteudo: ReactNode) =>
+    historicoDoJob ? (
+      <HistoricoDoOrcamento
+        jobId={historicoDoJob.jobId}
+        aprovadaEm={historicoDoJob.aprovadaEm}
+        versaoId={versao.id}
+        tenantId={session.activeTenant.id}
+        moeda={versao.moeda}
+        percentualHonorarios={Number(versao.percentual_honorarios)}
+        percentualImposto={Number(versao.percentual_imposto)}
+        internacional={planilha.internacional}
+      >
+        {conteudo}
+      </HistoricoDoOrcamento>
+    ) : (
+      conteudo
+    );
+  const Mensal = historicoDoJob ? PlanilhaMensalDoHistorico : PlanilhaMensal;
+
   return (
     <>
       {/* Parâmetros da aba à esquerda, rentabilidade à direita — o resumo
@@ -1631,6 +1713,8 @@ function VersaoSelecionada({
                 : null
             }
             podeRegistrarExcecao={pode(session.activeRole, "orcamentos.excecao_fechamento")}
+            // Decisão 225: com a regra ligada, quem não aprova direto é avisado.
+            excecaoVaiAoComite={comite?.excecaoVaiAoComite === true && session.activeRole !== "administrador"}
             itensDoFechamento={itens}
           />
           {pode(session.activeRole, "orcamentos.aprovar") && !arquivado && !jobCancelado && (
@@ -1683,6 +1767,7 @@ function VersaoSelecionada({
       <BannersEstado
         versaoLabel={`v${versao.numero_versao}`}
         aprovada={versao.status === "aprovada"}
+        comErratas={historicoDoJob !== null}
         job={job}
         jobHref={job ? `/jobs/${job.id}` : null}
         correcao={
@@ -1703,7 +1788,7 @@ function VersaoSelecionada({
           ao lado do "Editar meses": a planilha troca todos os meses de uma
           vez (15/09/2026). O fluxo de aprovação e abertura, abaixo, é o
           mesmo dos outros. */}
-      {midiaOff && paramsMidia ? (
+      {comHistorico(midiaOff && paramsMidia ? (
         // Mídia Off (decisão 147): régua da campanha, meios por mês e a
         // conta da mídia.
         <PlanilhaMidiaOff
@@ -1724,7 +1809,7 @@ function VersaoSelecionada({
           }
         />
       ) : planilha.modeloPlanilha === "mensal" ? (
-        <PlanilhaMensal
+        <Mensal
           projetoId={params.projetoId}
           orcamentoId={params.orcId}
           versao={versao}
@@ -1842,7 +1927,7 @@ function VersaoSelecionada({
         />
       </div>
       </>
-      )}
+      ))}
 
       {/* Arquivado (decisão 118) não se aprova nem vira job: a barra de
           aprovação e abertura não tem o que oferecer. O orçamento do job
@@ -1868,6 +1953,7 @@ function VersaoSelecionada({
             resultadoGeral,
             resultadoMinimo: comite?.resultadoMinimo ?? 20,
             pegaPlanejado: comite?.pegaPlanejado === true,
+            excecao: comite?.taxasDaExcecao ?? null,
             itensAcima: itens
               .filter((i) => acimaDoOrcado(i.total_planejado, i.total_orcado))
               .map((i) => ({ item: i.item, orcado: i.total_orcado, planejado: i.total_planejado })),

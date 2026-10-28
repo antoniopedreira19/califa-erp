@@ -8,9 +8,12 @@
  * - **Os valores** do orçado — R$ unitário, QT e D/M (P1) — e, desde
  *   08/10/2026, o **tipo de custo**, para qualquer tipo, enquanto nada foi
  *   lançado no item: sem PP (de qualquer situação, a emitir inclusive) e
- *   sem BV (Tiago: "do mesmo modo que com a realização de erratas"). Linha
- *   nova, linha cancelada, linha vermelha e planejado continuam sendo da
- *   errata da produção; no Interno o tipo é sempre F · Interno.
+ *   sem BV (Tiago: "do mesmo modo que com a realização de erratas"). Desde
+ *   28/10/2026 a linha com PP ou PP a emitir também troca, mas só entre os
+ *   tipos que geram PP (AR, B, C, F, FI); o BV segue travando
+ *   (`travaDoTipo`). Linha nova, linha cancelada, linha vermelha e
+ *   planejado continuam sendo da errata da produção; no Interno o tipo é
+ *   sempre F · Interno.
  * - **Linha com PP já no financeiro é editável** (P2), ao contrário da
  *   errata (decisão 040). Linha com save não: o save tem porta própria, e o
  *   banco recusa de todo jeito (`save_trava_linha_job`).
@@ -20,7 +23,10 @@
  *   imposto previsto, seguem a mesma regra. A curva de desembolso NÃO
  *   acompanha, nem no serviço Interno, em que o banco faz o planejado
  *   espelhar o orçado (Tiago, 28/09/2026: "é a previsão de recebimento que
- *   deve acompanhar").
+ *   deve acompanhar"). O job (ou o mês do mensal) que abriu sem faturamento
+ *   e não tem previsão para acompanhar recebe uma parcela nova, com a data
+ *   que o financeiro informa no pop-up (revisão de 28/10/2026) — antes, a
+ *   alteração era recusada e ia para a errata da produção.
  * - **Desde a abertura** — o job na fila, enquanto o financeiro o confere
  *   (Tiago, 28/09/2026: "desde o momento da abertura de jobs"). Ali ainda
  *   não há previsão, envio nem nota: quem acompanha é o formulário da
@@ -57,8 +63,8 @@ import { notasEmitidasDosJobs } from "@/lib/data/faturamento-por-job";
 import {
   distribuirDelta as distribuir,
   emReais as dinheiro,
-  motivoDoTipoTravado,
-  type LancamentoNaLinha,
+  motivoDaTrocaRecusada,
+  travaDoTipo,
 } from "@/lib/calculos/alteracao-financeiro";
 import { travaDoJobDeMidia } from "@/lib/data/midia-do-job";
 import {
@@ -93,6 +99,23 @@ const payloadSchema = z.object({
     .min(5, "O motivo da alteração precisa de pelo menos 5 caracteres.")
     .max(500, "O motivo da alteração passa de 500 caracteres."),
   linhas: z.array(linhaSchema).min(1, "Nenhuma linha alterada."),
+  /** A data de recebimento do faturamento que nasce sem previsão para
+   *  acompanhar (revisão de 28/10/2026): um por mês do mensal (`mes` no
+   *  primeiro dia), ou um só, com `mes` nulo, nos outros modelos. O valor
+   *  não vem da tela: é o faturamento que entra, pela conta do servidor. */
+  recebimentos_novos: z
+    .array(
+      z.object({
+        mes: z
+          .string()
+          .regex(/^\d{4}-\d{2}-01$/, "Mês inválido.")
+          .nullable(),
+        data_prevista: z
+          .string()
+          .regex(/^\d{4}-\d{2}-\d{2}$/, "Informe a data de recebimento."),
+      }),
+    )
+    .optional(),
 });
 
 export type PayloadAlteracaoFinanceiro = z.input<typeof payloadSchema>;
@@ -110,11 +133,17 @@ const MENSAGEM_PLANEJADO_FORA_DA_FILA =
 const MENSAGEM_JOB_COM_NOTA =
   "O job já tem nota emitida (faturamento parcial ou total): o orçado não muda mais pelo financeiro.";
 
-/** Previsão vazia não tem data a acompanhar: o valor novo precisaria de
- *  uma data que ninguém informou. A errata leva à revisão da abertura, que
- *  é onde a data se informa. */
+/** Previsão vazia não tem data a acompanhar. O faturamento que NASCE pede a
+ *  data no pop-up (revisão de 28/10/2026); o que diminui sem previsão
+ *  nenhuma é dado fora do lugar, e segue para a errata, que leva à revisão
+ *  da abertura. */
 const SEM_DATA_PARA_ACOMPANHAR =
   "Valor novo precisa de data: peça a errata à produção, que devolve o job para a revisão da abertura.";
+
+/** O faturamento nasceu e o pop-up não mandou a data dele. */
+function semDataDoRecebimento(rotulo: string): string {
+  return `${rotulo} não tem previsão de recebimento para acompanhar a alteração: informe a data de recebimento no pop-up da alteração.`;
+}
 
 /** O faturamento de cada mês (chave `yyyy-mm`) com as linhas num estado.
  *  A MESMA conta de `lerFaturamentoPorMesDoJob`, que fecha o envio do mês e
@@ -164,6 +193,9 @@ export async function registrarAlteracaoDoFinanceiro(
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
   const { motivo, linhas } = parsed.data;
+  const dataDoRecebimentoNovo = new Map(
+    (parsed.data.recebimentos_novos ?? []).map((r) => [r.mes?.slice(0, 7) ?? "", r.data_prevista]),
+  );
   const tenantId = session.activeTenant.id;
   const supabase = createClient();
   const travaMidia = await travaDoJobDeMidia(supabase, tenantId, jobId, "alteracao");
@@ -476,31 +508,42 @@ export async function registrarAlteracaoDoFinanceiro(
     return { ok: false, message: "Nenhuma linha foi alterada." };
   }
 
-  // ---- A troca de tipo: só enquanto nada foi lançado no item ----
+  // ---- A troca de tipo: livre sem nada lançado; com PP, entre os tipos
+  //      com PP; com BV, não (revisão de 28/10/2026) ----
   // Pela função do banco, que vê as PPs de todas as empresas: a RLS de
   // `pedidos_compra` filtra por empresa, e a trava não pode depender do que
   // o usuário enxerga. A gravação confere de novo, na transação.
   const trocasDeTipo = mudancas.filter((m) => m.tipoPara !== m.tipoDe);
   if (trocasDeTipo.length > 0) {
-    const { data: lancamentos, error: lancErr } = await supabase.rpc(
-      "lancamentos_nas_linhas_do_job",
+    const { data: travas, error: travaErr } = await supabase.rpc(
+      "travas_do_tipo_nas_linhas_do_job",
       { p_ids: trocasDeTipo.map((m) => m.id) },
     );
-    if (lancErr) {
-      console.error("[alteracao-financeiro.lancamentos]", lancErr.message);
+    if (travaErr) {
+      console.error("[alteracao-financeiro.travas-do-tipo]", travaErr.message);
       return {
         ok: false,
         message: "Não foi possível conferir as PPs e os BVs das linhas. Tente de novo.",
       };
     }
-    const lancamentoPorId = new Map(
-      ((lancamentos ?? []) as Array<{ job_item_orcado_id: string; lancamento: string | null }>).map(
-        (r) => [r.job_item_orcado_id, r.lancamento as LancamentoNaLinha | null],
-      ),
+    const travaPorId = new Map(
+      (
+        (travas ?? []) as Array<{
+          job_item_orcado_id: string;
+          tem_pp: boolean;
+          tem_pp_a_emitir: boolean;
+          tem_bv: boolean;
+        }>
+      ).map((r) => [
+        r.job_item_orcado_id,
+        { pp: r.tem_pp, ppAEmitir: r.tem_pp_a_emitir, bv: r.tem_bv },
+      ]),
     );
     for (const m of trocasDeTipo) {
-      const lancamento = lancamentoPorId.get(m.id);
-      if (lancamento) return { ok: false, message: motivoDoTipoTravado(lancamento, m.item) };
+      const lancamentos = travaPorId.get(m.id);
+      if (!lancamentos) continue;
+      const recusa = motivoDaTrocaRecusada(travaDoTipo(m.tipoDe, lancamentos), m.tipoPara, m.item);
+      if (recusa) return { ok: false, message: recusa };
     }
   }
 
@@ -535,6 +578,10 @@ export async function registrarAlteracaoDoFinanceiro(
   }));
   let recebimentoNovo = recebimentoAtual;
   const enviosNovos = new Map<string, EnvioLido>();
+  // O faturamento que nasce sem previsão (revisão de 28/10/2026): uma
+  // parcela nova, com a data do pop-up e o valor que entra.
+  const recebimentosCriados: Array<{ mes: string | null; data_prevista: string; valor: number }> =
+    [];
 
   if (mensal) {
     // Cada mês recebe o que ele fatura: só os meses mexidos andam.
@@ -548,10 +595,17 @@ export async function registrarAlteracaoDoFinanceiro(
       const doMes = recebimentoNovo.filter((r) => r.mes?.slice(0, 7) === chave);
       if (!naAbertura && doMes.length === 0 && Math.abs(delta) >= 0.005) {
         const nome = nomeDoMes(`${chave}-01`);
-        return {
-          ok: false,
-          message: `${nome.charAt(0).toUpperCase() + nome.slice(1)} não tinha faturamento na abertura e não tem previsão de recebimento para acompanhar a alteração. ${SEM_DATA_PARA_ACOMPANHAR}`,
-        };
+        const rotulo = nome.charAt(0).toUpperCase() + nome.slice(1);
+        if (delta < 0) {
+          return {
+            ok: false,
+            message: `${rotulo} não tinha faturamento na abertura e não tem previsão de recebimento para acompanhar a alteração. ${SEM_DATA_PARA_ACOMPANHAR}`,
+          };
+        }
+        const data = dataDoRecebimentoNovo.get(chave);
+        if (!data) return { ok: false, message: semDataDoRecebimento(rotulo) };
+        recebimentosCriados.push({ mes: `${chave}-01`, data_prevista: data, valor: delta });
+        continue;
       }
       const novos = new Map(distribuir(doMes, delta).map((r) => [r.id, r]));
       recebimentoNovo = recebimentoNovo.map((r) => novos.get(r.id) ?? r);
@@ -568,10 +622,15 @@ export async function registrarAlteracaoDoFinanceiro(
   } else {
     const delta = dinheiro(fatDepois - fatAntes);
     if (!naAbertura && recebimentoAtual.length === 0 && Math.abs(delta) >= 0.005) {
-      return {
-        ok: false,
-        message: `O job abriu sem faturamento previsto e não tem previsão de recebimento para acompanhar a alteração. ${SEM_DATA_PARA_ACOMPANHAR}`,
-      };
+      if (delta < 0) {
+        return {
+          ok: false,
+          message: `O job abriu sem faturamento previsto e não tem previsão de recebimento para acompanhar a alteração. ${SEM_DATA_PARA_ACOMPANHAR}`,
+        };
+      }
+      const data = dataDoRecebimentoNovo.get("");
+      if (!data) return { ok: false, message: semDataDoRecebimento("O job") };
+      recebimentosCriados.push({ mes: null, data_prevista: data, valor: delta });
     }
     recebimentoNovo = distribuir(recebimentoAtual, delta);
     const envio = envios.find((e) => e.mes === null);
@@ -661,7 +720,7 @@ export async function registrarAlteracaoDoFinanceiro(
           faturamento_previsto_antes: fatAntes,
           faturamento_previsto_depois: fatDepois,
           recebimento_antes: foto(recebimentoAtual),
-          recebimento_depois: foto(recebimentoNovo),
+          recebimento_depois: [...foto(recebimentoNovo), ...foto(recebimentosCriados)],
           impostos_antes: foto(impostosAtuais),
           impostos_depois: foto(impostosNovos),
           envio_antes: enviosTocados.map(fotoEnvio),
@@ -722,6 +781,7 @@ export async function registrarAlteracaoDoFinanceiro(
         impostos: impostosNovos
           .filter((r, k) => r.valor !== impostosAtuais[k]?.valor)
           .map((r) => ({ id: r.id, valor: r.valor })),
+        recebimento_novo: recebimentosCriados,
         espelhos,
       },
     },
@@ -770,6 +830,7 @@ export async function registrarAlteracaoDoFinanceiro(
       faturamento_previsto_antes: fatAntes,
       faturamento_previsto_depois: fatDepois,
       envios_acompanharam: enviosTocados.length,
+      recebimentos_criados: recebimentosCriados,
     },
   });
 

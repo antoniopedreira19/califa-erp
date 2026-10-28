@@ -23,8 +23,10 @@ import {
 } from "@/lib/exportacao/interna-da-versao";
 import { pode } from "@/lib/permissoes";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
+import { planilhaDoJobNaVersao, versaoMostraOJob } from "@/lib/data/versao-aprovada-do-job";
 import type {
   CategoriaModeloPlanilha,
+  JobStatus,
   VersaoOrcamento,
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
@@ -76,7 +78,7 @@ export async function GET(
       .from("orcamentos")
       // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
       .select(
-        "id, nome, cliente:clientes!orcamentos_cliente_id_fkey(nome_fantasia), categoria:categorias_dominio!categoria_id(modelo_planilha)",
+        "id, nome, versao_aprovada_id, cliente:clientes!orcamentos_cliente_id_fkey(nome_fantasia), categoria:categorias_dominio!categoria_id(modelo_planilha)",
       )
       .eq("id", params.orcId)
       .eq("projeto_id", params.projetoId)
@@ -84,6 +86,7 @@ export async function GET(
       .maybeSingle<{
         id: string;
         nome: string;
+        versao_aprovada_id: string | null;
         cliente: { nome_fantasia: string } | null;
         categoria: { modelo_planilha: CategoriaModeloPlanilha } | null;
       }>(),
@@ -120,8 +123,36 @@ export async function GET(
 
   const versao = versaoRes.data;
   const orcamento = orcRes.data;
-  const grupos = gruposRes.data ?? [];
-  const itens = (itensRes.data ?? []).map((it: any) => ({
+  let grupos: VersaoOrcamentoGrupo[] = gruposRes.data ?? [];
+  let itensLidos: VersaoOrcamentoItem[] = itensRes.data ?? [];
+
+  // Decisão 226: a versão aprovada de job aberto sai como está hoje — com as
+  // erratas, que são combinadas com o cliente. Sempre a versão mais recente.
+  const { data: jobVivo } = await supabase
+    .from("jobs")
+    .select("id, status")
+    .eq("orcamento_id", params.orcId)
+    .eq("tenant_id", session.activeTenant.id)
+    .neq("status", "cancelado")
+    .maybeSingle<{ id: string; status: JobStatus }>();
+  if (
+    jobVivo &&
+    versaoMostraOJob({
+      versaoId: versao.id,
+      versaoAprovadaId: orcamento.versao_aprovada_id,
+      jobStatus: jobVivo.status,
+      modelo: orcamento.categoria?.modelo_planilha ?? "nacional",
+    })
+  ) {
+    const doJob = await planilhaDoJobNaVersao(supabase, session.activeTenant.id, jobVivo.id, versao.id);
+    if (!doJob.ok) {
+      return NextResponse.json({ error: doJob.message }, { status: 500 });
+    }
+    grupos = doJob.planilha.grupos;
+    itensLidos = doJob.planilha.itens;
+  }
+
+  const itens = itensLidos.map((it: any) => ({
     ...it,
     valor_unitario_orcado: Number(it.valor_unitario_orcado ?? 0),
     quantidade_orcada: Number(it.quantidade_orcada ?? 1),

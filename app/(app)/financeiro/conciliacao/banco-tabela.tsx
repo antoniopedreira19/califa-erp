@@ -13,7 +13,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowLeftRight, CheckCheck, ChevronDown, CircleSlash, Link2, Plus, Search, Undo2, Wand2 } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, CheckCheck, ChevronDown, CircleSlash, Layers, Link2, Plus, Search, Undo2, Wand2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import type { GrupoDeIguais, TituloDoMotor } from "@/lib/conciliacao/motor";
@@ -53,6 +53,9 @@ export interface AcoesDoBanco {
   desfazer: (r: ResultadoDaLinha) => void;
   corrigirBaixa: (r: ResultadoDaLinha) => void;
   cancelarBaixa: (l: LancamentoSemLinha) => void;
+  /** Várias linhas do banco com várias baixas, quando a soma só bate no
+   *  conjunto (decisão 211, 28/10/2026). */
+  conciliarEmConjunto: (l: LancamentoSemLinha) => void;
   /** O Extrato, com a baixa em destaque, para trocar a conta ou a data. */
   linkDoLancamento: (l: LancamentoSemLinha) => string;
 }
@@ -854,6 +857,18 @@ export function SemLinhaNoBanco({ lancs, acoes }: { lancs: LancamentoSemLinha[];
                       >
                         <Search className="h-3.5 w-3.5" />
                       </Link>
+                    }
+                    terceiro={
+                      <button
+                        type="button"
+                        disabled={acoes.ocupado}
+                        onClick={() => acoes.conciliarEmConjunto(l)}
+                        title="Conciliar em conjunto com linhas do banco"
+                        aria-label="Conciliar em conjunto com linhas do banco"
+                        className={ICONE}
+                      >
+                        <Layers className="h-3.5 w-3.5" />
+                      </button>
                     }
                   />
                 </td>

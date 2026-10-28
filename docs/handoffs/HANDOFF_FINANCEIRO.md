@@ -8560,6 +8560,53 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - O Santander escreve a volta do PIX como "DEVOLUCAO DE PIX" ou "PIX
   DEVOLVIDO". O motor (`formaDoHistorico`) e `registrar_saiu_e_voltou`
   (migration `20261028300002`) passam a aceitar os dois.
-- 27 pares "saiu e voltou" registrados pela tela na California Santander
-  (R$ 181.620,40). Duas devoluções "NAO EFETUADA" de 08/10 ficaram de fora:
-  as saídas daquele dia estão ligadas à cauda do histórico.
+- 29 pares "saiu e voltou" na California Santander (R$ 183.170,40), todas
+  as devoluções de outubro. Nas duas "NAO EFETUADA" de 08/10 (R$ 350 e
+  R$ 1.200), a saída do dia estava ligada à cauda: desfeita a ligação de
+  uma de cada valor e feito o par (o extrato não diz qual favorecido ficou
+  sem o PIX).
+
+## ⚠️ Nota de 2026-10-28 — parâmetros do job também depois da abertura (decisão 224)
+
+- Na página do job aberto, o "Editar" da linha de parâmetros vale para
+  qualquer modelo, com as regras do "Editar orçado": até a primeira nota
+  emitida ou o encerramento. A previsão de recebimento, os recolhimentos de
+  imposto e o envio ainda sem nota acompanham. Com nota, cadeado; o câmbio
+  do internacional segue até o encerramento.
+- Migration `20261028400001` (só tira a recusa "só o câmbio" da função).
+- Teste no TES-1036/26 (fee 13 → 14% com o job aberto). Ver a
+  [decisão 224](../decisions/224-parametros-do-job-na-abertura.md).
+
+## ⚠️ Nota de 2026-10-28 (5) — conciliar em conjunto (decisão 211)
+
+- Migration `20261028300003`: `conciliar_em_conjunto(p_linha_ids,
+  p_lancamento_ids)` liga várias linhas do banco a várias baixas sem linha da
+  mesma conta quando a soma bate ao centavo e cada linha recebe ao menos uma
+  baixa (a baixa com os juros, e as partes da mesma guia, contam como uma).
+  `conciliada_como = 'conjunto'` e o mesmo `grupo` nas linhas; o Desfazer
+  solta o conjunto inteiro, e `lancamento_desliga_a_linha` também, quando
+  uma baixa dele é cancelada.
+- Aba Banco: em "Baixa no sistema, sem linha no banco", o botão "Conciliar
+  em conjunto com linhas do banco" abre o diálogo com as linhas pendentes e
+  as baixas sem linha até 7 dias da baixa; só confirma com a soma batendo.
+- Usado nos 4 PIX de 14/10 da Santander Hitlab contra as 5 PPs do job
+  AMB-1002/26 (dois conjuntos, R$ 197.176,80).
+
+## ⚠️ Nota de 2026-10-28 (6) — "Editar orçado": tipo da linha com PP e data do faturamento que nasce (revisão da decisão 115)
+
+- No "Editar orçado" da Planilha Interna, a linha com PP ou PP a emitir
+  passa a trocar de tipo, mas só entre AR, B, C, F e FI (a lista só mostra
+  esses, e o `title` da célula diz por quê). BV segue travando. A PP não
+  muda.
+- O job (ou o mês do mensal) sem parcela de previsão de recebimento, em que
+  a alteração faz entrar faturamento, não recusa mais: o pop-up pede a data
+  de cada mês ("Meses sem previsão de recebimento: informe a data") e cria a
+  parcela com o valor que entra. Na fila da abertura, nada muda.
+- Migration `20261028600001` (função nova `travas_do_tipo_nas_linhas_do_job`
+  e `registrar_alteracao_do_financeiro` com a trava nova e o
+  `recebimento_novo`).
+- Origem: o UER-1002/26, Always On da Universal aberto com as 35 linhas em
+  F · Interno, que o financeiro vai corrigir para A · Repasse com os
+  honorários zerados (parâmetros do job, decisão 224). Teste no TES-1035/26,
+  desfeito. Ver a §12 da
+  [decisão 115](../decisions/115-o-financeiro-edita-o-orcado-do-job.md).

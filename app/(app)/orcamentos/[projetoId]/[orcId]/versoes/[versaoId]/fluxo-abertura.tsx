@@ -823,6 +823,7 @@ export function FluxoAbertura({
           resultadoGeral,
           resultadoMinimo: comite?.resultadoMinimo ?? 20,
           pegaPlanejado: comite?.pegaPlanejado === true,
+          excecao: comite?.taxasDaExcecao ?? null,
           itensAcima: itensAcimaDoOrcado,
         })}
         motivoInicial={devolvidaPeloComite ? (pedidoDoComite?.motivo ?? "") : ""}
@@ -1003,9 +1004,12 @@ export function BannersEstado({
   job,
   jobHref,
   correcao,
+  comErratas = false,
 }: {
   versaoLabel: string;
   aprovada: boolean;
+  /** Decisão 226: a versão mostra a planilha do job, com as erratas. */
+  comErratas?: boolean;
   job: JobExistente | null;
   jobHref: string | null;
   /** O job cancelado pelo "Cancelar aprovação" da devolução (decisão 128):
@@ -1030,7 +1034,9 @@ export function BannersEstado({
             <p className="mt-0.5 text-xs text-emerald-700">
               {devolvido
                 ? "Orçado travado · com o job devolvido, os dados do orçamento e o planejado podem ser corrigidos."
-                : "Valores travados para edição · novas alterações exigem uma nova versão."}
+                : comErratas
+                  ? "Valores travados para edição · as erratas do job entram aqui; a versão que o cliente aprovou fica no Histórico."
+                  : "Valores travados para edição · novas alterações exigem uma nova versão."}
             </p>
           </div>
         </div>

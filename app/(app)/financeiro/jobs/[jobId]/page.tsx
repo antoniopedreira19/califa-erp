@@ -850,14 +850,22 @@ export default async function JobNoFinanceiroPage({
               papelCorrigeNf={pode(session.activeRole, "jobs.corrigir_nf_pp")}
               confirmarSaidaParaOrcamento
               edicaoDoFinanceiro={edicaoDoFinanceiro}
-              // Os parâmetros do job (decisão 224): depois da abertura, só o
-              // câmbio muda — e só até o encerramento.
+              // Os parâmetros do job (decisão 224): com o job aberto, como o
+              // "Editar orçado" — até a primeira nota (em qualquer mês, no
+              // mensal) ou o encerramento. O câmbio segue até o encerramento.
               parametrosDoJob={{
                 parametros: parametrosGravadosDe(versaoAprovada),
                 edicao:
                   pode(session.activeRole, "jobs.editar_orcado_financeiro") &&
                   (job.status === "aberto" || job.status === "em_producao")
-                    ? { naFila: false }
+                    ? {
+                        naFila: false,
+                        travaDosParametros:
+                          temNotaEmitida ||
+                          detalhe.faturamentoMensal.some((m) => m.faturado > 0.004)
+                            ? "O job já tem nota emitida: honorários, impostos e taxas não mudam mais pelo financeiro."
+                            : null,
+                      }
                     : null,
                 alteracoes: alteracoesDosParametros(detalhe.alteracoesFinanceiro),
               }}

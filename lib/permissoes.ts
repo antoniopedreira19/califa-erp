@@ -127,7 +127,8 @@ export const permissoes = {
   /** Exceção no fechamento do internacional (decisão 206): int. taxes,
    *  impostos BR e custo de transação fora do padrão, com motivo, só numa
    *  versão. O banco confere de novo (`versao_fechamento_internacional_no_padrao`). */
-  "orcamentos.excecao_fechamento": ["administrador"],
+  // Decisão 225: o GP também; a versão com exceção vai ao Comitê.
+  "orcamentos.excecao_fechamento": ["administrador", "gerente_producao"],
   "orcamentos.aprovar":            ["administrador", "gerente_producao"],
   /** Marcar save e consumo de save no orçamento (24/09/2026): a mesma
    *  regra do job — administrador ou GP. */

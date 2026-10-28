@@ -6555,3 +6555,29 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
   mesmo caminho.
 - A `JobRealizadoSection` ganhou a prop obrigatória `parametrosDoJob`: a
   linha só aparece nas telas do financeiro; a produção passa `null`.
+
+## ⚠️ Nota de 2026-10-28 — "Cancelar" travado na linha com PP gerada (decisão 151)
+
+- No modo errata, a calha oferecia "Cancelar" na linha com PP só gerada; o
+  servidor recusava na confirmação ("tem o Pedido de Produção … no
+  histórico"). Agora o botão nasce travado, com o motivo no `title`
+  (`MOTIVO_CANCELAR_COM_PP`, `job-item-realizado-table.tsx`). Sem migration.
+- Conferido no TES-1008/26 (Itens 3, 4, 5 e 7 do Agrupamento 1 travados;
+  Item 6, sem PP, livre), sem gravar errata.
+- Em aberto: linha com só PP cancelada (ver a nota na decisão 151).
+
+## ⚠️ Nota de 2026-10-28 (2) — "Editar planilha" e a linha vermelha fora da errata (decisão 226)
+
+- O "Realizar errata" virou **"Editar planilha"** ("Editando planilha"
+  ligado). A barra fica neutra ("Planilha em edição", "Salvar") até haver
+  mudança que é errata.
+- **Linha vermelha não é errata:** só ela no rascunho → "Salvar linha
+  vermelha" grava direto, sem pop-up (`salvarLinhasVermelhas`). Com errata
+  junto, ela entra antes e fora da errata (seção própria no "Confirmar
+  errata"). Não devolve ao mural, não trava o envio de PP (185) e o produtor
+  a grava sem o GP. Vermelha em agrupamento novo da mesma errata fica nela.
+- Banco: `jobs_itens_orcado.criada_por` e
+  `adicionar_linhas_vermelhas_do_job` (migration `20261028800001`).
+- O histórico da planilha (186) ganhou o momento "Linha vermelha".
+- Em aberto: o BOC-1003/26 tem uma errata pronta com 7 vermelhas num
+  agrupamento novo — segue esperando o GP.

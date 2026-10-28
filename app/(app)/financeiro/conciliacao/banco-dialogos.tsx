@@ -8,7 +8,7 @@
  */
 
 import * as React from "react";
-import { CheckCheck, Wand2 } from "lucide-react";
+import { CheckCheck, Layers, Wand2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -421,6 +421,184 @@ export function ProcurarTituloDialog({
           <Botao onClick={onFechar}>Cancelar</Botao>
           <Botao variante="verde" disabled={!pode} onClick={() => onEscolher(escolhidos)}>
             {escolhidos.length > 1 ? `Baixar e conciliar os ${escolhidos.length}` : "Abrir a baixa"}
+          </Botao>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Conciliar em conjunto
+// ---------------------------------------------------------------------------
+
+/** A distância, em dias, que o conjunto procura em volta da baixa. */
+const DIAS_DO_CONJUNTO = 7;
+
+/**
+ * Várias linhas do banco com várias baixas, quando a soma só bate no
+ * conjunto: o fornecedor que recebeu as PPs em PIX de outros valores
+ * (decisão 211, 28/10/2026). Cada linha do banco precisa de ao menos uma
+ * baixa, e a soma tem de bater centavo a centavo.
+ */
+export function ConjuntoDialog({
+  inicial,
+  linhas,
+  lancamentos,
+  pending,
+  erro,
+  onFechar,
+  onConfirmar,
+}: {
+  inicial: LancamentoSemLinha;
+  /** As linhas do banco ainda pendentes da conta. */
+  linhas: ReadonlyArray<{ id: string; data: string; valor: number; historico: string }>;
+  /** As baixas que o banco não mostra. */
+  lancamentos: LancamentoSemLinha[];
+  pending: boolean;
+  erro: string | null;
+  onFechar: () => void;
+  onConfirmar: (linhaIds: string[], lancamentoIds: string[]) => void;
+}) {
+  const [linhasMarcadas, setLinhasMarcadas] = React.useState<string[]>([]);
+  const [baixasMarcadas, setBaixasMarcadas] = React.useState<string[]>([inicial.id]);
+  const perto = (data: string) => Math.abs(Date.parse(data) - Date.parse(inicial.data)) <= DIAS_DO_CONJUNTO * 86_400_000;
+  const mesmoSinal = (v: number) => Math.sign(v) === Math.sign(inicial.valor);
+  const porData = <T extends { data: string; valor: number }>(a: T, b: T) =>
+    a.data.localeCompare(b.data) || Math.abs(b.valor) - Math.abs(a.valor);
+  const candidatasDoBanco = linhas.filter((l) => perto(l.data) && mesmoSinal(l.valor)).sort(porData);
+  const candidatasBaixas = lancamentos.filter((l) => perto(l.data) && mesmoSinal(l.valor)).sort(porData);
+  const doBanco = candidatasDoBanco.filter((l) => linhasMarcadas.includes(l.id));
+  const baixas = candidatasBaixas.filter((l) => baixasMarcadas.includes(l.id));
+  const somaBanco = r2(doBanco.reduce((s, l) => s + l.valor, 0));
+  const somaBaixas = r2(baixas.reduce((s, l) => s + l.valor, 0));
+  const diferenca = r2(somaBanco - somaBaixas);
+  const alternar = (setter: React.Dispatch<React.SetStateAction<string[]>>, id: string) =>
+    setter((m) => (m.includes(id) ? m.filter((x) => x !== id) : [...m, id]));
+
+  let rodape: React.ReactNode;
+  let pode = false;
+  if (doBanco.length === 0) {
+    rodape = <span className="text-muted-foreground">Marque as linhas do banco que pagaram estas baixas.</span>;
+  } else if (baixas.length < doBanco.length) {
+    rodape = (
+      <span className="font-semibold text-amber-800">
+        Cada linha do banco precisa de ao menos uma baixa: são {doBanco.length} linhas e {baixas.length}{" "}
+        {baixas.length === 1 ? "baixa" : "baixas"}.
+      </span>
+    );
+  } else if (diferenca !== 0) {
+    rodape = (
+      <span className="font-semibold text-amber-800">
+        Banco {moeda(Math.abs(somaBanco))} · baixas {moeda(Math.abs(somaBaixas))}:{" "}
+        {Math.abs(somaBanco) > Math.abs(somaBaixas) ? `faltam ${moeda(Math.abs(diferenca))} de baixa` : `sobram ${moeda(Math.abs(diferenca))} de baixa`}. O conjunto tem de bater centavo a centavo.
+      </span>
+    );
+  } else {
+    pode = true;
+    rodape = (
+      <span className="text-muted-foreground">
+        {doBanco.length} {doBanco.length === 1 ? "linha do banco" : "linhas do banco"} e {baixas.length}{" "}
+        {baixas.length === 1 ? "baixa" : "baixas"} somam {moeda(Math.abs(somaBanco))}: batem.
+      </span>
+    );
+  }
+
+  const caixa = (marcado: boolean) => (
+    <span
+      role="checkbox"
+      aria-checked={marcado}
+      className={cn(
+        "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+        marcado ? "border-california-red bg-california-red text-white" : "border-gray-300 bg-white",
+      )}
+    >
+      {marcado && <CheckCheck className="h-3 w-3" strokeWidth={3} />}
+    </span>
+  );
+  const vazio = (texto: string) => (
+    <p className="rounded-lg border border-dashed border-border px-4 py-4 text-center text-xs text-muted-foreground">{texto}</p>
+  );
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && onFechar()}>
+      <DialogContent className="sm:max-w-[780px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Layers className="h-5 w-5 text-california-red" />
+            Conciliar em conjunto
+          </DialogTitle>
+          <DialogDescription className="text-[12.5px]">
+            Quando o banco pagou as baixas em linhas de outros valores, que não batem uma a uma. Marque as linhas do banco e
+            as baixas do mesmo pagamento, até {DIAS_DO_CONJUNTO} dias da baixa: a soma tem de bater centavo a centavo.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-1.5">
+          <p className="text-xs font-semibold">Linhas do banco</p>
+          {candidatasDoBanco.length === 0 ? (
+            vazio("Nenhuma linha do banco pendente perto desta data.")
+          ) : (
+            <div className="max-h-[28vh] divide-y divide-border overflow-y-auto rounded-lg border border-border">
+              {candidatasDoBanco.map((l) => {
+                const marcado = linhasMarcadas.includes(l.id);
+                return (
+                  <button
+                    key={l.id}
+                    type="button"
+                    onClick={() => alternar(setLinhasMarcadas, l.id)}
+                    className={cn("flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-muted/50", marcado && "bg-california-red/[0.04]")}
+                  >
+                    {caixa(marcado)}
+                    <span className="w-[72px] shrink-0 font-mono text-xs">{dataBR(l.data)}</span>
+                    <span className="min-w-0 flex-1 truncate text-xs" title={l.historico}>
+                      {l.historico.replace(/\s{2,}.*$/, "")}
+                    </span>
+                    <span className="w-[120px] text-right font-mono text-xs">{moeda(Math.abs(l.valor))}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <div className="space-y-1.5">
+          <p className="text-xs font-semibold">Baixas que o banco não mostra</p>
+          {candidatasBaixas.length === 0 ? (
+            vazio("Nenhuma baixa sem linha perto desta data.")
+          ) : (
+            <div className="max-h-[28vh] divide-y divide-border overflow-y-auto rounded-lg border border-border">
+              {candidatasBaixas.map((l) => {
+                const marcado = baixasMarcadas.includes(l.id);
+                return (
+                  <button
+                    key={l.id}
+                    type="button"
+                    onClick={() => alternar(setBaixasMarcadas, l.id)}
+                    className={cn("flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-muted/50", marcado && "bg-california-red/[0.04]")}
+                  >
+                    {caixa(marcado)}
+                    <span className="w-[72px] shrink-0 font-mono text-xs">{dataBR(l.data)}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-xs font-semibold" title={l.descricao}>
+                        {l.descricao}
+                      </span>
+                      <span className="block truncate text-[11px] text-muted-foreground">{l.fornecedor ?? "—"}</span>
+                    </span>
+                    <span className="w-[120px] text-right font-mono text-xs">{moeda(Math.abs(l.valor))}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+        <DialogFooter className="items-center gap-3 text-[12px]">
+          <span className="mr-auto min-w-[260px] flex-1">{erro ? <Erro texto={erro} /> : rodape}</span>
+          <Botao onClick={onFechar}>Cancelar</Botao>
+          <Botao
+            variante="verde"
+            disabled={!pode || pending}
+            onClick={() => onConfirmar(doBanco.map((l) => l.id), baixas.flatMap((l) => l.ids))}
+          >
+            {pending ? "Conciliando…" : "Conciliar o conjunto"}
           </Botao>
         </DialogFooter>
       </DialogContent>

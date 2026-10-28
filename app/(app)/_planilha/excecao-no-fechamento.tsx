@@ -85,6 +85,7 @@ export function ExcecaoDialog({
   erro,
   onAplicar,
   onRemover,
+  vaiAoComite,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -93,6 +94,8 @@ export function ExcecaoDialog({
   atual: TaxasDoFechamento;
   /** Fee da versão, em % — não é exceção; só aparece para conferir. */
   fee: number;
+  /** Decisão 225: a versão com exceção será aprovada pelo Comitê. */
+  vaiAoComite: boolean;
   /** Faturamento previsto da versão com estas três taxas e o fee atual. */
   faturamento: (t: TaxasDoFechamento) => number;
   pending: boolean;
@@ -150,6 +153,7 @@ export function ExcecaoDialog({
           <DialogDescription className="text-[13.5px] leading-relaxed">
             Vale só para esta versão. O padrão do sistema não muda, e o financeiro é avisado na
             abertura do job.
+            {vaiAoComite && " Com a exceção, a aprovação da versão passa pelo Comitê de Aprovações."}
           </DialogDescription>
         </DialogHeader>
 

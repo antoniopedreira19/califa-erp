@@ -10,6 +10,10 @@
  * mantêm o nome antigo de propósito: renomear os dois arrastaria a
  * seção, o handoff e o histórico do git por uma mudança de rótulo.
  *
+ * ⚠️ 28/10/2026 (decisão 226): o rótulo passou a "Editar planilha". A
+ * linha vermelha saiu da errata — ela entra direto, pelo mesmo modo de
+ * edição —, e "Realizar errata" deixou de dizer o que o botão faz.
+ *
  * ⚠️ Até 27/08/2026 este botão abria um drawer com uma SEGUNDA tabela, na
  * qual se editava o orçado longe da planilha. Ele agora só liga e desliga
  * o modo errata na planilha que já está na tela — o estado mora em
@@ -58,7 +62,7 @@ export function AlterarOrcadoButton({
       )}
     >
       <PencilLine className="h-3.5 w-3.5 text-california-red" />
-      {ativo ? "Realizando errata" : (rotuloDaPronta ?? "Realizar errata")}
+      {ativo ? "Editando planilha" : (rotuloDaPronta ?? "Editar planilha")}
     </button>
   );
 }

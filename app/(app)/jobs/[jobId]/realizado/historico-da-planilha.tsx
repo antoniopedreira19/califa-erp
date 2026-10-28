@@ -14,6 +14,7 @@
  */
 import * as React from "react";
 import {
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Eye,
@@ -22,6 +23,7 @@ import {
   Landmark,
   Loader2,
   PiggyBank,
+  Plus,
   Send,
   Undo2,
   Unlock,
@@ -50,11 +52,14 @@ function corDoDelta(delta: number): string {
 }
 
 function iconeDe(v: VersaoDaPlanilha) {
+  // Decisão 226: a versão que o cliente aprovou, no histórico do orçamento.
+  if (v.chave === "aprovada") return CheckCircle2;
   if (v.tipo === "errata") return v.rotulo === "Errata de save" ? PiggyBank : FilePenLine;
   if (v.tipo === "fila" || v.tipo === "alteracao") return Landmark;
   if (v.tipo === "save") return PiggyBank;
   if (v.tipo === "abertura") return Unlock;
   if (v.tipo === "envio") return Send;
+  if (v.tipo === "linha_vermelha") return Plus;
   return Eye;
 }
 
@@ -65,9 +70,12 @@ function plural(n: number, um: string, varios: string) {
 /** "1 linha nova · 1 linha cancelada" — o que o momento mexeu. */
 export function resumoDaVersao(v: VersaoDaPlanilha): string {
   if (v.tipo === "atual") return "Como está hoje";
+  if (v.chave === "aprovada") return "Versão que o cliente aprovou";
   if (v.tipo === "envio") return "Nasce da versão aprovada do orçamento";
   if (v.tipo === "abertura") return "Valor inicial do job";
   if (v.tipo === "save") return "A linha sai do save";
+  // Decisão 226: a linha vermelha que entrou sem errata.
+  if (v.tipo === "linha_vermelha") return `${v.mudancas[0]?.item ?? "Linha"} · sem orçado e sem planejado`;
   const conta = (a: MudancaNaLinha["acao"]) => v.mudancas.filter((m) => m.acao === a).length;
   const partes: string[] = [];
   if (conta("nova")) partes.push(plural(conta("nova"), "linha nova", "linhas novas"));
@@ -113,7 +121,13 @@ export function BotaoHistorico({
   moeda,
   onAbrir,
   onEscolher,
+  titulo = "Histórico da planilha",
+  dica = "As versões da planilha, de cada momento do job",
 }: {
+  /** O título da lista e a dica do botão: o orçamento tem os seus
+   *  (decisão 226). */
+  titulo?: string;
+  dica?: string;
   /** Da mais nova (a atual) para a mais antiga; `null` antes da leitura. */
   versoes: VersaoDaPlanilha[] | null;
   carregando: boolean;
@@ -155,7 +169,7 @@ export function BotaoHistorico({
           if (!aberto) onAbrir();
           setAberto((v) => !v);
         }}
-        title="As versões da planilha, de cada momento do job"
+        title={dica}
         className={cn(
           "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors",
           vendoAntiga ? HISTORICO.botaoAtivo : "border-border bg-card text-foreground hover:bg-muted",
@@ -178,7 +192,7 @@ export function BotaoHistorico({
       {aberto && (
         <div className="absolute right-0 top-full z-30 mt-2 w-[440px] overflow-hidden rounded-xl border border-[#d7d5cf] bg-card text-left shadow-[0_14px_30px_-12px_rgba(0,0,0,.28)]">
           <p className="border-b border-border px-3.5 pb-1.5 pt-2.5 text-[9.5px] font-bold uppercase tracking-[0.07em] text-muted-foreground">
-            Histórico da planilha
+            {titulo}
           </p>
           {erro ? (
             <p className="px-3.5 py-4 text-xs text-red-700">{erro}</p>
@@ -281,7 +295,10 @@ export function FaixaDaVersao({
   onAtual,
   destacar,
   onDestacar,
+  nota = "Só leitura: o realizado e as PPs ficam na planilha atual.",
 }: {
+  /** O que a faixa diz da versão antiga: o orçamento tem a sua (decisão 226). */
+  nota?: string;
   versao: VersaoDaPlanilha;
   /** O valor do job antes e depois do momento. */
   valorJob: { antes: number | null; depois: number };
@@ -331,7 +348,7 @@ export function FaixaDaVersao({
                   {versao.revisao.autor ? `, por ${versao.revisao.autor}` : ""}.{" "}
                 </>
               )}
-              Só leitura: o realizado e as PPs ficam na planilha atual.
+              {nota}
             </p>
             {versao.descricao && (
               <p className="border-l-2 border-california-red/30 pl-2.5 text-[12px] leading-relaxed text-foreground">

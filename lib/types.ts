@@ -3761,7 +3761,7 @@ export interface ExtratoLinha {
 }
 
 /** Ligacao: a baixa já existia. Baixa e avulso: nasceu na conciliação. */
-export type ConciliadaComo = "ligacao" | "baixa" | "avulso" | "regra" | "par" | "correcao" | "historico";
+export type ConciliadaComo = "ligacao" | "baixa" | "avulso" | "regra" | "par" | "correcao" | "historico" | "conjunto";
 
 /** A baixa feita à mão corrigida pela conciliação (`baixa_correcoes`). */
 export interface BaixaCorrecao {
@@ -6366,6 +6366,8 @@ export interface ComiteConfigRow {
   tolerancia_valor: number | string;
   tolerancia_pct: number | string;
   admin_direto: boolean;
+  /** Decisão 225: a versão com exceção no fechamento vai ao Comitê. */
+  excecao_ligada: boolean;
   atualizado_por: string | null;
   updated_at: string;
 }

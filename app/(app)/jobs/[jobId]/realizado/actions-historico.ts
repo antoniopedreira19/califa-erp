@@ -38,7 +38,9 @@ const COLUNAS_DA_LINHA =
   "id, item_versao_id, linha_vermelha, grupo_id, job_grupo_id, ordem, item, tipo_custo, categoria_id, " +
   "valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, " +
   "valor_unitario_planejado, quantidade_planejada, dias_meses_planejado, " +
-  "bv_liquido_planejado, em_save, save_consumido, cancelada_em, planejado_antes_save";
+  "bv_liquido_planejado, em_save, save_consumido, cancelada_em, planejado_antes_save, " +
+  // Decisão 226: a linha vermelha criada sem errata vira um momento.
+  "errata_origem_id, created_at, criada_por";
 
 const COLUNAS_DA_VERSAO =
   "id, grupo_id, ordem, item, tipo_custo, categoria_id, " +
@@ -228,7 +230,19 @@ export async function carregarHistoricoDaPlanilha(jobId: unknown): Promise<Resul
   // Os nomes de quem enviou, abriu, revisou e desfez o save. `aberto_por`
   // aponta para `auth.users`, sem embed: uma consulta só para todos.
   const revisoes = revisoesRes.data ?? [];
+  // Decisão 226: as linhas vermelhas criadas sem errata.
+  type LinhaLida = LinhaDoJobNoHistorico & {
+    errata_origem_id: string | null;
+    created_at: string;
+    criada_por: string | null;
+  };
+  const linhasLidas = (linhasRes.data ?? []) as unknown as LinhaLida[];
+  const vermelhasSemErrata = linhasLidas.filter(
+    (l) => l.linha_vermelha && !l.errata_origem_id && !l.item_versao_id,
+  );
+
   const ids = [
+    ...vermelhasSemErrata.map((l) => l.criada_por),
     job.enviado_abertura_por,
     job.aberto_por,
     ...revisoes.map((r) => r.registrado_por),
@@ -310,6 +324,14 @@ export async function carregarHistoricoDaPlanilha(jobId: unknown): Promise<Resul
         errata_id: r.errata_id,
         registrado_em: r.registrado_em,
         por: nomeDe(r.registrado_por),
+      })),
+      linhasVermelhas: vermelhasSemErrata.map((l) => ({
+        id: l.id,
+        item: l.item,
+        grupo:
+          (gruposRes.data ?? []).find((g: { id: string }) => g.id === (l.job_grupo_id ?? l.grupo_id))?.nome ?? "",
+        quando: l.created_at,
+        por: nomeDe(l.criada_por),
       })),
     },
   };

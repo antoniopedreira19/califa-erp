@@ -498,7 +498,7 @@ export default async function AbrirJobNoFinanceiroPage({
             parametrosDoJob={{
               parametros: parametrosGravadosDe(versaoAprovada),
               edicao: pode(session.activeRole, "jobs.editar_orcado_financeiro")
-                ? { naFila: true }
+                ? { naFila: true, travaDosParametros: null }
                 : null,
               alteracoes: alteracoesDosParametros(detalhe.alteracoesFinanceiro),
             }}

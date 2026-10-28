@@ -615,7 +615,7 @@ export async function definirExcecaoDoFechamento(
   const session = await requireSession();
   const gate = await checarPermissao(session, "orcamentos.excecao_fechamento");
   if (!gate.ok) {
-    return { ...gate, message: "Só o administrador registra a exceção no fechamento." };
+    return { ...gate, message: "Só o administrador ou o GP registra a exceção no fechamento." };
   }
 
   const versao = await versaoParaExcecao(versaoId, session.activeTenant.id);
@@ -688,7 +688,7 @@ export async function removerExcecaoDoFechamento(versaoId: string): Promise<Acti
   const session = await requireSession();
   const gate = await checarPermissao(session, "orcamentos.excecao_fechamento");
   if (!gate.ok) {
-    return { ...gate, message: "Só o administrador remove a exceção no fechamento." };
+    return { ...gate, message: "Só o administrador ou o GP remove a exceção no fechamento." };
   }
 
   const versao = await versaoParaExcecao(versaoId, session.activeTenant.id);
@@ -2341,6 +2341,7 @@ async function aprovarVersaoInterna(
       regra?: boolean;
       direto?: boolean;
       coberta?: boolean;
+      excecao?: boolean;
       itens_acima?: number;
       resultado_geral?: number | null;
     } | null;
@@ -2348,7 +2349,11 @@ async function aprovarVersaoInterna(
       const regras = await carregarRegrasDoComite(supabase, session.activeTenant.id);
       const motivos = motivosDaVersaoNoComite(
         regras,
-        { itensAcima: Number(s.itens_acima ?? 0), resultadoGeral: s.resultado_geral ?? null },
+        {
+          itensAcima: Number(s.itens_acima ?? 0),
+          resultadoGeral: s.resultado_geral ?? null,
+          excecaoNoFechamento: s.excecao === true,
+        },
         orc.servico?.investimento_interno === true,
       );
       await logAuditEvent({

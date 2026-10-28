@@ -48,15 +48,17 @@ import {
 } from "@/lib/calculos/pps-item";
 import { ppChegouAoFinanceiro } from "@/lib/types";
 import {
-  lancamentoNaLinha,
+  lancamentosDaLinha,
+  motivoDoTipoSoComPP,
   motivoDoTipoTravado,
-  type LancamentoNaLinha,
+  travaDoTipo,
+  type TravaDoTipo,
 } from "@/lib/calculos/alteracao-financeiro";
 import { BvDialog } from "@/app/(app)/_bv/bv-dialog";
 import { acaoBv } from "@/app/(app)/_bv/bv-action-button";
 import { LARGURA_CALHA } from "@/app/(app)/_planilha/calha-acoes";
 import { ERRATA, HISTORICO, LINHA_NOVO_GRUPO, SAVE } from "@/app/(app)/_planilha/blocos";
-import { TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
+import { TIPOS_CALHA_PP, TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
 import {
   parseNumero,
   type CampoErrata,
@@ -334,6 +336,12 @@ const ALTURA_SUBLINHA_PP = "h-[28px]";
  *  action recusa. */
 const MOTIVO_TRAVA_PP =
   "Linha com Pedido de Produção já no financeiro não entra em errata. Corrija o que falta em outra linha, ou cancele a PP antes.";
+
+/** Linha com PP só gerada ainda entra na errata (decisão 040), mas não pode
+ *  ser cancelada: `barrarCancelamento`, no servidor, recusa qualquer PP no
+ *  histórico da linha. Até 28/10/2026 a calha oferecia o "Cancelar" e o
+ *  erro só vinha na confirmação. */
+const MOTIVO_CANCELAR_COM_PP = "Linha com Pedido de Produção não pode ser cancelada.";
 
 /** Linha cancelada por errata (decisão 151): fica na planilha com o
  *  orçado e, desde 15/10/2026, o planejado zerados, e não entra mais em
@@ -1042,20 +1050,25 @@ export function JobItemRealizadoTable({
     return modoDaEdicao === "financeiro" ? new Set<string>() : travadas;
   }, [todosOsItens, realizadosMap, ppsPorItemId, modoDaEdicao]);
 
-  /** Na edição do financeiro, o tipo de custo só abre na linha sem nada
-   *  lançado (Tiago, 08/10/2026): o que cada linha já tem, pelo mesmo
-   *  recorte que o servidor confere (`lancamentos_nas_linhas_do_job`). */
-  const lancamentoPorLinha = React.useMemo(() => {
-    const mapa = new Map<string, LancamentoNaLinha>();
+  /** Na edição do financeiro, até onde o tipo de custo abre (Tiago,
+   *  08/10/2026 e 28/10/2026): livre sem nada lançado, só entre os tipos com
+   *  PP na linha com PP ou PP a emitir, fechado com BV. Pelo mesmo recorte
+   *  que o servidor confere (`travas_do_tipo_nas_linhas_do_job`). Só entram
+   *  no mapa as linhas que não são livres. */
+  const travaDoTipoPorLinha = React.useMemo(() => {
+    const mapa = new Map<string, Exclude<TravaDoTipo, { tipo: "livre" }>>();
     if (modoDaEdicao !== "financeiro") return mapa;
     for (const it of todosOsItens) {
       const realizadoId = realizadosMap.get(it.id)?.id;
-      const lancamento = lancamentoNaLinha({
-        pps: realizadoId ? (ppsPorItemId.get(realizadoId) ?? []) : [],
-        aEmitir: realizadoId ? (aEmitirPorItemId.get(realizadoId)?.length ?? 0) : 0,
-        bvs: bvsPorItem[it.id] ?? [],
-      });
-      if (lancamento) mapa.set(it.id, lancamento);
+      const trava = travaDoTipo(
+        it.tipo_custo,
+        lancamentosDaLinha({
+          pps: realizadoId ? (ppsPorItemId.get(realizadoId) ?? []) : [],
+          aEmitir: realizadoId ? (aEmitirPorItemId.get(realizadoId)?.length ?? 0) : 0,
+          bvs: bvsPorItem[it.id] ?? [],
+        }),
+      );
+      if (trava.tipo !== "livre") mapa.set(it.id, trava);
     }
     return mapa;
   }, [modoDaEdicao, todosOsItens, realizadosMap, ppsPorItemId, aEmitirPorItemId, bvsPorItem]);
@@ -1136,12 +1149,15 @@ export function JobItemRealizadoTable({
       }
       if (coluna === "item") return errata.ehNova(rowId) ? "texto" : null;
       // No Interno o tipo é sempre F · Interno (decisão 105). Na edição do
-      // financeiro, só na linha sem nada lançado, e nunca na vermelha, que
-      // é da errata (revisão da decisão 115, 08/10/2026).
+      // financeiro, nunca na vermelha, que é da errata, nem na linha com BV;
+      // na com PP, a lista só traz os tipos com PP (revisão da decisão 115,
+      // 08/10/2026 e 28/10/2026).
       if (coluna === "tipo_custo") {
         if (errata.interno) return null;
         if (modoDaEdicao === "financeiro") {
-          return item.linha_vermelha || lancamentoPorLinha.has(rowId) ? null : "lista";
+          return item.linha_vermelha || travaDoTipoPorLinha.get(rowId)?.tipo === "travado"
+            ? null
+            : "lista";
         }
         return "lista";
       }
@@ -1170,7 +1186,7 @@ export function JobItemRealizadoTable({
       travadasPorPP,
       travadasPorSave,
       modoDaEdicao,
-      lancamentoPorLinha,
+      travaDoTipoPorLinha,
     ],
   );
 
@@ -1630,8 +1646,8 @@ export function JobItemRealizadoTable({
                         ? MOTIVO_TRAVA_PP
                         : (travadasPorSave.get(item.id) ?? null);
                     const travada = motivoDaTrava !== null;
-                    // O que trava o TIPO na edição do financeiro (só lá).
-                    const lancamento = lancamentoPorLinha.get(item.id);
+                    // Até onde o TIPO abre na edição do financeiro (só lá).
+                    const travaDoTipoDaLinha = travaDoTipoPorLinha.get(item.id);
                     const abertaAqui = (campo: string) =>
                       aberta?.rowId === item.id && aberta.campo === campo;
                     const sementeDe = (campo: string) =>
@@ -1848,7 +1864,12 @@ export function JobItemRealizadoTable({
                                   );
                                 }}
                               >
-                                {TIPOS_CUSTO.map((t) => (
+                                {/* Na linha com PP, só os tipos com PP
+                                    (revisão da decisão 115, 28/10/2026). */}
+                                {(travaDoTipoDaLinha?.tipo === "so_com_pp"
+                                  ? TIPOS_CALHA_PP
+                                  : TIPOS_CUSTO
+                                ).map((t) => (
                                   <SelectItem key={t} value={t}>
                                     {t}
                                   </SelectItem>
@@ -1862,11 +1883,16 @@ export function JobItemRealizadoTable({
                             moldura={moldura("tipo_custo")}
                             className={classeNeutra}
                             // Na edição do financeiro, por que o tipo desta
-                            // linha não abre (revisão da decisão 115).
+                            // linha não abre, ou abre só entre os tipos com
+                            // PP (revisão da decisão 115).
                             title={
                               editando && modoDaEdicao === "financeiro"
                                 ? (motivoDaTrava ??
-                                  (lancamento ? motivoDoTipoTravado(lancamento) : undefined))
+                                  (travaDoTipoDaLinha?.tipo === "travado"
+                                    ? motivoDoTipoTravado(travaDoTipoDaLinha.lancamento)
+                                    : travaDoTipoDaLinha?.tipo === "so_com_pp"
+                                      ? motivoDoTipoSoComPP(travaDoTipoDaLinha.lancamento)
+                                      : undefined))
                                 : undefined
                             }
                           >
@@ -2088,8 +2114,8 @@ export function JobItemRealizadoTable({
                             Linha vermelha
                           </button>
                           <span className="text-[11px] text-muted-foreground">
-                            linha vermelha: orçado e planejado zerados, só
-                            recebe realizado por PP
+                            linha vermelha: sem orçado nem planejado; entra
+                            fora da errata e já recebe PP
                           </span>
                         </div>
                       </td>
@@ -2320,9 +2346,14 @@ export function JobItemRealizadoTable({
                     // qualquer PP no histórico (`barrarRemocao`); a
                     // tela passa a dizer isso antes do clique.
                     const travadaPorPP = travadasPorPP.has(item.id);
+                    // A PP só gerada também impede cancelar (28/10/2026).
+                    const comPPGerada =
+                      (ppsPorItemId.get(realizadosMap.get(item.id)?.id ?? "") ?? []).length > 0;
                     const motivoDaTrava = travadaPorPP
                       ? MOTIVO_TRAVA_PP
-                      : motivoSave;
+                      : comPPGerada
+                        ? MOTIVO_CANCELAR_COM_PP
+                        : motivoSave;
                     const nova = errata.ehNova(item.id);
                     const cancelada = errata.estaCancelada(item.id);
                     return (
@@ -2343,9 +2374,9 @@ export function JobItemRealizadoTable({
                                 ? errata.reativar(item.id)
                                 : errata.remover(item.id)
                             }
-                            disabled={travadaPorSave || travadaPorPP}
+                            disabled={travadaPorSave || travadaPorPP || comPPGerada}
                             title={
-                              travadaPorSave || travadaPorPP
+                              travadaPorSave || travadaPorPP || comPPGerada
                                 ? (motivoDaTrava ?? undefined)
                                 : undefined
                             }

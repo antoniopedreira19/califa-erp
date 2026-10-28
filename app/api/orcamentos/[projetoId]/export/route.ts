@@ -1,3 +1,4 @@
+import { planilhaDoJobNaVersao, versaoMostraOJob } from "@/lib/data/versao-aprovada-do-job";
 import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { requireSession } from "@/lib/auth/session";
@@ -323,6 +324,51 @@ export async function GET(
       : Promise.resolve({ data: [] as any[] }),
   ]);
 
+  // Decisão 226: a versão aprovada de job aberto sai como está hoje — com as
+  // erratas, combinadas com o cliente. Sempre a versão mais recente.
+  let gruposLidos = (gruposRes.data ?? []) as any[];
+  let itensLidos = (itensRes.data ?? []) as any[];
+  const aprovadas = orcamentos.filter((o) => versaoAlvo.get(o.id)?.id === o.versao_aprovada_id);
+  if (aprovadas.length > 0) {
+    const { data: jobsVivos } = await supabase
+      .from("jobs")
+      .select("id, status, orcamento_id")
+      .eq("tenant_id", tenantId)
+      .in("orcamento_id", aprovadas.map((o) => o.id))
+      .neq("status", "cancelado")
+      .returns<Array<{ id: string; status: JobStatus; orcamento_id: string }>>();
+    const trocas = await Promise.all(
+      (jobsVivos ?? []).flatMap((j) => {
+        const o = aprovadas.find((x) => x.id === j.orcamento_id);
+        const versaoId = o?.versao_aprovada_id ?? null;
+        if (
+          !o ||
+          !versaoId ||
+          !versaoMostraOJob({
+            versaoId,
+            versaoAprovadaId: versaoId,
+            jobStatus: j.status,
+            modelo: o.categoria?.modelo_planilha ?? "nacional",
+          })
+        ) {
+          return [];
+        }
+        return [planilhaDoJobNaVersao(supabase, tenantId, j.id, versaoId).then((r) => ({ versaoId, r }))];
+      }),
+    );
+    for (const { versaoId, r } of trocas) {
+      if (!r.ok) {
+        return NextResponse.json({ error: r.message }, { status: 500 });
+      }
+      gruposLidos = gruposLidos
+        .filter((g) => g.versao_orcamento_id !== versaoId)
+        .concat(r.planilha.grupos);
+      itensLidos = itensLidos
+        .filter((i) => i.versao_orcamento_id !== versaoId)
+        .concat(r.planilha.itens);
+    }
+  }
+
   const mesesPorVersao = new Map<string, { id: string; mes: string }[]>();
   for (const m of ((mesesRes.data ?? []) as any[])) {
     const atuais = mesesPorVersao.get(m.versao_orcamento_id) ?? [];
@@ -334,13 +380,13 @@ export async function GET(
     string,
     { id: string; nome: string; mesId: string | null }[]
   >();
-  for (const g of ((gruposRes.data ?? []) as any[])) {
+  for (const g of gruposLidos) {
     const atuais = gruposPorVersao.get(g.versao_orcamento_id) ?? [];
     atuais.push({ id: g.id, nome: g.nome, mesId: g.mes_id ?? null });
     gruposPorVersao.set(g.versao_orcamento_id, atuais);
   }
   const itensPorGrupo = new Map<string, any[]>();
-  for (const it of ((itensRes.data ?? []) as any[])) {
+  for (const it of itensLidos) {
     const atuais = itensPorGrupo.get(it.grupo_id) ?? [];
     atuais.push({
       id: it.id as string,

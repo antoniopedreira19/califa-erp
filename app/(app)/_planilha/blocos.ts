@@ -361,7 +361,8 @@ export const ERRATA = {
     "inline-flex items-center rounded-full border border-[#fca5a5] bg-[#fef2f2] px-1.5 py-px text-[9px] font-bold uppercase tracking-[0.05em] text-[#b91c1c]",
   tagRemovida:
     "inline-flex items-center rounded-full border border-border bg-muted px-1.5 py-px text-[9px] font-bold uppercase tracking-[0.05em] text-muted-foreground",
-  /** Botão "Realizar errata" (era "Alterar orçado" até 07/09/2026)
+  /** Botão "Editar planilha" (era "Realizar errata" até 28/10/2026 e
+   *  "Alterar orçado" até 07/09/2026)
    *  enquanto o modo está LIGADO. */
   botaoAtivo:
     "inline-flex items-center gap-1.5 rounded-lg border border-california-red bg-california-red/[0.07] px-3 py-1.5 text-xs font-bold text-[#b83b45] shadow-[inset_0_1px_2px_rgba(231,75,86,0.18)]",

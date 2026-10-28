@@ -16,6 +16,9 @@
  * e o pop-up avisa quando o custo previsto muda sem a curva acompanhar.
  * Desde 14/10/2026, com o job na fila da abertura, o planejado também muda:
  * a linha mostra o planejado de → para, na cor do bloco Planejado.
+ * Desde 28/10/2026, o faturamento que nasce sem previsão de recebimento para
+ * acompanhar (o job, ou o mês do mensal, que abriu sem faturamento) pede a
+ * data de recebimento aqui, e a confirmação espera todas.
  */
 
 import * as React from "react";
@@ -36,6 +39,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { DatePicker } from "@/components/ui/date-picker";
 import { cn, formatCurrency } from "@/lib/utils";
 import { ERRATA, PLANEJADO } from "@/app/(app)/_planilha/blocos";
 import {
@@ -60,6 +64,23 @@ export interface ParcelaQueAcompanha {
   depois: number;
 }
 
+/** O faturamento que nasce sem previsão de recebimento para acompanhar: o
+ *  mês do mensal (`mes` no primeiro dia) ou o job (`mes` nulo), e quanto
+ *  entra. A data vem do campo do pop-up. */
+export interface RecebimentoSemPrevisao {
+  mes: string | null;
+  rotulo: string;
+  valor: number;
+}
+
+/** O mês seguinte ao de referência, onde o calendário abre — como a data de
+ *  recebimento do mensal na abertura (decisão 149). */
+function mesSeguinte(mes: string): string {
+  const [ano, m] = mes.split("-").map(Number);
+  const prox = m === 12 ? { ano: ano + 1, mes: 1 } : { ano, mes: m + 1 };
+  return `${prox.ano}-${String(prox.mes).padStart(2, "0")}-01`;
+}
+
 interface Props {
   open: boolean;
   onOpenChange: (aberto: boolean) => void;
@@ -76,6 +97,8 @@ interface Props {
   envio: ParcelaQueAcompanha[];
   /** Parcelas da previsão de recebimento que acompanham. */
   recebimento: ParcelaQueAcompanha[];
+  /** O faturamento que nasce sem previsão para acompanhar: pede a data. */
+  recebimentoSemPrevisao: RecebimentoSemPrevisao[];
   /** Serviço Interno (decisão 105): o planejado é igual ao orçado e anda
    *  junto. Nos outros, o planejado não muda. */
   planejadoAcompanha: boolean;
@@ -84,7 +107,10 @@ interface Props {
   naAbertura: boolean;
   salvando: boolean;
   erro: string | null;
-  onConfirmar: (motivo: string) => void;
+  onConfirmar: (
+    motivo: string,
+    recebimentosNovos: Array<{ mes: string | null; data_prevista: string }>,
+  ) => void;
 }
 
 function corDoDelta(delta: number): string {
@@ -181,6 +207,7 @@ export function EdicaoFinanceiroConfirmarDialog({
   moeda,
   envio,
   recebimento,
+  recebimentoSemPrevisao,
   planejadoAcompanha,
   naAbertura,
   salvando,
@@ -188,13 +215,21 @@ export function EdicaoFinanceiroConfirmarDialog({
   onConfirmar,
 }: Props) {
   const [motivo, setMotivo] = React.useState("");
+  // A data de cada faturamento que nasce, pela chave do mês ("" = o job).
+  const [datas, setDatas] = React.useState<Record<string, string>>({});
 
   // Zera a cada abertura, como a descrição da errata.
   React.useEffect(() => {
-    if (open) setMotivo("");
+    if (open) {
+      setMotivo("");
+      setDatas({});
+    }
   }, [open]);
 
-  const podeConfirmar = motivo.trim().length >= 5 && !salvando && mudancas.length > 0;
+  const chaveDe = (r: RecebimentoSemPrevisao) => r.mes ?? "";
+  const faltaData = recebimentoSemPrevisao.some((r) => !datas[chaveDe(r)]);
+  const podeConfirmar =
+    motivo.trim().length >= 5 && !salvando && mudancas.length > 0 && !faltaData;
 
   // A troca de tipo (08/10/2026) mexe no que a planilha mostra além do
   // orçado: o realizado de A e D é o próprio orçado, e o dos tipos com PP é
@@ -374,6 +409,58 @@ export function EdicaoFinanceiroConfirmarDialog({
             </div>
           )}
 
+          {recebimentoSemPrevisao.length > 0 && (
+            <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/30 px-3.5 py-3">
+              <CalendarClock className="mt-0.5 h-4 w-4 flex-none text-california-red" />
+              <div className="min-w-0 flex-1 space-y-2">
+                <p className="text-[12.5px] font-semibold text-foreground">
+                  {recebimentoSemPrevisao.length === 1 && recebimentoSemPrevisao[0].mes === null
+                    ? "O job não tem previsão de recebimento: informe a data"
+                    : "Meses sem previsão de recebimento: informe a data"}
+                </p>
+                <div className="space-y-1.5">
+                  {recebimentoSemPrevisao.map((r) => {
+                    const chave = chaveDe(r);
+                    const id = `recebimento-novo-${chave || "job"}`;
+                    return (
+                      <div key={chave || "job"} className="flex items-center justify-between gap-3">
+                        <label htmlFor={id} className="min-w-0 text-[12px] text-foreground">
+                          <span>{r.rotulo.charAt(0).toUpperCase() + r.rotulo.slice(1)}</span>
+                          <span className="ml-2 font-mono text-[11.5px] font-semibold">
+                            {formatCurrency(r.valor, moeda)}
+                          </span>
+                        </label>
+                        <DatePicker
+                          id={id}
+                          name={id}
+                          value={datas[chave] ?? ""}
+                          mesInicial={r.mes ? mesSeguinte(r.mes) : undefined}
+                          placeholder="Selecione a data"
+                          className="w-[190px]"
+                          onDateChange={(d) =>
+                            setDatas((atual) => ({
+                              ...atual,
+                              [chave]: d
+                                ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`
+                                : "",
+                            }))
+                          }
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                  {recebimentoSemPrevisao.length === 1 && recebimentoSemPrevisao[0].mes === null
+                    ? "Não há parcela de recebimento para acompanhar a alteração: o job ganha uma, com esta data e o valor que entra."
+                    : "Não há parcela de recebimento nesses meses para acompanhar a alteração: cada um ganha uma, com a data informada e o valor que entra."}{" "}
+                  Para dividir em outras parcelas, use o Editar registro, na aba
+                  Abertura do Job.
+                </p>
+              </div>
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <div className="flex items-baseline gap-2">
               <label
@@ -424,7 +511,15 @@ export function EdicaoFinanceiroConfirmarDialog({
             </button>
             <button
               type="button"
-              onClick={() => onConfirmar(motivo.trim())}
+              onClick={() =>
+                onConfirmar(
+                  motivo.trim(),
+                  recebimentoSemPrevisao.map((r) => ({
+                    mes: r.mes,
+                    data_prevista: datas[chaveDe(r)] ?? "",
+                  })),
+                )
+              }
               disabled={!podeConfirmar}
               className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-california-red-hover disabled:cursor-not-allowed disabled:opacity-45"
             >

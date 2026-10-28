@@ -67,6 +67,9 @@ interface Props {
   /** A errata é uma errata pronta para envio: quem preparou, quando e a
    *  descrição que deixou (o campo já abre com ela). */
   pronta: { autorNome: string; quando: string; descricao: string | null } | null;
+  /** Decisão 226: as linhas vermelhas novas que entram FORA da errata (pela
+   *  chave do rascunho), com o agrupamento de cada uma. */
+  vermelhasForaDaErrata: Array<{ chave: string; grupo: string }>;
 }
 
 function corDoDelta(delta: number): string {
@@ -216,8 +219,14 @@ export function ErrataConfirmarDialog({
   onConfirmar,
   modo,
   pronta,
+  vermelhasForaDaErrata,
 }: Props) {
   const prepara = modo === "prepara";
+  // Decisão 226: a linha vermelha nova não é errata — sai da lista do que
+  // a errata muda e aparece na seção dela.
+  const grupoDaVermelha = new Map(vermelhasForaDaErrata.map((v) => [v.chave, v.grupo]));
+  const vermelhas = mudancas.filter((m) => grupoDaVermelha.has(m.chave));
+  const daErrata = mudancas.filter((m) => !grupoDaVermelha.has(m.chave));
   const [descricao, setDescricao] = React.useState("");
 
   // Zera a cada abertura: o texto de uma errata não pode vazar para a
@@ -233,7 +242,7 @@ export function ErrataConfirmarDialog({
   // A errata que só reorganiza a planilha (decisão 162) não muda número
   // nenhum: o pop-up não mostra o bloco de valores. Ela devolve o job ao
   // mural como qualquer errata, e o financeiro vê que nenhum valor mudou.
-  const soOrganizacao = mudancas.length === 0 && estrutura.length > 0;
+  const soOrganizacao = daErrata.length === 0 && estrutura.length > 0;
   const podeConfirmar =
     descricaoOk && !faltaNomear && !salvando && (mudancas.length > 0 || estrutura.length > 0);
 
@@ -292,15 +301,15 @@ export function ErrataConfirmarDialog({
             </section>
           )}
           {/* O que muda no orçado */}
-          {mudancas.length > 0 && (
+          {daErrata.length > 0 && (
           <section className="rounded-xl border border-border">
             <h3 className="border-b border-border px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
-              {mudancas.some((m) => m.planejadoDe !== m.planejadoPara)
+              {daErrata.some((m) => m.planejadoDe !== m.planejadoPara)
                 ? "O que muda na planilha"
                 : "O que muda no orçado"}
             </h3>
             <ul className="divide-y divide-border">
-              {mudancas.map((m) => {
+              {daErrata.map((m) => {
                 const tag = tagDaMudanca(m);
                 // A sublinha do planejado aparece quando ele muda: na errata
                 // desde 15/10/2026 (volta atrás da decisão 151) e no
@@ -348,6 +357,36 @@ export function ErrataConfirmarDialog({
               })}
             </ul>
           </section>
+          )}
+
+          {/* Decisão 226: a linha vermelha entra fora da errata. */}
+          {vermelhas.length > 0 && (
+            <section className="rounded-xl border border-border">
+              <h3 className="border-b border-border px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                {vermelhas.length === 1 ? "Linha vermelha · fora da errata" : "Linhas vermelhas · fora da errata"}
+              </h3>
+              <ul className="divide-y divide-border">
+                {vermelhas.map((m) => (
+                  <li key={m.chave} className="flex items-center justify-between gap-3 px-3.5 py-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className={ERRATA.tagVermelha}>Vermelha</span>
+                      <span className="truncate text-[12.5px] text-foreground">{m.item}</span>
+                      <span className="flex-none text-[11px] text-muted-foreground">
+                        em {grupoDaVermelha.get(m.chave)}
+                      </span>
+                    </div>
+                    <span className="flex-none text-[11.5px] text-muted-foreground">
+                      sem orçado e sem planejado
+                    </span>
+                  </li>
+                ))}
+              </ul>
+              <p className="border-t border-border px-3.5 py-2 text-[11px] leading-relaxed text-muted-foreground">
+                {prepara
+                  ? `${vermelhas.length === 1 ? "Entra" : "Entram"} na planilha agora, sem esperar o GP, e já ${vermelhas.length === 1 ? "recebe" : "recebem"} PP. O resto fica pronto para envio.`
+                  : `${vermelhas.length === 1 ? "Entra" : "Entram"} na planilha ao confirmar e já ${vermelhas.length === 1 ? "recebe" : "recebem"} PP: não ${vermelhas.length === 1 ? "trava" : "travam"} o envio nem ${vermelhas.length === 1 ? "entra" : "entram"} na revisão do financeiro.`}
+              </p>
+            </section>
           )}
 
           {/* O que muda na organização (decisão 162): mover, renomear,
@@ -470,8 +509,8 @@ export function ErrataConfirmarDialog({
                 )}
                 <p className="text-[11px] leading-relaxed text-muted-foreground">
                   {soOrganizacao
-                    ? "Vai para o histórico de erratas, para o fio da Comunicação e para a fila de abertura do financeiro, que vê que nenhum valor mudou — com autor, data e hora. A versão aprovada não muda: os nomes e a ordem novos valem só no job."
-                    : "Vai para o histórico de erratas, para o fio da Comunicação e para a fila de abertura do financeiro — com autor, data e hora. O orçado aprovado da versão não muda: a errata fica registrada sobre ele."}
+                    ? "Vai para o histórico de erratas, para o fio da Comunicação e para a fila de abertura do financeiro, que vê que nenhum valor mudou — com autor, data e hora. A versão aprovada do orçamento passa a mostrar a nova organização; a que o cliente aprovou fica no Histórico dela."
+                    : "Vai para o histórico de erratas, para o fio da Comunicação e para a fila de abertura do financeiro — com autor, data e hora. A versão aprovada do orçamento passa a mostrar a errata; a que o cliente aprovou fica no Histórico dela."}
                 </p>
               </>
             )}

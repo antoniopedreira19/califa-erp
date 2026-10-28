@@ -80,7 +80,9 @@ import {
   LINHA_NOVO_GRUPO,
   LINHA_TOTAL_ROTULO,
   RENTAB_VALOR,
+  ERRATA,
 } from "@/app/(app)/_planilha/blocos";
+import { useHistoricoDoOrcamento } from "./historico-do-orcamento";
 import {
   Calha,
   LinhaDaCalha,
@@ -556,6 +558,7 @@ export function ItensTable({
   moedaEstrangeira,
   interno,
 }: Props) {
+  const historico = useHistoricoDoOrcamento();
   // O Interno não tem save (decisão 105): nem a coluna, nem a alça que a
   // abre — mesmo que a tela de cima esqueça de desligar.
   const saveVisivel = saveVisivelProp && !interno;
@@ -1811,6 +1814,9 @@ export function ItensTable({
                             className={cn(
                               ALTURA_LINHA,
                               "group/linha border-b border-border transition-colors",
+                              // Decisão 226: a linha que o momento do
+                              // Histórico do orçamento mudou.
+                              historico?.destaque?.has(item.id) && ERRATA.linhaEmRevisao,
                               "[&>td]:transition-shadow [&>td]:duration-700",
                               editavel && "hover:bg-accent/40",
                               arrasto.arrastando === item.id && "opacity-40",

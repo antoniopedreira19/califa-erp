@@ -239,6 +239,7 @@ export async function salvarRegrasDoComite(regras: RegrasDoComite): Promise<Resu
       tolerancia_valor: regras.toleranciaValor,
       tolerancia_pct: regras.toleranciaPct,
       admin_direto: regras.adminDireto,
+      excecao_ligada: regras.excecaoLigada,
       atualizado_por: session.profile.id,
     },
     { onConflict: "tenant_id" },

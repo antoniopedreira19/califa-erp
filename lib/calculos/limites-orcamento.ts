@@ -31,6 +31,8 @@ export interface RegrasDoComite {
   toleranciaValor: number;
   toleranciaPct: number;
   adminDireto: boolean;
+  /** Decisão 225: a versão com exceção no fechamento do internacional. */
+  excecaoLigada: boolean;
 }
 
 export const REGRAS_PADRAO_DO_COMITE: RegrasDoComite = {
@@ -43,6 +45,7 @@ export const REGRAS_PADRAO_DO_COMITE: RegrasDoComite = {
   toleranciaValor: 0,
   toleranciaPct: 0,
   adminDireto: true,
+  excecaoLigada: true,
 };
 
 /** Formato do Resultado geral do cabeçalho da versão: uma casa, vírgula. */
@@ -64,7 +67,9 @@ export interface RetratoDaVersao {
  */
 export function motivosDaVersaoNoComite(
   regras: RegrasDoComite,
-  retrato: RetratoDaVersao,
+  /** `excecaoNoFechamento`: a versão tem a exceção no fechamento do
+   *  internacional registrada (decisão 225). */
+  retrato: RetratoDaVersao & { excecaoNoFechamento: boolean },
   interno: boolean,
 ): string[] {
   if (interno) return [];
@@ -80,6 +85,11 @@ export function motivosDaVersaoNoComite(
     motivos.push(
       `o resultado geral está em ${formatarPercentualDoComite(retrato.resultadoGeral!)}, abaixo do mínimo de ${formatarPercentualDoComite(regras.resultadoMinimo)}`,
     );
+  }
+  // Só com a exceção registrada: as taxas de volta ao padrão tiram a
+  // exceção, e a regra deixa de pegar (Tiago, 28/10/2026).
+  if (regras.excecaoLigada && retrato.excecaoNoFechamento) {
+    motivos.push("há exceção no fechamento do internacional");
   }
   return motivos;
 }

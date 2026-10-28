@@ -42,6 +42,7 @@ import { TotaisCard } from "./versoes/[versaoId]/totais-card";
 import { ReguaMeses } from "./versoes/[versaoId]/regua-meses";
 import { CopiarItensDoMes } from "./versoes/[versaoId]/copiar-itens-mes";
 import { TrimestreEmpilhado } from "./versoes/[versaoId]/trimestre-empilhado";
+import { SemBotaoDoHistorico } from "./versoes/[versaoId]/historico-do-orcamento";
 import { ImportarPlanilhaVersao } from "./versoes/importar-planilha-versao";
 
 /** `2026-07` — a chave do mês na URL. */
@@ -355,7 +356,7 @@ export function PlanilhaMensal({
             <TrimestreEmpilhado
               barraAcimaDoMes
               moeda={moeda}
-              meses={dados.map((d) => ({
+              meses={dados.map((d, k) => ({
                 id: d.mes.id,
                 titulo: rotuloMes(d.mes.mes),
                 nome: nomeDoMes(d.mes.mes),
@@ -365,7 +366,13 @@ export function PlanilhaMensal({
                 resultadoOperacional: d.resultadoOperacional,
                 resultadoGeral: d.resultadoGeral,
                 href: d.href,
-                conteudo: planilhaDoMes(d, { semTotais: true }),
+                // Decisão 226: um botão de Histórico só, no primeiro mês.
+                conteudo:
+                  k === 0 ? (
+                    planilhaDoMes(d, { semTotais: true })
+                  ) : (
+                    <SemBotaoDoHistorico>{planilhaDoMes(d, { semTotais: true })}</SemBotaoDoHistorico>
+                  ),
               }))}
             />
             <TotaisCard

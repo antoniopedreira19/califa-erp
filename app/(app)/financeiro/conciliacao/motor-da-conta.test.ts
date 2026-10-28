@@ -161,6 +161,18 @@ test("o texto da linha resolvida", () => {
   assert.equal(corrigida?.ligados, false);
   const regra = resolucaoDaLinha(linhaDoBanco("a", { conciliada: true, conciliadaComo: "regra", regraId: "r1" }), new Map([["r1", { centro: "04 · Custo Fixo · Tarifa bancária" }]]));
   assert.equal(regra?.texto, "Avulso lançado pela regra: 04 · Custo Fixo · Tarifa bancária");
+  const conjunto = resolucaoDaLinha(
+    linhaDoBanco("a", {
+      conciliada: true,
+      conciliadaComo: "conjunto",
+      grupo: "g1",
+      ligados: [
+        { id: "l1", descricao: "PP-00116 · Custo do job", valor: -96888.6, origem: "pp_baixa" },
+        { id: "l2", descricao: "PP-00113 · Custo do job", valor: -1133.2, origem: "pp_baixa" },
+      ],
+    }),
+  );
+  assert.equal(conjunto?.texto, "Em conjunto com outras linhas do banco: “PP-00116 · Custo do job” e mais 1");
 });
 
 // Uma linha da planilha só com o que o motor lê.

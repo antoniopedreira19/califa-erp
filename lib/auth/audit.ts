@@ -209,6 +209,8 @@ export type AuditAction =
   // Decisão 159: a errata pronta para envio (o produtor prepara, o GP envia).
   | "job.errata_pronta_salva"
   | "job.errata_pronta_descartada"
+  // Decisão 226: a linha vermelha entra fora da errata.
+  | "job.linha_vermelha_criada"
   // "Editar orçado" do financeiro (decisão 115): os valores do orçado, sem
   // aprovação, com as previsões e o envio sem nota acompanhando.
   | "job.orcado_alterado_financeiro"

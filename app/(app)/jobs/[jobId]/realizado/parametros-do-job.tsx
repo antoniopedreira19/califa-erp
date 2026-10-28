@@ -14,8 +14,9 @@
  * - o "Salvar" abre o pop-up com o de → para, o impacto no faturamento
  *   previsto, nos impostos e no valor do job, e o motivo obrigatório (a
  *   confirmação A do protótipo aprovado em 27/10/2026);
- * - na fila da abertura tudo se edita; depois dela, só o câmbio do
- *   internacional — os outros campos ficam com o cadeado;
+ * - na fila da abertura tudo se edita; com o job aberto também, até a
+ *   primeira nota (aí os campos ficam com o cadeado, e o câmbio do
+ *   internacional continua) ou o encerramento (revisão de 28/10/2026);
  * - o selo "Alterado na abertura" mostra o de → para, quem e por quê.
  */
 
@@ -91,8 +92,9 @@ interface Props {
   /** Os parâmetros que valem para o job hoje (`vw_parametros_do_job`). */
   parametros: ParametrosDoJobGravados;
   /** Quem edita e quando. `null` = só leitura: sem a permissão, ou fora da
-   *  janela (encerrado). `naFila: false` = job aberto, só o câmbio. */
-  edicao: { naFila: boolean } | null;
+   *  janela (encerrado). `travaDosParametros`: por que honorários, impostos
+   *  e taxas não mudam mais (a primeira nota); o câmbio segue editável. */
+  edicao: { naFila: boolean; travaDosParametros: string | null } | null;
   alteracoes: AlteracaoDosParametros[];
   itens: ItemDosParametros[];
 }
@@ -366,7 +368,7 @@ export function ParametrosDoJob({
     });
   }
 
-  const podeParametros = edicao?.naFila === true;
+  const podeParametros = edicao !== null && edicao.travaDosParametros === null;
   const podeCambio = intl && edicao !== null;
   const antes = contas(p);
   const depois = contas(para);
@@ -421,12 +423,12 @@ export function ParametrosDoJob({
             <Pencil className="h-3 w-3" />
             Editar
           </button>
-        ) : edicao ? (
+        ) : edicao?.travaDosParametros ? (
           <span
             title={
               intl
-                ? "Fee e taxas travam na abertura do job. O câmbio continua editável."
-                : "Os parâmetros travam na abertura do job."
+                ? `${edicao.travaDosParametros} O câmbio continua editável.`
+                : edicao.travaDosParametros
             }
             className="inline-flex cursor-help items-center"
           >
@@ -850,14 +852,15 @@ function ConfirmarParametrosDialog({
             <LinhaDeValor rotulo="Valor do job" par={valorJob} moeda={moeda} forte />
           </section>
 
-          {naFila && mudaValor && (
+          {mudaValor && (
             <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/30 px-3.5 py-3">
               <CalendarClock className="mt-0.5 h-4 w-4 flex-none text-california-red" />
               <div className="min-w-0 flex-1 space-y-1">
                 <p className="text-[12.5px] font-semibold text-foreground">A previsão de recebimento acompanha</p>
                 <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-                  As parcelas já preenchidas na aba Abertura do Job andam na mesma proporção, com as mesmas datas;
-                  os recolhimentos de impostos previstos acompanham do mesmo jeito.
+                  {naFila
+                    ? "As parcelas já preenchidas na aba Abertura do Job andam na mesma proporção, com as mesmas datas; os recolhimentos de impostos previstos acompanham do mesmo jeito."
+                    : "Cada parcela na mesma proporção, com as mesmas datas; os recolhimentos de impostos previstos e o envio para faturamento ainda sem nota acompanham do mesmo jeito."}
                 </p>
               </div>
             </div>

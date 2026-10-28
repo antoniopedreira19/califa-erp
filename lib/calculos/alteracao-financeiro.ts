@@ -168,22 +168,65 @@ export function linhasAlteradasPeloFinanceiro(
  * Tiago pediu que, "do mesmo modo que com a realização de erratas, só será
  * possível realizar modificações enquanto nada tiver sido adicionado no
  * item". PP de qualquer situação, PP a emitir e BV contam; cancelados, não.
- * É o mesmo recorte de `lancamentos_nas_linhas_do_job`, no banco.
+ * É o mesmo recorte de `travas_do_tipo_nas_linhas_do_job`, no banco.
  */
 export type LancamentoNaLinha = "pp" | "pp_a_emitir" | "bv";
 
-export function lancamentoNaLinha(linha: {
+/** O que a linha tem lançado, cada coisa à parte: a linha com PP e BV
+ *  trava pelo BV, e a só com PP abre entre os tipos com PP. */
+export interface LancamentosDaLinha {
+  pp: boolean;
+  ppAEmitir: boolean;
+  bv: boolean;
+}
+
+export function lancamentosDaLinha(linha: {
   /** Status das PPs da linha. */
   pps: ReadonlyArray<{ status: string }>;
   /** PPs a emitir ainda abertas (decisão 153). */
   aEmitir: number;
   /** Situação dos BVs da linha. */
   bvs: ReadonlyArray<{ situacao: string }>;
-}): LancamentoNaLinha | null {
-  if (linha.pps.some((pp) => pp.status !== "cancelada")) return "pp";
-  if (linha.aEmitir > 0) return "pp_a_emitir";
-  if (linha.bvs.some((bv) => bv.situacao !== "cancelado")) return "bv";
-  return null;
+}): LancamentosDaLinha {
+  return {
+    pp: linha.pps.some((pp) => pp.status !== "cancelada"),
+    ppAEmitir: linha.aEmitir > 0,
+    bv: linha.bvs.some((bv) => bv.situacao !== "cancelado"),
+  };
+}
+
+/**
+ * Até onde o tipo de custo da linha muda no "Editar orçado" (revisão da
+ * decisão 115, 28/10/2026). O Tiago liberou a linha com PP — inclusive a que
+ * já está no financeiro —, mas só entre os tipos que geram PP: a PP emitida
+ * continua fazendo sentido numa linha AR, B, C, F ou FI, e não numa A ou D,
+ * em que o cliente paga o fornecedor direto. O BV segue travando: ele só
+ * existe em A, AR e D, e não se resolve por efeito colateral.
+ *
+ * - `livre`: nada lançado, qualquer tipo;
+ * - `so_com_pp`: PP ou PP a emitir, só os tipos com PP;
+ * - `travado`: BV, ou PP numa linha que hoje não é tipo com PP (dado
+ *   antigo — o banco não deixa nascer PP em A ou D).
+ */
+export type TravaDoTipo =
+  | { tipo: "livre" }
+  | { tipo: "so_com_pp"; lancamento: "pp" | "pp_a_emitir" }
+  | { tipo: "travado"; lancamento: LancamentoNaLinha };
+
+export function travaDoTipo(tipoAtual: TipoCusto, l: LancamentosDaLinha): TravaDoTipo {
+  if (l.bv) return { tipo: "travado", lancamento: "bv" };
+  const lancamento = l.pp ? "pp" : l.ppAEmitir ? "pp_a_emitir" : null;
+  if (!lancamento) return { tipo: "livre" };
+  return tipoGeraDesembolso(tipoAtual)
+    ? { tipo: "so_com_pp", lancamento }
+    : { tipo: "travado", lancamento };
+}
+
+/** A troca de `de` para `para` passa pela trava da linha? */
+export function trocaDeTipoPermitida(trava: TravaDoTipo, para: TipoCusto): boolean {
+  if (trava.tipo === "livre") return true;
+  if (trava.tipo === "travado") return false;
+  return tipoGeraDesembolso(para);
 }
 
 const NOME_DO_LANCAMENTO: Record<LancamentoNaLinha, string> = {
@@ -199,4 +242,28 @@ export function motivoDoTipoTravado(lancamento: LancamentoNaLinha, item?: string
   return item
     ? `"${item}" já tem ${nome}: o tipo de custo só muda enquanto nada foi lançado no item. Os valores do orçado continuam editáveis.`
     : `Linha com ${nome}: o tipo de custo só muda enquanto nada foi lançado no item. Os valores do orçado continuam editáveis.`;
+}
+
+/** Por que a linha com PP não vai para o tipo escolhido: só entre os tipos
+ *  com PP. Com o nome do item, é a recusa da action; sem ele, o `title`. */
+export function motivoDoTipoSoComPP(
+  lancamento: "pp" | "pp_a_emitir",
+  item?: string,
+): string {
+  const nome = NOME_DO_LANCAMENTO[lancamento];
+  const regra =
+    "o tipo de custo só muda entre os tipos que geram PP (A · Repasse, B, C, F · Externo e F · Interno).";
+  return item ? `"${item}" já tem ${nome}: ${regra}` : `Linha com ${nome}: ${regra}`;
+}
+
+/** A frase da recusa para a trava da linha, ou `null` quando a troca passa. */
+export function motivoDaTrocaRecusada(
+  trava: TravaDoTipo,
+  para: TipoCusto,
+  item?: string,
+): string | null {
+  if (trocaDeTipoPermitida(trava, para)) return null;
+  if (trava.tipo === "so_com_pp") return motivoDoTipoSoComPP(trava.lancamento, item);
+  if (trava.tipo === "travado") return motivoDoTipoTravado(trava.lancamento, item);
+  return null;
 }

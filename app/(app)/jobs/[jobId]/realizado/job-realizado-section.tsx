@@ -88,6 +88,7 @@ import { EdicaoFinanceiroBarra } from "./edicao-financeiro-barra";
 import {
   EdicaoFinanceiroConfirmarDialog,
   type ParcelaQueAcompanha,
+  type RecebimentoSemPrevisao,
 } from "./edicao-financeiro-confirmar-dialog";
 import { registrarAlteracaoDoFinanceiro } from "./actions-alteracao-financeiro";
 import {
@@ -116,6 +117,7 @@ import { ErrataConfirmarDialog } from "./errata-confirmar-dialog";
 import {
   registrarErrata,
   salvarErrataPronta,
+  salvarLinhasVermelhas,
   descartarErrataPronta,
 } from "./actions-errata";
 import {
@@ -158,8 +160,9 @@ import type { ParametrosDoJobGravados } from "@/lib/types";
  *  hoje, quem edita e o que já mudou. */
 export interface ParametrosDoJobNaPlanilha {
   parametros: ParametrosDoJobGravados;
-  /** `null` = só leitura. `naFila: false` = job aberto, só o câmbio. */
-  edicao: { naFila: boolean } | null;
+  /** `null` = só leitura. `travaDosParametros`: por que honorários,
+   *  impostos e taxas não mudam mais (a primeira nota); o câmbio segue. */
+  edicao: { naFila: boolean; travaDosParametros: string | null } | null;
   alteracoes: AlteracaoDosParametros[];
 }
 
@@ -859,11 +862,15 @@ function PlanilhaDoJob({
           linhasDoFinanceiro.length === 1 ? "linha alterada" : "linhas alteradas"
         }`;
 
-  async function confirmarEdicaoDoFinanceiro(motivo: string) {
+  async function confirmarEdicaoDoFinanceiro(
+    motivo: string,
+    recebimentosNovos: Array<{ mes: string | null; data_prevista: string }>,
+  ) {
     setSalvando(true);
     setErroErrata(null);
     const r = await registrarAlteracaoDoFinanceiro(job.id, {
       motivo,
+      recebimentos_novos: recebimentosNovos,
       linhas: linhasDoFinanceiro.map((l) => ({
         job_item_orcado_id: l.id,
         valor_unitario: l.valorUnitarioPara,
@@ -913,11 +920,41 @@ function PlanilhaDoJob({
         });
     setSalvando(false);
     if (!r.ok) {
+      // Decisão 226: a linha vermelha entra antes da errata. Se a errata
+      // falhou depois, a vermelha já está gravada e sai do rascunho — o
+      // reenvio não a cria de novo.
+      const gravadas = "vermelhasGravadas" in r ? (r.vermelhasGravadas ?? []) : [];
+      if (gravadas.length > 0) {
+        const chaves = gravadas.map((c) => errata.chaveDaNovaDoPedido(c));
+        for (const chave of chaves) if (chave) errata.remover(chave);
+        router.refresh();
+      }
       setErroErrata(r.message);
       return;
     }
     setConfirmando(false);
     setAbertaDaPronta(false);
+    errata.descartar();
+    router.refresh();
+  }
+
+  /** Decisão 226: só linha vermelha no rascunho. Não é errata — sem pop-up
+   *  e sem descrição, para o GP e para o produtor. */
+  async function salvarSoVermelhas() {
+    if (errata.faltaNomear) {
+      setErroErrata("Preencha o nome da linha vermelha antes de salvar.");
+      return;
+    }
+    setSalvando(true);
+    setErroErrata(null);
+    const { descricao: _descricao, ...doRascunho } = errata.payload("");
+    void _descricao;
+    const r = await salvarLinhasVermelhas(job.id, { ...doRascunho, meses_novos: [] });
+    setSalvando(false);
+    if (!r.ok) {
+      setErroErrata(r.message);
+      return;
+    }
     errata.descartar();
     router.refresh();
   }
@@ -1353,8 +1390,13 @@ function PlanilhaDoJob({
   const acompanhamDoFinanceiro = React.useMemo(() => {
     const envio: ParcelaQueAcompanha[] = [];
     const recebimento: ParcelaQueAcompanha[] = [];
+    // O valor que entra num faturamento sem previsão para acompanhar — o job
+    // que abriu sem faturamento, ou o mês do mensal sem parcela (revisão de
+    // 28/10/2026): o pop-up pede a data. Na fila não — lá a previsão é do
+    // formulário da abertura.
+    const semPrevisao: RecebimentoSemPrevisao[] = [];
     if (!edicaoDoFinanceiro || linhasDoFinanceiro.length === 0) {
-      return { envio, recebimento };
+      return { envio, recebimento, semPrevisao };
     }
     const deltaTotal = emReais(
       emReais(totaisDepois.faturamentoPrevisto) - emReais(totaisAntes.faturamentoPrevisto),
@@ -1371,11 +1413,21 @@ function PlanilhaDoJob({
     }
     const blocosDoRecebimento = mensal
       ? [...deltaDoMes.entries()].map(([chave, delta]) => ({
+          chave: chave as string | null,
           delta,
           linhas: edicaoDoFinanceiro.recebimento.filter((r) => r.mes?.slice(0, 7) === chave),
         }))
-      : [{ delta: deltaTotal, linhas: edicaoDoFinanceiro.recebimento }];
+      : [{ chave: null, delta: deltaTotal, linhas: edicaoDoFinanceiro.recebimento }];
+    const naFila = job.status === "aguardando_abertura";
     for (const bloco of blocosDoRecebimento) {
+      if (!naFila && bloco.linhas.length === 0 && bloco.delta >= 0.005) {
+        semPrevisao.push({
+          mes: bloco.chave ? `${bloco.chave}-01` : null,
+          rotulo: bloco.chave ? nomeDoMes(`${bloco.chave}-01`) : "Faturamento do job",
+          valor: bloco.delta,
+        });
+        continue;
+      }
       const depois = distribuirDelta(bloco.linhas, bloco.delta);
       bloco.linhas.forEach((l, k) => {
         if (depois[k].valor === l.valor) return;
@@ -1400,8 +1452,9 @@ function PlanilhaDoJob({
         });
       });
     }
-    return { envio, recebimento };
+    return { envio, recebimento, semPrevisao };
   }, [
+    job.status,
     edicaoDoFinanceiro,
     linhasDoFinanceiro,
     totaisAntes,
@@ -2143,6 +2196,11 @@ function PlanilhaDoJob({
           podeDesfazer={errata.podeDesfazer}
           onConfirmar={() => {
             setErroErrata(null);
+            // Decisão 226: só linha vermelha salva direto, sem pop-up.
+            if (errata.soVermelhas && !prontaAberta) {
+              void salvarSoVermelhas();
+              return;
+            }
             setConfirmando(true);
           }}
           modo={prepara ? "prepara" : "registra"}
@@ -2154,6 +2212,15 @@ function PlanilhaDoJob({
                 }
               : null
           }
+          vermelhas={
+            errata.soVermelhas && !prontaAberta
+              ? "so"
+              : errata.vermelhasForaDaErrata.length > 0
+                ? "junto"
+                : "nenhuma"
+          }
+          salvando={salvando && !confirmando}
+          erro={confirmando ? null : erroErrata}
         />
       )}
 
@@ -2208,6 +2275,7 @@ function PlanilhaDoJob({
         moeda={versao.moeda}
         envio={acompanhamDoFinanceiro.envio}
         recebimento={acompanhamDoFinanceiro.recebimento}
+        recebimentoSemPrevisao={acompanhamDoFinanceiro.semPrevisao}
         planejadoAcompanha={interno}
         naAbertura={job.status === "aguardando_abertura"}
         salvando={salvando}
@@ -2257,6 +2325,10 @@ function PlanilhaDoJob({
               }
             : null
         }
+        vermelhasForaDaErrata={errata.vermelhasForaDaErrata.map((chave) => {
+          const grupoId = errata.itens.find((i) => i.id === chave)?.grupo_id;
+          return { chave, grupo: errata.grupos.find((g) => g.id === grupoId)?.nome ?? "—" };
+        })}
       />
     </div>
   );
