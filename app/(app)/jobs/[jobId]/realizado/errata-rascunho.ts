@@ -201,6 +201,13 @@ export interface RascunhoErrata {
   resumo: string;
   /** Toda linha nova precisa de nome antes de a errata poder ser gravada. */
   faltaNomear: boolean;
+  /** Decisão 226: as linhas vermelhas novas em agrupamento que já existe —
+   *  elas não são errata e entram direto. Pela chave do rascunho. */
+  vermelhasForaDaErrata: string[];
+  /** Só há linha vermelha nova no rascunho: salvar não é errata. */
+  soVermelhas: boolean;
+  /** A chave do rascunho da N-ésima linha nova do pedido (`nova:N`). */
+  chaveDaNovaDoPedido: (chavePedido: string) => string | null;
   /** O que vai à action: o conteúdo da errata (o mesmo que a errata
    *  pronta guarda) e a descrição. */
   payload: (descricao: string) => ConteudoErrata & { descricao: string };
@@ -877,7 +884,10 @@ export function useRascunhoErrata(
     const nov = conta("nova");
     const can = conta("cancelada");
     if (alt) partes.push(`${alt} ${alt === 1 ? "linha alterada" : "linhas alteradas"}`);
-    if (nov) partes.push(`${nov} ${nov === 1 ? "linha nova" : "linhas novas"}`);
+    // Decisão 226: a linha vermelha conta à parte — ela não é errata.
+    const verm = mudancas.filter((m) => m.acao === "nova" && m.vermelha).length;
+    if (nov - verm) partes.push(`${nov - verm} ${nov - verm === 1 ? "linha nova" : "linhas novas"}`);
+    if (verm) partes.push(`${verm} ${verm === 1 ? "linha vermelha" : "linhas vermelhas"}`);
     if (can) partes.push(`${can} ${can === 1 ? "linha cancelada" : "linhas canceladas"}`);
     // A organização vem depois dos valores (decisão 162).
     partes.push(...resumoDaEstrutura(estrutura));
@@ -885,6 +895,27 @@ export function useRascunhoErrata(
   }, [mudancas, estrutura]);
 
   const faltaNomear = novas.some((n) => n.item.trim() === "");
+
+  // Decisão 226: a vermelha nova num agrupamento que já existe sai da
+  // errata. A criada num agrupamento novo desta errata fica nela — o
+  // agrupamento só nasce com a errata.
+  const vermelhasForaDaErrata = React.useMemo(() => {
+    const grupoDe = new Map(itens.map((i) => [i.id, i.grupo_id]));
+    return novas
+      .filter((n) => n.vermelha && !(grupoDe.get(n.chave) ?? n.grupoId).startsWith(PREFIXO_GRUPO_NOVO))
+      .map((n) => n.chave);
+  }, [novas, itens]);
+  const soVermelhas =
+    mudancas.length > 0 &&
+    estrutura.length === 0 &&
+    mudancas.every((m) => m.acao === "nova" && vermelhasForaDaErrata.includes(m.chave));
+  const chaveDaNovaDoPedido = React.useCallback(
+    (chavePedido: string) => {
+      const k = /^nova:(\d+)$/.exec(chavePedido);
+      return k ? (novas[Number(k[1]) - 1]?.chave ?? null) : null;
+    },
+    [novas],
+  );
 
   /** A organização no formato gravado. As chaves provisórias são
    *  renumeradas pela posição na lista (`nova:1`, `grupo-novo:1`…), que é
@@ -1006,6 +1037,9 @@ export function useRascunhoErrata(
     temMudanca: mudancas.length > 0 || estrutura.length > 0,
     resumo,
     faltaNomear,
+    vermelhasForaDaErrata,
+    soVermelhas,
+    chaveDaNovaDoPedido,
     payload,
     grupos,
     moverItem,

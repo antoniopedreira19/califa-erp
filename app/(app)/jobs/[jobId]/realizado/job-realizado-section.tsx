@@ -117,6 +117,7 @@ import { ErrataConfirmarDialog } from "./errata-confirmar-dialog";
 import {
   registrarErrata,
   salvarErrataPronta,
+  salvarLinhasVermelhas,
   descartarErrataPronta,
 } from "./actions-errata";
 import {
@@ -919,11 +920,41 @@ function PlanilhaDoJob({
         });
     setSalvando(false);
     if (!r.ok) {
+      // Decisão 226: a linha vermelha entra antes da errata. Se a errata
+      // falhou depois, a vermelha já está gravada e sai do rascunho — o
+      // reenvio não a cria de novo.
+      const gravadas = "vermelhasGravadas" in r ? (r.vermelhasGravadas ?? []) : [];
+      if (gravadas.length > 0) {
+        const chaves = gravadas.map((c) => errata.chaveDaNovaDoPedido(c));
+        for (const chave of chaves) if (chave) errata.remover(chave);
+        router.refresh();
+      }
       setErroErrata(r.message);
       return;
     }
     setConfirmando(false);
     setAbertaDaPronta(false);
+    errata.descartar();
+    router.refresh();
+  }
+
+  /** Decisão 226: só linha vermelha no rascunho. Não é errata — sem pop-up
+   *  e sem descrição, para o GP e para o produtor. */
+  async function salvarSoVermelhas() {
+    if (errata.faltaNomear) {
+      setErroErrata("Preencha o nome da linha vermelha antes de salvar.");
+      return;
+    }
+    setSalvando(true);
+    setErroErrata(null);
+    const { descricao: _descricao, ...doRascunho } = errata.payload("");
+    void _descricao;
+    const r = await salvarLinhasVermelhas(job.id, { ...doRascunho, meses_novos: [] });
+    setSalvando(false);
+    if (!r.ok) {
+      setErroErrata(r.message);
+      return;
+    }
     errata.descartar();
     router.refresh();
   }
@@ -2165,6 +2196,11 @@ function PlanilhaDoJob({
           podeDesfazer={errata.podeDesfazer}
           onConfirmar={() => {
             setErroErrata(null);
+            // Decisão 226: só linha vermelha salva direto, sem pop-up.
+            if (errata.soVermelhas && !prontaAberta) {
+              void salvarSoVermelhas();
+              return;
+            }
             setConfirmando(true);
           }}
           modo={prepara ? "prepara" : "registra"}
@@ -2176,6 +2212,15 @@ function PlanilhaDoJob({
                 }
               : null
           }
+          vermelhas={
+            errata.soVermelhas && !prontaAberta
+              ? "so"
+              : errata.vermelhasForaDaErrata.length > 0
+                ? "junto"
+                : "nenhuma"
+          }
+          salvando={salvando && !confirmando}
+          erro={confirmando ? null : erroErrata}
         />
       )}
 
@@ -2280,6 +2325,10 @@ function PlanilhaDoJob({
               }
             : null
         }
+        vermelhasForaDaErrata={errata.vermelhasForaDaErrata.map((chave) => {
+          const grupoId = errata.itens.find((i) => i.id === chave)?.grupo_id;
+          return { chave, grupo: errata.grupos.find((g) => g.id === grupoId)?.nome ?? "—" };
+        })}
       />
     </div>
   );

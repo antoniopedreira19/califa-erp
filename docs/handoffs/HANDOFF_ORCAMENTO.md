@@ -6031,3 +6031,15 @@ A exceção da 204 deixou de ser "só o administrador". Quando uma regra ligada 
   regra sai. O administrador segue a chave "aprova direto na tela".
 - Migration `20261028500001_excecao_no_fechamento_pelo_gp_e_comite.sql`.
   Ver [225](../decisions/225-excecao-no-fechamento-pelo-gp-e-comite.md).
+## ⚠️ Nota de 2026-10-28 — a versão aprovada mostra as erratas do job (decisão 226)
+
+- Com job aberto, a versão aprovada mostra a planilha do job (sem linha
+  vermelha e sem a cancelada), lida por `lib/data/versao-aprovada-do-job.ts`.
+  A versão gravada não muda. Ficam de fora job devolvido, cancelado e Mídia
+  Off.
+- Botão **"Histórico"** à esquerda do "Exibir": "Aprovada pelo cliente" e
+  cada errata / alteração do financeiro / save, com faixa e destaque. É um
+  contexto (`versoes/[versaoId]/historico-do-orcamento.tsx`) lido pela
+  `PlanilhaVersao`, pela `GruposSection`, pela `ItensTable` e, no mensal, pela
+  `PlanilhaMensalDoHistorico`.
+- A exportação da versão aprovada sai sempre com a planilha de hoje.

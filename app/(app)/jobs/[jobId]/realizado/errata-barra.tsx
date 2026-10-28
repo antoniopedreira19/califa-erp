@@ -13,7 +13,7 @@
  */
 
 import * as React from "react";
-import { FilePenLine, X, Undo2, Send } from "lucide-react";
+import { AlertCircle, FilePenLine, X, Undo2, Send } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 
 interface ParDeValores {
@@ -42,6 +42,14 @@ interface Props {
   /** A errata só reorganiza a planilha (decisão 162): nenhum valor muda. Ela
    *  devolve o job ao mural como qualquer errata. */
   soOrganizacao: boolean;
+  /** Decisão 226: a linha vermelha nova não é errata. "so": o rascunho só
+   *  tem ela — o botão salva direto, sem pop-up; "junto": ela vai com uma
+   *  errata e entra fora dela. */
+  vermelhas: "nenhuma" | "so" | "junto";
+  /** Salvando só a linha vermelha (que não passa pelo pop-up). */
+  salvando: boolean;
+  /** O erro de salvar só a linha vermelha. */
+  erro: string | null;
 }
 
 /** Custo que sobe é laranja, custo que desce é verde — a mesma leitura do
@@ -111,11 +119,14 @@ export function ErrataBarra({
   modo,
   pronta,
   soOrganizacao,
+  vermelhas,
+  salvando,
+  erro,
 }: Props) {
   const prepara = modo === "prepara";
   // O título diz de onde a errata veio; o texto de apoio, o que o botão
   // principal faz — cada papel tem a sua consequência.
-  const titulo = pronta
+  const tituloDaErrata = pronta
     ? prepara
       ? "Errata pronta em edição"
       : "Errata pronta para envio"
@@ -123,11 +134,38 @@ export function ErrataBarra({
   const consequencia = soOrganizacao
     ? "Confirmar registra a errata e devolve o job ao mural de abertura. Nenhum valor muda: os itens só são reorganizados."
     : "Confirmar registra a errata, atualiza o faturamento previsto e devolve o job ao mural de abertura.";
-  const apoio = prepara
+  const apoioDaErrata = prepara
     ? "Deixar pronta salva a errata no job para um GP revisar e enviar ao financeiro. Até o envio, nada muda no job."
     : pronta
       ? `Preparada por ${pronta.autorNome} em ${pronta.quando}. ${consequencia}`
       : consequencia;
+  // Decisão 226 (28/10/2026): enquanto nada é errata, a barra fica neutra —
+  // a linha vermelha entra direto; o resto vira errata.
+  const neutra = !pronta && !temMudanca;
+  const titulo = neutra || vermelhas === "so" ? "Planilha em edição" : tituloDaErrata;
+  const apoio = neutra
+    ? prepara
+      ? "Linha vermelha entra direto na planilha. Mudar valor, criar item, cancelar linha ou reorganizar fica pronto para um GP enviar."
+      : "Linha vermelha entra direto na planilha. Mudar valor, criar item, cancelar linha ou reorganizar vira errata."
+    : vermelhas === "so"
+      ? "Salvar põe a linha na planilha na hora. Não é errata: o job não volta ao mural e a PP dela já pode ser gerada e enviada."
+      : vermelhas === "junto"
+        ? `${apoioDaErrata} ${prepara ? "A linha vermelha entra na hora, sem esperar o GP." : "A linha vermelha entra fora da errata."}`
+        : apoioDaErrata;
+  const rotuloDoBotao =
+    neutra
+      ? "Salvar"
+      : vermelhas === "so"
+        ? salvando
+          ? "Salvando…"
+          : resumo.startsWith("1 ")
+            ? "Salvar linha vermelha"
+            : "Salvar linhas vermelhas"
+        : prepara
+          ? pronta
+            ? "Salvar errata pronta"
+            : "Deixar pronta para envio"
+          : "Confirmar errata";
   return (
     // `sticky` e não `fixed`: a barra pertence à planilha, e a sidebar do
     // app não pode ficar por baixo dela. Fica colada no pé da janela
@@ -145,6 +183,12 @@ export function ErrataBarra({
             <p className="text-[11.5px] leading-relaxed text-muted-foreground">
               {apoio}
             </p>
+            {erro && (
+              <p role="alert" className="mt-1 flex items-center gap-1.5 text-[11.5px] font-semibold text-california-red">
+                <AlertCircle className="h-3.5 w-3.5 flex-none" />
+                {erro}
+              </p>
+            )}
           </div>
         </div>
 
@@ -185,15 +229,15 @@ export function ErrataBarra({
             <button
               type="button"
               onClick={onConfirmar}
-              disabled={!temMudanca}
+              disabled={!temMudanca || salvando}
               className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-california-red-hover disabled:cursor-not-allowed disabled:opacity-45"
             >
-              {prepara ? <Send className="h-3.5 w-3.5" /> : <FilePenLine className="h-3.5 w-3.5" />}
-              {prepara
-                ? pronta
-                  ? "Salvar errata pronta"
-                  : "Deixar pronta para envio"
-                : "Confirmar errata"}
+              {prepara && vermelhas !== "so" && !neutra ? (
+                <Send className="h-3.5 w-3.5" />
+              ) : (
+                <FilePenLine className="h-3.5 w-3.5" />
+              )}
+              {rotuloDoBotao}
             </button>
           </div>
         </div>

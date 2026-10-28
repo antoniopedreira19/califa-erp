@@ -13,6 +13,7 @@ import { AcoesDoGrupo, NomeDoGrupo } from "./grupo-linha";
 import type { FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 import type { VisaoBv } from "@/lib/calculos/bv-planilha";
 import { MenuExibirColunas } from "@/app/(app)/_planilha/exibir-colunas";
+import { useHistoricoDoOrcamento } from "./historico-do-orcamento";
 import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
 import {
   BotaoRecolherTodos,
@@ -95,6 +96,7 @@ export function GruposSection({
   interno,
   rotuloTotal,
 }: Props) {
+  const historico = useHistoricoDoOrcamento();
   // A máquina de estado mora em `_planilha/recolher-grupos`: a planilha do
   // job, a da conferência do financeiro e os blocos da visão agregada
   // usam a MESMA, e quatro cópias divergiriam na primeira correção.
@@ -136,6 +138,9 @@ export function GruposSection({
         )}
         <div className="flex items-center gap-3">
           {controleDoSave}
+          {/* Decisão 226: o Histórico da versão aprovada, à esquerda do
+              "Exibir". Só existe com o provedor (job aberto). */}
+          {historico?.botao ?? null}
           {/* ⚠️ A chave Bruto ⇄ Líquido saiu daqui em 08/09/2026
               (decisão 062). O BV deixou de descontar o PLANEJADO e passou
               a descontar só o REALIZADO — que não existe nesta tela.

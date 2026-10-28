@@ -43,10 +43,17 @@ import {
   type Organizacao,
 } from "@/lib/calculos/organizacao-errata";
 import { comParametrosDoJob } from "@/lib/data/parametros-do-job";
+import {
+  separarLinhasVermelhas,
+  sobraErrata,
+  trocarMarcadores,
+  type LinhaVermelhaSeparada,
+} from "@/lib/calculos/linha-vermelha-fora-da-errata";
 
-type Ok = { ok: true; errataId: string };
+/** `vermelhasGravadas`: as linhas vermelhas do rascunho que entraram fora
+ *  da errata (decisão 226), pela chave `nova:N` do pedido. */
+type Ok = { ok: true; errataId: string; vermelhasGravadas: string[] };
 type Err = { ok: false; message: string };
-type Result = Ok | Err;
 
 const TIPOS = TIPOS_CUSTO;
 
@@ -531,7 +538,7 @@ function planejadoInformado(l: {
 export async function registrarErrata(
   jobId: string,
   payload: PayloadErrata,
-): Promise<Result> {
+): Promise<Ok | ErrComVermelhas> {
   const session = await requireSession();
   const gate = await checarPermissao(session, "jobs.criar_errata");
   if (!gate.ok) return gate;
@@ -549,14 +556,19 @@ export async function registrarErrata(
   const { descricao } = parsed.data;
   const errataProntaId = parsed.data.errataProntaId ?? null;
 
+  // Decisão 226: a linha vermelha nova entra antes e fora da errata.
+  const fora = await separarEGravarVermelhas(session, jobId, parsed.data);
+  if (!fora.ok) return fora;
+  const { dados, vermelhasGravadas } = fora;
+
   const montada = await montarErrata(
     session,
     jobId,
-    parsed.data,
+    dados,
     descricao,
     "job.errata_registrada",
   );
-  if (!montada.ok) return montada;
+  if (!montada.ok) return { ...montada, vermelhasGravadas };
   const { mudancas, antes, depois, perderamBv, devolveAoMural } = montada;
 
   const { data: gravada, error: gravarErr } = await supabase.rpc(
@@ -577,7 +589,11 @@ export async function registrarErrata(
       gravarErr?.code === "P0001" && gravarErr.message ? ` ${gravarErr.message}` : "";
     return {
       ok: false,
-      message: `Não foi possível registrar a errata, e nada foi gravado.${doBanco}`,
+      message:
+        vermelhasGravadas.length > 0
+          ? `A linha vermelha foi salva, mas a errata não foi registrada.${doBanco}`
+          : `Não foi possível registrar a errata, e nada foi gravado.${doBanco}`,
+      vermelhasGravadas,
     };
   }
 
@@ -639,7 +655,7 @@ export async function registrarErrata(
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath(`/financeiro/jobs/${jobId}`);
   revalidatePath("/financeiro/abertura-de-job");
-  return { ok: true, errataId: errata.id };
+  return { ok: true, errataId: errata.id, vermelhasGravadas };
 }
 
 /**
@@ -659,7 +675,7 @@ export async function registrarErrata(
 export async function salvarErrataPronta(
   jobId: string,
   payload: PayloadErrataPronta,
-): Promise<{ ok: true; errataProntaId: string } | Err> {
+): Promise<{ ok: true; errataProntaId: string; vermelhasGravadas: string[] } | ErrComVermelhas> {
   const session = await requireSession();
   const gate = await checarPermissao(session, "jobs.preparar_errata");
   if (!gate.ok) return gate;
@@ -676,27 +692,33 @@ export async function salvarErrataPronta(
   }
   const { descricao, errataProntaId } = parsed.data;
 
+  // Decisão 226: a linha vermelha nova entra na hora, sem esperar o GP; a
+  // pronta guarda só o resto.
+  const fora = await separarEGravarVermelhas(session, jobId, parsed.data);
+  if (!fora.ok) return fora;
+  const { dados, vermelhasGravadas } = fora;
+
   const montada = await montarErrata(
     session,
     jobId,
-    parsed.data,
+    dados,
     descricao ?? "",
     "job.errata_pronta_salva",
   );
-  if (!montada.ok) return montada;
+  if (!montada.ok) return { ...montada, vermelhasGravadas };
   const { antes, depois, mudancas, estrutura } = montada;
 
   const conteudo = {
-    alteracoes: parsed.data.alteracoes,
-    novas: parsed.data.novas,
+    alteracoes: dados.alteracoes,
+    novas: dados.novas,
     cancelamentos: Array.from(
-      new Set([...parsed.data.cancelamentos, ...parsed.data.remocoes]),
+      new Set([...dados.cancelamentos, ...dados.remocoes]),
     ),
     // A organização da planilha (decisão 162), como a tela a pediu: quem
     // abre a pronta de novo continua dela.
-    estrutura: parsed.data.estrutura ?? null,
+    estrutura: dados.estrutura ?? null,
     // Decisão 219: o mês que a pronta inclui volta com ela.
-    meses_novos: parsed.data.meses_novos,
+    meses_novos: dados.meses_novos,
   };
   const numeros = {
     conteudo,
@@ -726,13 +748,14 @@ export async function salvarErrataPronta(
       .maybeSingle();
     if (error) {
       console.error("[errata_pronta.atualizar]", error.message);
-      return { ok: false, message: "Não foi possível salvar a errata pronta. Tente de novo." };
+      return { ok: false, message: "Não foi possível salvar a errata pronta. Tente de novo.", vermelhasGravadas };
     }
     if (!data) {
       return {
         ok: false,
         message:
           "Esta errata pronta já foi enviada ao financeiro ou descartada. Recarregue a página para ver como o job ficou.",
+        vermelhasGravadas,
       };
     }
     id = data.id as string;
@@ -755,10 +778,11 @@ export async function salvarErrataPronta(
           ok: false,
           message:
             "Este job já tem uma errata pronta para envio, feita por outra pessoa enquanto você editava. Recarregue a página e continue dela.",
+          vermelhasGravadas,
         };
       }
       console.error("[errata_pronta.criar]", error?.message);
-      return { ok: false, message: "Não foi possível salvar a errata pronta. Tente de novo." };
+      return { ok: false, message: "Não foi possível salvar a errata pronta. Tente de novo.", vermelhasGravadas };
     }
     id = data.id as string;
   }
@@ -779,7 +803,7 @@ export async function salvarErrataPronta(
   });
 
   revalidatePath(`/jobs/${jobId}`);
-  return { ok: true, errataProntaId: id };
+  return { ok: true, errataProntaId: id, vermelhasGravadas };
 }
 
 /**
@@ -839,6 +863,173 @@ export async function descartarErrataPronta(
 
   revalidatePath(`/jobs/${jobId}`);
   return { ok: true };
+}
+
+/** Linhas vermelhas gravadas antes de a errata (ou a pronta) falhar: a tela
+ *  as tira do rascunho, para o reenvio não as criar de novo (decisão 226). */
+type ErrComVermelhas = Err & { vermelhasGravadas?: string[] };
+
+/**
+ * Grava as linhas vermelhas novas FORA da errata (decisão 226, 28/10/2026).
+ *
+ * A linha vermelha nasce zerada no orçado e no planejado: não muda valor do
+ * job, faturamento nem a curva do financeiro. Por isso ela não é errata —
+ * não devolve o job ao mural, não trava o envio de PP (a 185 lê só as linhas
+ * das erratas) e o produtor a grava sem esperar o GP. Valem as mesmas
+ * portas da errata: job aberto, nem enviado para faturamento (no mensal, o
+ * mês do agrupamento).
+ */
+async function gravarLinhasVermelhas(
+  session: Sessao,
+  jobId: string,
+  vermelhas: LinhaVermelhaSeparada[],
+): Promise<{ ok: true; ids: Record<string, string> } | Err> {
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const { data: job } = await supabase
+    .from("jobs")
+    .select(
+      "id, status, versao_orcamento_aprovada_id, versao:versoes_orcamento!versao_orcamento_aprovada_id(orcamento:orcamentos!orcamento_id(categoria:categorias_dominio!categoria_id(modelo_planilha)))",
+    )
+    .eq("id", jobId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (!job) return { ok: false, message: "Job não encontrado." };
+  if (!jobAceitaAcoesPlanilha(job.status as JobStatus)) {
+    await logAuditEvent({
+      acao: "acao_negada",
+      tenantId,
+      entidadeTipo: "job",
+      entidadeId: jobId,
+      metadata: {
+        acao_tentada: "job.linha_vermelha_criada",
+        motivo: "status_bloqueia_edicao",
+        status_atual: job.status,
+      },
+    });
+    return {
+      ok: false,
+      message: "A linha vermelha só pode ser criada com o job em 'Aberto' ou 'Em produção'.",
+    };
+  }
+
+  const modelo = (job as { versao?: { orcamento?: { categoria?: { modelo_planilha?: string } } } })
+    .versao?.orcamento?.categoria?.modelo_planilha;
+  if (modelo === "mensal") {
+    let enviados: Set<string>;
+    try {
+      enviados = await mesesEnviadosDoJob(supabase, jobId, tenantId);
+    } catch {
+      return {
+        ok: false,
+        message: "Não foi possível conferir os meses enviados para faturamento. Tente de novo.",
+      };
+    }
+    if (enviados.size > 0) {
+      const { data: grupos } = await supabase
+        .from("jobs_grupos")
+        .select("id, mes:versoes_orcamento_meses!mes_id(mes)")
+        .eq("job_id", jobId)
+        .eq("tenant_id", tenantId)
+        .in("id", vermelhas.map((v) => v.grupo_id));
+      const tocados = new Set<string>();
+      for (const g of (grupos ?? []) as unknown as Array<{ mes: { mes: string } | null }>) {
+        const mes = g.mes?.mes ? String(g.mes.mes).slice(0, 10) : null;
+        if (mes && enviados.has(mes)) tocados.add(mes);
+      }
+      if (tocados.size > 0) {
+        return { ok: false, message: mensagemMesJaEnviado([...tocados].sort().map(nomeDoMes)) };
+      }
+    }
+  } else if (await jobJaEnviadoParaFaturamento(supabase, jobId, tenantId)) {
+    return { ok: false, message: MENSAGEM_JA_ENVIADO };
+  }
+
+  const { data, error } = await supabase.rpc("adicionar_linhas_vermelhas_do_job", {
+    p_job_id: jobId,
+    p_linhas: vermelhas,
+  });
+  if (error || !data) {
+    console.error("[linha_vermelha.gravar]", error?.message);
+    const doBanco = error?.code === "P0001" && error.message ? ` ${error.message}` : "";
+    return { ok: false, message: `Não foi possível salvar a linha vermelha, e nada foi gravado.${doBanco}` };
+  }
+  const ids = data as Record<string, string>;
+
+  await logAuditEvent({
+    acao: "job.linha_vermelha_criada",
+    tenantId,
+    entidadeTipo: "job",
+    entidadeId: jobId,
+    metadata: {
+      linhas: vermelhas.map((v) => ({ id: ids[v.chave] ?? null, item: v.item, tipo_custo: v.tipo_custo })),
+    },
+  });
+  return { ok: true, ids };
+}
+
+/** Tira do pedido as linhas vermelhas novas e as grava (decisão 226). O que
+ *  volta é a errata sem elas — com a vermelha que estava na nova ordem já
+ *  pelo id — e as chaves `nova:N` que entraram. Sem o resto, recusa: o
+ *  rascunho só de linha vermelha se salva por `salvarLinhasVermelhas`. */
+async function separarEGravarVermelhas(
+  session: Sessao,
+  jobId: string,
+  pedido: ConteudoValidado,
+): Promise<{ ok: true; dados: ConteudoValidado; vermelhasGravadas: string[] } | Err> {
+  const { conteudo, vermelhas } = separarLinhasVermelhas(pedido);
+  if (vermelhas.length === 0) return { ok: true, dados: pedido, vermelhasGravadas: [] };
+  if (!sobraErrata(conteudo)) {
+    return {
+      ok: false,
+      message: "Só há linha vermelha nesta edição: ela não é errata. Use “Salvar linha vermelha”.",
+    };
+  }
+  const gravadas = await gravarLinhasVermelhas(session, jobId, vermelhas);
+  if (!gravadas.ok) return gravadas;
+  revalidatePath(`/jobs/${jobId}`);
+  return {
+    ok: true,
+    dados: trocarMarcadores(conteudo, gravadas.ids),
+    vermelhasGravadas: vermelhas.map((v) => v.chave),
+  };
+}
+
+/**
+ * Salva só linhas vermelhas (decisão 226): o rascunho da planilha em que
+ * nada mais mudou. Sem descrição e sem pop-up — o "Salvar linha vermelha"
+ * da barra grava direto. Administrador, GP e produtor.
+ */
+export async function salvarLinhasVermelhas(
+  jobId: string,
+  payload: z.input<typeof conteudoSchema>,
+): Promise<{ ok: true; vermelhasGravadas: string[] } | Err> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "jobs.preparar_errata");
+  if (!gate.ok) return gate;
+  const supabase = createClient();
+  const travaMidia = await travaDoJobDeMidia(supabase, session.activeTenant.id, jobId, "errata");
+  if (travaMidia) return { ok: false, message: travaMidia };
+
+  const parsed = conteudoSchema.safeParse(payload);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const { conteudo, vermelhas } = separarLinhasVermelhas(parsed.data);
+  if (vermelhas.length === 0) return { ok: false, message: "Nenhuma linha vermelha informada." };
+  if (sobraErrata(conteudo)) {
+    return {
+      ok: false,
+      message: "Além da linha vermelha, a planilha tem mudanças que são errata. Confirme pela errata.",
+    };
+  }
+  const gravadas = await gravarLinhasVermelhas(session, jobId, vermelhas);
+  if (!gravadas.ok) return gravadas;
+
+  revalidatePath(`/jobs/${jobId}`);
+  revalidatePath(`/financeiro/jobs/${jobId}`);
+  return { ok: true, vermelhasGravadas: vermelhas.map((v) => v.chave) };
 }
 
 /** "2 linhas alteradas · 1 linha nova · 1 item movido" — o mesmo texto do

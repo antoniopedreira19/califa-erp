@@ -17,6 +17,8 @@
  *     não contava para o financeiro: a linha sai do save sem errata;
  *   - a organização da errata (decisão 162, `jobs_erratas.estrutura`):
  *     agrupamento renomeado, novo, removido e item movido.
+ *   - a linha vermelha criada fora da errata (decisão 226,
+ *     `jobs_itens_orcado.criada_por`): a linha sai.
  * O envio para abertura e a abertura não mudam a planilha: são marcos.
  *
  * Limite conhecido: a ORDEM das linhas dentro do agrupamento antes de uma
@@ -101,6 +103,15 @@ export interface SaveDesfeitoNoHistorico {
   por: string | null;
 }
 
+/** A linha vermelha criada fora da errata (decisão 226). */
+export interface LinhaVermelhaNoHistorico {
+  id: string;
+  item: string;
+  grupo: string;
+  quando: string;
+  por: string | null;
+}
+
 /** O registro da abertura que revisou uma errata (`jobs_aberturas`). */
 export interface RevisaoNoHistorico {
   errata_id: string;
@@ -127,9 +138,19 @@ export interface DadosDoHistorico {
   saves: SaveDaErrataNoHistorico[];
   savesDesfeitos: SaveDesfeitoNoHistorico[];
   revisoes: RevisaoNoHistorico[];
+  /** Decisão 226: as linhas vermelhas que entraram sem errata. */
+  linhasVermelhas: LinhaVermelhaNoHistorico[];
 }
 
-export type TipoDoMomento = "envio" | "fila" | "abertura" | "errata" | "alteracao" | "save" | "atual";
+export type TipoDoMomento =
+  | "envio"
+  | "fila"
+  | "abertura"
+  | "errata"
+  | "alteracao"
+  | "save"
+  | "linha_vermelha"
+  | "atual";
 
 export type AcaoNaLinha = ErrataAcao | "save" | "movida";
 
@@ -315,6 +336,49 @@ function soMexeuNoSave(i: JobErrataComItens["itens"][number]): boolean {
 
 /** As versões da planilha, da mais nova (a atual) para a mais antiga. */
 export function montarHistorico(d: DadosDoHistorico): VersaoDaPlanilha[] {
+  return reconstruir(d).versoes;
+}
+
+/**
+ * Decisão 226 (28/10/2026): o Histórico da versão aprovada do orçamento.
+ * A mesma reconstrução, vista pelo cliente: só os momentos que mudam o que
+ * ele combinou (errata, alteração do financeiro, save), sem linha vermelha
+ * (não tem orçado) e com a versão que ele aprovou no fim da lista. Envio e
+ * abertura são marcos do job e saem.
+ */
+export function historicoDoOrcamento(d: DadosDoHistorico, aprovadaEm: string | null): VersaoDaPlanilha[] {
+  const { versoes, inicio } = reconstruir(d);
+  const [atual, ...anteriores] = versoes;
+  const momentos = anteriores
+    .filter((v) => v.tipo !== "envio" && v.tipo !== "abertura" && v.tipo !== "linha_vermelha")
+    .map((v) => {
+      const vermelhas = new Set(v.itens.filter((i) => i.linha_vermelha).map((i) => i.id));
+      return { ...v, mudancas: v.mudancas.filter((m) => !(m.itemId && vermelhas.has(m.itemId))) };
+    })
+    .filter((v) => v.mudancas.length > 0 || v.estrutura.length > 0);
+  return [
+    atual,
+    ...momentos,
+    {
+      chave: "aprovada",
+      tipo: "envio",
+      rotulo: "Aprovada pelo cliente",
+      descricao: null,
+      quando: aprovadaEm ?? d.enviadoAberturaEm ?? d.criadoEm,
+      autor: null,
+      revisao: null,
+      itens: inicio.itens,
+      grupos: inicio.grupos,
+      mudancas: [],
+      estrutura: [],
+      valorJobGravado: null,
+    },
+  ];
+}
+
+/** A planilha de hoje desfeita momento a momento; `inicio` é a de antes do
+ *  primeiro momento — a da versão aprovada. */
+function reconstruir(d: DadosDoHistorico): { versoes: VersaoDaPlanilha[]; inicio: Estado } {
   const aberturaMs = d.abertoEm ? Date.parse(d.abertoEm) : null;
   const gruposPorId = new Map(d.grupos.map((g) => [g.id, g]));
   const grupoDoJobDaAncora = new Map(d.grupos.map((g) => [g.grupo_versao_id, g.id]));
@@ -651,6 +715,42 @@ export function montarHistorico(d: DadosDoHistorico): VersaoDaPlanilha[] {
     });
   }
 
+  // Decisão 226: a linha vermelha que entrou sem errata é um momento só
+  // dela; desfazer tira a linha.
+  for (const v of d.linhasVermelhas) {
+    momentos.push({
+      chave: `vermelha-${v.id}`,
+      tipo: "linha_vermelha",
+      quando: v.quando,
+      autor: v.por,
+      rotulo: "Linha vermelha",
+      descricao: null,
+      revisao: null,
+      valorJobGravado: null,
+      desfazer: (depois) => {
+        const l = depois.itens.find((x) => x.id === v.id);
+        if (!l) return { antes: depois, mudancas: [], estrutura: [] };
+        const antes = copiar(depois);
+        antes.itens = antes.itens.filter((x) => x.id !== v.id);
+        return {
+          antes,
+          mudancas: [
+            mudanca({
+              itemId: v.id,
+              item: v.item || l.item,
+              grupo: v.grupo || nomeDoGrupo(depois, l.grupo_id),
+              acao: "nova",
+              orcadoPara: 0,
+              planejadoPara: 0,
+              tipoPara: l.tipo_custo,
+            }),
+          ],
+          estrutura: [],
+        };
+      },
+    });
+  }
+
   // Dois momentos no mesmo instante ficam na ordem em que foram listados
   // (o envio antes da edição na fila, a abertura antes da errata).
   momentos.sort((a, b) => Date.parse(a.quando) - Date.parse(b.quando));
@@ -693,5 +793,5 @@ export function montarHistorico(d: DadosDoHistorico): VersaoDaPlanilha[] {
     });
     estado = antes;
   }
-  return [atual, ...anteriores];
+  return { versoes: [atual, ...anteriores], inicio: estado };
 }

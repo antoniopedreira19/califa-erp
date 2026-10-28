@@ -2114,8 +2114,8 @@ export function JobItemRealizadoTable({
                             Linha vermelha
                           </button>
                           <span className="text-[11px] text-muted-foreground">
-                            linha vermelha: orçado e planejado zerados, só
-                            recebe realizado por PP
+                            linha vermelha: sem orçado nem planejado; entra
+                            fora da errata e já recebe PP
                           </span>
                         </div>
                       </td>

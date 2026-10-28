@@ -15,6 +15,7 @@ import type {
   JobGrupo,
 } from "@/lib/types";
 import {
+  historicoDoOrcamento,
   montarHistorico,
   type DadosDoHistorico,
   type LinhaDaVersaoNoHistorico,
@@ -206,6 +207,7 @@ function base(extra: Partial<DadosDoHistorico>): DadosDoHistorico {
     saves: [],
     savesDesfeitos: [],
     revisoes: [],
+    linhasVermelhas: [],
     ...extra,
   };
 }
@@ -543,4 +545,50 @@ test("linha nova apagada antes da decisão 151: a nova sem id sai com a que a re
     versoes.find((v) => v.chave === "abertura")!.itens.map((i) => i.item),
     ["Item 1"],
   );
+});
+
+test("decisão 226: a linha vermelha sem errata é um momento e sai antes dele", () => {
+  const versoes = montarHistorico(
+    base({
+      linhas: [
+        linha("1", "ga", 1, 1000, 800),
+        linha("v", "ga", 2, 0, 0, { item_versao_id: null, linha_vermelha: true, item: "Van extra" }),
+      ],
+      linhasVermelhas: [
+        { id: "v", item: "Van extra", grupo: "Agrupamento A", quando: "2026-10-10T12:00:00Z", por: "Pessoa da produção" },
+      ],
+    }),
+  );
+  assert.deepEqual(versoes.map((v) => v.chave), ["atual", "vermelha-v", "abertura", "envio"]);
+  const momento = versoes[1];
+  assert.equal(momento.tipo, "linha_vermelha");
+  assert.equal(momento.autor, "Pessoa da produção");
+  assert.deepEqual(momento.mudancas.map((m) => [m.acao, m.item]), [["nova", "Van extra"]]);
+  assert.ok(porId(momento.itens, "v"));
+  assert.equal(porId(versoes[2].itens, "v"), undefined);
+});
+
+test("decisão 226: o histórico do orçamento tira a linha vermelha e termina na versão do cliente", () => {
+  const versoes = historicoDoOrcamento(
+    base({
+      linhas: [
+        linha("1", "ga", 1, 1200, 800),
+        linha("v", "ga", 2, 0, 0, { item_versao_id: null, linha_vermelha: true, item: "Van extra" }),
+      ],
+      erratas: [
+        errata("e1", "2026-10-05T12:00:00Z", [
+          itemDeErrata({ acao: "alterada", job_item_orcado_id: "1", valor_unitario_de: 1000, valor_unitario_para: 1200, total_de: 1000, total_para: 1200 }),
+        ]),
+      ],
+      linhasVermelhas: [
+        { id: "v", item: "Van extra", grupo: "Agrupamento A", quando: "2026-10-10T12:00:00Z", por: null },
+      ],
+    }),
+    "2026-09-30T12:00:00Z",
+  );
+  assert.deepEqual(versoes.map((v) => v.chave), ["atual", "errata-e1", "aprovada"]);
+  const aprovada = versoes[2];
+  assert.equal(aprovada.quando, "2026-09-30T12:00:00Z");
+  assert.equal(porId(aprovada.itens, "1")?.valor_unitario_orcado, 1000);
+  assert.equal(porId(aprovada.itens, "v"), undefined);
 });

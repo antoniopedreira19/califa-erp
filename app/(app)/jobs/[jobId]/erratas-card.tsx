@@ -179,8 +179,9 @@ export function ErratasCard({
       {vazio && !pronta && (
         <p className="px-6 py-5 text-sm text-muted-foreground">
           Nenhuma errata registrada. Alterações no orçado do job são feitas pelo
-          botão <strong className="text-foreground">Realizar errata</strong>, na
-          aba Planilha Interna, e aparecem aqui.
+          botão <strong className="text-foreground">Editar planilha</strong>, na
+          aba Planilha Interna, e aparecem aqui. Linha vermelha não é errata e
+          não entra nesta lista.
         </p>
       )}
 

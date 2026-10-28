@@ -15,6 +15,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { FolderTree } from "lucide-react";
+import { useHistoricoDoOrcamento } from "./historico-do-orcamento";
 import type {
   Categoria,
   CategoriaModeloPlanilha,
@@ -119,7 +120,28 @@ interface Props {
   subtituloTotais?: string;
 }
 
-export function PlanilhaVersao({
+/** Decisão 226: com uma versão antiga escolhida no Histórico do orçamento,
+ *  a planilha mostra ela. O mês do mensal já chega trocado pela
+ *  `PlanilhaMensal`. */
+export function PlanilhaVersao(props: Props) {
+  const historico = useHistoricoDoOrcamento();
+  const antiga = !props.mes && historico?.versao ? historico.versao : null;
+  if (!antiga) return <PlanilhaVersaoBase {...props} />;
+  const porGrupo = new Map<string, VersaoOrcamentoItem[]>();
+  for (const g of antiga.grupos) porGrupo.set(g.id, []);
+  for (const it of [...antiga.itens].sort((a, b) => a.ordem - b.ordem)) porGrupo.get(it.grupo_id)?.push(it);
+  return (
+    <PlanilhaVersaoBase
+      {...props}
+      grupos={antiga.grupos}
+      itens={antiga.itens}
+      secoes={antiga.grupos.map((g) => ({ grupo: g, itens: porGrupo.get(g.id) ?? [] }))}
+      nomeDoGrupo={Object.fromEntries(antiga.grupos.map((g) => [g.id, g.nome]))}
+    />
+  );
+}
+
+function PlanilhaVersaoBase({
   grupos,
   itens,
   secoes,
