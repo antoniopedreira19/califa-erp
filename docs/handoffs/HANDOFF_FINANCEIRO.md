@@ -8565,3 +8565,14 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   R$ 1.200), a saída do dia estava ligada à cauda: desfeita a ligação de
   uma de cada valor e feito o par (o extrato não diz qual favorecido ficou
   sem o PIX).
+
+## ⚠️ Nota de 2026-10-28 — parâmetros do job também depois da abertura (decisão 224)
+
+- Na página do job aberto, o "Editar" da linha de parâmetros vale para
+  qualquer modelo, com as regras do "Editar orçado": até a primeira nota
+  emitida ou o encerramento. A previsão de recebimento, os recolhimentos de
+  imposto e o envio ainda sem nota acompanham. Com nota, cadeado; o câmbio
+  do internacional segue até o encerramento.
+- Migration `20261028400001` (só tira a recusa "só o câmbio" da função).
+- Teste no TES-1036/26 (fee 13 → 14% com o job aberto). Ver a
+  [decisão 224](../decisions/224-parametros-do-job-na-abertura.md).

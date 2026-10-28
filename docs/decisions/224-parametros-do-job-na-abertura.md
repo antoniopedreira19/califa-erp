@@ -1,7 +1,7 @@
 # 224 — O financeiro edita os parâmetros do job na abertura
 
 **Data:** 2026-10-28
-**Status:** implementada em 28/10/2026.
+**Status:** implementada em 28/10/2026; revista no mesmo dia (também depois da abertura).
 **Quem decidiu:** Tiago. Pedido em 27/10/2026, com o print da linha de
 parâmetros da versão internacional: "Quero que esses campos possam ser
 acessados e editados pelo financeiro no momento da abertura do job (assim
@@ -13,7 +13,8 @@ abertura: lá, int. taxes, Impostos BR e custo de transação passam a ser
 editados também pelo financeiro, sem a Exceção do administrador.
 **Irmã de:** a [115](115-o-financeiro-edita-o-orcado-do-job.md) (o "Editar
 orçado"): mesma permissão, mesma função de gravação, mesmo histórico.
-**Migration:** `20261027980001_parametros_do_job.sql`.
+**Migrations:** `20261027980001_parametros_do_job.sql` e
+`20261028400001_parametros_do_job_depois_da_abertura.sql`.
 
 ## O que se edita
 
@@ -78,3 +79,30 @@ financeiro). A produção não vê a linha.
 - Nada foi copiado para os jobs que já existem: sem linha em
   `jobs_parametros`, vale a versão aprovada, a mesma leitura de antes.
 - A tela da versão no orçamento não mostra a alteração do job.
+
+## ⚠️ Revisão de 2026-10-28 — também depois da abertura
+
+Pedido do Tiago (28/10/2026): "Quero que os campos de fee e impostos e etc.
+possam ser modificados depois da abertura pelo financeiro também. Assim como
+os de câmbio. (não só no internacional, mas em qualquer tipo)". Escolha dele
+entre as duas leituras: **as regras do "Editar orçado"** (decisão 115).
+
+- Com o job aberto, honorários/fee, impostos e as taxas do internacional se
+  editam **até a primeira nota emitida** (no mensal, qualquer mês com nota:
+  os parâmetros mexem em todos os meses) **ou o encerramento**. Com nota, os
+  campos ficam com o cadeado e o motivo na dica; o câmbio do internacional
+  segue editável até o encerramento, porque não muda conta em reais.
+- Acompanham como na 115 (P3, P4): a previsão de recebimento (no mensal, mês
+  a mês), os recolhimentos de imposto e o envio para faturamento ainda sem
+  nota, cada parcela na proporção dela e com a mesma data. A foto da
+  abertura (`valor_job_abertura`) não muda depois da abertura.
+- A função `registrar_alteracao_do_financeiro` perdeu a recusa "depois da
+  abertura só o câmbio muda" (migration
+  `20261028400001_parametros_do_job_depois_da_abertura.sql`); a trava da
+  nota fica na action, como no "Editar orçado", e a parcela do envio que
+  virou nota continua recusada pela função.
+- Teste: TES-1036/26 aberto, fee 13 → 14%: valor do job e faturamento
+  R$ 54.109,67 → 54.583,65; a parcela de recebimento e o recolhimento de
+  imposto acompanharam (impostos R$ 10.619,67 → 10.713,65); a foto da
+  abertura ficou em R$ 54.109,67. TES-1029/26 (nacional, sem nota) abre o
+  "Editar" e o pop-up (sem gravar); TES-1001/26 (com nota) mostra o cadeado.

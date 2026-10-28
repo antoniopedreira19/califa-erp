@@ -158,8 +158,9 @@ import type { ParametrosDoJobGravados } from "@/lib/types";
  *  hoje, quem edita e o que já mudou. */
 export interface ParametrosDoJobNaPlanilha {
   parametros: ParametrosDoJobGravados;
-  /** `null` = só leitura. `naFila: false` = job aberto, só o câmbio. */
-  edicao: { naFila: boolean } | null;
+  /** `null` = só leitura. `travaDosParametros`: por que honorários,
+   *  impostos e taxas não mudam mais (a primeira nota); o câmbio segue. */
+  edicao: { naFila: boolean; travaDosParametros: string | null } | null;
   alteracoes: AlteracaoDosParametros[];
 }
 
