@@ -71,6 +71,7 @@ import {
   baixarEConciliar,
   baixarPelaLinha,
   cancelarBaixasDesfeitas,
+  conciliarEmConjunto,
   conciliarLinha,
   conciliarPeloHistorico,
   conciliarPelosDocumentos,
@@ -96,7 +97,7 @@ import {
   type ContextoDasCelulas,
   type Cor,
 } from "./banco-tabela";
-import { CancelarBaixaDialog, CorrigirBaixaDialog, ProcurarTituloDialog, RegraDialog } from "./banco-dialogos";
+import { CancelarBaixaDialog, ConjuntoDialog, CorrigirBaixaDialog, ProcurarTituloDialog, RegraDialog } from "./banco-dialogos";
 import { BotoesDoFechamento } from "./fechamento";
 import { mensagemDoPeriodoFechado, noPeriodoFechado, type FechamentoDaConta } from "@/lib/conciliacao/fechamento";
 
@@ -167,6 +168,7 @@ export function AbaBanco({
   const [corrigindo, setCorrigindo] = React.useState<ResultadoDaLinha | null>(null);
   const [procurando, setProcurando] = React.useState<{ r: ResultadoDaLinha; marcados: string[] } | null>(null);
   const [cancelando, setCancelando] = React.useState<LancamentoSemLinha | null>(null);
+  const [conjuntoDe, setConjuntoDe] = React.useState<LancamentoSemLinha | null>(null);
   const [regraDe, setRegraDe] = React.useState<{ historico: string; l: Linha | null } | null>(null);
   // O "Lançar avulso": os cadastros dos formulários, lidos na primeira vez.
   const [dadosNovo, setDadosNovo] = React.useState<DadosDoNovoLancamento | null>(null);
@@ -502,6 +504,11 @@ export function AbaBanco({
       if (bloqueado(l.data)) return;
       setErroDoDialogo(null);
       setCancelando(l);
+    },
+    conciliarEmConjunto: (l) => {
+      if (bloqueado(l.data)) return;
+      setErroDoDialogo(null);
+      setConjuntoDe(l);
     },
     linkDoLancamento: (l) =>
       `/financeiro/conciliacao?conta=${contaId}&de=${l.data.slice(0, 8)}01&ate=${fimDoMes(l.data)}&highlight=${l.ids[0] ?? l.id}`,
@@ -1002,6 +1009,29 @@ export function AbaBanco({
               router.refresh();
             });
           }}
+        />
+      )}
+
+      {conjuntoDe && (
+        <ConjuntoDialog
+          inicial={conjuntoDe}
+          linhas={banco.linhas.filter((l) => !l.conciliada && !l.ignorada)}
+          lancamentos={conciliacao.naoApareceu}
+          pending={pending}
+          erro={erroDoDialogo}
+          onFechar={() => setConjuntoDe(null)}
+          onConfirmar={(linhaIds, lancamentoIds) =>
+            startTransition(async () => {
+              const res = await conciliarEmConjunto(linhaIds, lancamentoIds);
+              if (!res.ok) {
+                setErroDoDialogo(res.message);
+                return;
+              }
+              setConjuntoDe(null);
+              avisar(res);
+              router.refresh();
+            })
+          }
         />
       )}
 

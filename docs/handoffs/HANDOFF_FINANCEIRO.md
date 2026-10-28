@@ -8576,3 +8576,19 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - Migration `20261028400001` (só tira a recusa "só o câmbio" da função).
 - Teste no TES-1036/26 (fee 13 → 14% com o job aberto). Ver a
   [decisão 224](../decisions/224-parametros-do-job-na-abertura.md).
+
+## ⚠️ Nota de 2026-10-28 (5) — conciliar em conjunto (decisão 211)
+
+- Migration `20261028300003`: `conciliar_em_conjunto(p_linha_ids,
+  p_lancamento_ids)` liga várias linhas do banco a várias baixas sem linha da
+  mesma conta quando a soma bate ao centavo e cada linha recebe ao menos uma
+  baixa (a baixa com os juros, e as partes da mesma guia, contam como uma).
+  `conciliada_como = 'conjunto'` e o mesmo `grupo` nas linhas; o Desfazer
+  solta o conjunto inteiro, e `lancamento_desliga_a_linha` também, quando
+  uma baixa dele é cancelada.
+- Aba Banco: em "Baixa no sistema, sem linha no banco", o botão "Conciliar
+  em conjunto com linhas do banco" abre o diálogo com as linhas pendentes e
+  as baixas sem linha até 7 dias da baixa; só confirma com a soma batendo.
+- Usado nos 4 PIX de 14/10 da Santander Hitlab contra as 5 PPs do job
+  AMB-1002/26 (dois conjuntos, R$ 197.176,80).
+

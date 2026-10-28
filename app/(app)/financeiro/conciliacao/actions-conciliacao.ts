@@ -454,6 +454,26 @@ export async function registrarSaiuEVoltou(
   return { ok: true, mensagem: "Saída e devolução registradas no extrato, fora do DRE. O título continua a pagar." };
 }
 
+/** Várias linhas do banco com várias baixas cuja soma só bate no conjunto:
+ *  o fornecedor que recebeu as PPs em PIX de outros valores (decisão 211,
+ *  28/10/2026). Cada linha precisa de ao menos uma baixa. */
+export async function conciliarEmConjunto(linhaIds: string[], lancamentoIds: string[]): Promise<Resultado> {
+  const ok = z
+    .object({ linhas: z.array(UUID).min(1).max(50), lancamentos: z.array(UUID).min(1).max(200) })
+    .safeParse({ linhas: linhaIds, lancamentos: lancamentoIds });
+  if (!ok.success) return { ok: false, message: "Entrada inválida." };
+  const r = await chamar(
+    "conciliar_em_conjunto",
+    { p_linha_ids: linhaIds, p_lancamento_ids: lancamentoIds },
+    "Não foi possível conciliar o conjunto. Tente de novo.",
+  );
+  if (!r.ok) return r;
+  return {
+    ok: true,
+    mensagem: `${linhaIds.length === 1 ? "1 linha do banco conciliada" : `${linhaIds.length} linhas do banco conciliadas`} em conjunto com as baixas.`,
+  };
+}
+
 export async function ignorarLinha(linhaId: string, motivo: string | null): Promise<Resultado> {
   if (!UUID.safeParse(linhaId).success) return { ok: false, message: "Entrada inválida." };
   const r = await chamar(

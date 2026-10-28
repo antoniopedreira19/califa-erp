@@ -1136,9 +1136,20 @@ a BB California pela tela e a Santander Hitlab por migration".
   mútuo de R$ 185.000 da California (13/10); o imposto de R$ 1.822,41 (05/10,
   competência 3T na planilha), o PIX de R$ 464,72 (09/10, sem classificação
   na planilha), quatro PIX à Receita Federal (R$ 13.198,71, 23 e 26/10) e um
-  crédito de R$ 931,16 (23/10), que a planilha de 25/10 ainda não tem; e os
-  4 PIX de 14/10 (R$ 197.176,80) contra as 5 baixas de PP do mesmo dia, com
-  o mesmo total e valores diferentes um a um.
+  crédito de R$ 931,16 (23/10), que a planilha de 25/10 ainda não tem.
+- **Conciliar em conjunto** (migration `20261028300003`; Tiago, 28/10): os 4
+  PIX de 14/10 (R$ 197.176,80) pagaram as 5 PPs do job AMB-1002/26 em
+  valores que não batem um a um, mas fecham ao centavo em dois conjuntos
+  (R$ 84.990,00 + R$ 5.666,00 = PP-00166 + PP-00114; R$ 100.996,45 +
+  R$ 5.524,35 = PP-00116 + PP-00115 + PP-00113). A conciliação ganhou
+  `conciliar_em_conjunto`: várias linhas do banco com várias baixas da mesma
+  conta, soma ao centavo, ao menos uma baixa por linha; cada baixa se liga a
+  uma das linhas e todas ficam com o mesmo `grupo` (`conciliada_como =
+  'conjunto'`). O Desfazer solta o conjunto inteiro, e cancelar uma baixa
+  dele também. Na aba Banco, "Baixa no sistema, sem linha no banco" tem o
+  botão "Conciliar em conjunto com linhas do banco". As PPs e as baixas não
+  mudaram. Os dois conjuntos foram ligados pela tela; a Hitlab ficou sem
+  baixa sem linha e com 8 linhas do banco pendentes.
 
 ## A cauda: outubro dos jobs até o 3T (A6, 27/10/2026)
 

@@ -243,6 +243,9 @@ export function resolucaoDaLinha(
     case "par":
       texto = "Saída e devolução registradas; nenhum título baixado";
       break;
+    case "conjunto":
+      texto = `Em conjunto com outras linhas do banco: ${aspas(primeira)}${varios}${troca ? ` · data de ${diaMes(troca.de)} para ${diaMes(l.data)}, a do banco` : ""}`;
+      break;
     case "avulso":
       texto = `Avulso criado e baixado: ${primeira}`;
       break;
