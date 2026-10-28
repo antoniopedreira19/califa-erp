@@ -172,6 +172,11 @@ test("a regra vem antes do título de mesmo valor, e a baixa feita à mão vem a
   assert.equal(manual[0].estado, "ja_lancado");
 });
 
+test("\"PIX DEVOLVIDO\" também é devolução: a saída do mesmo dia vira o par", () => {
+  const res = casar([mov(0, -4200, "PIX ENVIADO", "2026-10-02"), mov(1, 4200, "PIX DEVOLVIDO", "2026-10-02")], vazio);
+  assert.deepEqual(res.map((r) => r.estado), ["par", "par"]);
+});
+
 test("a baixa feita à mão com juros conta pelo total que saiu da conta", () => {
   const l: LancamentoDoMotor = { id: "l1", data: "2026-10-19", valor: -1050, juros: 50, descricao: "PP 1/1" };
   const res = casar([mov(0, -1050, "PAGAMENTO DE TITULO")], { ...vazio, lancamentos: [l] });

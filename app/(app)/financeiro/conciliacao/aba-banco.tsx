@@ -1011,6 +1011,7 @@ export function AbaBanco({
           tipos={dados.tipos}
           subtipos={dados.subtipos}
           empresas={dados.empresas}
+          regionais={banco.regionais}
           contasDeDestino={contasDeDestino}
           inicial={centroDoAvulso(regraDe.l)}
           pending={pending}
@@ -1027,6 +1028,7 @@ export function AbaBanco({
                       tipoId: regra.tipoId,
                       subtipoId: regra.subtipoId,
                       empresaId: regra.empresaId,
+                      regionalId: regra.regionalId,
                       todasAsContas: regra.todasAsContas,
                     });
               if (!res.ok) {

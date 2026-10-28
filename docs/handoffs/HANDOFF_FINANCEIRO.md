@@ -8535,8 +8535,31 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
     Outros, Agência California, onde a planilha lançou o IOF de outubro
     (R$ 5.599,01);
   - Santander GoCrazy, "TAR" → 04 · Custo Fixo · Tarifa bancária, Agência
-    California: 12 tarifas, R$ 406,00.
-- A regra não grava regional, e assim fica: nas contas da California e da
-  GoCrazy a despesa administrativa é da gerencial California, rateada como
-  "TD" pela regra de rateio (Tiago, 28/10/2026). Na Hitlab, Hitlab. CCH não
-  tem conta.
+    California, regional SS: 12 tarifas, R$ 406,00.
+- Nas contas da California e da GoCrazy, a empresa gerencial é a
+  California; na Hitlab, Hitlab; CCH não tem conta. A tarifa da California
+  Santander e do BB vai sem regional ("TD", rateada); a da GoCrazy vai para
+  SS, como a planilha (ver a nota 3).
+
+## ⚠️ Nota de 2026-10-28 (3) — a regional na regra do extrato (decisão 211)
+
+- Migration `20261028300001`: `extrato_regras.regional_id` (opcional; vazio
+  é o "TD" da planilha). `criar_regra_do_extrato` ganha `p_regional_id`
+  (confere que a regional é da empresa da regra) e `lancar_pela_regra`
+  grava a regional no lançamento.
+- "Lembrar como regra": campo **Regional**, "Todas (TD, pelo rateio)" por
+  padrão, com as regionais da empresa escolhida. A regra mostra a regional
+  no centro ("04 · Custo Fixo · Tarifa bancária · SS").
+- O Tiago mudou a decisão da nota 2 ("Na verdade vamos fazer como a
+  planilha. Colocando as tarifas da conta GO CRAZY como SS."): a regra "TAR"
+  da GoCrazy e as 12 tarifas que ela lançou receberam SS pela migration
+  (só o campo vazio, com auditoria `extrato.regra_regional`).
+
+## ⚠️ Nota de 2026-10-28 (4) — "PIX DEVOLVIDO" também é devolução (decisão 211)
+
+- O Santander escreve a volta do PIX como "DEVOLUCAO DE PIX" ou "PIX
+  DEVOLVIDO". O motor (`formaDoHistorico`) e `registrar_saiu_e_voltou`
+  (migration `20261028300002`) passam a aceitar os dois.
+- 27 pares "saiu e voltou" registrados pela tela na California Santander
+  (R$ 181.620,40). Duas devoluções "NAO EFETUADA" de 08/10 ficaram de fora:
+  as saídas daquele dia estão ligadas à cauda do histórico.

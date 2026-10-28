@@ -1078,6 +1078,43 @@ a BB California pela tela e a Santander Hitlab por migration".
   linha foi desfeita e lançada pela regra, e o motor agora não procura a
   cauda para a linha que uma regra do extrato descreve.
 
+### Tarifas, IOF e a regional da regra (28/10/2026)
+
+- **A regra antes do título** (revisão da decisão 199): duas tarifas de
+  R$ 250,00 da California Santander recebiam a sugestão de PPs de verba do
+  mesmo valor; agora a linha que casa com uma regra vai pela regra.
+- **Regras novas, pela tela, com o Tiago:** BB California "TAR" (04.012
+  Tarifa bancária) e "COBRANCA DE I.O.F." (07.009 Outros, onde a planilha
+  lançou o IOF de outubro, R$ 5.599,01); Santander GoCrazy "TAR" (04.012).
+  Todas na gerencial Agência California: GoCrazy é só CNPJ (contábil), não
+  empresa gerencial. 18 linhas lançadas.
+- **A regional da regra** (migration `20261028300001`): `extrato_regras.regional_id`,
+  opcional — vazio é o "TD" da planilha (rateado entre as regionais). O
+  "Lembrar como regra" ganhou o campo Regional, e `lancar_pela_regra` grava
+  a regional no lançamento. O Tiago primeiro decidiu TD para tudo e depois
+  mudou: "Na verdade vamos fazer como a planilha. Colocando as tarifas da
+  conta GO CRAZY como SS." A regra "TAR" da GoCrazy recebeu SS, e as 12
+  tarifas que ela já tinha lançado também (só o campo vazio foi preenchido,
+  com auditoria). As da California Santander e do BB continuam TD, como na
+  planilha.
+
+### As devoluções de PIX viram "saiu e voltou" (28/10/2026)
+
+- **A regra** (Tiago): o PIX que sai e volta é um pagamento errado que
+  retorna, mesmo quando é custo de job; o custo do job vai na nova
+  transação. No sistema, a saída e a volta viram par "saiu e voltou": as
+  duas linhas se anulam, fora do resultado, como o estorno da planilha.
+- **27 pares na California Santander** (R$ 181.620,40), todos com a saída no
+  mesmo dia: 26 "DEVOLUCAO DE PIX" e o "PIX DEVOLVIDO" de R$ 4.200 de 02/10
+  (o estorno da planilha; o pagamento refeito em 05/10 está na cauda). Para
+  esse último, o motor e `registrar_saiu_e_voltou` passaram a aceitar
+  "PIX DEVOLVIDO" (migration `20261028300002`).
+- **Ficaram de fora** duas "DEVOLUCAO DE PIX NAO EFETUADA" de 08/10
+  (R$ 350 e R$ 1.200): as saídas de mesmo valor daquele dia estão todas
+  ligadas à cauda (em R$ 350 a planilha tem 11 pagamentos no dia e o banco,
+  9). As três devoluções que a planilha lançou como entrada no custo do job
+  (R$ 15.500) já estão conciliadas pela cauda, como a planilha.
+
 ## A cauda: outubro dos jobs até o 3T (A6, 27/10/2026)
 
 Depois do inventário do 4T (planilha de 01 a 25/10 contra os extratos e o

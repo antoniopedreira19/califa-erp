@@ -514,7 +514,16 @@ export function padraoDoHistorico(historico: string): string {
 
 /** O que a regra faz: lança no centro de custo, ou transfere para outra conta. */
 export type RegraEscolhida =
-  | { modo: "lancamento"; padrao: string; tipoId: string; subtipoId: string; empresaId: string; todasAsContas: boolean }
+  | {
+      modo: "lancamento";
+      padrao: string;
+      tipoId: string;
+      subtipoId: string;
+      empresaId: string;
+      /** `null`: todas as regionais da empresa (o "TD" da planilha, rateado). */
+      regionalId: string | null;
+      todasAsContas: boolean;
+    }
   | { modo: "transferencia"; padrao: string; contaDestinoId: string };
 
 export function RegraDialog({
@@ -522,6 +531,7 @@ export function RegraDialog({
   tipos,
   subtipos,
   empresas,
+  regionais,
   contasDeDestino,
   inicial,
   pending,
@@ -534,6 +544,8 @@ export function RegraDialog({
   subtipos: PlanoContaSubtipo[];
   /** Empresa → nome curto. */
   empresas: Record<string, string>;
+  /** As regionais ativas, de todas as empresas. */
+  regionais: ReadonlyArray<{ id: string; nome: string; empresaId: string }>;
   /** As contas do mesmo CNPJ para a regra de transferência (decisão 211, A5). */
   contasDeDestino: Array<{ id: string; nome: string }>;
   inicial: { tipoId: string | null; subtipoId: string | null; empresaId: string | null };
@@ -548,9 +560,11 @@ export function RegraDialog({
   const [tipoId, setTipoId] = React.useState(inicial.tipoId ?? "");
   const [subtipoId, setSubtipoId] = React.useState(inicial.subtipoId ?? "");
   const [empresaId, setEmpresaId] = React.useState(inicial.empresaId ?? "");
+  const [regionalId, setRegionalId] = React.useState("");
   const [todas, setTodas] = React.useState(false);
   const [erroLocal, setErroLocal] = React.useState<string | null>(null);
   const subtiposDoTipo = subtipos.filter((s) => s.tipo_id === tipoId && s.ativo);
+  const regionaisDaEmpresa = regionais.filter((r) => r.empresaId === empresaId);
   const casa = normalizar(historico).startsWith(normalizar(padrao));
   const select = "h-9 w-full rounded-lg border border-border bg-white px-2 text-sm focus:border-california-red focus:outline-none";
   return (
@@ -653,7 +667,15 @@ export function RegraDialog({
           <label htmlFor="regra-empresa" className="text-xs font-semibold">
             Empresa <span className="text-california-red">*</span>
           </label>
-          <select id="regra-empresa" value={empresaId} onChange={(e) => setEmpresaId(e.target.value)} className={select}>
+          <select
+            id="regra-empresa"
+            value={empresaId}
+            onChange={(e) => {
+              setEmpresaId(e.target.value);
+              setRegionalId("");
+            }}
+            className={select}
+          >
             <option value="">Escolha…</option>
             {Object.entries(empresas)
               .sort((a, b) => a[1].localeCompare(b[1], "pt-BR"))
@@ -662,6 +684,25 @@ export function RegraDialog({
                   {nome}
                 </option>
               ))}
+          </select>
+        </div>
+        <div className="space-y-1">
+          <label htmlFor="regra-regional" className="text-xs font-semibold">
+            Regional
+          </label>
+          <select
+            id="regra-regional"
+            value={regionalId}
+            onChange={(e) => setRegionalId(e.target.value)}
+            className={select}
+            disabled={!empresaId}
+          >
+            <option value="">Todas (TD, pelo rateio)</option>
+            {regionaisDaEmpresa.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.nome}
+              </option>
+            ))}
           </select>
         </div>
         <label className="flex items-center gap-2 text-sm">
@@ -684,7 +725,15 @@ export function RegraDialog({
                 return onConfirmar({ modo, padrao: normalizar(padrao), contaDestinoId });
               }
               if (!tipoId || !subtipoId || !empresaId) return setErroLocal("Escolha o centro de custo, o subtipo e a empresa.");
-              onConfirmar({ modo, padrao: normalizar(padrao), tipoId, subtipoId, empresaId, todasAsContas: todas });
+              onConfirmar({
+                modo,
+                padrao: normalizar(padrao),
+                tipoId,
+                subtipoId,
+                empresaId,
+                regionalId: regionalId || null,
+                todasAsContas: todas,
+              });
             }}
           >
             <Wand2 className="h-4 w-4" />
