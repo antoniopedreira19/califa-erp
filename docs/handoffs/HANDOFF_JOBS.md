@@ -6555,3 +6555,13 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
   mesmo caminho.
 - A `JobRealizadoSection` ganhou a prop obrigatória `parametrosDoJob`: a
   linha só aparece nas telas do financeiro; a produção passa `null`.
+
+## ⚠️ Nota de 2026-10-28 — "Cancelar" travado na linha com PP gerada (decisão 151)
+
+- No modo errata, a calha oferecia "Cancelar" na linha com PP só gerada; o
+  servidor recusava na confirmação ("tem o Pedido de Produção … no
+  histórico"). Agora o botão nasce travado, com o motivo no `title`
+  (`MOTIVO_CANCELAR_COM_PP`, `job-item-realizado-table.tsx`). Sem migration.
+- Conferido no TES-1008/26 (Itens 3, 4, 5 e 7 do Agrupamento 1 travados;
+  Item 6, sem PP, livre), sem gravar errata.
+- Em aberto: linha com só PP cancelada (ver a nota na decisão 151).

@@ -190,3 +190,20 @@ saiu do save depois (o planejado dela volta pelo save e entra na conta).
 sumiram da planilha, e o rodapé fica abaixo do card de Totais pelo valor
 delas. Só existem em jobs de teste (TES-1001, TES-1006 e TES-1008 — no
 TES-1008, R$ 10.000) e não acontecem mais: agora a linha é cancelada.
+
+## ⚠️ Nota de 2026-10-28 — linha com PP gerada não se cancela
+
+O servidor sempre recusou cancelar linha com Pedido de Produção no histórico
+(`barrarCancelamento`, em `actions-errata.ts`), e no banco nenhuma linha com
+PP foi cancelada. A tela é que travava o "Cancelar" da calha só com a PP já
+no financeiro (decisão 040): na linha com PP só **gerada** o botão ficava
+livre e o erro aparecia na confirmação da errata (caso do Tiago no
+TES-1008/26). Agora a calha trava também com PP gerada, com o motivo
+"Linha com Pedido de Produção não pode ser cancelada.". Editar valor, QT,
+D/M e tipo da linha com PP gerada continua permitido (040).
+
+Fica em aberto: a linha cuja única PP foi **cancelada** ainda mostra o
+"Cancelar" livre e o servidor recusa na confirmação. A PP cancelada não
+chega à tela (`ppsPorItemId` a deixa de fora), e a razão original da recusa
+(a FK `on delete restrict`) era da remoção, que a 151 trocou pelo
+cancelamento.

@@ -337,6 +337,12 @@ const ALTURA_SUBLINHA_PP = "h-[28px]";
 const MOTIVO_TRAVA_PP =
   "Linha com Pedido de Produção já no financeiro não entra em errata. Corrija o que falta em outra linha, ou cancele a PP antes.";
 
+/** Linha com PP só gerada ainda entra na errata (decisão 040), mas não pode
+ *  ser cancelada: `barrarCancelamento`, no servidor, recusa qualquer PP no
+ *  histórico da linha. Até 28/10/2026 a calha oferecia o "Cancelar" e o
+ *  erro só vinha na confirmação. */
+const MOTIVO_CANCELAR_COM_PP = "Linha com Pedido de Produção não pode ser cancelada.";
+
 /** Linha cancelada por errata (decisão 151): fica na planilha com o
  *  orçado e, desde 15/10/2026, o planejado zerados, e não entra mais em
  *  errata. É o `title` do cadeado, do selo e da calha. */
@@ -2340,9 +2346,14 @@ export function JobItemRealizadoTable({
                     // qualquer PP no histórico (`barrarRemocao`); a
                     // tela passa a dizer isso antes do clique.
                     const travadaPorPP = travadasPorPP.has(item.id);
+                    // A PP só gerada também impede cancelar (28/10/2026).
+                    const comPPGerada =
+                      (ppsPorItemId.get(realizadosMap.get(item.id)?.id ?? "") ?? []).length > 0;
                     const motivoDaTrava = travadaPorPP
                       ? MOTIVO_TRAVA_PP
-                      : motivoSave;
+                      : comPPGerada
+                        ? MOTIVO_CANCELAR_COM_PP
+                        : motivoSave;
                     const nova = errata.ehNova(item.id);
                     const cancelada = errata.estaCancelada(item.id);
                     return (
@@ -2363,9 +2374,9 @@ export function JobItemRealizadoTable({
                                 ? errata.reativar(item.id)
                                 : errata.remover(item.id)
                             }
-                            disabled={travadaPorSave || travadaPorPP}
+                            disabled={travadaPorSave || travadaPorPP || comPPGerada}
                             title={
-                              travadaPorSave || travadaPorPP
+                              travadaPorSave || travadaPorPP || comPPGerada
                                 ? (motivoDaTrava ?? undefined)
                                 : undefined
                             }
