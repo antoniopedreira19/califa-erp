@@ -1,5 +1,6 @@
 import { requireSession } from "@/lib/auth/session";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
+import { buscarAlocacaoVigente } from "@/lib/alocacao/montar-snapshot";
 import type {
   Colaborador,
   ColaboradorFeriasPeriodo,
@@ -94,7 +95,7 @@ export default async function PerfilPage() {
   const [
     { data: periodosData },
     { data: lancamentosData },
-    { data: alocacoesData },
+    snapshotAlocacao,
     membershipRes,
     resumoBeneficios,
     { data: linhasNfData },
@@ -113,13 +114,7 @@ export default async function PerfilPage() {
           .select("*")
           .eq("colaborador_id", colab.id)
           .order("data_inicio", { ascending: false }),
-    supabase
-      .from("colaboradores_alocacoes")
-      .select(
-        "percentual, empresa:empresas(id, nome_fantasia), regional:regionais!colaboradores_alocacoes_regional_id_fkey(id, nome)",
-      )
-      .eq("colaborador_id", colab.id)
-      .is("data_fim", null),
+    buscarAlocacaoVigente(supabase, colab.id, session.activeTenant.id),
     service
       .from("tenant_members")
       .select("role, status")
@@ -148,15 +143,6 @@ export default async function PerfilPage() {
 
   const periodos = (periodosData ?? []) as ColaboradorFeriasPeriodo[];
   const lancamentos = (lancamentosData ?? []) as ColaboradorFeriasLancamento[];
-  const alocacoes = (alocacoesData ?? []).map((a) => {
-    const emp = a.empresa as unknown as { nome_fantasia: string } | null;
-    const reg = a.regional as unknown as { nome: string } | null;
-    return {
-      empresa_nome: emp?.nome_fantasia ?? "—",
-      regional_nome: reg?.nome ?? null,
-      percentual: a.percentual ? Number(a.percentual) : null,
-    };
-  });
 
   const membership = membershipRes.data as
     | { role: AppRole; status: "ativo" | "inativo" }
@@ -165,7 +151,7 @@ export default async function PerfilPage() {
   const statusMembership = membership?.status ?? "ativo";
 
   const empresaPrincipal =
-    alocacoes[0]?.empresa_nome ?? null;
+    snapshotAlocacao?.itens[0]?.empresa_nome ?? null;
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -226,7 +212,7 @@ export default async function PerfilPage() {
             lastSignIn={acesso?.last_sign_in_at ?? null}
           />
           <CardAlocacaoAtual
-            alocacoes={alocacoes}
+            snapshot={snapshotAlocacao}
             liderNome={colab.lider?.nome ?? null}
             area={colab.area}
             nivel={colab.nivel}

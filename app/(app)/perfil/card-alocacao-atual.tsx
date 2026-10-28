@@ -1,26 +1,23 @@
 import { Building2, UserCircle2, MapPin } from "lucide-react";
 import { CardBase } from "./card-base";
-
-type AlocacaoResumo = {
-  empresa_nome: string;
-  regional_nome: string | null;
-  percentual: number | null;
-};
+import type { AlocacaoVigenteSnapshot } from "@/lib/types";
 
 type Props = {
-  alocacoes: AlocacaoResumo[];
+  snapshot: AlocacaoVigenteSnapshot | null;
   liderNome: string | null;
   area: string | null;
   nivel: { codigo: string; descricao: string | null } | null;
 };
 
 export function CardAlocacaoAtual({
-  alocacoes,
+  snapshot,
   liderNome,
   area,
   nivel,
 }: Props) {
-  const temAlocacao = alocacoes.length > 0;
+  const itens = snapshot?.itens ?? [];
+  const temAlocacao = itens.length > 0;
+  const multiEmpresa = itens.length >= 2;
 
   return (
     <CardBase titulo="Alocação atual" icon={Building2}>
@@ -28,26 +25,44 @@ export function CardAlocacaoAtual({
         {temAlocacao ? (
           <div>
             <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-              Empresa & regional
+              Empresa &amp; regional
             </p>
             <ul className="space-y-2">
-              {alocacoes.map((a, i) => (
+              {itens.map((item) => (
                 <li
-                  key={i}
-                  className="flex items-center justify-between gap-2 text-sm"
+                  key={item.id}
+                  className="flex items-start justify-between gap-2 text-sm"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="font-medium truncate">{a.empresa_nome}</p>
-                    {a.regional_nome && (
-                      <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <MapPin className="h-3 w-3" />
-                        {a.regional_nome}
+                    <p className="font-medium truncate">
+                      {item.empresa_nome || "—"}
+                    </p>
+                    {item.usa_rateio_empresa ? (
+                      <p className="text-xs text-muted-foreground">
+                        rateio padrão
                       </p>
-                    )}
+                    ) : item.regionais.length === 1 ? (
+                      <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <MapPin className="h-3 w-3 shrink-0" />
+                        {item.regionais[0].regional_nome}
+                      </p>
+                    ) : item.regionais.length > 1 ? (
+                      <ul className="mt-0.5 space-y-0.5">
+                        {item.regionais.map((reg) => (
+                          <li
+                            key={reg.id}
+                            className="flex items-center gap-1 text-xs text-muted-foreground"
+                          >
+                            <MapPin className="h-3 w-3 shrink-0" />
+                            {reg.regional_nome}
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
                   </div>
-                  {a.percentual !== null && alocacoes.length > 1 && (
+                  {multiEmpresa && (
                     <span className="text-xs font-medium text-muted-foreground shrink-0">
-                      {a.percentual}%
+                      {Number(item.percentual_empresa).toFixed(0)}%
                     </span>
                   )}
                 </li>

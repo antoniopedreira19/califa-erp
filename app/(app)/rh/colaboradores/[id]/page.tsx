@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { Users, Briefcase, DollarSign } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { buscarAlocacaoVigente } from "@/lib/alocacao/montar-snapshot";
 import { tipoContratacaoLabel } from "@/lib/types";
 import type {
   Colaborador,
@@ -170,6 +171,14 @@ export default async function ColaboradorDetalhePage({
     empresa: Pick<Empresa, "id" | "nome_fantasia">;
     regional: { id: string; nome: string } | null;
   })[];
+
+  // Snapshot multi-empresa da alocação vigente — alimenta o CardAlocacoes
+  // com o novo display hierárquico (N empresas + regionais por item).
+  const snapshotAlocacaoVigente = await buscarAlocacaoVigente(
+    supabase,
+    colab.id,
+    session.activeTenant.id,
+  );
 
   // Backlog de NFs: folhas PJ abertas anteriores ao mês vigente sem NF.
   const nfsExistentesChaves = new Set(
@@ -408,6 +417,7 @@ export default async function ColaboradorDetalhePage({
             rateiosDoAno={rateiosDoAno}
             anoRateio={anoRateio}
             pendencia={pendenciasPorCard.alocacao}
+            snapshotVigente={snapshotAlocacaoVigente}
           />
           <CardSalarios
             colaboradorId={colab.id}

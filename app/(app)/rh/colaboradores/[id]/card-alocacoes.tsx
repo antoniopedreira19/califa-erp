@@ -20,10 +20,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { ColaboradorAlocacao, Empresa } from "@/lib/types";
+import type { AlocacaoVigenteSnapshot, ColaboradorAlocacao, Empresa } from "@/lib/types";
 import type { NivelPendencia } from "@/lib/rh/pendencias";
 import { SeloPendencia } from "./selo-pendencia";
 import { alterarAlocacaoLegacy as alterarAlocacao } from "./actions-alocacao";
+import { CardAlocacao } from "./card-alocacao";
 
 export type AlocacaoRow = ColaboradorAlocacao & {
   empresa: Pick<Empresa, "id" | "nome_fantasia">;
@@ -47,6 +48,7 @@ export function CardAlocacoes({
   rateiosDoAno,
   anoRateio,
   pendencia,
+  snapshotVigente,
 }: {
   colaboradorId: string;
   alocacoes: AlocacaoRow[];
@@ -55,6 +57,9 @@ export function CardAlocacoes({
   rateiosDoAno: RateioEmpresa[];
   anoRateio: number;
   pendencia?: NivelPendencia;
+  /** Snapshot novo (multi-empresa). Quando fornecido, substitui o display
+   *  legado da vigente. O modal de edição continua usando o shape legado. */
+  snapshotVigente?: AlocacaoVigenteSnapshot | null;
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -149,6 +154,154 @@ export function CardAlocacoes({
       setOpen(false);
       router.refresh();
     });
+  }
+
+  // Quando o snapshot novo está disponível, delega o display ao CardAlocacao
+  // e acopla o modal via onAlterar. O Dialog fica como portal à parte.
+  if (snapshotVigente !== undefined) {
+    return (
+      <>
+        <CardAlocacao
+          snapshot={snapshotVigente ?? null}
+          permitirAlterar
+          onAlterar={() => setOpen(true)}
+        />
+        {pendencia && (
+          <div className="mt-1">
+            <SeloPendencia nivel={pendencia} />
+          </div>
+        )}
+        <Dialog open={open} onOpenChange={setOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Alterar alocação</DialogTitle>
+              <DialogDescription>
+                Fecha a vigente no dia anterior à data de mudança e abre esta
+                nova.
+              </DialogDescription>
+            </DialogHeader>
+
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="space-y-2">
+                <Label>Data da mudança</Label>
+                <DatePicker
+                  name="data_mudanca_visual"
+                  defaultValue={dataMudanca}
+                  onDateChange={(d) =>
+                    setDataMudanca(d ? d.toISOString().slice(0, 10) : "")
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Empresa</Label>
+                <Select value={empresaId} onValueChange={setEmpresaId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a empresa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {empresas.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.nome_fantasia}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {empresaTemRateio && (
+                <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-3">
+                  <div>
+                    <p className="text-sm font-medium">Todas as regionais</p>
+                    <p className="text-xs text-muted-foreground">
+                      Usa o rateio anual configurado para {anoRateio}.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={usaRateio}
+                    onClick={() => setUsaRateio((v) => !v)}
+                    className={`inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors ${
+                      usaRateio ? "bg-california-red" : "bg-muted-foreground/30"
+                    }`}
+                  >
+                    <span
+                      className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transform transition-transform ${
+                        usaRateio ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+              )}
+
+              {!usaRateio && empresaId && (
+                <div className="space-y-2">
+                  <Label>Regional</Label>
+                  <Select value={regionalId} onValueChange={setRegionalId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione a regional" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {regionaisDaEmpresa.map((r) => (
+                        <SelectItem key={r.id} value={r.id}>
+                          {r.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              {usaRateio && empresaTemRateio && (
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50/50 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">
+                    Preview do rateio {anoRateio}
+                  </p>
+                  <ul className="mt-2 space-y-1 text-xs text-emerald-900">
+                    {rateioPorEmpresa.get(empresaId)!.map((r) => (
+                      <li
+                        key={r.regional_id}
+                        className="flex items-center justify-between"
+                      >
+                        <span>{r.regional_nome}</span>
+                        <span className="tabular-nums font-semibold">
+                          {r.percentual.toFixed(2).replace(".", ",")}%
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {error && (
+                <div className="flex items-start gap-2 rounded-lg border border-california-red/20 bg-california-red/5 px-3 py-2 text-xs text-california-red">
+                  <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                  <span>{error}</span>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 border-t border-border pt-4">
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={pending}
+                  className="rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red/90 disabled:opacity-50 transition-colors"
+                >
+                  {pending ? "Salvando..." : "Confirmar mudança"}
+                </button>
+              </div>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </>
+    );
   }
 
   return (
