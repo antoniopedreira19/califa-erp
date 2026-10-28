@@ -56,7 +56,8 @@ function subtipoCodigoParaContratacao(
 ): string {
   if (
     tipoFolha === "decimo_terceiro_1a_parcela" ||
-    tipoFolha === "decimo_terceiro_2a_parcela"
+    tipoFolha === "decimo_terceiro_2a_parcela" ||
+    tipoFolha === "decimo_terceiro_adiantamento"
   ) {
     return "004"; // 13° Salário
   }
@@ -632,8 +633,87 @@ export async function aprovarLinhaFolha(
   // (decisão 069): o banco recusa conta avulsa sem rateio e exige que o
   // rateio some 100. Os centavos que o arredondamento deixa sobram no
   // último título e na última regional, para o total fechar exato.
+  //
+  // Adiantamento de 13° (e parcelas 1ª/2ª): folhas desses tipos não
+  // carregam alocações no snapshot (fecharParcela / lancarAdiantamento não
+  // inserem em folhas_pagamento_alocacoes). Quando alocacoesFinal está vazia,
+  // descobrimos empresa+regional a partir da alocação vigente do colaborador
+  // (pacote com data_fim IS NULL → item com maior percentual_empresa).
+  let alocacoesParaGrupo = alocacoesFinal;
+  if (alocacoesParaGrupo.length === 0) {
+    // Busca pacote vigente do colaborador
+    const { data: pacoteVig } = await supabase
+      .from("colaboradores_alocacoes")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("colaborador_id", folha.colaborador_id)
+      .is("data_fim", null)
+      .limit(1);
+    const pacoteId = pacoteVig?.[0]?.id ?? null;
+    if (pacoteId) {
+      const { data: itensVig } = await supabase
+        .from("colaboradores_alocacoes_itens")
+        .select("empresa_id, percentual_empresa")
+        .eq("alocacao_id", pacoteId)
+        .order("percentual_empresa", { ascending: false })
+        .limit(1);
+      const itemPrimario = itensVig?.[0];
+      if (itemPrimario?.empresa_id) {
+        // Busca a primeira regional deste item como destino do rateio
+        const { data: regionaisVig } = await supabase
+          .from("colaboradores_alocacoes_itens")
+          .select("id")
+          .eq("alocacao_id", pacoteId)
+          .eq("empresa_id", itemPrimario.empresa_id)
+          .limit(1);
+        const itemId = regionaisVig?.[0]?.id ?? null;
+        let regionalId: string | null = null;
+        if (itemId) {
+          const { data: regsVig } = await supabase
+            .from("colaboradores_alocacoes_itens_regionais")
+            .select("regional_id")
+            .eq("alocacao_item_id", itemId)
+            .order("percentual_regional", { ascending: false })
+            .limit(1);
+          regionalId = regsVig?.[0]?.regional_id ?? null;
+        }
+        if (regionalId) {
+          alocacoesParaGrupo = [{
+            empresa_id: itemPrimario.empresa_id,
+            regional_id: regionalId,
+            percentual: "100",
+          }];
+        }
+      }
+    }
+    if (alocacoesParaGrupo.length === 0) {
+      return {
+        ok: false,
+        message: "Colaborador sem alocação vigente. Configure a alocação antes de aprovar.",
+      };
+    }
+  }
+
+  // Descrição da conta_avulsa para adiantamento de 13° inclui a data do
+  // adiantamento (dd/MM/aaaa) para identificação rápida no financeiro.
+  let descricaoAdiantamento: string | null = null;
+  if (folha.tipo === "decimo_terceiro_adiantamento" && (folha as { decimo_terceiro_adiantamento_id?: string | null }).decimo_terceiro_adiantamento_id) {
+    const { data: adiantRow } = await supabase
+      .from("decimo_terceiro_adiantamentos")
+      .select("data")
+      .eq("id", (folha as { decimo_terceiro_adiantamento_id: string }).decimo_terceiro_adiantamento_id)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    if (adiantRow?.data) {
+      // Formata data de YYYY-MM-DD para DD/MM/AAAA
+      const [anoD, mesD, diaD] = (adiantRow.data as string).split("-");
+      const dataFormatada = `${diaD}/${mesD}/${anoD}`;
+      descricaoAdiantamento = `13º Adiantamento · ${colab.nome} · ${dataFormatada}`;
+    }
+  }
+
   const porEmpresa = new Map<string, { regional_id: string; percentual: number }[]>();
-  for (const a of alocacoesFinal) {
+  for (const a of alocacoesParaGrupo) {
     const lista = porEmpresa.get(a.empresa_id) ?? [];
     lista.push({ regional_id: a.regional_id, percentual: Number(a.percentual) });
     porEmpresa.set(a.empresa_id, lista);
@@ -688,6 +768,11 @@ export async function aprovarLinhaFolha(
       console.error("[folha.aprovar.codigo]", errCodigo.message);
     }
 
+    // Descrição: adiantamento usa label próprio com data; demais usam padrão.
+    const descricaoConta = descricaoAdiantamento ?? `Folha ${competencia} · ${colab.nome} · ${subtipoRow.nome}${
+      grupos.length > 1 ? ` · ${nomeEmpresa.get(empresaId) ?? ""}` : ""
+    }`;
+
     const { data: contaCriadaId, error: insContaError } = await supabase.rpc(
       "criar_conta_avulsa",
       {
@@ -698,9 +783,7 @@ export async function aprovarLinhaFolha(
           // rateio, quem diz as regionais é contas_avulsas_regionais.
           regional_id: rateio.length === 1 ? rateio[0].regional_id : null,
           codigo: (codigo as string | null) ?? null,
-          descricao: `Folha ${competencia} · ${colab.nome} · ${subtipoRow.nome}${
-            grupos.length > 1 ? ` · ${nomeEmpresa.get(empresaId) ?? ""}` : ""
-          }`,
+          descricao: descricaoConta,
           valor: (valorCentavos / 100).toFixed(2),
           natureza: "saida",
           status: "aprovada",
@@ -743,6 +826,26 @@ export async function aprovarLinhaFolha(
     contasCriadas.push(contaCriadaId as string);
   }
 
+  // Back-fill: se é adiantamento de 13°, grava conta_avulsa_id no registro
+  // de adiantamento para que o quadro de NF e a tela de adiantamentos possam
+  // exibir o link direto. Falha aqui não desfaz o título já criado — apenas
+  // loga um warning para investigação posterior.
+  const adiantamentoId = (folha as { decimo_terceiro_adiantamento_id?: string | null }).decimo_terceiro_adiantamento_id ?? null;
+  if (folha.tipo === "decimo_terceiro_adiantamento" && adiantamentoId && contasCriadas.length > 0) {
+    const { error: errBackfill } = await supabase
+      .from("decimo_terceiro_adiantamentos")
+      .update({ conta_avulsa_id: contasCriadas[0] })
+      .eq("id", adiantamentoId)
+      .eq("tenant_id", tenantId);
+    if (errBackfill) {
+      console.warn(
+        "[folha.aprovar.backfill_adiantamento]",
+        errBackfill.message,
+        "conta_avulsa_id não gravado em decimo_terceiro_adiantamentos id=", adiantamentoId,
+      );
+    }
+  }
+
   // 9) Marca folha como aprovada
   const { error: upAprovada } = await supabase
     .from("folhas_pagamento")
@@ -773,8 +876,11 @@ export async function aprovarLinhaFolha(
       valor_editado: valorEditado,
       nf_anexo_id: nfAnexoId,
       contas_criadas: contasCriadas.length,
-      regionais: alocacoesFinal.length,
+      regionais: alocacoesParaGrupo.length,
       pagamento_informado: !!pagamentoValidado?.ok,
+      ...(folha.tipo === "decimo_terceiro_adiantamento" && contasCriadas.length > 0
+        ? { conta_avulsa_id: contasCriadas[0], decimo_terceiro_adiantamento_id: adiantamentoId }
+        : {}),
     },
   });
 
