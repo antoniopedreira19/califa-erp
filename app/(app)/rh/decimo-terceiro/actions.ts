@@ -834,7 +834,7 @@ async function fecharParcela(
   const { data: linhas, error: errLinhas } = await supabase
     .from("decimo_terceiro_linhas")
     .select(
-      "id, colaborador_id, avos, primeira_parcela, segunda_parcela, snapshot_tipo_contratacao, parte_pj_primeira_parcela, parte_pj_segunda_parcela, parte_clt_primeira_parcela, parte_clt_segunda_parcela",
+      "id, colaborador_id, avos, primeira_parcela, segunda_parcela, snapshot_tipo_contratacao, parte_pj_primeira_parcela, parte_pj_segunda_parcela, parte_clt_primeira_parcela, parte_clt_segunda_parcela, desconto_inss, desconto_irrf, parte_clt_desconto_inss, parte_clt_desconto_irrf",
     )
     .eq("folha_id", folhaId)
     .eq("tenant_id", tenantId)
@@ -854,6 +854,8 @@ async function fecharParcela(
       ? "decimo_terceiro_1a_parcela"
       : "decimo_terceiro_2a_parcela";
   const agora = new Date().toISOString();
+  // 1ª parcela é paga até 30/novembro; 2ª até 20/dezembro.
+  const competenciaMes = numeroParcela === 1 ? 11 : 12;
 
   // Monta as folhas de pagamento por linha: híbrido vira 2 linhas (california
   // com parte_pj + contabilidade com parte_clt); CLT puro → 1 contabilidade;
@@ -891,18 +893,37 @@ async function fecharParcela(
 
     const folhasMontadas = montarFolhasParcela(linhaParaMontar, numeroParcela);
     for (const montada of folhasMontadas) {
+      // BUG FIX: montarFolhasParcela retorna salario_base GROSS (sem descontos).
+      // Para a 2ª parcela de CLT (origem=contabilidade), o valor líquido é
+      // segunda_parcela - desconto_inss - desconto_irrf. Subtrair aqui, após
+      // a montagem, pois montarFolhasParcela não tem acesso aos descontos.
+      let salarioBase = montada.salario_base;
+      if (numeroParcela === 2 && montada.origem === "contabilidade") {
+        if (l.snapshot_tipo_contratacao === "clt") {
+          // CLT puro: usa descontos top-level
+          salarioBase -= (Number(l.desconto_inss) + Number(l.desconto_irrf));
+        } else if (l.snapshot_tipo_contratacao === "clt_recibo") {
+          // Híbrido CLT_recibo: usa descontos da parte CLT
+          salarioBase -= (
+            Number(l.parte_clt_desconto_inss ?? 0) +
+            Number(l.parte_clt_desconto_irrf ?? 0)
+          );
+        }
+        // PJ, MEI e parte PJ de híbrido não têm INSS/IRRF — sem subtração.
+      }
+
       linhasFolhaPagamento.push({
         tenant_id: tenantId,
         colaborador_id: montada.colaborador_id,
         competencia_ano: folha.ano,
-        competencia_mes: 12,
-        salario_base: montada.salario_base,
+        competencia_mes: competenciaMes,
+        salario_base: salarioBase,
         status: "enviada",
         tipo: montada.tipo,
         origem: montada.origem,
         enviada_em: agora,
         enviada_por: session.profile.id,
-        data_pagamento_prevista: `${folha.ano}-12-${numeroParcela === 1 ? "30" : "20"}`,
+        data_pagamento_prevista: `${folha.ano}-${String(competenciaMes).padStart(2, "0")}-${numeroParcela === 1 ? "30" : "20"}`,
         decimo_terceiro_linha_id: montada.decimo_terceiro_linha_id,
         decimo_terceiro_adiantamento_id: null,
         created_by: session.profile.id,
@@ -969,7 +990,7 @@ async function fecharParcela(
     metadata: {
       ano: folha.ano,
       total_linhas_geradas: linhasFolhaPagamento.length,
-      competencia_mes: 12,
+      competencia_mes: competenciaMes,
     },
   });
 
