@@ -1078,6 +1078,26 @@ a BB California pela tela e a Santander Hitlab por migration".
   linha foi desfeita e lançada pela regra, e o motor agora não procura a
   cauda para a linha que uma regra do extrato descreve.
 
+### Tarifas, IOF e a regional da regra (28/10/2026)
+
+- **A regra antes do título** (revisão da decisão 199): duas tarifas de
+  R$ 250,00 da California Santander recebiam a sugestão de PPs de verba do
+  mesmo valor; agora a linha que casa com uma regra vai pela regra.
+- **Regras novas, pela tela, com o Tiago:** BB California "TAR" (04.012
+  Tarifa bancária) e "COBRANCA DE I.O.F." (07.009 Outros, onde a planilha
+  lançou o IOF de outubro, R$ 5.599,01); Santander GoCrazy "TAR" (04.012).
+  Todas na gerencial Agência California: GoCrazy é só CNPJ (contábil), não
+  empresa gerencial. 18 linhas lançadas.
+- **A regional da regra** (migration `20261028300001`): `extrato_regras.regional_id`,
+  opcional — vazio é o "TD" da planilha (rateado entre as regionais). O
+  "Lembrar como regra" ganhou o campo Regional, e `lancar_pela_regra` grava
+  a regional no lançamento. O Tiago primeiro decidiu TD para tudo e depois
+  mudou: "Na verdade vamos fazer como a planilha. Colocando as tarifas da
+  conta GO CRAZY como SS." A regra "TAR" da GoCrazy recebeu SS, e as 12
+  tarifas que ela já tinha lançado também (só o campo vazio foi preenchido,
+  com auditoria). As da California Santander e do BB continuam TD, como na
+  planilha.
+
 ## A cauda: outubro dos jobs até o 3T (A6, 27/10/2026)
 
 Depois do inventário do 4T (planilha de 01 a 25/10 contra os extratos e o

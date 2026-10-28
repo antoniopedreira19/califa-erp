@@ -565,6 +565,8 @@ export async function criarRegraDoExtrato(entrada: {
   tipoId: string;
   subtipoId: string;
   empresaId: string;
+  /** `null`: todas as regionais da empresa (o "TD" da planilha). */
+  regionalId: string | null;
   todasAsContas: boolean;
 }): Promise<Resultado> {
   const ok = z
@@ -574,6 +576,7 @@ export async function criarRegraDoExtrato(entrada: {
       tipoId: UUID,
       subtipoId: UUID,
       empresaId: UUID,
+      regionalId: UUID.nullable(),
       todasAsContas: z.boolean(),
     })
     .safeParse(entrada);
@@ -587,6 +590,7 @@ export async function criarRegraDoExtrato(entrada: {
       p_subtipo_id: entrada.subtipoId,
       p_empresa_id: entrada.empresaId,
       p_todas_as_contas: entrada.todasAsContas,
+      p_regional_id: entrada.regionalId,
     },
     "Não foi possível criar a regra. Tente de novo.",
   );

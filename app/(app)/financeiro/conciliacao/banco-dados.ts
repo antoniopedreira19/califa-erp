@@ -141,6 +141,8 @@ export interface RegraDaConta extends RegraDoMotor {
   contaId: string | null;
   /** A regra de transferência (decisão 211, A5): a conta de aplicação. */
   contaDestinoId: string | null;
+  /** A regional do lançamento; `null` é todas (o "TD" da planilha). */
+  regionalId: string | null;
 }
 
 export interface DadosDaAbaBanco {
@@ -169,6 +171,8 @@ export interface DadosDaAbaBanco {
   saldoSistemaNoFim: number | null;
   /** A cauda do histórico da conta ainda sem linha do banco (A6). */
   historico: HistoricoDoMotor[];
+  /** As regionais ativas, para a regional da regra. */
+  regionais: Array<{ id: string; nome: string; empresaId: string }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -286,7 +290,7 @@ export async function carregarBancoDaConciliacao(
   const { tenantId, contaId, dataDe, dataAte } = args;
 
   // ---- Rodada 1: a conta, as importações, as linhas, as remessas e as regras ----
-  const [contaRes, importacoesRes, linhasCruas, itensRes, regrasRes] = await Promise.all([
+  const [contaRes, importacoesRes, linhasCruas, itensRes, regrasRes, regionaisRes] = await Promise.all([
     supabase
       .from("contas_bancarias")
       .select("id, nome, banco, agencia, numero_conta, numero_conta_dv, saldo_inicial_data")
@@ -328,18 +332,21 @@ export async function carregarBancoDaConciliacao(
       .from("extrato_regras")
       .select(
         "id, conta_bancaria_id, padrao, usos, created_at, empresa_id, plano_conta_tipo_id, plano_conta_subtipo_id, conta_destino_id, " +
-          "tipo:plano_contas_tipos(codigo, nome), subtipo:plano_contas_subtipos(nome), empresa:empresas(nome_fantasia, razao_social), " +
+          "regional_id, tipo:plano_contas_tipos(codigo, nome), subtipo:plano_contas_subtipos(nome), " +
+          "empresa:empresas(nome_fantasia, razao_social), regional:regionais(nome), " +
           "destino:contas_bancarias!extrato_regras_conta_destino_id_fkey(nome)",
       )
       .eq("tenant_id", tenantId)
       .eq("ativa", true)
       .or(`conta_bancaria_id.is.null,conta_bancaria_id.eq.${contaId}`),
+    supabase.from("regionais").select("id, nome, empresa_id").eq("tenant_id", tenantId).eq("ativo", true).order("nome"),
   ]);
   for (const [nome, res] of [
     ["conta", contaRes],
     ["importacoes", importacoesRes],
     ["remessas", itensRes],
     ["regras", regrasRes],
+    ["regionais", regionaisRes],
   ] as const) {
     if (res.error) console.error(`[conciliacao.banco.${nome}]`, res.error.message);
   }
@@ -446,9 +453,11 @@ export async function carregarBancoDaConciliacao(
     plano_conta_tipo_id: string | null;
     plano_conta_subtipo_id: string | null;
     conta_destino_id: string | null;
+    regional_id: string | null;
     tipo: { codigo: string; nome: string } | null;
     subtipo: { nome: string } | null;
     empresa: { nome_fantasia: string | null; razao_social: string | null } | null;
+    regional: { nome: string } | null;
     destino: { nome: string } | null;
   };
   const regras: RegraDaConta[] = ((regrasRes.data ?? []) as unknown as RegraCrua[])
@@ -457,7 +466,7 @@ export async function carregarBancoDaConciliacao(
       padrao: g.padrao,
       centro: g.conta_destino_id
         ? `Transferência para ${g.destino?.nome ?? "a conta de aplicação"}`
-        : [g.tipo ? `${g.tipo.codigo} · ${g.tipo.nome}` : null, g.subtipo?.nome].filter(Boolean).join(" · "),
+        : [g.tipo ? `${g.tipo.codigo} · ${g.tipo.nome}` : null, g.subtipo?.nome, g.regional?.nome].filter(Boolean).join(" · "),
       criadaEm: formatDiaBr(g.created_at),
       usos: g.usos,
       empresa: g.empresa?.nome_fantasia ?? g.empresa?.razao_social ?? "—",
@@ -466,6 +475,7 @@ export async function carregarBancoDaConciliacao(
       empresaId: g.empresa_id,
       contaId: g.conta_bancaria_id,
       contaDestinoId: g.conta_destino_id,
+      regionalId: g.regional_id,
     }))
     .sort((a, b) => (a.contaId ? 0 : 1) - (b.contaId ? 0 : 1) || b.padrao.length - a.padrao.length);
 
@@ -609,6 +619,11 @@ export async function carregarBancoDaConciliacao(
     remessasBaixadas,
     saldoSistemaNoFim: saldoNoFim === null ? null : r2(saldoNoFim),
     historico,
+    regionais: ((regionaisRes.data ?? []) as Array<{ id: string; nome: string; empresa_id: string }>).map((r) => ({
+      id: r.id,
+      nome: r.nome,
+      empresaId: r.empresa_id,
+    })),
   };
 }
 
