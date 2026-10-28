@@ -18,7 +18,7 @@ export async function buscarAlocacaoVigente(
   tenantId: string,
 ): Promise<AlocacaoVigenteSnapshot | null> {
   // 1. Pacote vigente (data_fim IS NULL)
-  const { data: pacoteData } = await supabase
+  const { data: pacoteData, error: pacoteError } = await supabase
     .from("colaboradores_alocacoes")
     .select("*")
     .eq("colaborador_id", colaboradorId)
@@ -26,17 +26,27 @@ export async function buscarAlocacaoVigente(
     .is("data_fim", null)
     .maybeSingle();
 
+  if (pacoteError) {
+    console.error("[alocacao.buscar.pacote]", pacoteError.message);
+    return null;
+  }
+
   if (!pacoteData) return null;
 
   const pacote = pacoteData as ColaboradorAlocacao;
 
   // 2. Itens com nome da empresa (filtra pelo pacote vigente).
   //    percentual_empresa vem como string do Supabase (tipo numeric), convertemos abaixo.
-  const { data: itensData } = await supabase
+  const { data: itensData, error: itensError } = await supabase
     .from("colaboradores_alocacoes_itens")
     .select("*, empresa:empresas(nome_fantasia)")
     .eq("alocacao_id", pacote.id)
     .eq("tenant_id", tenantId);
+
+  if (itensError) {
+    console.error("[alocacao.buscar.itens]", itensError.message);
+    return null;
+  }
 
   const itensRaw = (itensData ?? []) as Array<
     ColaboradorAlocacaoItem & { empresa: { nome_fantasia: string } | null }
@@ -44,14 +54,19 @@ export async function buscarAlocacaoVigente(
 
   // 3. Regionais filtradas pelos itens deste pacote (via IN nos item IDs).
   const itemIds = itensRaw.map((i) => i.id);
-  const { data: regionaisData } =
+  const { data: regionaisData, error: regionaisError } =
     itemIds.length > 0
       ? await supabase
           .from("colaboradores_alocacoes_itens_regionais")
           .select("*, regional:regionais(nome)")
           .in("alocacao_item_id", itemIds)
           .eq("tenant_id", tenantId)
-      : { data: [] };
+      : { data: [], error: null };
+
+  if (regionaisError) {
+    console.error("[alocacao.buscar.regionais]", regionaisError.message);
+    return null;
+  }
 
   const regionaisRaw = (regionaisData ?? []) as Array<
     ColaboradorAlocacaoItemRegional & {

@@ -50,8 +50,8 @@ export function validarInputPacote(input: InputPacote): ValidacaoResult {
     0
   );
 
-  // Compara com tolerância de 0.01 (2 casas decimais)
-  if (Math.abs(somaEmpresa - 100) > 0.01) {
+  // Compara com tolerância de 0.01 (alinhado com SQL trigger >= 0.01)
+  if (Math.abs(somaEmpresa - 100) >= 0.01) {
     erros.push(
       `A soma dos percentuais de empresa deve ser 100%. Atual: ${somaEmpresa.toFixed(2)}%.`
     );
@@ -89,7 +89,7 @@ export function validarInputPacote(input: InputPacote): ValidacaoResult {
           0
         );
 
-        if (Math.abs(somaRegional - 100) > 0.01) {
+        if (Math.abs(somaRegional - 100) >= 0.01) {
           erros.push(
             `Item ${i + 1}: a soma dos percentuais regionais deve ser 100%. Atual: ${somaRegional.toFixed(2)}%.`
           );
