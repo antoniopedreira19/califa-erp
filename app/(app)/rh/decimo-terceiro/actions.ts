@@ -11,6 +11,10 @@ import {
   gerarXlsxFolhaDecimoTerceiro,
   type LinhaExport,
 } from "@/lib/decimo-terceiro/export-xlsx";
+import {
+  montarFolhasParcela,
+  type LinhaParaMontar,
+} from "@/lib/decimo-terceiro/montar-folhas-parcela";
 import type { TipoContratacao } from "@/lib/types";
 
 export type ActionResult<T = Record<string, never>> =
@@ -774,17 +778,6 @@ type FecharParcelaOut = ActionResult<{
   total_linhas_geradas: number;
 }>;
 
-interface LinhaParaFechamento {
-  id: string;
-  colaborador_id: string;
-  avos: number;
-  primeira_parcela: string;
-  segunda_parcela: string;
-  desconto_inss: string;
-  desconto_irrf: string;
-  snapshot_valor_recibo: string | null;
-}
-
 /**
  * Fecha a 1a parcela do 13o: cria 1 linha em folhas_pagamento por colaborador
  * da folha, com tipo='decimo_terceiro_1a_parcela', status='enviada' (vai
@@ -836,11 +829,12 @@ async function fecharParcela(
     };
   }
 
-  // Carrega todas as linhas da folha com avos > 0 (quem tem direito a algo).
+  // Carrega todas as linhas da folha com avos > 0 (quem tem direito a algo),
+  // incluindo os campos necessários pra montar folhas híbridas corretamente.
   const { data: linhas, error: errLinhas } = await supabase
     .from("decimo_terceiro_linhas")
     .select(
-      "id, colaborador_id, avos, primeira_parcela, segunda_parcela, desconto_inss, desconto_irrf, snapshot_valor_recibo",
+      "id, colaborador_id, avos, primeira_parcela, segunda_parcela, snapshot_tipo_contratacao, parte_pj_primeira_parcela, parte_pj_segunda_parcela, parte_clt_primeira_parcela, parte_clt_segunda_parcela",
     )
     .eq("folha_id", folhaId)
     .eq("tenant_id", tenantId)
@@ -859,35 +853,85 @@ async function fecharParcela(
     numeroParcela === 1
       ? "decimo_terceiro_1a_parcela"
       : "decimo_terceiro_2a_parcela";
-  const competenciaMes = numeroParcela === 1 ? 11 : 12;
   const agora = new Date().toISOString();
 
-  // Monta as linhas pra folhas_pagamento. salario_base = valor efetivo pago
-  // ao colaborador na parcela (1a = primeira_parcela; 2a = segunda_parcela
-  // menos INSS e IRRF, pros CLT; PJ fica sem desconto).
-  const linhasFolhaPagamento = (linhas as LinhaParaFechamento[]).map((l) => {
-    const salarioBase =
-      numeroParcela === 1
-        ? Number(l.primeira_parcela)
-        : Number(l.segunda_parcela) -
-          Number(l.desconto_inss) -
-          Number(l.desconto_irrf);
-    return {
-      tenant_id: tenantId,
-      colaborador_id: l.colaborador_id,
-      competencia_ano: folha.ano,
-      competencia_mes: competenciaMes,
-      salario_base: salarioBase,
-      status: "enviada",
-      tipo,
-      origem: "california",
-      enviada_em: agora,
-      enviada_por: session.profile.id,
-      data_pagamento_prevista: `${folha.ano}-${String(competenciaMes).padStart(2, "0")}-${numeroParcela === 1 ? "30" : "20"}`,
+  // Monta as folhas de pagamento por linha: híbrido vira 2 linhas (california
+  // com parte_pj + contabilidade com parte_clt); CLT puro → 1 contabilidade;
+  // PJ/MEI puro → 1 california. Linhas com valor 0 são puladas (avos nulos
+  // retornam array vazio da montarFolhasParcela).
+  const linhasFolhaPagamento: {
+    tenant_id: string;
+    colaborador_id: string;
+    competencia_ano: number;
+    competencia_mes: number;
+    salario_base: number;
+    status: string;
+    tipo: string;
+    origem: string;
+    enviada_em: string;
+    enviada_por: string;
+    data_pagamento_prevista: string;
+    decimo_terceiro_linha_id: string;
+    decimo_terceiro_adiantamento_id: null;
+    created_by: string;
+  }[] = [];
+
+  for (const l of linhas) {
+    const linhaParaMontar: LinhaParaMontar = {
       decimo_terceiro_linha_id: l.id,
-      created_by: session.profile.id,
+      colaborador_id: l.colaborador_id,
+      tipo_contratacao: l.snapshot_tipo_contratacao as LinhaParaMontar["tipo_contratacao"],
+      primeira_parcela: Number(l.primeira_parcela),
+      segunda_parcela: Number(l.segunda_parcela),
+      parte_pj_primeira_parcela: l.parte_pj_primeira_parcela != null ? Number(l.parte_pj_primeira_parcela) : null,
+      parte_pj_segunda_parcela: l.parte_pj_segunda_parcela != null ? Number(l.parte_pj_segunda_parcela) : null,
+      parte_clt_primeira_parcela: l.parte_clt_primeira_parcela != null ? Number(l.parte_clt_primeira_parcela) : null,
+      parte_clt_segunda_parcela: l.parte_clt_segunda_parcela != null ? Number(l.parte_clt_segunda_parcela) : null,
     };
-  });
+
+    const folhasMontadas = montarFolhasParcela(linhaParaMontar, numeroParcela);
+    for (const montada of folhasMontadas) {
+      linhasFolhaPagamento.push({
+        tenant_id: tenantId,
+        colaborador_id: montada.colaborador_id,
+        competencia_ano: folha.ano,
+        competencia_mes: 12,
+        salario_base: montada.salario_base,
+        status: "enviada",
+        tipo: montada.tipo,
+        origem: montada.origem,
+        enviada_em: agora,
+        enviada_por: session.profile.id,
+        data_pagamento_prevista: `${folha.ano}-12-${numeroParcela === 1 ? "30" : "20"}`,
+        decimo_terceiro_linha_id: montada.decimo_terceiro_linha_id,
+        decimo_terceiro_adiantamento_id: null,
+        created_by: session.profile.id,
+      });
+    }
+  }
+
+  // Idempotência: antes de inserir, apaga linhas existentes do mesmo
+  // decimo_terceiro_linha_id + tipo que ainda não foram aprovadas/pagas.
+  // Linhas já aprovadas ou pagas ficam intocadas.
+  const linhaIds = linhas.map((l) => l.id);
+  if (linhaIds.length > 0) {
+    const { error: errDelete } = await supabase
+      .from("folhas_pagamento")
+      .delete()
+      .in("decimo_terceiro_linha_id", linhaIds)
+      .eq("tipo", tipo)
+      .not("status", "in", "(aprovada,paga)");
+    if (errDelete) {
+      return {
+        ok: false,
+        message: `Falha ao limpar folhas anteriores: ${errDelete.message}`,
+      };
+    }
+  }
+
+  if (linhasFolhaPagamento.length === 0) {
+    return { ok: false, message: "Nenhuma linha gerada para enviar ao financeiro." };
+  }
 
   const { error: errInsert } = await supabase
     .from("folhas_pagamento")
@@ -925,7 +969,7 @@ async function fecharParcela(
     metadata: {
       ano: folha.ano,
       total_linhas_geradas: linhasFolhaPagamento.length,
-      competencia_mes: competenciaMes,
+      competencia_mes: 12,
     },
   });
 
