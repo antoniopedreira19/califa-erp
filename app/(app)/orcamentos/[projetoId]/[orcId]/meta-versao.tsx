@@ -670,7 +670,8 @@ const MOEDAS: Array<[codigo: string, nome: string, pais: string]> = [
   ["DKK", "Coroa dinamarquesa", "Dinamarca"],
 ];
 
-const ITENS_DE_MOEDA: ComboboxItem[] = MOEDAS.map(([codigo, nome, pais]) => ({
+/** Exportada para a linha de parâmetros do job no financeiro (decisão 224). */
+export const ITENS_DE_MOEDA: ComboboxItem[] = MOEDAS.map(([codigo, nome, pais]) => ({
   value: codigo,
   label: `${codigo} · ${nome}`,
   descricao: pais,

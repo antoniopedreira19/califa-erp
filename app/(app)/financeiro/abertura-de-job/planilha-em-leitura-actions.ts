@@ -66,6 +66,8 @@ export async function lerPlanilhaEmLeitura(jobId: string): Promise<ResultadoDaPl
       papelCorrigeNf: false,
       confirmarSaidaParaOrcamento: true,
       edicaoDoFinanceiro: null,
+      // A conferência só lê: sem a linha de parâmetros (decisão 224).
+      parametrosDoJob: null,
       aberturaDoJob: null,
       papelNaErrata: null,
       errataPronta: null,

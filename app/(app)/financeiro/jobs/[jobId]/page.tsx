@@ -73,6 +73,7 @@ import { linhasAlteradasNaRevisao } from "@/lib/data/linhas-da-revisao";
 import { midiaSystemDoJob, situacaoMidiaDaPP } from "@/lib/calculos/midia-system";
 import { SeloMidiaSystem } from "@/app/(app)/jobs/_midia-system/midia-system";
 import type { PPSemNfNaAuditoria } from "../../abertura-de-job/[jobId]/campo-midia-system";
+import { alteracoesDosParametros, parametrosGravadosDe } from "@/lib/data/parametros-do-job";
 
 export const dynamic = "force-dynamic";
 
@@ -849,6 +850,17 @@ export default async function JobNoFinanceiroPage({
               papelCorrigeNf={pode(session.activeRole, "jobs.corrigir_nf_pp")}
               confirmarSaidaParaOrcamento
               edicaoDoFinanceiro={edicaoDoFinanceiro}
+              // Os parâmetros do job (decisão 224): depois da abertura, só o
+              // câmbio muda — e só até o encerramento.
+              parametrosDoJob={{
+                parametros: parametrosGravadosDe(versaoAprovada),
+                edicao:
+                  pode(session.activeRole, "jobs.editar_orcado_financeiro") &&
+                  (job.status === "aberto" || job.status === "em_producao")
+                    ? { naFila: false }
+                    : null,
+                alteracoes: alteracoesDosParametros(detalhe.alteracoesFinanceiro),
+              }}
               // O Totais fecha sobre o job de hoje (15/10/2026).
               aberturaDoJob={null}
               // O financeiro não faz errata nem vê a pronta (decisão 159).

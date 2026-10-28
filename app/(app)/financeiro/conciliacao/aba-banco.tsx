@@ -75,6 +75,7 @@ import {
   conciliarPeloHistorico,
   conciliarPelosDocumentos,
   corrigirBaixa,
+  criarRegraDeTransferencia,
   criarRegraDoExtrato,
   desfazerConciliacao,
   ignorarLinha,
@@ -140,8 +141,11 @@ export function AbaBanco({
   dados,
   contaId,
   fechamento,
+  contasDeDestino,
 }: {
   banco: DadosDaAbaBanco;
+  /** As contas do mesmo CNPJ, para a regra de transferência (decisão 211, A5). */
+  contasDeDestino: Array<{ id: string; nome: string }>;
   /** A leitura da aba Títulos: os títulos em aberto que o motor procura. */
   dados: DadosDaAbaTitulos;
   contaId: string;
@@ -455,6 +459,7 @@ export function AbaBanco({
       const itens = rs.flatMap((r) => (r.regra?.id ? [{ linhaId: r.mov.id, regraId: r.regra.id as string }] : []));
       if (itens.length) executar(() => lancarPelaRegra(itens));
     },
+    criarRegra: (r) => setRegraDe({ historico: r.mov.historico, l: null }),
     conciliarHistorico: (rs) =>
       emSerie(
         rs,
@@ -1006,13 +1011,24 @@ export function AbaBanco({
           tipos={dados.tipos}
           subtipos={dados.subtipos}
           empresas={dados.empresas}
+          contasDeDestino={contasDeDestino}
           inicial={centroDoAvulso(regraDe.l)}
           pending={pending}
           erro={erroDoDialogo}
           onFechar={() => setRegraDe(null)}
           onConfirmar={(regra) =>
             startTransition(async () => {
-              const res = await criarRegraDoExtrato({ contaId, ...regra });
+              const res =
+                regra.modo === "transferencia"
+                  ? await criarRegraDeTransferencia({ contaId, padrao: regra.padrao, contaDestinoId: regra.contaDestinoId })
+                  : await criarRegraDoExtrato({
+                      contaId,
+                      padrao: regra.padrao,
+                      tipoId: regra.tipoId,
+                      subtipoId: regra.subtipoId,
+                      empresaId: regra.empresaId,
+                      todasAsContas: regra.todasAsContas,
+                    });
               if (!res.ok) {
                 setErroDoDialogo(res.message);
                 return;

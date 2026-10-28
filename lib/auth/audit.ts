@@ -212,6 +212,9 @@ export type AuditAction =
   // "Editar orçado" do financeiro (decisão 115): os valores do orçado, sem
   // aprovação, com as previsões e o envio sem nota acompanhando.
   | "job.orcado_alterado_financeiro"
+  // Decisão 224: os parâmetros do job (honorários, impostos, taxas e câmbio)
+  // alterados pelo financeiro, com motivo.
+  | "job.parametros_alterados_financeiro"
   | "job.enviado_para_faturamento"
   // Decisão 123: a lista de contatos de cobrança trocada no envio.
   | "job.contatos_cobranca_alterados"

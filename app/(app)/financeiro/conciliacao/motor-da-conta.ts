@@ -21,6 +21,7 @@ import {
   type TituloDoMotor,
 } from "@/lib/conciliacao/motor";
 import { casarComHistorico } from "@/lib/conciliacao/historico";
+import { normalizar } from "@/lib/conciliacao/ofx";
 import { efeitoNaConta, r2 } from "@/lib/financeiro/planilha-de-titulos";
 import type { EntradaDaBaixaEmLote } from "@/lib/financeiro/baixa-em-lote";
 import type { ResolucaoSozinha } from "@/lib/types";
@@ -233,7 +234,11 @@ export function resolucaoDaLinha(
         : `Baixa corrigida pelo valor do banco: ${primeira}`;
       break;
     case "regra":
-      texto = l.resolvidaSozinha === "regra" ? `Lançado sozinho pela regra: ${regra}` : `Avulso lançado pela regra: ${regra}`;
+      texto = l.transferenciaId
+        ? `${l.resolvidaSozinha === "regra" ? "Transferência feita sozinha" : "Transferência feita"} pela regra: ${regra}`
+        : l.resolvidaSozinha === "regra"
+          ? `Lançado sozinho pela regra: ${regra}`
+          : `Avulso lançado pela regra: ${regra}`;
       break;
     case "par":
       texto = "Saída e devolução registradas; nenhum título baixado";
@@ -296,7 +301,15 @@ export function conciliarConta(
   const cauda = dados.historico ?? [];
   const temBaixa = (m: MovimentoDaLinha) =>
     dados.lancamentos.some((l) => Math.round(l.valor * 100) === Math.round(m.valor * 100) && Math.abs(diasEntre(l.data, m.data)) <= 3);
-  const doDia = casarComHistorico(pendentes.filter((m) => !temBaixa(m)), cauda, { soNoDia: true });
+  // A linha que uma regra do extrato descreve (a tarifa, a aplicação e o
+  // resgate automáticos) é do banco, não de um job: em 27/10/2026 uma
+  // aplicação de R$ 11.000 casou com dois pagamentos de um job do mesmo dia
+  // que somavam o mesmo valor.
+  const daRegra = (m: MovimentoDaLinha) => {
+    const h = normalizar(m.historico);
+    return dados.regras.some((g) => h.startsWith(normalizar(g.padrao)));
+  };
+  const doDia = casarComHistorico(pendentes.filter((m) => !temBaixa(m) && !daRegra(m)), cauda, { soNoDia: true });
   const usadasDaCauda = new Set([...doDia.values()].flat());
   const res = casar(pendentes.filter((m) => !doDia.has(m)), {
     titulos,

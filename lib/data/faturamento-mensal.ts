@@ -22,6 +22,7 @@ import { parametrosDaVersao, type ParametrosMidia } from "@/lib/calculos/midia-o
 import { mesesDaVersaoQuery } from "./meses-versao";
 import { pedidosParaFinanceiroDoJob } from "./saves";
 import { itensParaOFinanceiro } from "@/lib/calculos/save-financeiro";
+import { SELECT_PARAMETROS_DO_JOB, comParametrosDoJob } from "./parametros-do-job";
 
 export async function lerFaturamentoPorMesDoJob(
   supabase: SupabaseClient,
@@ -112,12 +113,15 @@ export async function lerFaturamentoMensalPeloJob(
       "id, versao_orcamento_aprovada_id, " +
         "versao:versoes_orcamento!versao_orcamento_aprovada_id(percentual_honorarios, percentual_imposto, percentual_veiculo, base_honorarios), " +
         // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
-        "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
+        "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), " +
+        // Os parâmetros do job, quando o financeiro os alterou (decisão 224).
+        SELECT_PARAMETROS_DO_JOB,
     )
     .eq("id", jobId)
     .eq("tenant_id", tenantId)
     .maybeSingle<{
       id: string;
+      parametros: any;
       versao_orcamento_aprovada_id: string | null;
       versao: {
         percentual_honorarios: number | string | null;
@@ -131,6 +135,7 @@ export async function lerFaturamentoMensalPeloJob(
     if (error) console.error("[faturamento-mensal.job]", error.message);
     return null;
   }
+  job.versao = comParametrosDoJob(job.versao, job.parametros);
   const modelo = job.orcamento?.categoria?.modelo_planilha;
   if (modelo !== "mensal" && modelo !== "midia_off") {
     return { mensal: false, meses: null };

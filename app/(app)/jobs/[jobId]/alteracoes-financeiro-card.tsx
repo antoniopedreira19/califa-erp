@@ -34,6 +34,7 @@ import { ArrowRight, ChevronRight, Landmark, TrendingDown, TrendingUp } from "lu
 import { cn, formatCurrency } from "@/lib/utils";
 import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
 import { PLANEJADO, SELO_PLANEJADO } from "@/app/(app)/_planilha/blocos";
+import { camposDaAlteracao } from "./realizado/parametros-do-job";
 import {
   tipoCustoLabel,
   type JobAlteracaoFinanceiroComItens,
@@ -105,6 +106,46 @@ function PrevisaoQueAcompanhou({
   );
 }
 
+/** Os parâmetros que a alteração mudou (decisão 224), de → para. */
+function ParametrosDaAlteracao({
+  parametros,
+  moeda,
+}: {
+  parametros: NonNullable<JobAlteracaoFinanceiroComItens["parametros"]>;
+  moeda: string;
+}) {
+  // O rótulo do internacional ("Fee", "Impostos BR") quando o job tem moeda.
+  const modelo =
+    parametros.de.moeda_estrangeira || parametros.para.moeda_estrangeira ? "internacional" : "nacional";
+  const campos = camposDaAlteracao(parametros.de, parametros.para, modelo, moeda);
+  return (
+    <div className="border-t border-border bg-muted/30 px-6 pb-3 pt-1.5">
+      <table className="w-full border-collapse">
+        <thead>
+          <tr className="text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <th className="py-2.5 pr-2 text-left">Parâmetro do job</th>
+            <th className="w-[320px] py-2.5 pl-2 text-right">De → para</th>
+          </tr>
+        </thead>
+        <tbody>
+          {campos.map((c) => (
+            <tr key={c.rotulo} className="border-t border-border">
+              <td className="py-2 pr-2 text-[12.5px] font-medium">{c.rotulo}</td>
+              <td className="py-2 pl-2 text-right">
+                <span className="inline-flex items-center gap-1.5 whitespace-nowrap font-mono text-xs">
+                  <span className="text-muted-foreground line-through">{c.de}</span>
+                  <ArrowRight className="h-3 w-3 text-[#c9c9c9]" />
+                  <span className="font-semibold">{c.para}</span>
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 export function AlteracoesFinanceiroCard({ alteracoes, moeda }: Props) {
   // A mais recente aberta, como no card de Erratas.
   const [abertas, setAbertas] = React.useState<Record<string, boolean>>({});
@@ -173,7 +214,10 @@ export function AlteracoesFinanceiroCard({ alteracoes, moeda }: Props) {
               <div className="flex min-w-0 flex-col gap-0.5">
                 <span className="text-[13.5px] font-semibold leading-tight">{a.motivo}</span>
                 <span className="text-[11.5px] text-muted-foreground">
-                  {a.itens.length} {a.itens.length === 1 ? "item" : "itens"}
+                  {/* Decisão 224: a alteração só dos parâmetros não tem linha. */}
+                  {a.parametros && a.itens.length === 0
+                    ? "Parâmetros do job"
+                    : `${a.itens.length} ${a.itens.length === 1 ? "item" : "itens"}`}
                   {a.autor_nome ? ` · ${a.autor_nome}` : ""}
                 </span>
               </div>
@@ -198,7 +242,10 @@ export function AlteracoesFinanceiroCard({ alteracoes, moeda }: Props) {
               />
             </button>
 
-            {aberta && (
+            {aberta && a.parametros && (
+              <ParametrosDaAlteracao parametros={a.parametros} moeda={moeda} />
+            )}
+            {aberta && a.itens.length > 0 && (
               <div className="border-t border-border bg-muted/30 px-6 pb-4 pt-1.5">
                 <div className="overflow-x-auto">
                   <table className="w-full min-w-[860px] border-collapse">

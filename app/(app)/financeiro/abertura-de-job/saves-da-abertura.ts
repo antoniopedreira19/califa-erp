@@ -5,6 +5,7 @@ import type {
   TipoCusto,
 } from "@/lib/types";
 import { faturamentoDaLinhaEmSave, savesDaConferencia } from "./dados";
+import { SELECT_PARAMETROS_DO_JOB, comParametrosDoJob } from "@/lib/data/parametros-do-job";
 
 /**
  * Os saves que vieram com o job, como o formulário da abertura os mostra
@@ -92,7 +93,9 @@ export async function carregarSavesDaAbertura(
       .select(
         "id, cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), " +
           "versao:versoes_orcamento!versao_orcamento_aprovada_id(percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, save_por_padrao, save_consumo_job_id), " +
-          "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
+          "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), " +
+          // Os parâmetros do job, quando o financeiro os alterou (decisão 224).
+          SELECT_PARAMETROS_DO_JOB,
       )
       .eq("tenant_id", tenantId)
       .eq("id", jobId)
@@ -119,7 +122,7 @@ export async function carregarSavesDaAbertura(
   if (pedidosRes.error) console.error("[abertura-job.saves.pedidos]", pedidosRes.error.message);
 
   const job = jobRes.data as any;
-  const versao = job?.versao ?? null;
+  const versao = comParametrosDoJob(job?.versao ?? null, job?.parametros);
   const modelo = (job?.orcamento?.categoria?.modelo_planilha ?? null) as CategoriaModeloPlanilha | null;
   const clienteId = (job?.cliente_id as string | null) ?? null;
   const clienteNome = (job?.cliente?.nome_fantasia as string | null) ?? "o cliente";

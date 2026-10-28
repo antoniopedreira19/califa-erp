@@ -20,6 +20,7 @@ import {
   type FechamentoMidia,
   type ParametrosMidia,
 } from "@/lib/calculos/midia-off";
+import { SELECT_PARAMETROS_DO_JOB, comParametrosDoJob } from "./parametros-do-job";
 
 export type MidiaDoJob =
   | { ok: true; midia: ParametrosMidia | null }
@@ -36,12 +37,15 @@ export async function lerMidiaDoJob(
       "id, " +
         "versao:versoes_orcamento!versao_orcamento_aprovada_id(percentual_honorarios, percentual_imposto, percentual_veiculo, base_honorarios), " +
         // `!categoria_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
-        "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
+        "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), " +
+        // Os parâmetros do job, quando o financeiro os alterou (decisão 224).
+        SELECT_PARAMETROS_DO_JOB,
     )
     .eq("id", jobId)
     .eq("tenant_id", tenantId)
     .maybeSingle<{
       id: string;
+      parametros: any;
       versao: {
         percentual_honorarios: number | string | null;
         percentual_imposto: number | string | null;
@@ -58,6 +62,7 @@ export async function lerMidiaDoJob(
     return { ok: true, midia: null };
   }
   if (!data.versao) return { ok: false };
+  data.versao = comParametrosDoJob(data.versao, data.parametros);
   return {
     ok: true,
     midia: parametrosDaVersao({
