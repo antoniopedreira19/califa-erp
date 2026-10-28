@@ -63,7 +63,14 @@ export const freelancerSchema = z
       .trim()
       .min(2, { message: "Nome social deve ter ao menos 2 caracteres" })
       .max(120, { message: "Nome social muito longo" }),
-    nome_completo: textoOpcional(200),
+    nome_completo: z
+      .string()
+      .trim()
+      .min(2, { message: "Nome completo é obrigatório" })
+      .max(200, { message: "Nome completo muito longo" })
+      .refine((v) => v.trim().split(/\s+/).length >= 2, {
+        message: "Informe nome e sobrenome",
+      }),
 
     cpf: z
       .string()

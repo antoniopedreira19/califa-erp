@@ -123,10 +123,12 @@ export function FormClient({ token, nomePreenchido, cpfPreenchido }: Props) {
             required
           />
         </Campo>
-        <Campo rotulo="Nome completo oficial (RG)" erro={fieldErrors.nome_completo}>
+        <Campo rotulo="Nome completo oficial (RG) *" erro={fieldErrors.nome_completo}>
           <Input
             value={state.nome_completo}
             onChange={(e) => set("nome_completo", e.target.value)}
+            placeholder="Nome e sobrenome como no RG"
+            required
           />
         </Campo>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

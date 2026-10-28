@@ -190,7 +190,7 @@ export function FreelancerForm({ modo, freelancer }: Props) {
       )}
 
       {/* ============== Identificação ============== */}
-      <Secao titulo="Identificação" descricao="Dados pessoais básicos. Nome social é o único obrigatório.">
+      <Secao titulo="Identificação" descricao="Dados pessoais básicos. Nome social e nome completo são obrigatórios.">
         <Campo rotulo="Nome social *" erro={fieldErrors.nome_social}>
           <Input
             name="nome_social"
@@ -202,12 +202,13 @@ export function FreelancerForm({ modo, freelancer }: Props) {
           />
         </Campo>
 
-        <Campo rotulo="Nome completo" erro={fieldErrors.nome_completo}>
+        <Campo rotulo="Nome completo *" erro={fieldErrors.nome_completo}>
           <Input
             name="nome_completo"
             value={state.nome_completo}
             onChange={(e) => set("nome_completo", e.target.value)}
-            placeholder="Nome oficial (RG), se diferente"
+            placeholder="Nome oficial (RG), com sobrenome"
+            required
             disabled={pending}
           />
         </Campo>

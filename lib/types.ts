@@ -5981,7 +5981,7 @@ export interface Freelancer {
 
   // Identificação
   nome_social: string;
-  nome_completo: string | null;
+  nome_completo: string;
   cpf: string | null;
   rg: string | null;
   data_nascimento: string | null; // ISO YYYY-MM-DD
