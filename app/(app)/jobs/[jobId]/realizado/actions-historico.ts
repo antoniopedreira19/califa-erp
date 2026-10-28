@@ -259,8 +259,13 @@ export async function carregarHistoricoDaPlanilha(jobId: unknown): Promise<Resul
     // A reconstrução converte cada número que lê; aqui só o tipo da linha.
     itens: (itens ?? []) as unknown as JobErrataComItens["itens"],
   }));
-  const alteracoes: JobAlteracaoFinanceiroComItens[] = (alteracoesRes.data ?? []).map(({ autor, itens, ...a }) => ({
+  // A alteração só dos parâmetros (decisão 224) não muda linha nenhuma: não
+  // é uma versão da planilha.
+  const alteracoes: JobAlteracaoFinanceiroComItens[] = (alteracoesRes.data ?? [])
+    .filter((a) => (a.itens ?? []).length > 0)
+    .map(({ autor, itens, ...a }) => ({
     ...a,
+    parametros: null,
     custo_orcado_antes: 0,
     custo_orcado_depois: 0,
     valor_job_antes: num(a.valor_job_antes),

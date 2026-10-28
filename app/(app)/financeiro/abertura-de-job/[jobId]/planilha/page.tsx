@@ -16,6 +16,7 @@ import { PlanilhaConferencia } from "./planilha-conferencia";
 import { mesesDaVersaoQuery } from "@/lib/data/meses-versao";
 import { rotuloMesCurto } from "@/lib/calculos/meses-trimestre";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
+import { SELECT_PARAMETROS_DO_JOB, comParametrosDoJob } from "@/lib/data/parametros-do-job";
 
 export const dynamic = "force-dynamic";
 
@@ -59,7 +60,9 @@ export default async function PlanilhaDaAberturaPage({
         // O nome do cliente é do pop-up de save: os textos dele falam do
         // crédito "de {cliente}", e sem o nome diziam "do cliente"
         // (decisão 099, revisão de 22/09/2026).
-        "cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia)",
+        "cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), " +
+        // Os parâmetros do job, quando o financeiro os alterou (decisão 224).
+        SELECT_PARAMETROS_DO_JOB,
     )
     .eq("id", params.jobId)
     .eq("tenant_id", session.activeTenant.id)
@@ -82,7 +85,7 @@ export default async function PlanilhaDaAberturaPage({
     );
   }
 
-  const versao = (raw as any).versao;
+  const versao = comParametrosDoJob((raw as any).versao, (raw as any).parametros);
   // Qual fechamento este job usa. Sai da categoria do ORÇAMENTO, nunca da
   // do job (decisão 072) — e é a MESMA função que a tela da versão e a
   // abertura usam, para as três não se lerem diferente.

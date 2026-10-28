@@ -42,6 +42,7 @@ import {
   type GrupoDaOrganizacao,
   type Organizacao,
 } from "@/lib/calculos/organizacao-errata";
+import { comParametrosDoJob } from "@/lib/data/parametros-do-job";
 
 type Ok = { ok: true; errataId: string };
 type Err = { ok: false; message: string };
@@ -942,7 +943,16 @@ async function montarErrata(
   // (04/08/2026). O gate de status acima continua valendo pra todo mundo.
 
   // ---- Percentuais vêm da versão aprovada, que não muda por errata ----
-  const { data: versao, error: versaoErr } = await supabase
+  // (ou dos parâmetros do job, quando o financeiro os alterou — decisão 224)
+  const { data: parametrosDoJob } = await supabase
+    .from("jobs_parametros")
+    .select(
+      "percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, cambio_cotacao, cambio_venda, cambio_data, percentual_veiculo, base_honorarios",
+    )
+    .eq("job_id", jobId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+  const { data: versaoAprovada, error: versaoErr } = await supabase
     .from("versoes_orcamento")
     // Os quatro últimos são da cadeia internacional (decisão 072): a
     // errata GRAVA faturamento e valor do job, então errar aqui é erro no
@@ -963,9 +973,10 @@ async function montarErrata(
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
 
-  if (versaoErr || !versao) {
+  if (versaoErr || !versaoAprovada) {
     return { ok: false, message: "Versão aprovada do job não encontrada." };
   }
+  const versao = comParametrosDoJob(versaoAprovada, parametrosDoJob as any);
 
   const pctHonorarios = Number(versao.percentual_honorarios ?? 0);
   const pctImposto = Number(versao.percentual_imposto ?? 0);

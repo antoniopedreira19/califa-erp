@@ -18,6 +18,7 @@ import {
 } from "@/lib/exportacao/interna-do-job";
 import type { CategoriaModeloPlanilha } from "@/lib/types";
 import { nomeDeQuemRecebeAVerba, nomeDoCartaoCorporativo, rotuloDaVerba, tipoDaVerba } from "@/lib/types";
+import { SELECT_PARAMETROS_DO_JOB, comParametrosDoJob } from "@/lib/data/parametros-do-job";
 
 export const dynamic = "force-dynamic";
 
@@ -61,11 +62,14 @@ export async function GET(
         "orcamento:orcamentos(id, codigo, nome, categoria:categorias_dominio!categoria_id(modelo_planilha)), " +
         "versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, percentual_honorarios, percentual_imposto, " +
         "percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, cambio_cotacao, cambio_venda, cambio_data), " +
-        "cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia)",
+        "cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), " +
+        // Os parâmetros do job, quando o financeiro os alterou (decisão 224).
+        SELECT_PARAMETROS_DO_JOB,
     )
     .eq("id", params.jobId)
     .eq("tenant_id", tenantId)
     .maybeSingle<any>();
+  if (raw) raw.versao = comParametrosDoJob(raw.versao, raw.parametros);
 
   if (!raw) {
     return NextResponse.json({ error: "Job não encontrado" }, { status: 404 });

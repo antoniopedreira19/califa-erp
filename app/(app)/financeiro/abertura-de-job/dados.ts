@@ -22,6 +22,7 @@ import {
   type ContatoCobranca,
 } from "@/lib/data/contatos-cobranca";
 import { grupoDoPedido } from "@/lib/data/saves";
+import { SELECT_PARAMETROS_DO_JOB, comParametrosDoJob } from "@/lib/data/parametros-do-job";
 
 /**
  * Um job na fila de abertura, com tudo que a conferência do financeiro
@@ -1092,7 +1093,9 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
           // entre `jobs` e `versoes_orcamento`, e o modelo de planilha vem
           // da categoria do ORÇAMENTO, nunca da do job (decisão 072).
           "versao:versoes_orcamento!jobs_versao_orcamento_aprovada_id_fkey(percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra), " +
-          "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
+          "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), " +
+          // Os parâmetros do job, quando o financeiro os alterou (decisão 224).
+          SELECT_PARAMETROS_DO_JOB,
       )
       .eq("tenant_id", tenantId)
       .in("id", idsJobs),
@@ -1218,7 +1221,7 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
               p.job_item_orcado_id
                 ? (tipos.get(p.job_item_orcado_id) ?? null)
                 : null,
-              j.versao ?? null,
+              comParametrosDoJob(j.versao ?? null, j.parametros),
               (j.orcamento?.categoria?.modelo_planilha as
                 | CategoriaModeloPlanilha
                 | undefined) ?? null,

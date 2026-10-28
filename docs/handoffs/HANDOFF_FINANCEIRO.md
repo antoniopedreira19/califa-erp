@@ -8496,3 +8496,25 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   Santander GoCrazy, BB Rende Fácil) e 42 transferências feitas nos
   extratos de outubro. Detalhes na
   [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
+## Os parâmetros do job na abertura — 28/10/2026 (decisão 224)
+
+- Na aba **Planilha Interna** de "Abrir job no financeiro", embaixo de
+  "Planilha do job · …", a linha de parâmetros da versão: Honorários e
+  Impostos (nacional e mensal); Fee, Int. taxes, Impostos BR, Int.
+  transaction costs e o câmbio (internacional); Honorários + base, Veículo e
+  Impostos (Mídia Off). "Editar" → Salvar → pop-up com o de → para, o impacto
+  e o motivo obrigatório.
+- Grava no job (`jobs_parametros`); a versão aprovada não muda. O valor do
+  job, o faturamento previsto e a foto da abertura acompanham, e o
+  formulário da aba Abertura do Job lê os números novos.
+- Na página do job aberto (`/financeiro/jobs/[jobId]`), a linha fica com o
+  cadeado; no internacional, o **"Editar câmbio"** continua (até o
+  encerramento).
+- O registro vai para **Alterações do Financeiro** como "Parâmetros do job".
+- Teste: TES-1036/26 (ZZ Teste 224 parâmetros internacional, P-0006/26),
+  criado pelos fluxos da tela: fee 12 → 13%, int. taxes 18,02 → 0,37%, custo
+  de transação 0 → R$ 550 na fila (valor do job R$ 64.514,85 → 54.109,67);
+  aberto com esses números; câmbio 5,40 → 5,60 na fila e 5,60 → 5,65 depois
+  da abertura. Mudar o fee depois da abertura: recusado pela função do banco
+  (simulação desfeita).

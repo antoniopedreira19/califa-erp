@@ -6542,3 +6542,16 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - Banco: `comite_pedidos` + os gatilhos da 204 lendo as regras e as
   aprovações (`20261027970001`, `20261027970002`).
 - Detalhes na [decisão 223](../decisions/223-comite-de-aprovacoes.md).
+
+## ⚠️ Nota de 2026-10-28 — os parâmetros do job (decisão 224)
+
+- Honorários, impostos, as taxas do internacional, o câmbio e a base da
+  Mídia Off agora podem ser do **job**: quando o financeiro os altera, o
+  retrato vai para `jobs_parametros`, e a versão aprovada fica como o cliente
+  aprovou. Toda leitura de job que usava os percentuais da versão passa por
+  `comParametrosDoJob` (`lib/data/parametros-do-job.ts`); no banco,
+  `vw_parametros_do_job` (que `vw_job_rentabilidade` e `vw_saves_por_job`
+  passaram a ler). Leitura nova de job que use esses números deve seguir o
+  mesmo caminho.
+- A `JobRealizadoSection` ganhou a prop obrigatória `parametrosDoJob`: a
+  linha só aparece nas telas do financeiro; a produção passa `null`.

@@ -470,6 +470,8 @@ export default async function JobDetailPage({
             // O "Editar orçado" é do financeiro (decisão 115); aqui a
             // produção corrige pela errata.
             edicaoDoFinanceiro={null}
+            // A linha de parâmetros é do financeiro (decisão 224).
+            parametrosDoJob={null}
             // O Totais fecha sobre o job de hoje (15/10/2026).
             aberturaDoJob={null}
             // Decisão 159: o GP registra a errata; o produtor a deixa

@@ -24,6 +24,7 @@ import { lerFaturamentoPorMesDoJob } from "@/lib/data/faturamento-mensal";
 import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
 import { parametrosDaVersao, type ParametrosMidia } from "@/lib/calculos/midia-off";
 import type { FaturamentoDoMes } from "@/lib/calculos/faturamento-por-mes";
+import { SELECT_PARAMETROS_DO_JOB, comParametrosDoJob } from "@/lib/data/parametros-do-job";
 
 /** "outubro" → "Outubro", para abrir frase. */
 export function comMaiuscula(texto: string): string {
@@ -115,7 +116,9 @@ export async function conferirEnvioDoJob(
     supabase
       .from("jobs")
       .select(
-        "id, codigo, status, faturamento_previsto, abertura_em_revisao, empresa_id, projeto_id, orcamento_id, versao_orcamento_aprovada_id, cliente_id, orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(percentual_honorarios, percentual_imposto, percentual_veiculo, base_honorarios)",
+        "id, codigo, status, faturamento_previsto, abertura_em_revisao, empresa_id, projeto_id, orcamento_id, versao_orcamento_aprovada_id, cliente_id, orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(percentual_honorarios, percentual_imposto, percentual_veiculo, base_honorarios), " +
+          // Os parâmetros do job, quando o financeiro os alterou (decisão 224).
+          SELECT_PARAMETROS_DO_JOB,
       )
       .eq("id", jobId)
       .eq("tenant_id", tenantId)
@@ -138,6 +141,8 @@ export async function conferirEnvioDoJob(
   ]);
 
   if (!job) return { ok: false, message: "Job não encontrado." };
+  job.versao = comParametrosDoJob(job.versao, (job as { parametros?: any }).parametros);
+  delete (job as { parametros?: unknown }).parametros;
 
   // Modelo mensal (decisão 078): Fee e Always On são enviados para
   // faturamento MÊS A MÊS — cada envio leva o mês. Os outros jobs seguem

@@ -33,6 +33,7 @@ import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import { itensParaOFinanceiro } from "@/lib/calculos/save-financeiro";
 import { pedidosParaFinanceiroDoJob } from "@/lib/data/saves";
 import { emCentavos } from "./curva";
+import { SELECT_PARAMETROS_DO_JOB, comParametrosDoJob } from "@/lib/data/parametros-do-job";
 
 export interface ImpostoDoJob {
   /** O total que o cronograma de recolhimento precisa fechar. */
@@ -59,7 +60,9 @@ export async function impostoDoJob(
       .from("jobs")
       .select(
         "versao:versoes_orcamento!versao_orcamento_aprovada_id(percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, percentual_veiculo, base_honorarios), " +
-          "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
+          "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), " +
+          // Os parâmetros do job, quando o financeiro os alterou (decisão 224).
+          SELECT_PARAMETROS_DO_JOB,
       )
       .eq("tenant_id", tenantId)
       .eq("id", jobId)
@@ -87,7 +90,7 @@ export async function impostoDoJob(
   if (pedidos === null) return null;
 
   const job = jobRes.data as any;
-  const versao = job?.versao ?? null;
+  const versao = comParametrosDoJob(job?.versao ?? null, job?.parametros);
   if (!versao) return null;
 
   if (job?.orcamento?.categoria?.modelo_planilha === "midia_off") {

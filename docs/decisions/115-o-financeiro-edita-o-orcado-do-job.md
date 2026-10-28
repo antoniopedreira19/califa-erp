@@ -606,3 +606,14 @@ caixa não mudaram: o tipo A não entra neles.
 - **Depois da abertura (TES-1013/26):** no "Editar orçado" o planejado não
   abre e mostra o motivo; saída sem gravar. Por simulação desfeita como o
   Financeiro Teste, a função recusou a mudança do planejado.
+
+## ⚠️ Os parâmetros do job — 2026-10-28 (decisão 224)
+
+A mesma permissão, a mesma função (`registrar_alteracao_do_financeiro`, que
+agora aceita `p->'parametros'` com o de → para) e o mesmo card de
+Alterações do Financeiro passam a registrar também os **parâmetros do job**
+— honorários/fee, impostos, as taxas do internacional e o câmbio — editados
+na linha de parâmetros da Planilha Interna. Na fila tudo se edita; depois da
+abertura, só o câmbio. A alteração só de parâmetros chega ao card como
+"Parâmetros do job" e não entra no Histórico da planilha. Ver a
+[224](224-parametros-do-job-na-abertura.md).

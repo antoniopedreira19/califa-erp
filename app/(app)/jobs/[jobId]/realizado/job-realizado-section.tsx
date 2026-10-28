@@ -151,6 +151,17 @@ import {
 } from "@/lib/calculos/historico-da-planilha";
 import { carregarHistoricoDaPlanilha } from "./actions-historico";
 import { BotaoHistorico, FaixaDaVersao, SeloDaLinha } from "./historico-da-planilha";
+import { ParametrosDoJob, type AlteracaoDosParametros } from "./parametros-do-job";
+import type { ParametrosDoJobGravados } from "@/lib/types";
+
+/** A linha de parâmetros do job no financeiro (decisão 224): os que valem
+ *  hoje, quem edita e o que já mudou. */
+export interface ParametrosDoJobNaPlanilha {
+  parametros: ParametrosDoJobGravados;
+  /** `null` = só leitura. `naFila: false` = job aberto, só o câmbio. */
+  edicao: { naFila: boolean } | null;
+  alteracoes: AlteracaoDosParametros[];
+}
 
 const SEM_FATURAMENTO_MENSAL: MesDeFaturamento[] = [];
 
@@ -347,6 +358,10 @@ interface Props {
    *  produção e onde ninguém edita. Obrigatória pelo mesmo motivo de
    *  `interno`. */
   edicaoDoFinanceiro: EdicaoDoFinanceiro | null;
+  /** A linha de parâmetros do job, embaixo do rótulo da planilha (decisão
+   *  224). Só nas telas do financeiro; `null` na produção e na conferência
+   *  em leitura. Obrigatória pelo mesmo motivo de `interno`. */
+  parametrosDoJob: ParametrosDoJobNaPlanilha | null;
   /** O job como foi aberto (decisão 151, entrega 2): o card de Totais do
    *  job inteiro fecha a ótica Planejada sobre ele quando o valor do job
    *  mudou. `null` antes da abertura. Obrigatória pelo mesmo motivo de
@@ -640,6 +655,7 @@ function PlanilhaDoJob({
   interno,
   confirmarSaidaParaOrcamento,
   edicaoDoFinanceiro,
+  parametrosDoJob,
   aberturaDoJob,
   resultadoInicial,
   mesNoLugar = false,
@@ -1566,10 +1582,33 @@ function PlanilhaDoJob({
   // Mídia Off (decisão 167, entrega 2): a planilha do job é a de mídia, só
   // leitura. Depois de todos os hooks — o resto do componente não roda para
   // ela. A régua diz a situação do faturamento de cada mês.
+  // A linha de parâmetros do job no financeiro (decisão 224): embaixo do
+  // rótulo da planilha; na Mídia Off, acima da planilha de mídia.
+  const linhaDeParametros = parametrosDoJob ? (
+    <ParametrosDoJob
+      jobId={job.id}
+      jobCodigo={job.codigo}
+      jobNome={nomeJob}
+      moeda={versao.moeda}
+      modelo={modeloPlanilha}
+      parametros={parametrosDoJob.parametros}
+      edicao={parametrosDoJob.edicao}
+      alteracoes={parametrosDoJob.alteracoes}
+      itens={itens.map((i) => ({
+        tipo_custo: i.tipo_custo,
+        total_orcado: Number(i.total_orcado ?? 0),
+        em_save: i.em_save,
+        save_consumido: Number(i.save_consumido ?? 0),
+      }))}
+    />
+  ) : null;
+
   if (midia) {
     const enviados = faturamentoMensal.filter((m) => m.envio !== null).length;
     const comFaturamento = faturamentoMensal.filter((m) => m.faturamento > 0.004).length;
     return (
+      <div className="flex flex-col gap-4">
+      {linhaDeParametros}
       <PlanilhaMidiaDoJob
         job={job}
         nomeJob={nomeJob}
@@ -1616,6 +1655,7 @@ function PlanilhaDoJob({
               : `${enviados} de ${comFaturamento} ${comFaturamento === 1 ? "mês enviado" : "meses enviados"}`
         }
       />
+      </div>
     );
   }
 
@@ -1674,6 +1714,7 @@ function PlanilhaDoJob({
             Planilha do job · {nomeVersao(nomeJob, versao.numero_versao)}
           </span>
         </div>
+        {linhaDeParametros}
         <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           {grupos.length > 0 && (

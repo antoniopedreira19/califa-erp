@@ -2525,7 +2525,7 @@ export function AberturaForm({
               <h2 className="text-[15px] font-semibold">Previsões</h2>
               <span className="text-xs text-muted-foreground">
                 Faturamento do orçamento + custo planejado da planilha +
-                impostos da versão aprovada
+                impostos do job
               </span>
               {/* As duas contas moram no mesmo cabeçalho: a que recebe e
                   a que paga. */}
@@ -2642,10 +2642,10 @@ export function AberturaForm({
                     {semImposto
                       ? "Sem faturamento pela California — não há nota, nem imposto a recolher."
                       : aliquotaIntTaxes !== null
-                        ? `Imposto de ${formatPercentual(aliquotaImposto)} + taxas internacionais de ${formatPercentual(aliquotaIntTaxes)} da versão aprovada`
+                        ? `Imposto de ${formatPercentual(aliquotaImposto)} + taxas internacionais de ${formatPercentual(aliquotaIntTaxes)} do job`
                         : job.modelo_planilha_orcamento === "midia_off"
-                          ? `Alíquota de ${formatPercentual(aliquotaImposto)} da versão aprovada, sobre os honorários`
-                          : `Alíquota de ${formatPercentual(aliquotaImposto)} da versão aprovada, sobre o que a California fatura`}
+                          ? `Alíquota de ${formatPercentual(aliquotaImposto)} do job, sobre os honorários`
+                          : `Alíquota de ${formatPercentual(aliquotaImposto)} do job, sobre o que a California fatura`}
                   </p>
                 </div>
               </div>

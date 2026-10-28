@@ -36,6 +36,7 @@ import {
   type NotaParaCopiar,
 } from "@/lib/calculos/envio-em-lote";
 import { conferirEnvioDoJob } from "@/lib/faturamento/conferir-envio-do-job";
+import { SELECT_PARAMETROS_DO_JOB, comParametrosDoJob } from "@/lib/data/parametros-do-job";
 import { envioEmLoteSchema, type EnvioEmLoteInput } from "@/lib/validations/envio-faturamento-lote";
 
 export interface JobDoLote {
@@ -265,18 +266,29 @@ async function proximoMesDoJob(
 }
 
 async function lerJobs(supabase: ReturnType<typeof createClient>, tenantId: string, ids: string[]) {
-  return supabase
+  const res = await supabase
     .from("jobs")
     .select(
       "id, codigo, nome, status, empresa_id, data_prevista_faturamento, versao_orcamento_aprovada_id, " +
         "cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia, razao_social, cnpj), " +
         "empresa:empresas(nome_fantasia, razao_social), " +
         "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), " +
-        "versao:versoes_orcamento!versao_orcamento_aprovada_id(percentual_honorarios, percentual_imposto)",
+        "versao:versoes_orcamento!versao_orcamento_aprovada_id(percentual_honorarios, percentual_imposto), " +
+        // Os parâmetros do job, quando o financeiro os alterou (decisão 224).
+        SELECT_PARAMETROS_DO_JOB,
     )
     .in("id", ids)
     .eq("tenant_id", tenantId)
-    .returns<JobLido[]>();
+    .returns<Array<JobLido & { parametros?: unknown }>>();
+  return {
+    ...res,
+    data: res.data
+      ? res.data.map(({ parametros, ...j }) => ({
+          ...j,
+          versao: comParametrosDoJob(j.versao, parametros as any),
+        }))
+      : null,
+  };
 }
 
 /** Mesmo cliente e mesma empresa — a regra do lote (Tiago, 19/10/2026). */

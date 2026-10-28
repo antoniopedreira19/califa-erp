@@ -35,6 +35,11 @@ import {
   type ParametrosMidia,
 } from "@/lib/calculos/midia-off";
 import type { CategoriaModeloPlanilha, TipoCusto } from "@/lib/types";
+import {
+  SELECT_PARAMETROS_DO_JOB,
+  comParametrosDoJob,
+  type ParametrosGravadosDoJob,
+} from "@/lib/data/parametros-do-job";
 
 /** Uma linha do orçado do job, com o id de `jobs_itens_orcado`. */
 export interface LinhaDoEspelho {
@@ -102,7 +107,9 @@ const dinheiro = (n: number) => Number(n.toFixed(2));
 export const SELECT_JOB_DOS_ESPELHOS =
   // ⚠️ Dicas de FK obrigatórias: há duas FKs entre jobs e
   // versoes_orcamento, e duas entre versoes_orcamento e orcamentos.
-  "id, versao_orcamento_aprovada_id, versao:versoes_orcamento!jobs_versao_orcamento_aprovada_id_fkey(percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, percentual_veiculo, base_honorarios), orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))";
+  "id, versao_orcamento_aprovada_id, versao:versoes_orcamento!jobs_versao_orcamento_aprovada_id_fkey(percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, percentual_veiculo, base_honorarios), orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), " +
+  // Os parâmetros do job, quando o financeiro os alterou (decisão 224).
+  SELECT_PARAMETROS_DO_JOB;
 
 /** As colunas de `jobs_itens_orcado` que a conta dos espelhos usa. */
 export const SELECT_ITENS_DOS_ESPELHOS =
@@ -123,6 +130,7 @@ export interface JobDosEspelhos {
     base_honorarios: string | null;
   } | null;
   orcamento: { categoria: { modelo_planilha: CategoriaModeloPlanilha } | null } | null;
+  parametros: ParametrosGravadosDoJob | null;
 }
 
 /**
@@ -135,6 +143,8 @@ export function montarBaseDosEspelhos(
   itens: ReadonlyArray<Record<string, any>>,
   pedidos: PedidoParaFinanceiro[],
 ): BaseDosEspelhos {
+  // Os parâmetros do job por cima dos da versão (decisão 224).
+  job = { ...job, versao: comParametrosDoJob(job.versao, job.parametros) };
   const planilha = configDaPlanilha(
     job.orcamento?.categoria?.modelo_planilha,
     job.versao ?? {

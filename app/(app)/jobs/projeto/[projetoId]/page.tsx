@@ -21,6 +21,7 @@ import { PlanilhasDoProjeto } from "./planilhas-do-projeto";
 import { BotaoEquipe } from "../../_equipe/equipe-dialog";
 import { carregarEquipeDoProjeto } from "@/lib/data/equipe-do-projeto";
 import { pode } from "@/lib/permissoes";
+import { SELECT_PARAMETROS_DO_JOB, comParametrosDoJob } from "@/lib/data/parametros-do-job";
 
 export const dynamic = "force-dynamic";
 
@@ -54,7 +55,9 @@ export default async function ProjetoAgregadoPage({
           "responsavel:profiles!responsavel_id(nome), " +
           // O cliente é do job (decisão 215): o cabeçalho mostra os dos jobs.
           "cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), " +
-          "versao:versoes_orcamento!versao_orcamento_aprovada_id(moeda, percentual_honorarios, percentual_imposto)",
+          "versao:versoes_orcamento!versao_orcamento_aprovada_id(moeda, percentual_honorarios, percentual_imposto), " +
+          // Os parâmetros do job, quando o financeiro os alterou (decisão 224).
+          SELECT_PARAMETROS_DO_JOB,
       )
       .eq("tenant_id", session.activeTenant.id)
       .eq("projeto_id", params.projetoId)
@@ -85,9 +88,11 @@ export default async function ProjetoAgregadoPage({
         percentual_honorarios: number | string;
         percentual_imposto: number | string;
       } | null;
+      parametros: any;
     }>
-  ).map((j) => ({
+  ).map(({ parametros, ...j }) => ({
     ...j,
+    versao: comParametrosDoJob(j.versao, parametros),
     status: jobStatusExibido(j.status, j.faturamento_enviado_em),
   }));
 

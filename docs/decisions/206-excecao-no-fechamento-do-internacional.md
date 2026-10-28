@@ -156,3 +156,12 @@ a conta. Até a exceção, a aprovação barra o 0% gravado.
   recusado (furo achado e fechado no teste); exceção num nacional, recusada.
 - Uma versão nacional (TES-P001/26-05) continua com "Honorários · Impostos ·
   Editar", sem botão "Exceção".
+
+## ⚠️ Revisão de 2026-10-28 (decisão 224)
+
+Na **fila da abertura** o financeiro também edita int. taxes, Impostos BR e
+custo de transação, pela linha de parâmetros da Planilha Interna, com
+motivo, sem a Exceção do administrador (resposta do Tiago de 27/10/2026). A
+alteração grava no **job** (`jobs_parametros`): a versão aprovada, a trava
+desta decisão no orçamento e a Exceção do administrador continuam como
+estão. Ver a [224](224-parametros-do-job-na-abertura.md).

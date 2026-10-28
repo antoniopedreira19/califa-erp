@@ -153,6 +153,7 @@ function alteracao(
     impostos_depois: [],
     envio_antes: [],
     envio_depois: [],
+    parametros: null,
     created_by: null,
     created_at: quando,
     autor_nome: "Pessoa do financeiro",

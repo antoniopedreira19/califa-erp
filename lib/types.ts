@@ -2671,8 +2671,26 @@ export interface JobAlteracaoFinanceiro {
   /** Vazio quando o job ainda não tinha envio para faturamento. */
   envio_antes: EnvioDaAlteracao[];
   envio_depois: EnvioDaAlteracao[];
+  /** Os parâmetros do job antes → depois (decisão 224). Nulo nas
+   *  alterações só de linhas. */
+  parametros: { de: ParametrosDoJobGravados; para: ParametrosDoJobGravados } | null;
   created_by: string | null;
   created_at: string;
+}
+
+/** Os parâmetros do job como `jobs_parametros` os grava (decisão 224). */
+export interface ParametrosDoJobGravados {
+  percentual_honorarios: number;
+  percentual_imposto: number;
+  percentual_int_taxes: number;
+  int_transaction_costs: number;
+  moeda_estrangeira: string | null;
+  cambio_cotacao: number | null;
+  cambio_compra: number | null;
+  cambio_venda: number | null;
+  cambio_data: string | null;
+  percentual_veiculo: number;
+  base_honorarios: string;
 }
 
 export interface JobAlteracaoFinanceiroItem {

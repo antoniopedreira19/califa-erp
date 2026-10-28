@@ -28,6 +28,7 @@ import type {
   JobPlanilhaProjeto,
 } from "./tipos";
 import { rotuloMesCurto } from "@/lib/calculos/meses-trimestre";
+import { SELECT_PARAMETROS_DO_JOB, comParametrosDoJob } from "@/lib/data/parametros-do-job";
 
 /**
  * Monta a planilha consolidada de um conjunto de jobs — um bloco por job,
@@ -63,7 +64,9 @@ export async function carregarPlanilhasDosJobs(
         // cadeia, e o consolidado soma os fechamentos.
         // Os dois últimos são as condições da Mídia Off (decisão 167).
         "versao:versoes_orcamento!versao_orcamento_aprovada_id(moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, percentual_veiculo, base_honorarios), " +
-          "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha))",
+          "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), " +
+          // Os parâmetros do job, quando o financeiro os alterou (decisão 224).
+          SELECT_PARAMETROS_DO_JOB,
     )
     .eq("tenant_id", tenantId)
     .in("id", jobIds)
@@ -76,7 +79,10 @@ export async function carregarPlanilhasDosJobs(
     return [];
   }
 
-  const jobs = (jobsRaw ?? []) as any[];
+  const jobs = ((jobsRaw ?? []) as any[]).map(({ parametros, ...j }) => ({
+    ...j,
+    versao: comParametrosDoJob(j.versao, parametros),
+  }));
   if (jobs.length === 0) return [];
 
   const versaoIds = jobs.map((j) => j.versao_orcamento_aprovada_id);
