@@ -33,6 +33,7 @@ function badgeVariantParaEscopo(
     case "ferias_abono":       return "amarelo";
     case "decimo_terceiro_p1": return "roxo";
     case "decimo_terceiro_p2": return "roxo";
+    case "decimo_terceiro_adiantamento": return "roxo";
   }
 }
 
@@ -43,6 +44,7 @@ function labelEscopoTipo(escopo: PeopleAprovarItem["escopo_tipo"]): string {
     case "ferias_abono":       return "Abono";
     case "decimo_terceiro_p1": return "13° P1";
     case "decimo_terceiro_p2": return "13° P2";
+    case "decimo_terceiro_adiantamento": return "13° Adiantamento";
   }
 }
 
@@ -266,13 +268,17 @@ export function PeopleList({
               const colab = colaboradores[item.colaborador_id];
               const nomeColab = colab?.nome ?? "—";
               const variante = badgeVariantParaEscopo(item.escopo_tipo);
-              const tipoTexto = labelEscopoTipo(item.escopo_tipo);
+              // Para 13°, usar label da view (tem o ano e descrição completa).
+              // Para outros escopos, usar labelEscopoTipo() (badge curto).
+              const is13 = item.escopo_tipo === "decimo_terceiro_p1" || item.escopo_tipo === "decimo_terceiro_p2" || item.escopo_tipo === "decimo_terceiro_adiantamento";
+              const tipoTexto = is13 ? item.label : labelEscopoTipo(item.escopo_tipo);
               const eFolhaMensal = item.escopo_tipo === "folha_mensal";
 
               // Stub: 13° não está implementado — botão sempre bloqueado.
               const stubDecimo =
                 item.escopo_tipo === "decimo_terceiro_p1" ||
-                item.escopo_tipo === "decimo_terceiro_p2";
+                item.escopo_tipo === "decimo_terceiro_p2" ||
+                item.escopo_tipo === "decimo_terceiro_adiantamento";
 
               // Espelha a regra do server (actions-folhas.ts: exigeNf):
               //   origem california + pj/mei/clt_recibo exigem NF.
