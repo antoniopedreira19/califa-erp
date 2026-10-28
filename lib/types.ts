@@ -4862,6 +4862,43 @@ export interface ColaboradorAlocacao {
   created_at: string;
 }
 
+/** Fatia por empresa dentro de um pacote de alocação multi-empresa.
+ *  Soma de `percentual_empresa` por `alocacao_id` = 100 (trigger).
+ *  Quando `usa_rateio_empresa = false`, deve haver regionais em
+ *  `ColaboradorAlocacaoItemRegional` somando 100.
+ *  Spec: docs/superpowers/specs/2026-10-28-alocacao-multi-empresa-design.md */
+export type ColaboradorAlocacaoItem = {
+  id: string;
+  tenant_id: string;
+  alocacao_id: string;
+  empresa_id: string;
+  percentual_empresa: number;
+  usa_rateio_empresa: boolean;
+  created_at: string;
+};
+
+/** Divisão regional de uma fatia de empresa (`ColaboradorAlocacaoItem`).
+ *  Só existe quando `usa_rateio_empresa = false` no item pai.
+ *  Soma de `percentual_regional` por `alocacao_item_id` = 100 (trigger). */
+export type ColaboradorAlocacaoItemRegional = {
+  id: string;
+  tenant_id: string;
+  alocacao_item_id: string;
+  regional_id: string;
+  percentual_regional: number;
+  created_at: string;
+};
+
+/** Snapshot completo da alocação vigente de um colaborador — pacote + itens
+ *  por empresa + regionais por item. Usado por server actions e UI de edição. */
+export type AlocacaoVigenteSnapshot = {
+  pacote: ColaboradorAlocacao;
+  itens: Array<ColaboradorAlocacaoItem & {
+    empresa_nome: string;
+    regionais: Array<ColaboradorAlocacaoItemRegional & { regional_nome: string }>;
+  }>;
+};
+
 /** Rateio anual das regionais de uma empresa. Editado 1×/ano pelo RH/admin.
  *  Regionais com 0% não têm linha. Soma de `percentual` por (empresa, ano)
  *  deve ser 100 — trigger deferrable garante. */
