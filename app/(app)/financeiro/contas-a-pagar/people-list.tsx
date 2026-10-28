@@ -42,9 +42,9 @@ function labelEscopoTipo(escopo: PeopleAprovarItem["escopo_tipo"]): string {
     case "folha_mensal":       return "Folha";
     case "ferias_usufruto":    return "Férias";
     case "ferias_abono":       return "Abono";
-    case "decimo_terceiro_p1": return "13° P1";
-    case "decimo_terceiro_p2": return "13° P2";
-    case "decimo_terceiro_adiantamento": return "13° Adiantamento";
+    case "decimo_terceiro_p1": return "13º P1";
+    case "decimo_terceiro_p2": return "13º P2";
+    case "decimo_terceiro_adiantamento": return "13º Adiantamento";
   }
 }
 
@@ -280,12 +280,6 @@ export function PeopleList({
                 : labelEscopoTipo(item.escopo_tipo);
               const eFolhaMensal = item.escopo_tipo === "folha_mensal";
 
-              // Stub: 13° não está implementado — botão sempre bloqueado.
-              const stubDecimo =
-                item.escopo_tipo === "decimo_terceiro_p1" ||
-                item.escopo_tipo === "decimo_terceiro_p2" ||
-                item.escopo_tipo === "decimo_terceiro_adiantamento";
-
               // Espelha a regra do server (actions-folhas.ts: exigeNf):
               //   origem california + pj/mei/clt_recibo exigem NF.
               //   Férias (usufruto/abono) também exigem NF.
@@ -299,10 +293,10 @@ export function PeopleList({
                 item.escopo_tipo === "ferias_abono";
               const exigeNfParaUI = exigeNfLinha || exigeNfFerias;
 
-              const bloqueado = stubDecimo || (exigeNfParaUI && !item.nf_anexada);
-              const tooltipBloqueado = stubDecimo
-                ? "13° será implementado em iteração futura."
-                : "Aguardando o colaborador anexar a NF.";
+              const bloqueado = exigeNfParaUI && !item.nf_anexada;
+              const tooltipBloqueado = bloqueado
+                ? "Aguardando o colaborador anexar a NF."
+                : null;
 
               return (
                 <tr

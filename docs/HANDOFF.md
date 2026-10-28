@@ -99,9 +99,11 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 20261027700003  ferias_lancamentos_dias_abono
 20261027700004  ferias_lancamentos_dias_total_combinado
 20261027900001  freelancers_rls_gp_responsavel_le
+20261028110001  13_nf_fundacao_schema
+20261028110002  13_nf_atualizar_views
 ```
 
-Última: `20261027900001`.
+Última: `20261028110002`.
 
 Migration removida do repo em 2026-09-23 (regionais GERAL aposentadas): `20260916000004_rh_regional_geral.sql`.
 

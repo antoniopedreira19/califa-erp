@@ -48,11 +48,11 @@ function labelEscopoTipo(escopo: NfAnexoEscopo): string {
     case "ferias_abono":
       return "Férias — abono";
     case "decimo_terceiro_p1":
-      return "13° salário — 1ª parcela";
+      return "13º salário — 1ª parcela";
     case "decimo_terceiro_p2":
-      return "13° salário — 2ª parcela";
+      return "13º salário — 2ª parcela";
     case "decimo_terceiro_adiantamento":
-      return "13° salário — Adiantamento";
+      return "13º salário — Adiantamento";
   }
 }
 

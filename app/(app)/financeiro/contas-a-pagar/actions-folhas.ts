@@ -552,11 +552,11 @@ export async function aprovarLinhaFolha(
   if (exigeNf) {
     const escopo = resolverEscopoDaFolha({
       id: folha.id,
-      tipo: folha.tipo as "salario" | "ferias" | "decimo_terceiro_1a_parcela" | "decimo_terceiro_2a_parcela" | "decimo_terceiro_adiantamento",
-      tipo_folha_ferias: (folha as { tipo_folha_ferias?: "usufruto" | "abono" | null }).tipo_folha_ferias ?? null,
-      lancamento_ferias_id: (folha as { lancamento_ferias_id?: string | null }).lancamento_ferias_id ?? null,
-      decimo_terceiro_linha_id: (folha as { decimo_terceiro_linha_id?: string | null }).decimo_terceiro_linha_id ?? null,
-      decimo_terceiro_adiantamento_id: (folha as { decimo_terceiro_adiantamento_id?: string | null }).decimo_terceiro_adiantamento_id ?? null,
+      tipo: folha.tipo,
+      tipo_folha_ferias: folha.tipo_folha_ferias,
+      lancamento_ferias_id: folha.lancamento_ferias_id,
+      decimo_terceiro_linha_id: folha.decimo_terceiro_linha_id,
+      decimo_terceiro_adiantamento_id: folha.decimo_terceiro_adiantamento_id,
     });
     if (!escopo) {
       // Stub: 13° ou férias sem lancamento_id — segue sem trava de NF.
@@ -697,11 +697,11 @@ export async function aprovarLinhaFolha(
   // Descrição da conta_avulsa para adiantamento de 13° inclui a data do
   // adiantamento (dd/MM/aaaa) para identificação rápida no financeiro.
   let descricaoAdiantamento: string | null = null;
-  if (folha.tipo === "decimo_terceiro_adiantamento" && (folha as { decimo_terceiro_adiantamento_id?: string | null }).decimo_terceiro_adiantamento_id) {
+  if (folha.tipo === "decimo_terceiro_adiantamento" && folha.decimo_terceiro_adiantamento_id) {
     const { data: adiantRow } = await supabase
       .from("decimo_terceiro_adiantamentos")
       .select("data")
-      .eq("id", (folha as { decimo_terceiro_adiantamento_id: string }).decimo_terceiro_adiantamento_id)
+      .eq("id", folha.decimo_terceiro_adiantamento_id)
       .eq("tenant_id", tenantId)
       .maybeSingle();
     if (adiantRow?.data) {
@@ -830,7 +830,7 @@ export async function aprovarLinhaFolha(
   // de adiantamento para que o quadro de NF e a tela de adiantamentos possam
   // exibir o link direto. Falha aqui não desfaz o título já criado — apenas
   // loga um warning para investigação posterior.
-  const adiantamentoId = (folha as { decimo_terceiro_adiantamento_id?: string | null }).decimo_terceiro_adiantamento_id ?? null;
+  const adiantamentoId = folha.decimo_terceiro_adiantamento_id ?? null;
   if (folha.tipo === "decimo_terceiro_adiantamento" && adiantamentoId && contasCriadas.length > 0) {
     const { error: errBackfill } = await supabase
       .from("decimo_terceiro_adiantamentos")

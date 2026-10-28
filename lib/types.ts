@@ -5091,6 +5091,9 @@ export interface FolhaPagamento {
   colaborador_id: string;
   competencia_ano: number;
   competencia_mes: number;
+  /** Tipo da folha: "salario" (mensal), "ferias", "decimo_terceiro_1a_parcela",
+   *  "decimo_terceiro_2a_parcela" ou "decimo_terceiro_adiantamento". */
+  tipo: "salario" | "ferias" | "decimo_terceiro_1a_parcela" | "decimo_terceiro_2a_parcela" | "decimo_terceiro_adiantamento";
   /** Valor MANUAL que será pago. Não é vigente da Camada 1. */
   salario_base: string;
   status: FolhaLinhaStatus;
@@ -5099,6 +5102,12 @@ export interface FolhaPagamento {
   data_pagamento_prevista: string | null;
   /** Null exceto quando tipo='ferias'. Distingue folha de férias (usufruto) de folha de abono. */
   tipo_folha_ferias: 'usufruto' | 'abono' | null;
+  /** Null exceto quando tipo='ferias'. FK para lancamentos_ferias. */
+  lancamento_ferias_id: string | null;
+  /** FK para decimo_terceiro_linhas. Preenchido nas parcelas 1ª e 2ª do 13°. */
+  decimo_terceiro_linha_id: string | null;
+  /** FK para decimo_terceiro_adiantamentos. Preenchido em adiantamentos de 13°. */
+  decimo_terceiro_adiantamento_id: string | null;
   motivo_pendencia: string | null;
   enviada_em: string | null;
   enviada_por: string | null;
