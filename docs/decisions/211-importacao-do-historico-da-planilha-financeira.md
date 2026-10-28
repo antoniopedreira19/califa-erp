@@ -1122,6 +1122,24 @@ a BB California pela tela e a Santander Hitlab por migration".
 - As três devoluções que a planilha lançou como entrada no custo do job
   (R$ 15.500) já estão conciliadas pela cauda, como a planilha.
 
+### A Santander Hitlab em outubro (28/10/2026)
+
+- **OFX de outubro importado** (20 linhas, 05 a 26/10, soma zero: a ContaMax
+  cobre a conta corrente todo dia). Regras criadas: APLICACAO CONTAMAX e
+  RESGATE CONTAMAX AUTOMATICO (transferência para a Santander ContaMax
+  Hitlab) e "TAR" (04.012 Tarifa bancária, gerencial Hitlab, regional Hitlab,
+  como a planilha). 8 linhas lançadas: 7 transferências e a tarifa de R$ 475.
+- **Conferido:** a Santander ContaMax Hitlab fecha em R$ 5.621,50, o saldo
+  do extrato da aplicação em 27/10 (R$ 32.827,98 em 01/10, + R$ 185.000 de
+  aplicação, − R$ 212.206,48 de resgates, sem rendimento no mês).
+- **Pendente na corrente** (sistema −R$ 170.445,32 × banco R$ 0,00): o
+  mútuo de R$ 185.000 da California (13/10); o imposto de R$ 1.822,41 (05/10,
+  competência 3T na planilha), o PIX de R$ 464,72 (09/10, sem classificação
+  na planilha), quatro PIX à Receita Federal (R$ 13.198,71, 23 e 26/10) e um
+  crédito de R$ 931,16 (23/10), que a planilha de 25/10 ainda não tem; e os
+  4 PIX de 14/10 (R$ 197.176,80) contra as 5 baixas de PP do mesmo dia, com
+  o mesmo total e valores diferentes um a um.
+
 ## A cauda: outubro dos jobs até o 3T (A6, 27/10/2026)
 
 Depois do inventário do 4T (planilha de 01 a 25/10 contra os extratos e o
