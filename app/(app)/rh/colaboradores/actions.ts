@@ -12,6 +12,7 @@ import {
   salarioSchema,
   dadosBancariosColaboradorSchema,
 } from "@/lib/validations/rh-colaboradores";
+import { alterarAlocacao } from "@/app/(app)/rh/colaboradores/[id]/actions-alocacao";
 
 type ActionResult<T = { id: string }> =
   | ({ ok: true } & T)
@@ -139,23 +140,29 @@ export async function criarColaborador(
   const colaboradorId = colabData.id;
   const service = createServiceClient();
 
-  // 2) Alocação inicial vigente (regional específica, sem rateio)
-  const { error: alocError } = await supabase
-    .from("colaboradores_alocacoes")
-    .insert({
-      tenant_id: session.activeTenant.id,
-      colaborador_id: colaboradorId,
-      empresa_id: alocacaoParsed.data.empresa_id,
-      regional_id: alocacaoParsed.data.regional_id,
-      usa_rateio_empresa: false,
-      data_inicio: alocacaoParsed.data.data_inicio,
-      created_by: session.profile.id,
-    });
+  // 2) Alocação inicial vigente — usa hierarquia nova (itens) via alterarAlocacao.
+  const alocResult = await alterarAlocacao(colaboradorId, {
+    data_mudanca: alocacaoParsed.data.data_inicio,
+    motivo: "Alocação inicial (cadastro de colaborador)",
+    itens: [
+      {
+        empresa_id: alocacaoParsed.data.empresa_id,
+        percentual_empresa: 100,
+        usa_rateio_empresa: false,
+        regionais: [
+          {
+            regional_id: alocacaoParsed.data.regional_id,
+            percentual_regional: 100,
+          },
+        ],
+      },
+    ],
+  });
 
-  if (alocError) {
-    console.error("[rh.colaborador.criar.alocacao]", alocError.message);
+  if (!alocResult.ok) {
+    console.error("[rh.colaborador.criar.alocacao]", alocResult.message);
     await service.from("colaboradores").delete().eq("id", colaboradorId);
-    return { ok: false, message: mapColaboradorDbError(alocError.message) };
+    return { ok: false, message: mapColaboradorDbError(alocResult.message) };
   }
 
   // 3) Salário inicial

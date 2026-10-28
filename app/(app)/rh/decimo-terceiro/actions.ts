@@ -160,19 +160,30 @@ export async function criarFolhaDecimoTerceiro(
     }
   }
 
-  // Query 3: alocação vigente (empresa) — pega qualquer uma (a primeira
-  // por created_at) por simplicidade da Parte 1. Rateio real fica pra
-  // parte futura.
-  const { data: alocacoes, error: errAloc } = await supabase
+  // Query 3: alocação vigente (empresa) — usa hierarquia nova (itens).
+  // Lê pacotes vigentes → busca primeiro item de cada pacote → mapeia
+  // colaborador_id → empresa_id (item de maior percentual ou primeiro).
+  const { data: pacotesVigentes, error: errAloc } = await supabase
     .from("colaboradores_alocacoes")
-    .select("colaborador_id, empresa_id, created_at")
+    .select("id, colaborador_id")
     .eq("tenant_id", tenantId)
     .is("data_fim", null)
-    .in("colaborador_id", elegiveisIds)
-    .order("created_at", { ascending: true });
+    .in("colaborador_id", elegiveisIds);
   if (errAloc) {
     return { ok: false, message: `Falha ao buscar alocações: ${errAloc.message}` };
   }
+
+  const pacoteIds = (pacotesVigentes ?? []).map((p) => p.id);
+  const pacoteColabMap = new Map<string, string>(
+    (pacotesVigentes ?? []).map((p) => [p.id, p.colaborador_id]),
+  );
+  const { data: itensAloc } = pacoteIds.length > 0
+    ? await supabase
+        .from("colaboradores_alocacoes_itens")
+        .select("alocacao_id, empresa_id, percentual_empresa")
+        .in("alocacao_id", pacoteIds)
+        .order("percentual_empresa", { ascending: false })
+    : { data: [] };
 
   const salarioPorColab = new Map(
     (salarios ?? []).map((s) => [s.colaborador_id, s.valor]),
@@ -181,9 +192,11 @@ export async function criarFolhaDecimoTerceiro(
     (salarios ?? []).map((s) => [s.colaborador_id, s.valor_recibo]),
   );
   const empresaPorColab = new Map<string, string>();
-  for (const a of alocacoes ?? []) {
-    if (!empresaPorColab.has(a.colaborador_id) && a.empresa_id) {
-      empresaPorColab.set(a.colaborador_id, a.empresa_id);
+  for (const item of itensAloc ?? []) {
+    const colaboradorId = pacoteColabMap.get(item.alocacao_id);
+    if (colaboradorId && !empresaPorColab.has(colaboradorId) && item.empresa_id) {
+      // Pega a empresa com maior percentual (já ordenado DESC acima)
+      empresaPorColab.set(colaboradorId, item.empresa_id);
     }
   }
 
@@ -1037,16 +1050,26 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
     return { ok: false, message: "Colaborador não encontrado." };
   }
 
-  // Empresa alocada vigente
-  const { data: alocRaw } = await supabase
+  // Empresa alocada vigente — usa hierarquia nova (itens).
+  // Pega o pacote vigente e seleciona a empresa com maior percentual.
+  const { data: pacoteVigenteRaw } = await supabase
     .from("colaboradores_alocacoes")
-    .select("empresa_id, created_at")
+    .select("id")
     .eq("tenant_id", tenantId)
     .eq("colaborador_id", colaborador_id)
     .is("data_fim", null)
-    .order("created_at", { ascending: true })
     .limit(1);
-  const empresaId = alocRaw?.[0]?.empresa_id;
+  const pacoteId = pacoteVigenteRaw?.[0]?.id;
+  let empresaId: string | null = null;
+  if (pacoteId) {
+    const { data: itensPacote } = await supabase
+      .from("colaboradores_alocacoes_itens")
+      .select("empresa_id, percentual_empresa")
+      .eq("alocacao_id", pacoteId)
+      .order("percentual_empresa", { ascending: false })
+      .limit(1);
+    empresaId = itensPacote?.[0]?.empresa_id ?? null;
+  }
   if (!empresaId) {
     return {
       ok: false,

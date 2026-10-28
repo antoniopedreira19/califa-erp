@@ -11,6 +11,7 @@ import {
   motivoTextoSchema,
 } from "@/lib/validations/rh-contratacoes";
 import type { Contratacao } from "@/lib/types";
+import { alterarAlocacao } from "@/app/(app)/rh/colaboradores/[id]/actions-alocacao";
 
 type ActionResult<T = { id: string }> =
   | ({ ok: true } & T)
@@ -483,20 +484,23 @@ export async function efetivar(id: string): Promise<ActionResult> {
   }
   const colaboradorId = colab.id;
 
-  // 2. Alocação vigente
-  const { error: alocErr } = await supabase
-    .from("colaboradores_alocacoes")
-    .insert({
-      tenant_id: tenantId,
-      colaborador_id: colaboradorId,
-      empresa_id: c.empresa_id,
-      regional_id: c.regional_id,
-      usa_rateio_empresa: false,
-      data_inicio: c.data_admissao,
-      created_by: session.profile.id,
-    });
-  if (alocErr) {
-    console.error("[rh.contratacao.efetivar.aloc]", alocErr.message);
+  // 2. Alocação vigente — usa hierarquia nova (itens) via alterarAlocacao.
+  const alocResult = await alterarAlocacao(colaboradorId, {
+    data_mudanca: c.data_admissao,
+    motivo: "Alocação inicial (contratação efetivada)",
+    itens: [
+      {
+        empresa_id: c.empresa_id,
+        percentual_empresa: 100,
+        usa_rateio_empresa: false,
+        regionais: c.regional_id
+          ? [{ regional_id: c.regional_id, percentual_regional: 100 }]
+          : [],
+      },
+    ],
+  });
+  if (!alocResult.ok) {
+    console.error("[rh.contratacao.efetivar.aloc]", alocResult.message);
     await service.from("colaboradores").delete().eq("id", colaboradorId);
     return { ok: false, message: "Falha ao criar a alocação inicial." };
   }
