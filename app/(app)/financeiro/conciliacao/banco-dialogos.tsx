@@ -512,11 +512,17 @@ export function padraoDoHistorico(historico: string): string {
     .join(" ");
 }
 
+/** O que a regra faz: lança no centro de custo, ou transfere para outra conta. */
+export type RegraEscolhida =
+  | { modo: "lancamento"; padrao: string; tipoId: string; subtipoId: string; empresaId: string; todasAsContas: boolean }
+  | { modo: "transferencia"; padrao: string; contaDestinoId: string };
+
 export function RegraDialog({
   historico,
   tipos,
   subtipos,
   empresas,
+  contasDeDestino,
   inicial,
   pending,
   erro,
@@ -528,13 +534,17 @@ export function RegraDialog({
   subtipos: PlanoContaSubtipo[];
   /** Empresa → nome curto. */
   empresas: Record<string, string>;
+  /** As contas do mesmo CNPJ para a regra de transferência (decisão 211, A5). */
+  contasDeDestino: Array<{ id: string; nome: string }>;
   inicial: { tipoId: string | null; subtipoId: string | null; empresaId: string | null };
   pending: boolean;
   erro: string | null;
   onFechar: () => void;
-  onConfirmar: (regra: { padrao: string; tipoId: string; subtipoId: string; empresaId: string; todasAsContas: boolean }) => void;
+  onConfirmar: (regra: RegraEscolhida) => void;
 }) {
   const [padrao, setPadrao] = React.useState(() => padraoDoHistorico(historico));
+  const [modo, setModo] = React.useState<RegraEscolhida["modo"]>("lancamento");
+  const [contaDestinoId, setContaDestinoId] = React.useState("");
   const [tipoId, setTipoId] = React.useState(inicial.tipoId ?? "");
   const [subtipoId, setSubtipoId] = React.useState(inicial.subtipoId ?? "");
   const [empresaId, setEmpresaId] = React.useState(inicial.empresaId ?? "");
@@ -554,9 +564,21 @@ export function RegraDialog({
           <DialogDescription className="font-mono text-xs">{historico}</DialogDescription>
         </DialogHeader>
         <p className="text-[12.5px] text-muted-foreground">
-          As próximas linhas do banco cujo histórico começa assim vão para “Pelas regras do histórico”, com o centro de custo
-          e a empresa escolhidos aqui.
+          As próximas linhas do banco cujo histórico começa assim vão para “Pelas regras do histórico”:{" "}
+          {modo === "lancamento"
+            ? "lançadas com o centro de custo e a empresa escolhidos aqui."
+            : "cada uma vira transferência entre esta conta e a de destino, no sentido do banco — a saída vai para a outra conta, a entrada vem dela."}
         </p>
+        <div className="flex gap-4 text-sm">
+          <label className="flex items-center gap-2">
+            <input type="radio" name="regra-modo" checked={modo === "lancamento"} onChange={() => setModo("lancamento")} className="accent-california-red" />
+            Lança no centro de custo
+          </label>
+          <label className="flex items-center gap-2">
+            <input type="radio" name="regra-modo" checked={modo === "transferencia"} onChange={() => setModo("transferencia")} className="accent-california-red" />
+            Transfere para outra conta
+          </label>
+        </div>
         <div className="space-y-1">
           <label htmlFor="regra-padrao" className="text-xs font-semibold">
             O histórico começa por <span className="text-california-red">*</span>
@@ -572,6 +594,23 @@ export function RegraDialog({
           />
           {!casa && <p className="text-[11px] text-california-red">O histórico desta linha não começa assim.</p>}
         </div>
+        {modo === "transferencia" ? (
+          <div className="space-y-1">
+            <label htmlFor="regra-destino" className="text-xs font-semibold">
+              Conta de destino <span className="text-california-red">*</span>
+            </label>
+            <select id="regra-destino" value={contaDestinoId} onChange={(e) => setContaDestinoId(e.target.value)} className={select}>
+              <option value="">Escolha…</option>
+              {contasDeDestino.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nome}
+                </option>
+              ))}
+            </select>
+            <p className="text-[11px] text-muted-foreground">A aplicação e o resgate automáticos: a conta de investimento do mesmo CNPJ.</p>
+          </div>
+        ) : (
+          <>
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-1">
             <label htmlFor="regra-tipo" className="text-xs font-semibold">
@@ -629,6 +668,8 @@ export function RegraDialog({
           <input type="checkbox" checked={todas} onChange={(e) => setTodas(e.target.checked)} className="h-4 w-4 accent-california-red" />
           Vale para todas as contas
         </label>
+          </>
+        )}
         <DialogFooter className="items-center gap-2">
           <Erro texto={erro ?? erroLocal} />
           <Botao onClick={onFechar}>Agora não</Botao>
@@ -638,8 +679,12 @@ export function RegraDialog({
             onClick={() => {
               if (normalizar(padrao).length < 3) return setErroLocal("O começo do histórico precisa ter pelo menos 3 letras.");
               if (!casa) return setErroLocal("O histórico desta linha não começa assim.");
+              if (modo === "transferencia") {
+                if (!contaDestinoId) return setErroLocal("Escolha a conta de destino.");
+                return onConfirmar({ modo, padrao: normalizar(padrao), contaDestinoId });
+              }
               if (!tipoId || !subtipoId || !empresaId) return setErroLocal("Escolha o centro de custo, o subtipo e a empresa.");
-              onConfirmar({ padrao: normalizar(padrao), tipoId, subtipoId, empresaId, todasAsContas: todas });
+              onConfirmar({ modo, padrao: normalizar(padrao), tipoId, subtipoId, empresaId, todasAsContas: todas });
             }}
           >
             <Wand2 className="h-4 w-4" />

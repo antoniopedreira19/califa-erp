@@ -123,6 +123,7 @@ const linhaDoBanco = (id: string, extra: Partial<LinhaDoBanco> = {}): LinhaDoBan
   datasTrocadas: [],
   correcao: null,
   regraId: null,
+  transferenciaId: null,
   historicos: [],
   ...extra,
 });
@@ -392,4 +393,28 @@ test("a linha conciliada pelo histórico diz o job", () => {
   const r = resolucaoDaLinha(l);
   assert.equal(r?.sozinho, "historico");
   assert.equal(r?.texto, "Do histórico da planilha: “Job Exemplo 3T” e mais 1");
+});
+
+test("a linha da regra do extrato não vai para a cauda do histórico", () => {
+  const regra = { id: "g1", padrao: "APLICACAO CONTAMAX", centro: "Transferência para a aplicação", criadaEm: "28/10/2026", usos: 0 };
+  const { resultados } = conciliarConta(
+    {
+      lancamentos: [],
+      remessasBaixadas: [],
+      remessas: [],
+      regras: [regra] as never,
+      periodos: [],
+      historico: [
+        { id: "h1", data: "2026-10-19", valor: -4000, job: "Job Exemplo 3T", descricao: null },
+        { id: "h2", data: "2026-10-19", valor: -7000, job: "Job Exemplo 3T", descricao: null },
+        { id: "h3", data: "2026-10-19", valor: -11000, job: "Job Exemplo 3T", descricao: null },
+      ],
+      linhas: [linhaDoBanco("1", { valor: -11000, historico: "APLICACAO CONTAMAX" })],
+    },
+    [],
+    "conta",
+    {},
+    "2026-10-21",
+  );
+  assert.equal(resultados[0].estado, "regra");
 });

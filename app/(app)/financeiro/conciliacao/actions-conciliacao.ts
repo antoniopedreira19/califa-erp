@@ -539,6 +539,26 @@ export async function cancelarBaixasDesfeitas(lista: BaixaADesfazer[]): Promise<
 }
 
 /** "Lembrar como regra" (decisão 200). */
+/** A regra de transferência (decisão 211, A5): a linha do banco que começa
+ *  assim vira transferência entre esta conta e a de destino, no sentido do
+ *  sinal — a aplicação e o resgate automáticos. */
+export async function criarRegraDeTransferencia(entrada: {
+  contaId: string;
+  padrao: string;
+  contaDestinoId: string;
+}): Promise<Resultado> {
+  const ok = z
+    .object({ contaId: UUID, padrao: z.string().trim().min(3).max(80), contaDestinoId: UUID })
+    .safeParse(entrada);
+  if (!ok.success) return { ok: false, message: "Preencha o começo do histórico e a conta de destino da regra." };
+  const r = await chamar(
+    "criar_regra_de_transferencia",
+    { p_conta_bancaria_id: entrada.contaId, p_padrao: entrada.padrao, p_conta_destino_id: entrada.contaDestinoId },
+    "Não foi possível criar a regra. Tente de novo.",
+  );
+  return r.ok ? { ok: true, mensagem: "Regra criada: as próximas linhas com esse histórico viram transferência." } : r;
+}
+
 export async function criarRegraDoExtrato(entrada: {
   contaId: string;
   padrao: string;

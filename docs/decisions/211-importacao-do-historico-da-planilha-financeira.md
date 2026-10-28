@@ -1045,6 +1045,39 @@ a BB California pela tela e a Santander Hitlab por migration".
   A Go Crazy está completa (extrato de 30/09 a 27/10 e aplicação de setembro
   e outubro, que bate linha a linha com o extrato).
 
+### A regra que vira transferência e os extratos de outubro (28/10/2026)
+
+- **Extratos importados** (pedido do Tiago, 27/10): California Santander
+  1.478 linhas, BB California 52, Santander GoCrazy 107. O automático
+  conciliou 667 linhas pelo histórico (a cauda), 18 baixas feitas à mão e
+  44 tarifas pela regra; nenhum título foi baixado sozinho. As 2 linhas da
+  GoCrazy de 30/09 (antes do início da conta) foram ignoradas.
+- **Regra de transferência** (migration `20261028100001`; pedido do Tiago
+  em 28/10: "Pode fazer a regra que transforma cada aplicação e cada resgate
+  do extrato em transferência entre a conta corrente e a conta de
+  aplicação"): a regra do extrato ganha a conta de destino
+  (`extrato_regras.conta_destino_id`). Com ela, `lancar_pela_regra` cria e
+  efetiva uma transferência entre contas (decisão 124), no sentido do sinal
+  da linha (saída vai para a aplicação; entrada vem dela), na data e no
+  valor do banco; a perna da conta corrente se liga à linha, e o Desfazer
+  apaga as duas pernas e a transferência. Na aba Banco, o "Lembrar como
+  regra" ganha "Transfere para outra conta", e a linha sem correspondência
+  tem o atalho "Criar uma regra para este histórico".
+- **As cinco regras, criadas pela tela:** APLICACAO CONTAMAX e RESGATE
+  CONTAMAX AUTOMATICO na California Santander (para a Santander ContaMax
+  California) e na Santander GoCrazy (para a Santander ContaMax GoCrazy), e
+  BB RENDE FACIL no BB California (para a BB Rende Fácil California). 42
+  transferências feitas: 16 na Santander, 14 no BB, 12 na GoCrazy.
+- **Conferido:** a Santander ContaMax GoCrazy fecha em R$ 71.654,65, o saldo
+  da aplicação no extrato do banco em 26/10. As outras duas aplicações ainda
+  não têm o extrato de outubro para conferir, e o rendimento delas (receita
+  financeira) entra à parte.
+- **Correção no motor:** a aplicação de R$ 11.000 da GoCrazy em 06/10 tinha
+  se conciliado sozinha "do histórico" com dois pagamentos de um job do 3T
+  do mesmo dia que somavam o mesmo valor (a regra ainda não existia). A
+  linha foi desfeita e lançada pela regra, e o motor agora não procura a
+  cauda para a linha que uma regra do extrato descreve.
+
 ## A cauda: outubro dos jobs até o 3T (A6, 27/10/2026)
 
 Depois do inventário do 4T (planilha de 01 a 25/10 contra os extratos e o

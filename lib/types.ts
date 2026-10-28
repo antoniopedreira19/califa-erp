@@ -3736,7 +3736,7 @@ export interface ExtratoLinha {
   conciliada_em: string | null;
   conciliada_por: string | null;
   /** O que o desfazer precisa: as datas de antes, a correção, a regra. */
-  desfazer: { datas?: Array<{ id: string; de: string }>; correcao_id?: string; regra_id?: string } | null;
+  desfazer: { datas?: Array<{ id: string; de: string }>; correcao_id?: string; regra_id?: string; transferencia_id?: string } | null;
   /** As linhas que se resolveram juntas e se desfazem juntas. */
   grupo: string | null;
   created_at: string;

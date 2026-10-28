@@ -91,6 +91,8 @@ export interface LinhaDoBanco {
   correcao: { de: number; para: number; motivo: string } | null;
   /** A regra que lançou a linha. */
   regraId: string | null;
+  /** A transferência que a regra criou (a aplicação e o resgate, decisão 211, A5). */
+  transferenciaId: string | null;
   /** A cauda do histórico ligada (na conciliada `como 'historico'`, A6). */
   historicos: Array<{ id: string; valor: number; job: string | null; descricao: string | null }>;
 }
@@ -132,11 +134,13 @@ export interface RemessaDaConta {
 export interface RegraDaConta extends RegraDoMotor {
   id: string;
   empresa: string;
-  tipoId: string;
-  subtipoId: string;
-  empresaId: string;
+  tipoId: string | null;
+  subtipoId: string | null;
+  empresaId: string | null;
   /** `null` vale para todas as contas. */
   contaId: string | null;
+  /** A regra de transferência (decisão 211, A5): a conta de aplicação. */
+  contaDestinoId: string | null;
 }
 
 export interface DadosDaAbaBanco {
@@ -323,8 +327,9 @@ export async function carregarBancoDaConciliacao(
     supabase
       .from("extrato_regras")
       .select(
-        "id, conta_bancaria_id, padrao, usos, created_at, empresa_id, plano_conta_tipo_id, plano_conta_subtipo_id, " +
-          "tipo:plano_contas_tipos(codigo, nome), subtipo:plano_contas_subtipos(nome), empresa:empresas(nome_fantasia, razao_social)",
+        "id, conta_bancaria_id, padrao, usos, created_at, empresa_id, plano_conta_tipo_id, plano_conta_subtipo_id, conta_destino_id, " +
+          "tipo:plano_contas_tipos(codigo, nome), subtipo:plano_contas_subtipos(nome), empresa:empresas(nome_fantasia, razao_social), " +
+          "destino:contas_bancarias!extrato_regras_conta_destino_id_fkey(nome)",
       )
       .eq("tenant_id", tenantId)
       .eq("ativa", true)
@@ -437,18 +442,22 @@ export async function carregarBancoDaConciliacao(
     padrao: string;
     usos: number;
     created_at: string;
-    empresa_id: string;
-    plano_conta_tipo_id: string;
-    plano_conta_subtipo_id: string;
+    empresa_id: string | null;
+    plano_conta_tipo_id: string | null;
+    plano_conta_subtipo_id: string | null;
+    conta_destino_id: string | null;
     tipo: { codigo: string; nome: string } | null;
     subtipo: { nome: string } | null;
     empresa: { nome_fantasia: string | null; razao_social: string | null } | null;
+    destino: { nome: string } | null;
   };
   const regras: RegraDaConta[] = ((regrasRes.data ?? []) as unknown as RegraCrua[])
     .map((g) => ({
       id: g.id,
       padrao: g.padrao,
-      centro: [g.tipo ? `${g.tipo.codigo} · ${g.tipo.nome}` : null, g.subtipo?.nome].filter(Boolean).join(" · "),
+      centro: g.conta_destino_id
+        ? `Transferência para ${g.destino?.nome ?? "a conta de aplicação"}`
+        : [g.tipo ? `${g.tipo.codigo} · ${g.tipo.nome}` : null, g.subtipo?.nome].filter(Boolean).join(" · "),
       criadaEm: formatDiaBr(g.created_at),
       usos: g.usos,
       empresa: g.empresa?.nome_fantasia ?? g.empresa?.razao_social ?? "—",
@@ -456,6 +465,7 @@ export async function carregarBancoDaConciliacao(
       subtipoId: g.plano_conta_subtipo_id,
       empresaId: g.empresa_id,
       contaId: g.conta_bancaria_id,
+      contaDestinoId: g.conta_destino_id,
     }))
     .sort((a, b) => (a.contaId ? 0 : 1) - (b.contaId ? 0 : 1) || b.padrao.length - a.padrao.length);
 
@@ -584,6 +594,7 @@ export async function carregarBancoDaConciliacao(
     datasTrocadas: l.desfazer?.datas ?? [],
     correcao: correcaoDaLinha.get(l.id) ?? null,
     regraId: l.desfazer?.regra_id ?? null,
+    transferenciaId: l.desfazer?.transferencia_id ?? null,
     historicos: caudaPorLinha.get(l.id) ?? [],
   }));
 

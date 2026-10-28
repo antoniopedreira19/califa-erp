@@ -356,7 +356,21 @@ export default async function ConciliacaoPage({
           }
         >
           {aba === "banco" && dadosTitulos ? (
-            <AbaBanco banco={dadosBanco} dados={dadosTitulos} contaId={contaId} fechamento={fechamento} />
+            <AbaBanco
+              banco={dadosBanco}
+              dados={dadosTitulos}
+              contaId={contaId}
+              fechamento={fechamento}
+              contasDeDestino={listaContas
+                .filter(
+                  (c) =>
+                    c.id !== contaId &&
+                    c.ativo &&
+                    (c.tipo as string) !== "cartao_credito" &&
+                    c.empresa_contabil_id === contaAberta?.empresa_contabil_id,
+                )
+                .map((c) => ({ id: c.id, nome: c.nome }))}
+            />
           ) : dadosTitulos ? (
             <AbaTitulos
               dados={dadosTitulos}

@@ -45,6 +45,8 @@ export interface AcoesDoBanco {
   lancarRegra: (rs: ResultadoDaLinha[]) => void;
   /** A cauda do histórico da planilha (decisão 211, A6). */
   conciliarHistorico: (rs: ResultadoDaLinha[]) => void;
+  /** Uma regra para o histórico desta linha (lançamento ou transferência). */
+  criarRegra: (r: ResultadoDaLinha) => void;
   lancarAvulso: (r: ResultadoDaLinha) => void;
   procurar: (r: ResultadoDaLinha) => void;
   ignorar: (r: ResultadoDaLinha) => void;
@@ -376,8 +378,14 @@ function NoSistema({ r, contexto }: { r: ResultadoDaLinha; contexto: ContextoDas
           {nome} · {r.mov.historico.replace(/\s+\S*\d{6,}.*$/, "")}
         </p>
         <p className="truncate text-[11px] text-muted-foreground">
-          Lançamento novo · {r.regra.centro}
-          {g ? ` · ${g.empresa}` : ""}
+          {g?.contaDestinoId ? (
+            <>Transferência nova entre as contas, no sentido do banco · {r.regra.centro}</>
+          ) : (
+            <>
+              Lançamento novo · {r.regra.centro}
+              {g ? ` · ${g.empresa}` : ""}
+            </>
+          )}
         </p>
       </div>
     );
@@ -429,12 +437,23 @@ const VERDE = `${BASE} bg-emerald-600 text-white hover:bg-emerald-700`;
 const CONTORNO = `${BASE} border border-border bg-white text-foreground hover:bg-muted`;
 const ICONE = "inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-wait disabled:opacity-60";
 
-function Vagas({ principal, segundo, terceiro }: { principal?: React.ReactNode; segundo?: React.ReactNode; terceiro?: React.ReactNode }) {
+function Vagas({
+  principal,
+  segundo,
+  terceiro,
+  quarto,
+}: {
+  principal?: React.ReactNode;
+  segundo?: React.ReactNode;
+  terceiro?: React.ReactNode;
+  quarto?: React.ReactNode;
+}) {
   return (
-    <span className="ml-auto grid w-[200px] grid-cols-[136px_28px_28px] items-center gap-1">
+    <span className="ml-auto grid w-[232px] grid-cols-[136px_28px_28px_28px] items-center gap-1">
       <span>{principal}</span>
       <span>{segundo}</span>
       <span>{terceiro}</span>
+      <span>{quarto}</span>
     </span>
   );
 }
@@ -609,7 +628,19 @@ function AcoesDaLinha({ r, acoes, contexto }: { r: ResultadoDaLinha; acoes: Acoe
             </button>
           }
           segundo={procurar("Procurar um título")}
-          terceiro={ignorar}
+          terceiro={
+            <button
+              type="button"
+              title="Criar uma regra para este histórico"
+              aria-label="Criar uma regra para este histórico"
+              disabled={off}
+              onClick={() => acoes.criarRegra(r)}
+              className={ICONE}
+            >
+              <Wand2 className="h-3.5 w-3.5" />
+            </button>
+          }
+          quarto={ignorar}
         />
       );
   }

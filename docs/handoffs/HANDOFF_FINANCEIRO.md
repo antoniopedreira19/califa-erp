@@ -8480,3 +8480,19 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   lê a view página a página (passou de mil linhas).
 - Detalhes na
   [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
+
+## ⚠️ Nota de 2026-10-28 (1) — a regra do extrato que vira transferência (decisão 211, A5)
+
+- `extrato_regras.conta_destino_id` (migration `20261028100001`): a regra
+  com conta de destino cria e efetiva uma transferência entre contas no
+  sentido do sinal da linha, liga a perna da conta corrente à linha do banco,
+  e o Desfazer apaga as duas pernas. `criar_regra_de_transferencia` confere
+  conta ativa, outra conta, mesmo CNPJ e não cartão.
+- Aba Banco: "Lembrar como regra" com "Transfere para outra conta"; atalho
+  "Criar uma regra para este histórico" na linha sem correspondência; a
+  linha da regra de transferência diz "Transferência feita pela regra".
+- Motor: a linha que uma regra descreve não procura a cauda do histórico.
+- Cinco regras criadas (aplicação e resgate da California Santander e da
+  Santander GoCrazy, BB Rende Fácil) e 42 transferências feitas nos
+  extratos de outubro. Detalhes na
+  [decisão 211](../decisions/211-importacao-do-historico-da-planilha-financeira.md).
