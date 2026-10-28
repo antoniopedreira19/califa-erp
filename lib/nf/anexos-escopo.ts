@@ -9,7 +9,8 @@ export type NfAnexoEscopo =
   | "ferias_usufruto"
   | "ferias_abono"
   | "decimo_terceiro_p1"
-  | "decimo_terceiro_p2";
+  | "decimo_terceiro_p2"
+  | "decimo_terceiro_adiantamento";
 
 /** Retorna a tabela e coluna PK onde escopo_id deve existir. */
 export function escopoParaFkTabela(escopo: NfAnexoEscopo): {
@@ -25,5 +26,7 @@ export function escopoParaFkTabela(escopo: NfAnexoEscopo): {
     case "decimo_terceiro_p1":
     case "decimo_terceiro_p2":
       return { tabela: "decimo_terceiro_linhas", coluna: "id" };
+    case "decimo_terceiro_adiantamento":
+      return { tabela: "decimo_terceiro_adiantamentos", coluna: "id" };
   }
 }

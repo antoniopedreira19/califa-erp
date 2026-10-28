@@ -382,7 +382,7 @@ export async function aprovarLinhaFolha(
   const { data: folha, error: folhaError } = await supabase
     .from("folhas_pagamento")
     .select(
-      "id, status, salario_base, colaborador_id, competencia_ano, competencia_mes, origem, tipo, tipo_folha_ferias, lancamento_ferias_id, data_pagamento_prevista",
+      "id, status, salario_base, colaborador_id, competencia_ano, competencia_mes, origem, tipo, tipo_folha_ferias, lancamento_ferias_id, decimo_terceiro_linha_id, decimo_terceiro_adiantamento_id, data_pagamento_prevista",
     )
     .eq("id", folhaId)
     .eq("tenant_id", tenantId)
@@ -551,9 +551,11 @@ export async function aprovarLinhaFolha(
   if (exigeNf) {
     const escopo = resolverEscopoDaFolha({
       id: folha.id,
-      tipo: folha.tipo as "salario" | "ferias" | "decimo_terceiro_1a_parcela" | "decimo_terceiro_2a_parcela",
+      tipo: folha.tipo as "salario" | "ferias" | "decimo_terceiro_1a_parcela" | "decimo_terceiro_2a_parcela" | "decimo_terceiro_adiantamento",
       tipo_folha_ferias: (folha as { tipo_folha_ferias?: "usufruto" | "abono" | null }).tipo_folha_ferias ?? null,
       lancamento_ferias_id: (folha as { lancamento_ferias_id?: string | null }).lancamento_ferias_id ?? null,
+      decimo_terceiro_linha_id: (folha as { decimo_terceiro_linha_id?: string | null }).decimo_terceiro_linha_id ?? null,
+      decimo_terceiro_adiantamento_id: (folha as { decimo_terceiro_adiantamento_id?: string | null }).decimo_terceiro_adiantamento_id ?? null,
     });
     if (!escopo) {
       // Stub: 13° ou férias sem lancamento_id — segue sem trava de NF.

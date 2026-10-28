@@ -12,9 +12,11 @@ import type { NfAnexoEscopo } from "@/lib/nf/anexos-escopo";
 /** Subconjunto mínimo da linha de folha necessário para a resolução. */
 export interface FolhaParaEscopo {
   id: string;
-  tipo: "salario" | "ferias" | "decimo_terceiro_1a_parcela" | "decimo_terceiro_2a_parcela";
+  tipo: "salario" | "ferias" | "decimo_terceiro_1a_parcela" | "decimo_terceiro_2a_parcela" | "decimo_terceiro_adiantamento";
   tipo_folha_ferias: "usufruto" | "abono" | null;
   lancamento_ferias_id: string | null;
+  decimo_terceiro_linha_id: string | null;
+  decimo_terceiro_adiantamento_id: string | null;
 }
 
 /** Resultado da resolução. */
@@ -50,9 +52,19 @@ export function resolverEscopoDaFolha(
       return null;
     }
 
-    case "decimo_terceiro_1a_parcela":
-    case "decimo_terceiro_2a_parcela":
-      // Stub: 13° não trava por NF ainda. Implementar quando 13° tiver escopo próprio.
-      return null;
+    case "decimo_terceiro_1a_parcela": {
+      if (!folha.decimo_terceiro_linha_id) return null;
+      return { escopo_tipo: "decimo_terceiro_p1", escopo_id: folha.decimo_terceiro_linha_id };
+    }
+
+    case "decimo_terceiro_2a_parcela": {
+      if (!folha.decimo_terceiro_linha_id) return null;
+      return { escopo_tipo: "decimo_terceiro_p2", escopo_id: folha.decimo_terceiro_linha_id };
+    }
+
+    case "decimo_terceiro_adiantamento": {
+      if (!folha.decimo_terceiro_adiantamento_id) return null;
+      return { escopo_tipo: "decimo_terceiro_adiantamento", escopo_id: folha.decimo_terceiro_adiantamento_id };
+    }
   }
 }

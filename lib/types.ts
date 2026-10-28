@@ -4945,7 +4945,8 @@ export type NfAnexoEscopo =
   | "ferias_usufruto"
   | "ferias_abono"
   | "decimo_terceiro_p1"
-  | "decimo_terceiro_p2";
+  | "decimo_terceiro_p2"
+  | "decimo_terceiro_adiantamento";
 
 /** Metadado do anexo de NF por (colaborador, competência).
  *  Arquivo em Storage no bucket 'colaboradores-nf', path
