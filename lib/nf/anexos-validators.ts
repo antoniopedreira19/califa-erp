@@ -115,7 +115,28 @@ export async function resolverEscopo(
     case "decimo_terceiro_p1":
     case "decimo_terceiro_p2":
       return resolverDecimoTerceiroLinha(supabase, tenantId, escopoId, escopoTipo);
+    case "decimo_terceiro_adiantamento":
+      return resolverDecimoTerceiroAdiantamento(supabase, tenantId, escopoId);
   }
+}
+
+export async function resolverDecimoTerceiroAdiantamento(
+  supabase: SupabaseQueryClient,
+  tenantId: string,
+  escopoId: string,
+): Promise<EscopoResolvido | null> {
+  const { data } = await supabase
+    .from("decimo_terceiro_adiantamentos")
+    .select("colaborador_id, ano")
+    .eq("id", escopoId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (!data) return null;
+  return {
+    colaboradorId: data.colaborador_id as string,
+    competenciaAno: data.ano as number,
+    competenciaMes: 12,
+  };
 }
 
 // ---------------------------------------------------------------------------

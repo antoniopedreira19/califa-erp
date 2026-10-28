@@ -113,6 +113,14 @@ function resolverEscopoFake(
         competenciaMes: 12,
       };
     }
+    case "decimo_terceiro_adiantamento": {
+      if (!dados.decimoLinha) return null;
+      return {
+        colaboradorId: dados.decimoLinha.colaborador_id,
+        competenciaAno: dados.decimoLinha.ano,
+        competenciaMes: 12,
+      };
+    }
   }
 }
 

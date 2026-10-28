@@ -34,6 +34,7 @@ function badgeVariantParaEscopo(escopo: NfAnexoEscopo): BadgeVariant {
       return "amarelo";
     case "decimo_terceiro_p1":
     case "decimo_terceiro_p2":
+    case "decimo_terceiro_adiantamento":
       return "roxo";
   }
 }
@@ -50,6 +51,8 @@ function labelEscopoTipo(escopo: NfAnexoEscopo): string {
       return "13° salário — 1ª parcela";
     case "decimo_terceiro_p2":
       return "13° salário — 2ª parcela";
+    case "decimo_terceiro_adiantamento":
+      return "13° salário — Adiantamento";
   }
 }
 

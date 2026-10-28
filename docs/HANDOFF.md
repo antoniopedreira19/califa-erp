@@ -111,6 +111,7 @@ Ordem: mais recente primeiro. Cada linha aponta para um arquivo em `docs/handoff
 
 | Data | Entrega | Handoff |
 |---|---|---|
+| 2026-10-28 | 13° no quadro de NF + adiantamento: parcelas PJ/CLT/híbrido no quadro de NF, adiantamentos com fluxo completo (anexar → aprovar → título), excluir adiantamento com 3 estados, People atualizado | [2026-10-28-13o-nf-fluxo.md](handoffs/2026-10-28-13o-nf-fluxo.md) |
 | 2026-10-21 | 13º Salário end-to-end (criação com snapshot, breakdown híbrido CLT_recibo, adiantamentos durante o ano, fechar parcelas integrado ao fluxo de folha mensal, tabelas 10/2026 + Lei 15.270, histórico por colaborador; dec 219/220/221) | [2026-10-21-decimo-terceiro.md](handoffs/2026-10-21-decimo-terceiro.md) |
 | 2026-10-27 | Férias de ponta a ponta (abono combinado real, clt_recibo híbrido na parte RPA, UI compartilhada /perfil↔RH) + folha prevista no fluxo de caixa (dec 218) + mês seguinte nasce sozinho; rescisões alinhadas pra próxima sessão | [2026-10-27-ferias-fluxo-completo-e-folha-prevista.md](handoffs/2026-10-27-ferias-fluxo-completo-e-folha-prevista.md) |
 | 2026-10-21 | Conciliação com o banco (task 029, fases 1 a 4): planilhas de títulos, popup de baixa e cartão, importação do OFX e Conciliação automática, marcas do banco no Extrato, fechamento que trava o caixa (decisões 195 a 202 e 205) | [2026-10-21-conciliacao-com-o-banco-retrospectiva.md](handoffs/2026-10-21-conciliacao-com-o-banco-retrospectiva.md) |
