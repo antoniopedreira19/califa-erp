@@ -34,7 +34,7 @@ export default async function AdiantamentosPage({ params }: Props) {
     supabase
       .from("decimo_terceiro_adiantamentos")
       .select(
-        `id, ano, colaborador_id, data, valor, obs, conta_avulsa_id,
+        `id, ano, colaborador_id, data, valor, obs, folha_pagamento_id,
          colaborador:colaboradores!decimo_terceiro_adiantamentos_colaborador_id_fkey(nome, funcao, tipo_contratacao)`,
       )
       .eq("tenant_id", session.activeTenant.id)
@@ -65,7 +65,7 @@ export default async function AdiantamentosPage({ params }: Props) {
     data: string;
     valor: string;
     obs: string | null;
-    conta_avulsa_id: string | null;
+    folha_pagamento_id: string | null;
     colaborador: ColabEmbed;
   }
 
@@ -80,7 +80,7 @@ export default async function AdiantamentosPage({ params }: Props) {
       data: a.data,
       valor: Number(a.valor),
       obs: a.obs,
-      conta_avulsa_id: a.conta_avulsa_id,
+      folha_pagamento_id: a.folha_pagamento_id,
     };
   });
 

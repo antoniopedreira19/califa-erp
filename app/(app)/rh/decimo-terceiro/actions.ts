@@ -15,6 +15,7 @@ import {
   montarFolhasParcela,
   type LinhaParaMontar,
 } from "@/lib/decimo-terceiro/montar-folhas-parcela";
+import { montarFolhaAdiantamento } from "@/lib/decimo-terceiro/montar-folha-adiantamento";
 import type { TipoContratacao } from "@/lib/types";
 
 export type ActionResult<T = Record<string, never>> =
@@ -1095,7 +1096,7 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
   data: string;
   valor: number;
   obs: string | null;
-}): Promise<ActionResult<{ id: string; conta_avulsa_id: string | null }>> {
+}): Promise<ActionResult<{ id: string; folha_pagamento_id: string | null }>> {
   const session = await requireSession();
   if (!pode(session.activeRole, "rh.decimo_terceiro.editar")) {
     return { ok: false, message: "Sem permissão para esta ação." };
@@ -1118,65 +1119,12 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
     return { ok: false, message: "Colaborador não encontrado." };
   }
 
-  // Empresa alocada vigente — usa hierarquia nova (itens).
-  // Pega o pacote vigente e seleciona a empresa com maior percentual.
-  const { data: pacoteVigenteRaw } = await supabase
-    .from("colaboradores_alocacoes")
-    .select("id")
-    .eq("tenant_id", tenantId)
-    .eq("colaborador_id", colaborador_id)
-    .is("data_fim", null)
-    .limit(1);
-  const pacoteId = pacoteVigenteRaw?.[0]?.id;
-  let empresaId: string | null = null;
-  if (pacoteId) {
-    const { data: itensPacote, error: errItensAdiant } = await supabase
-      .from("colaboradores_alocacoes_itens")
-      .select("empresa_id, percentual_empresa")
-      .eq("alocacao_id", pacoteId)
-      .order("percentual_empresa", { ascending: false })
-      .limit(1);
-    if (errItensAdiant) {
-      return {
-        ok: false,
-        message: `Falha ao buscar alocações de itens: ${errItensAdiant.message}`,
-      };
-    }
-    empresaId = itensPacote?.[0]?.empresa_id ?? null;
-  }
-  if (!empresaId) {
-    return {
-      ok: false,
-      message:
-        "Colaborador sem empresa alocada — lançamento no financeiro não é possível.",
-    };
+  if (valor <= 0) {
+    return { ok: false, message: "Valor do adiantamento deve ser maior que zero." };
   }
 
-  // Plano de contas
-  const { data: tipoRow } = await supabase
-    .from("plano_contas_tipos")
-    .select("id")
-    .eq("tenant_id", tenantId)
-    .eq("nome", "Despesa com Pessoal")
-    .maybeSingle();
-  if (!tipoRow) {
-    return {
-      ok: false,
-      message: "Plano de contas 'Despesa com Pessoal' não configurado.",
-    };
-  }
-  const { data: subtipoRow } = await supabase
-    .from("plano_contas_subtipos")
-    .select("id")
-    .eq("tenant_id", tenantId)
-    .eq("tipo_id", tipoRow.id)
-    .eq("codigo", "004")
-    .maybeSingle();
-  if (!subtipoRow) {
-    return { ok: false, message: "Subtipo '13° Salário' não configurado." };
-  }
-
-  // 1) Insert do adiantamento
+  // 1) Insert do adiantamento sem conta_avulsa_id nem folha_pagamento_id
+  //    (esses campos são preenchidos nos passos seguintes).
   const { data: adiantInserido, error: errAd } = await supabase
     .from("decimo_terceiro_adiantamentos")
     .insert({
@@ -1198,56 +1146,53 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
   }
   const adiantamentoId = adiantInserido.id;
 
-  // 2) Cria conta_avulsa via service client (RH não tem permissão direta
-  // mas o adiantamento de 13º é responsabilidade do RH).
-  const { createServiceClient } = await import("@/lib/supabase/server");
-  const service = createServiceClient();
-
-  const { data: codigo } = await service.rpc("gerar_codigo_avulsa", {
-    p_tenant_id: tenantId,
+  // 2) Monta os campos da folha de pagamento usando a função pura.
+  const folhaMontada = montarFolhaAdiantamento({
+    adiantamento_id: adiantamentoId,
+    colaborador_id,
+    tipo_contratacao: colab.tipo_contratacao as "clt" | "clt_recibo" | "pj" | "mei",
+    valor,
   });
 
-  const dataBr = data.split("-").reverse().join("/");
-  const { data: contaId, error: errAvulsa } = await service.rpc(
-    "criar_conta_avulsa",
-    {
-      p_dados: {
-        tenant_id: tenantId,
-        empresa_id: empresaId,
-        codigo: (codigo as string | null) ?? null,
-        descricao: `13º Adiantamento · ${colab.nome} · ${dataBr}`,
-        valor: valor.toFixed(2),
-        natureza: "saida",
-        status: "aprovada",
-        data_prevista_pagamento: data,
-        data_pagamento: data,
-        data_pagamento_primeira: data,
-        plano_conta_tipo_id: tipoRow.id,
-        plano_conta_subtipo_id: subtipoRow.id,
-        colaborador_id,
-        parcela_numero: 1,
-        parcela_total: 1,
-        aprovada_em: new Date().toISOString(),
-        aprovada_por: session.profile.id,
-        criado_por: session.profile.id,
-      },
-      p_rateio: [],
-    },
-  );
+  // 3) Insere linha em folhas_pagamento com status='enviada'.
+  //    data_pagamento_prevista usa a data do adiantamento — quando o pagamento
+  //    sairá de fato (financeiro aprova e cria o título nessa data).
+  const agora = new Date().toISOString();
+  const { data: folhaInserida, error: errFolha } = await supabase
+    .from("folhas_pagamento")
+    .insert({
+      tenant_id: tenantId,
+      colaborador_id: folhaMontada.colaborador_id,
+      competencia_ano: ano,
+      competencia_mes: 12,
+      salario_base: folhaMontada.salario_base,
+      status: "enviada",
+      tipo: folhaMontada.tipo,
+      origem: folhaMontada.origem,
+      enviada_em: agora,
+      enviada_por: session.profile.id,
+      data_pagamento_prevista: data,
+      decimo_terceiro_adiantamento_id: folhaMontada.decimo_terceiro_adiantamento_id,
+      decimo_terceiro_linha_id: null,
+      created_by: session.profile.id,
+    })
+    .select("id")
+    .single();
 
-  let contaAvulsaId: string | null = null;
-  if (!errAvulsa && contaId) {
-    contaAvulsaId = contaId as string;
+  let folhaPagamentoId: string | null = null;
+  if (errFolha || !folhaInserida) {
+    console.error("[13o.adiantamento.folha]", errFolha?.message);
+  } else {
+    folhaPagamentoId = folhaInserida.id;
+    // 4) Atualiza o adiantamento com o folha_pagamento_id.
     await supabase
       .from("decimo_terceiro_adiantamentos")
-      .update({ conta_avulsa_id: contaAvulsaId })
+      .update({ folha_pagamento_id: folhaPagamentoId })
       .eq("id", adiantamentoId)
       .eq("tenant_id", tenantId);
-  } else {
-    console.error("[13o.adiantamento.avulsa]", errAvulsa?.message);
   }
 
-  // 3) Recalcula a linha correspondente, se já existe folha pro ano.
+  // 5) Recalcula a linha correspondente, se já existe folha pro ano.
   await recalcularLinhaDeAdiantamento(
     tenantId,
     ano,
@@ -1260,13 +1205,13 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
     tenantId,
     entidadeTipo: "decimo_terceiro_adiantamento",
     entidadeId: adiantamentoId,
-    metadata: { ano, colaborador_id, valor, conta_avulsa_id: contaAvulsaId },
+    metadata: { ano, colaborador_id, valor, folha_pagamento_id: folhaPagamentoId },
   });
 
   revalidatePath(`/rh/decimo-terceiro/${ano}`);
   revalidatePath(`/rh/decimo-terceiro/${ano}/adiantamentos`);
 
-  return { ok: true, id: adiantamentoId, conta_avulsa_id: contaAvulsaId };
+  return { ok: true, id: adiantamentoId, folha_pagamento_id: folhaPagamentoId };
 }
 
 export async function excluirAdiantamentoDecimoTerceiro(

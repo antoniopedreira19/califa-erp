@@ -34,7 +34,7 @@ export interface AdiantamentoRow {
   data: string;
   valor: number;
   obs: string | null;
-  conta_avulsa_id: string | null;
+  folha_pagamento_id: string | null;
 }
 
 export interface ColabOpcao {
@@ -71,7 +71,7 @@ export function ListaAdiantamentos({
   const [excluindoId, setExcluindoId] = React.useState<string | null>(null);
 
   async function handleExcluir(adiantamentoId: string) {
-    if (!confirm("Excluir este adiantamento? A conta avulsa no financeiro continua existindo e precisa ser cancelada à parte, se já tiver sido lançada.")) {
+    if (!confirm("Excluir este adiantamento? A linha no financeiro será removida automaticamente se ainda não estiver aprovada.")) {
       return;
     }
     setExcluindoId(adiantamentoId);
@@ -145,7 +145,7 @@ export function ListaAdiantamentos({
                     {a.obs ?? "—"}
                   </td>
                   <td className="px-4 py-3 text-center">
-                    {a.conta_avulsa_id ? (
+                    {a.folha_pagamento_id ? (
                       <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
                         enviado
                       </span>
@@ -233,8 +233,8 @@ function NovoAdiantamentoDialogContent({
       <DialogHeader>
         <DialogTitle>Novo adiantamento de 13º</DialogTitle>
         <DialogDescription>
-          Gera lançamento no financeiro como Despesa com Pessoal · 13° Salário
-          e abate automaticamente da 1ª parcela quando a folha for calculada.
+          Cria linha no financeiro aguardando aprovação e abate automaticamente
+          da 1ª parcela quando a folha for calculada.
         </DialogDescription>
       </DialogHeader>
 
