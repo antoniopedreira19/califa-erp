@@ -8554,3 +8554,12 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   planilha. Colocando as tarifas da conta GO CRAZY como SS."): a regra "TAR"
   da GoCrazy e as 12 tarifas que ela lançou receberam SS pela migration
   (só o campo vazio, com auditoria `extrato.regra_regional`).
+
+## ⚠️ Nota de 2026-10-28 (4) — "PIX DEVOLVIDO" também é devolução (decisão 211)
+
+- O Santander escreve a volta do PIX como "DEVOLUCAO DE PIX" ou "PIX
+  DEVOLVIDO". O motor (`formaDoHistorico`) e `registrar_saiu_e_voltou`
+  (migration `20261028300002`) passam a aceitar os dois.
+- 27 pares "saiu e voltou" registrados pela tela na California Santander
+  (R$ 181.620,40). Duas devoluções "NAO EFETUADA" de 08/10 ficaram de fora:
+  as saídas daquele dia estão ligadas à cauda do histórico.

@@ -202,7 +202,8 @@ export function formaDoHistorico(h: string): FormaDoHistorico {
   if (/^TAR /.test(n)) return "tarifa";
   if (n.includes("CONCESSIONARIA")) return "concessionaria";
   if (n.includes("PAGAMENTO DE TITULO")) return "boleto";
-  if (n.includes("DEVOLUCAO")) return "devolucao";
+  // O Santander escreve "DEVOLUCAO DE PIX" e também "PIX DEVOLVIDO".
+  if (n.includes("DEVOLUCAO") || n.includes("DEVOLVID")) return "devolucao";
   if (n.includes("PIX")) return "pix";
   if (n.includes("TED")) return "ted";
   return "outro";
