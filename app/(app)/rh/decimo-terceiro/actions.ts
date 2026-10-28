@@ -1179,17 +1179,61 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
     .select("id")
     .single();
 
-  let folhaPagamentoId: string | null = null;
   if (errFolha || !folhaInserida) {
-    console.error("[13o.adiantamento.folha]", errFolha?.message);
-  } else {
-    folhaPagamentoId = folhaInserida.id;
-    // 4) Atualiza o adiantamento com o folha_pagamento_id.
+    // Rollback: deleta o adiantamento recém-inserido para não deixar órfão.
     await supabase
       .from("decimo_terceiro_adiantamentos")
-      .update({ folha_pagamento_id: folhaPagamentoId })
+      .delete()
       .eq("id", adiantamentoId)
       .eq("tenant_id", tenantId);
+    // Preserva o audit mesmo em falha, para rastreabilidade.
+    await logAuditEvent({
+      acao: "decimo_terceiro.adiantamento.lancado",
+      tenantId,
+      entidadeTipo: "decimo_terceiro_adiantamento",
+      entidadeId: adiantamentoId,
+      metadata: { ano, colaborador_id, valor, folha_pagamento_id: null, falha: errFolha?.message ?? "sem retorno" },
+    });
+    return {
+      ok: false,
+      message: `Falha ao criar folha de pagamento: ${errFolha?.message ?? "sem retorno"}`,
+    };
+  }
+
+  const folhaPagamentoId = folhaInserida.id;
+
+  // 4) Atualiza o adiantamento com o folha_pagamento_id.
+  const { error: errUpdAd } = await supabase
+    .from("decimo_terceiro_adiantamentos")
+    .update({ folha_pagamento_id: folhaPagamentoId })
+    .eq("id", adiantamentoId)
+    .eq("tenant_id", tenantId);
+  if (errUpdAd) {
+    // Rollback: deleta folha_pagamento e adiantamento para não deixar nenhum órfão.
+    await supabase
+      .from("folhas_pagamento")
+      .delete()
+      .eq("id", folhaPagamentoId)
+      .eq("tenant_id", tenantId);
+    const { error: errDelAd } = await supabase
+      .from("decimo_terceiro_adiantamentos")
+      .delete()
+      .eq("id", adiantamentoId)
+      .eq("tenant_id", tenantId);
+    if (errDelAd) {
+      console.error("[13o.adiantamento.rollback.ad]", errDelAd.message);
+    }
+    await logAuditEvent({
+      acao: "decimo_terceiro.adiantamento.lancado",
+      tenantId,
+      entidadeTipo: "decimo_terceiro_adiantamento",
+      entidadeId: adiantamentoId,
+      metadata: { ano, colaborador_id, valor, folha_pagamento_id: folhaPagamentoId, falha: errUpdAd.message },
+    });
+    return {
+      ok: false,
+      message: `Falha ao vincular folha ao adiantamento: ${errUpdAd.message}`,
+    };
   }
 
   // 5) Recalcula a linha correspondente, se já existe folha pro ano.
