@@ -488,6 +488,7 @@ export type AuditAction =
   // Parte 2 — Adiantamentos (21/10/2026).
   | "decimo_terceiro.adiantamento.lancado"
   | "decimo_terceiro.adiantamento.excluido"
+  | "decimo_terceiro.adiantamento.exclusao_bloqueada"
   // Comitê de Aprovações (decisão 223, 27/10/2026).
   | "comite.pedido_enviado"
   | "comite.pedido_aprovado"

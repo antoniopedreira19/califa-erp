@@ -1268,14 +1268,117 @@ export async function excluirAdiantamentoDecimoTerceiro(
   const tenantId = session.activeTenant.id;
   const supabase = createClient();
 
+  // 1) Busca o adiantamento.
   const { data: adiantamento } = await supabase
     .from("decimo_terceiro_adiantamentos")
-    .select("id, ano, colaborador_id, conta_avulsa_id")
+    .select("id, ano, colaborador_id, folha_pagamento_id, valor")
     .eq("id", adiantamentoId)
     .eq("tenant_id", tenantId)
     .maybeSingle();
   if (!adiantamento) {
     return { ok: false, message: "Adiantamento não encontrado." };
+  }
+
+  // Adiantamento legado (anterior à T6): sem folha vinculada.
+  // Mantém comportamento antigo — deleta só o adiantamento (ON DELETE SET NULL
+  // cuida da conta_avulsa_id se existir).
+  if (!adiantamento.folha_pagamento_id) {
+    const { error: errDel } = await supabase
+      .from("decimo_terceiro_adiantamentos")
+      .delete()
+      .eq("id", adiantamentoId)
+      .eq("tenant_id", tenantId);
+    if (errDel) {
+      return { ok: false, message: `Falha ao excluir: ${errDel.message}` };
+    }
+    await recalcularLinhaDeAdiantamento(
+      tenantId,
+      adiantamento.ano,
+      adiantamento.colaborador_id,
+      session.profile.id,
+    );
+    await logAuditEvent({
+      acao: "decimo_terceiro.adiantamento.excluido",
+      tenantId,
+      entidadeTipo: "decimo_terceiro_adiantamento",
+      entidadeId: adiantamentoId,
+      metadata: { ano: adiantamento.ano, legado: true },
+    });
+    revalidatePath(`/rh/decimo-terceiro/${adiantamento.ano}`);
+    revalidatePath(`/rh/decimo-terceiro/${adiantamento.ano}/adiantamentos`);
+    return { ok: true, id: adiantamentoId };
+  }
+
+  // 2) Busca a folha vinculada.
+  const { data: folha } = await supabase
+    .from("folhas_pagamento")
+    .select("id, status")
+    .eq("id", adiantamento.folha_pagamento_id)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+
+  // Caso 1: folha aprovada ou paga — bloqueia.
+  if (folha && (folha.status === "aprovada" || folha.status === "paga")) {
+    await logAuditEvent({
+      acao: "decimo_terceiro.adiantamento.exclusao_bloqueada",
+      tenantId,
+      entidadeTipo: "decimo_terceiro_adiantamento",
+      entidadeId: adiantamentoId,
+      metadata: {
+        motivo: "folha_aprovada",
+        folha_status: folha.status,
+        folha_pagamento_id: adiantamento.folha_pagamento_id,
+      },
+    });
+    return {
+      ok: false,
+      message:
+        "Adiantamento já aprovado pelo financeiro — cancele o título em contas a pagar primeiro.",
+    };
+  }
+
+  // 3) Verifica NF anexada ao adiantamento.
+  const { data: anexos } = await supabase
+    .from("colaboradores_nf_anexos")
+    .select("id")
+    .eq("escopo_tipo", "decimo_terceiro_adiantamento")
+    .eq("escopo_id", adiantamentoId)
+    .eq("tenant_id", tenantId)
+    .limit(1);
+
+  // Caso 2: folha enviada e há NF — bloqueia.
+  if (anexos && anexos.length > 0) {
+    await logAuditEvent({
+      acao: "decimo_terceiro.adiantamento.exclusao_bloqueada",
+      tenantId,
+      entidadeTipo: "decimo_terceiro_adiantamento",
+      entidadeId: adiantamentoId,
+      metadata: {
+        motivo: "nf_anexada",
+        nf_anexo_id: anexos[0].id,
+        folha_pagamento_id: adiantamento.folha_pagamento_id,
+      },
+    });
+    return {
+      ok: false,
+      message:
+        "Colaborador já anexou NF — remova a NF antes de excluir o adiantamento.",
+    };
+  }
+
+  // Caso 3: enviada, sem NF — deleta folha e depois adiantamento.
+  // Ordem: DELETE folha primeiro (SET NULL resolve a cross-FK do adiantamento),
+  // depois DELETE adiantamento (sem a RESTRICT no sentido inverso).
+  const { error: errFolha } = await supabase
+    .from("folhas_pagamento")
+    .delete()
+    .eq("id", adiantamento.folha_pagamento_id)
+    .eq("tenant_id", tenantId);
+  if (errFolha) {
+    return {
+      ok: false,
+      message: `Falha ao remover linha do financeiro: ${errFolha.message}`,
+    };
   }
 
   const { error: errDel } = await supabase
@@ -1284,11 +1387,11 @@ export async function excluirAdiantamentoDecimoTerceiro(
     .eq("id", adiantamentoId)
     .eq("tenant_id", tenantId);
   if (errDel) {
-    return { ok: false, message: `Falha ao excluir: ${errDel.message}` };
+    // Folha já deletada mas adiantamento falhou. Loga e retorna erro.
+    console.error("[13o.adiantamento.excluir.orfao]", errDel.message);
+    return { ok: false, message: `Falha ao excluir adiantamento: ${errDel.message}` };
   }
 
-  // Nota: não estornamos conta_avulsa — financeiro cancela manualmente se
-  // precisar. A FK no adiantamento é SET NULL; delete não quebra financeiro.
   await recalcularLinhaDeAdiantamento(
     tenantId,
     adiantamento.ano,
@@ -1302,8 +1405,8 @@ export async function excluirAdiantamentoDecimoTerceiro(
     entidadeTipo: "decimo_terceiro_adiantamento",
     entidadeId: adiantamentoId,
     metadata: {
-      ano: adiantamento.ano,
-      conta_avulsa_id: adiantamento.conta_avulsa_id,
+      folha_pagamento_id: adiantamento.folha_pagamento_id,
+      valor_abatido: adiantamento.valor,
     },
   });
 
