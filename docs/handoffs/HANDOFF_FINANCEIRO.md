@@ -8518,3 +8518,17 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   aberto com esses números; câmbio 5,40 → 5,60 na fila e 5,60 → 5,65 depois
   da abertura. Mudar o fee depois da abertura: recusado pela função do banco
   (simulação desfeita).
+
+## ⚠️ Nota de 2026-10-28 (2) — a regra do histórico antes do título (decisão 199)
+
+- Motor (`lib/conciliacao/motor.ts`): a regra do histórico passou de passo 6
+  (depois dos títulos) para 2b, logo depois de "saiu e voltou". A linha cujo
+  histórico casa com uma regra vai pela regra mesmo quando um título tem o
+  mesmo valor; a baixa feita à mão que bate continua antes da regra.
+- O caso: duas tarifas de R$ 250,00 na California Santander ("TAR PIX PGTO
+  FORNEC", 21/10) recebiam a sugestão de duas PPs de verba de R$ 250,00, e a
+  regra "TAR" não chegava a elas. Lançadas pela regra depois da mudança.
+- Regra "TAR" nova no BB California (04 · Custo Fixo · Tarifa bancária,
+  Agência California, como a planilha): três tarifas de outubro, R$ 738,60.
+  O IOF do BB (R$ 5.599,01) e a regra da Santander GoCrazy ficam para a
+  resposta do Tiago (centro do IOF; regional SS na regra).

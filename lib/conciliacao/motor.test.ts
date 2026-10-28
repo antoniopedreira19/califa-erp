@@ -158,6 +158,20 @@ test("a remessa só casa com uma saída do banco", () => {
   assert.equal(casar([mov(0, 1000, "TED RECEBIDA")], { ...vazio, lotes: [lote] })[0].estado, "sem_par");
 });
 
+test("a regra vem antes do título de mesmo valor, e a baixa feita à mão vem antes da regra", () => {
+  const tarifa: RegraDoMotor = { id: "g1", padrao: "TAR", centro: "04 · Tarifa bancária", criadaEm: "27/10/2026", usos: 44 };
+  const res = casar([mov(0, -250, "TAR PIX PGTO FORNEC - MESMA INST"), mov(1, -250)], {
+    ...vazio,
+    titulos: [titulo("a", 250)],
+    regras: [tarifa],
+  });
+  assert.equal(res[0].estado, "regra");
+  assert.equal(res[1].titulo?.id, "a");
+  const l: LancamentoDoMotor = { id: "l1", data: "2026-10-19", valor: -250, descricao: "Tarifa lançada à mão" };
+  const manual = casar([mov(0, -250, "TAR PIX PGTO FORNEC - MESMA INST")], { ...vazio, lancamentos: [l], regras: [tarifa] });
+  assert.equal(manual[0].estado, "ja_lancado");
+});
+
 test("a baixa feita à mão com juros conta pelo total que saiu da conta", () => {
   const l: LancamentoDoMotor = { id: "l1", data: "2026-10-19", valor: -1050, juros: 50, descricao: "PP 1/1" };
   const res = casar([mov(0, -1050, "PAGAMENTO DE TITULO")], { ...vazio, lancamentos: [l] });
