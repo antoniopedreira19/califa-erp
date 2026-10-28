@@ -23,7 +23,7 @@ import {
 import type { ColaboradorAlocacao, Empresa } from "@/lib/types";
 import type { NivelPendencia } from "@/lib/rh/pendencias";
 import { SeloPendencia } from "./selo-pendencia";
-import { alterarAlocacao } from "./actions-alocacao";
+import { alterarAlocacaoLegacy as alterarAlocacao } from "./actions-alocacao";
 
 export type AlocacaoRow = ColaboradorAlocacao & {
   empresa: Pick<Empresa, "id" | "nome_fantasia">;
