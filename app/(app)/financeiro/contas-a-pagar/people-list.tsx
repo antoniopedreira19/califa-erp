@@ -271,7 +271,13 @@ export function PeopleList({
               // Para 13°, usar label da view (tem o ano e descrição completa).
               // Para outros escopos, usar labelEscopoTipo() (badge curto).
               const is13 = item.escopo_tipo === "decimo_terceiro_p1" || item.escopo_tipo === "decimo_terceiro_p2" || item.escopo_tipo === "decimo_terceiro_adiantamento";
-              const tipoTexto = is13 ? item.label : labelEscopoTipo(item.escopo_tipo);
+
+              // Para 13° parcelas (não adiantamento) com clt_recibo origem california, adiciona "(parte PJ)"
+              const is13Parcela = item.escopo_tipo === "decimo_terceiro_p1" || item.escopo_tipo === "decimo_terceiro_p2";
+              const ehPartePj = is13Parcela && item.tipo_contratacao === "clt_recibo" && item.origem === "california";
+              const tipoTexto = is13
+                ? (ehPartePj ? `${item.label} (parte PJ)` : item.label)
+                : labelEscopoTipo(item.escopo_tipo);
               const eFolhaMensal = item.escopo_tipo === "folha_mensal";
 
               // Stub: 13° não está implementado — botão sempre bloqueado.
