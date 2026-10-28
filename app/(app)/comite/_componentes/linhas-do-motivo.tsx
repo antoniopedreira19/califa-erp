@@ -24,6 +24,8 @@ export function linhasDoMotivoDaVersao(args: {
   resultadoMinimo: number;
   pegaPlanejado: boolean;
   itensAcima: ItemAcimaDoOrcado[];
+  /** Decisão 225: as taxas da exceção no fechamento, quando ela pega. */
+  excecao: { intTaxes: number; imposto: number; itc: number } | null;
 }): LinhaDoMotivo[] {
   const linhas: LinhaDoMotivo[] = [];
   if (args.pegaResultado && args.resultadoGeral !== null) {
@@ -50,6 +52,22 @@ export function linhasDoMotivoDaVersao(args: {
         ),
       }),
     );
+  }
+  if (args.excecao) {
+    const pct = (n: number) => `${String(Number(n)).replace(".", ",")}%`;
+    linhas.push({
+      rotulo: "Exceção no fechamento do internacional",
+      valor: (
+        <>
+          <span className="text-muted-foreground">int. taxes </span>
+          <span className="font-semibold text-amber-700">{pct(args.excecao.intTaxes)}</span>
+          <span className="text-muted-foreground"> · Impostos BR </span>
+          <span className="font-semibold text-amber-700">{pct(args.excecao.imposto)}</span>
+          <span className="text-muted-foreground"> · custo de transação </span>
+          <span className="font-semibold text-amber-700">{brl(args.excecao.itc)}</span>
+        </>
+      ),
+    });
   }
   return linhas;
 }

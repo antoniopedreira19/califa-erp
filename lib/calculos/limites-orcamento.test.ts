@@ -21,33 +21,33 @@ const com = (r: Partial<RegrasDoComite>): RegrasDoComite => ({ ...R, ...r });
 test("planejado maior que o orçado leva ao Comitê mesmo com margem alta", () => {
   const itens = [{ orcado: 100, planejado: 101 }, { orcado: 900, planejado: 100 }];
   const itensAcima = itens.filter((i) => acimaDoOrcado(i.planejado, i.orcado)).length;
-  assert.deepEqual(motivosDaVersaoNoComite(R, { itensAcima, resultadoGeral: 70 }, false), [
+  assert.deepEqual(motivosDaVersaoNoComite(R, { itensAcima, resultadoGeral: 70, excecaoNoFechamento: false }, false), [
     "há 1 item com planejado acima do orçado",
   ]);
-  assert.deepEqual(motivosDaVersaoNoComite(com({ planejadoLigado: false }), { itensAcima, resultadoGeral: 70 }, false), []);
+  assert.deepEqual(motivosDaVersaoNoComite(com({ planejadoLigado: false }), { itensAcima, resultadoGeral: 70, excecaoNoFechamento: false }, false), []);
 });
 
 test("resultado abaixo do mínimo leva ao Comitê; o mínimo exato libera", () => {
   for (const margem of [19.99, 0, -10]) {
-    assert.equal(motivosDaVersaoNoComite(R, { itensAcima: 0, resultadoGeral: margem }, false).length, 1);
+    assert.equal(motivosDaVersaoNoComite(R, { itensAcima: 0, resultadoGeral: margem, excecaoNoFechamento: false }, false).length, 1);
   }
-  assert.deepEqual(motivosDaVersaoNoComite(R, { itensAcima: 0, resultadoGeral: 20 }, false), []);
-  assert.deepEqual(motivosDaVersaoNoComite(R, { itensAcima: 0, resultadoGeral: null }, false), []);
-  assert.deepEqual(motivosDaVersaoNoComite(com({ resultadoMinimo: 15 }), { itensAcima: 0, resultadoGeral: 18 }, false), []);
-  assert.deepEqual(motivosDaVersaoNoComite(com({ resultadoLigado: false }), { itensAcima: 0, resultadoGeral: 5 }, false), []);
+  assert.deepEqual(motivosDaVersaoNoComite(R, { itensAcima: 0, resultadoGeral: 20, excecaoNoFechamento: false }, false), []);
+  assert.deepEqual(motivosDaVersaoNoComite(R, { itensAcima: 0, resultadoGeral: null, excecaoNoFechamento: false }, false), []);
+  assert.deepEqual(motivosDaVersaoNoComite(com({ resultadoMinimo: 15 }), { itensAcima: 0, resultadoGeral: 18, excecaoNoFechamento: false }, false), []);
+  assert.deepEqual(motivosDaVersaoNoComite(com({ resultadoLigado: false }), { itensAcima: 0, resultadoGeral: 5, excecaoNoFechamento: false }, false), []);
   assert.equal(rentabilidadeAbaixoDoMinimo(19.999), true);
   assert.equal(rentabilidadeAbaixoDoMinimo(20 - Number.EPSILON), false);
 });
 
 test("os dois motivos da aprovação aparecem juntos", () => {
-  const m = motivosDaVersaoNoComite(R, { itensAcima: 2, resultadoGeral: 8.6214 }, false);
+  const m = motivosDaVersaoNoComite(R, { itensAcima: 2, resultadoGeral: 8.6214, excecaoNoFechamento: false }, false);
   assert.equal(m[0], "há 2 itens com planejado acima do orçado");
   assert.equal(m[1], "o resultado geral está em 8,6%, abaixo do mínimo de 20%");
 });
 
 test("serviço Interno não passa pelo Comitê, nem com resultado zero", () => {
-  assert.deepEqual(motivosDaVersaoNoComite(R, { itensAcima: 0, resultadoGeral: 0 }, true), []);
-  assert.deepEqual(motivosDaVersaoNoComite(R, { itensAcima: 3, resultadoGeral: -5 }, true), []);
+  assert.deepEqual(motivosDaVersaoNoComite(R, { itensAcima: 0, resultadoGeral: 0, excecaoNoFechamento: false }, true), []);
+  assert.deepEqual(motivosDaVersaoNoComite(R, { itensAcima: 3, resultadoGeral: -5, excecaoNoFechamento: false }, true), []);
 });
 
 test("só o administrador aprova direto, e só com a regra dele ligada", () => {
@@ -124,4 +124,15 @@ test("PP aprovada volta ao Comitê só se ficar mais cara", () => {
   assert.equal(pp({ valor: 1000, valorAprovado: 1000 }), null);
   assert.equal(pp({ valor: 900, valorAprovado: 1000 }), null);
   assert.ok(pp({ valor: 1000.01, valorAprovado: 1000 }));
+});
+
+test("decisão 225: a exceção no fechamento leva a versão ao Comitê enquanto existir", () => {
+  const base = { itensAcima: 0, resultadoGeral: 40 };
+  assert.deepEqual(motivosDaVersaoNoComite(R, { ...base, excecaoNoFechamento: true }, false), [
+    "há exceção no fechamento do internacional",
+  ]);
+  // Taxas de volta ao padrão: a exceção sai, e a versão aprova direto.
+  assert.deepEqual(motivosDaVersaoNoComite(R, { ...base, excecaoNoFechamento: false }, false), []);
+  // Regra desligada nas Configurações.
+  assert.deepEqual(motivosDaVersaoNoComite(com({ excecaoLigada: false }), { ...base, excecaoNoFechamento: true }, false), []);
 });

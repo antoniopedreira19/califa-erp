@@ -823,6 +823,7 @@ export function FluxoAbertura({
           resultadoGeral,
           resultadoMinimo: comite?.resultadoMinimo ?? 20,
           pegaPlanejado: comite?.pegaPlanejado === true,
+          excecao: comite?.taxasDaExcecao ?? null,
           itensAcima: itensAcimaDoOrcado,
         })}
         motivoInicial={devolvidaPeloComite ? (pedidoDoComite?.motivo ?? "") : ""}

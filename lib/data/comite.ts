@@ -24,6 +24,7 @@ export function regrasDaLinha(row: ComiteConfigRow | null): RegrasDoComite {
     toleranciaValor: Number(row.tolerancia_valor),
     toleranciaPct: Number(row.tolerancia_pct),
     adminDireto: row.admin_direto,
+    excecaoLigada: row.excecao_ligada,
   };
 }
 
@@ -94,6 +95,13 @@ export interface ComiteDaVersao {
   /** Qual regra pega: o quadro do motivo lista os itens ou o resultado. */
   pegaPlanejado: boolean;
   pegaResultado: boolean;
+  /** Decisão 225: a exceção no fechamento do internacional pega. */
+  pegaExcecao: boolean;
+  /** As três taxas da exceção, quando ela pega — o quadro do motivo. */
+  taxasDaExcecao: { intTaxes: number; imposto: number; itc: number } | null;
+  /** A regra da exceção está ligada: o pop-up da Exceção avisa que a
+   *  aprovação vai ao Comitê. */
+  excecaoVaiAoComite: boolean;
   resultadoMinimo: number;
   /** Precisa solicitar a aprovação: alguma regra pega, quem está na tela
    *  não aprova direto e nenhuma aprovação anterior do orçamento cobre a
@@ -110,7 +118,14 @@ export interface ComiteDaVersao {
 export async function carregarComiteDaVersao(
   supabase: Supabase,
   tenantId: string,
-  versao: { id: string; orcamento_id: string },
+  versao: {
+    id: string;
+    orcamento_id: string;
+    // As taxas da exceção no fechamento (decisão 225), para o quadro do motivo.
+    percentual_int_taxes: number | string | null;
+    percentual_imposto: number | string | null;
+    int_transaction_costs: number | string | null;
+  },
   interno: boolean,
 ): Promise<ComiteDaVersao> {
   const [situacaoRes, regras, pedidosRes] = await Promise.all([
@@ -130,6 +145,7 @@ export async function carregarComiteDaVersao(
     regra?: boolean;
     planejado?: boolean;
     resultado?: boolean;
+    excecao?: boolean;
     itens_acima?: number;
     resultado_geral?: number | null;
     coberta?: boolean;
@@ -138,7 +154,11 @@ export async function carregarComiteDaVersao(
   const motivos = s?.regra
     ? motivosDaVersaoNoComite(
         regras,
-        { itensAcima: Number(s.itens_acima ?? 0), resultadoGeral: s.resultado_geral ?? null },
+        {
+          itensAcima: Number(s.itens_acima ?? 0),
+          resultadoGeral: s.resultado_geral ?? null,
+          excecaoNoFechamento: s.excecao === true,
+        },
         interno,
       )
     : [];
@@ -152,6 +172,16 @@ export async function carregarComiteDaVersao(
     motivos,
     pegaPlanejado: motivos.length > 0 && s?.planejado === true,
     pegaResultado: motivos.length > 0 && s?.resultado === true,
+    pegaExcecao: motivos.length > 0 && s?.excecao === true,
+    taxasDaExcecao:
+      motivos.length > 0 && s?.excecao === true
+        ? {
+            intTaxes: Number(versao.percentual_int_taxes ?? 0),
+            imposto: Number(versao.percentual_imposto ?? 0),
+            itc: Number(versao.int_transaction_costs ?? 0),
+          }
+        : null,
+    excecaoVaiAoComite: regras.excecaoLigada && !interno,
     resultadoMinimo: regras.resultadoMinimo,
     precisa: motivos.length > 0 && !s?.direto && !coberta,
     coberta: motivos.length > 0 && coberta,

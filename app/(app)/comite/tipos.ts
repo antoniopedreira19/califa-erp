@@ -28,6 +28,8 @@ export interface CasoDeVersao extends BaseDoCaso {
   valorJob: number;
   resultadoGeral: number | null;
   itensAcima: number;
+  /** Decisão 225: a versão tinha exceção no fechamento do internacional. */
+  comExcecao: boolean;
 }
 
 export interface CasoDePP extends BaseDoCaso {

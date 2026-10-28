@@ -312,6 +312,9 @@ function CaixaJobs({ casos, onAbrir }: { casos: CasoDeVersao[]; onAbrir: (c: Cas
                         {c.itensAcima === 1 ? "1 item acima" : `${c.itensAcima} itens acima`}
                       </span>
                     )}
+                    {c.comExcecao && (
+                      <span className="block text-[11px] font-semibold text-amber-700">Exceção no fechamento</span>
+                    )}
                   </td>
                   <td className={TD}>
                     <Motivo caso={c} />

@@ -119,6 +119,7 @@ interface Rascunho {
   toleranciaValor: string;
   toleranciaPct: string;
   adminDireto: boolean;
+  excecaoLigada: boolean;
   membros: string[];
 }
 
@@ -133,6 +134,7 @@ function rascunhoDe(r: RegrasDoComite, membros: string[]): Rascunho {
     toleranciaValor: numeroParaTexto(r.toleranciaValor),
     toleranciaPct: numeroParaTexto(r.toleranciaPct),
     adminDireto: r.adminDireto,
+    excecaoLigada: r.excecaoLigada,
     membros: [...membros].sort(),
   };
 }
@@ -190,6 +192,7 @@ export function Configuracoes({
       toleranciaValor: textoParaNumero(c.toleranciaValor),
       toleranciaPct: textoParaNumero(c.toleranciaPct),
       adminDireto: c.adminDireto,
+      excecaoLigada: c.excecaoLigada,
     };
     const entram = c.membros.filter((id) => !salvo.membros.includes(id));
     const saem = salvo.membros.filter((id) => !c.membros.includes(id));
@@ -248,6 +251,13 @@ export function Configuracoes({
           descricao="Qualquer item da versão com o planejado maior que o orçado."
           ligada={c.planejadoLigado}
           onLigar={(v) => set("planejadoLigado", v)}
+        />
+        {/* Decisão 225: a última da seção (pedido do Tiago, 28/10/2026). */}
+        <Regra
+          titulo="Exceção no fechamento do internacional"
+          descricao="Versão com exceção nas taxas do internacional. Aprovada aqui, só volta se as taxas mudarem; de volta ao padrão, aprova direto."
+          ligada={c.excecaoLigada}
+          onLigar={(v) => set("excecaoLigada", v)}
         />
       </section>
 

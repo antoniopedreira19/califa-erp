@@ -6019,3 +6019,15 @@ A exceção da 204 deixou de ser "só o administrador". Quando uma regra ligada 
 - Banco: `comite_pedidos` + os gatilhos da 204 lendo as regras e as
   aprovações (`20261027970001`, `20261027970002`).
 - Detalhes na [decisão 223](../decisions/223-comite-de-aprovacoes.md).
+
+## ⚠️ Nota de 2026-10-28 — O GP registra a exceção no fechamento (decisão 225)
+
+- O botão **Exceção** da versão internacional vale para o administrador e
+  para o GP (`orcamentos.excecao_fechamento` e o gatilho
+  `versao_fechamento_internacional_no_padrao`).
+- Regra nova do Comitê, ligada por padrão e a última de "Abertura de job":
+  versão com exceção registrada só é aprovada pelo Comitê. O pedido aprovado
+  cobre enquanto as três taxas forem as do retrato; de volta ao padrão, a
+  regra sai. O administrador segue a chave "aprova direto na tela".
+- Migration `20261028500001_excecao_no_fechamento_pelo_gp_e_comite.sql`.
+  Ver [225](../decisions/225-excecao-no-fechamento-pelo-gp-e-comite.md).

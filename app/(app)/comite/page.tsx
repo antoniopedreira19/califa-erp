@@ -127,6 +127,7 @@ export default async function ComitePage({
       valorJob: num(p.snapshot.valor_job) ?? 0,
       resultadoGeral: num(p.snapshot.resultado_geral),
       itensAcima: num(p.snapshot.itens_acima) ?? 0,
+      comExcecao: p.snapshot.excecao !== null && p.snapshot.excecao !== undefined,
     });
   }
 

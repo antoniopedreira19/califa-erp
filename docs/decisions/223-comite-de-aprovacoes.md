@@ -12,6 +12,9 @@ administrador" passa a ser "o Comitê" (o administrador continua aprovando
 direto enquanto a regra dele estiver ligada).
 **Migrations:** `20261027970001_comite_de_aprovacoes.sql` e
 `20261027970002_comite_valor_do_job_no_retrato.sql`.
+> ⚠️ **Regra nova pela [225](225-excecao-no-fechamento-pelo-gp-e-comite.md)
+> (28/10/2026):** "Exceção no fechamento do internacional", ligada por
+> padrão, a última da seção Abertura de job.
 
 ## O que vai ao Comitê
 

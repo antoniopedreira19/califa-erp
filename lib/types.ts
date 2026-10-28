@@ -6366,6 +6366,8 @@ export interface ComiteConfigRow {
   tolerancia_valor: number | string;
   tolerancia_pct: number | string;
   admin_direto: boolean;
+  /** Decisão 225: a versão com exceção no fechamento vai ao Comitê. */
+  excecao_ligada: boolean;
   atualizado_por: string | null;
   updated_at: string;
 }

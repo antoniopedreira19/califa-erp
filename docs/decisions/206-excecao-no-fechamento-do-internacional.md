@@ -8,6 +8,9 @@ nos comentários do protótipo.
 **Migrations:** `20261022860001_excecao_no_fechamento_do_internacional.sql`
 (colunas) e `20261022860002_trava_do_fechamento_do_internacional.sql`
 (gatilho).
+> ⚠️ **Revista pela [225](225-excecao-no-fechamento-pelo-gp-e-comite.md)
+> (28/10/2026):** o GP também registra a exceção, e a versão com exceção
+> passa a ir ao Comitê de Aprovações para ser aprovada.
 **Revê:** a 072 (int. taxes e custo de transação deixam de ser campos do
 "Editar"; a versão nova não herda mais Impostos BR e int. taxes da vigente)
 e a 096 (a alíquota de 17,03% existe, mas só como exceção).

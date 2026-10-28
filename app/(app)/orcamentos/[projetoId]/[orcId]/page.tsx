@@ -1631,6 +1631,8 @@ function VersaoSelecionada({
                 : null
             }
             podeRegistrarExcecao={pode(session.activeRole, "orcamentos.excecao_fechamento")}
+            // Decisão 225: com a regra ligada, quem não aprova direto é avisado.
+            excecaoVaiAoComite={comite?.excecaoVaiAoComite === true && session.activeRole !== "administrador"}
             itensDoFechamento={itens}
           />
           {pode(session.activeRole, "orcamentos.aprovar") && !arquivado && !jobCancelado && (
@@ -1868,6 +1870,7 @@ function VersaoSelecionada({
             resultadoGeral,
             resultadoMinimo: comite?.resultadoMinimo ?? 20,
             pegaPlanejado: comite?.pegaPlanejado === true,
+            excecao: comite?.taxasDaExcecao ?? null,
             itensAcima: itens
               .filter((i) => acimaDoOrcado(i.total_planejado, i.total_orcado))
               .map((i) => ({ item: i.item, orcado: i.total_orcado, planejado: i.total_planejado })),

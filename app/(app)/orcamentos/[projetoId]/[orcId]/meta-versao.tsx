@@ -87,8 +87,12 @@ interface Props {
   /** Exceção no fechamento do internacional (decisão 206), ou `null` com a
    *  versão no padrão. Obrigatória e anulável, como `internacional`. */
   excecao: ExcecaoDoFechamento | null;
-  /** `orcamentos.excecao_fechamento` — só o administrador. */
+  /** `orcamentos.excecao_fechamento` — o administrador e, desde a decisão
+   *  225, o GP. */
   podeRegistrarExcecao: boolean;
+  /** A regra da exceção está ligada no Comitê e quem está na tela não
+   *  aprova direto: o pop-up avisa que a aprovação vai ao Comitê. */
+  excecaoVaiAoComite: boolean;
   /** Os itens como a cadeia os soma: o pop-up da exceção mostra o
    *  faturamento previsto com as taxas novas antes de gravar. */
   itensDoFechamento: ItemParaTotais[];
@@ -136,6 +140,7 @@ export function MetaVersao({
   midia,
   excecao,
   podeRegistrarExcecao,
+  excecaoVaiAoComite,
   itensDoFechamento,
 }: Props) {
   const router = useRouter();
@@ -157,7 +162,7 @@ export function MetaVersao({
   );
   const dicaDaTrava = podeRegistrarExcecao
     ? "Fora do padrão, pelo botão “Exceção”."
-    : "Só o administrador altera, como exceção no fechamento.";
+    : "Só o administrador ou o GP altera, como exceção no fechamento.";
 
   function faturamentoCom(t: TaxasDoFechamento): number {
     return calcularTotaisVersao(itensDoFechamento, percentualHonorarios, t.imposto, {
@@ -377,6 +382,7 @@ export function MetaVersao({
               erro={erroDaExcecao}
               onAplicar={aplicarExcecao}
               onRemover={removerExcecao}
+              vaiAoComite={excecaoVaiAoComite}
             />
           </>
         )}
