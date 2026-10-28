@@ -17,6 +17,7 @@ import {
   parseFolhaContabilidadeTexto,
   type SecaoPdf,
 } from "@/lib/pdf/parse-folha-contabilidade";
+import { buscarAlocacaoVigente } from "@/lib/alocacao/montar-snapshot";
 import type {
   FolhaImportacaoWarning,
   FolhaImportacaoTotalizadores,
@@ -352,18 +353,16 @@ export async function importarFolhaContabilidade(input: {
       continue;
     }
 
-    // Snapshot das alocações vigentes (Camada 1). Sem alocação, a aprovação
-    // em `/financeiro/contas-a-pagar` vai falhar (não há como ratear): warning
-    // explícito e segue sem gravar alocação.
-    const { data: alocVigente } = await supabase
-      .from("colaboradores_alocacoes")
-      .select("empresa_id, regional_id, usa_rateio_empresa")
-      .eq("colaborador_id", p.colaborador_id!)
-      .eq("tenant_id", tenantId)
-      .is("data_fim", null)
-      .maybeSingle();
+    // Snapshot das alocações vigentes (modelo hierárquico multi-empresa).
+    // Sem alocação, a aprovação em `/financeiro/contas-a-pagar` vai falhar
+    // (não há como ratear): warning explícito e segue sem gravar alocação.
+    const snapshot = await buscarAlocacaoVigente(
+      supabase,
+      p.colaborador_id!,
+      tenantId,
+    );
 
-    if (!alocVigente) {
+    if (!snapshot) {
       warnings.push({
         tipo: "valor_invalido",
         mensagem: `${p.nome} importado sem alocação vigente — o financeiro não vai conseguir aprovar enquanto não houver alocação cadastrada em /rh/colaboradores.`,
@@ -373,46 +372,87 @@ export async function importarFolhaContabilidade(input: {
       continue;
     }
 
-    if (alocVigente.usa_rateio_empresa) {
-      const { data: rateio } = await supabase
-        .from("empresas_rateios_regionais")
-        .select("regional_id, percentual")
-        .eq("tenant_id", tenantId)
-        .eq("empresa_id", alocVigente.empresa_id)
-        .eq("ano_vigencia", input.ano);
-      if (!rateio || rateio.length === 0) {
-        warnings.push({
-          tipo: "valor_invalido",
-          mensagem: `${p.nome}: colaborador usa rateio da empresa mas não há rateio configurado para ${input.ano}. Configure em /financeiro/cadastros antes da aprovação.`,
-          cpf: p.cpf,
-          nome: p.nome,
-        });
-        continue;
+    // Expande cada item do pacote (empresa) em N linhas de alocação,
+    // usando a mesma fórmula da RPC gerar_folha_da_competencia v2:
+    //   percentual_final = round(item.percentual_empresa × regional_pct / 100, 2)
+    // Correção de rounding na última linha para fechar em 100.
+    type LinhaAlocacao = {
+      tenant_id: string;
+      folha_id: string;
+      empresa_id: string;
+      regional_id: string;
+      percentual: number;
+    };
+    const linhas: LinhaAlocacao[] = [];
+    let bloqueado = false;
+
+    for (const item of snapshot.itens) {
+      if (item.usa_rateio_empresa) {
+        const { data: rateio } = await supabase
+          .from("empresas_rateios_regionais")
+          .select("regional_id, percentual")
+          .eq("tenant_id", tenantId)
+          .eq("empresa_id", item.empresa_id)
+          .eq("ano_vigencia", input.ano)
+          .gt("percentual", 0);
+
+        if (!rateio || rateio.length === 0) {
+          warnings.push({
+            tipo: "valor_invalido",
+            mensagem: `${p.nome}: empresa "${item.empresa_nome}" usa rateio mas não há rateio configurado para ${input.ano}. Configure em /financeiro/cadastros antes da aprovação.`,
+            cpf: p.cpf,
+            nome: p.nome,
+          });
+          bloqueado = true;
+          break;
+        }
+
+        for (const r of rateio) {
+          linhas.push({
+            tenant_id: tenantId,
+            folha_id: nova.id,
+            empresa_id: item.empresa_id,
+            regional_id: r.regional_id,
+            percentual: Math.round(item.percentual_empresa * Number(r.percentual) / 100 * 100) / 100,
+          });
+        }
+      } else {
+        if (item.regionais.length === 0) {
+          warnings.push({
+            tipo: "valor_invalido",
+            mensagem: `${p.nome}: empresa "${item.empresa_nome}" não usa rateio mas não tem regionais explícitas. Corrija em /rh/colaboradores antes da aprovação.`,
+            cpf: p.cpf,
+            nome: p.nome,
+          });
+          bloqueado = true;
+          break;
+        }
+
+        for (const reg of item.regionais) {
+          linhas.push({
+            tenant_id: tenantId,
+            folha_id: nova.id,
+            empresa_id: item.empresa_id,
+            regional_id: reg.regional_id,
+            percentual: Math.round(item.percentual_empresa * reg.percentual_regional / 100 * 100) / 100,
+          });
+        }
+      }
+    }
+
+    if (bloqueado) continue;
+
+    // Correção de rounding: ajusta a última linha para fechar exatamente em 100
+    if (linhas.length > 0) {
+      const soma = linhas.reduce((acc, l) => acc + l.percentual, 0);
+      const diff = Math.round((100 - soma) * 100) / 100;
+      if (Math.abs(diff) >= 0.01) {
+        linhas[linhas.length - 1].percentual =
+          Math.round((linhas[linhas.length - 1].percentual + diff) * 100) / 100;
       }
       await supabase.from("folhas_pagamento_alocacoes").insert(
-        rateio.map((r) => ({
-          tenant_id: tenantId,
-          folha_id: nova.id,
-          empresa_id: alocVigente.empresa_id,
-          regional_id: r.regional_id,
-          percentual: String(r.percentual),
-        })),
+        linhas.map((l) => ({ ...l, percentual: String(l.percentual) })),
       );
-    } else if (alocVigente.regional_id) {
-      await supabase.from("folhas_pagamento_alocacoes").insert({
-        tenant_id: tenantId,
-        folha_id: nova.id,
-        empresa_id: alocVigente.empresa_id,
-        regional_id: alocVigente.regional_id,
-        percentual: "100.00",
-      });
-    } else {
-      warnings.push({
-        tipo: "valor_invalido",
-        mensagem: `${p.nome}: alocação vigente sem regional nem rateio da empresa. Corrija em /rh/colaboradores antes da aprovação.`,
-        cpf: p.cpf,
-        nome: p.nome,
-      });
     }
   }
 
