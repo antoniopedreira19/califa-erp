@@ -8528,7 +8528,15 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - O caso: duas tarifas de R$ 250,00 na California Santander ("TAR PIX PGTO
   FORNEC", 21/10) recebiam a sugestão de duas PPs de verba de R$ 250,00, e a
   regra "TAR" não chegava a elas. Lançadas pela regra depois da mudança.
-- Regra "TAR" nova no BB California (04 · Custo Fixo · Tarifa bancária,
-  Agência California, como a planilha): três tarifas de outubro, R$ 738,60.
-  O IOF do BB (R$ 5.599,01) e a regra da Santander GoCrazy ficam para a
-  resposta do Tiago (centro do IOF; regional SS na regra).
+- Regras novas, criadas pela tela com o Tiago:
+  - BB California, "TAR" → 04 · Custo Fixo · Tarifa bancária, Agência
+    California: três tarifas de outubro, R$ 738,60;
+  - BB California, "COBRANCA DE I.O.F." → 07 · Despesa Administrativa ·
+    Outros, Agência California, onde a planilha lançou o IOF de outubro
+    (R$ 5.599,01);
+  - Santander GoCrazy, "TAR" → 04 · Custo Fixo · Tarifa bancária, Agência
+    California: 12 tarifas, R$ 406,00.
+- A regra não grava regional, e assim fica: nas contas da California e da
+  GoCrazy a despesa administrativa é da gerencial California, rateada como
+  "TD" pela regra de rateio (Tiago, 28/10/2026). Na Hitlab, Hitlab. CCH não
+  tem conta.
