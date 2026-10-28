@@ -1682,6 +1682,11 @@ export function JobItemRealizadoTable({
                           organizando && arrasto.arrastando === item.id && "opacity-40",
                           recemMovido === item.id &&
                             "[&>td]:shadow-[inset_0_0_0_999px_rgba(231,75,86,0.14)]",
+                          // A linha da PP em decisão no Comitê (decisão 223),
+                          // como no protótipo aprovado: fundo e contorno
+                          // vermelhos.
+                          itemDoComite?.id === item.id &&
+                            "[&>td]:shadow-[inset_0_0_0_999px_rgba(231,75,86,0.10)] outline outline-2 -outline-offset-2 outline-california-red",
                           item.linha_vermelha && ERRATA.linhaVermelha,
                           saveVisivel &&
                             classesDaLinhaComSave(
