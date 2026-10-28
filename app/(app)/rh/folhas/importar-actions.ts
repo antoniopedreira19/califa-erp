@@ -369,6 +369,9 @@ export async function importarFolhaContabilidade(input: {
         cpf: p.cpf,
         nome: p.nome,
       });
+      // Deleta a folha recém-inserida para evitar registro órfão
+      // (folhas_pagamento sem nenhuma linha em folhas_pagamento_alocacoes).
+      await supabase.from("folhas_pagamento").delete().eq("id", nova.id);
       continue;
     }
 
@@ -440,7 +443,12 @@ export async function importarFolhaContabilidade(input: {
       }
     }
 
-    if (bloqueado) continue;
+    if (bloqueado) {
+      // Deleta a folha recém-inserida para evitar registro órfão
+      // (folhas_pagamento sem nenhuma linha em folhas_pagamento_alocacoes).
+      await supabase.from("folhas_pagamento").delete().eq("id", nova.id);
+      continue;
+    }
 
     // Correção de rounding: ajusta a última linha para fechar exatamente em 100
     if (linhas.length > 0) {

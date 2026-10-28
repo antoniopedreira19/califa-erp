@@ -199,6 +199,14 @@ BEGIN
       )
       RETURNING id INTO v_folha_id;
 
+      -- NOTA (I1 — invariante do caminho legado):
+      -- Este INSERT...SELECT não acumula v_linhas_ids e portanto não passa pela
+      -- correção de rounding do modelo multi-empresa. Isso é seguro porque folhas
+      -- legadas usam uma única empresa com percentual_empresa = 100 %, e as linhas
+      -- de empresas_rateios_regionais para essa empresa devem somar exatamente 100.
+      -- Se o cadastro estiver correto, o multiplicador é 100 % × rateio = rateio
+      -- e a soma fecha por construção sem ajuste. Este caminho é transitório e será
+      -- removido após o backfill universal de colaboradores_alocacoes_pacotes.
       IF v_leg_usa_rateio IS TRUE THEN
         INSERT INTO folhas_pagamento_alocacoes
               (tenant_id, folha_id, empresa_id, regional_id, percentual)
