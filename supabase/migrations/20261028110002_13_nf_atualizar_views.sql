@@ -105,9 +105,9 @@ decimo_parcelas AS (
     dtl.id AS escopo_id,
     CASE fp.tipo
       WHEN 'decimo_terceiro_1a_parcela'::folha_tipo THEN
-        '13° — 1ª parcela · ' || fp.competencia_ano::text
+        '13º ' || fp.competencia_ano::text || ' — 1ª parcela'
       ELSE
-        '13° — 2ª parcela · ' || fp.competencia_ano::text
+        '13º ' || fp.competencia_ano::text || ' — 2ª parcela'
     END AS label,
     fp.competencia_ano::int AS competencia_ano,
     fp.competencia_mes::int AS competencia_mes,
@@ -140,7 +140,7 @@ decimo_adiantamento AS (
     fp.colaborador_id,
     'decimo_terceiro_adiantamento'::nf_anexo_escopo AS escopo_tipo,
     dta.id AS escopo_id,
-    '13° — Adiantamento · ' || dta.ano::text AS label,
+    '13º ' || dta.ano::text || ' — Adiantamento' AS label,
     fp.competencia_ano::int AS competencia_ano,
     fp.competencia_mes::int AS competencia_mes,
     fp.salario_base::numeric AS valor,
@@ -277,9 +277,9 @@ decimo_parcelas AS (
     dtl.id AS escopo_id,
     CASE fp.tipo
       WHEN 'decimo_terceiro_1a_parcela'::folha_tipo THEN
-        '13° — 1ª parcela · ' || fp.competencia_ano::text
+        '13º ' || fp.competencia_ano::text || ' — 1ª parcela'
       ELSE
-        '13° — 2ª parcela · ' || fp.competencia_ano::text
+        '13º ' || fp.competencia_ano::text || ' — 2ª parcela'
     END AS label,
     fp.competencia_ano::int AS competencia_ano,
     fp.competencia_mes::int AS competencia_mes,
@@ -310,7 +310,7 @@ decimo_adiantamento AS (
     fp.id AS linha_id,
     'decimo_terceiro_adiantamento'::nf_anexo_escopo AS escopo_tipo,
     dta.id AS escopo_id,
-    '13° — Adiantamento · ' || dta.ano::text AS label,
+    '13º ' || dta.ano::text || ' — Adiantamento' AS label,
     fp.competencia_ano::int AS competencia_ano,
     fp.competencia_mes::int AS competencia_mes,
     fp.salario_base::numeric AS valor,
