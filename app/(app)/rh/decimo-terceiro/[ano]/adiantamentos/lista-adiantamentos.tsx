@@ -21,6 +21,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   lancarAdiantamentoDecimoTerceiro,
   excluirAdiantamentoDecimoTerceiro,
 } from "../../actions";
@@ -35,7 +41,35 @@ export interface AdiantamentoRow {
   valor: number;
   obs: string | null;
   folha_pagamento_id: string | null;
+  folha_status: string | null;
+  tem_nf: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Deriva o status visual do adiantamento com base no estado da folha e NF
+
+function derivarStatusAdiantamento(
+  folha_status: string | null,
+  tem_nf: boolean,
+  tipo_contratacao: string,
+): { label: string; variant: "legado" | "aguardando_nf" | "aguardando_aprovacao" | "aprovado" | "pago" } {
+  if (!folha_status) return { label: "Pré-fluxo (legado)", variant: "legado" };
+  if (folha_status === "paga") return { label: "Pago", variant: "pago" };
+  if (folha_status === "aprovada") return { label: "Aprovado — a pagar", variant: "aprovado" };
+  // status === 'enviada' (ou 'pendente_correcao' tratado como enviada)
+  if (!tem_nf && ["pj", "mei", "clt_recibo"].includes(tipo_contratacao)) {
+    return { label: "Aguardando NF", variant: "aguardando_nf" };
+  }
+  return { label: "Aguardando aprovação", variant: "aguardando_aprovacao" };
+}
+
+const variantClasses: Record<ReturnType<typeof derivarStatusAdiantamento>["variant"], string> = {
+  legado: "bg-zinc-100 text-zinc-500",
+  aguardando_nf: "bg-amber-50 text-amber-700",
+  aguardando_aprovacao: "bg-blue-50 text-blue-700",
+  aprovado: "bg-emerald-50 text-emerald-700",
+  pago: "bg-zinc-100 text-zinc-400",
+};
 
 export interface ColabOpcao {
   id: string;
@@ -123,57 +157,92 @@ export function ListaAdiantamentos({
                 <th className="px-4 py-3 text-right font-medium">Valor</th>
                 <th className="px-4 py-3 text-left font-medium">Observação</th>
                 <th className="px-4 py-3 text-center font-medium">Lançado</th>
+                <th className="px-4 py-3 text-left font-medium">Status</th>
                 <th className="px-4 py-3 text-center font-medium w-10"></th>
               </tr>
             </thead>
             <tbody>
-              {adiantamentos.map((a) => (
-                <tr key={a.id} className="border-t border-border">
-                  <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                    {formatarData(a.data)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="font-medium">{a.colaborador_nome}</div>
-                    <div className="text-xs text-muted-foreground">
-                      {a.colaborador_funcao}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums font-semibold text-california-red">
-                    {brl.format(a.valor)}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {a.obs ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {a.folha_pagamento_id ? (
-                      <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                        enviado
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
-                        falhou
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {podeEditar && (
-                      <button
-                        type="button"
-                        onClick={() => handleExcluir(a.id)}
-                        disabled={excluindoId === a.id}
-                        aria-label="Excluir"
-                        className="inline-flex items-center justify-center rounded-full hover:bg-destructive/10 p-1.5 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+              {adiantamentos.map((a) => {
+                const status = derivarStatusAdiantamento(a.folha_status, a.tem_nf, a.colaborador_tipo);
+                const bloqueadoAprovado = a.folha_status === "aprovada" || a.folha_status === "paga";
+                const bloqueadoNf = a.tem_nf && a.folha_status === "enviada";
+                const excluirBloqueado = bloqueadoAprovado || bloqueadoNf;
+                const tooltipExcluir = bloqueadoAprovado
+                  ? "Adiantamento já aprovado pelo financeiro — cancele o título em contas a pagar primeiro."
+                  : bloqueadoNf
+                    ? "Colaborador já anexou NF — remova a NF antes de excluir."
+                    : null;
+
+                return (
+                  <tr key={a.id} className="border-t border-border">
+                    <td className="px-4 py-3 tabular-nums text-muted-foreground">
+                      {formatarData(a.data)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium">{a.colaborador_nome}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {a.colaborador_funcao}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums font-semibold text-california-red">
+                      {brl.format(a.valor)}
+                    </td>
+                    <td className="px-4 py-3 text-muted-foreground">
+                      {a.obs ?? "—"}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {a.folha_pagamento_id ? (
+                        <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                          enviado
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                          falhou
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${variantClasses[status.variant]}`}
                       >
-                        {excluindoId === a.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
+                        {status.label}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      {podeEditar && (
+                        excluirBloqueado ? (
+                          <TooltipProvider delayDuration={200}>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className="inline-flex items-center justify-center rounded-full p-1.5 text-muted-foreground/40 cursor-not-allowed">
+                                  <Trash2 className="h-4 w-4" />
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="left" className="max-w-[260px] text-center">
+                                {tooltipExcluir}
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
                         ) : (
-                          <Trash2 className="h-4 w-4" />
-                        )}
-                      </button>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                          <button
+                            type="button"
+                            onClick={() => handleExcluir(a.id)}
+                            disabled={excluindoId === a.id}
+                            aria-label="Excluir"
+                            className="inline-flex items-center justify-center rounded-full hover:bg-destructive/10 p-1.5 text-muted-foreground hover:text-destructive transition-colors disabled:opacity-50"
+                          >
+                            {excluindoId === a.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </button>
+                        )
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

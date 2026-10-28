@@ -35,7 +35,8 @@ export default async function AdiantamentosPage({ params }: Props) {
       .from("decimo_terceiro_adiantamentos")
       .select(
         `id, ano, colaborador_id, data, valor, obs, folha_pagamento_id,
-         colaborador:colaboradores!decimo_terceiro_adiantamentos_colaborador_id_fkey(nome, funcao, tipo_contratacao)`,
+         colaborador:colaboradores!decimo_terceiro_adiantamentos_colaborador_id_fkey(nome, funcao, tipo_contratacao),
+         folha:folhas_pagamento!decimo_terceiro_adiantamentos_folha_pagamento_id_fkey(status)`,
       )
       .eq("tenant_id", session.activeTenant.id)
       .eq("ano", ano)
@@ -54,9 +55,28 @@ export default async function AdiantamentosPage({ params }: Props) {
     throw new Error(`Falha ao carregar adiantamentos: ${adiantRes.error.message}`);
   }
 
+  // Busca NFs de adiantamentos de 13° em lote (evita N+1)
+  const adiantIds = (adiantRes.data ?? []).map((a) => a.id);
+  const nfSet = new Set<string>();
+  if (adiantIds.length > 0) {
+    const { data: nfRows } = await supabase
+      .from("colaboradores_nf_anexos")
+      .select("escopo_id")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("escopo_tipo", "decimo_terceiro_adiantamento")
+      .in("escopo_id", adiantIds);
+    for (const row of nfRows ?? []) {
+      if (row.escopo_id) nfSet.add(row.escopo_id);
+    }
+  }
+
   type ColabEmbed =
     | { nome: string; funcao: string; tipo_contratacao: string }
     | { nome: string; funcao: string; tipo_contratacao: string }[]
+    | null;
+  type FolhaEmbed =
+    | { status: string }
+    | { status: string }[]
     | null;
   interface AdiantamentoRaw {
     id: string;
@@ -67,10 +87,12 @@ export default async function AdiantamentosPage({ params }: Props) {
     obs: string | null;
     folha_pagamento_id: string | null;
     colaborador: ColabEmbed;
+    folha: FolhaEmbed;
   }
 
   const adiantamentos: AdiantamentoRow[] = ((adiantRes.data ?? []) as AdiantamentoRaw[]).map((a) => {
     const colab = Array.isArray(a.colaborador) ? a.colaborador[0] : a.colaborador;
+    const folha = Array.isArray(a.folha) ? a.folha[0] : a.folha;
     return {
       id: a.id,
       colaborador_id: a.colaborador_id,
@@ -81,6 +103,8 @@ export default async function AdiantamentosPage({ params }: Props) {
       valor: Number(a.valor),
       obs: a.obs,
       folha_pagamento_id: a.folha_pagamento_id,
+      folha_status: folha?.status ?? null,
+      tem_nf: nfSet.has(a.id),
     };
   });
 
