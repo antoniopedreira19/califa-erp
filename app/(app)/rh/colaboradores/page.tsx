@@ -162,6 +162,9 @@ export default async function ColaboradoresPage() {
   if (colaboradoresRes.error) {
     console.error("[rh.colaboradores.page]", colaboradoresRes.error.message);
   }
+  if (pacotesVigentesRes.error) {
+    console.error("[rh.colaboradores.lista.pacotes]", pacotesVigentesRes.error.message);
+  }
 
   // Mapa colaborador → salário vigente (BRL number).
   const salarioPorColaborador = new Map<string, number>();

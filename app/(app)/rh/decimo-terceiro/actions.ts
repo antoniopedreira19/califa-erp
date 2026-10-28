@@ -177,13 +177,16 @@ export async function criarFolhaDecimoTerceiro(
   const pacoteColabMap = new Map<string, string>(
     (pacotesVigentes ?? []).map((p) => [p.id, p.colaborador_id]),
   );
-  const { data: itensAloc } = pacoteIds.length > 0
+  const { data: itensAloc, error: errItens } = pacoteIds.length > 0
     ? await supabase
         .from("colaboradores_alocacoes_itens")
         .select("alocacao_id, empresa_id, percentual_empresa")
         .in("alocacao_id", pacoteIds)
         .order("percentual_empresa", { ascending: false })
-    : { data: [] };
+    : { data: [], error: null };
+  if (errItens) {
+    return { ok: false, message: `Falha ao buscar alocações de itens: ${errItens.message}` };
+  }
 
   const salarioPorColab = new Map(
     (salarios ?? []).map((s) => [s.colaborador_id, s.valor]),
@@ -1062,12 +1065,18 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
   const pacoteId = pacoteVigenteRaw?.[0]?.id;
   let empresaId: string | null = null;
   if (pacoteId) {
-    const { data: itensPacote } = await supabase
+    const { data: itensPacote, error: errItensAdiant } = await supabase
       .from("colaboradores_alocacoes_itens")
       .select("empresa_id, percentual_empresa")
       .eq("alocacao_id", pacoteId)
       .order("percentual_empresa", { ascending: false })
       .limit(1);
+    if (errItensAdiant) {
+      return {
+        ok: false,
+        message: `Falha ao buscar alocações de itens: ${errItensAdiant.message}`,
+      };
+    }
     empresaId = itensPacote?.[0]?.empresa_id ?? null;
   }
   if (!empresaId) {
