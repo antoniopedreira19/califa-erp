@@ -17,11 +17,11 @@ import {
   carregarNovidades,
   carregarFreelancersLookup,
 } from "./_data/novidades";
+import { jobsProPickerDeFreelancer } from "@/lib/data/jobs-pro-picker-de-freelancer";
 
 export const dynamic = "force-dynamic";
 
 const APROVADORES = new Set(["administrador", "rh", "financeiro"]);
-const JOBS_STATUS_EXCLUIDOS = ["cancelado", "rejeitado_financeiro"];
 
 export default async function FreelancersDashboardPage() {
   const session = await requireSession();
@@ -185,21 +185,14 @@ export default async function FreelancersDashboardPage() {
   // Dados pros pills do hero (Buscar freelancer + Novidades). Fila de
   // solicitações pendentes mudou pra badge na tab de Solicitações (carregado
   // no layout.tsx).
-  const [lookupData, novidadesData, jobsPillRes, cargosPillRes] =
+  const [lookupData, novidadesData, jobsPill, cargosPillRes] =
     await Promise.all([
       carregarFreelancersLookup(supabase, session.activeTenant.id),
       isAprovador
         ? carregarNovidades(supabase, session.activeTenant.id)
         : Promise.resolve(null),
-      // Jobs/cargos pro NovaSolicitacaoDialog. Qualquer role que vê o módulo
-      // pode abrir solicitação (inclusive admin/RH/financeiro).
-      supabase
-        .from("jobs")
-        .select("id, codigo, nome, status")
-        .eq("tenant_id", session.activeTenant.id)
-        .not("status", "in", `(${JOBS_STATUS_EXCLUIDOS.join(",")})`)
-        .order("codigo", { ascending: false })
-        .limit(500),
+      // Jobs pro NovaSolicitacaoDialog — produção + internos ativos.
+      jobsProPickerDeFreelancer(supabase, session.activeTenant.id),
       supabase
         .from("freelancer_cargos")
         .select("*")
@@ -210,11 +203,6 @@ export default async function FreelancersDashboardPage() {
     ]);
 
   const freelancersLookup = lookupData as FreelancerLookup[];
-  const jobsPill: JobItem[] = (jobsPillRes.data ?? []).map((j: any) => ({
-    id: j.id,
-    codigo: j.codigo,
-    nome: j.nome,
-  }));
   const cargosPill = (cargosPillRes.data ?? []) as FreelancerCargo[];
 
   return (

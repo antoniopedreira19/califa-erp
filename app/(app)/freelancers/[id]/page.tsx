@@ -33,8 +33,7 @@ import {
 import type { JobItem } from "../_components/job-picker";
 import { formatCnpj, formatCep, formatTelefone, initials } from "@/lib/utils";
 import { PIX_TIPOS } from "@/lib/pix";
-
-const JOBS_STATUS_EXCLUIDOS = ["cancelado", "rejeitado_financeiro"];
+import { jobsProPickerDeFreelancer } from "@/lib/data/jobs-pro-picker-de-freelancer";
 
 const ROLES_RESPONSAVEL: AppRole[] = [
   "administrador",
@@ -62,7 +61,7 @@ export default async function FreelancerPerfilPage({
   const session = await requireSession();
   const supabase = createClient();
 
-  const [freelancerRes, contratosRes, historicoRes, jobsRes, cargosRes] =
+  const [freelancerRes, contratosRes, historicoRes, jobsCarregados, cargosRes] =
     await Promise.all([
       supabase
         .from("freelancers")
@@ -70,9 +69,14 @@ export default async function FreelancerPerfilPage({
         .eq("id", params.id)
         .eq("tenant_id", session.activeTenant.id)
         .maybeSingle(),
+      // Embed polimórfico: PostgREST não resolve "ou um ou outro" num campo
+      // só, então pedimos os dois embeds separados — `job` (produção) e
+      // `job_interno` (interno). O JS faz o COALESCE ao montar o row.
       supabase
         .from("freelancer_contratos")
-        .select("*, job:jobs(codigo, nome)")
+        .select(
+          "*, job:jobs(codigo, nome), job_interno:freelancer_jobs_internos(codigo, nome)",
+        )
         .eq("freelancer_id", params.id)
         .eq("tenant_id", session.activeTenant.id)
         .order("data_inicio", { ascending: false, nullsFirst: false })
@@ -85,13 +89,7 @@ export default async function FreelancerPerfilPage({
         .eq("tenant_id", session.activeTenant.id)
         .order("alterado_em", { ascending: false })
         .limit(200),
-      supabase
-        .from("jobs")
-        .select("id, codigo, nome, status")
-        .eq("tenant_id", session.activeTenant.id)
-        .not("status", "in", `(${JOBS_STATUS_EXCLUIDOS.join(",")})`)
-        .order("codigo", { ascending: false })
-        .limit(500),
+      jobsProPickerDeFreelancer(supabase, session.activeTenant.id),
       supabase
         .from("freelancer_cargos")
         .select("*")
@@ -112,8 +110,10 @@ export default async function FreelancerPerfilPage({
 
   const contratos = ((contratosRes.data ?? []) as any[]).map((c) => ({
     ...(c as FreelancerContrato),
-    job_codigo: c.job?.codigo ?? null,
-    job_nome: c.job?.nome ?? null,
+    // COALESCE: um contrato aponta pra `job` (produção) OU `job_interno`
+    // (interno). Nunca pros dois (CHECK no banco).
+    job_codigo: c.job?.codigo ?? c.job_interno?.codigo ?? null,
+    job_nome: c.job?.nome ?? c.job_interno?.nome ?? null,
   }));
 
   // Filtra histórico só dos contratos deste freelancer (RLS já restringiu
@@ -260,11 +260,7 @@ export default async function FreelancerPerfilPage({
     ? (gpEmailsPorId[freelancer.responsavel_id] ?? null)
     : null;
 
-  const jobsNovaSolic: JobItem[] = (jobsRes.data ?? []).map((j: any) => ({
-    id: j.id as string,
-    codigo: j.codigo as string,
-    nome: j.nome as string,
-  }));
+  const jobsNovaSolic: JobItem[] = jobsCarregados;
   const cargosNovaSolic = cargosRes.data ?? [];
 
   const botaoSolicitarContrato = (

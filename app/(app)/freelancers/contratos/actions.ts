@@ -23,13 +23,20 @@ function parseForm(formData: FormData) {
   return contratoSchema.safeParse(raw);
 }
 
+/**
+ * Snapshot do nome do job. Lê de `jobs` ou `freelancer_jobs_internos`
+ * conforme a origem — devolve o nome ou null se o job não existe (ou foge do
+ * tenant). O chamador decide se null é erro ou tolerável.
+ */
 async function nomeJobSnapshot(
   jobId: string,
+  origem: "producao" | "interno",
   tenantId: string,
 ): Promise<string | null> {
   const supabase = createClient();
+  const tabela = origem === "interno" ? "freelancer_jobs_internos" : "jobs";
   const { data, error } = await supabase
-    .from("jobs")
+    .from(tabela)
     .select("nome")
     .eq("id", jobId)
     .eq("tenant_id", tenantId)
@@ -55,9 +62,10 @@ export async function criarFreelancerContrato(
     };
   }
 
-  // Snapshot do nome_job a partir do job real
+  const origem = parsed.data.job_origem;
   const nomeJob = await nomeJobSnapshot(
     parsed.data.job_id,
+    origem,
     session.activeTenant.id,
   );
   if (!nomeJob) {
@@ -74,7 +82,10 @@ export async function criarFreelancerContrato(
     .insert({
       tenant_id: session.activeTenant.id,
       freelancer_id: parsed.data.freelancer_id,
-      job_id: parsed.data.job_id,
+      // Grava na coluna da fonte certa; a outra fica null (CHECK no banco
+      // garante exclusividade).
+      job_id: origem === "producao" ? parsed.data.job_id : null,
+      job_interno_id: origem === "interno" ? parsed.data.job_id : null,
       responsavel_id: parsed.data.responsavel_id ?? null,
       nome_job: nomeJob,
       cargo: parsed.data.cargo ?? null,
@@ -104,6 +115,7 @@ export async function criarFreelancerContrato(
     metadata: {
       freelancer_id: parsed.data.freelancer_id,
       job_id: parsed.data.job_id,
+      job_origem: origem,
       nome_job: nomeJob,
     },
   });
@@ -131,9 +143,10 @@ export async function atualizarFreelancerContrato(
     };
   }
 
-  // Snapshot do nome_job — se o job mudou, atualiza o snapshot junto
+  const origem = parsed.data.job_origem;
   const nomeJob = await nomeJobSnapshot(
     parsed.data.job_id,
+    origem,
     session.activeTenant.id,
   );
   if (!nomeJob) {
@@ -149,7 +162,8 @@ export async function atualizarFreelancerContrato(
     .from("freelancer_contratos")
     .update({
       freelancer_id: parsed.data.freelancer_id,
-      job_id: parsed.data.job_id,
+      job_id: origem === "producao" ? parsed.data.job_id : null,
+      job_interno_id: origem === "interno" ? parsed.data.job_id : null,
       responsavel_id: parsed.data.responsavel_id ?? null,
       nome_job: nomeJob,
       cargo: parsed.data.cargo ?? null,
@@ -174,7 +188,7 @@ export async function atualizarFreelancerContrato(
     tenantId: session.activeTenant.id,
     entidadeTipo: "freelancer_contrato",
     entidadeId: id,
-    metadata: { nome_job: nomeJob },
+    metadata: { nome_job: nomeJob, job_origem: origem },
   });
 
   revalidatePath(`/freelancers/${parsed.data.freelancer_id}`);

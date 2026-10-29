@@ -37,6 +37,7 @@ export async function criarSolicitacao(
     };
   }
 
+  const origem = parsed.data.job_origem;
   const supabase = createClient();
   const { data, error } = await supabase
     .from("freelancer_solicitacoes")
@@ -45,7 +46,9 @@ export async function criarSolicitacao(
       solicitante_id: session.profile.id,
       nome_freela: parsed.data.nome_freela,
       cpf_freela: parsed.data.cpf_freela ?? null,
-      job_id: parsed.data.job_id,
+      // Grava na coluna da fonte certa (CHECK no banco garante exclusividade).
+      job_id: origem === "producao" ? parsed.data.job_id : null,
+      job_interno_id: origem === "interno" ? parsed.data.job_id : null,
       cargo: parsed.data.cargo ?? null,
       tipo: parsed.data.tipo,
       valor: parsed.data.valor,

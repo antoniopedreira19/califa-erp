@@ -103,10 +103,12 @@ export async function carregarNovidades(
 
     // 5. Solicitações concluídas (status=cadastrada, falta PDF)
     // nome_job é fallback pros registros migrados do RH antigo (job_id null).
+    // Embed polimórfico: pode vir de produção (`job`) ou interno
+    // (`job_interno`); COALESCE abaixo.
     supabase
       .from("freelancer_solicitacoes")
       .select(
-        "id, freelancer_id, nome_freela, cargo, updated_at, nome_job, job:jobs(nome), solicitante:profiles!solicitante_id(nome)",
+        "id, freelancer_id, nome_freela, cargo, updated_at, nome_job, job:jobs(nome), job_interno:freelancer_jobs_internos(nome), solicitante:profiles!solicitante_id(nome)",
       )
       .eq("tenant_id", tenantId)
       .eq("status", "cadastrada")
@@ -248,7 +250,7 @@ export async function carregarNovidades(
     solicitacao_id: s.id,
     freelancer_id: s.freelancer_id,
     freelancer_nome: s.nome_freela,
-    nome_job: s.job?.nome ?? s.nome_job ?? "—",
+    nome_job: s.job?.nome ?? s.job_interno?.nome ?? s.nome_job ?? "—",
     cargo: s.cargo,
     solicitante_nome: s.solicitante?.nome ?? null,
     atualizado_em: s.updated_at,

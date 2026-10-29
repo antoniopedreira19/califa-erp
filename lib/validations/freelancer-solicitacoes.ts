@@ -36,6 +36,13 @@ export const criarSolicitacaoSchema = z
       .nullable()
       .optional(),
     job_id: z.string().uuid({ message: "Escolha um job" }),
+    /** 'producao' = grava em `job_id` da `freelancer_solicitacoes`;
+     *  'interno' = grava em `job_interno_id`. Default 'producao' pra compat
+     *  com form antigo. */
+    job_origem: z
+      .enum(["producao", "interno"])
+      .optional()
+      .default("producao"),
     cargo: textoOpcional(100),
     tipo: z.enum(["mensal", "periodo", "diarias"], {
       errorMap: () => ({ message: "Escolha o tipo do contrato" }),

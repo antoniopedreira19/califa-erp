@@ -10,6 +10,7 @@ import type {
   FreelancerCargo,
 } from "@/lib/types";
 import { ContratoForm } from "../_components/contrato-form";
+import { jobsProPickerDeFreelancer } from "@/lib/data/jobs-pro-picker-de-freelancer";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,6 @@ const ROLES_RESPONSAVEL: AppRole[] = [
   "gerente_producao",
   "produtor",
 ];
-const JOBS_STATUS_EXCLUIDOS = ["cancelado", "rejeitado_financeiro"];
 
 export default async function NovoContratoPage({
   searchParams,
@@ -41,20 +41,14 @@ export default async function NovoContratoPage({
   }
 
   const supabase = createClient();
-  const [freelancerRes, jobsRes, respRes, cargosRes] = await Promise.all([
+  const [freelancerRes, jobs, respRes, cargosRes] = await Promise.all([
     supabase
       .from("freelancers")
       .select("id, nome_social")
       .eq("id", freelancerId)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle(),
-    supabase
-      .from("jobs")
-      .select("id, codigo, nome, status")
-      .eq("tenant_id", session.activeTenant.id)
-      .not("status", "in", `(${JOBS_STATUS_EXCLUIDOS.join(",")})`)
-      .order("codigo", { ascending: false })
-      .limit(500),
+    jobsProPickerDeFreelancer(supabase, session.activeTenant.id),
     supabase
       .from("tenant_members")
       .select("role, user_id, profiles(id, nome, email)")
@@ -75,12 +69,6 @@ export default async function NovoContratoPage({
   if (!freelancer) {
     notFound();
   }
-
-  const jobs = (jobsRes.data ?? []).map((j: any) => ({
-    id: j.id as string,
-    codigo: j.codigo as string,
-    nome: j.nome as string,
-  }));
 
   const responsaveis = (respRes.data ?? [])
     .map((m: any) => {

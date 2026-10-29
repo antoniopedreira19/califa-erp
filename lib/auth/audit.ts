@@ -451,6 +451,11 @@ export type AuditAction =
   | "freelancer_cargo.renomeado"
   | "freelancer_cargo.inativado"
   | "freelancer_cargo.reativado"
+  // Módulo Freelancers — jobs internos (migration 20261029000002).
+  | "freelancer_job_interno.criado"
+  | "freelancer_job_interno.editado"
+  | "freelancer_job_interno.arquivado"
+  | "freelancer_job_interno.desarquivado"
   // Módulo Freelancers — cadastro mestre (Task 014).
   | "freelancer.criado"
   | "freelancer.editado"

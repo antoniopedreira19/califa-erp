@@ -2,7 +2,11 @@ import { z } from "zod";
 
 /**
  * Validações para contratos de freelancer.
- * nome_job NÃO vem do form — é snapshot derivado do job escolhido na action.
+ *
+ * `nome_job` NÃO vem do form — é snapshot derivado do job escolhido na action.
+ * O form envia `job_id` + `job_origem`; a action grava em `job_id` ou em
+ * `job_interno_id` da tabela `freelancer_contratos` conforme a origem (CHECK
+ * no banco garante que só um dos dois fica preenchido).
  */
 
 const dataOpcional = z
@@ -27,6 +31,12 @@ export const contratoSchema = z
   .object({
     freelancer_id: z.string().uuid({ message: "Freelancer inválido" }),
     job_id: z.string().uuid({ message: "Escolha um job" }),
+    /** 'producao' = grava em `job_id` da tabela; 'interno' = grava em
+     *  `job_interno_id`. Default 'producao' pra compat (form antigo sem campo). */
+    job_origem: z
+      .enum(["producao", "interno"])
+      .optional()
+      .default("producao"),
     responsavel_id: z
       .string()
       .refine((v) => v === "" || /^[0-9a-f-]{36}$/i.test(v), {

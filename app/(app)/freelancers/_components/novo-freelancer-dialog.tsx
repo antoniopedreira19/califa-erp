@@ -323,6 +323,11 @@ export function NovoFreelancerDialog({
     // Contrato
     fd.set("responsavel_id", responsavelId ?? "");
     fd.set("job_id", jobId ?? "");
+    const jobEscolhido = jobs.find((j) => j.id === jobId);
+    fd.set(
+      "job_origem",
+      jobEscolhido?.origem === "interno" ? "interno" : "producao",
+    );
     fd.set("cargo_contrato", cargoContrato ?? "");
     fd.set("valor_centavos", String(Math.round((valor ?? 0) * 100)));
     fd.set("tipo_contrato", tipo);

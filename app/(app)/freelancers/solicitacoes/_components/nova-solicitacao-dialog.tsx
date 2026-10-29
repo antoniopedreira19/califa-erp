@@ -282,6 +282,11 @@ export function NovaSolicitacaoDialog({
     fd.set("nome_freela", nomeFinal);
     fd.set("cpf_freela", cpfDigits);
     fd.set("job_id", jobId);
+    const jobEscolhido = jobs.find((j) => j.id === jobId);
+    fd.set(
+      "job_origem",
+      jobEscolhido?.origem === "interno" ? "interno" : "producao",
+    );
     fd.set("cargo", cargo);
     fd.set("tipo", tipo);
     fd.set("valor", String(valor));

@@ -160,6 +160,9 @@ export async function criarFreelancerCompleto(
   //    porque é um fluxo específico.
   const responsavel_id = raw.responsavel_id?.trim() ?? "";
   const job_id = raw.job_id?.trim() ?? "";
+  const job_origem_raw = raw.job_origem?.trim() ?? "producao";
+  const job_origem: "producao" | "interno" =
+    job_origem_raw === "interno" ? "interno" : "producao";
   const cargo_contrato = raw.cargo_contrato?.trim() ?? "";
   const valor_centavos = Number(raw.valor_centavos ?? "0");
   const tipo = raw.tipo_contrato?.trim() ?? "";
@@ -290,22 +293,25 @@ export async function criarFreelancerCompleto(
     if (upErr) console.error("[freelancers.upload_cartao]", upErr.message);
   }
 
-  // 5. Snapshot do nome do job
+  // 5. Snapshot do nome do job — da fonte certa conforme a origem.
+  const tabelaDoJob =
+    job_origem === "interno" ? "freelancer_jobs_internos" : "jobs";
   const { data: job } = await supabase
-    .from("jobs")
+    .from(tabelaDoJob)
     .select("nome")
     .eq("id", job_id)
     .eq("tenant_id", session.activeTenant.id)
     .maybeSingle();
   const nome_job = job?.nome ?? "Importado (sem job vinculado)";
 
-  // 6. Cria o contrato
+  // 6. Cria o contrato (grava na coluna da fonte certa).
   const { error: errContrato } = await supabase
     .from("freelancer_contratos")
     .insert({
       tenant_id: session.activeTenant.id,
       freelancer_id: freelancer_id!,
-      job_id,
+      job_id: job_origem === "producao" ? job_id : null,
+      job_interno_id: job_origem === "interno" ? job_id : null,
       responsavel_id,
       nome_job,
       cargo: cargo_contrato,

@@ -9,6 +9,7 @@ import type {
 } from "@/lib/types";
 import { NovaSolicitacaoDialog } from "./_components/nova-solicitacao-dialog";
 import { SolicitacoesTabela } from "./_components/solicitacoes-tabela";
+import { jobsProPickerDeFreelancer } from "@/lib/data/jobs-pro-picker-de-freelancer";
 
 export const dynamic = "force-dynamic";
 
@@ -21,8 +22,6 @@ const STATUS_VALIDOS = new Set([
 ]);
 
 const TIPOS_SOLICITACAO = new Set(["contratacao", "renovacao"]);
-
-const JOBS_STATUS_EXCLUIDOS = ["cancelado", "rejeitado_financeiro"];
 
 export default async function SolicitacoesPage({
   searchParams,
@@ -45,10 +44,12 @@ export default async function SolicitacoesPage({
   const tenantId = session.activeTenant.id;
 
   // Query da lista (sem order — a ordenação é client-side por prioridade de status)
+  // Embed polimórfico: solicitação aponta pra `job` (produção) OU
+  // `job_interno` (interno). O JS faz o COALESCE abaixo.
   let query = supabase
     .from("freelancer_solicitacoes")
     .select(
-      "*, solicitante:profiles!solicitante_id(nome, email), job:jobs(codigo, nome)",
+      "*, solicitante:profiles!solicitante_id(nome, email), job:jobs(codigo, nome), job_interno:freelancer_jobs_internos(codigo, nome)",
     )
     .eq("tenant_id", tenantId);
 
@@ -81,7 +82,12 @@ export default async function SolicitacoesPage({
     .map((s) => s.trim())
     .filter((s) => /^[0-9a-f-]{36}$/i.test(s));
   if (jobFiltro.length > 0) {
-    query = query.in("job_id", jobFiltro);
+    // O dropdown não distingue origem; o id é único na raiz da sua tabela.
+    // Casa com qualquer uma das duas colunas.
+    const inList = jobFiltro.join(",");
+    query = query.or(
+      `job_id.in.(${inList}),job_interno_id.in.(${inList})`,
+    );
   }
 
   const tipoFiltro = (searchParams.tipo ?? "").trim();
@@ -92,20 +98,14 @@ export default async function SolicitacoesPage({
   // retrato geral).
   const [
     solicitacoesRes,
-    jobsRes,
+    jobs,
     cargosRes,
     naoLidasRes,
     contagensRes,
     todosSolicitantesRes,
   ] = await Promise.all([
     query,
-    supabase
-      .from("jobs")
-      .select("id, codigo, nome, status")
-      .eq("tenant_id", tenantId)
-      .not("status", "in", `(${JOBS_STATUS_EXCLUIDOS.join(",")})`)
-      .order("codigo", { ascending: false })
-      .limit(500),
+    jobsProPickerDeFreelancer(supabase, tenantId),
     supabase
       .from("freelancer_cargos")
       .select("*")
@@ -187,19 +187,14 @@ export default async function SolicitacoesPage({
       nome_freela_display: nomeCompleto ?? s.nome_freela,
       solicitante_nome: s.solicitante?.nome ?? null,
       solicitante_email: s.solicitante?.email ?? null,
-      job_codigo: s.job?.codigo ?? null,
+      // COALESCE das duas fontes: produção → `job`, interno → `job_interno`.
       // Fallback pro texto preservado das solicitações legadas do RH antigo
       // (job_id null, mas `nome_job` traz o nome como texto).
-      job_nome: s.job?.nome ?? s.nome_job ?? null,
+      job_codigo: s.job?.codigo ?? s.job_interno?.codigo ?? null,
+      job_nome: s.job?.nome ?? s.job_interno?.nome ?? s.nome_job ?? null,
       tipo_solicitacao,
     };
   });
-
-  const jobs = (jobsRes.data ?? []).map((j: any) => ({
-    id: j.id as string,
-    codigo: j.codigo as string,
-    nome: j.nome as string,
-  }));
 
   const cargos = cargosRes.data ?? [];
 

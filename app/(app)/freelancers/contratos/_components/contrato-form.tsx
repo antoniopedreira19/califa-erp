@@ -59,7 +59,13 @@ export function ContratoForm({
   const [erroGeral, setErroGeral] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<FieldErrors>({});
 
-  const [jobId, setJobId] = React.useState<string | null>(contrato?.job_id ?? null);
+  // Pro form, o `jobId` representa a escolha visível no picker — pode vir de
+  // qualquer uma das duas fontes. A origem é inferida pelo item escolhido na
+  // lista `jobs` e enviada em campo auxiliar `job_origem` pra action decidir
+  // em qual coluna gravar.
+  const [jobId, setJobId] = React.useState<string | null>(
+    contrato?.job_interno_id ?? contrato?.job_id ?? null,
+  );
   const [responsavelId, setResponsavelId] = React.useState<string | null>(
     contrato?.responsavel_id ?? null,
   );
@@ -101,6 +107,8 @@ export function ContratoForm({
     const fd = new FormData();
     fd.set("freelancer_id", freelancer.id);
     fd.set("job_id", jobId ?? "");
+    const jobEscolhido = jobs.find((j) => j.id === jobId);
+    fd.set("job_origem", jobEscolhido?.origem === "interno" ? "interno" : "producao");
     fd.set("responsavel_id", responsavelId ?? "");
     fd.set("cargo", cargo ?? "");
     fd.set("tipo", tipo);

@@ -6060,8 +6060,11 @@ export interface FreelancerContrato {
 
   // Vínculos
   freelancer_id: string;
-  /** Null em contratos legados migrados; obrigatório em contratos novos. */
+  /** Null em contratos legados migrados; nos novos, obrigatório — pode ser
+   *  um `job_id` (produção) OU um `job_interno_id` (jobs internos do módulo
+   *  Freelancers), mutuamente exclusivos (CHECK no banco). */
   job_id: string | null;
+  job_interno_id: string | null;
   responsavel_id: string | null;
 
   // Dados do contrato (snapshot)
@@ -6150,8 +6153,13 @@ export interface FreelancerSolicitacao {
   // Dados do contrato pré-aprovado
   /** Nullable desde a migração 20261026600002: solicitações legadas apontavam
    *  pra jobs do RH antigo que não existem aqui. Nome do job como texto fica em
-   *  `nome_job`. */
+   *  `nome_job`. Em solicitação nova, mutuamente exclusivo com `job_interno_id`
+   *  (CHECK no banco). */
   job_id: string | null;
+  /** Alternativa a `job_id` pra solicitação que aponta pra job interno de
+   *  freelancer (sem orçamento/projeto/cliente). CHECK no banco garante que só
+   *  um dos dois está preenchido. */
+  job_interno_id: string | null;
   /** Preservado da migração do RH antigo quando não há job_id FK equivalente. */
   nome_job: string | null;
   /** ID original no AgCaliforniaRH quando a solicitação veio por migração. */
@@ -6248,7 +6256,9 @@ export interface FreelancerComStatus extends Omit<Freelancer, "responsavel_id"> 
   responsavel_nome: string | null;
   responsavel_email: string | null;
 
-  // Job real do califa-erp (id da FK + join com jobs pra código e nome)
+  // Job vinculado ao contrato ativo. `job_id` é COALESCE(contrato.job_id,
+  // contrato.job_interno_id); `job_codigo` e `job_nome` idem com join nas
+  // duas fontes. `job_origem` diz de onde veio ('producao' | 'interno' | null).
   job_id: string | null;
   job_codigo: string | null;
   job_nome: string | null;
@@ -6262,6 +6272,32 @@ export interface FreelancerComStatus extends Omit<Freelancer, "responsavel_id"> 
   freela_responsavel_id: string | null;
   freela_responsavel_nome: string | null;
   freela_responsavel_email: string | null;
+
+  /** Fonte do job vinculado ao contrato ativo. 'producao' = tabela `jobs`;
+   *  'interno' = tabela `freelancer_jobs_internos`; null = sem job. */
+  job_origem: "producao" | "interno" | null;
+}
+
+// ----------------------------------------------------------------------------
+// Jobs internos de freelancer (migration 20261029000002)
+// ----------------------------------------------------------------------------
+
+/** Job interno de freelancer — rótulo pra agrupar contratos sem orçamento,
+ *  projeto, cliente ou empresa. Isolado da tabela `jobs` de produção. */
+export interface FreelancerJobInterno {
+  id: string;
+  tenant_id: string;
+  codigo: string;
+  nome: string;
+  descricao: string | null;
+  /** Soft delete: job arquivado some do picker, mas continua ligado aos
+   *  contratos antigos pra preservar histórico. */
+  arquivado_em: string | null;
+  arquivado_por: string | null;
+  created_by: string | null;
+  updated_by: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 // ----------------------------------------------------------------------------

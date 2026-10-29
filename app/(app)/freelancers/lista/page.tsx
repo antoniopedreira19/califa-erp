@@ -12,7 +12,7 @@ import { GerenciarCargosDialog } from "./_components/gerenciar-cargos-dialog";
 import { CardsAnalise, type CategoriaCard } from "./_components/cards-analise";
 import { ExportarButton } from "./_components/exportar-button";
 import { NovoFreelancerDialog } from "../_components/novo-freelancer-dialog";
-import type { JobItem } from "../_components/job-picker";
+import { jobsProPickerDeFreelancer } from "@/lib/data/jobs-pro-picker-de-freelancer";
 
 export const dynamic = "force-dynamic";
 
@@ -189,9 +189,8 @@ export default async function FreelancersListaPage({
   }
 
   // Dados pro NovoFreelancerDialog (só carrega quando user pode criar).
-  const JOBS_STATUS_EXCLUIDOS = ["cancelado", "rejeitado_financeiro"];
 
-  const [freelancersRes, cargosRes, totaisRes, jobsNovoRes, responsaveisNovoRes] =
+  const [freelancersRes, cargosRes, totaisRes, jobsNovo, responsaveisNovoRes] =
     await Promise.all([
       query.returns<FreelancerComStatus[]>(),
       supabase
@@ -201,14 +200,8 @@ export default async function FreelancersListaPage({
         .order("nome", { ascending: true })
         .returns<FreelancerCargo[]>(),
       totaisQuery,
-      // Jobs ativos pro picker do Step 5 do dialog
-      supabase
-        .from("jobs")
-        .select("id, codigo, nome, status")
-        .eq("tenant_id", session.activeTenant.id)
-        .not("status", "in", `(${JOBS_STATUS_EXCLUIDOS.join(",")})`)
-        .order("codigo", { ascending: false })
-        .limit(500),
+      // Jobs pro picker do Step 5 do dialog — produção + internos ativos.
+      jobsProPickerDeFreelancer(supabase, session.activeTenant.id),
       // Responsáveis (profiles ativos do tenant) pro combobox do Step 1
       supabase
         .from("profiles")
@@ -241,11 +234,6 @@ export default async function FreelancersListaPage({
 
   const freelancers = freelancersRes.data ?? [];
   const cargos = cargosRes.data ?? [];
-  const jobsNovo: JobItem[] = (jobsNovoRes.data ?? []).map((j: any) => ({
-    id: j.id as string,
-    codigo: j.codigo as string,
-    nome: j.nome as string,
-  }));
   const responsaveisNovo = ((responsaveisNovoRes.data ?? []) as any[]).map(
     (r) => ({ id: r.id as string, nome: r.nome as string }),
   );
@@ -341,7 +329,7 @@ export default async function FreelancersListaPage({
         <ExportarButton />
         {podeGerenciarCargos && (
           <Link
-            href="/jobs"
+            href="/freelancers/jobs"
             prefetch={false}
             className="inline-flex items-center gap-2 rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-foreground hover:border-california-red/40 hover:text-california-red transition-colors"
           >

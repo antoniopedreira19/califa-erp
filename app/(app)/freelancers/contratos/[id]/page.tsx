@@ -12,6 +12,7 @@ import type {
 import { ContratoForm } from "../_components/contrato-form";
 import { BlocoArquivos } from "../_components/bloco-arquivos";
 import { BlocoDistrato } from "../_components/bloco-distrato";
+import { jobsProPickerDeFreelancer } from "@/lib/data/jobs-pro-picker-de-freelancer";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,6 @@ const ROLES_RESPONSAVEL: AppRole[] = [
   "gerente_producao",
   "produtor",
 ];
-const JOBS_STATUS_EXCLUIDOS = ["cancelado", "rejeitado_financeiro"];
 
 export default async function EditarContratoPage({
   params,
@@ -60,14 +60,8 @@ export default async function EditarContratoPage({
     redirect(`/freelancers/${freelancer.id}?reason=sem_permissao_editar`);
   }
 
-  const [jobsRes, respRes, cargosRes] = await Promise.all([
-    supabase
-      .from("jobs")
-      .select("id, codigo, nome, status")
-      .eq("tenant_id", session.activeTenant.id)
-      .not("status", "in", `(${JOBS_STATUS_EXCLUIDOS.join(",")})`)
-      .order("codigo", { ascending: false })
-      .limit(500),
+  const [jobsCarregados, respRes, cargosRes] = await Promise.all([
+    jobsProPickerDeFreelancer(supabase, session.activeTenant.id),
     supabase
       .from("tenant_members")
       .select("role, user_id, profiles(id, nome, email)")
@@ -82,19 +76,29 @@ export default async function EditarContratoPage({
       .returns<FreelancerCargo[]>(),
   ]);
 
-  const jobs = (jobsRes.data ?? []).map((j: any) => ({
-    id: j.id as string,
-    codigo: j.codigo as string,
-    nome: j.nome as string,
-  }));
+  const jobs = [...jobsCarregados];
 
   // Se o job original do contrato ficou fora do filtro (status cancelado,
-  // por exemplo), ainda assim mostra ele na lista pra edição funcionar.
+  // interno arquivado, etc.), ainda assim mostra ele na lista pra edição
+  // funcionar. Vale pros dois tipos: produção (`job_id`) e interno
+  // (`job_interno_id`).
   if (contrato.job_id && !jobs.find((j) => j.id === contrato.job_id)) {
     jobs.unshift({
       id: contrato.job_id,
       codigo: "",
       nome: contrato.nome_job,
+      origem: "producao",
+    });
+  }
+  if (
+    contrato.job_interno_id &&
+    !jobs.find((j) => j.id === contrato.job_interno_id)
+  ) {
+    jobs.unshift({
+      id: contrato.job_interno_id,
+      codigo: "",
+      nome: contrato.nome_job,
+      origem: "interno",
     });
   }
 
