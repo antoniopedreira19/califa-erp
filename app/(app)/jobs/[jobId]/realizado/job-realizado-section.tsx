@@ -2329,6 +2329,7 @@ function PlanilhaDoJob({
           const grupoId = errata.itens.find((i) => i.id === chave)?.grupo_id;
           return { chave, grupo: errata.grupos.find((g) => g.id === grupoId)?.nome ?? "—" };
         })}
+        gruposForaDaErrata={errata.gruposForaDaErrata}
       />
     </div>
   );

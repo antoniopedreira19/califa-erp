@@ -6581,3 +6581,13 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - O histórico da planilha (186) ganhou o momento "Linha vermelha".
 - Em aberto: o BOC-1003/26 tem uma errata pronta com 7 vermelhas num
   agrupamento novo — segue esperando o GP.
+
+## ⚠️ Nota de 2026-10-29 — agrupamento novo só de vermelhas e linha com PPs canceladas (decisão 226, revisão)
+
+- O agrupamento novo composto **apenas** por linhas vermelhas nasce junto
+  com elas, fora da errata (`gruposSoDeVermelhas` / `gruposForaDaErrata`;
+  `jobs_grupos.criado_por`, migration `20261029800001`). Com item normal ou
+  linha movida, segue errata. A nota de 28/10 sobre o BOC-1003/26 deixa de
+  valer: no envio do GP, as 7 vermelhas e o agrupamento saem da errata.
+- Linha com **todas** as PPs canceladas se cancela pela errata
+  (`barrarCancelamento` ignora a PP cancelada).

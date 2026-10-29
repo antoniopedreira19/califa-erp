@@ -88,6 +88,14 @@ function itensDoCliente(itens: ItemPlanilhaJob[], versaoId: string, tenantId: st
     }));
 }
 
+/** A versão do histórico como o cliente a vê: sem o agrupamento que só tem
+ *  linha vermelha (29/10/2026). */
+function versaoDoCliente(v: VersaoDaPlanilha, versaoId: string, tenantId: string) {
+  const itens = itensDoCliente(v.itens, versaoId, tenantId);
+  const comLinha = new Set(itens.map((i) => i.grupo_id));
+  return { grupos: v.grupos.filter((g) => comLinha.has(g.id)), itens };
+}
+
 export function HistoricoDoOrcamento({
   jobId,
   aprovadaEm,
@@ -151,9 +159,7 @@ export function HistoricoDoOrcamento({
 
   const valor = React.useMemo<ContextoDoHistorico>(
     () => ({
-      versao: antiga
-        ? { grupos: antiga.grupos, itens: itensDoCliente(antiga.itens, versaoId, tenantId) }
-        : null,
+      versao: antiga ? versaoDoCliente(antiga, versaoId, tenantId) : null,
       destaque:
         antiga && destacar
           ? new Set(antiga.mudancas.map((m) => m.itemId).filter((id): id is string => !!id))

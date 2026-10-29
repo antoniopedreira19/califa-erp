@@ -732,6 +732,12 @@ function reconstruir(d: DadosDoHistorico): { versoes: VersaoDaPlanilha[]; inicio
         if (!l) return { antes: depois, mudancas: [], estrutura: [] };
         const antes = copiar(depois);
         antes.itens = antes.itens.filter((x) => x.id !== v.id);
+        // O agrupamento novo só de vermelhas nasceu com elas (29/10/2026):
+        // sem linha nenhuma antes do momento, ele sai também.
+        const g = gruposPorId.get(l.grupo_id);
+        if (g && g.criado_por && !g.criado_na_errata_id && !antes.itens.some((x) => x.grupo_id === g.id)) {
+          antes.grupos = antes.grupos.filter((x) => x.id !== g.id);
+        }
         return {
           antes,
           mudancas: [

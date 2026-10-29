@@ -47,6 +47,7 @@ import {
   separarLinhasVermelhas,
   sobraErrata,
   trocarMarcadores,
+  type GrupoNovoSeparado,
   type LinhaVermelhaSeparada,
 } from "@/lib/calculos/linha-vermelha-fora-da-errata";
 
@@ -883,7 +884,9 @@ async function gravarLinhasVermelhas(
   session: Sessao,
   jobId: string,
   vermelhas: LinhaVermelhaSeparada[],
-): Promise<{ ok: true; ids: Record<string, string> } | Err> {
+  /** O agrupamento novo só de vermelhas, que nasce junto (29/10/2026). */
+  gruposNovos: GrupoNovoSeparado[],
+): Promise<{ ok: true; ids: Record<string, string>; idsDosGrupos: Record<string, string> } | Err> {
   const supabase = createClient();
   const tenantId = session.activeTenant.id;
 
@@ -914,6 +917,25 @@ async function gravarLinhasVermelhas(
     };
   }
 
+  // Os agrupamentos do job, os removidos inclusive: a âncora do agrupamento
+  // novo é um da versão do mesmo mês, como na errata (decisão 162).
+  const { data: gruposDoJob, error: gruposErr } = await supabase
+    .from("jobs_grupos")
+    .select("id, mes_id, grupo_versao_id, mes:versoes_orcamento_meses!mes_id(mes)")
+    .eq("job_id", jobId)
+    .eq("tenant_id", tenantId)
+    .returns<Array<{ id: string; mes_id: string | null; grupo_versao_id: string; mes: { mes: string } | null }>>();
+  if (gruposErr || !gruposDoJob) {
+    return { ok: false, message: "Não foi possível ler os agrupamentos do job." };
+  }
+  const grupos: Array<{ chave: string; nome: string; ancora: string }> = [];
+  for (const g of gruposNovos) {
+    const doMes = gruposDoJob.find((x) => (x.mes_id ?? null) === (g.mes_id ?? null));
+    if (!doMes) return { ok: false, message: "O mês do agrupamento novo não é deste job." };
+    if (!g.nome) return { ok: false, message: "O agrupamento novo precisa de um nome." };
+    grupos.push({ chave: g.chave, nome: g.nome, ancora: doMes.grupo_versao_id });
+  }
+
   const modelo = (job as { versao?: { orcamento?: { categoria?: { modelo_planilha?: string } } } })
     .versao?.orcamento?.categoria?.modelo_planilha;
   if (modelo === "mensal") {
@@ -927,15 +949,17 @@ async function gravarLinhasVermelhas(
       };
     }
     if (enviados.size > 0) {
-      const { data: grupos } = await supabase
-        .from("jobs_grupos")
-        .select("id, mes:versoes_orcamento_meses!mes_id(mes)")
-        .eq("job_id", jobId)
-        .eq("tenant_id", tenantId)
-        .in("id", vermelhas.map((v) => v.grupo_id));
+      // O mês de cada agrupamento: o do job, ou o do novo pela âncora.
+      const mesDoId = new Map(
+        gruposDoJob.filter((g) => g.mes_id && g.mes).map((g) => [g.mes_id as string, String(g.mes!.mes).slice(0, 10)]),
+      );
+      const mesDoGrupo = new Map<string, string | null>([
+        ...gruposDoJob.map((g) => [g.id, g.mes_id ? (mesDoId.get(g.mes_id) ?? null) : null] as const),
+        ...gruposNovos.map((g) => [g.chave, g.mes_id ? (mesDoId.get(g.mes_id) ?? null) : null] as const),
+      ]);
       const tocados = new Set<string>();
-      for (const g of (grupos ?? []) as unknown as Array<{ mes: { mes: string } | null }>) {
-        const mes = g.mes?.mes ? String(g.mes.mes).slice(0, 10) : null;
+      for (const v of vermelhas) {
+        const mes = mesDoGrupo.get(v.grupo_id) ?? null;
         if (mes && enviados.has(mes)) tocados.add(mes);
       }
       if (tocados.size > 0) {
@@ -948,14 +972,16 @@ async function gravarLinhasVermelhas(
 
   const { data, error } = await supabase.rpc("adicionar_linhas_vermelhas_do_job", {
     p_job_id: jobId,
-    p_linhas: vermelhas,
+    p_linhas: { grupos, linhas: vermelhas },
   });
   if (error || !data) {
     console.error("[linha_vermelha.gravar]", error?.message);
     const doBanco = error?.code === "P0001" && error.message ? ` ${error.message}` : "";
     return { ok: false, message: `Não foi possível salvar a linha vermelha, e nada foi gravado.${doBanco}` };
   }
-  const ids = data as Record<string, string>;
+  const { grupos: idsDosGrupos = {}, ...ids } = data as Record<string, string> & {
+    grupos?: Record<string, string>;
+  };
 
   await logAuditEvent({
     acao: "job.linha_vermelha_criada",
@@ -964,9 +990,10 @@ async function gravarLinhasVermelhas(
     entidadeId: jobId,
     metadata: {
       linhas: vermelhas.map((v) => ({ id: ids[v.chave] ?? null, item: v.item, tipo_custo: v.tipo_custo })),
+      grupos_novos: grupos.map((g) => ({ id: idsDosGrupos[g.chave] ?? null, nome: g.nome })),
     },
   });
-  return { ok: true, ids };
+  return { ok: true, ids, idsDosGrupos };
 }
 
 /** Tira do pedido as linhas vermelhas novas e as grava (decisão 226). O que
@@ -978,7 +1005,7 @@ async function separarEGravarVermelhas(
   jobId: string,
   pedido: ConteudoValidado,
 ): Promise<{ ok: true; dados: ConteudoValidado; vermelhasGravadas: string[] } | Err> {
-  const { conteudo, vermelhas } = separarLinhasVermelhas(pedido);
+  const { conteudo, vermelhas, grupos } = separarLinhasVermelhas(pedido);
   if (vermelhas.length === 0) return { ok: true, dados: pedido, vermelhasGravadas: [] };
   if (!sobraErrata(conteudo)) {
     return {
@@ -986,12 +1013,12 @@ async function separarEGravarVermelhas(
       message: "Só há linha vermelha nesta edição: ela não é errata. Use “Salvar linha vermelha”.",
     };
   }
-  const gravadas = await gravarLinhasVermelhas(session, jobId, vermelhas);
+  const gravadas = await gravarLinhasVermelhas(session, jobId, vermelhas, grupos);
   if (!gravadas.ok) return gravadas;
   revalidatePath(`/jobs/${jobId}`);
   return {
     ok: true,
-    dados: trocarMarcadores(conteudo, gravadas.ids),
+    dados: trocarMarcadores(conteudo, gravadas.ids, gravadas.idsDosGrupos),
     vermelhasGravadas: vermelhas.map((v) => v.chave),
   };
 }
@@ -1016,7 +1043,7 @@ export async function salvarLinhasVermelhas(
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
-  const { conteudo, vermelhas } = separarLinhasVermelhas(parsed.data);
+  const { conteudo, vermelhas, grupos } = separarLinhasVermelhas(parsed.data);
   if (vermelhas.length === 0) return { ok: false, message: "Nenhuma linha vermelha informada." };
   if (sobraErrata(conteudo)) {
     return {
@@ -1024,7 +1051,7 @@ export async function salvarLinhasVermelhas(
       message: "Além da linha vermelha, a planilha tem mudanças que são errata. Confirme pela errata.",
     };
   }
-  const gravadas = await gravarLinhasVermelhas(session, jobId, vermelhas);
+  const gravadas = await gravarLinhasVermelhas(session, jobId, vermelhas, grupos);
   if (!gravadas.ok) return gravadas;
 
   revalidatePath(`/jobs/${jobId}`);
@@ -2203,14 +2230,16 @@ async function barrarCancelamento(
 
   const [ppsRes, bvsRes] = await Promise.all([
     copiaPorRealizado.size > 0
-      // Sem filtro de status: a PP cancelada também impede, porque a FK é
-      // `on delete restrict` e o documento continua no histórico do
-      // financeiro. Some a linha e a PP fica apontando para o nada.
+      // A PP cancelada não impede (Tiago, 29/10/2026, nota na decisão
+      // 151): desde a 151 a errata CANCELA a linha em vez de apagá-la, e a
+      // PP cancelada continua apontando para ela no histórico. O motivo de
+      // antes — a FK `on delete restrict` — era da remoção.
       ? supabase
           .from("pedidos_compra")
           .select("codigo, status, item_realizado_id")
           .eq("job_id", jobId)
           .eq("tenant_id", tenantId)
+          .neq("status", "cancelada")
           .in("item_realizado_id", Array.from(copiaPorRealizado.keys()))
       : Promise.resolve({ data: [] as any[], error: null }),
     supabase
@@ -2226,7 +2255,7 @@ async function barrarCancelamento(
     | undefined;
   if (pp) {
     const copiaId = copiaPorRealizado.get(pp.item_realizado_id) ?? "";
-    return `"${nome(copiaId)}" tem o Pedido de Produção ${pp.codigo} no histórico. Uma linha com PP não pode ser cancelada.`;
+    return `"${nome(copiaId)}" tem o Pedido de Produção ${pp.codigo}. Uma linha com PP só pode ser cancelada com todas as PPs dela canceladas.`;
   }
 
   const bv = (bvsRes.data ?? [])[0] as
