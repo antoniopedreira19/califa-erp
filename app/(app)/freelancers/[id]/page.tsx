@@ -75,7 +75,7 @@ export default async function FreelancerPerfilPage({
       supabase
         .from("freelancer_contratos")
         .select(
-          "*, job:jobs(codigo, nome), job_interno:freelancer_jobs_internos(codigo, nome)",
+          "*, job:jobs(codigo, nome), job_interno:freelancer_jobs_internos(nome)",
         )
         .eq("freelancer_id", params.id)
         .eq("tenant_id", session.activeTenant.id)
@@ -111,8 +111,8 @@ export default async function FreelancerPerfilPage({
   const contratos = ((contratosRes.data ?? []) as any[]).map((c) => ({
     ...(c as FreelancerContrato),
     // COALESCE: um contrato aponta pra `job` (produção) OU `job_interno`
-    // (interno). Nunca pros dois (CHECK no banco).
-    job_codigo: c.job?.codigo ?? c.job_interno?.codigo ?? null,
+    // (interno). Nunca pros dois (CHECK no banco). Internos não têm código.
+    job_codigo: c.job?.codigo ?? null,
     job_nome: c.job?.nome ?? c.job_interno?.nome ?? null,
   }));
 

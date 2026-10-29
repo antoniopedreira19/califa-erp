@@ -6290,7 +6290,6 @@ export interface FreelancerComStatus extends Omit<Freelancer, "responsavel_id"> 
 export interface FreelancerJobInterno {
   id: string;
   tenant_id: string;
-  codigo: string;
   nome: string;
   descricao: string | null;
   /** Soft delete: job arquivado some do picker, mas continua ligado aos

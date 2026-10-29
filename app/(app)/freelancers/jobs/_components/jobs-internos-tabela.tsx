@@ -18,7 +18,7 @@ interface Props {
 /**
  * Tabela com CRUD inline dos jobs internos. Linha arquivada aparece com
  * texto esmaecido e badge "Arquivado" — nunca some, pra preservar contexto
- * dos contratos antigos. Edição inline por linha (código + nome + descrição).
+ * dos contratos antigos. Edição inline por linha (nome + descrição).
  */
 export function JobsInternosTabela({ jobs, podeEscrever }: Props) {
   return (
@@ -38,8 +38,7 @@ export function JobsInternosTabela({ jobs, podeEscrever }: Props) {
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
               <tr>
-                <th className="text-left px-4 py-3 w-[140px]">Código</th>
-                <th className="text-left px-4 py-3 w-[280px]">Nome</th>
+                <th className="text-left px-4 py-3 w-[320px]">Nome</th>
                 <th className="text-left px-4 py-3">Descrição</th>
                 {podeEscrever && <th className="w-[120px]" />}
               </tr>
@@ -58,7 +57,6 @@ export function JobsInternosTabela({ jobs, podeEscrever }: Props) {
 
 function NovoJobInternoForm() {
   const [aberto, setAberto] = React.useState(false);
-  const [codigo, setCodigo] = React.useState("");
   const [nome, setNome] = React.useState("");
   const [descricao, setDescricao] = React.useState("");
   const [erros, setErros] = React.useState<Record<string, string[]>>({});
@@ -66,7 +64,6 @@ function NovoJobInternoForm() {
   const [pending, startTransition] = React.useTransition();
 
   function reset() {
-    setCodigo("");
     setNome("");
     setDescricao("");
     setErros({});
@@ -81,7 +78,6 @@ function NovoJobInternoForm() {
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     const fd = new FormData();
-    fd.set("codigo", codigo);
     fd.set("nome", nome);
     fd.set("descricao", descricao);
 
@@ -116,56 +112,30 @@ function NovoJobInternoForm() {
       onSubmit={onSubmit}
       className="rounded-2xl border border-border bg-card p-5 shadow-soft space-y-4"
     >
-      <div className="grid grid-cols-1 md:grid-cols-[140px_1fr] gap-3">
-        <div>
-          <label className="text-xs font-semibold text-muted-foreground">
-            Código *
-          </label>
-          <input
-            type="text"
-            value={codigo}
-            onChange={(e) => {
-              setCodigo(e.target.value);
-              if (erros.codigo) setErros((p) => ({ ...p, codigo: [] }));
-            }}
-            placeholder="INT-01"
-            disabled={pending}
-            autoFocus
-            className={cn(
-              "mt-1 w-full h-10 rounded-lg border bg-white px-3 text-sm focus:outline-none focus:ring-2",
-              erros.codigo?.length
-                ? "border-california-red focus:ring-california-red/15"
-                : "border-border focus:border-california-red focus:ring-california-red/15",
-            )}
-          />
-          {erros.codigo?.[0] && (
-            <p className="mt-1 text-[11px] text-california-red">{erros.codigo[0]}</p>
+      <div>
+        <label className="text-xs font-semibold text-muted-foreground">
+          Nome *
+        </label>
+        <input
+          type="text"
+          value={nome}
+          onChange={(e) => {
+            setNome(e.target.value);
+            if (erros.nome) setErros((p) => ({ ...p, nome: [] }));
+          }}
+          placeholder="Time fixo da estrutura"
+          disabled={pending}
+          autoFocus
+          className={cn(
+            "mt-1 w-full h-10 rounded-lg border bg-white px-3 text-sm focus:outline-none focus:ring-2",
+            erros.nome?.length
+              ? "border-california-red focus:ring-california-red/15"
+              : "border-border focus:border-california-red focus:ring-california-red/15",
           )}
-        </div>
-        <div>
-          <label className="text-xs font-semibold text-muted-foreground">
-            Nome *
-          </label>
-          <input
-            type="text"
-            value={nome}
-            onChange={(e) => {
-              setNome(e.target.value);
-              if (erros.nome) setErros((p) => ({ ...p, nome: [] }));
-            }}
-            placeholder="Time fixo da estrutura"
-            disabled={pending}
-            className={cn(
-              "mt-1 w-full h-10 rounded-lg border bg-white px-3 text-sm focus:outline-none focus:ring-2",
-              erros.nome?.length
-                ? "border-california-red focus:ring-california-red/15"
-                : "border-border focus:border-california-red focus:ring-california-red/15",
-            )}
-          />
-          {erros.nome?.[0] && (
-            <p className="mt-1 text-[11px] text-california-red">{erros.nome[0]}</p>
-          )}
-        </div>
+        />
+        {erros.nome?.[0] && (
+          <p className="mt-1 text-[11px] text-california-red">{erros.nome[0]}</p>
+        )}
       </div>
       <div>
         <label className="text-xs font-semibold text-muted-foreground">
@@ -194,7 +164,7 @@ function NovoJobInternoForm() {
         </button>
         <button
           type="submit"
-          disabled={pending || !codigo.trim() || !nome.trim()}
+          disabled={pending || !nome.trim()}
           className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red-hover disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
         >
           <Plus className="h-4 w-4" />
@@ -213,7 +183,6 @@ function JobInternoRow({
   podeEscrever: boolean;
 }) {
   const [editando, setEditando] = React.useState(false);
-  const [codigo, setCodigo] = React.useState(job.codigo);
   const [nome, setNome] = React.useState(job.nome);
   const [descricao, setDescricao] = React.useState(job.descricao ?? "");
   const [erros, setErros] = React.useState<Record<string, string[]>>({});
@@ -222,7 +191,6 @@ function JobInternoRow({
   const arquivado = job.arquivado_em !== null;
 
   function cancelar() {
-    setCodigo(job.codigo);
     setNome(job.nome);
     setDescricao(job.descricao ?? "");
     setErros({});
@@ -233,7 +201,6 @@ function JobInternoRow({
   function salvar() {
     const fd = new FormData();
     fd.set("id", job.id);
-    fd.set("codigo", codigo);
     fd.set("nome", nome);
     fd.set("descricao", descricao);
     startTransition(async () => {
@@ -264,34 +231,6 @@ function JobInternoRow({
         {editando ? (
           <input
             type="text"
-            value={codigo}
-            onChange={(e) => {
-              setCodigo(e.target.value);
-              if (erros.codigo) setErros((p) => ({ ...p, codigo: [] }));
-            }}
-            disabled={pending}
-            className={cn(
-              "w-full h-9 rounded-md border bg-white px-2 text-sm focus:outline-none focus:ring-2",
-              erros.codigo?.length
-                ? "border-california-red focus:ring-california-red/15"
-                : "border-border focus:border-california-red focus:ring-california-red/15",
-            )}
-          />
-        ) : (
-          <span
-            className={cn(
-              "font-mono text-xs font-semibold",
-              arquivado ? "text-muted-foreground line-through" : "text-foreground",
-            )}
-          >
-            {job.codigo}
-          </span>
-        )}
-      </td>
-      <td className="px-4 py-3 align-top">
-        {editando ? (
-          <input
-            type="text"
             value={nome}
             onChange={(e) => {
               setNome(e.target.value);
@@ -308,6 +247,7 @@ function JobInternoRow({
         ) : (
           <span
             className={cn(
+              "font-medium",
               arquivado && "text-muted-foreground line-through",
             )}
           >

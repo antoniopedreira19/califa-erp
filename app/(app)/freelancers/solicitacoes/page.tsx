@@ -49,7 +49,7 @@ export default async function SolicitacoesPage({
   let query = supabase
     .from("freelancer_solicitacoes")
     .select(
-      "*, solicitante:profiles!solicitante_id(nome, email), job:jobs(codigo, nome), job_interno:freelancer_jobs_internos(codigo, nome)",
+      "*, solicitante:profiles!solicitante_id(nome, email), job:jobs(codigo, nome), job_interno:freelancer_jobs_internos(nome)",
     )
     .eq("tenant_id", tenantId);
 
@@ -127,6 +127,10 @@ export default async function SolicitacoesPage({
       .eq("tenant_id", tenantId),
   ]);
 
+  if (solicitacoesRes.error) {
+    console.error("[solicitacoes.list]", solicitacoesRes.error.message, solicitacoesRes.error);
+  }
+
   // Calcula tipo_solicitacao (contratacao/renovacao) a partir dos contratos
   // efetivos de cada freelancer. "Efetivo" = tem nome_job preenchido.
   const freelancerIdsNaLista = Array.from(
@@ -188,9 +192,9 @@ export default async function SolicitacoesPage({
       solicitante_nome: s.solicitante?.nome ?? null,
       solicitante_email: s.solicitante?.email ?? null,
       // COALESCE das duas fontes: produção → `job`, interno → `job_interno`.
-      // Fallback pro texto preservado das solicitações legadas do RH antigo
-      // (job_id null, mas `nome_job` traz o nome como texto).
-      job_codigo: s.job?.codigo ?? s.job_interno?.codigo ?? null,
+      // Internos não têm código. Fallback pro texto preservado das solicitações
+      // legadas do RH antigo (job_id null, mas `nome_job` traz o nome).
+      job_codigo: s.job?.codigo ?? null,
       job_nome: s.job?.nome ?? s.job_interno?.nome ?? s.nome_job ?? null,
       tipo_solicitacao,
     };

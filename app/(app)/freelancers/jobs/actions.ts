@@ -29,7 +29,6 @@ export async function criarJobInterno(formData: FormData): Promise<ActionResult>
   }
 
   const parsed = criarJobInternoSchema.safeParse({
-    codigo: formData.get("codigo")?.toString() ?? "",
     nome: formData.get("nome")?.toString() ?? "",
     descricao: formData.get("descricao")?.toString() ?? "",
   });
@@ -46,7 +45,6 @@ export async function criarJobInterno(formData: FormData): Promise<ActionResult>
     .from("freelancer_jobs_internos")
     .insert({
       tenant_id: session.activeTenant.id,
-      codigo: parsed.data.codigo,
       nome: parsed.data.nome,
       descricao: parsed.data.descricao,
       created_by: session.profile.id,
@@ -55,13 +53,6 @@ export async function criarJobInterno(formData: FormData): Promise<ActionResult>
     .single();
 
   if (error) {
-    if (error.code === "23505") {
-      return {
-        ok: false,
-        message: "Já existe um job interno com esse código",
-        fieldErrors: { codigo: ["Código já em uso"] },
-      };
-    }
     return { ok: false, message: error.message };
   }
 
@@ -70,7 +61,7 @@ export async function criarJobInterno(formData: FormData): Promise<ActionResult>
     tenantId: session.activeTenant.id,
     entidadeTipo: "freelancer_job_interno",
     entidadeId: data.id,
-    metadata: { codigo: parsed.data.codigo, nome: parsed.data.nome },
+    metadata: { nome: parsed.data.nome },
   });
 
   revalidatePath("/freelancers/jobs");
@@ -85,7 +76,6 @@ export async function editarJobInterno(formData: FormData): Promise<ActionResult
 
   const parsed = editarJobInternoSchema.safeParse({
     id: formData.get("id")?.toString() ?? "",
-    codigo: formData.get("codigo")?.toString() ?? "",
     nome: formData.get("nome")?.toString() ?? "",
     descricao: formData.get("descricao")?.toString() ?? "",
   });
@@ -101,7 +91,6 @@ export async function editarJobInterno(formData: FormData): Promise<ActionResult
   const { error } = await supabase
     .from("freelancer_jobs_internos")
     .update({
-      codigo: parsed.data.codigo,
       nome: parsed.data.nome,
       descricao: parsed.data.descricao,
       updated_by: session.profile.id,
@@ -110,13 +99,6 @@ export async function editarJobInterno(formData: FormData): Promise<ActionResult
     .eq("tenant_id", session.activeTenant.id);
 
   if (error) {
-    if (error.code === "23505") {
-      return {
-        ok: false,
-        message: "Já existe um job interno com esse código",
-        fieldErrors: { codigo: ["Código já em uso"] },
-      };
-    }
     return { ok: false, message: error.message };
   }
 
@@ -125,7 +107,7 @@ export async function editarJobInterno(formData: FormData): Promise<ActionResult
     tenantId: session.activeTenant.id,
     entidadeTipo: "freelancer_job_interno",
     entidadeId: parsed.data.id,
-    metadata: { codigo: parsed.data.codigo, nome: parsed.data.nome },
+    metadata: { nome: parsed.data.nome },
   });
 
   revalidatePath("/freelancers/jobs");

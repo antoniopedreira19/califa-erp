@@ -26,10 +26,10 @@ export async function jobsProPickerDeFreelancer(
       .limit(500),
     supabase
       .from("freelancer_jobs_internos")
-      .select("id, codigo, nome")
+      .select("id, nome")
       .eq("tenant_id", tenantId)
       .is("arquivado_em", null)
-      .order("codigo", { ascending: true }),
+      .order("nome", { ascending: true }),
   ]);
 
   const producao: JobItem[] = (producaoRes.data ?? []).map(
@@ -41,9 +41,11 @@ export async function jobsProPickerDeFreelancer(
     }),
   );
   const interno: JobItem[] = (internoRes.data ?? []).map(
-    (j: { id: string; codigo: string; nome: string }) => ({
+    (j: { id: string; nome: string }) => ({
       id: j.id,
-      codigo: j.codigo,
+      // Internos não têm código — passa string vazia (o Combobox só mostra
+      // na busca/descrição, não no label principal).
+      codigo: "",
       nome: j.nome,
       origem: "interno" as const,
     }),
