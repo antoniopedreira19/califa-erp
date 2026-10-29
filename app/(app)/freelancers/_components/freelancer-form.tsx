@@ -276,6 +276,21 @@ export function FreelancerForm({ modo, freelancer }: Props) {
 
       {/* ============== Endereço ============== */}
       <Secao titulo="Endereço" descricao="CEP preenche rua, bairro e cidade automaticamente.">
+        {freelancer?.endereco_legado &&
+          !state.rua.trim() &&
+          !state.bairro.trim() && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs">
+              <p className="font-semibold text-amber-900">
+                Endereço do RH antigo (texto livre):
+              </p>
+              <p className="mt-1 whitespace-pre-line text-amber-800">
+                {freelancer.endereco_legado}
+              </p>
+              <p className="mt-1.5 text-[11px] text-amber-700/80">
+                Preencha os campos abaixo pra padronizar — depois esse texto some.
+              </p>
+            </div>
+          )}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Campo rotulo="CEP" erro={fieldErrors.cep}>
             <CepInput

@@ -372,7 +372,7 @@ export default async function FreelancerPerfilPage({
     );
   })();
   const temContato = !!(freelancer.email || freelancer.celular);
-  const temEndereco = !!(
+  const temEnderecoEstruturado = !!(
     freelancer.cep ||
     freelancer.rua ||
     freelancer.numero ||
@@ -380,6 +380,7 @@ export default async function FreelancerPerfilPage({
     freelancer.bairro ||
     freelancer.cidade
   );
+  const temEndereco = temEnderecoEstruturado || !!freelancer.endereco_legado;
   const temPj = !!(freelancer.cnpj && freelancer.razao_social);
   const temPagamento = !!(
     freelancer.tipo_pagamento ||
@@ -454,22 +455,39 @@ export default async function FreelancerPerfilPage({
 
       {temEndereco && (
         <BlocoInfo icon={MapPin} titulo="Endereço">
-          {freelancer.cep && <Linha rotulo="CEP" valor={formatCep(freelancer.cep)} />}
-          {freelancer.rua && (
-            <Linha
-              rotulo="Rua"
-              valor={
-                freelancer.numero
-                  ? `${freelancer.rua}, ${freelancer.numero}`
-                  : freelancer.rua
-              }
-            />
+          {temEnderecoEstruturado ? (
+            <>
+              {freelancer.cep && <Linha rotulo="CEP" valor={formatCep(freelancer.cep)} />}
+              {freelancer.rua && (
+                <Linha
+                  rotulo="Rua"
+                  valor={
+                    freelancer.numero
+                      ? `${freelancer.rua}, ${freelancer.numero}`
+                      : freelancer.rua
+                  }
+                />
+              )}
+              {freelancer.complemento && (
+                <Linha rotulo="Complemento" valor={freelancer.complemento} />
+              )}
+              {freelancer.bairro && <Linha rotulo="Bairro" valor={freelancer.bairro} />}
+              {freelancer.cidade && <Linha rotulo="Cidade" valor={freelancer.cidade} />}
+            </>
+          ) : (
+            // Endereço só vem do RH antigo (texto livre). Mostramos como veio,
+            // com nota pra deixar claro que o RH precisa migrar pros campos
+            // estruturados quando editar a pessoa.
+            <div className="space-y-1.5">
+              <p className="text-sm whitespace-pre-line">
+                {freelancer.endereco_legado}
+              </p>
+              <p className="text-[11px] text-muted-foreground italic">
+                Endereço migrado do RH antigo. Preencha os campos estruturados
+                ao editar.
+              </p>
+            </div>
           )}
-          {freelancer.complemento && (
-            <Linha rotulo="Complemento" valor={freelancer.complemento} />
-          )}
-          {freelancer.bairro && <Linha rotulo="Bairro" valor={freelancer.bairro} />}
-          {freelancer.cidade && <Linha rotulo="Cidade" valor={freelancer.cidade} />}
         </BlocoInfo>
       )}
 

@@ -144,7 +144,11 @@ function composeEndereco(f: Freelancer): string {
     f.bairro,
     f.cidade,
   ].filter(Boolean);
-  return partes.join(", ");
+  const estruturado = partes.join(", ");
+  // Fallback: freelancer migrado do RH antigo com só o texto livre
+  // (`endereco_legado`) preenchido — a minuta mostra o texto como veio.
+  if (estruturado) return estruturado;
+  return (f.endereco_legado ?? "").trim();
 }
 
 /**

@@ -6000,6 +6000,10 @@ export interface Freelancer {
   complemento: string | null;
   bairro: string | null;
   cidade: string | null;
+  /** Texto livre migrado do RH antigo (campo `endereco` lá). Fallback de
+   *  leitura quando os campos estruturados estão vazios — não editável pelo
+   *  form novo. Fica no banco como snapshot histórico. */
+  endereco_legado: string | null;
 
   // Pessoa jurídica (par obrigatório: ou os dois null, ou os dois preenchidos)
   cnpj: string | null;
