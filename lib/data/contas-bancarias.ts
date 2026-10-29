@@ -49,7 +49,11 @@ export async function listarContasBancarias(
       // A conta espelho do CARTÃO fica de fora: ela não recebe nem paga
       // direto. Quem escolhe conta aqui é a abertura do job, para dizer
       // por onde o dinheiro entra e sai de verdade (28/08/2026).
-      .neq("tipo", "cartao_credito")
+      // A de investimento e a de caixa (o fundo fixo) também ficam de
+      // fora: aplicação e dinheiro em espécie não recebem do cliente nem
+      // pagam fornecedor, e as sete que existiam só embaralhavam a lista
+      // (29/10/2026).
+      .not("tipo", "in", "(cartao_credito,investimento,caixa)")
       .order("ordem", { ascending: true })
       .order("nome", { ascending: true }),
     supabase.rpc("fc_saldos_por_conta", { p_data: hoje }),

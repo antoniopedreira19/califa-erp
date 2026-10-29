@@ -2448,6 +2448,9 @@ export interface JobGrupo {
   nome: string;
   ordem: number;
   criado_na_errata_id: string | null;
+  /** Decisão 226 (29/10/2026): quem criou o agrupamento fora da errata, junto
+   *  de linhas vermelhas. Nulo nos da versão e nos criados por errata. */
+  criado_por: string | null;
   removido_em: string | null;
   removido_na_errata_id: string | null;
   created_at: string;

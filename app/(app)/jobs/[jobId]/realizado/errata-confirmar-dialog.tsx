@@ -70,6 +70,9 @@ interface Props {
   /** Decisão 226: as linhas vermelhas novas que entram FORA da errata (pela
    *  chave do rascunho), com o agrupamento de cada uma. */
   vermelhasForaDaErrata: Array<{ chave: string; grupo: string }>;
+  /** Os agrupamentos novos só de linhas vermelhas, que nascem junto com
+   *  elas fora da errata (revisão de 29/10/2026). */
+  gruposForaDaErrata: string[];
 }
 
 function corDoDelta(delta: number): string {
@@ -220,6 +223,7 @@ export function ErrataConfirmarDialog({
   modo,
   pronta,
   vermelhasForaDaErrata,
+  gruposForaDaErrata,
 }: Props) {
   const prepara = modo === "prepara";
   // Decisão 226: a linha vermelha nova não é errata — sai da lista do que
@@ -227,6 +231,9 @@ export function ErrataConfirmarDialog({
   const grupoDaVermelha = new Map(vermelhasForaDaErrata.map((v) => [v.chave, v.grupo]));
   const vermelhas = mudancas.filter((m) => grupoDaVermelha.has(m.chave));
   const daErrata = mudancas.filter((m) => !grupoDaVermelha.has(m.chave));
+  const estruturaDaErrata = estrutura.filter(
+    (m) => !(m.tipo === "grupo_novo" && gruposForaDaErrata.includes(m.chave)),
+  );
   const [descricao, setDescricao] = React.useState("");
 
   // Zera a cada abertura: o texto de uma errata não pode vazar para a
@@ -242,7 +249,7 @@ export function ErrataConfirmarDialog({
   // A errata que só reorganiza a planilha (decisão 162) não muda número
   // nenhum: o pop-up não mostra o bloco de valores. Ela devolve o job ao
   // mural como qualquer errata, e o financeiro vê que nenhum valor mudou.
-  const soOrganizacao = daErrata.length === 0 && estrutura.length > 0;
+  const soOrganizacao = daErrata.length === 0 && estruturaDaErrata.length > 0;
   const podeConfirmar =
     descricaoOk && !faltaNomear && !salvando && (mudancas.length > 0 || estrutura.length > 0);
 
@@ -391,13 +398,13 @@ export function ErrataConfirmarDialog({
 
           {/* O que muda na organização (decisão 162): mover, renomear,
               criar agrupamento, e o que ficou vazio sai. Não muda valor. */}
-          {estrutura.length > 0 && (
+          {estruturaDaErrata.length > 0 && (
             <section className="rounded-xl border border-border">
               <h3 className="border-b border-border px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
                 O que muda na organização
               </h3>
               <ul className="divide-y divide-border">
-                {estrutura.map((m) => (
+                {estruturaDaErrata.map((m) => (
                   <li key={`${m.tipo}:${m.chave}`} className="flex items-center gap-2 px-3.5 py-2">
                     <LinhaDeEstrutura m={m} />
                   </li>

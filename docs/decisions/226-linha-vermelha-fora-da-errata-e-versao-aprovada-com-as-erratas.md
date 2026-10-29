@@ -1,7 +1,8 @@
 # 226 — A linha vermelha sai da errata, e a versão aprovada mostra as erratas
 
 **Data:** 2026-10-28
-**Status:** implementada em 28/10/2026.
+**Status:** implementada em 28/10/2026; revista em 29/10/2026 (agrupamento
+novo só de linhas vermelhas e linha com todas as PPs canceladas, no fim).
 **Quem decidiu:** Tiago. Pedido em 28/10/2026: "ao gerarmos uma linha
 vermelha a alteração não seja considerada uma errata e o novo item já fique
 disponível para a geração de PPs, mesmo sem aprovação ou do financeiro", e
@@ -96,13 +97,29 @@ só aceita orçamento sem job aberto.
 Junto desta entrega: o "Cancelar" da calha da errata trava também com PP só
 gerada (nota de 28/10/2026 na [151](151-errata-nao-mexe-no-planejado-e-cancela-linha.md)).
 
-## Em aberto
+## Revisão de 29/10/2026
 
-- **Vermelha num agrupamento novo:** fica na errata. Em 28/10/2026 o
-  BOC-1003/26 tinha uma errata pronta do produtor com 7 linhas vermelhas num
-  agrupamento novo "LINHA VERMELHA" — esse caso continua esperando o GP.
-- **Linha cuja única PP foi cancelada:** a tela oferece "Cancelar" e o
-  servidor recusa (nota na 151).
+- **Agrupamento novo só de linhas vermelhas** (Tiago: "desde que seja
+  composto apenas por linhas vermelhas"): nasce junto com elas, fora da
+  errata. Com item normal ou linha movida para ele, segue errata, com as
+  vermelhas dentro; o de um mês novo da errata (219) também. A regra está em
+  `gruposSoDeVermelhas` (servidor) e em `gruposForaDaErrata` (rascunho da
+  tela). Banco: `jobs_grupos.criado_por` e a mesma função, que passa a
+  receber `{grupos, linhas}` (migration `20261029800001`). O histórico da
+  planilha tira o agrupamento junto da linha vermelha que o criou, e a versão
+  aprovada do orçamento não mostra agrupamento sem linha do cliente. Com
+  isso, a errata pronta do BOC-1003/26 (7 vermelhas no agrupamento novo
+  "LINHA VERMELHA" e 1 linha alterada) sai, no envio do GP, com o
+  agrupamento e as vermelhas fora da errata.
+- **Linha com todas as PPs canceladas** se cancela pela errata (Tiago):
+  `barrarCancelamento` passa a ler só PP não cancelada. A recusa antiga vinha
+  da FK `on delete restrict`, que era da remoção; desde a 151 a errata
+  cancela a linha. Ver a nota na 151.
+- Conferido: TES-1003/26 ganhou o agrupamento "ZZ Teste 226 grupo vermelho"
+  com uma linha vermelha, sem errata (seguem 6) e fora do mural; o orçamento
+  dele segue com 1 grupo e 3 itens. TES-1025/26: o Item 3 (única PP,
+  PP-00244, cancelada) foi cancelado pela errata "Teste da decisão 226
+  (29/10)".
 
 ## Conferência (28/10/2026)
 

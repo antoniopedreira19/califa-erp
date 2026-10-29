@@ -35,6 +35,7 @@ function grupo(id: string, nome: string, ordem: number, extra: Partial<JobGrupo>
     nome,
     ordem,
     criado_na_errata_id: null,
+    criado_por: null,
     removido_em: null,
     removido_na_errata_id: null,
     created_at: "2026-10-01T12:00:00Z",
@@ -591,4 +592,21 @@ test("decisão 226: o histórico do orçamento tira a linha vermelha e termina n
   assert.equal(aprovada.quando, "2026-09-30T12:00:00Z");
   assert.equal(porId(aprovada.itens, "1")?.valor_unitario_orcado, 1000);
   assert.equal(porId(aprovada.itens, "v"), undefined);
+});
+
+test("decisão 226 (29/10): o agrupamento criado com a linha vermelha sai com ela", () => {
+  const versoes = montarHistorico(
+    base({
+      linhas: [
+        linha("1", "ga", 1, 1000, 800),
+        linha("v", "gv", 1, 0, 0, { item_versao_id: null, linha_vermelha: true, item: "Van extra" }),
+      ],
+      grupos: [grupo("ga", "Agrupamento A", 1), grupo("gv", "LINHA VERMELHA", 2, { criado_por: "pessoa" })],
+      linhasVermelhas: [
+        { id: "v", item: "Van extra", grupo: "LINHA VERMELHA", quando: "2026-10-10T12:00:00Z", por: null },
+      ],
+    }),
+  );
+  assert.ok(versoes[1].grupos.some((g) => g.id === "gv"));
+  assert.equal(versoes[2].grupos.some((g) => g.id === "gv"), false);
 });

@@ -54,6 +54,9 @@ import {
 } from "@/lib/calculos/organizacao-errata";
 
 /** O agrupamento como a errata o deixa. */
+/** Mês de verdade da versão (uuid); o mês novo da errata tem outra chave. */
+const UUID_DO_MES = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export interface GrupoDaErrata extends VersaoOrcamentoGrupo {
   /** O nome gravado no job; `null` no agrupamento criado nesta errata. */
   nomeSalvo: string | null;
@@ -206,6 +209,9 @@ export interface RascunhoErrata {
   vermelhasForaDaErrata: string[];
   /** Só há linha vermelha nova no rascunho: salvar não é errata. */
   soVermelhas: boolean;
+  /** Os agrupamentos novos só de linhas vermelhas, que nascem junto com elas
+   *  fora da errata (revisão de 29/10/2026). */
+  gruposForaDaErrata: string[];
   /** A chave do rascunho da N-ésima linha nova do pedido (`nova:N`). */
   chaveDaNovaDoPedido: (chavePedido: string) => string | null;
   /** O que vai à action: o conteúdo da errata (o mesmo que a errata
@@ -896,19 +902,37 @@ export function useRascunhoErrata(
 
   const faltaNomear = novas.some((n) => n.item.trim() === "");
 
-  // Decisão 226: a vermelha nova num agrupamento que já existe sai da
-  // errata. A criada num agrupamento novo desta errata fica nela — o
-  // agrupamento só nasce com a errata.
+  // Decisão 226: a vermelha nova sai da errata. Num agrupamento que já
+  // existe, sempre; num agrupamento novo desta errata, só quando ele é
+  // composto APENAS por linhas vermelhas novas — aí ele nasce junto com
+  // elas (revisão de 29/10/2026). O agrupamento novo de um mês novo
+  // (decisão 219) fica na errata.
+  const gruposForaDaErrata = React.useMemo(() => {
+    const vermelhas = new Set(novas.filter((n) => n.vermelha).map((n) => n.chave));
+    const saem = new Set(gruposQueSaem);
+    return grupos
+      .filter((g) => {
+        if (g.nomeSalvo !== null || saem.has(g.id)) return false;
+        if (g.mes_id !== null && !UUID_DO_MES.test(g.mes_id)) return false;
+        const doGrupo = itens.filter((i) => i.grupo_id === g.id);
+        return doGrupo.length > 0 && doGrupo.every((i) => vermelhas.has(i.id));
+      })
+      .map((g) => g.id);
+  }, [novas, grupos, gruposQueSaem, itens]);
   const vermelhasForaDaErrata = React.useMemo(() => {
     const grupoDe = new Map(itens.map((i) => [i.id, i.grupo_id]));
     return novas
-      .filter((n) => n.vermelha && !(grupoDe.get(n.chave) ?? n.grupoId).startsWith(PREFIXO_GRUPO_NOVO))
+      .filter((n) => {
+        if (!n.vermelha) return false;
+        const g = grupoDe.get(n.chave) ?? n.grupoId;
+        return !g.startsWith(PREFIXO_GRUPO_NOVO) || gruposForaDaErrata.includes(g);
+      })
       .map((n) => n.chave);
-  }, [novas, itens]);
+  }, [novas, itens, gruposForaDaErrata]);
   const soVermelhas =
     mudancas.length > 0 &&
-    estrutura.length === 0 &&
-    mudancas.every((m) => m.acao === "nova" && vermelhasForaDaErrata.includes(m.chave));
+    mudancas.every((m) => m.acao === "nova" && vermelhasForaDaErrata.includes(m.chave)) &&
+    estrutura.every((m) => m.tipo === "grupo_novo" && gruposForaDaErrata.includes(m.chave));
   const chaveDaNovaDoPedido = React.useCallback(
     (chavePedido: string) => {
       const k = /^nova:(\d+)$/.exec(chavePedido);
@@ -1039,6 +1063,7 @@ export function useRascunhoErrata(
     faltaNomear,
     vermelhasForaDaErrata,
     soVermelhas,
+    gruposForaDaErrata,
     chaveDaNovaDoPedido,
     payload,
     grupos,

@@ -202,8 +202,10 @@ TES-1008/26). Agora a calha trava também com PP gerada, com o motivo
 "Linha com Pedido de Produção não pode ser cancelada.". Editar valor, QT,
 D/M e tipo da linha com PP gerada continua permitido (040).
 
-Fica em aberto: a linha cuja única PP foi **cancelada** ainda mostra o
-"Cancelar" livre e o servidor recusa na confirmação. A PP cancelada não
-chega à tela (`ppsPorItemId` a deixa de fora), e a razão original da recusa
-(a FK `on delete restrict`) era da remoção, que a 151 trocou pelo
-cancelamento.
+**29/10/2026 — linha com todas as PPs canceladas se cancela** (Tiago): o
+servidor passa a ler só PP não cancelada em `barrarCancelamento`, e a tela,
+que já deixava a cancelada de fora (`ppsPorItemId`), oferece o "Cancelar".
+A recusa antiga vinha da FK `on delete restrict`, que era da remoção — desde
+esta decisão a errata cancela a linha, e a PP cancelada continua apontando
+para ela. Com PP não cancelada (gerada inclusive), segue travado. Conferido
+no TES-1025/26 (Item 3, PP-00244 cancelada).

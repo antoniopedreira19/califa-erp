@@ -139,5 +139,11 @@ export async function planilhaDoJobNaVersao(
     };
   });
 
-  return { ok: true, planilha: { jobId, grupos, itens, idDaLinhaDoJob } };
+  // O agrupamento só de linhas vermelhas (29/10/2026) fica sem linha do
+  // cliente: não aparece no orçamento.
+  const comLinha = new Set(itens.map((i) => i.grupo_id));
+  return {
+    ok: true,
+    planilha: { jobId, grupos: grupos.filter((g) => comLinha.has(g.id)), itens, idDaLinhaDoJob },
+  };
 }

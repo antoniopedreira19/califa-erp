@@ -338,10 +338,13 @@ const MOTIVO_TRAVA_PP =
   "Linha com Pedido de Produção já no financeiro não entra em errata. Corrija o que falta em outra linha, ou cancele a PP antes.";
 
 /** Linha com PP só gerada ainda entra na errata (decisão 040), mas não pode
- *  ser cancelada: `barrarCancelamento`, no servidor, recusa qualquer PP no
- *  histórico da linha. Até 28/10/2026 a calha oferecia o "Cancelar" e o
- *  erro só vinha na confirmação. */
-const MOTIVO_CANCELAR_COM_PP = "Linha com Pedido de Produção não pode ser cancelada.";
+ *  ser cancelada enquanto tiver PP que não foi cancelada:
+ *  `barrarCancelamento`, no servidor, recusa. Com todas as PPs canceladas a
+ *  linha se cancela (Tiago, 29/10/2026) — e `ppsPorItemId` já deixa a
+ *  cancelada de fora. Até 28/10/2026 a calha oferecia o "Cancelar" e o erro
+ *  só vinha na confirmação. */
+const MOTIVO_CANCELAR_COM_PP =
+  "Linha com Pedido de Produção não pode ser cancelada. Cancele as PPs dela antes.";
 
 /** Linha cancelada por errata (decisão 151): fica na planilha com o
  *  orçado e, desde 15/10/2026, o planejado zerados, e não entra mais em

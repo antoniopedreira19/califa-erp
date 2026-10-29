@@ -659,7 +659,10 @@ export default async function JobDetailPage({
 
       {/* Fora das abas de propósito: as ações são do job, não da aba de
           Informações. Substitui o card "Status", que vivia no corpo da aba
-          — ver <BarraAcoesJob>. */}
+          — ver <BarraAcoesJob>. Aberta pelo Comitê (decisão 223), a página
+          é só para decidir: a barra de faturamento e encerramento sai, e a
+          de decisão fica sozinha no rodapé. */}
+      {!emDecisao && (
       <BarraAcoesJob
         jobId={job.id}
         jobCodigo={job.codigo}
@@ -717,6 +720,7 @@ export default async function JobDetailPage({
           midia: detalhe.midia?.params ?? null,
         }}
       />
+      )}
     </div>
   );
 }
