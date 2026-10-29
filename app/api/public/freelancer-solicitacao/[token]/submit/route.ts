@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/lib/supabase/server";
-import { freelancerSchema } from "@/lib/validations/freelancers";
+import { freelancerCriarSchema } from "@/lib/validations/freelancers";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { isValidCpf, onlyDigits } from "@/lib/utils";
 
@@ -46,7 +46,7 @@ export async function POST(
     );
   }
 
-  const parsed = freelancerSchema.safeParse(raw);
+  const parsed = freelancerCriarSchema.safeParse(raw);
   if (!parsed.success) {
     return NextResponse.json(
       {

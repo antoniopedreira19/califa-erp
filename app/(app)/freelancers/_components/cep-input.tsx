@@ -16,6 +16,7 @@ export interface CepInputProps {
   id?: string;
   defaultValue?: string;
   disabled?: boolean;
+  required?: boolean;
   onEnderecoEncontrado?: (dados: {
     rua: string;
     bairro: string;
@@ -35,6 +36,7 @@ export function CepInput({
   id,
   defaultValue,
   disabled,
+  required,
   onEnderecoEncontrado,
   onDigitsChange,
 }: CepInputProps) {
@@ -69,6 +71,7 @@ export function CepInput({
         id={id}
         defaultValue={defaultValue}
         disabled={disabled || buscando}
+        required={required}
         onDigitsChange={(d) => {
           setDigits(d);
           onDigitsChange?.(d);

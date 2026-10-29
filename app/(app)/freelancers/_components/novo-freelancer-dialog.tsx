@@ -242,8 +242,8 @@ export function NovoFreelancerDialog({
       if (!cidade) return "Selecione a cidade";
     }
     if (n === 3) {
-      if (cnpj && !razaoSocial.trim())
-        return "Razão Social obrigatória quando CNPJ é preenchido";
+      if (!cnpj || !razaoSocial.trim())
+        return "CNPJ e Razão Social são obrigatórios (contrato é emitido pra PJ)";
       if (!banco.trim() || !agencia.trim() || !conta.trim())
         return "Dados bancários (banco, agência, conta) são obrigatórios";
       // Decisão 212: a chave PIX vai com o tipo, no formato que o banco aceita.

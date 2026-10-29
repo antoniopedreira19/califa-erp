@@ -275,7 +275,10 @@ export function FreelancerForm({ modo, freelancer }: Props) {
       </Secao>
 
       {/* ============== Endereço ============== */}
-      <Secao titulo="Endereço" descricao="CEP preenche rua, bairro e cidade automaticamente.">
+      <Secao
+        titulo="Endereço"
+        descricao="CEP preenche rua, bairro e cidade automaticamente. Todos obrigatórios (menos complemento)."
+      >
         {freelancer?.endereco_legado && !state.rua.trim() && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs">
               <p className="font-semibold text-amber-900">
@@ -290,11 +293,12 @@ export function FreelancerForm({ modo, freelancer }: Props) {
             </div>
           )}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Campo rotulo="CEP" erro={fieldErrors.cep}>
+          <Campo rotulo="CEP *" erro={fieldErrors.cep}>
             <CepInput
               name="cep"
               defaultValue={state.cep}
               disabled={pending}
+              required
               onEnderecoEncontrado={(d) => {
                 setState((s) => ({
                   ...s,
@@ -305,32 +309,35 @@ export function FreelancerForm({ modo, freelancer }: Props) {
               }}
             />
           </Campo>
-          <Campo rotulo="Cidade" erro={fieldErrors.cidade} className="sm:col-span-2">
+          <Campo rotulo="Cidade *" erro={fieldErrors.cidade} className="sm:col-span-2">
             <Input
               name="cidade"
               value={state.cidade}
               onChange={(e) => set("cidade", e.target.value)}
               disabled={pending}
+              required
             />
           </Campo>
         </div>
 
-        <Campo rotulo="Rua" erro={fieldErrors.rua}>
+        <Campo rotulo="Rua *" erro={fieldErrors.rua}>
           <Input
             name="rua"
             value={state.rua}
             onChange={(e) => set("rua", e.target.value)}
             disabled={pending}
+            required
           />
         </Campo>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Campo rotulo="Número" erro={fieldErrors.numero}>
+          <Campo rotulo="Número *" erro={fieldErrors.numero}>
             <Input
               name="numero"
               value={state.numero}
               onChange={(e) => set("numero", e.target.value)}
               disabled={pending}
+              required
             />
           </Campo>
           <Campo rotulo="Complemento" erro={fieldErrors.complemento}>
@@ -342,12 +349,13 @@ export function FreelancerForm({ modo, freelancer }: Props) {
               disabled={pending}
             />
           </Campo>
-          <Campo rotulo="Bairro" erro={fieldErrors.bairro}>
+          <Campo rotulo="Bairro *" erro={fieldErrors.bairro}>
             <Input
               name="bairro"
               value={state.bairro}
               onChange={(e) => set("bairro", e.target.value)}
               disabled={pending}
+              required
             />
           </Campo>
         </div>
@@ -355,30 +363,28 @@ export function FreelancerForm({ modo, freelancer }: Props) {
 
       {/* ============== Pessoa jurídica ============== */}
       <Secao
-        titulo="Pessoa jurídica (opcional)"
-        descricao="Preencha se o freelancer emite nota como PJ. CNPJ e Razão Social andam juntos."
+        titulo="Pessoa jurídica"
+        descricao="CNPJ e Razão Social são obrigatórios — o contrato é emitido pra PJ."
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Campo rotulo="CNPJ" erro={fieldErrors.cnpj}>
+          <Campo rotulo="CNPJ *" erro={fieldErrors.cnpj}>
             <MaskedInput
               mask="cnpj"
               name="cnpj"
               defaultValue={state.cnpj}
               onDigitsChange={(d) => set("cnpj", d)}
               disabled={pending}
+              required
             />
           </Campo>
-          <Campo
-            rotulo={temPj ? "Razão Social *" : "Razão Social"}
-            erro={fieldErrors.razao_social}
-          >
+          <Campo rotulo="Razão Social *" erro={fieldErrors.razao_social}>
             <Input
               name="razao_social"
               value={state.razao_social}
               onChange={(e) => set("razao_social", e.target.value)}
               placeholder="Nome oficial da empresa"
               disabled={pending}
-              required={temPj}
+              required
             />
           </Campo>
         </div>

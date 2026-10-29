@@ -238,3 +238,35 @@ export const freelancerSchema = z
   );
 
 export type FreelancerInput = z.infer<typeof freelancerSchema>;
+
+/**
+ * Schema estrito usado em CRIAÇÃO (form admin "Novo freelancer" e form
+ * público preenchido pelo próprio freelancer). Exige endereço estruturado
+ * completo + CNPJ/razão social.
+ *
+ * A EDIÇÃO continua usando o schema base — validação cruzada de
+ * obrigatoriedade (com fallback pro `endereco_legado` dos migrados) é feita
+ * na action `atualizarFreelancer`, que lê o estado atual do banco. Isso
+ * evita bloquear o save dos 190 freelas migrados do RH antigo que estão
+ * sem o endereço estruturado mas com o legado preservado.
+ */
+export const freelancerCriarSchema = freelancerSchema.superRefine((v, ctx) => {
+  if (!v.cep)
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["cep"], message: "CEP obrigatório" });
+  if (!v.rua)
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["rua"], message: "Rua obrigatória" });
+  if (!v.numero)
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["numero"], message: "Número obrigatório" });
+  if (!v.bairro)
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["bairro"], message: "Bairro obrigatório" });
+  if (!v.cidade)
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["cidade"], message: "Cidade obrigatória" });
+  if (!v.cnpj)
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["cnpj"], message: "CNPJ obrigatório" });
+  if (!v.razao_social)
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["razao_social"],
+      message: "Razão Social obrigatória",
+    });
+});

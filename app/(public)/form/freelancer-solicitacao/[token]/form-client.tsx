@@ -69,9 +69,23 @@ export function FormClient({ token, nomePreenchido, cpfPreenchido }: Props) {
     setErroGeral(null);
     setFieldErrors({});
 
-    // Validação mínima no cliente — CPF é obrigatório no fluxo público
+    // Validação cliente: CPF + endereço estruturado + CNPJ/razão são
+    // obrigatórios no fluxo público (ADR 30/10/2026). Server valida de novo
+    // via freelancerCriarSchema.
+    const erros: Record<string, string[]> = {};
     if (!state.cpf || state.cpf.length !== 11 || !isValidCpf(state.cpf)) {
-      setFieldErrors({ cpf: ["CPF obrigatório e válido pra confirmar o cadastro"] });
+      erros.cpf = ["CPF obrigatório e válido pra confirmar o cadastro"];
+    }
+    if (!state.cep) erros.cep = ["CEP obrigatório"];
+    if (!state.rua.trim()) erros.rua = ["Rua obrigatória"];
+    if (!state.numero.trim()) erros.numero = ["Número obrigatório"];
+    if (!state.bairro.trim()) erros.bairro = ["Bairro obrigatório"];
+    if (!state.cidade.trim()) erros.cidade = ["Cidade obrigatória"];
+    if (!state.cnpj) erros.cnpj = ["CNPJ obrigatório"];
+    if (!state.razao_social.trim())
+      erros.razao_social = ["Razão Social obrigatória"];
+    if (Object.keys(erros).length > 0) {
+      setFieldErrors(erros);
       return;
     }
 
@@ -174,9 +188,10 @@ export function FormClient({ token, nomePreenchido, cpfPreenchido }: Props) {
 
       <Secao titulo="Endereço">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Campo rotulo="CEP" erro={fieldErrors.cep}>
+          <Campo rotulo="CEP *" erro={fieldErrors.cep}>
             <CepInput
               defaultValue={state.cep}
+              required
               onEnderecoEncontrado={(d) =>
                 setState((s) => ({
                   ...s,
@@ -187,21 +202,27 @@ export function FormClient({ token, nomePreenchido, cpfPreenchido }: Props) {
               }
             />
           </Campo>
-          <Campo rotulo="Cidade" erro={fieldErrors.cidade} className="sm:col-span-2">
+          <Campo rotulo="Cidade *" erro={fieldErrors.cidade} className="sm:col-span-2">
             <Input
               value={state.cidade}
               onChange={(e) => set("cidade", e.target.value)}
+              required
             />
           </Campo>
         </div>
-        <Campo rotulo="Rua" erro={fieldErrors.rua}>
-          <Input value={state.rua} onChange={(e) => set("rua", e.target.value)} />
+        <Campo rotulo="Rua *" erro={fieldErrors.rua}>
+          <Input
+            value={state.rua}
+            onChange={(e) => set("rua", e.target.value)}
+            required
+          />
         </Campo>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          <Campo rotulo="Número" erro={fieldErrors.numero}>
+          <Campo rotulo="Número *" erro={fieldErrors.numero}>
             <Input
               value={state.numero}
               onChange={(e) => set("numero", e.target.value)}
+              required
             />
           </Campo>
           <Campo rotulo="Complemento" erro={fieldErrors.complemento}>
@@ -210,32 +231,34 @@ export function FormClient({ token, nomePreenchido, cpfPreenchido }: Props) {
               onChange={(e) => set("complemento", e.target.value)}
             />
           </Campo>
-          <Campo rotulo="Bairro" erro={fieldErrors.bairro}>
+          <Campo rotulo="Bairro *" erro={fieldErrors.bairro}>
             <Input
               value={state.bairro}
               onChange={(e) => set("bairro", e.target.value)}
+              required
             />
           </Campo>
         </div>
       </Secao>
 
       <Secao
-        titulo="Pessoa jurídica (opcional)"
-        descricao="Preencha se emite nota como PJ."
+        titulo="Pessoa jurídica"
+        descricao="CNPJ e Razão Social são obrigatórios — o contrato é emitido pra PJ."
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Campo rotulo="CNPJ" erro={fieldErrors.cnpj}>
+          <Campo rotulo="CNPJ *" erro={fieldErrors.cnpj}>
             <MaskedInput
               mask="cnpj"
               defaultValue={state.cnpj}
               onDigitsChange={(d) => set("cnpj", d)}
+              required
             />
           </Campo>
-          <Campo rotulo={temPj ? "Razão Social *" : "Razão Social"} erro={fieldErrors.razao_social}>
+          <Campo rotulo="Razão Social *" erro={fieldErrors.razao_social}>
             <Input
               value={state.razao_social}
               onChange={(e) => set("razao_social", e.target.value)}
-              required={temPj}
+              required
             />
           </Campo>
         </div>

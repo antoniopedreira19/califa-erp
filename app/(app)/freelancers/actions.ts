@@ -5,7 +5,10 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
-import { freelancerSchema } from "@/lib/validations/freelancers";
+import {
+  freelancerCriarSchema,
+  freelancerSchema,
+} from "@/lib/validations/freelancers";
 
 export type ActionResult<T = undefined> =
   | { ok: true; data?: T }
@@ -24,12 +27,13 @@ function podeEscrever(role: string): boolean {
  * Lê FormData e aplica o schema. Normalização (dígitos puros, trim) é feita
  * pelo Zod via `.transform()`. Campos vazios viram null — o schema trata.
  */
-function parseFormData(formData: FormData) {
+function parseFormData(formData: FormData, strict = false) {
   const raw: Record<string, string> = {};
   for (const [k, v] of formData.entries()) {
     if (typeof v === "string") raw[k] = v;
   }
-  return freelancerSchema.safeParse(raw);
+  const schema = strict ? freelancerCriarSchema : freelancerSchema;
+  return schema.safeParse(raw);
 }
 
 type ErroTratado = {
@@ -100,7 +104,7 @@ export async function criarFreelancer(formData: FormData): Promise<ActionResult<
     return { ok: false, message: "Sem permissão para cadastrar freelancer" };
   }
 
-  const parsed = parseFormData(formData);
+  const parsed = parseFormData(formData, /* strict */ true);
   if (!parsed.success) {
     return {
       ok: false,
@@ -170,7 +174,9 @@ export async function criarFreelancerCompleto(
     if (typeof v === "string") raw[k] = v;
   }
   raw.tipo_pagamento = "conta_bancaria"; // sempre obrig. pelo fluxo integrado
-  const parsedFreela = freelancerSchema.safeParse(raw);
+  // Schema estrito aqui — cadastro via dialog admin é criação, igual ao
+  // "Novo freelancer" (ADR 30/10/2026: endereço + CNPJ obrigatórios).
+  const parsedFreela = freelancerCriarSchema.safeParse(raw);
   if (!parsedFreela.success) {
     return {
       ok: false,
@@ -440,6 +446,46 @@ export async function atualizarFreelancer(
   }
 
   const supabase = createClient();
+
+  // Validação cruzada de obrigatoriedade (ADR 30/10/2026): a tela de edição
+  // não pode salvar com endereço vazio OU CNPJ/razão vazios. Mas tolera o
+  // `endereco_legado` dos 176 freelas migrados do RH antigo. Lê o atual pra
+  // decidir — assim um save que não mexe nesses campos passa, e um save que
+  // tenta esvaziá-los é bloqueado.
+  const { data: atual } = await supabase
+    .from("freelancers")
+    .select("endereco_legado")
+    .eq("id", id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+
+  const temEnderecoEstruturado = !!(
+    parsed.data.rua &&
+    parsed.data.numero &&
+    parsed.data.bairro &&
+    parsed.data.cidade
+  );
+  const temEnderecoLegado = !!(atual as { endereco_legado: string | null } | null)
+    ?.endereco_legado;
+  const fieldErrorsCruzados: Record<string, string[]> = {};
+  if (!temEnderecoEstruturado && !temEnderecoLegado) {
+    if (!parsed.data.cep) fieldErrorsCruzados.cep = ["CEP obrigatório"];
+    if (!parsed.data.rua) fieldErrorsCruzados.rua = ["Rua obrigatória"];
+    if (!parsed.data.numero) fieldErrorsCruzados.numero = ["Número obrigatório"];
+    if (!parsed.data.bairro) fieldErrorsCruzados.bairro = ["Bairro obrigatório"];
+    if (!parsed.data.cidade) fieldErrorsCruzados.cidade = ["Cidade obrigatória"];
+  }
+  if (!parsed.data.cnpj) fieldErrorsCruzados.cnpj = ["CNPJ obrigatório"];
+  if (!parsed.data.razao_social)
+    fieldErrorsCruzados.razao_social = ["Razão Social obrigatória"];
+  if (Object.keys(fieldErrorsCruzados).length > 0) {
+    return {
+      ok: false,
+      message: "Preencha os campos obrigatórios",
+      fieldErrors: fieldErrorsCruzados,
+    };
+  }
+
   const { error } = await supabase
     .from("freelancers")
     .update({
