@@ -37,10 +37,23 @@ type ErroTratado = {
   fieldErrors?: Record<string, string[]>;
 };
 
+/**
+ * Extrai o nome do constraint da `error.message` do Postgres (via PostgREST).
+ * Formato típico: `... violates check constraint "freelancers_x"` ou
+ * `... violates unique constraint "freelancers_cpf_key"`. O supabase-js não
+ * popula `error.constraint` separado — o nome só vive dentro do message.
+ */
+function extrairConstraint(mensagem: string | undefined): string | undefined {
+  if (!mensagem) return undefined;
+  const m = mensagem.match(/constraint "([^"]+)"/);
+  return m?.[1];
+}
+
 function tratarErroPostgres(
   code: string | undefined,
-  constraint: string | undefined,
+  mensagem: string | undefined,
 ): ErroTratado | null {
+  const constraint = extrairConstraint(mensagem);
   if (code === "23505") {
     if (constraint?.includes("cpf")) {
       return {
@@ -66,7 +79,17 @@ function tratarErroPostgres(
         },
       };
     }
-    return { message: "Dados fora das regras do banco" };
+    if (constraint === "freelancers_pix_tipo_com_chave") {
+      return {
+        message: "Preencha a chave PIX junto com o tipo (ou deixe os dois vazios)",
+        fieldErrors: {
+          pix_chave: ["Obrigatório quando o tipo PIX está preenchido"],
+        },
+      };
+    }
+    return {
+      message: `Dados fora das regras do banco${constraint ? ` (${constraint})` : ""}`,
+    };
   }
   return null;
 }
