@@ -131,7 +131,7 @@ export const freelancerSchema = z
       .enum(["conta_bancaria", "pix"])
       .nullable()
       .optional()
-      .or(z.literal("")),
+      .or(z.literal("").transform(() => null)),
 
     banco: textoOpcional(100),
     agencia: textoOpcional(20),
@@ -161,7 +161,7 @@ export const freelancerSchema = z
       .enum(["contratar", "renovar", "manter", "substituir", "encerrar"])
       .nullable()
       .optional()
-      .or(z.literal("")),
+      .or(z.literal("").transform(() => null)),
   })
   .superRefine((v, ctx) => {
     // CNPJ + razão social são par
