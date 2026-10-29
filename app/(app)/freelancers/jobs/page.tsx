@@ -160,7 +160,7 @@ async function AbaInterno({
     .select("*")
     .eq("tenant_id", tenantId)
     .order("arquivado_em", { ascending: true, nullsFirst: true })
-    .order("codigo", { ascending: true });
+    .order("nome", { ascending: true });
 
   if (error) {
     console.error("[freelancers.jobs.internos]", error.message);
