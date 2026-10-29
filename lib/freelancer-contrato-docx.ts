@@ -117,10 +117,14 @@ function meseseDias(
   inicio: Date,
   termino: Date,
 ): { meses: number; dias: number } {
+  // Convenção: período em meses conta o dia-D até o mesmo dia-D de N meses
+  // depois como "N meses" cheios (não "N meses e 1 dia"). O +1 inclusivo só
+  // vale pro cálculo de diárias (ver `duracaoTexto`). Antes isso, a minuta
+  // saía com "3 meses e 1 dia" quando o form tinha pedido 3 meses redondos.
   let meses =
     (termino.getFullYear() - inicio.getFullYear()) * 12 +
     (termino.getMonth() - inicio.getMonth());
-  let dias = termino.getDate() - inicio.getDate() + 1;
+  let dias = termino.getDate() - inicio.getDate();
   if (dias < 0) {
     meses -= 1;
     const diasNoMesAnterior = new Date(
