@@ -13,9 +13,19 @@ import { useHistoricoDoOrcamento } from "./historico-do-orcamento";
 export function PlanilhaMensalDoHistorico(props: React.ComponentProps<typeof PlanilhaMensal>) {
   const historico = useHistoricoDoOrcamento();
   const antiga = historico?.versao ?? null;
+  // O mês que uma errata do job incluiu (decisão 219) não existia antes
+  // dela: na versão que o cliente aprovou, e em cada momento anterior, ele
+  // sai. Antes da errata o mês ainda não tem linha (Tiago, 29/10/2026).
+  const meses = React.useMemo(() => {
+    if (!antiga) return props.meses;
+    const mesDoGrupo = new Map(antiga.grupos.map((g) => [g.id, g.mes_id]));
+    const comLinha = new Set(antiga.itens.map((i) => mesDoGrupo.get(i.grupo_id)));
+    return props.meses.filter((m) => !m.incluido_na_errata_id || comLinha.has(m.id));
+  }, [antiga, props.meses]);
   return (
     <PlanilhaMensal
       {...props}
+      meses={meses}
       grupos={antiga ? antiga.grupos : props.grupos}
       itens={antiga ? antiga.itens : props.itens}
     />

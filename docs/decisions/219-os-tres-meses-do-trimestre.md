@@ -129,3 +129,15 @@ com a linha copiada (R$ 5.000 orçado, R$ 4.000 planejado), período
 financeiro pede a data de novembro; o orçamento mostra novembro "Incluído
 pela errata do job"; reabrindo a errata, só dezembro aparece. A revisão da
 abertura ficou pendente, de propósito.
+
+## ⚠️ Nota de 2026-10-29 — o mês da errata no Histórico do orçamento (decisão 226)
+
+Com a [226](226-linha-vermelha-fora-da-errata-e-versao-aprovada-com-as-erratas.md),
+a versão aprovada mostra a planilha do job, e o mês incluído pela errata
+aparece com as linhas dele. No "Histórico", porém, a vista "Aprovada pelo
+cliente" mostrava o mês vazio: os meses vinham da versão de hoje. A pedido
+do Tiago (29/10/2026), nas vistas antigas o mês incluído pela errata só
+aparece a partir do momento em que tem linha
+(`planilha-mensal-do-historico.tsx`). Conferido no orçamento do
+TES-1035/26: "Aprovada pelo cliente" só com outubro (R$ 6.959,12); o
+momento da errata com outubro e novembro.

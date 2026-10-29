@@ -6043,3 +6043,9 @@ A exceção da 204 deixou de ser "só o administrador". Quando uma regra ligada 
   `PlanilhaVersao`, pela `GruposSection`, pela `ItensTable` e, no mensal, pela
   `PlanilhaMensalDoHistorico`.
 - A exportação da versão aprovada sai sempre com a planilha de hoje.
+
+## ⚠️ Nota de 2026-10-29 — "Aprovada pelo cliente" sem o mês da errata (decisões 219 e 226)
+
+- No Histórico do orçamento mensal, o mês que a errata do job incluiu não
+  aparece mais nas vistas anteriores a ela ("Aprovada pelo cliente"); volta
+  no momento da errata. Conferido no orçamento do TES-1035/26.
