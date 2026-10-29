@@ -44,12 +44,14 @@ export default async function SolicitacoesPage({
   const tenantId = session.activeTenant.id;
 
   // Query da lista (sem order — a ordenação é client-side por prioridade de status)
-  // Embed polimórfico: solicitação aponta pra `job` (produção) OU
-  // `job_interno` (interno). O JS faz o COALESCE abaixo.
+  // Sem embed de job/job_interno aqui — fazemos lookup separado abaixo. O
+  // embed polimórfico via PostgREST esbarra em cache de schema stale com
+  // alguma frequência e isso já comeu a lista inteira em produção uma vez
+  // (29/10/2026). Mais robusto é um Promise.all adicional.
   let query = supabase
     .from("freelancer_solicitacoes")
     .select(
-      "*, solicitante:profiles!solicitante_id(nome, email), job:jobs(codigo, nome), job_interno:freelancer_jobs_internos(nome)",
+      "*, solicitante:profiles!solicitante_id(nome, email)",
     )
     .eq("tenant_id", tenantId);
 
@@ -131,11 +133,52 @@ export default async function SolicitacoesPage({
     console.error("[solicitacoes.list]", solicitacoesRes.error.message, solicitacoesRes.error);
   }
 
+  // Lookup dos jobs (produção + internos) referenciados pelas solicitações
+  // dessa lista. Query separada em vez de embed PostgREST — evita o problema
+  // de schema cache stale do PostgREST.
+  const linhasBrutas = (solicitacoesRes.data ?? []) as any[];
+  const jobIdsRef = Array.from(
+    new Set(
+      linhasBrutas
+        .map((s) => s.job_id as string | null)
+        .filter((id): id is string => !!id),
+    ),
+  );
+  const jobInternoIdsRef = Array.from(
+    new Set(
+      linhasBrutas
+        .map((s) => s.job_interno_id as string | null)
+        .filter((id): id is string => !!id),
+    ),
+  );
+  const [jobsLookupRes, jobsInternosLookupRes] = await Promise.all([
+    jobIdsRef.length > 0
+      ? supabase
+          .from("jobs")
+          .select("id, codigo, nome")
+          .in("id", jobIdsRef)
+      : Promise.resolve({ data: [] as any[], error: null }),
+    jobInternoIdsRef.length > 0
+      ? supabase
+          .from("freelancer_jobs_internos")
+          .select("id, nome")
+          .in("id", jobInternoIdsRef)
+      : Promise.resolve({ data: [] as any[], error: null }),
+  ]);
+  const jobsMap = new Map<string, { codigo: string; nome: string }>();
+  for (const j of (jobsLookupRes.data ?? []) as any[]) {
+    jobsMap.set(j.id, { codigo: j.codigo, nome: j.nome });
+  }
+  const jobsInternosMap = new Map<string, { nome: string }>();
+  for (const j of (jobsInternosLookupRes.data ?? []) as any[]) {
+    jobsInternosMap.set(j.id, { nome: j.nome });
+  }
+
   // Calcula tipo_solicitacao (contratacao/renovacao) a partir dos contratos
   // efetivos de cada freelancer. "Efetivo" = tem nome_job preenchido.
   const freelancerIdsNaLista = Array.from(
     new Set(
-      (solicitacoesRes.data ?? [])
+      linhasBrutas
         .map((s: any) => s.freelancer_id)
         .filter((id: string | null): id is string => !!id),
     ),
@@ -172,7 +215,7 @@ export default async function SolicitacoesPage({
     }
   }
 
-  const solicitacoes = ((solicitacoesRes.data ?? []) as any[]).map((s) => {
+  const solicitacoes = linhasBrutas.map((s) => {
     let tipo_solicitacao: "contratacao" | "renovacao" = "contratacao";
     if (s.freelancer_id) {
       const total = contratosPorFreela.get(s.freelancer_id) ?? 0;
@@ -184,6 +227,12 @@ export default async function SolicitacoesPage({
     const nomeCompleto = s.freelancer_id
       ? (nomeCompletoPorFreela.get(s.freelancer_id) ?? null)
       : null;
+    // Lookup via maps separados (ver comentário no bloco de queries). Internos
+    // não têm código; `nome_job` cobre o legado do RH antigo (sem FK).
+    const jobProducao = s.job_id ? jobsMap.get(s.job_id) : null;
+    const jobInterno = s.job_interno_id
+      ? jobsInternosMap.get(s.job_interno_id)
+      : null;
     return {
       ...(s as FreelancerSolicitacao),
       // Prefere nome_completo do cadastro quando a solicitação já está vinculada
@@ -191,11 +240,9 @@ export default async function SolicitacoesPage({
       nome_freela_display: nomeCompleto ?? s.nome_freela,
       solicitante_nome: s.solicitante?.nome ?? null,
       solicitante_email: s.solicitante?.email ?? null,
-      // COALESCE das duas fontes: produção → `job`, interno → `job_interno`.
-      // Internos não têm código. Fallback pro texto preservado das solicitações
-      // legadas do RH antigo (job_id null, mas `nome_job` traz o nome).
-      job_codigo: s.job?.codigo ?? null,
-      job_nome: s.job?.nome ?? s.job_interno?.nome ?? s.nome_job ?? null,
+      job_codigo: jobProducao?.codigo ?? null,
+      job_nome:
+        jobProducao?.nome ?? jobInterno?.nome ?? s.nome_job ?? null,
       tipo_solicitacao,
     };
   });

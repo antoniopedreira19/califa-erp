@@ -102,13 +102,14 @@ export async function carregarNovidades(
       .limit(50),
 
     // 5. Solicitações concluídas (status=cadastrada, falta PDF)
-    // nome_job é fallback pros registros migrados do RH antigo (job_id null).
-    // Embed polimórfico: pode vir de produção (`job`) ou interno
-    // (`job_interno`); COALESCE abaixo.
+    // nome_job é fallback pros registros migrados do RH antigo (sem FK).
+    // Sem embed de job/job_interno — lookup separado em concluidasJobsRes
+    // abaixo (evita o bug de schema cache stale do PostgREST com embed
+    // polimórfico, 29/10/2026).
     supabase
       .from("freelancer_solicitacoes")
       .select(
-        "id, freelancer_id, nome_freela, cargo, updated_at, nome_job, job:jobs(nome), job_interno:freelancer_jobs_internos(nome), solicitante:profiles!solicitante_id(nome)",
+        "id, freelancer_id, nome_freela, cargo, updated_at, nome_job, job_id, job_interno_id, solicitante:profiles!solicitante_id(nome)",
       )
       .eq("tenant_id", tenantId)
       .eq("status", "cadastrada")
@@ -244,13 +245,56 @@ export async function carregarNovidades(
       };
     });
 
-  const concluidas: SolicitacaoConcluidaItem[] = (
-    concluidasRaw.data ?? []
-  ).map((s: any) => ({
+  // Lookup dos nomes de job pras concluídas (produção + internos).
+  const concluidasBrutas = (concluidasRaw.data ?? []) as any[];
+  const concluidasJobIds = Array.from(
+    new Set(
+      concluidasBrutas
+        .map((s) => s.job_id as string | null)
+        .filter((id): id is string => !!id),
+    ),
+  );
+  const concluidasJobInternoIds = Array.from(
+    new Set(
+      concluidasBrutas
+        .map((s) => s.job_interno_id as string | null)
+        .filter((id): id is string => !!id),
+    ),
+  );
+  const [concluidasJobsRes, concluidasInternosRes] = await Promise.all([
+    concluidasJobIds.length > 0
+      ? supabase
+          .from("jobs")
+          .select("id, nome")
+          .in("id", concluidasJobIds)
+      : Promise.resolve({ data: [] as any[], error: null }),
+    concluidasJobInternoIds.length > 0
+      ? supabase
+          .from("freelancer_jobs_internos")
+          .select("id, nome")
+          .in("id", concluidasJobInternoIds)
+      : Promise.resolve({ data: [] as any[], error: null }),
+  ]);
+  const concluidasJobsMap = new Map<string, string>();
+  for (const j of (concluidasJobsRes.data ?? []) as any[]) {
+    concluidasJobsMap.set(j.id, j.nome);
+  }
+  const concluidasInternosMap = new Map<string, string>();
+  for (const j of (concluidasInternosRes.data ?? []) as any[]) {
+    concluidasInternosMap.set(j.id, j.nome);
+  }
+
+  const concluidas: SolicitacaoConcluidaItem[] = concluidasBrutas.map((s) => ({
     solicitacao_id: s.id,
     freelancer_id: s.freelancer_id,
     freelancer_nome: s.nome_freela,
-    nome_job: s.job?.nome ?? s.job_interno?.nome ?? s.nome_job ?? "—",
+    nome_job:
+      (s.job_id ? concluidasJobsMap.get(s.job_id) : undefined) ??
+      (s.job_interno_id
+        ? concluidasInternosMap.get(s.job_interno_id)
+        : undefined) ??
+      s.nome_job ??
+      "—",
     cargo: s.cargo,
     solicitante_nome: s.solicitante?.nome ?? null,
     atualizado_em: s.updated_at,

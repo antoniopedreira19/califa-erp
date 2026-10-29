@@ -69,14 +69,12 @@ export default async function FreelancerPerfilPage({
         .eq("id", params.id)
         .eq("tenant_id", session.activeTenant.id)
         .maybeSingle(),
-      // Embed polimórfico: PostgREST não resolve "ou um ou outro" num campo
-      // só, então pedimos os dois embeds separados — `job` (produção) e
-      // `job_interno` (interno). O JS faz o COALESCE ao montar o row.
+      // Sem embed de job/job_interno — lookup separado abaixo. O embed
+      // polimórfico via PostgREST esbarra em cache de schema stale com
+      // frequência (29/10/2026 travou a lista inteira de /solicitacoes).
       supabase
         .from("freelancer_contratos")
-        .select(
-          "*, job:jobs(codigo, nome), job_interno:freelancer_jobs_internos(nome)",
-        )
+        .select("*")
         .eq("freelancer_id", params.id)
         .eq("tenant_id", session.activeTenant.id)
         .order("data_inicio", { ascending: false, nullsFirst: false })
@@ -108,13 +106,59 @@ export default async function FreelancerPerfilPage({
     notFound();
   }
 
-  const contratos = ((contratosRes.data ?? []) as any[]).map((c) => ({
-    ...(c as FreelancerContrato),
-    // COALESCE: um contrato aponta pra `job` (produção) OU `job_interno`
-    // (interno). Nunca pros dois (CHECK no banco). Internos não têm código.
-    job_codigo: c.job?.codigo ?? null,
-    job_nome: c.job?.nome ?? c.job_interno?.nome ?? null,
-  }));
+  // Lookup dos jobs (produção + internos) referenciados pelos contratos deste
+  // freelancer. Query separada em vez de embed PostgREST.
+  const contratosBrutos = (contratosRes.data ?? []) as any[];
+  const jobIdsRef = Array.from(
+    new Set(
+      contratosBrutos
+        .map((c) => c.job_id as string | null)
+        .filter((id): id is string => !!id),
+    ),
+  );
+  const jobInternoIdsRef = Array.from(
+    new Set(
+      contratosBrutos
+        .map((c) => c.job_interno_id as string | null)
+        .filter((id): id is string => !!id),
+    ),
+  );
+  const [jobsLookupRes, jobsInternosLookupRes] = await Promise.all([
+    jobIdsRef.length > 0
+      ? supabase
+          .from("jobs")
+          .select("id, codigo, nome")
+          .in("id", jobIdsRef)
+      : Promise.resolve({ data: [] as any[], error: null }),
+    jobInternoIdsRef.length > 0
+      ? supabase
+          .from("freelancer_jobs_internos")
+          .select("id, nome")
+          .in("id", jobInternoIdsRef)
+      : Promise.resolve({ data: [] as any[], error: null }),
+  ]);
+  const jobsMapPerfil = new Map<string, { codigo: string; nome: string }>();
+  for (const j of (jobsLookupRes.data ?? []) as any[]) {
+    jobsMapPerfil.set(j.id, { codigo: j.codigo, nome: j.nome });
+  }
+  const jobsInternosMapPerfil = new Map<string, { nome: string }>();
+  for (const j of (jobsInternosLookupRes.data ?? []) as any[]) {
+    jobsInternosMapPerfil.set(j.id, { nome: j.nome });
+  }
+
+  const contratos = contratosBrutos.map((c) => {
+    const jobProd = c.job_id ? jobsMapPerfil.get(c.job_id) : null;
+    const jobInt = c.job_interno_id
+      ? jobsInternosMapPerfil.get(c.job_interno_id)
+      : null;
+    return {
+      ...(c as FreelancerContrato),
+      // COALESCE: produção OU interno. Nunca os dois (CHECK no banco).
+      // Internos não têm código.
+      job_codigo: jobProd?.codigo ?? null,
+      job_nome: jobProd?.nome ?? jobInt?.nome ?? null,
+    };
+  });
 
   // Filtra histórico só dos contratos deste freelancer (RLS já restringiu
   // por tenant). Nome do autor e do job vêm no join.
