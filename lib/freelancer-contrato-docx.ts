@@ -138,16 +138,18 @@ function meseseDias(
 }
 
 function composeEndereco(f: Freelancer): string {
-  const partes = [
-    f.rua && f.numero ? `${f.rua}, ${f.numero}` : f.rua,
-    f.complemento,
-    f.bairro,
-    f.cidade,
-  ].filter(Boolean);
-  const estruturado = partes.join(", ");
-  // Fallback: freelancer migrado do RH antigo com só o texto livre
-  // (`endereco_legado`) preenchido — a minuta mostra o texto como veio.
-  if (estruturado) return estruturado;
+  // "Estruturado útil" exige rua — cidade sozinha não é endereço (vários
+  // migrados do RH antigo têm só a cidade). Nesse caso cai no
+  // `endereco_legado` que vem completo.
+  if (f.rua) {
+    const partes = [
+      f.numero ? `${f.rua}, ${f.numero}` : f.rua,
+      f.complemento,
+      f.bairro,
+      f.cidade,
+    ].filter(Boolean);
+    return partes.join(", ");
+  }
   return (f.endereco_legado ?? "").trim();
 }
 

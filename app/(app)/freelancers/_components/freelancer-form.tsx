@@ -276,9 +276,7 @@ export function FreelancerForm({ modo, freelancer }: Props) {
 
       {/* ============== Endereço ============== */}
       <Secao titulo="Endereço" descricao="CEP preenche rua, bairro e cidade automaticamente.">
-        {freelancer?.endereco_legado &&
-          !state.rua.trim() &&
-          !state.bairro.trim() && (
+        {freelancer?.endereco_legado && !state.rua.trim() && (
             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs">
               <p className="font-semibold text-amber-900">
                 Endereço do RH antigo (texto livre):

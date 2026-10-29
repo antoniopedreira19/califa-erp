@@ -372,13 +372,15 @@ export default async function FreelancerPerfilPage({
     );
   })();
   const temContato = !!(freelancer.email || freelancer.celular);
+  // "Estruturado útil" exige pelo menos rua — cidade sozinha não é endereço
+  // (vários migrados do RH antigo têm só a cidade). Sem rua, preferimos
+  // mostrar o `endereco_legado` que vem completo.
   const temEnderecoEstruturado = !!(
     freelancer.cep ||
     freelancer.rua ||
     freelancer.numero ||
     freelancer.complemento ||
-    freelancer.bairro ||
-    freelancer.cidade
+    freelancer.bairro
   );
   const temEndereco = temEnderecoEstruturado || !!freelancer.endereco_legado;
   const temPj = !!(freelancer.cnpj && freelancer.razao_social);
