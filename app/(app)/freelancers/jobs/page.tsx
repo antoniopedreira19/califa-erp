@@ -1,17 +1,8 @@
+import Link from "next/link";
 import { Briefcase } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
-import { listEmpresasAtivas } from "@/lib/data/empresas";
-import { pode } from "@/lib/permissoes";
-import { JOB_STATUS_ABERTO, jobStatusExibido } from "@/lib/types";
 import type { FreelancerJobInterno } from "@/lib/types";
-import {
-  impedimentosDosJobs,
-  podeEncerrar,
-} from "@/lib/data/impedimentos-encerramento";
-import { jobsComCancelamentoPendente } from "@/lib/data/cancelamentos";
-import { projetosNaEquipeDe } from "@/lib/data/equipe-do-projeto";
-import { JobsList, type JobRow } from "../../jobs/jobs-list";
 import { PageHeader } from "@/components/ui/page-header";
 import { AbasOrigem } from "./_components/abas-origem";
 import { JobsInternosTabela } from "./_components/jobs-internos-tabela";
@@ -19,8 +10,9 @@ import { JobsInternosTabela } from "./_components/jobs-internos-tabela";
 export const dynamic = "force-dynamic";
 
 // Página de jobs da aba Freelancers. Duas origens:
-//   `aba=producao` → espelho de /jobs (todos os jobs da tabela `jobs` que o
-//                    usuário enxerga por RLS).
+//   `aba=producao` → lista básica (código + nome) dos jobs de produção. Não
+//                    é o /jobs completo — aqui a aba Freelancers só precisa
+//                    saber que jobs existem pra referenciar em contrato.
 //   `aba=interno`  → CRUD dos jobs internos de freelancer (tabela
 //                    `freelancer_jobs_internos`), que não existem no fluxo
 //                    de orçamento/PP/faturamento.
@@ -31,25 +23,10 @@ const PODE_ESCREVER_INTERNO = new Set([
   "financeiro",
 ]);
 
-function motivoForaDoLote(r: any, cancelamentoPedido: boolean): string | null {
-  if (!["aberto", "em_producao", "encerrado"].includes(r.status)) {
-    return "Só job aberto ou encerrado vai para faturamento.";
-  }
-  if (cancelamentoPedido) return "Tem pedido de cancelamento no financeiro.";
-  if (r.faturamento_enviado_em) return "Todo o faturamento dele já foi enviado.";
-  if (!(Number(r.faturamento_previsto ?? 0) > 0.004)) return "Sem faturamento previsto.";
-  return null;
-}
-
 export default async function FreelancersJobsPage({
   searchParams,
 }: {
-  searchParams?: {
-    aba?: string;
-    filtro?: string;
-    empresa?: string;
-    meus?: string;
-  };
+  searchParams?: { aba?: string };
 }) {
   const session = await requireSession();
   const supabase = createClient();
@@ -86,9 +63,8 @@ export default async function FreelancersJobsPage({
 
       {aba === "producao" ? (
         <AbaProducao
-          session={session}
           supabase={supabase}
-          searchParams={searchParams}
+          tenantId={session.activeTenant.id}
         />
       ) : (
         <AbaInterno
@@ -102,139 +78,28 @@ export default async function FreelancersJobsPage({
 }
 
 async function AbaProducao({
-  session,
   supabase,
-  searchParams,
+  tenantId,
 }: {
-  session: Awaited<ReturnType<typeof requireSession>>;
   supabase: ReturnType<typeof createClient>;
-  searchParams?: { filtro?: string; empresa?: string; meus?: string };
+  tenantId: string;
 }) {
-  const filtro =
-    searchParams?.filtro === "faturamento_proximo" ||
-    searchParams?.filtro === "faturamento_pronto"
-      ? "faturamento_pendente"
-      : searchParams?.filtro;
-
-  const empresaFiltroIds: string[] =
-    typeof searchParams?.empresa === "string" && searchParams.empresa.length > 0
-      ? searchParams.empresa.split(",").filter((id) => id.length > 0)
-      : session.activeEmpresas.map((e) => e.id);
-
-  let jobIdsComPendencia: string[] | null = null;
-  if (filtro === "realizado_pendente") {
-    const { data: comPendencia } = await supabase
-      .from("jobs_itens_realizado")
-      .select("job_id")
-      .eq("tenant_id", session.activeTenant.id)
-      .is("total_realizado", null);
-    const ids = Array.from(
-      new Set(
-        (comPendencia ?? [])
-          .map((r: { job_id: string | null }) => r.job_id)
-          .filter((id): id is string => Boolean(id)),
-      ),
-    );
-    jobIdsComPendencia = ids;
-  }
-
-  let jobsQuery = supabase
+  // Lista básica — só código + nome. Pro módulo Freelancers isso basta
+  // (o /jobs continua sendo o lugar de fluxo completo).
+  const { data, error } = await supabase
     .from("jobs")
-    .select(
-      "id, codigo, created_at, nome, status, faturamento_enviado_em, faturamento_previsto, valor_total, data_inicio_prevista, empresa_id, projeto_id, " +
-        "produto, regional_id, responsavel_id, produtor_id, observacoes, " +
-        "regional:regionais(nome), " +
-        "cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), projeto:projetos(codigo, nome, descricao), " +
-        "responsavel:profiles!responsavel_id(nome), " +
-        "empresa:empresas(id, razao_social, nome_fantasia)",
-    )
-    .eq("tenant_id", session.activeTenant.id)
+    .select("id, codigo, nome")
+    .eq("tenant_id", tenantId)
     .neq("status", "cancelado")
-    .order("created_at", { ascending: true });
+    .order("codigo", { ascending: true });
 
-  if (empresaFiltroIds.length > 0) {
-    jobsQuery = jobsQuery.in("empresa_id", empresaFiltroIds);
+  if (error) {
+    console.error("[freelancers.jobs.producao]", error.message);
   }
 
-  if (filtro === "faturamento_pendente") {
-    jobsQuery = jobsQuery
-      .in("status", ["aberto", "em_producao", "encerrado"])
-      .gt("faturamento_previsto", 0.004)
-      .is("faturamento_enviado_em", null);
-  } else if (filtro === "realizado_pendente") {
-    if (jobIdsComPendencia !== null && jobIdsComPendencia.length === 0) {
-      jobsQuery = jobsQuery.eq("id", "00000000-0000-0000-0000-000000000000");
-    } else if (jobIdsComPendencia !== null && jobIdsComPendencia.length > 0) {
-      jobsQuery = jobsQuery.in("id", jobIdsComPendencia);
-    }
-  }
-  if (filtro === "encerrar_pronto") {
-    jobsQuery = jobsQuery.in("status", JOB_STATUS_ABERTO);
-  }
+  const jobs = (data ?? []) as Array<{ id: string; codigo: string; nome: string }>;
 
-  const podeAlternarMeusTodos = pode(session.activeRole, "listas.chave_meus_todos");
-  const podeEnviarFaturamento = pode(session.activeRole, "jobs.enviar_faturamento");
-
-  const [jobsRes, empresas, comPedidoDeCancelamento, projetosDaMinhaEquipe] =
-    await Promise.all([
-      jobsQuery,
-      listEmpresasAtivas(session.activeTenant.id),
-      jobsComCancelamentoPendente(supabase, session.activeTenant.id),
-      podeAlternarMeusTodos
-        ? projetosNaEquipeDe(supabase, session.activeTenant.id, session.profile.id)
-        : Promise.resolve(new Set<string>()),
-    ]);
-
-  if (jobsRes.error) console.error("[freelancers.jobs.list]", jobsRes.error.message);
-
-  let linhas = (jobsRes.data ?? []) as any[];
-  if (filtro === "encerrar_pronto" && linhas.length > 0) {
-    const impedimentos = await impedimentosDosJobs(
-      supabase,
-      session.activeTenant.id,
-      linhas.map((r) => r.id as string),
-    );
-    linhas = linhas.filter((r) => {
-      const imp = impedimentos.get(r.id);
-      return imp ? podeEncerrar(imp) : false;
-    });
-  }
-
-  const rows: JobRow[] = linhas.map((r: any) => ({
-    id: r.id,
-    codigo: r.codigo,
-    criado_em: r.created_at,
-    nome: r.nome,
-    status: jobStatusExibido(
-      r.status,
-      r.faturamento_enviado_em ?? null,
-      comPedidoDeCancelamento.has(r.id),
-    ),
-    valor_total: r.valor_total !== null ? Number(r.valor_total) : null,
-    data_inicio_prevista: r.data_inicio_prevista,
-    projeto_id: r.projeto_id,
-    produto: r.produto ?? null,
-    regional_id: r.regional_id ?? null,
-    regional_nome: r.regional?.nome ?? null,
-    responsavel_id: r.responsavel_id ?? null,
-    produtor_id: r.produtor_id ?? null,
-    meu:
-      r.responsavel_id === session.profile.id ||
-      r.produtor_id === session.profile.id ||
-      projetosDaMinhaEquipe.has(r.projeto_id),
-    observacoes: r.observacoes ?? null,
-    projeto_codigo: r.projeto?.codigo ?? null,
-    projeto_nome: r.projeto?.nome ?? null,
-    projeto_descricao: r.projeto?.descricao ?? null,
-    cliente_nome: r.cliente?.nome_fantasia ?? null,
-    responsavel_nome: r.responsavel?.nome ?? null,
-    empresa_id: r.empresa_id ?? null,
-    empresa_nome: r.empresa?.nome_fantasia ?? r.empresa?.razao_social ?? null,
-    cliente_id: r.cliente_id ?? null,
-    motivo_fora_do_lote: motivoForaDoLote(r, comPedidoDeCancelamento.has(r.id)),
-  }));
-
-  if (rows.length === 0) {
+  if (jobs.length === 0) {
     return (
       <div className="rounded-2xl border border-border bg-card p-12 shadow-soft text-center max-w-2xl mx-auto">
         <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-xl bg-california-red/10 text-california-red">
@@ -242,7 +107,7 @@ async function AbaProducao({
         </div>
         <h2 className="mt-6 text-xl font-semibold">Nenhum job de produção</h2>
         <p className="mt-2 text-sm text-muted-foreground">
-          Os jobs de produção nascem a partir de orçamentos aprovados em
+          Jobs de produção nascem a partir de orçamentos aprovados em
           /orcamentos.
         </p>
       </div>
@@ -250,15 +115,40 @@ async function AbaProducao({
   }
 
   return (
-    <JobsList
-      rows={rows}
-      empresas={empresas}
-      podeAlternarMeusTodos={podeAlternarMeusTodos}
-      meusInicial={
-        podeAlternarMeusTodos && (searchParams?.meus === "1" || !filtro)
-      }
-      podeEnviarFaturamento={podeEnviarFaturamento}
-    />
+    <div className="rounded-2xl border border-border bg-card shadow-soft overflow-hidden">
+      <table className="w-full text-sm">
+        <thead className="bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
+          <tr>
+            <th className="text-left px-4 py-3 w-[140px]">Código</th>
+            <th className="text-left px-4 py-3">Nome</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-border">
+          {jobs.map((j) => (
+            <tr key={j.id} className="hover:bg-muted/20 transition-colors">
+              <td className="px-4 py-3">
+                <Link
+                  href={`/jobs/${j.id}`}
+                  prefetch={false}
+                  className="font-mono text-xs font-semibold text-california-red hover:underline"
+                >
+                  {j.codigo}
+                </Link>
+              </td>
+              <td className="px-4 py-3">
+                <Link
+                  href={`/jobs/${j.id}`}
+                  prefetch={false}
+                  className="hover:underline"
+                >
+                  {j.nome}
+                </Link>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
