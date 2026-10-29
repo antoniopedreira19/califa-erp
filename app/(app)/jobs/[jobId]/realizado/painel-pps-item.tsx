@@ -106,6 +106,8 @@ import {
   type PPStatus,
   type PrestacaoDaVerba,
   type SituacaoVerba,
+  meioPeloAnexo,
+  type MeioPeloAnexo,
 } from "@/lib/types";
 import {
   producaoEditaPrestacao,
@@ -206,9 +208,10 @@ export interface PPDoItem {
    *  deixou a PP para o GP enviar. Obrigatórios pelo mesmo motivo do trio. */
   prontaParaEnvioEm: string | null;
   prontaParaEnvioPorNome: string | null;
-  /** Decisão 161: paga por boleto — o envio exige o boleto e a nota.
+  /** Pago pelo documento anexado: o boleto exige o boleto e a nota
+   *  (decisão 161); a guia, só a guia (decisão 227). Null nos outros meios.
    *  Obrigatório pelo mesmo motivo do trio. */
-  pagaPorBoleto: boolean;
+  pagaPeloAnexo: MeioPeloAnexo | null;
   /** Decisão 209: a PP do cartão corporativo vai sem nota. Obrigatório
    *  pelo mesmo motivo do trio. */
   cartaoCorporativo: boolean;
@@ -765,7 +768,7 @@ export function PainelPPsItem({
                     // A PP a emitir ainda não é PP: nada a enviar.
                     prontaParaEnvioEm: null,
                     prontaParaEnvioPorNome: null,
-                    pagaPorBoleto: a.dados.pagamento_fora_do_cadastro?.meio === "boleto",
+                    pagaPeloAnexo: meioPeloAnexo(a.dados.pagamento_fora_do_cadastro?.meio),
                     cartaoCorporativo: a.cartao_corporativo,
                   }}
                   moeda={moeda}
@@ -1008,7 +1011,9 @@ export function PainelPPsItem({
                               {/* Decisão 216: na auditoria, a nota pode ir depois. */}
                               {envioDispensaNf(midiaSystem)
                                 ? "Job Mídia System em auditoria: a nota pode ir depois."
-                                : "Ainda sem a nota do fornecedor: ela e os dados dela entram no envio."}
+                                : pp.pagaPeloAnexo === "guia"
+                                  ? "Ainda sem a guia: ela entra no envio."
+                                  : "Ainda sem a nota do fornecedor: ela e os dados dela entram no envio."}
                             </span>
                           )}
                         </span>
@@ -1284,7 +1289,7 @@ export function PainelPPsItem({
                 verbaProducao: enviando.verbaProducao,
                 reembolsoTipo: enviando.reembolsoTipo,
                 anexos: enviando.anexos,
-                pagaPorBoleto: enviando.pagaPorBoleto,
+                pagaPeloAnexo: enviando.pagaPeloAnexo,
                 cartaoCorporativo: enviando.cartaoCorporativo,
               } satisfies PPParaEnviar
             }

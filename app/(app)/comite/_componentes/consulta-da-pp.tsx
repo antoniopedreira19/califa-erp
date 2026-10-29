@@ -95,7 +95,9 @@ export function ConsultaDaPP({
     : fora
       ? fora.meio === "boleto"
         ? "Boleto"
-        : "Fora do cadastro"
+        : fora.meio === "guia"
+          ? "Guia"
+          : "Fora do cadastro"
       : aEmitir.verba_producao
         ? "Verba de produção"
         : "Cadastro do fornecedor";

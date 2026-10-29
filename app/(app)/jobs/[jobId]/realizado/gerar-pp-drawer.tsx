@@ -2312,8 +2312,11 @@ export function GerarPPDrawer({
                       </button>
                     </div>
                   )}
-                  {/* Decisão 161: paga por boleto, o envio exige o boleto e a nota. */}
-                  {pagamento.escolha === "boleto" && <ExigidosNoEnvio anexos={anexos} />}
+                  {/* Decisão 161: paga por boleto, o envio exige o boleto e a nota;
+                      decisão 227: paga por guia, só a guia. */}
+                  {(pagamento.escolha === "boleto" || pagamento.escolha === "guia") && (
+                    <ExigidosNoEnvio anexos={anexos} meio={pagamento.escolha} />
+                  )}
                   <ZonaDeAnexos id="pp-arquivos" pronto={!!uploadPrefix} onArquivos={subir} />
                   {avisoDosAnexos && (
                     <p className="text-[11.5px] font-semibold text-california-red">{avisoDosAnexos}</p>

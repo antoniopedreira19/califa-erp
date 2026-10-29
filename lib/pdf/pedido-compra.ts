@@ -15,6 +15,7 @@ import type {
   Job,
   Projeto,
   Cliente,
+  MeioPeloAnexo,
   PixTipoChave,
   TipoContaBancariaFornecedor,
   TipoVerba,
@@ -203,8 +204,9 @@ interface Dados {
     reembolso_deslocamentos?: DeslocamentosDoReembolso | null;
   };
   /** Decisão 161: a PP paga por boleto. O documento continua o de sempre;
-   *  só a linha do PIX vira "Pagamento: Boleto". */
-  pagamentoPorBoleto?: boolean;
+   *  só a linha do PIX vira "Pagamento: Boleto". Na paga por guia (decisão
+   *  227), "Pagamento: Guia". */
+  pagamentoPeloAnexo?: MeioPeloAnexo | null;
   /** Decisão 178: a prévia da conferência lado a lado, montada com os dados
    *  do formulário antes de gerar. Sai com a marca d'água "PRÉVIA" em toda
    *  página e o aviso no cabeçalho; não é gravada em lugar nenhum. */
@@ -317,7 +319,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     cliente,
     responsavelNome,
     parcelas,
-    pagamentoPorBoleto,
+    pagamentoPeloAnexo,
     previa,
     selo,
   } = dados;
@@ -814,10 +816,10 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
                 { text: "CNPJ/CPF:", bold: true, fontSize: 8 },
                 { text: fmtCPFCNPJ(fornecedor?.cpf_cnpj ?? null), fontSize: 8 },
               ],
-              pagamentoPorBoleto
+              pagamentoPeloAnexo
                 ? [
                     { text: "Pagamento:", bold: true, fontSize: 8 },
-                    { text: "Boleto", bold: true, colSpan: 3, fontSize: 8 },
+                    { text: pagamentoPeloAnexo === "guia" ? "Guia" : "Boleto", bold: true, colSpan: 3, fontSize: 8 },
                     { text: "" },
                     { text: "" },
                   ]

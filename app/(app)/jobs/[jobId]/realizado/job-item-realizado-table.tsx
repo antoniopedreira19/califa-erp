@@ -25,7 +25,7 @@ import type {
 } from "@/lib/types";
 import type { TomadorDaNf } from "./anexos-da-pp";
 import { TEXTO_LINHA_ALTERADA_EM_REVISAO, textoAguardaAbertura } from "./pp-a-emitir-ui";
-import { nomeContraparteBRPP, nomeDoCartaoCorporativo, ppStatusLabel, situacaoDaVerba } from "@/lib/types";
+import { meioPeloAnexo, nomeContraparteBRPP, nomeDoCartaoCorporativo, ppStatusLabel, situacaoDaVerba } from "@/lib/types";
 import { CalhaLinha } from "./calha-linha";
 import {
   NomeDoGrupoNaErrata,
@@ -2634,7 +2634,7 @@ export function JobItemRealizadoTable({
                 motivoRejeicao: pp.motivo_rejeicao ?? null,
                 prontaParaEnvioEm: pp.pronta_para_envio_em,
                 prontaParaEnvioPorNome: pp.pronta_para_envio_por_nome,
-                pagaPorBoleto: pp.pagamento_fora_do_cadastro?.meio === "boleto",
+                pagaPeloAnexo: meioPeloAnexo(pp.pagamento_fora_do_cadastro?.meio),
                 cartaoCorporativo: pp.cartao_corporativo === true,
               }))}
               aEmitir={aEmitirDoItem}

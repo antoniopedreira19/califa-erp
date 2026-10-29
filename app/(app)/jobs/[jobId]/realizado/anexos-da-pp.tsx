@@ -57,6 +57,7 @@ import {
   type CampoLidoPelaIA,
   type DadosExtraidosNF,
   type DocumentoTipo,
+  type MeioPeloAnexo,
 } from "@/lib/types";
 import { createClient } from "@/lib/supabase/client";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
@@ -1133,17 +1134,22 @@ function ListaDePPs({ pps }: { pps: NotaExistente["pps"] }) {
  *  avisa (amarelo). Com uma nota, só a frase quando não bate; com várias, a
  *  soma. */
 /**
- * O que o envio vai exigir quando a PP é paga por boleto (decisão 161): a
- * nota (NF, recibo ou fatura — 178) e o boleto, cada um com ✓ quando já tem arquivo do
- * tipo. Fica no formulário da PP e no pop-up de envio, acima da área de
- * anexos. Sem boleto, não aparece — a regra de sempre não muda.
+ * O que o envio vai exigir quando a PP é paga pelo documento anexado: no
+ * boleto (decisão 161), a nota (NF, recibo ou fatura — 178) e o boleto; na
+ * guia (decisão 227), só a guia — taxa de órgão público não tem NF. Cada um
+ * com ✓ quando já tem arquivo do tipo. Fica no formulário da PP e no pop-up
+ * de envio, acima da área de anexos. Nos outros meios, não aparece — a
+ * regra de sempre não muda.
  */
-export function ExigidosNoEnvio({ anexos }: { anexos: AnexoEmEdicao[] }) {
+export function ExigidosNoEnvio({ anexos, meio }: { anexos: AnexoEmEdicao[]; meio: MeioPeloAnexo }) {
   const ok = anexos.filter((a) => a.status === "ok");
-  const itens: Array<[string, boolean]> = [
-    ["NF", ok.some((a) => !!a.tipo && DOCUMENTO_TIPOS_FISCAIS.includes(a.tipo))],
-    ["Boleto", ok.some((a) => a.tipo === "boleto")],
-  ];
+  const itens: Array<[string, boolean]> =
+    meio === "guia"
+      ? [["Guia", ok.some((a) => a.tipo === "guia")]]
+      : [
+          ["NF", ok.some((a) => !!a.tipo && DOCUMENTO_TIPOS_FISCAIS.includes(a.tipo))],
+          ["Boleto", ok.some((a) => a.tipo === "boleto")],
+        ];
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-[11.5px]">
       <span className="text-muted-foreground">Exigidos no envio:</span>
@@ -1337,14 +1343,15 @@ export function faltaNosAnexosParaEnviar(
   anexos: AnexoEmEdicao[],
   valorPP: number,
   existentes: Record<string, NotaExistente>,
-  /** Decisão 161: a PP paga por boleto exige o boleto e a nota. */
-  exigeBoleto: boolean,
+  /** O meio pago pelo anexo: o boleto exige o boleto e a nota (decisão
+   *  161); a guia exige só a guia (decisão 227). */
+  pagaPeloAnexo: MeioPeloAnexo | null,
 ): string | null {
   const ok = anexos.filter((a) => a.status === "ok");
   if (anexos.some((a) => a.status === "uploading" || a.status === "selecionado")) {
     return "Aguarde os arquivos terminarem de subir.";
   }
-  if (ok.length === 0) return "Anexe a nota fiscal do fornecedor.";
+  if (ok.length === 0) return pagaPeloAnexo === "guia" ? "Anexe a guia do órgão público." : "Anexe a nota fiscal do fornecedor.";
   const semTipo = ok.find((a) => !a.tipo);
   if (semTipo) return `Escolha o tipo de “${semTipo.nome}”.`;
   const semNumero = ok.find((a) => a.tipo !== "nota_fiscal" && !(a.numero ?? "").trim());
@@ -1352,10 +1359,13 @@ export function faltaNosAnexosParaEnviar(
   const semCnpj = ok.find((a) => a.tipo !== "nota_fiscal" && documentoTemCnpj(a.tipo) && !a.nf.tomador);
   if (semCnpj) return `Escolha contra qual CNPJ foi emitido “${semCnpj.nome}”.`;
   if (emissoraDosDocumentos(ok.map(anexoParaEnvio)).tipo === "divergente") return DOCUMENTOS_EM_CNPJS_DIFERENTES;
-  if (exigeBoleto && !ok.some((a) => !!a.tipo && DOCUMENTO_TIPOS_FISCAIS.includes(a.tipo))) {
+  if (pagaPeloAnexo === "guia" && !ok.some((a) => a.tipo === "guia")) {
+    return "Esta PP é paga por guia: anexe a guia, com o tipo Guia.";
+  }
+  if (pagaPeloAnexo === "boleto" && !ok.some((a) => !!a.tipo && DOCUMENTO_TIPOS_FISCAIS.includes(a.tipo))) {
     return "Anexe também a NF do fornecedor: o boleto não substitui a nota.";
   }
-  if (exigeBoleto && !ok.some((a) => a.tipo === "boleto")) {
+  if (pagaPeloAnexo === "boleto" && !ok.some((a) => a.tipo === "boleto")) {
     return "Esta PP é paga por boleto: anexe o boleto, com o tipo Boleto.";
   }
   const nfs = ok.filter((a) => a.tipo === "nota_fiscal");

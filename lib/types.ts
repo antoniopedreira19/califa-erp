@@ -120,9 +120,19 @@ export type TipoContaBancariaFornecedor = "corrente" | "poupanca" | "pagamento";
 export type PixTipoChave = "cpf" | "cnpj" | "email" | "telefone" | "aleatoria";
 
 /** O meio que uma PP troca quando não paga pelo cadastro (decisão 127).
- *  Desde a decisão 161 (09/10/2026) a tela oferece só chave aleatória
- *  (`pix`) e `boleto`; `conta` fica para o legado (nenhuma PP o usou). */
-export type MeioForaDoCadastro = "pix" | "conta" | "boleto";
+ *  Desde a decisão 161 (09/10/2026) a tela oferece chave aleatória (`pix`)
+ *  e `boleto`; desde a 227 (29/10/2026), também `guia` (taxa, licença ou
+ *  alvará de órgão público). `conta` fica para o legado (nenhuma PP o usou). */
+export type MeioForaDoCadastro = "pix" | "conta" | "boleto" | "guia";
+
+/** Os meios pagos pelo documento anexado: sem dado digitado, fora da
+ *  remessa, e o envio ao financeiro exige o anexo do tipo do meio. O boleto
+ *  pede também a nota (decisão 161); a guia, não (decisão 227). */
+export type MeioPeloAnexo = "boleto" | "guia";
+
+export function meioPeloAnexo(meio: string | null | undefined): MeioPeloAnexo | null {
+  return meio === "boleto" || meio === "guia" ? meio : null;
+}
 
 /**
  * O pagamento fora do cadastro de uma PP, como as telas o leem (decisão
@@ -3397,12 +3407,15 @@ export type PPAnexoMimetype = (typeof PP_ANEXO_MIMETYPES_ACEITOS)[number];
  * que o time nomeou. A fatura entrou na decisão 178 (15/10/2026): na
  * locação de bens móveis o fornecedor emite fatura, não NF, e a produção
  * marcava o arquivo como Recibo. O contrato de locação é o "Contrato".
+ * A guia entrou na decisão 227 (29/10/2026): taxa, licença ou alvará de
+ * órgão público, paga sem NF.
  */
 export const DOCUMENTO_TIPOS = [
   "nota_fiscal",
   "recibo",
   "fatura",
   "boleto",
+  "guia",
   "contrato",
   "outro",
 ] as const;
@@ -3423,6 +3436,8 @@ export function documentoTipoLabel(t: DocumentoTipo): string {
       return "Fatura";
     case "boleto":
       return "Boleto";
+    case "guia":
+      return "Guia";
     case "contrato":
       return "Contrato";
     case "cupom_fiscal":

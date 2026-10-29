@@ -6591,3 +6591,26 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
   valer: no envio do GP, as 7 vermelhas e o agrupamento saem da errata.
 - Linha com **todas** as PPs canceladas se cancela pela errata
   (`barrarCancelamento` ignora a PP cancelada).
+
+## ⚠️ Nota de 2026-10-29 (2) — a PP paga por guia (decisão 227)
+
+- O Pagamento da PP ganhou a quarta opção, **Guia** (taxa, licença ou alvará
+  de órgão público), e as quatro opções têm a mesma largura. Os anexos
+  ganharam o tipo **Guia**. Com Guia, "Exigidos no envio: Guia", e o envio
+  ao financeiro pede a guia e **não pede NF** (`faltaNosAnexosDoEnvio` e
+  `faltaNosAnexosParaEnviar`). O PDF da PP sai com "Pagamento: Guia".
+- O meio pago pelo anexo passa pelas telas em `pagaPeloAnexo`
+  (`"boleto" | "guia" | null`, `meioPeloAnexo` em `lib/types.ts`), no lugar
+  do antigo `pagaPorBoleto`; o PDF recebe `pagamentoPeloAnexo`.
+- Banco: valor `guia` no enum `documento_tipo` e nos CHECKs
+  `pp_fora_do_cadastro_meio_valido` e `_formato` (migration
+  `20261029900001`). A remessa não paga guia, como não paga boleto.
+- A IA (192) passa a reconhecer a guia como tipo de documento.
+- Conferido no TES-1035/26 como GP Teste: PP-00637 (Fornecedor Teste,
+  R$ 450,00) gerada com Guia, PDF com "Pagamento: Guia", envio barrado com o
+  anexo marcado Contrato ("Esta PP é paga por guia…") e aceito com o tipo
+  Guia, sem NF. Não conferido: a leitura da IA (o `.env.local` local não tem
+  a chave da OpenAI) e o cartão do financeiro ("Guia · Pagar pela guia
+  anexada"), que o GP Teste não abre.
+- Fora, de propósito (Tiago, 29/10): o código de barras da guia e como ela
+  chega ao Contas a Pagar.

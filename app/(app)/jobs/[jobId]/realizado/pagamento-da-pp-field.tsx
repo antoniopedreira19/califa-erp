@@ -4,23 +4,25 @@
  * O campo "Pagamento" do formulário da PP (decisão 127; decisão 161, de
  * 09/10/2026).
  *
- * Um seletor só — Cadastro do fornecedor / Chave aleatória / Boleto. As
- * duas últimas são os meios que o fornecedor sem pagamento fixo manda na
+ * Um seletor só — Cadastro do fornecedor / Chave aleatória / Boleto / Guia.
+ * Chave e boleto são os meios que o fornecedor sem pagamento fixo manda na
  * hora de cobrar: a chave PIX aleatória temporária, que entra aqui, ou o
  * boleto, que vai nos anexos com o tipo Boleto (o envio ao financeiro o
- * exige, junto da nota). "Outra conta" e o motivo saíram: o motivo é o meio
- * que o fornecedor escolheu.
+ * exige, junto da nota). A guia (decisão 227, 29/10/2026) é a taxa, licença
+ * ou alvará de órgão público: vai nos anexos com o tipo Guia, e o envio a
+ * exige sem NF. "Outra conta" e o motivo saíram: o motivo é o meio que o
+ * fornecedor escolheu.
  *
  * Fornecedor marcado "Sem conta nem PIX" no cadastro: "Cadastro do
- * fornecedor" fica riscado e a PP só sai com chave aleatória ou boleto — o
- * servidor confere de novo na geração.
+ * fornecedor" fica riscado e a PP só sai com chave aleatória, boleto ou guia
+ * — o servidor confere de novo na geração.
  *
  * Trocar o meio só vale nesta PP: o cadastro do fornecedor não muda, e o
- * PDF sai igual ao de sempre, só com a chave escolhida ou "Boleto".
+ * PDF sai igual ao de sempre, só com a chave escolhida, "Boleto" ou "Guia".
  */
 
 import * as React from "react";
-import { Barcode, Zap } from "lucide-react";
+import { Barcode, Landmark, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { problemaDaChavePix } from "@/lib/pix";
 import type { PagamentoForaDoCadastroInput } from "@/lib/validations/pagamento-fora-do-cadastro";
@@ -33,7 +35,7 @@ import { resumoDoPagamentoDoFornecedor } from "./actions-pp";
 
 export interface PagamentoDaPPEstado {
   /** Null = o fornecedor não tem conta nem PIX e ainda não se escolheu. */
-  escolha: "cadastro" | "aleatoria" | "boleto" | null;
+  escolha: "cadastro" | "aleatoria" | "boleto" | "guia" | null;
   pix_chave: string;
   /** O cadastro do fornecedor é "Sem conta nem PIX" (lido com o resumo). */
   semCadastro: boolean;
@@ -50,7 +52,7 @@ export function estadoDoPagamento(
   p: PagamentoForaDoCadastroDaPP | null | undefined,
 ): PagamentoDaPPEstado {
   if (!p) return PAGAMENTO_PELO_CADASTRO;
-  if (p.meio === "boleto") return { escolha: "boleto", pix_chave: "", semCadastro: false };
+  if (p.meio === "boleto" || p.meio === "guia") return { escolha: p.meio, pix_chave: "", semCadastro: false };
   // Só a chave aleatória continua; uma PP a emitir antiga com outro meio
   // volta para a escolha, e quem salvar decide de novo.
   if (p.meio === "pix" && p.pix_tipo === "aleatoria") {
@@ -62,14 +64,14 @@ export function estadoDoPagamento(
 /** O que vai para a server action. Null = paga pelo cadastro. */
 export function pagamentoParaEnvio(e: PagamentoDaPPEstado): PagamentoForaDoCadastroInput | null {
   if (e.escolha === "cadastro" || e.escolha === null) return null;
-  if (e.escolha === "boleto") return { meio: "boleto" };
+  if (e.escolha === "boleto" || e.escolha === "guia") return { meio: e.escolha };
   return { meio: "pix", pix_tipo: "aleatoria", pix_chave: e.pix_chave.trim() };
 }
 
 /** O primeiro problema, com a mesma régua do servidor. Null = pode gerar. */
 export function problemaDoPagamento(e: PagamentoDaPPEstado): string | null {
   if (e.escolha === null || (e.escolha === "cadastro" && e.semCadastro)) {
-    return "Este fornecedor não tem conta nem PIX no cadastro: escolha chave aleatória ou boleto.";
+    return "Este fornecedor não tem conta nem PIX no cadastro: escolha chave aleatória, boleto ou guia.";
   }
   if (e.escolha === "aleatoria") {
     if (!e.pix_chave.trim()) return "Cole a chave aleatória que o fornecedor mandou.";
@@ -93,6 +95,7 @@ const OPCOES: Array<{
   { valor: "cadastro", rotulo: "Cadastro do fornecedor" },
   { valor: "aleatoria", rotulo: "Chave aleatória", Icone: Zap },
   { valor: "boleto", rotulo: "Boleto", Icone: Barcode },
+  { valor: "guia", rotulo: "Guia", Icone: Landmark },
 ];
 
 export function PagamentoDaPPField({
@@ -137,7 +140,7 @@ export function PagamentoDaPPField({
   const resumoAtual = resumo?.id === fornecedorId ? resumo : undefined;
 
   // Sem conta nem PIX: o "Cadastro do fornecedor" sai da escolha e a PP
-  // espera chave aleatória ou boleto. Vale também quando o formulário volta
+  // espera chave aleatória, boleto ou guia. Vale também quando o formulário volta
   // ao "cadastro" com o mesmo fornecedor escolhido de novo na lista.
   React.useEffect(() => {
     if (!resumoAtual) return;
@@ -192,7 +195,10 @@ export function PagamentoDaPPField({
                   set({ escolha: o.valor });
                 }}
                 className={cn(
-                  "inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-md px-3 text-[12.5px] font-semibold transition-colors disabled:opacity-50",
+                  // Quatro opções da mesma largura, ocupando a linha: com
+                  // menos folga nas laterais, "Cadastro do fornecedor" cabe
+                  // numa linha só.
+                  "inline-flex h-8 min-w-0 flex-1 basis-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-1 text-[12.5px] font-semibold transition-colors disabled:opacity-50",
                   ativo ? "bg-[#282828] text-white" : "text-muted-foreground hover:text-foreground",
                   riscado &&
                     "cursor-not-allowed line-through decoration-muted-foreground/50 hover:text-muted-foreground",
@@ -215,7 +221,7 @@ export function PagamentoDaPPField({
 
         {semCadastro && (valor.escolha === null || valor.escolha === "cadastro") && (
           <p className={cn("text-[12px]", faltaEscolha ? "text-california-red" : "text-muted-foreground")}>
-            Sem conta nem PIX no cadastro: escolha chave aleatória ou boleto.
+            Sem conta nem PIX no cadastro: escolha chave aleatória, boleto ou guia.
           </p>
         )}
 
@@ -241,6 +247,13 @@ export function PagamentoDaPPField({
               <p className="mt-1 text-[11.5px] text-california-red">{problemaChave}</p>
             )}
           </div>
+        )}
+
+        {valor.escolha === "guia" && (
+          <p className="text-[12px] text-muted-foreground">
+            Taxa, licença ou alvará de órgão público. Anexe a guia abaixo, com o tipo{" "}
+            <strong className="font-semibold text-foreground">Guia</strong>.
+          </p>
         )}
 
         {valor.escolha === "boleto" && (

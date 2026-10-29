@@ -134,10 +134,11 @@ function garantirShapeDadosBrutosNF(parsed: unknown): DadosBrutosNF {
 // ---------------------------------------------------------------------------
 // Leitura do documento ao anexar (decisão 192, 19/10/2026): o
 // mesmo pedido da NF, mais o tipo do documento e o número dele. Vale para
-// NF, recibo, fatura, boleto, contrato e outros.
+// NF, recibo, fatura, boleto, guia, contrato e outros. A guia (taxa,
+// licença ou alvará de órgão público) entrou na decisão 227 (29/10/2026).
 // ---------------------------------------------------------------------------
 
-export const TIPOS_LIDOS = ["nota_fiscal", "recibo", "fatura", "boleto", "contrato", "outro"] as const;
+export const TIPOS_LIDOS = ["nota_fiscal", "recibo", "fatura", "boleto", "guia", "contrato", "outro"] as const;
 
 export interface DadosBrutosDocumento extends DadosBrutosNF {
   tipo_documento: (typeof TIPOS_LIDOS)[number] | null;
@@ -157,17 +158,18 @@ export const SCHEMA_DADOS_DOCUMENTO = {
       type: ["string", "null"] as const,
       enum: [...TIPOS_LIDOS, null],
       description:
-        "nota_fiscal (DANFE, NFS-e), recibo, fatura (inclusive fatura de locação), boleto, contrato ou outro",
+        "nota_fiscal (DANFE, NFS-e), recibo, fatura (inclusive fatura de locação), boleto, guia (taxa, licença ou alvará de órgão público), contrato ou outro",
     },
     numero_documento: {
       type: ["string", "null"] as const,
-      description: "O número que identifica o documento (Fatura nº, Recibo nº, número da NF, número do documento do boleto)",
+      description: "O número que identifica o documento (Fatura nº, Recibo nº, número da NF, número do documento do boleto, número da guia)",
     },
   },
 };
 
 const PROMPT_DOCUMENTO = `Você está lendo um documento anexado a um pedido de compra de uma agência no Brasil.
-Primeiro diga que documento é: nota_fiscal (DANFE ou NFS-e), recibo, fatura (inclusive fatura de locação), boleto, contrato ou outro.
+Primeiro diga que documento é: nota_fiscal (DANFE ou NFS-e), recibo, fatura (inclusive fatura de locação), boleto, guia, contrato ou outro.
+guia é o documento de arrecadação de um órgão público (prefeitura, estado, União) para pagar taxa, licença ou alvará — por exemplo DAM, DAR, DARE ou GRU; o código de barras dela começa com 8. Boleto de cobrança de uma empresa é boleto, não guia.
 Depois extraia os dados nos campos do schema. numero_documento é o número que identifica o documento; numa NF, é o mesmo número da nota.
 Os campos de NF (data de emissão, valor total, CNPJs) valem para qualquer documento que os traga. CNPJ emissor é de quem emitiu; CNPJ tomador é de quem recebe ou paga (o cliente, o sacado).
 Use null quando não puder identificar com certeza — nunca invente, nunca chute.

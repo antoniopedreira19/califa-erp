@@ -25,6 +25,7 @@ import {
   ROTULO_CARTAO_CORPORATIVO,
   type AnexoDaPPNaLista,
   type PPAEmitir,
+  type MeioPeloAnexo,
 } from "@/lib/types";
 import {
   deixarPPProntaParaEnvio,
@@ -445,8 +446,9 @@ export interface PPParaEnviar {
    *  mandaria o reembolso sem comprovante, como a verba. */
   reembolsoTipo: ReembolsoTipo | null;
   anexos: AnexoDaPPNaLista[];
-  /** Decisão 161: paga por boleto — o envio exige o boleto e a nota. */
-  pagaPorBoleto: boolean;
+  /** Pago pelo documento anexado: o boleto exige o boleto e a nota
+   *  (decisão 161); a guia, só a guia (decisão 227). Null nos outros meios. */
+  pagaPeloAnexo: MeioPeloAnexo | null;
   /** Decisão 209: o cartão corporativo vai sem nota e sem anexos, como a
    *  verba. Obrigatório: um chamador que o esquecesse cobraria a nota. */
   cartaoCorporativo: boolean;
@@ -584,7 +586,7 @@ export function EnvioDialog({
       ? subindo
         ? "Aguarde os arquivos terminarem de subir."
         : faltaNosComprovantesDoReembolso(comprovantesDosAnexos(anexos), pp.valor, reembolsoTipo)
-      : faltaNosAnexosParaEnviar(anexos, pp.valor, existentes, pp.pagaPorBoleto);
+      : faltaNosAnexosParaEnviar(anexos, pp.valor, existentes, pp.pagaPeloAnexo);
     if (falta && comAnexos && !(semNfNaAuditoria && anexos.length === 0)) {
       setErro(falta);
       return;
@@ -772,7 +774,7 @@ export function EnvioDialog({
                     ? "Anexos · opcionais na auditoria"
                     : "Anexos"}
               </p>
-              {pp.pagaPorBoleto && <ExigidosNoEnvio anexos={anexos} />}
+              {pp.pagaPeloAnexo && <ExigidosNoEnvio anexos={anexos} meio={pp.pagaPeloAnexo} />}
               <ZonaDeAnexos id={`envio-arquivos-${pp.id}`} pronto={prefixo !== null} onArquivos={subir} />
               <ListaDeAnexos
                 itens={itensDaLista(anexos)}
