@@ -3,7 +3,6 @@ import { Briefcase } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type { FreelancerJobInterno } from "@/lib/types";
-import { PageHeader } from "@/components/ui/page-header";
 import { AbasOrigem } from "./_components/abas-origem";
 import { JobsInternosTabela } from "./_components/jobs-internos-tabela";
 
@@ -52,13 +51,6 @@ export default async function FreelancersJobsPage({
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow="FREELANCERS"
-        title="Jobs"
-        description="Jobs de produção (com orçamento, projeto e cliente) e jobs internos (rótulos pra agrupar freelancers sem fluxo financeiro)."
-        icon={Briefcase}
-      />
-
       <AbasOrigem countProducao={countProducao} countInterno={countInterno} />
 
       {aba === "producao" ? (

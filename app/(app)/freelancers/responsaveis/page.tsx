@@ -122,34 +122,8 @@ export default async function ResponsaveisPage() {
     )
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
-  const totalFreelas = Array.from(contagem.values()).reduce((a, b) => a + b, 0);
-
   return (
     <div className="space-y-6">
-      <header className="flex items-start justify-between gap-4 flex-wrap">
-        <div>
-          <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground">
-            <UserCog className="h-3.5 w-3.5 text-california-red" />
-            <span>Time</span>
-          </div>
-          <h1 className="mt-2 text-2xl md:text-[28px] font-bold tracking-tight text-foreground">
-            Responsáveis
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Quem gerencia os freelancers da agência. Clique num responsável
-            pra ver os freelas dele.
-          </p>
-        </div>
-        <div className="text-right">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Freelancers atribuídos
-          </p>
-          <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">
-            {totalFreelas}
-          </p>
-        </div>
-      </header>
-
       <div className="rounded-2xl border border-border bg-white shadow-soft overflow-hidden">
         {responsaveis.length === 0 ? (
           <div className="px-5 py-20 text-center">
