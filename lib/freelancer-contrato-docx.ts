@@ -96,7 +96,12 @@ function valorExtenso(v: number | string | null): string {
   const n = typeof v === "string" ? Number(v) : v;
   if (!n || isNaN(n as number)) return "zero reais";
   try {
-    return extenso((n as number).toFixed(2).replace(".", ","), {
+    // extenso@3 exige par decimal/milhar coerente: default é ponto decimal +
+    // vírgula de milhar. toFixed(2) já devolve "3000.00", sem milhar — passar
+    // cru funciona. Antes trocávamos "." por "," e isso quebrava desde a
+    // v3 (ParseError INVALID_GROUPING) — o catch engolia e a minuta saía sem
+    // extenso.
+    return extenso((n as number).toFixed(2), {
       mode: "currency",
     });
   } catch {
