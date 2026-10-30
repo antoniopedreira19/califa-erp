@@ -8732,3 +8732,27 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - O mútuo (MÚTUO INT) continua fora: a função própria está em protótipo,
   aguardando o Tiago.
 - Os juros de 25/10 têm competência 3T e seguem na cauda, sem linha no banco.
+
+## ⚠️ Nota de 2026-10-30 (7) — o 4T até 25/10 pelo histórico, passo a passo (decisão 211)
+
+- O único DRE do sistema lê só as cargas do histórico: o que é lançado como PP
+  ou conta avulsa não aparece nele. O DRE do sistema continua por fazer.
+- A descrição da planilha traz o código da PP ("PP00141"). Use esse código para
+  casar: favorecido e valor iguais podem ser o pagamento do mês seguinte.
+- 13 PPs aprovadas baixadas contra 10 linhas do banco. 17 linhas seguem com PP
+  em avaliação, aguardando aprovação.
+
+## ⚠️ Nota de 2026-10-30 (8) — as PPs já pagas que estavam em avaliação (decisão 211)
+
+- **O que mudou:** 19 PPs aprovadas pelo fluxo de sempre e baixadas contra 17 linhas da California Santander (R$ 423.551,20), com autorização do Tiago. Sem mudança de código.
+- **Notas:** as 10 PPs com NF usaram os dados que o GP digitou; os PDFs não foram abertos. Foram pagas pelo valor cheio, então nenhuma retenção foi registrada.
+- **Correção:** a PP-00194 foi para a linha de 21/10 (estava na de 20/10). A linha de 20/10 voltou a pendente.
+- **Em aberto:** a PP-00264 tem os valores das parcelas trocados no sistema, e a parcela de R$ 1.241,60 paga em 23/10 não tem linha própria no extrato.
+
+## ⚠️ Nota de 2026-10-30 (9) — a carga só DRE (decisão 211)
+
+- **O que mudou:** o histórico tem um terceiro tipo de carga, `so_dre`, para o que já foi pago pelo sistema. Conta no DRE, no regional e na rentabilidade, e não no saldo, no extrato nem na conciliação.
+- **Carregada:** "Outubro 2026 · só DRE", 85 linhas, −R$ 1.043.805,56 (55 de PP baixada e 30 de tarifa e taxa).
+- **A lista** vem da conferência com o banco, em `<versão>/so-dre/linhas.json`, fora do git. Gere com `empacotar.ts --so-dre`.
+- **Regra:** a mesma linha não pode estar na cauda e no só DRE. O empacotador e o banco recusam.
+- **Índice:** `uq_historico_cargas_ativa_periodo` passou a incluir o tipo.

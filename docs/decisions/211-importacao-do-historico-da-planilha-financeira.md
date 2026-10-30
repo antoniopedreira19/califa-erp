@@ -10,8 +10,8 @@ California e BB Americas criadas antes) feitas e conferidas em 26/10/2026,
 A3 (o histórico de cada conta no Extrato da Conciliação) e a A4 (a DRE do
 histórico, o resultado por regional, a rentabilidade e o faturamento dos jobs
 do histórico, em Relatórios) no mesmo dia. A5: o 3T carregado em 27/10/2026,
-da versão de 25/10. Próximo: o saldo inicial das contas em 01/10, pelo
-extrato de 30/09, e a trilha do 4T no sistema.
+da versão de 25/10. A carga só DRE do 4T, em 30/10/2026. Próximo: o saldo
+inicial das contas em 01/10, pelo extrato de 30/09, e a trilha do 4T no sistema.
 **Quem decidiu:** Tiago, no plano "Importação do histórico financeiro"
 (página privada de 25/10/2026), com as respostas D1, D2 e D3 dadas no mesmo
 dia: "Aprovo D1, D2 e D3 como você recomendou".
@@ -1286,6 +1286,101 @@ ficam só os jobs do 4T." Os jobs do 3T que já existem no sistema (cerca de
 - **O mútuo continua fora.** Entre CNPJs diferentes a transferência é travada
   (decisão 124 D4), e o Tiago pediu um protótipo da função própria antes de
   implementar.
+
+### O 4T até 25/10: pelo histórico, passo a passo (30/10/2026)
+
+- **O ponto que decide:** o único DRE do sistema é o "DRE do histórico", e
+  `historico_dre` lê só as cargas ativas. PP ou conta avulsa lançada no sistema
+  não aparece nele. O DRE que leia o sistema continua por fazer e será
+  necessário depois da virada.
+- **Decidido** (Tiago, 30/10): o 4T até 25/10 entra pela cauda, passo a passo.
+  Primeiro o que já corresponde ao sistema; depois as PPs que não estão nele e
+  as de jobs que não estão nele. Nos recebimentos, por enquanto, só o mapa.
+- **Inventário fora da cauda:** 537 linhas de 01 a 25/10. Recebimentos 12
+  (R$ 4,23 mi); PP de job que não existe 98 (R$ 1,20 mi); PP de job aberto sem
+  PP no sistema 103 (R$ 780 mil); com PP no sistema 43 (R$ 217 mil); já baixada
+  19 (R$ 565 mil); sem job 212 (R$ 1,95 mi); outras 50.
+- **A descrição da planilha traz o código da PP** ("PP00141"): é o casamento
+  exato, sem depender de nome. Mesmo favorecido e mesmo valor não bastam, porque
+  os mensalistas recebem igual todo mês: a PP que vence em novembro é o próximo
+  pagamento, não o de outubro. A sugestão da conciliação por valor erra nesses
+  casos.
+- **Feito:** 10 linhas do banco (R$ 35.044,39) baixadas com 13 PPs aprovadas,
+  pelo `baixarEConciliar`, com o centro das baixas anteriores (Custo Operacional,
+  Geral provisório). Duas têm o código de uma PP cancelada na planilha: PP-00180
+  e PP-00391 são as reemitidas, conferidas pelo favorecido, job e valor.
+- **Sobrou do que já está no sistema:** 17 linhas (R$ 423.551,20) com PP em
+  avaliação. Aprovadas e baixadas no mesmo dia, com autorização do Tiago: 19 PPs,
+  pela aprovação de sempre (`aprovarPPComData` / `aprovarPPComNotaFiscal`), e
+  depois `baixarEConciliar`. Só a conta de teste e a PP-00290, de 26/10, seguem
+  sem linha do banco.
+  - **As 10 PPs com NF** usaram o que o GP digitou na PP (número, emissão, valor e
+    tomador). A soma bate com a PP e com o banco, e o tomador é o CNPJ da PP; os
+    PDFs não foram abertos. O crédito de PIS/COFINS ficou na regra automática.
+  - **Sem retenção:** todas foram pagas pelo valor cheio. Quatro são de fornecedor
+    do regime normal (R$ 267.236,00: PP-00205, 00398, 00401 e 00403): se devia ter
+    retenção, ela não foi feita no pagamento. Nada foi registrado que o banco não
+    mostre.
+  - **Data da aprovação:** a data da linha do banco. Nas três PPs com duas parcelas
+    (00216, 00264 e 00325), a do 1º vencimento, para a segunda não andar.
+  - **PP-00264:** marcada como pagamento fora do cadastro (boleto). Os valores das
+    parcelas estão trocados no sistema: a planilha paga 01/02 de R$ 1.241,20 em
+    05/10 e 02/02 de R$ 1.241,60 em 23/10. A linha de 05/10 baixou a parcela 2, que
+    fecha ao centavo. Os R$ 1.241,60 de 23/10 não têm linha própria no extrato e
+    a parcela 1 segue em aberto.
+  - **Linha que mudou:** a PP-00194 foi para a linha de 21/10, e não a de 20/10.
+    Com valores iguais, o inventário pareava a primeira linha livre com a primeira
+    da planilha, e a planilha diz 21/10. Conferidas as 27 linhas: foi o único caso
+    com data diferente. A linha de R$ 7.000 de 20/10 (ordem 1282) segue pendente;
+    a linha da planilha que sobra é de pessoal, sem job, de 23/10.
+- **Três jobs têm código diferente** na planilha e no sistema: AMB-1002 × AMB-1001,
+  DEE-1002 × DEE-1001 e ANI-1013 × ANI-1012. O Realizado do job segue o sistema.
+- **Recebimentos, só o mapa:** nada pronto para baixa (o sistema tem 2 títulos em
+  aberto, sem linha de mesmo valor no banco). Dos 108 jobs do 4T: 26 no sistema e
+  já faturados na planilha, 37 no sistema sem nota, 20 fora do sistema e
+  faturados, 25 fora do sistema sem nota. A decisão de como entram fica para depois.
+
+### A carga só DRE: o que já foi pago pelo sistema (30/10/2026)
+
+- **O problema:** a linha de outubro paga pelo sistema tem o caixa no lançamento e
+  não aparece no DRE, que só lê as cargas. Na cauda, contaria duas vezes no saldo.
+- **Decidido** (Tiago, 30/10: "Sim, as 85 linhas"): essas linhas contam no
+  resultado e não no saldo. A ordem do 4T ficou: primeiro o que já está no sistema;
+  depois, pela cauda, as PPs fora do sistema e as de jobs fora do sistema.
+- **Como:** um terceiro tipo de carga, `so_dre` (migrations `20261030500001` e
+  `20261030500002`). O DRE, o regional e a rentabilidade somam todas as cargas
+  ativas; o saldo, o extrato e a conciliação leem só as de tipo `cauda`, e nenhum
+  deles mudou. A nova substitui a ativa do tipo, como a cauda.
+- **A mesma linha não pode estar nas duas:** contaria duas vezes no resultado. O
+  empacotador (`movimentosSoDre`) e o banco (`historico_concluir_carga`, pela
+  `digital`) recusam. A trava do banco não foi exercida com uma sobreposição real;
+  a do empacotador tem teste.
+- **A lista vem da conferência com o banco**, e não de uma regra da planilha, em
+  `<versão>/so-dre/linhas.json`, fora do git. A planilha nova pede lista nova.
+- **Carregada pela tela em 30/10:** "Outubro 2026 · só DRE", 85 movimentos, soma
+  −R$ 1.043.805,56, 18 jobs (o regional divide o custo pelo job da mesma carga).
+  - 55 linhas de PP baixada, R$ 1.034.529,75. Uma delas (PP-00163, R$ 750,20) não
+    tem classificação na planilha e não muda o DRE.
+  - 30 linhas de tarifa e taxa lançadas pela regra, R$ 9.275,81.
+- **Efeito no lucro líquido de 2026:**
+
+  | Empresa | 3T antes | 3T depois | 4T antes | 4T depois |
+  |---|---:|---:|---:|---:|
+  | Agência California | −9.574.590,90 | −9.604.492,59 | 3.028.895,29 | 2.855.852,57 |
+  | CCH | −204.327,37 | −204.327,37 | 116.250,90 | −168.388,25 |
+  | Hitlab | 781.742,62 | 232.445,82 | 195.000,00 | 188.825,00 |
+
+  O 4T ainda é parcial: faltam as PPs fora do sistema e os recebimentos. A Hitlab
+  perde R$ 549 mil no 3T porque as PPs de jobs do 3T pagas em outubro estavam fora.
+- **Conferido:** a tela do DRE bate ao centavo com a simulação. Saldo, diferença,
+  pendentes e linhas sem banco das contas ficaram iguais. A cauda segue com 1.661
+  linhas e 1.226 ligações, e nenhuma linha está nas duas cargas.
+- **Ficam para as pendências, fora das duas cargas por enquanto:** 16 linhas com PP
+  no sistema e sem baixa (R$ 39.889,53) e a de R$ 6.500 (PP25594, 20/10), que o
+  inventário dava como já no sistema e não casa com nenhuma baixa.
+- **Dois casos novos:** a tarifa de R$ 10 da GoCrazy de 01/10 conta duas vezes no
+  saldo (na cauda e na regra). A PP-00406 (R$ 6.000) está na linha de 20/10, a
+  planilha diz 23/10 e o total fecha.
 
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas

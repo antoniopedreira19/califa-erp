@@ -7,7 +7,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { jobDaCauda, linhaDeJob, linhaDeMovimento, linhasDeSaldo, linhasDoRateio, movimentoDaCauda, type FonteDoRateio, type LinhaLida } from "./empacotar";
+import { jobDaCauda, linhaDeJob, linhaDeMovimento, linhasDeSaldo, linhasDoRateio, movimentoDaCauda, movimentosSoDre, type FonteDoRateio, type LinhaLida } from "./empacotar";
 import {
   COLUNAS_DO_PACOTE,
   FORMATO_DO_PACOTE,
@@ -277,6 +277,18 @@ test("cauda: sem job, o DRE com competência até o 3T, fora o mútuo e o empré
   assert.equal(movimentoDaCauda(mov({ competencia_trimestre: "" }), jobs), false);
 });
 
+test("só DRE: leva as linhas da lista; recusa a que falta na planilha e a que iria para a cauda", () => {
+  const mov = (id: string, extra: Partial<LinhaLida> = {}): LinhaLida => ({
+    id, classe: "dre", grupo: "CO", competencia_ano: "2026", competencia_trimestre: "4", job_id: "", ...extra,
+  });
+  const jobs = new Set(["j3"]);
+  const linhas = [mov("a", { job_id: "j4" }), mov("b", { grupo: "CF" }), mov("c", { job_id: "j3" }), mov("d", { competencia_trimestre: "3" })];
+  assert.deepEqual(movimentosSoDre(linhas, new Set(["a", "b"]), jobs).map((m) => m.id), ["a", "b"]);
+  assert.throws(() => movimentosSoDre(linhas, new Set(["a", "z"]), jobs), /traz 2 linhas e a planilha tem 1/);
+  assert.throws(() => movimentosSoDre(linhas, new Set(["a", "c"]), jobs), /1 linhas da lista também iriam para a cauda: c/);
+  assert.throws(() => movimentosSoDre(linhas, new Set(["d"]), jobs), /iriam para a cauda: d/);
+});
+
 test("cabeçalho: o pacote sem tipo é de período; a cauda declara o tipo", () => {
   const base = (carga: Record<string, string>) =>
     JSON.stringify({
@@ -296,5 +308,7 @@ test("cabeçalho: o pacote sem tipo é de período; a cauda declara o tipo", () 
   assert.ok(antigo.ok && antigo.pacote.carga.tipo === "periodo");
   const cauda = lerPacote(base({ nome: "Outubro 2026 · jobs até o 3T", de: "2026-10-01", ate: "2026-10-25", tipo: "cauda" }));
   assert.ok(cauda.ok && cauda.pacote.carga.tipo === "cauda");
+  const soDre = lerPacote(base({ nome: "Outubro 2026 · só DRE", de: "2026-10-01", ate: "2026-10-25", tipo: "so_dre" }));
+  assert.ok(soDre.ok && soDre.pacote.carga.tipo === "so_dre");
   assert.equal(lerPacote(base({ nome: "X", de: "2026-10-01", ate: "2026-10-25", tipo: "outro" })).ok, false);
 });
