@@ -1151,7 +1151,7 @@ a BB California pela tela e a Santander Hitlab por migration".
   mudaram. Os dois conjuntos foram ligados pela tela; a Hitlab ficou sem
   baixa sem linha e com 8 linhas do banco pendentes.
 
-## A cauda: outubro dos jobs até o 3T (A6, 27/10/2026)
+## A cauda: outubro dos jobs até o 3T (A6, 27/10/2026; ampliada em 30/10)
 
 Depois do inventário do 4T (planilha de 01 a 25/10 contra os extratos e o
 sistema, só leitura, em `tmp/historico-planilha/inventario-4t/`), o grosso
@@ -1216,6 +1216,28 @@ ficam só os jobs do 4T." Os jobs do 3T que já existem no sistema (cerca de
 - **Falta:** escolher à mão as linhas da cauda de uma linha do banco que o
   motor não casou (as 318 da California Santander, sobretudo recebimentos
   que a planilha divide por nota).
+
+### A cauda ampliada: competência até o 3T (30/10/2026)
+
+- **A regra** (Tiago, 30/10: "Sim, ampliar"): além dos jobs até o 3T que
+  não existem no sistema, entra na cauda todo movimento de outubro **sem
+  job**, do DRE, com **competência até o 3T** — a folha de setembro, os
+  impostos do 3T, os custos fixos e as contas avulsas de setembro e o
+  imobilizado pagos em outubro. Ficam de fora o empréstimo (EMP) e o mútuo
+  entre as empresas, que esperam decisão própria, a transferência, o estorno
+  e o que não tem competência. No sistema fica só o que é de competência 4T.
+  `movimentoDaCauda` em `lib/historico-financeiro/empacotar.ts`; a carga se
+  chama "Outubro 2026 · competência até o 3T".
+- **A troca não solta o que já estava ligado** (migration
+  `20261030400001`): na troca de cauda, o movimento novo com a mesma
+  digital, conta e valor herda a ligação com o banco do antigo. Antes, a
+  troca soltava todas as linhas do banco ligadas à cauda.
+- **Carregada pela tela em 30/10:** 1.659 movimentos (os 1.058 dos jobs e
+  601 sem job: folha 241, impostos 174, custos fixos 119, despesas
+  administrativas 46, imobilizado 5 e outros 16), 54 notas e 200 jobs. As
+  721 ligações foram herdadas; as 664 linhas do banco continuaram
+  conciliadas. A conciliação passou a casar a cauda nova com 328 linhas da
+  California Santander, ligadas pela seção "Do histórico da planilha".
 
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas

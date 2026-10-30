@@ -67,7 +67,7 @@ export async function carregarCaudaDoExtrato(
         id: `historico:${h.id}`,
         folha: null,
         data_movimento: h.data,
-        descricao: `Histórico da planilha · ${h.job_nome ?? h.descricao ?? "jobs até o 3T"}`,
+        descricao: `Histórico da planilha · ${h.job_nome ?? h.descricao ?? "competência até o 3T"}`,
         natureza: valor >= 0 ? "entrada" : "saida",
         valor: Math.abs(valor),
         fornecedor_nome: h.fornecedor,

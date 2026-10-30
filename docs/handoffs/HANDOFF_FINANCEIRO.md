@@ -8700,3 +8700,15 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   confirmação e é apagada no registrar.
 - Teste no TES-1029/26 (P-0006/26), desfeito; ficaram 4 alterações de
   teste no histórico dele.
+
+## ⚠️ Nota de 2026-10-30 (4) — a cauda ampliada: competência até o 3T (decisão 211)
+
+- A cauda do histórico passa a ter, além dos jobs até o 3T fora do sistema,
+  todo movimento de outubro sem job, do DRE, com competência até o 3T (folha
+  de setembro, impostos, custos fixos, avulsas, imobilizado), fora
+  empréstimo e mútuo (`movimentoDaCauda`). No sistema fica só o 4T.
+- Migration `20261030400001`: `historico_concluir_carga`, na troca de cauda,
+  passa a ligação com o banco do movimento antigo para o novo de mesma
+  digital, conta e valor, em vez de soltar todas as linhas do banco.
+- Textos da tela (Histórico, aba Banco, Extrato, fluxo de caixa) dizem
+  "competência até o 3T".

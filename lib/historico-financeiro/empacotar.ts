@@ -117,6 +117,27 @@ export function jobDaCauda(j: LinhaLida): boolean {
   return ano === 2026 && tri >= 1 && tri <= 3;
 }
 
+/** Os grupos da planilha que não vão para a cauda mesmo com competência até
+ *  o 3T: o empréstimo e o mútuo entre as empresas esperam decisão própria. */
+const FORA_DA_CAUDA = new Set(["EMP", "MÚTUO INT"]);
+
+/**
+ * O movimento depois do corte que vai para a cauda: o do job da cauda
+ * (`jobDaCauda`) e, sem job, o do DRE com competência até o 3T de 2026 ou de
+ * ano anterior — a folha de setembro, os impostos, os custos fixos e as
+ * contas avulsas pagos em outubro (Tiago, 30/10/2026: "no sistema ficam só
+ * os do 4T"). Ficam de fora o empréstimo, o mútuo, a transferência, o
+ * estorno e o que não tem competência.
+ */
+export function movimentoDaCauda(m: LinhaLida, jobsDaCauda: ReadonlySet<string>): boolean {
+  if (m.job_id) return jobsDaCauda.has(m.job_id);
+  if (m.classe !== "dre" || FORA_DA_CAUDA.has(m.grupo ?? "")) return false;
+  const ano = Number(m.competencia_ano);
+  const tri = Number(m.competencia_trimestre);
+  if (!ano || !tri) return false;
+  return ano < 2026 || (ano === 2026 && tri >= 1 && tri <= 3);
+}
+
 export function linhaDeJob(j: LinhaLida): ValorDoPacote[] {
   return emOrdem("jobs", {
     chave: j.id,

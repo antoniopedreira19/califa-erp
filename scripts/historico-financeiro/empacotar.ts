@@ -34,6 +34,7 @@ import { lerTabelaCsv } from "../../lib/historico-financeiro/depara";
 import {
   FONTES_DO_RATEIO,
   jobDaCauda,
+  movimentoDaCauda,
   linhaDeJob,
   linhaDeMovimento,
   linhaDeNota,
@@ -60,7 +61,7 @@ const USO =
   '  ou: … <pasta-da-versao> --nome "Teste da A1" --de 2023-01-01 --ate 2023-01-31 [--conta "BB California"]\n' +
   '  ou: … <pasta-da-versao> --cauda';
 
-const NOME_DA_CAUDA = "Outubro 2026 · jobs até o 3T";
+const NOME_DA_CAUDA = "Outubro 2026 · competência até o 3T";
 
 const PERIODOS: Record<string, [string, string]> = {
   "1ª carga": ["2023-01-01", "2026-06-30"],
@@ -237,7 +238,8 @@ async function gravarPacote(versao: string, manifesto: Manifesto, carga: Pacote[
   );
 }
 
-/** A cauda (A6): do dia seguinte ao corte até a versão da planilha, só os jobs até o 3T fora do sistema. */
+/** A cauda (A6): do dia seguinte ao corte até a versão da planilha, o que é de competência até o 3T e fica fora do
+ *  sistema — os jobs até o 3T que não existem nele e, sem job, o DRE até o 3T (`movimentoDaCauda`). */
 async function empacotarCauda(versao: string) {
   const manifesto: Manifesto = JSON.parse(await readFile(join(versao, "bruto", "manifesto.json"), "utf8"));
   const ler = async (...caminho: string[]): Promise<LinhaLida[]> => {
@@ -255,11 +257,11 @@ async function empacotarCauda(versao: string) {
   if (ate < de) throw new Error(`A planilha é de ${ate}: não tem nada depois do corte.`);
 
   const daCauda = new Set(jobs.filter(jobDaCauda).map((j) => j.id));
-  const movs = movimentos.filter((m) => m.carga === "depois do corte" && m.data >= de && m.data <= ate && daCauda.has(m.job_id));
+  const movs = movimentos.filter((m) => m.carga === "depois do corte" && m.data >= de && m.data <= ate && movimentoDaCauda(m, daCauda));
   const nts = notas.filter(
     (n) => (n.situacao === "emitida" || n.situacao === "cancelada") && n.emissao >= de && n.emissao <= ate && daCauda.has(n.job_id),
   );
-  const citados = new Set([...movs.map((m) => m.job_id), ...nts.map((n) => n.job_id)]);
+  const citados = new Set([...movs.map((m) => m.job_id), ...nts.map((n) => n.job_id)].filter(Boolean));
   const jbs = jobs.filter((j) => citados.has(j.id));
 
   const tabelas: Pacote["tabelas"] = {

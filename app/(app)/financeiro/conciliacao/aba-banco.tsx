@@ -821,7 +821,7 @@ export function AbaBanco({
     [
       "historico",
       "Do histórico da planilha",
-      "Pagamentos e recebimentos dos jobs até o 3T que não existem no sistema: estão na cauda do histórico (decisão 211). Conciliar liga a linha do banco à linha da planilha, sem lançamento no sistema. Na importação elas se conciliam sozinhas.",
+      "Pagamentos e recebimentos de competência até o 3T que ficam fora do sistema — dos jobs até o 3T que não existem nele e, sem job, a folha, os impostos e as despesas do 3T: estão na cauda do histórico (decisão 211). Conciliar liga a linha do banco à linha da planilha, sem lançamento no sistema. Na importação elas se conciliam sozinhas.",
       "violet",
       secoes.historico.length > 1 && (
         <BotaoDaSecao disabled={pending} onClick={() => acoes.conciliarHistorico(secoes.historico)}>
@@ -1374,8 +1374,8 @@ function ZonaDeArquivo({
         <p className="text-xs text-muted-foreground">
           O arquivo que o internet banking do Santander, Itaú ou qualquer banco exporta. O sistema guarda só as linhas do
           extrato, sem repetir as que já vieram. O que é certo se resolve sozinho, com Desfazer: a baixa feita à mão que
-          bate, o título de valor exato, a remessa, a regra do histórico e a linha do histórico da planilha (os jobs até o 3T
-          fora do sistema); o resto espera você.
+          bate, o título de valor exato, a remessa, a regra do histórico e a linha do histórico da planilha (a competência até
+          o 3T fora do sistema); o resto espera você.
           {!compacta && ` A conta vem do próprio arquivo: ele só é aceito se for da ${contaNome}, a conta aberta no topo.`}
         </p>
       </div>
