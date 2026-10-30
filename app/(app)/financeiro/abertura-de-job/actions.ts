@@ -1149,12 +1149,9 @@ async function conferirProjetoEContas(
     if (!projeto.ativo) {
       return "Este projeto foi inativado. Escolha outro para o job.";
     }
-    // Agrupar jobs de clientes diferentes sob o mesmo projeto não é
-    // arrumação, é engano — e o total do projeto sairia somando dinheiro
-    // de dois clientes.
-    if (clienteDoJob && projeto.cliente_id !== clienteDoJob) {
-      return "O projeto escolhido é de outro cliente.";
-    }
+    // Projeto de outro cliente é permitido desde a decisão 228: os
+    // parceiros de um mesmo evento são clientes diferentes e o financeiro
+    // quer vê-los juntos. Até 29/10/2026 isto recusava.
   }
 
   if (contasRes.error) {
@@ -1209,12 +1206,13 @@ async function projetoComONome(
   return linha ?? null;
 }
 
-/** Diz qual projeto já tem o nome — e de que cliente, porque a unicidade
- *  vale no sistema inteiro e o combo só mostra os do cliente do job. */
+/** Diz que o nome já existe e como pôr o job nele: desde a decisão 228 o
+ *  combo acha projeto de qualquer cliente, então o repetido é para ser
+ *  escolhido na lista, não renomeado. */
 function mensagemDeNomeRepetido(p: ProjetoDeMesmoNome): string {
   // Sem o código do projeto, que não aparece para o usuário (27/10/2026).
-  const cliente = p.cliente_nome ? ` no cliente ${p.cliente_nome}` : "";
-  return `Já existe um projeto com este nome${cliente}. Use outro nome.`;
+  const cliente = p.cliente_nome ? ` (criado no cliente ${p.cliente_nome})` : "";
+  return `Já existe um projeto com este nome${cliente}. Para incluir o job nele, escolha-o na lista do campo Projeto.`;
 }
 
 /** O 23505 do insert/update: o nome repetido, ou a corrida do código. */

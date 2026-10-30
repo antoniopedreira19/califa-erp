@@ -8610,3 +8610,22 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   honorários zerados (parâmetros do job, decisão 224). Teste no TES-1035/26,
   desfeito. Ver a §12 da
   [decisão 115](../decisions/115-o-financeiro-edita-o-orcado-do-job.md).
+
+## O projeto do financeiro com jobs de clientes diferentes — 29/10/2026 (decisão 228)
+
+- O campo Projeto da abertura e do "Editar registro" deixa de filtrar pelo
+  cliente do job: busca em todos os projetos abertos, em dois grupos
+  ("deste cliente" em cima, "de outros clientes" embaixo). Cada linha mostra
+  os clientes dos jobs do projeto, e a busca acha também pelo cliente.
+- O servidor (`conferirProjetoEContas` em `abertura-de-job/actions.ts`) deixa de
+  recusar "O projeto escolhido é de outro cliente". O "+" com nome repetido
+  manda escolher o projeto na lista.
+- `/financeiro/projetos/[id]`: o card "Cliente" vira a lista dos clientes
+  dos jobs ("Clientes" quando há mais de um).
+- `listarProjetosFinanceiro` (`lib/data/projetos-financeiro.ts`) traz os
+  clientes de cada projeto numa consulta enxuta aos jobs, em paralelo; o
+  resumo "A, B e mais N" fica em `lib/resumo-dos-clientes.ts`, sem import de
+  servidor, porque o combo é componente de cliente.
+- Sem migration. A reclassificação retroativa (Fair Culture & Business em
+  nove projetos, Festa Debut em três) fica com o financeiro, pelo "Editar
+  registro". Ver a [decisão 228](../decisions/228-projeto-do-financeiro-com-jobs-de-clientes-diferentes.md).

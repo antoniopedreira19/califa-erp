@@ -109,6 +109,7 @@ import {
   ResumoDaAberturaAnterior,
 } from "./historico-abertura";
 import type { ProjetoFinanceiroOpcao } from "@/lib/data/projetos-financeiro";
+import { resumoDosClientes } from "@/lib/resumo-dos-clientes";
 import type { AprovacaoDeSave } from "../aprovacao-save";
 // Só os TIPOS: `saves-da-abertura.ts` lê o banco (servidor) e não pode
 // entrar no bundle do cliente (decisão 155).
@@ -252,7 +253,8 @@ interface Props {
   categorias: CategoriaOption[];
   /** Serviços (categorias_dominio, escopo 'projeto') para o combo. */
   servicos: ServicoOption[];
-  /** Projetos do financeiro do mesmo cliente, para o combo. */
+  /** Todos os projetos abertos do financeiro, os do cliente do job
+   *  primeiro (decisão 228), para o combo. */
   projetos: ProjetoFinanceiroOpcao[];
   /**
    * O projeto do financeiro do último job aberto no mesmo projeto da
@@ -962,6 +964,7 @@ export function AberturaForm({
             nome: nomeProjetoNovo,
             cliente_id: job.cliente_id ?? "",
             cliente_nome: job.cliente_nome,
+            clientes: [{ id: job.cliente_id ?? "", nome: job.cliente_nome }],
             novo: true,
           },
           ...lista,
@@ -977,10 +980,29 @@ export function AberturaForm({
     if (!q) return projetosVisiveis;
     return projetosVisiveis.filter(
       (p) =>
-        // Só pelo nome: o código do projeto não aparece (27/10/2026).
-        normalizar(p.nome).includes(q),
+        // Pelo nome e pelos clientes que já estão dentro — o código do
+        // projeto não aparece (27/10/2026).
+        normalizar(p.nome).includes(q) ||
+        p.clientes.some((c) => normalizar(c.nome ?? "").includes(q)),
     );
   }, [projetosVisiveis, buscaProjeto]);
+  // A busca acha projeto de qualquer cliente (decisão 228); os do cliente
+  // do job ficam num grupo à parte, em cima — o servidor já manda nessa
+  // ordem, e o projeto novo é sempre deste cliente.
+  const ehDoClienteDoJob = (p: OpcaoDeProjeto) =>
+    p.novo ||
+    p.cliente_id === job.cliente_id ||
+    p.clientes.some((c) => c.id === job.cliente_id);
+  const gruposDeProjeto = [
+    {
+      titulo: "Projetos abertos deste cliente",
+      itens: projetosFiltrados.filter(ehDoClienteDoJob),
+    },
+    {
+      titulo: "Projetos abertos de outros clientes",
+      itens: projetosFiltrados.filter((p) => !ehDoClienteDoJob(p)),
+    },
+  ].filter((g) => g.itens.length > 0);
   function escolherProjeto(id: string) {
     setProjetoId(id);
     setProjetoAberto(false);
@@ -1816,44 +1838,51 @@ export function AberturaForm({
                           className="h-9 text-[13px]"
                         />
                       </div>
-                      <p className="px-4 pb-1 pt-2.5 text-[10px] font-bold uppercase tracking-[0.09em] text-[#8a8a8a]">
-                        Projetos abertos
-                      </p>
-                      <div className="max-h-64 overflow-y-auto px-1.5 pb-1.5">
+                      <div className="max-h-72 overflow-y-auto px-1.5 pb-1.5">
                         {projetosVisiveis.length === 0 ? (
-                          <p className="px-2.5 pb-2 text-[12px] text-muted-foreground">
-                            Nenhum projeto do financeiro para este cliente. Crie
-                            um no “+” ao lado.
+                          <p className="px-2.5 pb-2 pt-2.5 text-[12px] text-muted-foreground">
+                            Nenhum projeto aberto no financeiro. Crie um no
+                            “+” ao lado.
                           </p>
                         ) : projetosFiltrados.length === 0 ? (
-                          <p className="px-2.5 pb-2 text-[12px] text-muted-foreground">
+                          <p className="px-2.5 pb-2 pt-2.5 text-[12px] text-muted-foreground">
                             Nenhum projeto com “{buscaProjeto.trim()}”.{" "}
                             {projetoSel
                               ? "Confira o nome, ou limpe o campo no ✕ e crie um no “+”."
                               : "Confira o nome ou crie um no “+” ao lado."}
                           </p>
                         ) : (
-                          projetosFiltrados.map((pr) => (
-                            <button
-                              key={pr.id}
-                              type="button"
-                              onClick={() => escolherProjeto(pr.id)}
-                              className={cn(
-                                "block w-full rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors hover:bg-muted",
-                                pr.id === projetoId &&
-                                  "bg-california-red/[0.06] text-california-red",
-                              )}
-                            >
-                              <span className="flex items-baseline justify-between gap-3">
-                                <span className="truncate font-semibold">
-                                  {pr.nome}
-                                </span>
-                                {pr.novo && <SeloProjetoNovo />}
-                              </span>
-                              <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                                {pr.cliente_nome ?? "—"}
-                              </span>
-                            </button>
+                          gruposDeProjeto.map((grupo) => (
+                            <div key={grupo.titulo}>
+                              <p className="px-2.5 pb-1 pt-2.5 text-[10px] font-bold uppercase tracking-[0.09em] text-[#8a8a8a]">
+                                {grupo.titulo}
+                              </p>
+                              {grupo.itens.map((pr) => (
+                                <button
+                                  key={pr.id}
+                                  type="button"
+                                  onClick={() => escolherProjeto(pr.id)}
+                                  className={cn(
+                                    "block w-full rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors hover:bg-muted",
+                                    pr.id === projetoId &&
+                                      "bg-california-red/[0.06] text-california-red",
+                                  )}
+                                >
+                                  <span className="flex items-baseline justify-between gap-3">
+                                    <span className="truncate font-semibold">
+                                      {pr.nome}
+                                    </span>
+                                    {pr.novo && <SeloProjetoNovo />}
+                                  </span>
+                                  <span
+                                    className="mt-0.5 block truncate text-[11px] text-muted-foreground"
+                                    title={pr.clientes.map((c) => c.nome ?? "—").join(", ")}
+                                  >
+                                    {resumoDosClientes(pr.clientes.map((c) => c.nome))}
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
                           ))
                         )}
                       </div>

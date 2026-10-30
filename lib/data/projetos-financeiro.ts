@@ -16,46 +16,101 @@ export interface ProjetoFinanceiroOpcao {
   id: string;
   codigo: string;
   nome: string;
+  /** O cliente de quem criou o projeto — o do primeiro job. */
   cliente_id: string;
   cliente_nome: string | null;
+  /**
+   * Os clientes dos jobs do projeto, sem repetir. Desde a decisão 228 um
+   * projeto do financeiro junta jobs de clientes diferentes (os parceiros
+   * de um mesmo evento), e o cliente de quem criou não diz mais quem está
+   * dentro. Vazio só no projeto novo, que ainda não tem job.
+   */
+  clientes: { id: string; nome: string | null }[];
 }
 
 /**
- * Projetos do financeiro ativos, para o combo da abertura.
+ * Todos os projetos do financeiro ativos, para o combo da abertura e do
+ * registro.
  *
- * `clienteId` filtra por cliente: agrupar jobs de clientes diferentes sob
- * o mesmo projeto não é arrumação, é engano — e o combo do protótipo já
- * mostra o cliente em cada linha justamente para isso ficar visível.
+ * Até 29/10/2026 a lista vinha filtrada pelo cliente do job, e o nome é
+ * único no sistema inteiro (decisão 119): o job de um parceiro de evento
+ * não achava o projeto do evento e não podia criar outro com o mesmo
+ * nome — "Fair Culture & Business" virou dez projetos, um por cliente.
+ * Agora a busca acha qualquer projeto aberto (decisão 228); os do cliente
+ * do job (`clienteDoJob`) vêm primeiro, e cada linha mostra os clientes
+ * que já estão dentro.
  */
 export async function listarProjetosFinanceiro(
   tenantId: string,
-  clienteId?: string | null,
+  clienteDoJob?: string | null,
 ): Promise<ProjetoFinanceiroOpcao[]> {
   const supabase = createClient();
 
-  let query = supabase
-    .from("projetos_financeiro")
-    .select("id, codigo, nome, cliente_id, cliente:clientes(nome_fantasia)")
-    .eq("tenant_id", tenantId)
-    .eq("ativo", true)
-    // Pela criação: era pelo código, que saiu das telas (27/10/2026) e dava
-    // a mesma ordem dentro do ano.
-    .order("created_at", { ascending: true });
+  // Independentes — em paralelo (`docs/PERFORMANCE.md`). Os clientes vêm
+  // dos jobs numa consulta enxuta à parte, e não num embed por projeto.
+  const [projetosRes, jobsRes] = await Promise.all([
+    supabase
+      .from("projetos_financeiro")
+      .select("id, codigo, nome, cliente_id, cliente:clientes(nome_fantasia)")
+      .eq("tenant_id", tenantId)
+      .eq("ativo", true)
+      // Pela criação: era pelo código, que saiu das telas (27/10/2026) e
+      // dava a mesma ordem dentro do ano.
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("jobs")
+      .select(
+        "projeto_financeiro_id, cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia)",
+      )
+      .eq("tenant_id", tenantId)
+      .not("projeto_financeiro_id", "is", null)
+      // Job cancelado ou reprovado não existe no financeiro.
+      .not("status", "in", "(cancelado,rejeitado_financeiro)")
+      .order("created_at", { ascending: true }),
+  ]);
 
-  if (clienteId) query = query.eq("cliente_id", clienteId);
-
-  const { data, error } = await query;
-
-  if (error) {
-    console.error("[projetos-financeiro.listar]", error.message);
+  if (projetosRes.error) {
+    console.error("[projetos-financeiro.listar]", projetosRes.error.message);
     return [];
   }
+  if (jobsRes.error) {
+    console.error("[projetos-financeiro.clientes]", jobsRes.error.message);
+  }
 
-  return ((data ?? []) as any[]).map((p) => ({
-    id: p.id,
-    codigo: p.codigo,
-    nome: p.nome,
-    cliente_id: p.cliente_id,
-    cliente_nome: p.cliente?.nome_fantasia ?? null,
-  }));
+  const clientesPorProjeto = new Map<string, Map<string, string | null>>();
+  for (const j of (jobsRes.data ?? []) as any[]) {
+    if (!j.cliente_id) continue;
+    const doProjeto =
+      clientesPorProjeto.get(j.projeto_financeiro_id) ?? new Map();
+    if (!doProjeto.has(j.cliente_id)) {
+      doProjeto.set(j.cliente_id, j.cliente?.nome_fantasia ?? null);
+    }
+    clientesPorProjeto.set(j.projeto_financeiro_id, doProjeto);
+  }
+
+  const lista = ((projetosRes.data ?? []) as any[]).map((p) => {
+    const dosJobs = clientesPorProjeto.get(p.id);
+    return {
+      id: p.id as string,
+      codigo: p.codigo as string,
+      nome: p.nome as string,
+      cliente_id: p.cliente_id as string,
+      cliente_nome: (p.cliente?.nome_fantasia as string | undefined) ?? null,
+      clientes: dosJobs
+        ? Array.from(dosJobs, ([id, nome]) => ({ id, nome }))
+        : [
+            {
+              id: p.cliente_id as string,
+              nome: (p.cliente?.nome_fantasia as string | undefined) ?? null,
+            },
+          ],
+    };
+  });
+
+  if (!clienteDoJob) return lista;
+  // Os do cliente do job primeiro, cada metade na ordem de criação.
+  const doCliente = (p: ProjetoFinanceiroOpcao) =>
+    p.cliente_id === clienteDoJob ||
+    p.clientes.some((c) => c.id === clienteDoJob);
+  return [...lista.filter(doCliente), ...lista.filter((p) => !doCliente(p))];
 }

@@ -97,6 +97,9 @@ apagado, com o aviso "(projeto apagado)".
   função `projeto_financeiro_com_o_nome`. A mensagem diz qual projeto já usa
   o nome, e de qual cliente: o combo só mostra os projetos do cliente do job,
   e o outro pode estar fora dele.
+  ⚠️ **Revisto pela [228](228-projeto-do-financeiro-com-jobs-de-clientes-diferentes.md)
+  (29/10/2026):** o combo passou a mostrar os projetos de todos os clientes,
+  e a mensagem manda escolher o projeto na lista em vez de trocar o nome.
 - A comparação é sempre a do banco. Uma segunda normalização em TypeScript
   acabaria divergindo da do índice.
 
