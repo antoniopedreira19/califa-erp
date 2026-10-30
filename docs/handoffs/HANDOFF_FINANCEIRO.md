@@ -8723,4 +8723,3 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   dela (`notaComRetencoes`).
 - 29 ligações antigas que somavam favorecidos diferentes foram desfeitas;
   14 recebimentos ligados à nota mais as retenções; a regra nova ligou mais 24.
-
