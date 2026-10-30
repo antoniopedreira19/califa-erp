@@ -1142,7 +1142,7 @@ export function ContratoCard({
           }
         >
           <div
-            className="bg-white rounded-xl border border-border shadow-elevated w-full max-w-md p-5"
+            className="relative z-10 bg-white rounded-xl border border-border shadow-elevated w-full max-w-md p-5"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start gap-3 mb-4">
