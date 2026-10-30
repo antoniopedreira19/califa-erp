@@ -1287,6 +1287,38 @@ ficam só os jobs do 4T." Os jobs do 3T que já existem no sistema (cerca de
   (decisão 124 D4), e o Tiago pediu um protótipo da função própria antes de
   implementar.
 
+### O 4T até 25/10: pelo histórico, passo a passo (30/10/2026)
+
+- **O ponto que decide:** o único DRE do sistema é o "DRE do histórico", e
+  `historico_dre` lê só as cargas ativas. PP ou conta avulsa lançada no sistema
+  não aparece nele. O DRE que leia o sistema continua por fazer e será
+  necessário depois da virada.
+- **Decidido** (Tiago, 30/10): o 4T até 25/10 entra pela cauda, passo a passo.
+  Primeiro o que já corresponde ao sistema; depois as PPs que não estão nele e
+  as de jobs que não estão nele. Nos recebimentos, por enquanto, só o mapa.
+- **Inventário fora da cauda:** 537 linhas de 01 a 25/10. Recebimentos 12
+  (R$ 4,23 mi); PP de job que não existe 98 (R$ 1,20 mi); PP de job aberto sem
+  PP no sistema 103 (R$ 780 mil); com PP no sistema 43 (R$ 217 mil); já baixada
+  19 (R$ 565 mil); sem job 212 (R$ 1,95 mi); outras 50.
+- **A descrição da planilha traz o código da PP** ("PP00141"): é o casamento
+  exato, sem depender de nome. Mesmo favorecido e mesmo valor não bastam, porque
+  os mensalistas recebem igual todo mês: a PP que vence em novembro é o próximo
+  pagamento, não o de outubro. A sugestão da conciliação por valor erra nesses
+  casos.
+- **Feito:** 10 linhas do banco (R$ 35.044,39) baixadas com 13 PPs aprovadas,
+  pelo `baixarEConciliar`, com o centro das baixas anteriores (Custo Operacional,
+  Geral provisório). Duas têm o código de uma PP cancelada na planilha: PP-00180
+  e PP-00391 são as reemitidas, conferidas pelo favorecido, job e valor.
+- **Sobrou do que já está no sistema:** 17 linhas (R$ 423.551,20) com PP em
+  avaliação, que precisam ser aprovadas antes da baixa. Só a conta de teste e a
+  PP-00290, de 26/10, seguem sem linha do banco.
+- **Três jobs têm código diferente** na planilha e no sistema: AMB-1002 × AMB-1001,
+  DEE-1002 × DEE-1001 e ANI-1013 × ANI-1012. O Realizado do job segue o sistema.
+- **Recebimentos, só o mapa:** nada pronto para baixa (o sistema tem 2 títulos em
+  aberto, sem linha de mesmo valor no banco). Dos 108 jobs do 4T: 26 no sistema e
+  já faturados na planilha, 37 no sistema sem nota, 20 fora do sistema e
+  faturados, 25 fora do sistema sem nota. A decisão de como entram fica para depois.
+
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas
   85 e 91 da Res. Jobs 2026; R$ 1.520.000,00 de benefício): o histórico segue a

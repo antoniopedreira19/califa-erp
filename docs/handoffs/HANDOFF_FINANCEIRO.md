@@ -8732,3 +8732,12 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - O mútuo (MÚTUO INT) continua fora: a função própria está em protótipo,
   aguardando o Tiago.
 - Os juros de 25/10 têm competência 3T e seguem na cauda, sem linha no banco.
+
+## ⚠️ Nota de 2026-10-30 (7) — o 4T até 25/10 pelo histórico, passo a passo (decisão 211)
+
+- O único DRE do sistema lê só as cargas do histórico: o que é lançado como PP
+  ou conta avulsa não aparece nele. O DRE do sistema continua por fazer.
+- A descrição da planilha traz o código da PP ("PP00141"). Use esse código para
+  casar: favorecido e valor iguais podem ser o pagamento do mês seguinte.
+- 13 PPs aprovadas baixadas contra 10 linhas do banco. 17 linhas seguem com PP
+  em avaliação, aguardando aprovação.
