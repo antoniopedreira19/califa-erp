@@ -417,10 +417,10 @@ export function CargasDoHistorico({ cargas }: { cargas: CargaNaLista[] }) {
 }
 
 /** A carga ativa do mesmo período (que a nova substitui) e a que cruza o período sem ser igual (que impede).
- *  A cauda substitui a cauda ativa, qualquer que seja o período: a planilha nova estende a mesma cauda. */
+ *  A cauda e o só DRE substituem a ativa do tipo, qualquer que seja o período: a planilha nova estende a mesma carga. */
 function cargasDoPeriodo(cargas: CargaNaLista[], carga: { de: string; ate: string; tipo: string }) {
   const ativas = cargas.filter((c) => c.situacao === "ativa" && c.tipo === carga.tipo);
-  if (carga.tipo === "cauda") return { mesmoPeriodo: ativas[0], cruzada: undefined };
+  if (carga.tipo !== "periodo") return { mesmoPeriodo: ativas[0], cruzada: undefined };
   const cruzam = ativas.filter((c) => c.periodo_de <= carga.ate && c.periodo_ate >= carga.de);
   return {
     mesmoPeriodo: cruzam.find((c) => c.periodo_de === carga.de && c.periodo_ate === carga.ate),
@@ -464,7 +464,8 @@ function ResumoDoPacote({ lido, cargas, comAvisos }: { lido: Lido; cargas: Carga
       </dl>
       {comAvisos && mesmoPeriodo && (
         <Aviso tom="alerta">
-          Substitui a carga ativa “{mesmoPeriodo.nome}”, {carga.tipo === "cauda" ? "a cauda de antes" : "do mesmo período"}, quando terminar.
+          Substitui a carga ativa “{mesmoPeriodo.nome}”,{" "}
+          {carga.tipo === "cauda" ? "a cauda de antes" : carga.tipo === "so_dre" ? "o só DRE de antes" : "do mesmo período"}, quando terminar.
         </Aviso>
       )}
       {comAvisos && cruzada && (

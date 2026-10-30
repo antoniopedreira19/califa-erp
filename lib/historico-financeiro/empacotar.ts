@@ -140,6 +140,28 @@ export function movimentoDaCauda(m: LinhaLida, jobsDaCauda: ReadonlySet<string>)
   return ano < 2026 || (ano === 2026 && tri >= 1 && tri <= 3);
 }
 
+/**
+ * As linhas da carga só DRE: as que já foram pagas pelo sistema (a PP baixada,
+ * a tarifa lançada pela regra). A lista vem da conferência com o banco, e não
+ * de uma regra da planilha. A linha que falta na planilha, ou que iria também
+ * para a cauda, para o pacote: na cauda, contaria duas vezes no resultado.
+ */
+export function movimentosSoDre(
+  movimentos: readonly LinhaLida[],
+  ids: ReadonlySet<string>,
+  jobsDaCauda: ReadonlySet<string>,
+): LinhaLida[] {
+  const escolhidas = movimentos.filter((m) => ids.has(m.id));
+  if (escolhidas.length !== ids.size) {
+    throw new Error(`A lista traz ${ids.size} linhas e a planilha tem ${escolhidas.length} delas.`);
+  }
+  const naCauda = escolhidas.filter((m) => movimentoDaCauda(m, jobsDaCauda));
+  if (naCauda.length > 0) {
+    throw new Error(`${naCauda.length} linhas da lista também iriam para a cauda: ${naCauda.map((m) => m.id).slice(0, 5).join(", ")}.`);
+  }
+  return escolhidas;
+}
+
 export function linhaDeJob(j: LinhaLida): ValorDoPacote[] {
   return emOrdem("jobs", {
     chave: j.id,

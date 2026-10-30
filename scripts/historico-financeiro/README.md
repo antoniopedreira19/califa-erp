@@ -108,6 +108,12 @@ marcas, plano de contas, serviços, regionais, contas e os jobs abertos. O
   até o 3T de 2026 (ou de ano anterior) que não existem no sistema (sem
   `job_sistema` no de-para). O resto de outubro entra pelo sistema. A cauda
   nova substitui a ativa, qualquer que seja o período.
+- **Só DRE, `empacotar.ts --so-dre`:** as linhas de outubro já pagas pelo
+  sistema (PP baixada, tarifa lançada pela regra), listadas em
+  `<versão>/so-dre/linhas.json`. Contam no resultado e não no saldo: o DRE lê
+  todas as cargas ativas, e o saldo, o extrato e a conciliação só as de tipo
+  `cauda`. A mesma linha não pode estar na cauda e no só DRE: o empacotador e
+  o banco recusam.
 - **Carga, na tela:** Financeiro › Cadastros › Histórico da planilha (admin e
   financeiro). Ela lê o pacote no navegador, avisa as contas que faltam
   cadastrar e envia em partes; o banco liga os textos aos cadastros, confere

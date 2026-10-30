@@ -11,11 +11,18 @@
  *     --de 2023-01-01 --ate 2023-01-31 --conta "BB California"
  *
  *   npx tsx scripts/historico-financeiro/empacotar.ts <pasta-da-versao> --cauda
+ *   npx tsx scripts/historico-financeiro/empacotar.ts <pasta-da-versao> --so-dre
  *
  * A cauda (A6) vai do dia seguinte ao corte até o dia em que a planilha foi
  * baixada e leva só os movimentos e as notas dos jobs até o 3T de 2026 que
  * não existem no sistema (sem `job_sistema` no de-para); os jobs do 4T, os
  * do sistema e o que não é de job entram pelo sistema. Sem rateio nem saldos.
+ *
+ * O só DRE vai do mesmo dia até a mesma data e leva as linhas de
+ * <pasta-da-versao>/so-dre/linhas.json ({ "ids": [...] }, os ids do
+ * padronizado): o que já foi pago pelo sistema e precisa contar no resultado
+ * sem contar no saldo. Leva também os jobs citados, porque o relatório regional
+ * divide o custo pelo job da mesma carga. Sem notas, rateio nem saldos.
  *
  * Com `--conta` (pode repetir), a carga leva só os movimentos e os saldos
  * daquelas contas e só os jobs que os movimentos e as notas citam: serve para
@@ -35,6 +42,7 @@ import {
   FONTES_DO_RATEIO,
   jobDaCauda,
   movimentoDaCauda,
+  movimentosSoDre,
   linhaDeJob,
   linhaDeMovimento,
   linhaDeNota,
@@ -59,23 +67,26 @@ import type { Manifesto } from "./extrair";
 const USO =
   'Uso: npx tsx scripts/historico-financeiro/empacotar.ts <pasta-da-versao> --carga "1ª carga"\n' +
   '  ou: … <pasta-da-versao> --nome "Teste da A1" --de 2023-01-01 --ate 2023-01-31 [--conta "BB California"]\n' +
-  '  ou: … <pasta-da-versao> --cauda';
+  '  ou: … <pasta-da-versao> --cauda\n' +
+  '  ou: … <pasta-da-versao> --so-dre';
 
 const NOME_DA_CAUDA = "Outubro 2026 · competência até o 3T";
+const NOME_DO_SO_DRE = "Outubro 2026 · só DRE";
 
 const PERIODOS: Record<string, [string, string]> = {
   "1ª carga": ["2023-01-01", "2026-06-30"],
   "3T 2026": ["2026-07-01", "2026-09-30"],
 };
 
-type Opcoes = { carga?: string; nome?: string; de?: string; ate?: string; contas: string[]; cauda?: boolean };
+type Opcoes = { carga?: string; nome?: string; de?: string; ate?: string; contas: string[]; cauda?: boolean; soDre?: boolean };
 
 function lerArgumentos(args: string[]): { pasta: string | undefined; opcoes: Opcoes } {
   const opcoes: Opcoes = { contas: [] };
   for (let k = 1; k < args.length; k += 2) {
     const chave = args[k];
-    if (chave === "--cauda") {
-      opcoes.cauda = true;
+    if (chave === "--cauda" || chave === "--so-dre") {
+      if (chave === "--cauda") opcoes.cauda = true;
+      else opcoes.soDre = true;
       k -= 1; // sem valor
       continue;
     }
@@ -122,6 +133,7 @@ async function main() {
   }
   const versao = resolve(pasta);
   if (opcoes.cauda) return empacotarCauda(versao);
+  if (opcoes.soDre) return empacotarSoDre(versao);
   const padrao = opcoes.carga ? PERIODOS[opcoes.carga] : undefined;
   if (opcoes.carga && !padrao) {
     throw new Error(`Carga desconhecida: ${opcoes.carga}. Use ${Object.keys(PERIODOS).join(" ou ")}, ou --nome com --de e --ate.`);
@@ -272,6 +284,33 @@ async function empacotarCauda(versao: string) {
     movimentos: embalar("movimentos", movs.map(linhaDeMovimento)),
   };
   await gravarPacote(versao, manifesto, { nome: NOME_DA_CAUDA, de, ate, tipo: "cauda" }, tabelas);
+}
+
+/** O só DRE: do dia seguinte ao corte até a versão da planilha, as linhas da lista (`movimentosSoDre`) e os jobs delas. */
+async function empacotarSoDre(versao: string) {
+  const manifesto: Manifesto = JSON.parse(await readFile(join(versao, "bruto", "manifesto.json"), "utf8"));
+  const ler = async (...caminho: string[]): Promise<LinhaLida[]> => {
+    const tabela = await lerTabelaCsv(join(versao, ...caminho));
+    if (!tabela) throw new Error(`Não achei ${join(...caminho)}: rode a padronização (E2) antes.`);
+    return tabela;
+  };
+  const [movimentos, jobs] = await Promise.all([ler("padronizado", "movimentos.csv"), ler("padronizado", "jobs.csv")]);
+  const lista: { ids: string[] } = JSON.parse(await readFile(join(versao, "so-dre", "linhas.json"), "utf8"));
+  const de = diaSeguinte(CORTE);
+  const ate = (manifesto.origem.exportado_em || basename(versao)).slice(0, 10);
+
+  const daCauda = new Set(jobs.filter(jobDaCauda).map((j) => j.id));
+  const movs = movimentosSoDre(movimentos, new Set(lista.ids), daCauda);
+  const citados = new Set(movs.map((m) => m.job_id).filter(Boolean));
+
+  const tabelas: Pacote["tabelas"] = {
+    rateio: embalar("rateio", []),
+    saldos: embalar("saldos", []),
+    jobs: embalar("jobs", jobs.filter((j) => citados.has(j.id)).map(linhaDeJob)),
+    notas: embalar("notas", []),
+    movimentos: embalar("movimentos", movs.map(linhaDeMovimento)),
+  };
+  await gravarPacote(versao, manifesto, { nome: NOME_DO_SO_DRE, de, ate, tipo: "so_dre" }, tabelas);
 }
 
 const diaSeguinte = (data: string) => {
