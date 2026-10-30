@@ -473,8 +473,8 @@ gesto aprendido uma vez, válido em qualquer tela:
 - **"Recolher todos" / "Expandir todos"** no topo da planilha, com o
   rótulo seguindo o estado (basta um grupo aberto para o botão oferecer
   fechar tudo);
-  quando a mesma tela tem dois botões (o orçamento mensal: meses e
-  grupos), cada um diz o que recolhe — **"Recolher meses"** ao lado do
+  quando a mesma tela tem dois botões (o orçamento e o job mensais: meses
+  e grupos), cada um diz o que recolhe — **"Recolher meses"** ao lado do
   título do trimestre e **"Recolher grupos"** na célula vazia do
   cabeçalho da tabela (decisão 219, nota de 30/10/2026);
 - o contador da calha vira **"N itens ocultos"**.

@@ -58,6 +58,8 @@ import { BvDialog } from "@/app/(app)/_bv/bv-dialog";
 import { acaoBv } from "@/app/(app)/_bv/bv-action-button";
 import { LARGURA_CALHA } from "@/app/(app)/_planilha/calha-acoes";
 import { ERRATA, HISTORICO, LINHA_NOVO_GRUPO, SAVE } from "@/app/(app)/_planilha/blocos";
+import { BotaoRecolherTodos } from "@/app/(app)/_planilha/recolher-grupos";
+import { usePlanilhaColada } from "@/app/(app)/_planilha/lugar-da-barra";
 import { TIPOS_CALHA_PP, TIPOS_CUSTO } from "@/lib/calculos/versao-totais";
 import {
   parseNumero,
@@ -172,6 +174,10 @@ interface Props {
    *  justifica recolher, mesma regra da planilha do orçamento. */
   estaAberto: (grupoId: string) => boolean;
   onAlternarGrupo: (grupoId: string) => void;
+  /** "Recolher grupos" na célula vazia do cabeçalho, acima de "Grupo ·
+   *  Item" — o job mensal, em que cada mês tem a sua tabela (decisão 219,
+   *  revista em 30/10/2026). Ausente ⇒ a célula fica vazia. */
+  recolherNoCabecalho?: { algumAberto: boolean; onAlternarTodos: () => void };
   /** Trilha lateral de BV e Pedido de Produção — só com o job aberto.
    *  Antes da abertura a planilha é visível e o realizado é editável,
    *  mas nada que vire documento pode ser criado. */
@@ -743,6 +749,7 @@ export function JobItemRealizadoTable({
   visao,
   estaAberto,
   onAlternarGrupo,
+  recolherNoCabecalho,
   podeAcoes,
   podeGerarPP = false,
   papelEnviaPP,
@@ -788,6 +795,8 @@ export function JobItemRealizadoTable({
   rentabPlanejadaVisivel = false,
   rentabRealizadaVisivel = false,
 }: Props) {
+  // Na vista Total do job mensal a linha do mês fecha o topo do card.
+  const colada = usePlanilhaColada();
   const editando = errata?.ativo === true;
   /** A errata organiza a planilha (09/10/2026): mover item, renomear,
    *  criar e remover agrupamento. Só na errata — o "Editar orçado" do
@@ -1327,7 +1336,7 @@ export function JobItemRealizadoTable({
       )}
       {/* Com o nome do grupo na faixa, a tabela abre e fecha o card. */}
       {/* A tabela abre e fecha o card: a planilha inteira é uma só. */}
-      <div className="overflow-x-auto rounded-b-2xl rounded-t-2xl">
+      <div className={cn("overflow-x-auto rounded-b-2xl", !colada && "rounded-t-2xl")}>
         <table
           className="w-full table-fixed text-sm border-collapse"
           style={{ minWidth: larguraMinimaJob(colunas) }}
@@ -1339,7 +1348,16 @@ export function JobItemRealizadoTable({
                 handoff "Grupos Unificados" veio eliminar. */}
             <tr>
               {saveVisivel && <CabecalhoSaveFaixa />}
-              <th colSpan={3} className={FAIXA_GRUPO} />
+              <th colSpan={3} className={FAIXA_GRUPO}>
+                {recolherNoCabecalho && (
+                  <BotaoRecolherTodos
+                    algumAberto={recolherNoCabecalho.algumAberto}
+                    onAlternarTodos={recolherNoCabecalho.onAlternarTodos}
+                    rotulos={["Recolher grupos", "Expandir grupos"]}
+                    className="-ml-2 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold tracking-normal text-muted-foreground transition-colors hover:bg-accent hover:text-california-red"
+                  />
+                )}
+              </th>
               {orcadoVisivel && (
                 <th
                   colSpan={moedaEstrangeira ? 5 : 4}

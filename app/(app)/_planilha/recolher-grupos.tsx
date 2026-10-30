@@ -30,6 +30,10 @@ export interface ControleDeGrupos {
   /** Estado misto resolve para "recolher": basta um aberto para o botão
    *  oferecer fechar tudo. */
   algumAberto: boolean;
+  /** O mesmo, só para estes grupos — o "Recolher grupos" de cada mês do
+   *  job mensal, que divide o estado com os outros meses. */
+  algumAbertoEm: (ids: readonly string[]) => boolean;
+  alternarEstes: (ids: readonly string[]) => void;
 }
 
 export function useGruposRecolhiveis(
@@ -63,7 +67,28 @@ export function useGruposRecolhiveis(
     setAlternados(marcarTodos ? new Set(ids) : new Set());
   }, [algumAberto, ids, padrao]);
 
-  return { estaAberto, alternar, alternarTodos, algumAberto };
+  const algumAbertoEm = React.useCallback(
+    (sub: readonly string[]) => sub.some((id) => estaAberto(id)),
+    [estaAberto],
+  );
+
+  const alternarEstes = React.useCallback(
+    (sub: readonly string[]) => {
+      const fechar = sub.some((id) => estaAberto(id));
+      const marcar = padrao === "aberto" ? fechar : !fechar;
+      setAlternados((prev) => {
+        const next = new Set(prev);
+        for (const id of sub) {
+          if (marcar) next.add(id);
+          else next.delete(id);
+        }
+        return next;
+      });
+    },
+    [estaAberto, padrao],
+  );
+
+  return { estaAberto, alternar, alternarTodos, algumAberto, algumAbertoEm, alternarEstes };
 }
 
 /** O botão que alterna a planilha inteira. O rótulo segue o estado: com

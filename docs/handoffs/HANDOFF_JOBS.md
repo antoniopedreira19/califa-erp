@@ -6614,3 +6614,14 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
   anexada"), que o GP Teste não abre.
 - Fora, de propósito (Tiago, 29/10): o código de barras da guia e como ela
   chega ao Contas a Pagar.
+
+## ⚠️ Nota de 2026-10-30 — o "Recolher" e a linha do mês no job mensal (decisão 219)
+
+- Na planilha interna do job mensal (produção e financeiro), o "Recolher
+  todos" saiu da barra: cada mês tem o "Recolher grupos" na célula vazia
+  do cabeçalho da tabela, e ele recolhe só os grupos daquele mês.
+- Vista Total: título "4º trimestre de 2026 · N meses" com o "Recolher
+  meses"; a linha do mês aberto encosta na tabela e mostra Faturamento,
+  Resultado op. e Rentabilidade, sem o Custo planejado e sem o "Abrir
+  {mês}" (a régua abre o mês).
+- O job que não é mensal fica como era. Ver a nota de 30/10 na decisão 219.

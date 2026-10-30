@@ -168,11 +168,22 @@ o dos grupos do mês aberto).
    mostra **Faturamento, Resultado op. e Rentabilidade** (o "Geral" de
    antes) em colunas iguais. Saíram o Custo planejado e o "Abrir {mês}" —
    a régua já abre o mês. "Valor do job" foi mostrado e o Tiago tirou.
-5. **Só no orçamento mensal.** A planilha do job, a da conferência da
-   abertura e a da Mídia Off usam o mesmo `TrimestreEmpilhado` e ficaram
-   como eram — as mudanças entram por props (`titulo`, `linhaColada`) e
-   por contexto (`ComRecolherNoCabecalho`, `ComPlanilhaColada`,
-   `TituloComABarra`, em `app/(app)/_planilha/lugar-da-barra.tsx`).
+5. **Onde vale.** No orçamento mensal e, no mesmo dia, a pedido do Tiago,
+   na planilha interna do job mensal — a da produção e a que o financeiro
+   vê (Jobs, Abertura de job, planilha em leitura: o componente é o
+   mesmo, `JobRealizadoSection`). No job a barra já era uma só, acima da
+   régua, e ficou onde estava; saiu dela o "Recolher todos", que recolhia
+   os grupos de todos os meses de uma vez: o "Recolher grupos" do
+   cabeçalho de cada mês recolhe só os daquele mês (`alternarEstes` em
+   `recolher-grupos.tsx`). A vista Total do job ganhou o título do
+   trimestre com o "Recolher meses", e a linha do mês os mesmos três
+   números (as contas de antes, pelo planejado). O job que não é mensal e
+   a Mídia Off ficaram como eram. As mudanças entram por props (`titulo`,
+   `linhaColada`, `recolherNoCabecalho`) e por contexto
+   (`ComRecolherNoCabecalho`, `ComPlanilhaColada`, `TituloComABarra`, em
+   `app/(app)/_planilha/lugar-da-barra.tsx`).
 
 Conferido no `ZZ Teste 158 planilha de um mês` (rascunho, três meses) e na
-versão aprovada do `ZZ Teste 219 mês pela errata` (com o "Histórico").
+versão aprovada do `ZZ Teste 219 mês pela errata` (com o "Histórico"); o
+job no TES-1035/26, pela produção e pelo financeiro (o "Recolher grupos"
+de outubro recolhe só outubro).

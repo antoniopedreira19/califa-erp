@@ -139,6 +139,7 @@ import {
   nomeDoMes,
   rotuloMes,
   rotuloMesCurto,
+  rotuloTrimestre,
   trimestreDe,
 } from "@/lib/calculos/meses-trimestre";
 import { ReguaMeses } from "@/app/(app)/orcamentos/[projetoId]/[orcId]/versoes/[versaoId]/regua-meses";
@@ -1702,6 +1703,9 @@ function PlanilhaDoJob({
     mesFechado = false,
     /** Mês do trecho no mensal: é nele que o grupo novo da errata nasce. */
     mesId: string | null = null,
+    /** Na vista Total a linha do mês fecha o topo do card (decisão 219,
+     *  revista em 30/10/2026): o card perde os cantos e a borda de cima. */
+    colada = false,
   ) {
     // Só a tabela esconde as canceladas: as contas (meses, Totais) seguem
     // com a lista inteira — a cancelada é zero dos dois lados.
@@ -1724,7 +1728,10 @@ function PlanilhaDoJob({
         <AvisoDoMesEnviado mes={mesDoAviso.mes} onFechar={() => setTentouNoMes(null)} />
       )}
       <div
-        className="rounded-2xl border border-border bg-card shadow-soft"
+        className={cn(
+          "rounded-2xl border border-border bg-card shadow-soft",
+          colada && "rounded-t-none border-t-0",
+        )}
         onClickCapture={
           tentativaNoMesEnviado
             ? (e) => {
@@ -1747,6 +1754,17 @@ function PlanilhaDoJob({
           visao={visao}
           estaAberto={recolher.estaAberto}
           onAlternarGrupo={recolher.alternar}
+          // No mensal cada mês é uma tabela, e o "Recolher grupos" do
+          // cabeçalho dela recolhe só os grupos daquele mês.
+          recolherNoCabecalho={
+            mesId !== null && gruposRecebidos.length > 0
+              ? {
+                  algumAberto: recolher.algumAbertoEm(gruposRecebidos.map((g) => g.id)),
+                  onAlternarTodos: () =>
+                    recolher.alternarEstes(gruposRecebidos.map((g) => g.id)),
+                }
+              : undefined
+          }
           podeAcoes={podeAcoes}
           podeGerarPP={podeGerarPP}
           papelEnviaPP={papelEnviaPP}
@@ -1978,7 +1996,9 @@ function PlanilhaDoJob({
         {linhaDeParametros}
         <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          {grupos.length > 0 && (
+          {/* No mensal ele mora no cabeçalho de cada mês (decisão 219,
+              revista em 30/10/2026). */}
+          {grupos.length > 0 && !mensal && (
             <BotaoRecolherTodos
               algumAberto={recolher.algumAberto}
               onAlternarTodos={recolher.alternarTodos}
@@ -2258,6 +2278,17 @@ function PlanilhaDoJob({
           ) : (
             <>
               <TrimestreEmpilhado
+                linhaColada
+                titulo={
+                  <div className="flex items-baseline gap-2.5">
+                    <h2 className="text-xl font-semibold tracking-tight">
+                      {rotuloTrimestre(trimestreDe(dadosDosMeses[0].mes.mes))}
+                    </h2>
+                    <span className="text-[13px] text-muted-foreground">
+                      {dadosDosMeses.length === 1 ? "1 mês" : `${dadosDosMeses.length} meses`}
+                    </span>
+                  </div>
+                }
                 moeda={versao.moeda}
                 onAbrir={
                   mesNoLugar
@@ -2284,6 +2315,7 @@ function PlanilhaDoJob({
                     `Total de ${nomeDoMes(d.mes.mes)}`,
                     mesTravado(d.mes.id),
                     d.mes.id,
+                    true,
                   ),
                 }))}
               />
