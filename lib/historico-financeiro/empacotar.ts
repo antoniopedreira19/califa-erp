@@ -117,21 +117,23 @@ export function jobDaCauda(j: LinhaLida): boolean {
   return ano === 2026 && tri >= 1 && tri <= 3;
 }
 
-/** Os grupos da planilha que não vão para a cauda mesmo com competência até
- *  o 3T: o empréstimo e o mútuo entre as empresas esperam decisão própria. */
-const FORA_DA_CAUDA = new Set(["EMP", "MÚTUO INT"]);
+/** O empréstimo só entra depois de aparecer no extrato. Até aqui, as devoluções
+ *  de 20 e 21/10; as de 25/10 estão na planilha e não no banco (extratos até
+ *  26/10). Quando aparecerem, esta data anda. */
+const EMPRESTIMO_NO_EXTRATO_ATE = "2026-10-21";
 
 /**
  * O movimento depois do corte que vai para a cauda: o do job da cauda
  * (`jobDaCauda`) e, sem job, o do DRE com competência até o 3T de 2026 ou de
- * ano anterior — a folha de setembro, os impostos, os custos fixos e as
- * contas avulsas pagos em outubro (Tiago, 30/10/2026: "no sistema ficam só
- * os do 4T"). Ficam de fora o empréstimo, o mútuo, a transferência, o
- * estorno e o que não tem competência.
+ * ano anterior — a folha de setembro, os impostos, os custos fixos, as contas
+ * avulsas e as devoluções de empréstimo pagos em outubro (Tiago, 30/10/2026:
+ * "no sistema ficam só os do 4T"). Ficam de fora o mútuo, que espera a função
+ * própria, a transferência, o estorno e o que não tem competência.
  */
 export function movimentoDaCauda(m: LinhaLida, jobsDaCauda: ReadonlySet<string>): boolean {
   if (m.job_id) return jobsDaCauda.has(m.job_id);
-  if (m.classe !== "dre" || FORA_DA_CAUDA.has(m.grupo ?? "")) return false;
+  if (m.classe !== "dre" || m.grupo === "MÚTUO INT") return false;
+  if (m.grupo === "EMP" && (!m.data || m.data > EMPRESTIMO_NO_EXTRATO_ATE)) return false;
   const ano = Number(m.competencia_ano);
   const tri = Number(m.competencia_trimestre);
   if (!ano || !tri) return false;

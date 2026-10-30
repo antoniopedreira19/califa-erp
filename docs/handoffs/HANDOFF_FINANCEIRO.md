@@ -8723,3 +8723,12 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   dela (`notaComRetencoes`).
 - 29 ligações antigas que somavam favorecidos diferentes foram desfeitas;
   14 recebimentos ligados à nota mais as retenções; a regra nova ligou mais 24.
+
+## ⚠️ Nota de 2026-10-30 (6) — as devoluções de empréstimo na cauda (decisão 211)
+
+- `movimentoDaCauda`: o grupo EMP entra na cauda com data até
+  `EMPRESTIMO_NO_EXTRATO_ATE` (21/10). As devoluções de 25/10 ficam de fora
+  até aparecerem no extrato; aí a data anda e o pacote sai de novo.
+- O mútuo (MÚTUO INT) continua fora: a função própria está em protótipo,
+  aguardando o Tiago.
+- Os juros de 25/10 têm competência 3T e seguem na cauda, sem linha no banco.

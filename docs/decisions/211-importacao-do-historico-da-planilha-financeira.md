@@ -1261,6 +1261,32 @@ ficam só os jobs do 4T." Os jobs do 3T que já existem no sistema (cerca de
   cliente, junto da nota (`notaComRetencoes`). O "ISS retido" da folha de PJ
   e da PP é pagamento e casa normalmente. A regra nova ligou mais 24 linhas.
 
+### As devoluções de empréstimo e o mútuo (30/10/2026)
+
+- **As devoluções de 20 e 21/10 entram na cauda** (Tiago, 30/10: "pode fazer
+  de acordo com a recomendação"). Cada débito do banco é o principal (EMP)
+  mais os juros (DJ) da mesma pessoa física, e fecha ao centavo. As duas
+  linhas da California Santander foram ligadas às duas linhas da planilha
+  cada uma. Carregada pela tela: 1.661 movimentos, 1.222 ligações herdadas.
+- **As duas de 25/10 ficam de fora até aparecerem no extrato.** Não estão em
+  nenhum extrato importado (até 26/10) e 25/10 foi um domingo. Quando o
+  débito aparecer, `EMPRESTIMO_NO_EXTRATO_ATE` anda (em
+  `lib/historico-financeiro/empacotar.ts`), o pacote sai de novo e a tela
+  troca a carga.
+- **O que os números dizem de 25/10:** as quatro devoluções somadas fecham o
+  principal que as duas pessoas físicas emprestaram em junho e julho, com
+  R$ 65,93 de diferença. As de 25/10 têm o mesmo desenho das de 20 e 21/10,
+  principal e juros por pessoa, e nenhuma outra conta traz a contrapartida.
+  Isso aponta para o resto da devolução, não para uma transferência entre
+  empresas. Falta o comprovante do débito de R$ 3.500.000,00 de 26/10, que o
+  extrato não diz para quem foi.
+- **Os juros de 25/10 continuam na cauda**, porque têm competência 3T: ficam
+  sem linha no banco até o débito aparecer, e o saldo do sistema carrega esses
+  R$ 212.957,31 a menos que o banco até lá.
+- **O mútuo continua fora.** Entre CNPJs diferentes a transferência é travada
+  (decisão 124 D4), e o Tiago pediu um protótipo da função própria antes de
+  implementar.
+
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas
   85 e 91 da Res. Jobs 2026; R$ 1.520.000,00 de benefício): o histórico segue a
