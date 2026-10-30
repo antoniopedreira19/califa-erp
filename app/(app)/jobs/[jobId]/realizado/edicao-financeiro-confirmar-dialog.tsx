@@ -19,6 +19,10 @@
  * Desde 28/10/2026, o faturamento que nasce sem previsão de recebimento para
  * acompanhar (o job, ou o mês do mensal, que abriu sem faturamento) pede a
  * data de recebimento aqui, e a confirmação espera todas.
+ * Desde 30/10/2026 ("Editar planilha") os parâmetros do job mudam no mesmo
+ * pop-up, e com o job aberto ele é aberto pelo rodapé da aba Abertura do
+ * Job (opção C): mostra como ficam as previsões que a revisão grava junto,
+ * e nada acompanha sozinho — só o envio ainda sem nota.
  */
 
 import * as React from "react";
@@ -49,6 +53,7 @@ import {
 } from "@/lib/calculos/alteracao-financeiro";
 import { tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
 import { tipoCustoLabel } from "@/lib/types";
+import type { EdicaoRegistroAberturaInput } from "@/lib/validations/abertura-financeiro";
 
 interface ParDeValores {
   antes: number;
@@ -105,6 +110,12 @@ interface Props {
   /** Job ainda na fila da abertura (decisão 115): não há previsão gravada
    *  nem envio, e quem acompanha é o formulário da abertura. */
   naAbertura: boolean;
+  /** Os parâmetros do job que mudam junto (decisão 224). `[]` sem
+   *  mudança. */
+  parametros: Array<{ rotulo: string; de: string; para: string }>;
+  /** O registro da abertura que a revisão grava junto (opção C), ou
+   *  `null` na alteração que grava sozinha. */
+  revisao: EdicaoRegistroAberturaInput | null;
   salvando: boolean;
   erro: string | null;
   onConfirmar: (
@@ -210,6 +221,8 @@ export function EdicaoFinanceiroConfirmarDialog({
   recebimentoSemPrevisao,
   planejadoAcompanha,
   naAbertura,
+  parametros,
+  revisao,
   salvando,
   erro,
   onConfirmar,
@@ -229,7 +242,10 @@ export function EdicaoFinanceiroConfirmarDialog({
   const chaveDe = (r: RecebimentoSemPrevisao) => r.mes ?? "";
   const faltaData = recebimentoSemPrevisao.some((r) => !datas[chaveDe(r)]);
   const podeConfirmar =
-    motivo.trim().length >= 5 && !salvando && mudancas.length > 0 && !faltaData;
+    motivo.trim().length >= 5 &&
+    !salvando &&
+    (mudancas.length > 0 || parametros.length > 0) &&
+    !faltaData;
 
   // A troca de tipo (08/10/2026) mexe no que a planilha mostra além do
   // orçado: o realizado de A e D é o próprio orçado, e o dos tipos com PP é
@@ -251,7 +267,9 @@ export function EdicaoFinanceiroConfirmarDialog({
               <FilePenLine className="h-4.5 w-4.5 text-california-red" />
             </div>
             <div className="min-w-0">
-              <DialogTitle className="text-[19px]">Confirmar alteração do orçado</DialogTitle>
+              <DialogTitle className="text-[19px]">
+                {revisao ? "Confirmar alteração e revisão da abertura" : "Confirmar alteração da planilha"}
+              </DialogTitle>
               <DialogDescription className="pt-1.5 text-[13px] leading-relaxed">
                 {jobCodigo} · {jobNome} · {resumo}
               </DialogDescription>
@@ -260,7 +278,29 @@ export function EdicaoFinanceiroConfirmarDialog({
         </DialogHeader>
 
         <div className="space-y-4 pt-1">
-          <section className="rounded-xl border border-border">
+          {parametros.length > 0 && (
+            <section className="rounded-xl border border-border">
+              <h3 className="border-b border-border px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                O que muda nos parâmetros
+              </h3>
+              <ul className="divide-y divide-border">
+                {parametros.map((c) => (
+                  <li key={c.rotulo} className="flex items-center justify-between gap-3 px-3.5 py-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className={ERRATA.tagAlterada}>Alterado</span>
+                      <span className="truncate text-[12.5px] text-foreground">{c.rotulo}</span>
+                    </div>
+                    <div className="flex items-baseline gap-2 whitespace-nowrap font-mono text-[11.5px]">
+                      <span className="text-muted-foreground">{c.de}</span>
+                      <span className="text-muted-foreground">→</span>
+                      <span className="font-bold text-foreground">{c.para}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          <section className={cn("rounded-xl border border-border", mudancas.length === 0 && "hidden")}>
             <h3 className="border-b border-border px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
               {mudaPlanejado ? "O que muda na planilha" : "O que muda no orçado"}
             </h3>
@@ -335,7 +375,16 @@ export function EdicaoFinanceiroConfirmarDialog({
             <LinhaDeValor rotulo="Valor do job" par={valorJob} moeda={moeda} forte />
           </section>
 
-          <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/30 px-3.5 py-3">
+          {revisao && <PrevisoesDaRevisao registro={revisao} moeda={moeda} />}
+
+          {/* Com a revisão, o pop-up não explica: o rodapé que o abriu já
+              disse tudo (Tiago, 30/10/2026: "Desnecessário"). */}
+          <div
+            className={cn(
+              "flex items-start gap-2.5 rounded-xl border border-border bg-muted/30 px-3.5 py-3",
+              revisao && "hidden",
+            )}
+          >
             <CheckCircle2 className="mt-0.5 h-4 w-4 flex-none text-california-red" />
             <div className="space-y-1">
               <p className="text-[12.5px] font-semibold text-foreground">
@@ -356,7 +405,7 @@ export function EdicaoFinanceiroConfirmarDialog({
             </div>
           </div>
 
-          {Math.round(deltaCusto * 100) !== 0 && (
+          {!revisao && Math.round(deltaCusto * 100) !== 0 && (
             <div className="flex items-start gap-2.5 rounded-xl border border-border bg-muted/30 px-3.5 py-3">
               <Wallet className="mt-0.5 h-4 w-4 flex-none text-california-red" />
               <div className="min-w-0 flex-1 space-y-1">
@@ -524,11 +573,69 @@ export function EdicaoFinanceiroConfirmarDialog({
               className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-california-red-hover disabled:cursor-not-allowed disabled:opacity-45"
             >
               <FilePenLine className="h-3.5 w-3.5" />
-              {salvando ? "Gravando…" : "Confirmar alteração"}
+              {salvando
+                ? "Gravando…"
+                : revisao
+                  ? "Registrar alteração e revisão"
+                  : "Confirmar alteração"}
             </button>
           </div>
         </div>
       </DialogContent>
     </Dialog>
   );
+}
+
+/** Como ficam as previsões que a revisão da abertura grava junto (opção C). */
+function PrevisoesDaRevisao({
+  registro,
+  moeda,
+}: {
+  registro: EdicaoRegistroAberturaInput;
+  moeda: string;
+}) {
+  const blocos: Array<{ rotulo: string; um: string; varios: string; linhas: Array<{ data_prevista: string; valor: number }> }> = [
+    { rotulo: "Previsão de recebimento", um: "parcela", varios: "parcelas", linhas: registro.recebimento },
+    { rotulo: "Curva de desembolso", um: "data", varios: "datas", linhas: registro.curva },
+    { rotulo: "Recolhimento de impostos", um: "data", varios: "datas", linhas: registro.impostos },
+  ];
+  return (
+    <section className="rounded-xl border border-border">
+      <h3 className="border-b border-border px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+        Como ficam as previsões da abertura
+      </h3>
+      <ul className="divide-y divide-border">
+        {blocos.map((b) => {
+          const total = b.linhas.reduce((s, l) => s + l.valor, 0);
+          const datas =
+            b.linhas.length === 0
+              ? "—"
+              : b.linhas.length === 1
+                ? dataBr(b.linhas[0].data_prevista)
+                : `${dataBr(b.linhas[0].data_prevista)} → ${dataBr(b.linhas[b.linhas.length - 1].data_prevista)}`;
+          return (
+            <li key={b.rotulo} className="flex items-center justify-between gap-3 px-3.5 py-2">
+              <span className="min-w-0 text-[12.5px] text-foreground">
+                {b.rotulo}
+                <span className="ml-2 text-[11.5px] text-muted-foreground">
+                  {b.linhas.length === 0
+                    ? "nenhuma"
+                    : `${b.linhas.length} ${b.linhas.length === 1 ? b.um : b.varios}`}{" "}
+                  · <span className="font-mono">{datas}</span>
+                </span>
+              </span>
+              <span className="whitespace-nowrap font-mono text-[11.5px] font-bold text-foreground">
+                {formatCurrency(total, moeda)}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
+  );
+}
+
+function dataBr(iso: string): string {
+  const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
 }

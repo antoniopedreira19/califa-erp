@@ -1151,7 +1151,7 @@ a BB California pela tela e a Santander Hitlab por migration".
   mudaram. Os dois conjuntos foram ligados pela tela; a Hitlab ficou sem
   baixa sem linha e com 8 linhas do banco pendentes.
 
-## A cauda: outubro dos jobs até o 3T (A6, 27/10/2026)
+## A cauda: outubro dos jobs até o 3T (A6, 27/10/2026; ampliada em 30/10)
 
 Depois do inventário do 4T (planilha de 01 a 25/10 contra os extratos e o
 sistema, só leitura, em `tmp/historico-planilha/inventario-4t/`), o grosso
@@ -1216,6 +1216,76 @@ ficam só os jobs do 4T." Os jobs do 3T que já existem no sistema (cerca de
 - **Falta:** escolher à mão as linhas da cauda de uma linha do banco que o
   motor não casou (as 318 da California Santander, sobretudo recebimentos
   que a planilha divide por nota).
+
+### A cauda ampliada: competência até o 3T (30/10/2026)
+
+- **A regra** (Tiago, 30/10: "Sim, ampliar"): além dos jobs até o 3T que
+  não existem no sistema, entra na cauda todo movimento de outubro **sem
+  job**, do DRE, com **competência até o 3T** — a folha de setembro, os
+  impostos do 3T, os custos fixos e as contas avulsas de setembro e o
+  imobilizado pagos em outubro. Ficam de fora o empréstimo (EMP) e o mútuo
+  entre as empresas, que esperam decisão própria, a transferência, o estorno
+  e o que não tem competência. No sistema fica só o que é de competência 4T.
+  `movimentoDaCauda` em `lib/historico-financeiro/empacotar.ts`; a carga se
+  chama "Outubro 2026 · competência até o 3T".
+- **A troca não solta o que já estava ligado** (migration
+  `20261030400001`): na troca de cauda, o movimento novo com a mesma
+  digital, conta e valor herda a ligação com o banco do antigo. Antes, a
+  troca soltava todas as linhas do banco ligadas à cauda.
+- **Carregada pela tela em 30/10:** 1.659 movimentos (os 1.058 dos jobs e
+  601 sem job: folha 241, impostos 174, custos fixos 119, despesas
+  administrativas 46, imobilizado 5 e outros 16), 54 notas e 200 jobs. As
+  721 ligações foram herdadas; as 664 linhas do banco continuaram
+  conciliadas. A conciliação passou a casar a cauda nova com 328 linhas da
+  California Santander, ligadas pela seção "Do histórico da planilha".
+
+### A varredura, os recebimentos com retenção e a soma do mesmo favorecido (30/10/2026)
+
+- **Varredura** (só leitura, pedido do Tiago): as linhas pendentes do banco
+  contra as linhas da cauda sem banco, pelo valor exato. Ligadas com o OK
+  dele 25 saídas da California Santander (R$ 305.304,11) pela action
+  `conciliarPeloHistorico`; 5 delas (somas de 4 linhas) eram coincidência e
+  foram desfeitas.
+- **Recebimentos com retenção:** a planilha lança a nota cheia e, no mesmo
+  dia, uma linha por imposto retido pelo cliente ("Imposto retido na fonte
+  …": IR 1,5%, CSLL 1%, PIS 0,65%, COFINS 3%, ISS 5%), com o cliente como
+  favorecido. A nota mais as retenções dão o líquido do banco. 14 ligados à
+  mão (R$ 1.275.386,97) e 2 pela regra nova. Os 5 de 14/10 esperam o 4T: as
+  retenções desse dia têm competência 4T na planilha.
+- **A soma do histórico exige o mesmo favorecido** (Tiago, 30/10: "Sim,
+  corrigir"): um PIX paga um favorecido só. 29 ligações do automático
+  (27 e 30/10) somavam favorecidos diferentes e foram desfeitas. Em
+  `lib/conciliacao/historico.ts`: a soma só junta linhas do mesmo favorecido
+  (nome normalizado); a linha sem favorecido só casa sozinha; o imposto
+  retido na fonte nunca casa com saída e entra só no recebimento do mesmo
+  cliente, junto da nota (`notaComRetencoes`). O "ISS retido" da folha de PJ
+  e da PP é pagamento e casa normalmente. A regra nova ligou mais 24 linhas.
+
+### As devoluções de empréstimo e o mútuo (30/10/2026)
+
+- **As devoluções de 20 e 21/10 entram na cauda** (Tiago, 30/10: "pode fazer
+  de acordo com a recomendação"). Cada débito do banco é o principal (EMP)
+  mais os juros (DJ) da mesma pessoa física, e fecha ao centavo. As duas
+  linhas da California Santander foram ligadas às duas linhas da planilha
+  cada uma. Carregada pela tela: 1.661 movimentos, 1.222 ligações herdadas.
+- **As duas de 25/10 ficam de fora até aparecerem no extrato.** Não estão em
+  nenhum extrato importado (até 26/10) e 25/10 foi um domingo. Quando o
+  débito aparecer, `EMPRESTIMO_NO_EXTRATO_ATE` anda (em
+  `lib/historico-financeiro/empacotar.ts`), o pacote sai de novo e a tela
+  troca a carga.
+- **O que os números dizem de 25/10:** as quatro devoluções somadas fecham o
+  principal que as duas pessoas físicas emprestaram em junho e julho, com
+  R$ 65,93 de diferença. As de 25/10 têm o mesmo desenho das de 20 e 21/10,
+  principal e juros por pessoa, e nenhuma outra conta traz a contrapartida.
+  Isso aponta para o resto da devolução, não para uma transferência entre
+  empresas. Falta o comprovante do débito de R$ 3.500.000,00 de 26/10, que o
+  extrato não diz para quem foi.
+- **Os juros de 25/10 continuam na cauda**, porque têm competência 3T: ficam
+  sem linha no banco até o débito aparecer, e o saldo do sistema carrega esses
+  R$ 212.957,31 a menos que o banco até lá.
+- **O mútuo continua fora.** Entre CNPJs diferentes a transferência é travada
+  (decisão 124 D4), e o Tiago pediu um protótipo da função própria antes de
+  implementar.
 
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas

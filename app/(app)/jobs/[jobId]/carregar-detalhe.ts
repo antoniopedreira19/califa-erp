@@ -63,7 +63,7 @@ import type {
   CategoriaModeloPlanilha,
 } from "@/lib/types";
 import type { FechamentoDoJob } from "./enviar-encerramento-dialog";
-import { saldoAFaturarDoJob } from "@/lib/data/saldo-a-faturar";
+import { saldoAFaturarDoJob, variacoesCambiaisDoJob } from "@/lib/data/saldo-a-faturar";
 import {
   COLUNAS_DE_PAGAMENTO,
   cadastroMudouDepoisDaFoto,
@@ -1380,9 +1380,11 @@ export async function carregarDetalheDoJob(
   // mês, e do envio único do job normal, que ganhou o mesmo "Ver envio" na
   // decisão 087. Uma leitura só, e só quando há envio.
   const idsParcelas = envios.flatMap((e) => e.parcelas.map((par) => par.id));
-  const notasDasParcelasRes =
+  // Decisão 229: a variação cambial do câmbio fechado, junto (a do envio
+  // único é a soma das notas dele).
+  const [notasDasParcelasRes, variacoesPorNota] = await Promise.all([
     idsParcelas.length > 0
-      ? await supabase
+      ? supabase
           .from("faturamento_itens")
           .select(
             "envio_parcela_id, valor, faturamento:faturamentos!inner(numero_nf, data_emissao, status)",
@@ -1390,7 +1392,11 @@ export async function carregarDetalheDoJob(
           .eq("tenant_id", session.activeTenant.id)
           .eq("faturamento.status", "emitido")
           .in("envio_parcela_id", idsParcelas)
-      : { data: [], error: null };
+      : Promise.resolve({ data: [], error: null }),
+    envios.length > 0 && !faturaPorMes
+      ? variacoesCambiaisDoJob(supabase, session.activeTenant.id, jobId)
+      : Promise.resolve(new Map<string, number>()),
+  ]);
   if (notasDasParcelasRes.error) {
     console.error("[job.notas-das-parcelas]", notasDasParcelasRes.error.message);
   }
@@ -1431,6 +1437,8 @@ export async function carregarDetalheDoJob(
           envio: envioFaturamento,
           itensDeNota: (notasDasParcelasRes.data ?? []) as unknown as ItemDeNotaDaParcela[],
           semFaturamento: totaisJob.faturamentoPrevisto <= 0.004,
+          variacaoCambial:
+            Math.round([...variacoesPorNota.values()].reduce((t, v) => t + v, 0) * 100) / 100,
         });
 
   // Todo o faturamento do job já saiu em nota. ⚠️ Desde 20/09/2026 (decisão

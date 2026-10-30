@@ -88,6 +88,11 @@ const CAMPOS_DO_MEIO: Record<MeioForaDoCadastro, Array<keyof DadosDePagamento>> 
     "banco_codigo", "banco_nome", "agencia", "agencia_dv", "conta", "conta_dv", "tipo_conta",
     "pix_tipo", "pix_chave",
   ],
+  // Guia (decisão 227): como o boleto, nada do cadastro é pagamento.
+  guia: [
+    "banco_codigo", "banco_nome", "agencia", "agencia_dv", "conta", "conta_dv", "tipo_conta",
+    "pix_tipo", "pix_chave",
+  ],
 };
 
 /**
@@ -113,9 +118,10 @@ export function aplicarPagamentoForaDoCadastro(
     pix_tipo: cadastro?.pix_tipo ?? null,
     pix_chave: cadastro?.pix_chave ?? null,
   };
-  // Boleto (decisão 161): o documento continua o de sempre, com o cadastro
-  // como está; o PDF só troca a linha do PIX por "Boleto".
-  if (!fora || fora.meio === "boleto") return base;
+  // Boleto (decisão 161) e guia (227): o documento continua o de sempre,
+  // com o cadastro como está; o PDF só troca a linha do PIX por "Boleto" ou
+  // "Guia".
+  if (!fora || fora.meio === "boleto" || fora.meio === "guia") return base;
   if (fora.meio === "pix") {
     return { ...base, pix_tipo: fora.pix_tipo, pix_chave: fora.pix_chave };
   }
@@ -161,7 +167,7 @@ export function lerPagamentoForaDoCadastro(
   },
 ): PagamentoForaDoCadastroDaPP | null {
   const meio = pp.pagamento_fora_do_cadastro_meio;
-  if (meio !== "pix" && meio !== "conta" && meio !== "boleto") return null;
+  if (meio !== "pix" && meio !== "conta" && meio !== "boleto" && meio !== "guia") return null;
   const pix = meio === "pix";
   const conta = meio === "conta";
   return {
@@ -253,7 +259,7 @@ export function cadastroMudouDepoisDaFoto(
   // é do cadastro entra na conta.
   const meio = pp.pagamento_fora_do_cadastro_meio;
   const ignorados =
-    meio === "pix" || meio === "conta" || meio === "boleto" ? CAMPOS_DO_MEIO[meio] : [];
+    meio === "pix" || meio === "conta" || meio === "boleto" || meio === "guia" ? CAMPOS_DO_MEIO[meio] : [];
   return (Object.keys(foto) as Array<keyof DadosDePagamento>)
     .filter((campo) => !ignorados.includes(campo))
     .some((campo) => (foto[campo] ?? null) !== (cadastro[campo] ?? null));

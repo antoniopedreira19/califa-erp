@@ -76,9 +76,8 @@ export default async function AbrirJobNoFinanceiroPage({
   const tenantId = session.activeTenant.id;
 
   // Uma onda só, em paralelo (`docs/PERFORMANCE.md`). O que depende do job
-  // da fila — os projetos do combo, que são os do mesmo cliente (agrupar
-  // clientes diferentes sob um projeto faria o total somar dinheiro de
-  // dois), e o faturamento de cada mês no Fee e no Always On (decisão 078)
+  // da fila — os projetos do combo, os do cliente do job primeiro (desde a
+  // decisão 228 a busca acha projeto de qualquer cliente), e o faturamento de cada mês no Fee e no Always On (decisão 078)
   // — encadeia atrás dele sem segurar o resto. O save consumido e o
   // imposto só precisam do id. As três últimas são das abas de consulta
   // (decisão 111). Até 27/09/2026 eram três ondas em série.
@@ -87,7 +86,7 @@ export default async function AbrirJobNoFinanceiroPage({
       if (!carregado) return null;
       const [projetos, faturamentoMensal, ultimoDoProjetoRes, opcoesDoRegistro] =
         await Promise.all([
-          listarProjetosFinanceiro(tenantId, carregado.job.cliente_id),
+          listarProjetosFinanceiro(tenantId, carregado.job.cliente_id, carregado.job.id),
           // A Mídia Off também fatura por mês (decisão 167).
           carregado.job.modelo_planilha_orcamento === "mensal" ||
           carregado.job.modelo_planilha_orcamento === "midia_off"
@@ -131,8 +130,8 @@ export default async function AbrirJobNoFinanceiroPage({
         );
       }
       const ultimo = (ultimoDoProjetoRes.data ?? [])[0] as any;
-      // Só sugere o que o combo oferece: projeto encerrado ou de outro
-      // cliente não aparece na lista, e a busca não o acharia.
+      // Só sugere o que o combo oferece: projeto inativado não aparece na
+      // lista, e a busca não o acharia.
       const sugestaoDeProjeto =
         ultimo &&
         projetos.some((p) => p.id === ultimo.projeto_financeiro_id)

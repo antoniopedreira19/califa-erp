@@ -97,9 +97,29 @@ interface Props {
   edicao: { naFila: boolean; travaDosParametros: string | null } | null;
   alteracoes: AlteracaoDosParametros[];
   itens: ItemDosParametros[];
+  /**
+   * O "Editar planilha" do financeiro (revisão de 30/10/2026): os
+   * parâmetros abrem junto com a planilha, sem botão próprio, e o rascunho
+   * vai para o pop-up dela. `null` onde a planilha não tem o "Editar
+   * planilha" (Mídia Off, ou planilha travada pela nota): aí a linha
+   * continua com o "Editar" e o "Editar câmbio" próprios. Obrigatória: quem
+   * não tem manda `null`.
+   */
+  pelaPlanilha: {
+    ativa: boolean;
+    onRascunho: (r: RascunhoDosParametros) => void;
+  } | null;
 }
 
-type Editando = null | "parametros" | "cambio";
+/** O que a linha manda para o pop-up da planilha. */
+export interface RascunhoDosParametros {
+  para: ParametrosDoJobGravados;
+  campos: Array<{ rotulo: string; de: string; para: string }>;
+  erro: string | null;
+}
+
+/** `tudo`: parâmetros e câmbio juntos, pelo "Editar planilha". */
+type Editando = null | "parametros" | "cambio" | "tudo";
 
 interface Rascunho {
   fee: string;
@@ -231,7 +251,7 @@ function paraDoRascunho(
     const n = lerNumeroDigitado(s);
     return Number.isFinite(n) && n >= 0 ? n : null;
   };
-  if (editando === "parametros") {
+  if (editando === "parametros" || editando === "tudo") {
     const fee = ler(r.fee, p.percentual_honorarios);
     const imposto = r.imposto === "" ? p.percentual_imposto : ler(r.imposto, p.percentual_imposto);
     if (fee === null || imposto === null) {
@@ -253,7 +273,13 @@ function paraDoRascunho(
       para.base_honorarios = r.base;
     }
   }
-  if (editando === "cambio") {
+  // O câmbio só conta se alguém mexeu nele: pelo "Editar planilha", o job
+  // internacional ainda sem câmbio não trava a edição do resto.
+  const inicial = rascunhoDe(p, intl);
+  const cambioTocado =
+    (editando === "cambio" || (editando === "tudo" && intl)) &&
+    (r.moeda !== inicial.moeda || r.cotacao !== inicial.cotacao || r.data !== inicial.data);
+  if (cambioTocado) {
     if (!r.moeda) return { para, erro: "Escolha a moeda do job." };
     const cot = lerNumeroDigitado(r.cotacao);
     if (!cotacaoValida(cot)) {
@@ -281,6 +307,7 @@ export function ParametrosDoJob({
   edicao,
   alteracoes,
   itens,
+  pelaPlanilha,
 }: Props) {
   const router = useRouter();
   const intl = modelo === "internacional";
@@ -292,17 +319,35 @@ export function ParametrosDoJob({
   const [salvando, startSalvar] = React.useTransition();
   const [erroDoPopup, setErroDoPopup] = React.useState<string | null>(null);
 
+  // Pelo "Editar planilha" a linha abre e fecha com a planilha. Depois da
+  // primeira nota só o câmbio do internacional abre.
+  const ativaPelaPlanilha = pelaPlanilha?.ativa === true;
+  const comoAbrePelaPlanilha: Editando =
+    edicao === null ? null : edicao.travaDosParametros === null ? "tudo" : intl ? "cambio" : null;
+
   // Depois do refresh os parâmetros novos chegam: a linha volta a ler deles.
   // Pelo conteúdo, e não pela referência — o objeto é remontado a cada render.
   const chaveDosParametros = JSON.stringify(p);
   React.useEffect(() => {
-    setEditando(null);
+    setEditando(ativaPelaPlanilha ? comoAbrePelaPlanilha : null);
+    setRascunho(rascunhoDe(p, intl));
     setConfirmando(false);
     setErro(null);
-  }, [chaveDosParametros]);
+    // A planilha liga e desliga a linha; os parâmetros novos a releem.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveDosParametros, ativaPelaPlanilha]);
 
   const { para, erro: erroDoRascunho } = paraDoRascunho(p, rascunho, editando, modelo);
   const campos = camposDaAlteracao(p, para, modelo, moeda);
+
+  // O rascunho vai para o pop-up da planilha a cada mudança.
+  const onRascunho = pelaPlanilha?.onRascunho;
+  const chaveDoRascunho = JSON.stringify([para, erroDoRascunho]);
+  React.useEffect(() => {
+    if (!onRascunho) return;
+    onRascunho({ para, campos: ativaPelaPlanilha ? campos : [], erro: ativaPelaPlanilha ? erroDoRascunho : null });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveDoRascunho, ativaPelaPlanilha]);
 
   /** Faturamento, impostos e valor do job com um retrato de parâmetros —
    *  a mesma conta do card de Totais; o servidor refaz a sua ao gravar. */
@@ -334,6 +379,8 @@ export function ParametrosDoJob({
 
   function pedirConfirmacao(e: React.FormEvent) {
     e.preventDefault();
+    // Pelo "Editar planilha" quem confirma é a barra da planilha.
+    if (pelaPlanilha) return;
     if (erroDoRascunho) return setErro(erroDoRascunho);
     if (campos.length === 0) return setErro("Nenhum parâmetro mudou.");
     setErro(null);
@@ -369,13 +416,16 @@ export function ParametrosDoJob({
   }
 
   const podeParametros = edicao !== null && edicao.travaDosParametros === null;
+  // Pelo "Editar planilha" o erro do que foi digitado aparece na hora: não
+  // há "Salvar" na linha.
+  const erroVisivel = erro ?? (pelaPlanilha ? erroDoRascunho : null);
   const podeCambio = intl && edicao !== null;
   const antes = contas(p);
   const depois = contas(para);
   const rotuloDoSelo = edicao?.naFila === false ? "Alterado pelo financeiro" : "Alterado na abertura";
 
   const linhaDosParametros =
-    editando !== "parametros" ? (
+    editando !== "parametros" && editando !== "tudo" ? (
       <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
         {intl ? (
           <>
@@ -412,7 +462,7 @@ export function ParametrosDoJob({
             <Campo rotulo="Impostos" valor={pct(p.percentual_imposto)} />
           </>
         )}
-        {podeParametros ? (
+        {podeParametros && !pelaPlanilha ? (
           <button
             type="button"
             onClick={() => editar("parametros")}
@@ -451,7 +501,7 @@ export function ParametrosDoJob({
               inputMode="decimal"
               value={rascunho.fee}
               onChange={(e) => setRascunho((r) => ({ ...r, fee: e.target.value }))}
-              autoFocus
+              autoFocus={!pelaPlanilha}
               aria-label={intl ? "Fee, em %" : "Honorários, em %"}
               className={`${CLASSE_INPUT} w-[76px]`}
             />
@@ -540,13 +590,13 @@ export function ParametrosDoJob({
             </CampoEdicao>
           )}
 
-          <BotoesDoForm onCancelar={fechar} />
+          {!pelaPlanilha && <BotoesDoForm onCancelar={fechar} />}
         </div>
-        {erro && <Erro texto={erro} />}
+        {erroVisivel && <Erro texto={erroVisivel} />}
       </form>
     );
 
-  const linhaDoCambio = !intl ? null : editando !== "cambio" ? (
+  const linhaDoCambio = !intl ? null : editando !== "cambio" && editando !== "tudo" ? (
     <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
       {/* Travessão quando vazio: quem lê a linha tem que ver o que falta. */}
       <Campo rotulo="Moeda" valor={p.moeda_estrangeira || "—"} />
@@ -568,7 +618,7 @@ export function ParametrosDoJob({
         valor={p.cambio_venda ? formatarTaxa(p.cambio_venda) : "—"}
         dica="Cotação + 0,20. Registro de conferência: não entra em conta nenhuma."
       />
-      {podeCambio && (
+      {podeCambio && !pelaPlanilha && (
         <button
           type="button"
           onClick={() => editar("cambio")}
@@ -616,7 +666,7 @@ export function ParametrosDoJob({
             onChange={(e) => setRascunho((r) => ({ ...r, cotacao: e.target.value }))}
             inputMode="decimal"
             aria-label="Cotação do dia"
-            autoFocus
+            autoFocus={!pelaPlanilha}
             className="h-7 w-[92px] rounded-md border border-border bg-white px-2 text-sm font-medium text-foreground outline-none focus:border-california-red/50"
           />
         </CampoEdicao>
@@ -638,9 +688,9 @@ export function ParametrosDoJob({
               : "—"}
           </span>
         </CampoEdicao>
-        <BotoesDoForm onCancelar={fechar} />
+        {!pelaPlanilha && <BotoesDoForm onCancelar={fechar} />}
       </div>
-      {erro && <Erro texto={erro} />}
+      {erroVisivel && <Erro texto={erroVisivel} />}
     </form>
   );
 

@@ -278,6 +278,7 @@ type CaudaCrua = {
   valor: string | number;
   job_nome: string | null;
   descricao: string | null;
+  fornecedor: string | null;
   extrato_linha_id: string | null;
 };
 
@@ -540,7 +541,7 @@ export async function carregarBancoDaConciliacao(
           (de, ate) =>
             supabase
               .from("historico_movimentos")
-              .select("id, data, valor, job_nome, descricao, extrato_linha_id, carga:historico_cargas!inner(tipo, situacao)")
+              .select("id, data, valor, job_nome, descricao, fornecedor, extrato_linha_id, carga:historico_cargas!inner(tipo, situacao)")
               .eq("tenant_id", tenantId)
               .eq("conta_bancaria_id", contaId)
               .eq("carga.tipo", "cauda")
@@ -577,7 +578,7 @@ export async function carregarBancoDaConciliacao(
   const caudaPorLinha = new Map<string, LinhaDoBanco["historicos"]>();
   const historico: HistoricoDoMotor[] = [];
   for (const h of caudaCrua) {
-    const item = { id: h.id, data: h.data, valor: Number(h.valor), job: h.job_nome, descricao: h.descricao };
+    const item = { id: h.id, data: h.data, valor: Number(h.valor), job: h.job_nome, descricao: h.descricao, fornecedor: h.fornecedor };
     if (h.extrato_linha_id) {
       caudaPorLinha.set(h.extrato_linha_id, [...(caudaPorLinha.get(h.extrato_linha_id) ?? []), item]);
     } else {

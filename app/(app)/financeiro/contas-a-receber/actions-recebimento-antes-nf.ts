@@ -101,6 +101,56 @@ export async function registrarRecebimentoAntesNf(input: unknown): Promise<Resul
   return { ok: true };
 }
 
+// O câmbio fechado do job internacional (decisão 229): o bruto em R$ e,
+// à parte, o valor na moeda, a cotação, o IOF e a tarifa. A função confere
+// que o job é internacional, que a nota ainda não tem recebimento e que o
+// bruto é o valor na moeda vezes a cotação; grava o bruto, o IOF e a tarifa
+// como lançamentos do job e a variação cambial no recebimento.
+const registrarCambioSchema = z.object({
+  envio_nota_id: z.string().uuid("Informe a nota do envio."),
+  data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe a data do recebimento."),
+  conta_bancaria_id: z.string().uuid("Selecione a conta que recebeu."),
+  valor: z.number().positive("Informe o valor recebido."),
+  valor_moeda: z.number().positive("Informe o valor recebido na moeda."),
+  cotacao: z.number().positive("Informe a cotação do dia."),
+  iof: z.number().min(0, "O IOF não pode ser negativo."),
+  tarifa: z.number().min(0, "A tarifa não pode ser negativa."),
+  plano_conta_tipo_id: z.string().uuid("Selecione o centro de custo do recebimento."),
+  plano_conta_subtipo_id: z.string().uuid("Selecione o centro de custo do recebimento."),
+});
+
+export async function registrarRecebimentoCambio(input: unknown): Promise<Result> {
+  const parsed = registrarCambioSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Entrada inválida." };
+  }
+  const gate = await gateFinanceiro("recebimento_antes_nf.registrado");
+  if (!gate.ok) return gate;
+  const d = parsed.data;
+
+  const { error } = await gate.supabase.rpc("registrar_recebimento_antes_nf_cambio", {
+    p_envio_nota_id: d.envio_nota_id,
+    p_data: d.data,
+    p_conta_bancaria_id: d.conta_bancaria_id,
+    p_valor_moeda: d.valor_moeda,
+    p_cotacao: d.cotacao,
+    p_bruto: d.valor,
+    p_iof: d.iof,
+    p_tarifa: d.tarifa,
+    p_tipo_id: d.plano_conta_tipo_id,
+    p_subtipo_id: d.plano_conta_subtipo_id,
+  });
+  if (error) {
+    return {
+      ok: false,
+      message: mensagemDoBanco(error.message, "Não foi possível registrar o recebimento."),
+    };
+  }
+
+  revalidar();
+  return { ok: true };
+}
+
 const cancelarSchema = z.object({
   id: z.string().uuid(),
   motivo: z

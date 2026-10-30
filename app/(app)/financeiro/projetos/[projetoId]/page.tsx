@@ -23,6 +23,7 @@ import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { carregarPlanilhasDosJobs } from "@/app/(app)/jobs/projeto/[projetoId]/carregar-planilhas";
 import { PlanilhasDoProjeto } from "@/app/(app)/jobs/projeto/[projetoId]/planilhas-do-projeto";
 import { STATUS_NA_LISTA } from "../../abertura-de-job/dados-abertos";
+import { resumoDosClientes } from "@/lib/resumo-dos-clientes";
 import {
   carregarLinhasDeFluxo,
   carregarPrazosDosJobs,
@@ -87,7 +88,9 @@ export default async function ProjetoNoFinanceiroPage({
       .maybeSingle(),
     supabase
       .from("jobs")
-      .select("id, codigo, nome, nome_financeiro, status, faturamento_enviado_em")
+      .select(
+        "id, codigo, nome, nome_financeiro, status, faturamento_enviado_em, cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia)",
+      )
       .eq("tenant_id", tenantId)
       .eq("projeto_financeiro_id", params.projetoId)
       .in("status", STATUS_NA_LISTA as unknown as string[])
@@ -118,6 +121,20 @@ export default async function ProjetoNoFinanceiroPage({
     ),
   }));
   const jobIds = jobsDoProjeto.map((j) => j.id);
+
+  // Os clientes dos jobs, sem repetir e na ordem de criação: desde a
+  // decisão 228 um projeto junta clientes diferentes (os parceiros de um
+  // evento), e o cliente de quem criou não diz mais quem está dentro.
+  const clientesDoProjeto = new Map<string, string | null>();
+  for (const j of (jobsRes.data ?? []) as any[]) {
+    if (j.cliente_id && !clientesDoProjeto.has(j.cliente_id)) {
+      clientesDoProjeto.set(j.cliente_id, j.cliente?.nome_fantasia ?? null);
+    }
+  }
+  const nomesDosClientes =
+    clientesDoProjeto.size > 0
+      ? Array.from(clientesDoProjeto.values())
+      : [(projeto.cliente?.nome_fantasia as string | undefined) ?? null];
 
   // Independentes entre si — em paralelo, nunca em série
   // (`docs/PERFORMANCE.md`).
@@ -258,8 +275,9 @@ export default async function ProjetoNoFinanceiroPage({
 
       <div className="grid gap-4 md:grid-cols-4">
         <CardResumo
-          rotulo="Cliente"
-          valor={projeto.cliente?.nome_fantasia ?? "—"}
+          rotulo={nomesDosClientes.length > 1 ? "Clientes" : "Cliente"}
+          valor={resumoDosClientes(nomesDosClientes)}
+          completo={nomesDosClientes.map((n) => n ?? "—").join(", ")}
         />
         <CardResumo
           rotulo="Jobs no financeiro"
@@ -328,13 +346,24 @@ export default async function ProjetoNoFinanceiroPage({
   );
 }
 
-function CardResumo({ rotulo, valor }: { rotulo: string; valor: string }) {
+function CardResumo({
+  rotulo,
+  valor,
+  completo,
+}: {
+  rotulo: string;
+  valor: string;
+  /** O texto inteiro no tooltip, quando o valor é um resumo. */
+  completo?: string;
+}) {
   return (
     <div className="rounded-2xl border border-border bg-card p-4 shadow-soft">
       <p className="text-[10px] uppercase tracking-[0.09em] text-muted-foreground">
         {rotulo}
       </p>
-      <p className="mt-1 truncate text-sm font-semibold">{valor}</p>
+      <p className="mt-1 truncate text-sm font-semibold" title={completo ?? valor}>
+        {valor}
+      </p>
     </div>
   );
 }

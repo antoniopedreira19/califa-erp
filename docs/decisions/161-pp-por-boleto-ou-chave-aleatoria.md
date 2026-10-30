@@ -1,7 +1,7 @@
 # 161 — A PP paga por boleto ou chave aleatória, e o fornecedor pode não ter conta nem PIX no cadastro
 
 **Data:** 2026-10-09
-**Status:** aceita e implementada (09/10/2026).
+**Status:** aceita e implementada (09/10/2026). Revista pela [227](227-pp-paga-por-guia.md) em 29/10/2026: o Pagamento ganha a opção Guia (taxa ou licença de órgão público), que exige a guia no envio e não pede NF.
 **Quem decidiu:** Tiago, em 09/10/2026, sobre o protótipo "Boleto e chave aleatória" (2 rodadas).
 **Revê:** a [127](127-pp-com-pagamento-fora-do-cadastro.md) (as opções fora do cadastro e o motivo) e a [137](137-fora-do-cadastro-visivel-e-pago-pela-remessa.md) (a remessa não paga boleto).
 **Completa:** a [150](150-cadastro-de-veiculos.md) (o veículo usa o mesmo formulário do fornecedor) e a [152](152-nf-do-fornecedor-com-cadastro-proprio.md) (as regras de anexo no envio).

@@ -204,10 +204,13 @@ export interface MesDeFaturamento extends FaturamentoDoMes {
 export function situacaoDoMes(
   envio: EnvioDoJobComParcelas | null,
   faturado: number,
+  /** Decisão 229: a variação cambial do câmbio fechado; o envio fecha pelo
+   *  convertido. Zero fora do internacional. */
+  variacaoCambial = 0,
 ): SituacaoDoMes {
   if (!envio) return "a_enviar";
   if (faturado <= 0.004) return "na_fila";
-  return faturado >= envio.valor_faturado - 0.01 ? "faturado" : "faturado_parcial";
+  return faturado >= envio.valor_faturado + variacaoCambial - 0.01 ? "faturado" : "faturado_parcial";
 }
 
 /** Um mês por linha: o valor pela planilha, o envio dele (se houve), as
@@ -318,21 +321,27 @@ export interface FaturamentoDoEnvioUnico {
   faturado: number;
   notas: NotaDoMes[];
   situacao: SituacaoDoMes;
+  /** Decisão 229: a variação cambial do câmbio fechado (+ ganho, − perda).
+   *  O envio fecha por `envio.valor_faturado + variacaoCambial`. Zero fora
+   *  do internacional. */
+  variacaoCambial: number;
 }
 
 export function montarFaturamentoDoEnvioUnico({
   envio,
   itensDeNota,
   semFaturamento,
+  variacaoCambial,
 }: {
   envio: EnvioDoJobComParcelas | null;
   itensDeNota: ItemDeNotaDaParcela[];
   /** Nada a faturar: faturamento previsto zero, como o job pago só por
    *  save (decisão 028 §11). */
   semFaturamento: boolean;
+  variacaoCambial: number;
 }): FaturamentoDoEnvioUnico {
   const { faturado, notas } = notasDoEnvio(envio, itensDeNota);
   const situacao: SituacaoDoMes =
-    !envio && semFaturamento ? "sem_faturamento" : situacaoDoMes(envio, faturado);
-  return { envio, faturado, notas, situacao };
+    !envio && semFaturamento ? "sem_faturamento" : situacaoDoMes(envio, faturado, variacaoCambial);
+  return { envio, faturado, notas, situacao, variacaoCambial };
 }

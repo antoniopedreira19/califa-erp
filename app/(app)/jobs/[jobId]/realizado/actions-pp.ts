@@ -34,7 +34,9 @@ import {
   DOCUMENTO_TIPOS,
   DOCUMENTO_TIPOS_FISCAIS,
   PP_URGENTE_JUSTIFICATIVA_MIN,
+  meioPeloAnexo,
   verbaDeResponsavel,
+  type MeioPeloAnexo,
   type PagamentoDoTitular,
   type TipoVerba,
   type TitularDaVerbaTipo,
@@ -376,7 +378,8 @@ function fornecedorDoDocumento(
 function auditoriaDoForaDoCadastro(fora: PagamentoForaDoCadastro | null) {
   if (!fora) return null;
   // Decisão 161: o boleto não tem dado digitado — o arquivo vai nos anexos.
-  if (fora.meio === "boleto") return { meio: fora.meio };
+  // A guia (decisão 227), também não.
+  if (fora.meio === "boleto" || fora.meio === "guia") return { meio: fora.meio };
   return fora.meio === "pix"
     ? { meio: fora.meio, motivo: fora.motivo, pix_tipo: fora.pix_tipo, pix_chave: fora.pix_chave }
     : {
@@ -1479,8 +1482,8 @@ async function renderizarDocumentoDaPP(args: {
    *  "Atualizar vencimento" (decisão 157) mantém a da PP. */
   emitidaEm?: string;
   /** Decisão 161: a PP paga por boleto — o PDF troca a linha do PIX por
-   *  "Pagamento: Boleto". */
-  pagamentoPorBoleto?: boolean;
+   *  "Pagamento: Boleto"; na paga por guia (227), "Pagamento: Guia". */
+  pagamentoPeloAnexo?: MeioPeloAnexo | null;
   /** Decisão 178: a prévia da conferência — marca d'água e sem gravar. */
   previa?: boolean;
   /** Decisão 190: o selo "não pague" da PP gerada e da cancelada; null na
@@ -1507,7 +1510,7 @@ async function renderizarDocumentoDaPP(args: {
       reembolso_tipo: args.pp.reembolso_tipo,
       reembolso_deslocamentos: args.pp.reembolso_deslocamentos,
     },
-    pagamentoPorBoleto: args.pagamentoPorBoleto === true,
+    pagamentoPeloAnexo: args.pagamentoPeloAnexo ?? null,
     previa: args.previa === true,
     selo: args.selo,
     empresa: args.empresa as never,
@@ -2142,7 +2145,7 @@ async function finalizarPedidoCompraImpl(
       // O cabeçalho é o do CNPJ da PP, não o da gerencial (decisão 156).
       empresa: cnpjDaPP.empresa,
       fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
-      pagamentoPorBoleto: foraDoCadastroDe(d)?.meio === "boleto",
+      pagamentoPeloAnexo: meioPeloAnexo(foraDoCadastroDe(d)?.meio),
       cartao: cartaoDe(d),
       responsavelVerbaNome: tipoVerba ? (titular.nome ?? "") : null,
       pagamentoDoTitular,
@@ -2717,7 +2720,7 @@ export async function previaDoPdfDaPP(
       },
       empresa: cnpjDaPP.empresa,
       fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
-      pagamentoPorBoleto: foraDoCadastroDe(d)?.meio === "boleto",
+      pagamentoPeloAnexo: meioPeloAnexo(foraDoCadastroDe(d)?.meio),
       cartao: cartaoDe(d),
       responsavelVerbaNome: tipoVerba ? (titular.nome ?? "") : null,
       pagamentoDoTitular: pagamentoDigitadoNoPdf(pagTitularDaPrevia),
@@ -2745,16 +2748,23 @@ export async function previaDoPdfDaPP(
  *
  * Decisão 161: a PP paga por boleto exige também o boleto (tipo Boleto) e a
  * nota (NF, recibo ou fatura — 178) — o boleto não substitui a nota.
+ * Decisão 227: a PP paga por guia exige a guia (tipo Guia) e não pede nota:
+ * taxa, licença ou alvará de órgão público não tem NF.
  */
 function faltaNosAnexosDoEnvio(
   anexos: AnexoUploaded[],
   valorPP: number,
-  exigeBoleto: boolean,
+  pagaPeloAnexo: MeioPeloAnexo | null,
 ): string | null {
   if (anexos.length === 0) {
-    return "Anexe a nota fiscal do fornecedor antes de enviar esta PP ao financeiro.";
+    return pagaPeloAnexo === "guia"
+      ? "Anexe a guia do órgão público antes de enviar esta PP ao financeiro."
+      : "Anexe a nota fiscal do fornecedor antes de enviar esta PP ao financeiro.";
   }
-  if (exigeBoleto) {
+  if (pagaPeloAnexo === "guia" && !anexos.some((a) => a.documento_tipo === "guia")) {
+    return "Esta PP é paga por guia: anexe a guia, com o tipo Guia.";
+  }
+  if (pagaPeloAnexo === "boleto") {
     if (!anexos.some((a) => !!a.documento_tipo && DOCUMENTO_TIPOS_FISCAIS.includes(a.documento_tipo))) {
       return "Anexe também a NF do fornecedor: o boleto não substitui a nota.";
     }
@@ -3042,7 +3052,7 @@ async function refazerPdfDaPP(
       fornecedor: fornecedorDoPdf,
       cartao: cartaoDaLinha(pp),
       pagamentoDoTitular: pagamentoDoTitularDaPP(pp),
-      pagamentoPorBoleto: pp.pagamento_fora_do_cadastro_meio === "boleto",
+      pagamentoPeloAnexo: meioPeloAnexo(pp.pagamento_fora_do_cadastro_meio),
       responsavelVerbaNome: !pp.verba_producao
         ? null
         : verbaDeResponsavel(pp)
@@ -3387,7 +3397,7 @@ export async function enviarPedidoCompraAoFinanceiro(
       : faltaNosAnexosDoEnvio(
           anexosDoPedido,
           Number(ppRow.valor ?? 0),
-          ppRow.pagamento_fora_do_cadastro_meio === "boleto",
+          meioPeloAnexo(ppRow.pagamento_fora_do_cadastro_meio),
         );
     if (falta && !(semNfPermitido && anexosDoPedido.length === 0)) return { ok: false, message: falta };
   }
@@ -3622,7 +3632,7 @@ export async function deixarPPProntaParaEnvio(
       : faltaNosAnexosDoEnvio(
           anexosDoPedido,
           Number(ppRow.valor ?? 0),
-          ppRow.pagamento_fora_do_cadastro_meio === "boleto",
+          meioPeloAnexo(ppRow.pagamento_fora_do_cadastro_meio),
         );
     if (falta && !(semNfPermitido && anexosDoPedido.length === 0)) return { ok: false, message: falta };
     const erroAnexos = await gravarAnexosDoEnvio(
@@ -4873,9 +4883,9 @@ export async function atualizarVencimentoDaPP(
       cartao: cartaoDaLinha(pp),
       // Decisão 171: o pagamento do colaborador sai da foto da PP.
       pagamentoDoTitular: pagamentoDoTitularDaPP(pp),
-      pagamentoPorBoleto:
-        (ppBruta as { pagamento_fora_do_cadastro_meio?: string | null }).pagamento_fora_do_cadastro_meio ===
-        "boleto",
+      pagamentoPeloAnexo: meioPeloAnexo(
+        (ppBruta as { pagamento_fora_do_cadastro_meio?: string | null }).pagamento_fora_do_cadastro_meio,
+      ),
       responsavelVerbaNome: !pp.verba_producao
         ? null
         : verbaDeResponsavel(pp)
@@ -5247,7 +5257,7 @@ async function editarPPGeradaImpl(
     },
     empresa: cnpjDaPP.empresa,
     fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
-    pagamentoPorBoleto: foraDoCadastroDe(d)?.meio === "boleto",
+    pagamentoPeloAnexo: meioPeloAnexo(foraDoCadastroDe(d)?.meio),
     cartao: cartaoDe(d),
     // Decisão 171: a verba tem titular nas três; nada novo grava responsável.
     responsavelVerbaNome: tipoVerba ? (titular.nome ?? "") : null,

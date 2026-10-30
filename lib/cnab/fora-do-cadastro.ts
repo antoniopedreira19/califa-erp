@@ -36,9 +36,9 @@ export function aplicarForaDoCadastroNaRemessa<T extends MeiosDoDestinatario>(
   dados: T,
   fora: PagamentoForaDoCadastroDaPP,
 ): { dados: T; forma: "pix" | "banco" } {
-  if (fora.meio === "boleto") {
+  if (fora.meio === "boleto" || fora.meio === "guia") {
     // Barrado antes, em `resolverOrigem`: chegar aqui é defeito.
-    throw new Error("PP paga por boleto não entra na remessa.");
+    throw new Error(`PP paga por ${fora.meio} não entra na remessa.`);
   }
   if (fora.meio === "pix") {
     return {

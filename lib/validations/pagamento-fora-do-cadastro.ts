@@ -3,7 +3,8 @@ import { normalizarChavePix, problemaDaChavePix } from "@/lib/pix";
 
 /**
  * O pagamento fora do cadastro de uma PP (decisão 127, 29/09/2026; desde a
- * decisão 161, de 09/10/2026, chave aleatória ou boleto).
+ * decisão 161, de 09/10/2026, chave aleatória ou boleto; desde a 227, de
+ * 29/10/2026, também guia).
  *
  * A produção escolhe UM meio que o fornecedor mandou na hora de cobrar:
  *   - `pix` — só chave ALEATÓRIA (a temporária que o fornecedor gera). A
@@ -11,7 +12,10 @@ import { normalizarChavePix, problemaDaChavePix } from "@/lib/pix";
  *     chave sai no PDF e no arquivo do banco do mesmo jeito; a CHECK
  *     `pp_fora_do_cadastro_formato` repete a expressão no banco;
  *   - `boleto` — sem dado digitado: o boleto vai nos anexos, com o tipo
- *     Boleto, e o envio ao financeiro o exige.
+ *     Boleto, e o envio ao financeiro o exige, junto da nota;
+ *   - `guia` — taxa, licença ou alvará de órgão público: como o boleto, sem
+ *     dado digitado; a guia vai nos anexos, com o tipo Guia, e o envio ao
+ *     financeiro a exige, sem NF.
  *
  * Sem motivo (Tiago, 09/10/2026): o motivo é o meio que o fornecedor
  * escolheu. "Outra conta" saiu da tela; o banco ainda aceita `conta` para o
@@ -23,8 +27,8 @@ import { normalizarChavePix, problemaDaChavePix } from "@/lib/pix";
 
 export const pagamentoForaDoCadastroSchema = z
   .object({
-    meio: z.enum(["pix", "boleto"], {
-      errorMap: () => ({ message: "Escolha chave aleatória ou boleto." }),
+    meio: z.enum(["pix", "boleto", "guia"], {
+      errorMap: () => ({ message: "Escolha chave aleatória, boleto ou guia." }),
     }),
     pix_tipo: z.enum(["cpf", "cnpj", "email", "telefone", "aleatoria"]).nullable().optional(),
     pix_chave: z

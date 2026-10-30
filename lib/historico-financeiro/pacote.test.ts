@@ -7,7 +7,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { jobDaCauda, linhaDeJob, linhaDeMovimento, linhasDeSaldo, linhasDoRateio, type FonteDoRateio, type LinhaLida } from "./empacotar";
+import { jobDaCauda, linhaDeJob, linhaDeMovimento, linhasDeSaldo, linhasDoRateio, movimentoDaCauda, type FonteDoRateio, type LinhaLida } from "./empacotar";
 import {
   COLUNAS_DO_PACOTE,
   FORMATO_DO_PACOTE,
@@ -259,6 +259,22 @@ test("cauda: só o job até o 3T de 2026, ou de ano anterior, que não existe no
   assert.equal(jobDaCauda(job("2026", "")), false);
   assert.equal(jobDaCauda(job("2026", "3T", "AAA-1001/26")), false);
   assert.equal(jobDaCauda(job("", "3T")), false);
+});
+
+test("cauda: sem job, o DRE com competência até o 3T, fora o mútuo e o empréstimo que não está no extrato", () => {
+  const jobs = new Set(["j3"]);
+  const mov = (extra: LinhaLida): LinhaLida => ({ job_id: "", classe: "dre", grupo: "DP", competencia_ano: "2026", competencia_trimestre: "3", ...extra });
+  assert.equal(movimentoDaCauda(mov({ job_id: "j3" }), jobs), true);
+  assert.equal(movimentoDaCauda(mov({ job_id: "j4" }), jobs), false);
+  assert.equal(movimentoDaCauda(mov({}), jobs), true);
+  assert.equal(movimentoDaCauda(mov({ grupo: "CF", competencia_ano: "2025", competencia_trimestre: "4" }), jobs), true);
+  assert.equal(movimentoDaCauda(mov({ competencia_trimestre: "4" }), jobs), false);
+  assert.equal(movimentoDaCauda(mov({ grupo: "EMP", data: "2026-10-21" }), jobs), true);
+  assert.equal(movimentoDaCauda(mov({ grupo: "EMP", data: "2026-10-25" }), jobs), false);
+  assert.equal(movimentoDaCauda(mov({ grupo: "EMP" }), jobs), false);
+  assert.equal(movimentoDaCauda(mov({ grupo: "MÚTUO INT", data: "2026-10-20" }), jobs), false);
+  assert.equal(movimentoDaCauda(mov({ classe: "transferencia" }), jobs), false);
+  assert.equal(movimentoDaCauda(mov({ competencia_trimestre: "" }), jobs), false);
 });
 
 test("cabeçalho: o pacote sem tipo é de período; a cauda declara o tipo", () => {

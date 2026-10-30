@@ -474,6 +474,10 @@ function TrilhaFaturamentoUnico({
       faturamento && faturamento.notas.length > 0
         ? faturamento.notas[faturamento.notas.length - 1].dataEmissao
         : null;
+    // Decisão 229: no internacional o envio fecha pelo convertido no câmbio
+    // fechado; a diferença para o que a produção enviou é a variação.
+    const variacao = faturamento?.variacaoCambial ?? 0;
+    const valorEnviado = envio.valor_faturado + variacao;
     texto = (
       <>
         Enviado em <strong className={MONO}>{dataDoEnvio(envio.enviado_em)}</strong> ·{" "}
@@ -483,7 +487,7 @@ function TrilhaFaturamentoUnico({
         {situacao === "na_fila" ? (
           <>
             <strong className={FORTE}>
-              {formatCurrency(envio.valor_faturado, moeda)}
+              {formatCurrency(valorEnviado, moeda)}
             </strong>{" "}
             ainda sem nota.
           </>
@@ -494,14 +498,14 @@ function TrilhaFaturamentoUnico({
             </strong>{" "}
             de{" "}
             <strong className={FORTE}>
-              {formatCurrency(envio.valor_faturado, moeda)}
+              {formatCurrency(valorEnviado, moeda)}
             </strong>{" "}
             em nota emitida.
           </>
         ) : (
           <>
             <strong className={FORTE}>
-              {formatCurrency(envio.valor_faturado, moeda)}
+              {formatCurrency(valorEnviado, moeda)}
             </strong>{" "}
             em nota emitida
             {ultimaNota ? (
@@ -511,6 +515,16 @@ function TrilhaFaturamentoUnico({
               </>
             ) : null}
             .
+          </>
+        )}
+        {Math.abs(variacao) >= 0.005 && (
+          <>
+            {" "}
+            · variação cambial{" "}
+            <strong className={variacao < 0 ? "font-semibold text-california-red" : "font-semibold text-emerald-700"}>
+              {variacao > 0 ? "+" : ""}
+              {formatCurrency(variacao, moeda)}
+            </strong>
           </>
         )}
       </>

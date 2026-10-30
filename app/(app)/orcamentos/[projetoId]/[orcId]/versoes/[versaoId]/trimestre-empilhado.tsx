@@ -15,7 +15,10 @@ import { ChevronRight } from "lucide-react";
 import { cn, formatCurrency } from "@/lib/utils";
 import { NUMEROS_PLANILHA } from "@/app/(app)/_planilha/blocos";
 import { BotaoRecolherTodos } from "@/app/(app)/_planilha/recolher-grupos";
-import { ComLugarDaBarra } from "@/app/(app)/_planilha/lugar-da-barra";
+import {
+  ComLugarDaBarra,
+  ComPlanilhaColada,
+} from "@/app/(app)/_planilha/lugar-da-barra";
 
 export interface MesDoTrimestre {
   id: string;
@@ -38,6 +41,8 @@ export function TrimestreEmpilhado({
   acoes,
   onAbrir,
   barraAcimaDoMes = false,
+  titulo,
+  linhaColada = false,
 }: {
   meses: MesDoTrimestre[];
   moeda: string;
@@ -52,6 +57,18 @@ export function TrimestreEmpilhado({
    *  linha do mês (Tiago, 27/10/2026). Só no orçamento: a planilha do job
    *  não tem barra por mês. */
   barraAcimaDoMes?: boolean;
+  /** O título da vista ("4º trimestre de 2026 · 3 meses"). Com ele, o
+   *  botão dos meses vira "Recolher meses" e fica ao lado do título, e a
+   *  barra do primeiro mês, quando ele está aberto, vem para a mesma linha,
+   *  à direita: o título e "Save"/"Exibir" deixam de ocupar duas linhas
+   *  (Tiago, 30/10/2026). Só no orçamento mensal. */
+  titulo?: React.ReactNode;
+  /** A linha do mês aberto fecha o topo do card da planilha, sem o vão; ela
+   *  mostra Faturamento, Resultado op. e Rentabilidade, sem o Custo
+   *  planejado e sem o "Abrir {mês}" (a régua já abre o mês). Tiago,
+   *  30/10/2026. Só no orçamento mensal: no job o mês tem orçado,
+   *  planejado e realizado, e a linha segue como era. */
+  linhaColada?: boolean;
 }) {
   // Nasce com o primeiro mês aberto: com os três abertos a página enterra
   // o Totais do trimestre, e com todos fechados ela não mostra planilha.
@@ -63,8 +80,12 @@ export function TrimestreEmpilhado({
   // O lugar da barra acima da linha de cada mês aberto. A ref de cada mês é
   // a mesma em todo render: ref nova a cada render faria o React chamar a
   // antiga com null e a nova com o elemento, sem parar.
-  const [lugares, setLugares] = React.useState<Record<string, HTMLElement | null>>({});
-  const refsDosLugares = React.useRef(new Map<string, (el: HTMLDivElement | null) => void>());
+  const [lugares, setLugares] = React.useState<
+    Record<string, HTMLElement | null>
+  >({});
+  const refsDosLugares = React.useRef(
+    new Map<string, (el: HTMLDivElement | null) => void>(),
+  );
   function refDoLugar(id: string) {
     let ref = refsDosLugares.current.get(id);
     if (!ref) {
@@ -73,6 +94,11 @@ export function TrimestreEmpilhado({
     }
     return ref;
   }
+
+  // A barra do primeiro mês sobe para a linha do título quando há título.
+  const primeiro = meses[0];
+  const barraNoTitulo =
+    !!titulo && barraAcimaDoMes && !!primeiro && abertos.has(primeiro.id);
 
   function alternar(id: string) {
     setAbertos((atual) => {
@@ -83,47 +109,97 @@ export function TrimestreEmpilhado({
     });
   }
 
+  const recolherMeses = (
+    <BotaoRecolherTodos
+      algumAberto={algumAberto}
+      onAlternarTodos={() =>
+        setAbertos(algumAberto ? new Set() : new Set(meses.map((m) => m.id)))
+      }
+      rotulos={titulo ? ["Recolher meses", "Expandir meses"] : undefined}
+    />
+  );
+
   return (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-2">
-        <BotaoRecolherTodos
-          algumAberto={algumAberto}
-          onAlternarTodos={() =>
-            setAbertos(algumAberto ? new Set() : new Set(meses.map((m) => m.id)))
-          }
-        />
-        {acoes}
-      </div>
+      {titulo ? (
+        // `pb-3` soma ao `space-y-3`: 24px até o primeiro mês, a mesma
+        // distância que separa o título da tabela na tela de um mês só.
+        <div className="flex flex-wrap items-center justify-between gap-3 pb-3">
+          <div className="flex flex-wrap items-center gap-4">
+            {titulo}
+            {recolherMeses}
+            {acoes}
+          </div>
+          {barraNoTitulo && <div ref={refDoLugar(primeiro.id)} />}
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2">
+          {recolherMeses}
+          {acoes}
+        </div>
+      )}
       {meses.map((m) => {
         const aberto = abertos.has(m.id);
-        return (
-          <div key={m.id} className="space-y-3">
-            {aberto && barraAcimaDoMes && <div ref={refDoLugar(m.id)} />}
-            <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-5 py-3 shadow-soft">
-              <button
-                type="button"
-                onClick={() => alternar(m.id)}
-                aria-expanded={aberto}
-                className="flex min-w-0 flex-1 items-center gap-3 text-left"
-              >
-                <ChevronRight
-                  className={cn(
-                    "h-4 w-4 flex-none text-muted-foreground transition-transform",
-                    aberto && "rotate-90",
-                  )}
-                />
-                <span className="w-[160px] flex-none text-[15px] font-bold tracking-[-0.01em]">
-                  {m.titulo}
-                </span>
-                <span className="truncate text-xs text-muted-foreground">
-                  {m.resumo}
-                </span>
-              </button>
-              <div className="grid flex-none grid-cols-[140px_140px_140px_72px] gap-6">
-                <Metrica rotulo="Faturamento" className={NUMEROS_PLANILHA.total}>
+        const colada = linhaColada && aberto;
+        const linha = (
+          <div
+            className={cn(
+              "flex items-center gap-3 rounded-2xl border border-border bg-card px-5 py-3 shadow-soft",
+              colada && "rounded-b-none shadow-none",
+            )}
+          >
+            <button
+              type="button"
+              onClick={() => alternar(m.id)}
+              aria-expanded={aberto}
+              className="flex min-w-0 flex-1 items-center gap-3 text-left"
+            >
+              <ChevronRight
+                className={cn(
+                  "h-4 w-4 flex-none text-muted-foreground transition-transform",
+                  aberto && "rotate-90",
+                )}
+              />
+              <span className="w-[160px] flex-none text-[15px] font-bold tracking-[-0.01em]">
+                {m.titulo}
+              </span>
+              <span className="truncate text-xs text-muted-foreground">
+                {m.resumo}
+              </span>
+            </button>
+            {linhaColada ? (
+              // Colunas iguais: os números alinham à direita, e com
+              // larguras diferentes o vão entre eles ficava desigual.
+              <div className="grid flex-none grid-cols-[120px_120px_120px] gap-4">
+                <Metrica
+                  rotulo="Faturamento"
+                  className={NUMEROS_PLANILHA.total}
+                >
                   {formatCurrency(m.faturamento, moeda)}
                 </Metrica>
-                <Metrica rotulo="Custo planejado" className={NUMEROS_PLANILHA.total}>
+                <Metrica rotulo="Resultado op.">
+                  {m.resultadoOperacional === null
+                    ? "—"
+                    : formatCurrency(m.resultadoOperacional, moeda)}
+                </Metrica>
+                <Metrica rotulo="Rentabilidade">
+                  {m.resultadoGeral === null
+                    ? "—"
+                    : `${m.resultadoGeral.toFixed(1).replace(".", ",")}%`}
+                </Metrica>
+              </div>
+            ) : (
+              <div className="grid flex-none grid-cols-[140px_140px_140px_72px] gap-6">
+                <Metrica
+                  rotulo="Faturamento"
+                  className={NUMEROS_PLANILHA.total}
+                >
+                  {formatCurrency(m.faturamento, moeda)}
+                </Metrica>
+                <Metrica
+                  rotulo="Custo planejado"
+                  className={NUMEROS_PLANILHA.total}
+                >
                   {formatCurrency(m.custoPlanejado, moeda)}
                 </Metrica>
                 <Metrica rotulo="Resultado op.">
@@ -137,28 +213,55 @@ export function TrimestreEmpilhado({
                     : `${m.resultadoGeral.toFixed(1).replace(".", ",")}%`}
                 </Metrica>
               </div>
-              {onAbrir ? (
-                <button
-                  type="button"
-                  onClick={() => onAbrir(m.id)}
-                  className="flex-none whitespace-nowrap rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-california-red/40 hover:text-california-red"
-                >
-                  Abrir {m.nome}
-                </button>
-              ) : (
-                <Link
-                  href={m.href}
-                  prefetch={false}
-                  className="flex-none whitespace-nowrap rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-california-red/40 hover:text-california-red"
-                >
-                  Abrir {m.nome}
-                </Link>
+            )}
+            {linhaColada ? null : onAbrir ? (
+              <button
+                type="button"
+                onClick={() => onAbrir(m.id)}
+                className="flex-none whitespace-nowrap rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-california-red/40 hover:text-california-red"
+              >
+                Abrir {m.nome}
+              </button>
+            ) : (
+              <Link
+                href={m.href}
+                prefetch={false}
+                className="flex-none whitespace-nowrap rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-foreground transition-colors hover:border-california-red/40 hover:text-california-red"
+              >
+                Abrir {m.nome}
+              </Link>
+            )}
+          </div>
+        );
+        const conteudo = aberto && (
+          <ComLugarDaBarra
+            lugar={barraAcimaDoMes ? (lugares[m.id] ?? null) : null}
+          >
+            {colada ? (
+              <ComPlanilhaColada>{m.conteudo}</ComPlanilhaColada>
+            ) : (
+              m.conteudo
+            )}
+          </ComLugarDaBarra>
+        );
+        return (
+          <div key={m.id} className="space-y-3">
+            {aberto &&
+              barraAcimaDoMes &&
+              !(barraNoTitulo && m.id === primeiro.id) && (
+                <div ref={refDoLugar(m.id)} />
               )}
-            </div>
-            {aberto && (
-              <ComLugarDaBarra lugar={barraAcimaDoMes ? (lugares[m.id] ?? null) : null}>
-                {m.conteudo}
-              </ComLugarDaBarra>
+            {colada ? (
+              // Linha e planilha num bloco só, sem o `space-y-3` entre elas.
+              <div>
+                {linha}
+                {conteudo}
+              </div>
+            ) : (
+              <>
+                {linha}
+                {conteudo}
+              </>
             )}
           </div>
         );

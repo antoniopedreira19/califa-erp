@@ -2,7 +2,8 @@
 
 /**
  * O selo "Somente leitura" do cabeçalho do job no financeiro. Durante o
- * "Editar orçado" (decisão 115) ele vira "Editando orçado": dizer "somente
+ * "Editar planilha" (decisão 115; "Editar orçado" até 30/10/2026) ele vira
+ * "Editando planilha": dizer "somente
  * leitura" com a planilha aberta para edição seria mentira — a mesma razão
  * pela qual a revisão da abertura já troca o selo (decisão 059).
  *
@@ -19,7 +20,7 @@ export function SeloDaEdicao() {
     return (
       <span className="inline-flex items-center gap-1.5 rounded-full border border-california-red/30 bg-california-red/[0.06] px-3 py-1 text-[11px] font-semibold text-california-red">
         <FilePenLine className="h-3 w-3" />
-        Editando orçado
+        Editando planilha
       </span>
     );
   }

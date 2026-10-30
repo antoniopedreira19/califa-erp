@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
  * As cargas do histórico da planilha financeira (decisão 211, A1): a lista e
  * o envio de um pacote novo. O histórico vai até 30/09/2026; a partir de
  * 01/10/2026 vale o sistema, menos a cauda: os movimentos e as notas dos
- * jobs até o 3T que não existem no sistema (A6).
+ * competência até o 3T fora do sistema (A6; ampliada em 30/10/2026).
  */
 export default async function HistoricoDaPlanilhaPage() {
   const session = await requireSession();
@@ -60,7 +60,7 @@ export default async function HistoricoDaPlanilhaPage() {
         <PageHeader
           eyebrow="FINANCEIRO"
           title="Histórico da planilha"
-          description="As cargas do histórico da planilha financeira: até 30/09/2026, e depois disso só os jobs até o 3T que não existem no sistema. Carregar de novo o mesmo período troca a carga dele."
+          description="As cargas do histórico da planilha financeira: até 30/09/2026 e, depois disso, o que é de competência até o 3T e fica fora do sistema — os jobs até o 3T que não existem nele e, sem job, a folha, os impostos e as despesas do 3T pagos depois. Carregar de novo o mesmo período troca a carga dele."
           icon={History}
         />
       </div>

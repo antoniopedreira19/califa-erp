@@ -59,4 +59,10 @@ era só do administrador) e acrescenta uma regra à
   taxas ficaram cobertas, int. taxes 0,50 não, e de volta a 0,37 sim.
 - Tela, como administrador: a regra aparece ligada e por último na seção;
   o pop-up da Exceção abre sem o aviso do Comitê (o administrador aprova
-  direto). A tela do GP não foi aberta (sem o link mágico).
+  direto).
+- Tela, como o GP Teste (29/10/2026, link mágico autorizado), no mesmo
+  rascunho: o pop-up da Exceção trouxe o aviso do Comitê; com int. taxes
+  0,37% o botão virou "Solicitar aprovação" e o quadro do pedido mostrou a
+  linha da exceção; o pedido gravou as três taxas no retrato; o GP cancelou o
+  envio e, no "Voltar ao padrão", o botão voltou a "Aprovar versão". O
+  rascunho ficou no padrão, com o pedido cancelado.

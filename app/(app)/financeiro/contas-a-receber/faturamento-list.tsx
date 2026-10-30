@@ -68,11 +68,13 @@ import {
   RecebimentoAntesNfDialog,
   somaDosRecebidos,
   type AlvoDoRecebidoAntes,
+  type CambioDoJob,
   type RecebidoAntesDaNf,
 } from "./recebimento-antes-nf-dialog";
 import {
   cancelarRecebimentoAntesNf,
   registrarRecebimentoAntesNf,
+  registrarRecebimentoCambio,
 } from "./actions-recebimento-antes-nf";
 import {
   BarraDosFiltrosDeColuna,
@@ -143,6 +145,9 @@ export interface FaturamentoPendenteRow {
   /** Decisão 188: a nota do envio em lote de que esta parcela é parte. Nula
    *  no envio de um job só e no BV. */
   lote: NotaDoLote | null;
+  /** Decisão 229: a variação cambial do câmbio fechado da nota (+ ganho,
+   *  − perda), já somada a `saldo`. Zero fora do internacional. */
+  variacao_cambial: number;
 }
 
 /**
@@ -496,6 +501,9 @@ interface Props {
   /** O recebido antes da NF que ainda espera a nota (decisão 130), pela
    *  chave da linha: `nota:<id>` ou `bv:<id>`. */
   recebidosAntes: Record<string, RecebidoAntesDaNf[]>;
+  /** Decisão 229: os jobs internacionais, com a moeda e a cotação de compra
+   *  da versão. Neles o recebimento antes da NF é o câmbio fechado. */
+  cambioPorJob: Record<string, CambioDoJob>;
   /** Módulo fiscal (02/10/2026): o que o Faturar usa do cadastro de
    *  impostos — CNPJ emissor, CNAEs e as sugestões. */
   fiscal: FiscalDoFaturar;
@@ -523,6 +531,7 @@ export function FaturamentoList({
   infoPorJob,
   contas,
   recebidosAntes,
+  cambioPorJob,
   fiscal,
   jobs,
   cnpjsPorCliente,
@@ -728,6 +737,7 @@ export function FaturamentoList({
             (vencimentos > 1 ? ` · ${vencimentos} vencimentos` : ""),
       saldo: linha.saldo,
       recebidos: recebidosAntes[chave] ?? [],
+      cambio: p.origem_tipo === "job" && p.job_id ? (cambioPorJob[p.job_id] ?? null) : null,
     };
   }
 
@@ -1340,6 +1350,22 @@ export function FaturamentoList({
                               ? "total do mês"
                               : "total do job"}
                       </span>
+                      {(() => {
+                        // Decisão 229: a nota fecha pelo convertido.
+                        const variacao = linha.parcelas.reduce((t, x) => t + x.variacao_cambial, 0);
+                        if (Math.abs(variacao) < 0.005) return null;
+                        return (
+                          <span
+                            className={cn(
+                              "text-[10.5px] font-semibold",
+                              variacao < 0 ? "text-california-red" : "text-emerald-700",
+                            )}
+                          >
+                            variação cambial {variacao > 0 ? "+" : ""}
+                            {formatMoney(variacao)}
+                          </span>
+                        );
+                      })()}
                     </div>
                   </td>
                   <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
@@ -1646,16 +1672,23 @@ export function FaturamentoList({
         subtipos={subtipos}
         pending={pendingAntes}
         erro={erroAntes}
-        onConfirm={(dados) => {
+        onConfirm={(dados, cambio) => {
           const alvo = registrarAntes;
           if (!alvo) return;
           setErroAntes(null);
           startAntes(async () => {
-            const res = await registrarRecebimentoAntesNf({
-              envio_nota_id: alvo.envioNotaId,
-              item_bv_id: alvo.itemBvId,
-              ...dados,
-            });
+            // O internacional registra o câmbio fechado (decisão 229).
+            const res = cambio
+              ? await registrarRecebimentoCambio({
+                  envio_nota_id: alvo.envioNotaId,
+                  ...dados,
+                  ...cambio,
+                })
+              : await registrarRecebimentoAntesNf({
+                  envio_nota_id: alvo.envioNotaId,
+                  item_bv_id: alvo.itemBvId,
+                  ...dados,
+                });
             if (!res.ok) {
               setErroAntes(res.message);
               return;

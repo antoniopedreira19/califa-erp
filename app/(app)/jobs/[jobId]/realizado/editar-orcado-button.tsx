@@ -1,8 +1,10 @@
 "use client";
 
 /**
- * "Editar orçado" — o gatilho da edição do orçado pelo FINANCEIRO (decisão
- * 115), no mesmo lugar em que a produção tem o "Realizar errata". Mesma
+ * "Editar planilha" — o gatilho da edição do orçado pelo FINANCEIRO (decisão
+ * 115), no mesmo lugar em que a produção tem o "Realizar errata". Até
+ * 30/10/2026 chamava "Editar orçado"; desde então abre também os parâmetros
+ * do job (decisão 224), que perderam o "Editar" próprio. Mesma
  * forma e mesmo estado ligado do botão da errata (`AlterarOrcadoButton`):
  * as duas telas mostram a mesma planilha, e o botão muda só de nome.
  *
@@ -38,7 +40,7 @@ export function EditarOrcadoButton({ ativo, onAlternar, travadoPor }: Props) {
       )}
     >
       <PencilLine className="h-3.5 w-3.5 text-california-red" />
-      {ativo ? "Editando orçado" : "Editar orçado"}
+      {ativo ? "Editando planilha" : "Editar planilha"}
     </button>
   );
 }

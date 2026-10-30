@@ -41,6 +41,7 @@ import {
   type PPAEmitir,
   situacaoDaVerba,
   verbaAguardaProducao,
+  meioPeloAnexo,
 } from "@/lib/types";
 import {
   cancelarERefazerPP,
@@ -1301,7 +1302,7 @@ export function JobPPsSection({
               reembolsoTipo:
                 ppEnviando.tipo_verba === "reembolso" ? (ppEnviando.reembolso_tipo ?? "despesas") : null,
               anexos: ppEnviando.anexos ?? [],
-              pagaPorBoleto: ppEnviando.pagamento_fora_do_cadastro?.meio === "boleto",
+              pagaPeloAnexo: meioPeloAnexo(ppEnviando.pagamento_fora_do_cadastro?.meio),
               cartaoCorporativo: ppEnviando.cartao_corporativo === true,
             } satisfies PPParaEnviar
           }

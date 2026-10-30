@@ -129,3 +129,61 @@ com a linha copiada (R$ 5.000 orçado, R$ 4.000 planejado), período
 financeiro pede a data de novembro; o orçamento mostra novembro "Incluído
 pela errata do job"; reabrindo a errata, só dezembro aparece. A revisão da
 abertura ficou pendente, de propósito.
+
+## ⚠️ Nota de 2026-10-29 — o mês da errata no Histórico do orçamento (decisão 226)
+
+Com a [226](226-linha-vermelha-fora-da-errata-e-versao-aprovada-com-as-erratas.md),
+a versão aprovada mostra a planilha do job, e o mês incluído pela errata
+aparece com as linhas dele. No "Histórico", porém, a vista "Aprovada pelo
+cliente" mostrava o mês vazio: os meses vinham da versão de hoje. A pedido
+do Tiago (29/10/2026), nas vistas antigas o mês incluído pela errata só
+aparece a partir do momento em que tem linha
+(`planilha-mensal-do-historico.tsx`). Conferido no orçamento do
+TES-1035/26: "Aprovada pelo cliente" só com outubro (R$ 6.959,12); o
+momento da errata com outubro e novembro.
+
+## ⚠️ Nota de 2026-10-30 — a barra, o "Recolher" e a linha do mês (revê o item 4)
+
+Dois pontos que sobraram da entrega 1, levados a protótipo e escolhidos
+pelo Tiago depois de nove comentários
+(https://claude.ai/artifact/NdCGhD1iwLv9cRjPSbiYLt, proposta "C ·
+Recolher no cabeçalho", linha do mês "Junto, com os 3 números"):
+na tela de um mês só a barra continuava entre a linha do mês e a planilha,
+e na vista Total apareciam dois "Recolher todos" seguidos (o dos meses e
+o dos grupos do mês aberto).
+
+1. **"Recolher grupos" no cabeçalho da tabela**, na célula vazia acima de
+   "Grupo · Item", ao lado da faixa ORÇADO — nas duas telas do mensal. Na
+   vista Total o botão dos meses vira **"Recolher meses"** e fica ao lado
+   do título do trimestre.
+2. **Tela de um mês só:** "Save", "Histórico" e "Exibir" sobem para a linha
+   do título ("Outubro de 2026"), à direita, ao lado de "Copiar itens de
+   outro mês". A planilha começa logo abaixo dela.
+3. **Vista Total:** a barra do primeiro mês, quando ele está aberto, fica
+   na linha do título do trimestre, à direita; os outros meses abertos
+   mantêm a sua acima da linha deles. Fechado o primeiro mês, o título
+   fica sozinho. As distâncias são as da tela de um mês: 24px da régua ao
+   título e do título ao primeiro mês.
+4. **A linha do mês aberto encosta na planilha** (um card só, sem o vão) e
+   mostra **Faturamento, Resultado op. e Rentabilidade** (o "Geral" de
+   antes) em colunas iguais. Saíram o Custo planejado e o "Abrir {mês}" —
+   a régua já abre o mês. "Valor do job" foi mostrado e o Tiago tirou.
+5. **Onde vale.** No orçamento mensal e, no mesmo dia, a pedido do Tiago,
+   na planilha interna do job mensal — a da produção e a que o financeiro
+   vê (Jobs, Abertura de job, planilha em leitura: o componente é o
+   mesmo, `JobRealizadoSection`). No job a barra já era uma só, acima da
+   régua, e ficou onde estava; saiu dela o "Recolher todos", que recolhia
+   os grupos de todos os meses de uma vez: o "Recolher grupos" do
+   cabeçalho de cada mês recolhe só os daquele mês (`alternarEstes` em
+   `recolher-grupos.tsx`). A vista Total do job ganhou o título do
+   trimestre com o "Recolher meses", e a linha do mês os mesmos três
+   números (as contas de antes, pelo planejado). O job que não é mensal e
+   a Mídia Off ficaram como eram. As mudanças entram por props (`titulo`,
+   `linhaColada`, `recolherNoCabecalho`) e por contexto
+   (`ComRecolherNoCabecalho`, `ComPlanilhaColada`, `TituloComABarra`, em
+   `app/(app)/_planilha/lugar-da-barra.tsx`).
+
+Conferido no `ZZ Teste 158 planilha de um mês` (rascunho, três meses) e na
+versão aprovada do `ZZ Teste 219 mês pela errata` (com o "Histórico"); o
+job no TES-1035/26, pela produção e pelo financeiro (o "Recolher grupos"
+de outubro recolhe só outubro).

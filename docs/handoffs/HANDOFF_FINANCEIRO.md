@@ -8610,3 +8610,125 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   honorários zerados (parâmetros do job, decisão 224). Teste no TES-1035/26,
   desfeito. Ver a §12 da
   [decisão 115](../decisions/115-o-financeiro-edita-o-orcado-do-job.md).
+
+## O projeto do financeiro com jobs de clientes diferentes — 29/10/2026 (decisão 228)
+
+- O campo Projeto da abertura e do "Editar registro" deixa de filtrar pelo
+  cliente do job: busca em todos os projetos abertos, em dois grupos
+  ("deste cliente" em cima, "de outros clientes" embaixo). Cada linha mostra
+  os clientes dos jobs do projeto, e a busca acha também pelo cliente.
+- O servidor (`conferirProjetoEContas` em `abertura-de-job/actions.ts`) deixa de
+  recusar "O projeto escolhido é de outro cliente". O "+" com nome repetido
+  manda escolher o projeto na lista.
+- `/financeiro/projetos/[id]`: o card "Cliente" vira a lista dos clientes
+  dos jobs ("Clientes" quando há mais de um).
+- `listarProjetosFinanceiro` (`lib/data/projetos-financeiro.ts`) traz os
+  clientes de cada projeto numa consulta enxuta aos jobs, em paralelo; o
+  resumo "A, B e mais N" fica em `lib/resumo-dos-clientes.ts`, sem import de
+  servidor, porque o combo é componente de cliente.
+- Sem migration. A reclassificação retroativa (Fair Culture & Business em
+  nove projetos, Festa Debut em três) fica com o financeiro, pelo "Editar
+  registro". Ver a [decisão 228](../decisions/228-projeto-do-financeiro-com-jobs-de-clientes-diferentes.md).
+
+## ⚠️ Nota de 2026-10-30 — "Projeto unificado", só da empresa do job (revisão da decisão 228)
+
+- O campo Projeto da abertura e do "Editar registro" passa a se chamar
+  "Projeto unificado" e lista só os projetos da empresa escolhida no job.
+  A empresa do projeto é a dos jobs dele, fora o job em edição
+  (`empresas` em `ProjetoFinanceiroOpcao`; `listarProjetosFinanceiro`
+  recebe o id do job). Trocar a empresa tira o projeto de outra empresa.
+- `conferirProjetoEContas` recusa projeto com job de outra empresa.
+- Sem migration. Ver a §§7–11 da
+  [decisão 228](../decisions/228-projeto-do-financeiro-com-jobs-de-clientes-diferentes.md).
+
+## O câmbio fechado no recebimento do job internacional — 29/10/2026 (decisão 229)
+
+- Contas a Receber › Faturamento: no job internacional (modelo
+  `internacional`, moeda e cotação de compra na versão aprovada), o
+  "Registrar recebimento antes da NF" abre o formulário do câmbio:
+  valor na moeda e cotação (preenchidos com o job), bruto em R$, IOF (0,38%
+  sugerido), tarifa, líquido e variação cambial. `cambioPorJob` vem do
+  `page.tsx`; a action é `registrarRecebimentoCambio`
+  (`actions-recebimento-antes-nf.ts`) → RPC
+  `registrar_recebimento_antes_nf_cambio`.
+- Três lançamentos do job: o bruto (`recebimento_antes_nf`), o IOF e a
+  tarifa (origem nova `cambio_custo`, em 16 · Despesas de câmbio). A
+  variação fica em `recebimentos_antes_nf.variacao_cambial` e soma no saldo
+  da primeira parcela da nota: fila (`vw_faturamento_pendente.variacao_cambial`,
+  mostrada debaixo do saldo), Faturar, fluxo de caixa,
+  `saldoAFaturarDoJob` e a trilha de faturamento do job
+  (`FaturamentoDoEnvioUnico.variacaoCambial`).
+- Cancelar o recebimento apaga os três lançamentos. Uma vez por nota.
+- Testado no TES-1036/26 (P-0006/26): envio pela página do job, câmbio a
+  5,05 com tarifa (três lançamentos, previsão do envio zerada para o
+  usuário), cancelamento, câmbio a 5,35 (+R$ 1.574,55, acima do envio) e a
+  emissão da nota pelo convertido numa transação desfeita (fila zerada,
+  parcela 1 paga). O recebimento a 5,35 ficou registrado como dado de teste.
+- ⚠️ Das 22h23 às 22h27 (horário de Brasília) de 29/10/2026 as duas FKs
+  novas de `recebimentos_antes_nf` para `lancamentos_financeiros` deixaram
+  ambíguos o embed `lancamento:lancamentos_financeiros(...)` do Contas a
+  Receber e o `antes_nf:recebimentos_antes_nf(id)` das baixas; a migration
+  `20261029950004` as tirou. Ver a
+  [decisão 229](../decisions/229-cambio-fechado-no-recebimento-do-internacional.md).
+
+## ⚠️ Nota de 2026-10-30 (2) — os jobs de cada projeto unificado no campo e no painel (decisão 228 §12)
+
+- Opção A+B do protótipo "Projetos e Jobs": o "N jobs ▾" em cada linha da
+  lista do campo Projeto unificado e o painel "Ver todos os projetos
+  unificados e os jobs de cada um", no pé da lista
+  (`abertura-de-job/[jobId]/projetos-unificados.tsx`).
+- `ProjetoFinanceiroOpcao.jobs` vem da mesma consulta aos jobs que já dava
+  clientes e empresas (sem consulta nova); o job em edição fica de fora.
+- Testado em 30/10 com o TES-1013/26: levado de "Testes Sistema" para
+  "Teste Always On" pelo painel, conferido na visão agregada e devolvido
+  pela lista. A recusa de projeto de outra empresa foi testada pela action
+  com o payload do TES-1036/26, sem gravar.
+
+## ⚠️ Nota de 2026-10-30 (3) — "Editar planilha" e a revisão da abertura junto (decisão 115, §13)
+
+- O "Editar orçado" virou **"Editar planilha"** e abre também os parâmetros
+  do job (decisão 224), que perderam os botões próprios — menos na Mídia
+  Off e com a planilha travada pela nota.
+- **Com o job aberto nada acompanha sozinho.** "Continuar para a abertura"
+  leva o rascunho à aba Abertura do Job, em revisão sobre os números novos
+  (`preverAlteracaoComRevisao`); o rodapé "Registrar alteração e revisão"
+  fica embaixo de todas as abas e grava a alteração e o registro juntos
+  (`registrarAlteracaoComRevisao` → `editarRegistroDaAbertura` com a foto
+  `revisao_financeiro`, migration `20261030300001`). O envio sem nota
+  continua acompanhando. Na fila, como antes.
+- Revisão da abertura (esta e a da errata): linha com R$ 0,00 pede
+  confirmação e é apagada no registrar.
+- Teste no TES-1029/26 (P-0006/26), desfeito; ficaram 4 alterações de
+  teste no histórico dele.
+
+## ⚠️ Nota de 2026-10-30 (4) — a cauda ampliada: competência até o 3T (decisão 211)
+
+- A cauda do histórico passa a ter, além dos jobs até o 3T fora do sistema,
+  todo movimento de outubro sem job, do DRE, com competência até o 3T (folha
+  de setembro, impostos, custos fixos, avulsas, imobilizado), fora
+  empréstimo e mútuo (`movimentoDaCauda`). No sistema fica só o 4T.
+- Migration `20261030400001`: `historico_concluir_carga`, na troca de cauda,
+  passa a ligação com o banco do movimento antigo para o novo de mesma
+  digital, conta e valor, em vez de soltar todas as linhas do banco.
+- Textos da tela (Histórico, aba Banco, Extrato, fluxo de caixa) dizem
+  "competência até o 3T".
+
+## ⚠️ Nota de 2026-10-30 (5) — a soma do histórico só junta o mesmo favorecido (decisão 211)
+
+- `lib/conciliacao/historico.ts`: a soma de várias linhas da cauda (mesmo
+  job, todas do dia, duas a três) passa a exigir o mesmo favorecido; a linha
+  sem favorecido só casa sozinha. A cauda traz o `fornecedor` para o motor.
+- Imposto retido na fonte pelo cliente ("… retido na fonte"): nunca casa com
+  saída; entra no recebimento do mesmo cliente, a nota mais as retenções
+  dela (`notaComRetencoes`).
+- 29 ligações antigas que somavam favorecidos diferentes foram desfeitas;
+  14 recebimentos ligados à nota mais as retenções; a regra nova ligou mais 24.
+
+## ⚠️ Nota de 2026-10-30 (6) — as devoluções de empréstimo na cauda (decisão 211)
+
+- `movimentoDaCauda`: o grupo EMP entra na cauda com data até
+  `EMPRESTIMO_NO_EXTRATO_ATE` (21/10). As devoluções de 25/10 ficam de fora
+  até aparecerem no extrato; aí a data anda e o pacote sai de novo.
+- O mútuo (MÚTUO INT) continua fora: a função própria está em protótipo,
+  aguardando o Tiago.
+- Os juros de 25/10 têm competência 3T e seguem na cauda, sem linha no banco.

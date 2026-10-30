@@ -14,11 +14,15 @@
  *   que carrega a própria chave e não repete o cartão do dossiê.
  *
  * O PDF não tem nada disto: o documento sai igual ao de sempre, só com a
- * chave (ou a conta) escolhida — ou, no boleto, "Boleto" na linha do PIX.
+ * chave (ou a conta) escolhida — ou, no boleto e na guia, "Boleto" ou
+ * "Guia" na linha do PIX.
  *
  * Decisão 161 (09/10/2026): o meio pode ser `boleto` (sem dado: paga-se
  * pelo boleto anexado) e o motivo virou opcional — a PP nova não tem; a
  * linha só aparece nas PPs antigas que o trazem.
+ *
+ * Decisão 227 (29/10/2026): o meio pode ser `guia` (taxa ou licença de
+ * órgão público, sem dado: paga-se pela guia anexada).
  */
 
 import { AlertTriangle, Check } from "lucide-react";
@@ -46,9 +50,10 @@ export const ROTULO_CONTA: Record<TipoContaBancariaFornecedor, string> = {
   pagamento: "Pagamento",
 };
 
-/** "PIX · Aleatória", "Boleto" ou "ITAÚ UNIBANCO". */
+/** "PIX · Aleatória", "Boleto", "Guia" ou "ITAÚ UNIBANCO". */
 export function meioLegivel(p: PagamentoForaDoCadastroDaPP): string {
   if (p.meio === "boleto") return "Boleto";
+  if (p.meio === "guia") return "Guia";
   if (p.meio === "pix") return p.pix_tipo ? `PIX · ${ROTULO_PIX[p.pix_tipo]}` : "PIX";
   return p.banco_codigo ? nomeCurtoDoBanco(p.banco_codigo, p.banco_nome) : "Conta";
 }
@@ -56,6 +61,7 @@ export function meioLegivel(p: PagamentoForaDoCadastroDaPP): string {
 /** A chave, ou agência e conta — o que se digita no banco para pagar. */
 export function destinoLegivel(p: PagamentoForaDoCadastroDaPP): string {
   if (p.meio === "boleto") return "Pagar pelo boleto anexado";
+  if (p.meio === "guia") return "Pagar pela guia anexada";
   if (p.meio === "pix") return chavePixLegivel(p.pix_tipo, p.pix_chave);
   const tipo = p.tipo_conta ? ROTULO_CONTA[p.tipo_conta] : "Conta";
   return `Ag. ${p.agencia ?? ""}${p.agencia_dv ? `-${p.agencia_dv}` : ""} · ${tipo} ${p.conta ?? ""}-${p.conta_dv ?? ""}`;

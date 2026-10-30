@@ -707,3 +707,96 @@ alterar orçado", e respondeu às duas perguntas que isso abria:
   foi recusado com a frase nova; FI → AR na mesma linha, com
   `recebimento_novo`, passou e criou a parcela. Depois do rollback, o job
   seguia com 35 linhas FI e nenhuma previsão.
+
+## 13. A revisão de 30/10/2026: "Editar planilha" e a revisão da abertura junto
+
+### O pedido
+
+A parcela de recebimento de R$ 0,00 que o §12 deixou no TES-1035/26 mostrou
+o custo da regra "a previsão acompanha": quando o faturamento de um mês cai
+a zero, a parcela é reduzida a zero em vez de sair. O Tiago pediu para
+tirar qualquer modificação automática, fazer o financeiro atualizar a
+abertura à mão, e juntar os parâmetros do job (decisão 224) ao mesmo botão.
+Das três opções do protótipo (artifact "Parâmetros na Abertura",
+`KazzTnoUX5e5nTYgFjYN5P`), aprovou a **C**: o rascunho vai até a aba
+Abertura do Job sem gravar nada, e planilha e abertura são registradas
+juntas. Respostas dele às duas perguntas que a C deixou:
+
+- **Envio para faturamento ainda sem nota:** "Envio acompanha" — ele é do
+  faturamento, e a revisão da abertura não o edita.
+- **Job na fila da abertura:** "Como hoje" — ali não há revisão; a
+  alteração grava na hora e o formulário da abertura acompanha.
+
+### A regra
+
+1. O botão chama **"Editar planilha"** ("Editando planilha" ligado; o selo
+   do cabeçalho idem) e abre também os parâmetros do job, que perdem o
+   "Editar" e o "Editar câmbio" próprios. Onde não há "Editar planilha" —
+   Mídia Off, ou planilha travada pela nota — a linha de parâmetros segue
+   com os botões próprios (o câmbio do internacional edita até o fim).
+2. Um pop-up só para linhas e parâmetros ("Confirmar alteração da
+   planilha"), com "O que muda nos parâmetros" e "O que muda no orçado".
+3. **Na fila da abertura:** "Confirmar alteração" grava na hora, e o
+   formulário da abertura acompanha, como antes.
+4. **Com o job aberto:** a barra diz "Nada é gravado ainda" e o botão é
+   "Continuar para a abertura". Ele calcula os números do rascunho no
+   servidor (`preverAlteracaoComRevisao`, a mesma conta da gravação) e leva
+   à aba Abertura do Job, que entra em revisão sobre eles:
+   - faixa "Revisão da abertura junto com a alteração da planilha" — "Nada
+     foi gravado ainda", o faturamento antes → depois, as linhas e os
+     parâmetros, e "Voltar à planilha";
+   - recebimento, curva e recolhimentos ficam como estão, e o financeiro
+     ajusta à mão. No mensal o valor de cada mês continua vindo da
+     planilha, como sempre na abertura;
+   - o rodapé "Registrar alteração e revisão" fica embaixo de **todas** as
+     abas, com "Ir para a Abertura do Job" fora dela;
+   - voltar à planilha e mudar o rascunho refaz os números da revisão; o
+     Descartar tira a revisão de cena.
+5. "Registrar alteração e revisão" abre o pop-up da planilha com "Como
+   ficam as previsões da abertura" e o motivo (sem o quadro explicativo —
+   "Desnecessário", Tiago). Confirmar grava a alteração
+   (`registrar_alteracao_do_financeiro`, sem mexer nas previsões; o envio
+   sem nota acompanha) e, em seguida, o registro da abertura
+   (`editarRegistroDaAbertura`), cuja foto sai como **"Revisão N ·
+   alteração do financeiro"** (`jobs_aberturas.tipo = revisao_financeiro`,
+   migration `20261030300001`). Antes de gravar, o registro é conferido
+   contra os números novos (recebimento, curva e impostos fechando); se
+   mesmo assim a segunda gravação falhar, a tela avisa que a alteração
+   entrou e a revisão não, e diz onde ajustar.
+6. **Linha zerada:** em qualquer revisão da abertura (a desta seção e a da
+   errata), linha de recebimento, curva ou impostos com R$ 0,00 deixa de
+   travar o rodapé. No registrar, o aviso "N linhas zeradas serão
+   apagadas" lista as linhas; "Apagar e continuar" as tira e segue para a
+   confirmação.
+
+### Onde mora
+
+- **Actions:** `actions-alteracao-financeiro.ts` — um núcleo
+  (`montarAlteracao`) com as travas e a conta; `registrarAlteracaoDoFinanceiro`
+  (o caminho que acompanha, agora também com parâmetros),
+  `preverAlteracaoComRevisao` e `registrarAlteracaoComRevisao`.
+  `alterarParametrosDoJob` fica para a Mídia Off.
+- **Ligação entre as abas:** `financeiro/jobs/[jobId]/revisao-pela-planilha.tsx`
+  (contexto dado pelas abas do job; o contêiner do rodapé mora em
+  `job-financeiro-tabs.tsx`).
+- **Tela:** `job-realizado-section.tsx`, `parametros-do-job.tsx`
+  (`pelaPlanilha`), `edicao-financeiro-barra.tsx`,
+  `edicao-financeiro-confirmar-dialog.tsx`, `abertura-form.tsx`,
+  `historico-abertura.tsx` e `linhas-zeradas-dialog.tsx`.
+
+### Conferência (30/10/2026)
+
+- **TES-1029/26** (nacional, aberto, sem envio): honorários 12 → 0% pelo
+  "Editar planilha"; a aba Abertura abriu em revisão sobre R$ 62.134,96 com
+  a parcela antiga de R$ 69.591,15. Parcela 1 em R$ 62.134,96, uma parcela
+  2 de R$ 0,00 e o recolhimento em R$ 12.134,96: o aviso listou a parcela
+  2, "Apagar e continuar" levou ao pop-up e a gravação deixou valor e
+  faturamento em R$ 62.134,96, uma parcela, o recolhimento novo, a curva
+  intacta, honorários 0% e a foto nº 2 `revisao_financeiro`. Desfeito pelo
+  mesmo caminho (11% → voltar à planilha → 12%, os números da revisão se
+  refizeram), e o Descartar tirou a revisão de cena.
+- Caminho que acompanha, chamado direto (sem job na fila no P-0006/26):
+  honorários 12 → 10% fez a parcela e o recolhimento andarem (R$ 68.348,45
+  e R$ 13.348,45, os números da prévia), e voltou a 12%.
+- TES-1026/26 (Mídia Off) mantém o "Editar" próprio; TES-1036/26
+  (internacional) abre parâmetros e câmbio juntos (sem gravar).

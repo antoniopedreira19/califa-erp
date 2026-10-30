@@ -22,7 +22,7 @@ import type {
   PlanoContaSubtipo,
 } from "@/lib/types";
 import { chaveDaLinhaDaFila, chaveDoRecebidoAntes, chaveInfoDoEnvio } from "./chave-info";
-import type { RecebidoAntesDaNf } from "./recebimento-antes-nf-dialog";
+import type { CambioDoJob, RecebidoAntesDaNf } from "./recebimento-antes-nf-dialog";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { SELECT_ESTORNO_DE_BAIXA } from "@/lib/data/estornos-de-baixa";
 import { mapearUltimasRetencoes } from "@/lib/data/baixas-do-documento";
@@ -236,6 +236,7 @@ export default async function ContasReceberPage({
       .from("recebimentos_antes_nf")
       .select(`
         id, envio_nota_id, item_bv_id, valor, data, created_at,
+        moeda, valor_moeda, cotacao, iof, tarifa, variacao_cambial,
         conta:contas_bancarias(nome, banco),
         lancamento:lancamentos_financeiros(
           tipo:plano_contas_tipos(codigo, nome),
@@ -260,7 +261,13 @@ export default async function ContasReceberPage({
     // escolhido nesta mesma lista.
     supabase
       .from("jobs")
-      .select("id, codigo, nome, status, empresa_id, regional_id, cliente_id")
+      // Decisão 229: o modelo da planilha e a moeda e a cotação de compra
+      // da versão aprovada — o job internacional recebe pelo câmbio fechado.
+      .select(
+        "id, codigo, nome, status, empresa_id, regional_id, cliente_id, " +
+          "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), " +
+          "versao:versoes_orcamento!versao_orcamento_aprovada_id(moeda_estrangeira, cambio_compra)",
+      )
       .eq("tenant_id", tenantId)
       .in("status", ["aberto", "em_producao", "encerrado", "finalizado"])
       .order("codigo", { ascending: false }),
@@ -474,6 +481,9 @@ export default async function ContasReceberPage({
       descritivo_nota: (r.descritivo_nota as string | null) ?? null,
       autor_nome: (r.autor_nome as string | null) ?? null,
       autor_em: (r.autor_em as string | null) ?? null,
+      // Decisão 229: a variação cambial da nota, já somada ao saldo. Zero
+      // fora do câmbio (e na janela entre o deploy do código e o da view).
+      variacao_cambial: Number(r.variacao_cambial ?? 0),
       // Decisão 188: a nota do envio em lote de que esta parte é. Nula no
       // envio de um job só e no BV.
       lote: r.envio_nota_id ? (notaDoLotePorEnvioNota.get(r.envio_nota_id as string) ?? null) : null,
@@ -488,6 +498,12 @@ export default async function ContasReceberPage({
     item_bv_id: string | null;
     valor: string | number;
     data: string;
+    moeda: string | null;
+    valor_moeda: string | number | null;
+    cotacao: string | number | null;
+    iof: string | number | null;
+    tarifa: string | number | null;
+    variacao_cambial: string | number | null;
     conta: { nome: string; banco: string } | null;
     lancamento: {
       tipo: { codigo: string; nome: string } | null;
@@ -505,6 +521,17 @@ export default async function ContasReceberPage({
         ? `${r.lancamento.tipo.codigo} · ${r.lancamento.tipo.nome}`
         : "—",
       subtipoNome: r.lancamento?.subtipo?.nome ?? "—",
+      // O câmbio fechado do internacional (decisão 229).
+      cambio: r.moeda
+        ? {
+            moeda: r.moeda,
+            valorMoeda: Number(r.valor_moeda ?? 0),
+            cotacao: Number(r.cotacao ?? 0),
+            iof: Number(r.iof ?? 0),
+            tarifa: Number(r.tarifa ?? 0),
+            variacao: Number(r.variacao_cambial ?? 0),
+          }
+        : null,
     });
   }
 
@@ -751,6 +778,8 @@ export default async function ContasReceberPage({
       empresa_id: string | null;
       regional_id: string | null;
       cliente_id: string | null;
+      orcamento: { categoria: { modelo_planilha: string } | null } | null;
+      versao: { moeda_estrangeira: string | null; cambio_compra: string | number | null } | null;
     }>
   ).map((j) => ({
     id: j.id,
@@ -761,6 +790,23 @@ export default async function ContasReceberPage({
     regional_id: j.regional_id,
     cliente_id: j.cliente_id ?? null,
   }));
+
+  // Decisão 229: o job internacional recebe pelo câmbio fechado, com a
+  // moeda e a cotação de compra da versão aprovada para preencher o
+  // formulário. Sem moeda estrangeira ou cotação na versão, fica no
+  // recebimento em reais de sempre.
+  const cambioPorJob: Record<string, CambioDoJob> = {};
+  for (const j of (jobsDoFaturarRes.data ?? []) as unknown as Array<{
+    id: string;
+    orcamento: { categoria: { modelo_planilha: string } | null } | null;
+    versao: { moeda_estrangeira: string | null; cambio_compra: string | number | null } | null;
+  }>) {
+    const moeda = j.versao?.moeda_estrangeira?.trim() ?? "";
+    const cotacao = Number(j.versao?.cambio_compra ?? 0);
+    if (j.orcamento?.categoria?.modelo_planilha === "internacional" && moeda && cotacao > 0) {
+      cambioPorJob[j.id] = { moeda, cotacaoDaVersao: cotacao };
+    }
+  }
 
   // O CNPJ do tomador da avulsa nasce com o do cadastro do cliente; os já
   // usados em nota ou no envio viram atalhos debaixo do campo.
@@ -814,6 +860,7 @@ export default async function ContasReceberPage({
             infoPorJob={infoPorJob}
             contas={contasRes.data ?? []}
             recebidosAntes={recebidosAntes}
+            cambioPorJob={cambioPorJob}
             fiscal={fiscal}
             jobs={jobsDoFaturar}
             cnpjsPorCliente={cnpjsPorCliente}

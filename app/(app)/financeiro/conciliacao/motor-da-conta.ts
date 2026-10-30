@@ -251,7 +251,7 @@ export function resolucaoDaLinha(
       break;
     case "historico": {
       const jobs = [...new Set(l.historicos.map((h) => h.job ?? h.descricao ?? "sem job"))];
-      texto = `Do histórico da planilha: ${aspas(jobs[0] ?? "jobs até o 3T")}${jobs.length > 1 ? ` e mais ${jobs.length - 1}` : ""}`;
+      texto = `Do histórico da planilha: ${aspas(jobs[0] ?? "competência até o 3T")}${jobs.length > 1 ? ` e mais ${jobs.length - 1}` : ""}`;
       break;
     }
     default:
@@ -505,7 +505,7 @@ export function textoDosSozinhos(resultados: ResultadoDaLinha[]): { quantas: num
     remessa && (remessa === 1 ? "a remessa, que soma centavo a centavo" : `${remessa} remessas, que somam centavo a centavo`),
     regra && `${regra === 1 ? "1 tarifa" : `${regra} tarifas`} pela regra do histórico`,
     historico &&
-      `${historico === 1 ? "1 linha" : `${historico} linhas`} do histórico da planilha (jobs até o 3T fora do sistema), pelo valor e pelo dia`,
+      `${historico === 1 ? "1 linha" : `${historico} linhas`} do histórico da planilha (competência até o 3T fora do sistema), pelo valor e pelo dia`,
   ].filter((p): p is string => !!p);
   return { quantas, partes };
 }

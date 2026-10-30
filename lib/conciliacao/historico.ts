@@ -8,9 +8,18 @@
  *
  * 1. a linha da cauda de mesmo valor, até `janela` dias (a mais perto);
  * 2. (fora do `soNoDia`) as linhas da cauda do mesmo dia, até 3 dias antes
- *    ou depois, que somam a linha do banco: as do mesmo job, todas as do
- *    dia, ou duas a três delas. A planilha às vezes divide um pagamento do
- *    banco entre jobs, ou junta numa linha o que o banco recebe em várias.
+ *    ou depois, e do **mesmo favorecido**, que somam a linha do banco: as do
+ *    mesmo job, todas as do favorecido no dia, ou duas a três delas. A
+ *    planilha às vezes divide um pagamento do banco entre jobs. Um PIX ou TED
+ *    paga um favorecido só: somar favorecidos diferentes casava por
+ *    coincidência de valor (30/10/2026, 29 ligações desfeitas), e a linha da
+ *    cauda sem favorecido só casa sozinha, pelo valor.
+ *
+ * O imposto retido na fonte (a descrição diz "retido na fonte") não é pago pela
+ * agência: a planilha lança a nota cheia e, no mesmo dia, uma linha por
+ * imposto retido, com o cliente como favorecido. Ele nunca casa com uma saída
+ * nem sozinho; só entra no recebimento do mesmo cliente, junto da nota: a
+ * nota mais as retenções dela dão o líquido que o banco recebeu.
  *
  * Função pura: recebe as linhas do banco ainda sem solução e as linhas da
  * cauda ainda sem linha do banco, e devolve o par de cada linha resolvida.
@@ -25,6 +34,32 @@ export interface HistoricoDoMotor {
   valor: number;
   job: string | null;
   descricao: string | null;
+  /** O fornecedor ou o cliente da planilha: a soma só junta linhas do mesmo. */
+  fornecedor: string | null;
+}
+
+/** O imposto retido na fonte pelo cliente (IR, CSLL, PIS, COFINS, ISS): a
+ *  planilha escreve "Imposto retido na fonte …" ou "ISS retido na fonte". O
+ *  "ISS retido" da folha de PJ e da PP é pagamento de verdade e não entra. */
+export function ehRetencao(h: Pick<HistoricoDoMotor, "descricao">): boolean {
+  return /\bRETIDOS? NA FONTE\b/.test(
+    (h.descricao ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toUpperCase(),
+  );
+}
+
+/** O favorecido normalizado (sem acento, maiúsculas, só letras e números);
+ *  `null` quando a planilha não diz. */
+export function favorecidoDe(h: Pick<HistoricoDoMotor, "fornecedor">): string | null {
+  const n = (h.fornecedor ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, " ")
+    .trim();
+  return n || null;
 }
 
 type Movimento = { id?: string; data: string; valor: number };
@@ -48,7 +83,7 @@ export function casarComHistorico<M extends Movimento>(
   for (const m of ordenados) {
     let melhor: HistoricoDoMotor | null = null;
     for (const h of livres) {
-      if (cents(h.valor) !== cents(m.valor)) continue;
+      if (ehRetencao(h) || cents(h.valor) !== cents(m.valor)) continue;
       const d = Math.abs(diasEntre(m.data, h.data));
       if (d > janela) continue;
       if (!melhor || d < Math.abs(diasEntre(m.data, melhor.data))) melhor = h;
@@ -60,14 +95,32 @@ export function casarComHistorico<M extends Movimento>(
   }
   if (opcoes.soNoDia) return pares;
 
-  // 2. Várias linhas da cauda do mesmo dia que somam a linha do banco.
+  // 2. Várias linhas da cauda do mesmo dia e do mesmo favorecido que somam a
+  //    linha do banco.
   for (const m of ordenados) {
     if (pares.has(m)) continue;
     for (const d of [0, 1, -1, 2, -2, 3, -3]) {
       const dia = somaDias(m.data, d);
-      const doDia = [...livres].filter((h) => h.data === dia && Math.sign(h.valor) === Math.sign(m.valor));
-      if (doDia.length < 2) continue;
-      const achou = somaQueBate(doDia, m.valor);
+      const porFavorecido = new Map<string, HistoricoDoMotor[]>();
+      const retencoes = new Map<string, HistoricoDoMotor[]>();
+      for (const h of livres) {
+        if (h.data !== dia) continue;
+        const f = favorecidoDe(h);
+        if (!f) continue;
+        if (ehRetencao(h)) {
+          if (m.valor > 0 && h.valor < 0) retencoes.set(f, [...(retencoes.get(f) ?? []), h]);
+          continue;
+        }
+        if (Math.sign(h.valor) !== Math.sign(m.valor)) continue;
+        porFavorecido.set(f, [...(porFavorecido.get(f) ?? []), h]);
+      }
+      let achou: HistoricoDoMotor[] | null = null;
+      for (const [f, doFavorecido] of porFavorecido) {
+        const rets = retencoes.get(f) ?? [];
+        if (rets.length) achou = notaComRetencoes(doFavorecido, rets, m.valor);
+        if (!achou && doFavorecido.length >= 2) achou = somaQueBate(doFavorecido, m.valor);
+        if (achou) break;
+      }
       if (achou) {
         for (const h of achou) livres.delete(h);
         pares.set(m, achou);
@@ -78,7 +131,37 @@ export function casarComHistorico<M extends Movimento>(
   return pares;
 }
 
-/** As do mesmo job, todas do dia, ou duas a três delas, que somam o valor. */
+/** Até quantas retenções a nota leva (IR, CSLL, PIS, COFINS e ISS, com folga). */
+const MAX_RETENCOES = 6;
+
+/** O recebimento: uma nota do cliente mais as retenções dele no dia que
+ *  somam o líquido do banco, centavo a centavo. */
+function notaComRetencoes(notas: HistoricoDoMotor[], retencoes: HistoricoDoMotor[], valor: number): HistoricoDoMotor[] | null {
+  const alvo = cents(valor);
+  const rets = retencoes.slice(0, MAX_CANDIDATAS);
+  for (const nota of notas) {
+    const falta = alvo - cents(nota.valor);
+    if (falta >= 0) continue;
+    const escolhidas: HistoricoDoMotor[] = [];
+    const busca = (i: number, resto: number): boolean => {
+      if (resto === 0 && escolhidas.length > 0) return true;
+      if (escolhidas.length >= MAX_RETENCOES || i >= rets.length) return false;
+      for (let j = i; j < rets.length; j++) {
+        const v = cents(rets[j].valor);
+        if (v < resto) continue;
+        escolhidas.push(rets[j]);
+        if (busca(j + 1, resto - v)) return true;
+        escolhidas.pop();
+      }
+      return false;
+    };
+    if (busca(0, falta)) return [nota, ...escolhidas];
+  }
+  return null;
+}
+
+/** Entre as linhas de um favorecido no dia: as do mesmo job, todas, ou duas a
+ *  três delas, que somam o valor. */
 function somaQueBate(doDia: HistoricoDoMotor[], valor: number): HistoricoDoMotor[] | null {
   const alvo = cents(valor);
   const soma = (hs: HistoricoDoMotor[]) => hs.reduce((s, h) => s + cents(h.valor), 0);

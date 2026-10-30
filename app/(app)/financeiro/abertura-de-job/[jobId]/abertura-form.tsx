@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -104,11 +105,18 @@ import {
   renomearProjetoFinanceiro,
 } from "../actions";
 import { ReprovarDialog } from "../reprovar-dialog";
+import { useRevisaoPelaPlanilha } from "@/app/(app)/financeiro/jobs/[jobId]/revisao-pela-planilha";
+import { LinhasZeradasDialog, type LinhaZerada } from "./linhas-zeradas-dialog";
 import {
   HistoricoDaAbertura,
   ResumoDaAberturaAnterior,
 } from "./historico-abertura";
 import type { ProjetoFinanceiroOpcao } from "@/lib/data/projetos-financeiro";
+import {
+  BotaoTodosOsProjetos,
+  LinhaDoProjetoUnificado,
+  TodosOsProjetosDialog,
+} from "./projetos-unificados";
 import type { AprovacaoDeSave } from "../aprovacao-save";
 // Só os TIPOS: `saves-da-abertura.ts` lê o banco (servidor) e não pode
 // entrar no bundle do cliente (decisão 155).
@@ -141,6 +149,12 @@ const PROJETO_NOVO = "novo";
 
 /** Uma linha do combo de projeto: as do servidor e a do projeto novo. */
 type OpcaoDeProjeto = ProjetoFinanceiroOpcao & { novo: boolean };
+
+/** O projeto unificado é da empresa dos jobs que já estão nele; o que só
+ *  tem este job não prende a empresa (revisão da 228, 30/10/2026). */
+function projetoDaEmpresa(p: ProjetoFinanceiroOpcao, empresaId: string) {
+  return p.empresas.length === 0 || p.empresas.includes(empresaId);
+}
 
 /** "Novo": o projeto ainda não existe, e só nasce com o job. */
 function SeloProjetoNovo() {
@@ -252,7 +266,8 @@ interface Props {
   categorias: CategoriaOption[];
   /** Serviços (categorias_dominio, escopo 'projeto') para o combo. */
   servicos: ServicoOption[];
-  /** Projetos do financeiro do mesmo cliente, para o combo. */
+  /** Todos os projetos abertos do financeiro, os do cliente do job
+   *  primeiro (decisão 228), para o combo. */
   projetos: ProjetoFinanceiroOpcao[];
   /**
    * O projeto do financeiro do último job aberto no mesmo projeto da
@@ -476,12 +491,12 @@ export function AberturaForm({
   projetos,
   sugestaoDeProjeto,
   contas,
-  custoPrevisto,
-  faturamentoPrevisto,
-  impostoPrevisto,
+  custoPrevisto: custoPrevistoDoServidor,
+  faturamentoPrevisto: faturamentoPrevistoDoServidor,
+  impostoPrevisto: impostoPrevistoDoServidor,
   aliquotaImposto,
   aliquotaIntTaxes,
-  rentabilidade,
+  rentabilidade: rentabilidadeDoServidor,
   saveConsumido,
   saveGerado,
   linhasDoSave,
@@ -489,7 +504,7 @@ export function AberturaForm({
   curvaInicial,
   recebimentoInicial,
   impostosIniciais,
-  faturamentoPorMes,
+  faturamentoPorMes: faturamentoPorMesDoServidor,
   trimestreSugerido,
   anoSugerido,
   competenciasIniciais,
@@ -517,8 +532,38 @@ export function AberturaForm({
   // errata É editar, e pedir um clique a mais para isso era o que deixava
   // o financeiro numa tela de leitura sem saber por quê (decisão 059).
   const [editando, setEditando] = React.useState(false);
-  const ehRevisao = modo === "revisao";
-  const travado = modo === "leitura" && !editando;
+
+  // A revisão pelo "Editar planilha" (opção C, 30/10/2026): com o job
+  // aberto, a planilha leva o rascunho até aqui, sem gravar nada. O
+  // formulário revisa sobre os números do rascunho, nada acompanha sozinho,
+  // e o rodapé — embaixo de todas as abas — grava a alteração e a revisão
+  // juntas, pelo pop-up da planilha.
+  const revisaoPelaPlanilha = useRevisaoPelaPlanilha();
+  const rascunhoDaPlanilha =
+    modo === "leitura" || modo === "revisao" ? (revisaoPelaPlanilha?.rascunho ?? null) : null;
+  const pelaPlanilha = rascunhoDaPlanilha !== null;
+  const numerosDaPlanilha = rascunhoDaPlanilha?.numeros ?? null;
+  const faturamentoPrevisto = numerosDaPlanilha
+    ? numerosDaPlanilha.faturamentoPrevisto
+    : faturamentoPrevistoDoServidor;
+  const impostoPrevisto = numerosDaPlanilha
+    ? numerosDaPlanilha.impostoPrevisto
+    : impostoPrevistoDoServidor;
+  const custoPrevisto = numerosDaPlanilha
+    ? emCentavos(custoPrevistoDoServidor + numerosDaPlanilha.deltaCustoPrevisto)
+    : custoPrevistoDoServidor;
+  const faturamentoPorMes =
+    numerosDaPlanilha?.faturamentoPorMes ?? faturamentoPorMesDoServidor;
+  const rentabilidade = numerosDaPlanilha
+    ? {
+        valorJob: numerosDaPlanilha.valorJob,
+        deducoes: numerosDaPlanilha.deducoesDoResultado,
+        custoPlanejado: rentabilidadeDoServidor.custoPlanejado,
+      }
+    : rentabilidadeDoServidor;
+
+  const ehRevisao = modo === "revisao" || pelaPlanilha;
+  const travado = modo === "leitura" && !editando && !pelaPlanilha;
   // Decisão 216: a caixa "Mídia System" — na fila nasce desmarcada; no job
   // aberto, como está gravada.
   const [midiaSystem, setMidiaSystem] = React.useState(job.midia_system);
@@ -536,7 +581,9 @@ export function AberturaForm({
     ? aprovacaoSave.tipo === "gera"
       ? "Aprovar save e registrar revisão"
       : "Aprovar consumo e registrar revisão"
-    : "Registrar revisão de abertura";
+    : pelaPlanilha
+      ? "Registrar alteração e revisão"
+      : "Registrar revisão de abertura";
 
   // Na abertura o nome vem do job da produção; num job já aberto, do nome
   // que o financeiro gravou. Até 16/10/2026 nascia sempre do da produção, e
@@ -558,6 +605,12 @@ export function AberturaForm({
     () => job.projeto_financeiro_id ?? "",
   );
   const [projetoAberto, setProjetoAberto] = React.useState(false);
+  // Os jobs abertos embaixo de cada linha da lista (opção A) e o painel
+  // com todos os projetos unificados (opção B) — decisão 228, 30/10/2026.
+  const [projetosComJobsAbertos, setProjetosComJobsAbertos] = React.useState<
+    Set<string>
+  >(new Set());
+  const [painelDeProjetosAberto, setPainelDeProjetosAberto] = React.useState(false);
   const [buscaProjeto, setBuscaProjeto] = React.useState("");
   /**
    * O projeto novo do "+": só o nome, reservado no formulário. Ele nasce
@@ -633,6 +686,11 @@ export function AberturaForm({
   const regionaisDaEmpresa = regionais.filter((r) => r.empresa_id === empresaId);
   function trocarEmpresa(id: string) {
     setEmpresaId(id);
+    // O projeto unificado é de uma empresa só (revisão da 228, 30/10/2026):
+    // o escolhido sai se for de outra. O novo do "+" fica — ele nasce na
+    // empresa do job.
+    const escolhido = projetos.find((p) => p.id === projetoId);
+    if (escolhido && !projetoDaEmpresa(escolhido, id)) setProjetoId("");
     const daNova = regionais.filter((r) => r.empresa_id === id);
     // Com uma regional só, ela já fica escolhida; com mais, a pessoa
     // escolhe — a de antes era de outra empresa.
@@ -700,7 +758,7 @@ export function AberturaForm({
         : "todo"
       : null;
   const curvaDatasOk = curva.every((l) => l.data.length === 10);
-  const curvaValoresOk = linhasCurva.every((l) => l.valor > 0);
+  const curvaValoresOk = linhasCurva.every((l) => l.valor > 0 || (ehRevisao && l.valor === 0));
   const curvaOk =
     semDesembolso ||
     (curva.length > 0 && curvaDatasOk && curvaValoresOk && curvaBate);
@@ -724,7 +782,7 @@ export function AberturaForm({
   // direto pelo cliente ao fornecedor) abre sem previsão de entrada.
   const semRecebimento = faturamentoPrevisto <= 0;
   const recebDatasOk = recebimento.every((l) => l.data.length === 10);
-  const recebValoresOk = linhasReceb.every((l) => l.valor > 0);
+  const recebValoresOk = linhasReceb.every((l) => l.valor > 0 || (ehRevisao && l.valor === 0));
   const recebOk =
     semRecebimento ||
     (recebimento.length > 0 && recebDatasOk && recebValoresOk && recebBate);
@@ -772,7 +830,43 @@ export function AberturaForm({
   const impostosBate = curvaFecha(linhasImp, impostoPrevisto);
   const difImpostos = emCentavos(somaDosImpostos - impostoPrevisto);
   const impDatasOk = impostos.every((l) => l.data.length === 10);
-  const impValoresOk = linhasImp.every((l) => l.valor > 0);
+  const impValoresOk = linhasImp.every((l) => l.valor > 0 || (ehRevisao && l.valor === 0));
+
+  // ---------- Linha zerada na revisão (30/10/2026) ----------
+  // O registro não guarda linha sem valor: no "Registrar", o aviso lista as
+  // zeradas, e continuar as apaga.
+  const [zeradasAberto, setZeradasAberto] = React.useState(false);
+  const zeradas: LinhaZerada[] = ehRevisao
+    ? [
+        ...(semRecebimento
+          ? []
+          : recebimento.map((l, i) => ({
+              id: l.id,
+              bloco: "Previsão de recebimento",
+              rotulo: l.mes ? mesCurto(l.mes) : `Parcela ${i + 1}`,
+              data: l.data,
+              valor: parseMoeda(l.valorTexto),
+            }))),
+        ...(semDesembolso
+          ? []
+          : curva.map((l, i) => ({
+              id: l.id,
+              bloco: "Curva de desembolso",
+              rotulo: `Data ${i + 1}`,
+              data: l.data,
+              valor: parseMoeda(l.valorTexto),
+            }))),
+        ...(semImposto
+          ? []
+          : impostos.map((l, i) => ({
+              id: l.id,
+              bloco: "Recolhimento de impostos",
+              rotulo: `Recolhimento ${i + 1}`,
+              data: l.data,
+              valor: parseMoeda(l.valorTexto),
+            }))),
+      ].filter((z) => emCentavos(z.valor) === 0)
+    : [];
 
   // ---------- Os números do servidor mudaram (decisão 115) ----------
   // O "Editar orçado" do financeiro grava na hora, pela aba Planilha desta
@@ -825,6 +919,7 @@ export function AberturaForm({
       setRodadaDoDia((r) => r + 1);
       return;
     }
+    if (pelaPlanilha && !faturamentoPorMes) return;
     if (faturamentoPorMes) {
       setRecebimento((atual) =>
         recebimentoMensalParaForm(
@@ -846,7 +941,7 @@ export function AberturaForm({
             : acompanharTotal(atual, faturamentoPrevisto - antes.faturamento),
       );
     }
-    if (antes.imposto !== impostoPrevisto) {
+    if (antes.imposto !== impostoPrevisto && !pelaPlanilha) {
       setImpostosSoltos((atual) =>
         atual === null || atual.length === 0
           ? atual
@@ -856,6 +951,7 @@ export function AberturaForm({
   }, [
     chaveDoServidor,
     travado,
+    pelaPlanilha,
     faturamentoPrevisto,
     impostoPrevisto,
     curvaInicial,
@@ -924,7 +1020,9 @@ export function AberturaForm({
     impostosOk &&
     (semRecebimento || contaRecebId !== null) &&
     (semDesembolso || contaPagId !== null) &&
-    !faltaAprovarSaves;
+    !faltaAprovarSaves &&
+    !rascunhoDaPlanilha?.atualizando &&
+    !rascunhoDaPlanilha?.erro;
 
   const categoriaNome =
     categorias.find((c) => c.id === categoriaId)?.nome ?? "— não informada";
@@ -948,7 +1046,7 @@ export function AberturaForm({
   // A lista do servidor, com os nomes do lápis, e o projeto novo reservado
   // no topo — ele ainda não tem código: o sistema gera ao gravar.
   const projetosVisiveis = React.useMemo<OpcaoDeProjeto[]>(() => {
-    const lista = projetos.map((p) => ({
+    const lista = projetos.filter((p) => projetoDaEmpresa(p, empresaId)).map((p) => ({
       ...p,
       nome: nomesEditados[p.id] ?? p.nome,
       novo: false,
@@ -962,11 +1060,14 @@ export function AberturaForm({
             nome: nomeProjetoNovo,
             cliente_id: job.cliente_id ?? "",
             cliente_nome: job.cliente_nome,
+            clientes: [{ id: job.cliente_id ?? "", nome: job.cliente_nome }],
+            empresas: [],
+            jobs: [],
             novo: true,
           },
           ...lista,
         ];
-  }, [projetos, nomesEditados, nomeProjetoNovo, job.cliente_id, job.cliente_nome]);
+  }, [projetos, nomesEditados, nomeProjetoNovo, job.cliente_id, job.cliente_nome, empresaId]);
   const projetoSel = projetosVisiveis.find((p) => p.id === projetoId) ?? null;
   // Sem acento e sem caixa, no nome e no código — o mesmo critério do
   // campo de fornecedor (`components/ui/combobox.tsx`).
@@ -977,14 +1078,41 @@ export function AberturaForm({
     if (!q) return projetosVisiveis;
     return projetosVisiveis.filter(
       (p) =>
-        // Só pelo nome: o código do projeto não aparece (27/10/2026).
-        normalizar(p.nome).includes(q),
+        // Pelo nome e pelos clientes que já estão dentro — o código do
+        // projeto não aparece (27/10/2026).
+        normalizar(p.nome).includes(q) ||
+        p.clientes.some((c) => normalizar(c.nome ?? "").includes(q)),
     );
   }, [projetosVisiveis, buscaProjeto]);
+  // A busca acha projeto de qualquer cliente (decisão 228); os do cliente
+  // do job ficam num grupo à parte, em cima — o servidor já manda nessa
+  // ordem, e o projeto novo é sempre deste cliente.
+  const ehDoClienteDoJob = (p: OpcaoDeProjeto) =>
+    p.novo ||
+    p.cliente_id === job.cliente_id ||
+    p.clientes.some((c) => c.id === job.cliente_id);
+  const gruposDeProjeto = [
+    {
+      titulo: "Projetos abertos deste cliente",
+      itens: projetosFiltrados.filter(ehDoClienteDoJob),
+    },
+    {
+      titulo: "Projetos abertos de outros clientes",
+      itens: projetosFiltrados.filter((p) => !ehDoClienteDoJob(p)),
+    },
+  ].filter((g) => g.itens.length > 0);
   function escolherProjeto(id: string) {
     setProjetoId(id);
     setProjetoAberto(false);
     setBuscaProjeto("");
+  }
+  function alternarJobsDoProjeto(id: string) {
+    setProjetosComJobsAbertos((atual) => {
+      const novo = new Set(atual);
+      if (novo.has(id)) novo.delete(id);
+      else novo.add(id);
+      return novo;
+    });
   }
   /** O ✕ do campo: zera a escolha e devolve o "+". O projeto novo
    *  reservado, que ainda não existe, sai junto. */
@@ -992,7 +1120,7 @@ export function AberturaForm({
     if (projetoId === PROJETO_NOVO) setNomeProjetoNovo(null);
     setProjetoId("");
   }
-  const projetoLabel = projetoSel?.nome ?? "Selecione o projeto";
+  const projetoLabel = projetoSel?.nome ?? "Selecione o projeto unificado";
   // Sem o código do projeto, que não aparece para o usuário (pedido do
   // Tiago, 27/10/2026).
   const projetoResumo = projetoSel
@@ -1045,10 +1173,14 @@ export function AberturaForm({
       ? "1 data"
       : `${impostos.length} datas`;
 
-  const textoValidacao = !nomeOk
+  const textoValidacao = rascunhoDaPlanilha?.erro
+    ? rascunhoDaPlanilha.erro
+    : rascunhoDaPlanilha?.atualizando
+      ? "Atualizando os números da planilha…"
+      : !nomeOk
     ? "Informe o nome do job."
     : !projetoOk
-      ? "Selecione o projeto do job."
+      ? "Selecione o projeto unificado do job."
       : categoriaId === ""
       ? "Selecione a categoria do job."
       : !servicoOk
@@ -1551,6 +1683,42 @@ export function AberturaForm({
     });
   }
 
+  /** "Registrar revisão de abertura": a confirmação de sempre — ou, na
+   *  revisão pela planilha, o pop-up dela, que grava as duas juntas. */
+  function registrarRevisao(payload = montarPayload()) {
+    if (pelaPlanilha) {
+      revisaoPelaPlanilha?.registrar(payload);
+      return;
+    }
+    setConfirmarAberto(true);
+  }
+
+  /** Continuar depois do aviso: as linhas zeradas saem do formulário e do
+   *  registro. */
+  function apagarZeradasERegistrar() {
+    const ids = new Set(zeradas.map((z) => z.id));
+    const fora = (l: { valor: number }) => emCentavos(l.valor) !== 0;
+    setRecebimento((atual) => atual.filter((l) => !ids.has(l.id)));
+    setCurva((atual) => atual.filter((l) => !ids.has(l.id)));
+    if (impostosSoltos) setImpostosSoltos(impostosSoltos.filter((l) => !ids.has(l.id)));
+    setZeradasAberto(false);
+    const p = montarPayload();
+    registrarRevisao({
+      ...p,
+      recebimento: p.recebimento.filter(fora),
+      curva: p.curva.filter(fora),
+      impostos: p.impostos.filter(fora),
+    });
+  }
+
+  /** Na revisão pela planilha o rodapé sai da aba e fica embaixo de todas
+   *  elas (o contêiner é das abas do job). */
+  function noRodapeDasAbas(el: React.ReactElement) {
+    return pelaPlanilha && revisaoPelaPlanilha?.rodape
+      ? createPortal(el, revisaoPelaPlanilha.rodape)
+      : el;
+  }
+
   /** Desfaz a edição voltando tudo ao que veio do servidor. */
   function cancelarEdicao() {
     setErro(null);
@@ -1647,6 +1815,17 @@ export function AberturaForm({
           foto={ultimaFoto}
           revisao={revisao}
           aprovacaoSave={aprovacaoSave}
+          alteracaoDaPlanilha={
+            rascunhoDaPlanilha
+              ? {
+                  faturamentoAntes: rascunhoDaPlanilha.numeros.faturamentoPrevistoAntes,
+                  faturamentoDepois: rascunhoDaPlanilha.numeros.faturamentoPrevisto,
+                  linhas: rascunhoDaPlanilha.linhas,
+                  campos: rascunhoDaPlanilha.campos,
+                  onVoltar: () => revisaoPelaPlanilha?.irPara("planilha"),
+                }
+              : null
+          }
         />
       )}
 
@@ -1721,7 +1900,7 @@ export function AberturaForm({
                   produção (migration 20260820000011). */}
               <div className="flex flex-col gap-1.5">
                 <span className="text-[12.5px] font-semibold">
-                  Projeto <span className="text-california-red">*</span>
+                  Projeto unificado <span className="text-california-red">*</span>
                 </span>
                 <div className="flex items-center gap-2">
                   <Popover
@@ -1816,49 +1995,70 @@ export function AberturaForm({
                           className="h-9 text-[13px]"
                         />
                       </div>
-                      <p className="px-4 pb-1 pt-2.5 text-[10px] font-bold uppercase tracking-[0.09em] text-[#8a8a8a]">
-                        Projetos abertos
+                      <p className="border-b border-border px-4 py-2 text-[11.5px] text-muted-foreground">
+                        Só os projetos unificados de{" "}
+                        <strong className="font-semibold text-foreground">
+                          {empresaNomeEscolhida}
+                        </strong>
+                        . Para ver os de outra empresa, troque a empresa do job.
                       </p>
-                      <div className="max-h-64 overflow-y-auto px-1.5 pb-1.5">
+                      <div className="max-h-72 overflow-y-auto px-1.5 pb-1.5">
                         {projetosVisiveis.length === 0 ? (
-                          <p className="px-2.5 pb-2 text-[12px] text-muted-foreground">
-                            Nenhum projeto do financeiro para este cliente. Crie
-                            um no “+” ao lado.
+                          <p className="px-2.5 pb-2 pt-2.5 text-[12px] text-muted-foreground">
+                            Nenhum projeto unificado aberto nesta empresa.
+                            Crie um no “+” ao lado.
                           </p>
                         ) : projetosFiltrados.length === 0 ? (
-                          <p className="px-2.5 pb-2 text-[12px] text-muted-foreground">
+                          <p className="px-2.5 pb-2 pt-2.5 text-[12px] text-muted-foreground">
                             Nenhum projeto com “{buscaProjeto.trim()}”.{" "}
                             {projetoSel
                               ? "Confira o nome, ou limpe o campo no ✕ e crie um no “+”."
                               : "Confira o nome ou crie um no “+” ao lado."}
                           </p>
                         ) : (
-                          projetosFiltrados.map((pr) => (
-                            <button
-                              key={pr.id}
-                              type="button"
-                              onClick={() => escolherProjeto(pr.id)}
-                              className={cn(
-                                "block w-full rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors hover:bg-muted",
-                                pr.id === projetoId &&
-                                  "bg-california-red/[0.06] text-california-red",
-                              )}
-                            >
-                              <span className="flex items-baseline justify-between gap-3">
-                                <span className="truncate font-semibold">
-                                  {pr.nome}
-                                </span>
-                                {pr.novo && <SeloProjetoNovo />}
-                              </span>
-                              <span className="mt-0.5 block text-[11px] text-muted-foreground">
-                                {pr.cliente_nome ?? "—"}
-                              </span>
-                            </button>
+                          gruposDeProjeto.map((grupo) => (
+                            <div key={grupo.titulo}>
+                              <p className="px-2.5 pb-1 pt-2.5 text-[10px] font-bold uppercase tracking-[0.09em] text-[#8a8a8a]">
+                                {grupo.titulo}
+                              </p>
+                              {grupo.itens.map((pr) => (
+                                <LinhaDoProjetoUnificado
+                                  key={pr.id}
+                                  pr={pr}
+                                  selecionado={pr.id === projetoId}
+                                  seloNovo={<SeloProjetoNovo />}
+                                  aberta={projetosComJobsAbertos.has(pr.id)}
+                                  onEscolher={() => escolherProjeto(pr.id)}
+                                  onAlternar={() => alternarJobsDoProjeto(pr.id)}
+                                />
+                              ))}
+                            </div>
                           ))
                         )}
                       </div>
+                      <BotaoTodosOsProjetos
+                        onAbrir={() => {
+                          setProjetoAberto(false);
+                          setBuscaProjeto("");
+                          setPainelDeProjetosAberto(true);
+                        }}
+                      />
                     </PopoverContent>
                   </Popover>
+                  <TodosOsProjetosDialog
+                    open={painelDeProjetosAberto}
+                    onOpenChange={setPainelDeProjetosAberto}
+                    projetos={projetosVisiveis}
+                    ehDoClienteDoJob={ehDoClienteDoJob}
+                    clienteDoJobNome={job.cliente_nome}
+                    empresaNome={empresaNomeEscolhida}
+                    jobCodigo={job.codigo}
+                    selecionadoId={projetoId}
+                    onEscolher={(id) => {
+                      escolherProjeto(id);
+                      setPainelDeProjetosAberto(false);
+                    }}
+                  />
 
                   {/* "+" cria, lápis revisa o escolhido — o MESMO botão
                       trocando de ícone, como no campo de fornecedor
@@ -3616,7 +3816,7 @@ export function AberturaForm({
             </p>
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-[12.5px] text-muted-foreground">
-                Projeto
+                Projeto unificado
               </span>
               <span className="text-right text-[12.5px] font-semibold">
                 {projetoResumo}
@@ -3761,7 +3961,7 @@ export function AberturaForm({
       {/* ---------- Barra fixa de ação ---------- */}
       {/* Registro travado não tem barra: não há nada para confirmar, e
           "Editar registro" mora na faixa do topo. */}
-      {!travado && (
+      {!travado && noRodapeDasAbas(
         <div className="sticky bottom-0 z-10 -mx-5 -mb-6 flex flex-wrap items-center justify-between gap-4 border-t border-border bg-white/95 px-5 py-3.5 backdrop-blur md:-mx-8 md:-mb-8 md:px-8">
           <span
             className={cn(
@@ -3779,6 +3979,15 @@ export function AberturaForm({
           <div className="flex items-center gap-2.5">
             {ehRevisao ? (
               <>
+                {pelaPlanilha && revisaoPelaPlanilha?.abaAtual !== "abertura" && (
+                  <button
+                    type="button"
+                    onClick={() => revisaoPelaPlanilha?.irPara("abertura")}
+                    className="rounded-lg border border-border bg-white px-4 py-2.5 text-[13.5px] font-semibold transition-colors hover:bg-muted"
+                  >
+                    Ir para a Abertura do Job
+                  </button>
+                )}
                 {/* O mesmo destino do voltar do topo (decisão 108): a fila
                     para quem veio dela, Visualizar Jobs para quem veio de lá. */}
                 <Link
@@ -3796,7 +4005,7 @@ export function AberturaForm({
                 </Link>
                 <button
                   type="button"
-                  onClick={() => setConfirmarAberto(true)}
+                  onClick={() => (zeradas.length > 0 ? setZeradasAberto(true) : registrarRevisao())}
                   disabled={!podeAbrir || pending}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-5 py-2.5 text-[13.5px] font-bold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-45"
                 >
@@ -3849,6 +4058,13 @@ export function AberturaForm({
         </div>
       )}
 
+      <LinhasZeradasDialog
+        open={zeradasAberto}
+        onOpenChange={setZeradasAberto}
+        linhas={zeradas}
+        onContinuar={apagarZeradasERegistrar}
+      />
+
       {/* ---------- Confirmação ---------- */}
       <Dialog open={confirmarAberto} onOpenChange={setConfirmarAberto}>
         <DialogContent className="max-h-[88vh] max-w-[470px] overflow-y-auto">
@@ -3883,7 +4099,7 @@ export function AberturaForm({
 
           <div className="flex flex-col gap-2.5 rounded-xl border border-border px-4 py-4">
             <ResumoLinha rotulo="Nome do job" valor={nome.trim()} />
-            <ResumoLinha rotulo="Projeto" valor={projetoResumo} />
+            <ResumoLinha rotulo="Projeto unificado" valor={projetoResumo} />
             <ResumoLinha rotulo="Categoria" valor={categoriaNome} />
             <ResumoLinha rotulo="Serviço" valor={servicoNome} />
             <ResumoLinha rotulo="Mídia System" valor={resumoMidia} />

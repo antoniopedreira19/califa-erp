@@ -505,6 +505,7 @@ export async function abrirJobNoFinanceiro(
   const refsErro = await conferirProjetoEContas(
     supabase,
     session.activeTenant.id,
+    jobId,
     job.cliente_id ?? null,
     parsed.data,
   );
@@ -1091,8 +1092,10 @@ function conferirImpostos(
 async function conferirProjetoEContas(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
+  jobId: string,
   clienteDoJob: string | null,
   input: {
+    empresa_id: string;
     projeto_financeiro_id: string | null;
     projeto_financeiro_novo: string | null;
     conta_recebimento_id: string | null;
@@ -1118,7 +1121,7 @@ async function conferirProjetoEContas(
     ),
   );
 
-  const [projetoRes, nomeRes, contasRes] = await Promise.all([
+  const [projetoRes, outrosJobsRes, nomeRes, contasRes] = await Promise.all([
     input.projeto_financeiro_id
       ? supabase
           .from("projetos_financeiro")
@@ -1127,6 +1130,17 @@ async function conferirProjetoEContas(
           .eq("tenant_id", tenantId)
           .maybeSingle<{ id: string; ativo: boolean; cliente_id: string }>()
       : Promise.resolve({ data: null }),
+    // A empresa do projeto unificado é a dos jobs que já estão nele, fora
+    // este (decisão 228, revisão de 30/10/2026).
+    input.projeto_financeiro_id
+      ? supabase
+          .from("jobs")
+          .select("empresa_id")
+          .eq("tenant_id", tenantId)
+          .eq("projeto_financeiro_id", input.projeto_financeiro_id)
+          .neq("id", jobId)
+          .not("status", "in", "(cancelado,rejeitado_financeiro)")
+      : Promise.resolve({ data: [], error: null }),
     input.projeto_financeiro_novo
       ? projetoComONome(supabase, tenantId, input.projeto_financeiro_novo, null)
       : Promise.resolve(null),
@@ -1149,11 +1163,20 @@ async function conferirProjetoEContas(
     if (!projeto.ativo) {
       return "Este projeto foi inativado. Escolha outro para o job.";
     }
-    // Agrupar jobs de clientes diferentes sob o mesmo projeto não é
-    // arrumação, é engano — e o total do projeto sairia somando dinheiro
-    // de dois clientes.
-    if (clienteDoJob && projeto.cliente_id !== clienteDoJob) {
-      return "O projeto escolhido é de outro cliente.";
+    // Projeto de outro cliente é permitido desde a decisão 228: os
+    // parceiros de um mesmo evento são clientes diferentes e o financeiro
+    // quer vê-los juntos. Até 29/10/2026 isto recusava.
+    //
+    // De outra empresa, não (revisão de 30/10/2026): o projeto unificado
+    // é sempre de uma empresa só. Para usar o de outra, troca-se antes a
+    // empresa do job.
+    if (outrosJobsRes.error) {
+      console.error("[abertura-job.empresa-do-projeto]", outrosJobsRes.error.message);
+      return "Não foi possível conferir a empresa do projeto unificado.";
+    }
+    const outrosJobs = (outrosJobsRes.data ?? []) as { empresa_id: string | null }[];
+    if (outrosJobs.some((j) => j.empresa_id && j.empresa_id !== input.empresa_id)) {
+      return "Este projeto unificado é de outra empresa. Troque a empresa do job ou escolha outro projeto.";
     }
   }
 
@@ -1209,12 +1232,13 @@ async function projetoComONome(
   return linha ?? null;
 }
 
-/** Diz qual projeto já tem o nome — e de que cliente, porque a unicidade
- *  vale no sistema inteiro e o combo só mostra os do cliente do job. */
+/** Diz que o nome já existe e como pôr o job nele: desde a decisão 228 o
+ *  combo acha projeto de qualquer cliente, então o repetido é para ser
+ *  escolhido na lista, não renomeado. */
 function mensagemDeNomeRepetido(p: ProjetoDeMesmoNome): string {
   // Sem o código do projeto, que não aparece para o usuário (27/10/2026).
-  const cliente = p.cliente_nome ? ` no cliente ${p.cliente_nome}` : "";
-  return `Já existe um projeto com este nome${cliente}. Use outro nome.`;
+  const cliente = p.cliente_nome ? ` (criado no cliente ${p.cliente_nome})` : "";
+  return `Já existe um projeto com este nome${cliente}. Para incluir o job nele, escolha-o na lista do campo Projeto.`;
 }
 
 /** O 23505 do insert/update: o nome repetido, ou a corrida do código. */
@@ -1491,6 +1515,13 @@ export async function editarRegistroDaAbertura(
    * `null` na edição e na revisão de sempre.
    */
   aprovarSaveId: string | null,
+  /**
+   * A alteração do financeiro que esta revisão acompanha (revisão das
+   * decisões 115 e 224, 30/10/2026): o "Editar planilha" grava a alteração
+   * e, em seguida, este registro, e a foto sai como "alteração do
+   * financeiro". Só `registrarAlteracaoComRevisao` passa; `null` no resto.
+   */
+  alteracaoDoFinanceiroId: string | null = null,
 ): Promise<ActionResult> {
   const session = await requireSession();
 
@@ -1711,6 +1742,7 @@ export async function editarRegistroDaAbertura(
   const refsErro = await conferirProjetoEContas(
     supabase,
     session.activeTenant.id,
+    jobId,
     job.cliente_id ?? null,
     parsed.data,
   );
@@ -2175,6 +2207,7 @@ export async function editarRegistroDaAbertura(
       errata_id: errataDaRevisao,
       erratas_ids: erratasDaRevisao,
       aprovou_save: aprovacao?.id ?? null,
+      alteracao_do_financeiro_id: alteracaoDoFinanceiroId,
       de: {
         nome_financeiro: job.nome_financeiro,
         projeto_financeiro_id: job.projeto_financeiro_id,
@@ -2216,12 +2249,17 @@ export async function editarRegistroDaAbertura(
     },
   });
 
-  // A foto desta confirmação (decisão 059): revisão de errata ou edição
-  // livre, com a errata pendurada quando é o caso.
+  // A foto desta confirmação (decisão 059): revisão de errata, revisão pela
+  // alteração do financeiro ou edição livre, com a errata pendurada quando
+  // é o caso.
   await registrarFotoDaAbertura(supabase, {
     tenantId: session.activeTenant.id,
     jobId,
-    tipo: eraRevisao ? "revisao_errata" : "edicao",
+    tipo: eraRevisao
+      ? "revisao_errata"
+      : alteracaoDoFinanceiroId
+        ? "revisao_financeiro"
+        : "edicao",
     errataId: errataDaRevisao,
     profileId: session.profile.id,
     registro: {
