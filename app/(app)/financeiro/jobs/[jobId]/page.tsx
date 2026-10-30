@@ -553,7 +553,7 @@ export default async function JobNoFinanceiroPage({
                   Revisão da abertura pendente
                 </span>
               ) : (
-                // Vira "Editando orçado" durante o "Editar orçado" (decisão 115).
+                // Vira "Editando planilha" durante o "Editar planilha" (decisão 115).
                 <SeloDaEdicao />
               )}
             </div>

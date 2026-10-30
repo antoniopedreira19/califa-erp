@@ -1495,7 +1495,10 @@ export interface JobCompetencia {
 // edição do registro depois dela. É o que a aba "Abertura do Job" lista
 // e o que a revisão mostra como "a abertura anterior".
 
-export type TipoFotoAbertura = "abertura" | "revisao_errata" | "edicao";
+/** `revisao_financeiro`: a revisão registrada junto com a alteração do
+ *  financeiro no "Editar planilha" (revisão das decisões 115 e 224,
+ *  30/10/2026). */
+export type TipoFotoAbertura = "abertura" | "revisao_errata" | "edicao" | "revisao_financeiro";
 
 export interface LinhaPrevisaoFoto {
   data_prevista: string;
@@ -1544,10 +1547,12 @@ export interface FotoDaAbertura {
   impostoPrevisto: number | null;
 }
 
-/** "Abertura", "Revisão 1 · errata", "Revisão 2 · edição do registro". */
+/** "Abertura", "Revisão 1 · errata", "Revisão 2 · edição do registro",
+ *  "Revisão 3 · alteração do financeiro". */
 export function rotuloDaFoto(foto: FotoDaAbertura): string {
   if (foto.numero === 1 || foto.tipo === "abertura") return "Abertura";
   const ordinal = `Revisão ${foto.numero - 1}`;
+  if (foto.tipo === "revisao_financeiro") return `${ordinal} · alteração do financeiro`;
   return foto.tipo === "revisao_errata"
     ? `${ordinal} · errata`
     : `${ordinal} · edição do registro`;

@@ -90,7 +90,14 @@ import {
   type ParcelaQueAcompanha,
   type RecebimentoSemPrevisao,
 } from "./edicao-financeiro-confirmar-dialog";
-import { registrarAlteracaoDoFinanceiro } from "./actions-alteracao-financeiro";
+import {
+  preverAlteracaoComRevisao,
+  registrarAlteracaoComRevisao,
+  registrarAlteracaoDoFinanceiro,
+  type MudancaDoFinanceiro,
+} from "./actions-alteracao-financeiro";
+import { useRevisaoPelaPlanilha } from "@/app/(app)/financeiro/jobs/[jobId]/revisao-pela-planilha";
+import type { EdicaoRegistroAberturaInput } from "@/lib/validations/abertura-financeiro";
 import {
   distribuirDelta,
   emReais,
@@ -153,7 +160,11 @@ import {
 } from "@/lib/calculos/historico-da-planilha";
 import { carregarHistoricoDaPlanilha } from "./actions-historico";
 import { BotaoHistorico, FaixaDaVersao, SeloDaLinha } from "./historico-da-planilha";
-import { ParametrosDoJob, type AlteracaoDosParametros } from "./parametros-do-job";
+import {
+  ParametrosDoJob,
+  type AlteracaoDosParametros,
+  type RascunhoDosParametros,
+} from "./parametros-do-job";
 import type { ParametrosDoJobGravados } from "@/lib/types";
 
 /** A linha de parâmetros do job no financeiro (decisão 224): os que valem
@@ -708,6 +719,29 @@ function PlanilhaDoJob({
         : rascunho,
     [modoFinanceiro, planejadoNaFila, rascunho, interno],
   );
+
+  // Os parâmetros do job abrem junto com o "Editar planilha" (revisão de
+  // 30/10/2026): o rascunho deles vem da linha de parâmetros, e enquanto a
+  // edição está no ar a planilha, os Totais e a barra fazem a conta com ele.
+  const [rascunhoDosParametros, setRascunhoDosParametros] =
+    React.useState<RascunhoDosParametros | null>(null);
+  const paramsDoRascunho =
+    modoFinanceiro &&
+    errata.ativo &&
+    rascunhoDosParametros &&
+    rascunhoDosParametros.erro === null &&
+    rascunhoDosParametros.campos.length > 0
+      ? rascunhoDosParametros.para
+      : null;
+  const camposDosParametros = paramsDoRascunho ? rascunhoDosParametros!.campos : [];
+  const versaoDoRascunho = React.useMemo(
+    () => (paramsDoRascunho ? { ...versao, ...paramsDoRascunho } : versao),
+    [versao, paramsDoRascunho],
+  );
+  const planilhaDoRascunho = React.useMemo(
+    () => (paramsDoRascunho ? configDaPlanilha(modeloPlanilha, versaoDoRascunho) : planilha),
+    [paramsDoRascunho, modeloPlanilha, versaoDoRascunho, planilha],
+  );
   // A barra de ações do job é irmã das abas e precisa sair de cena
   // enquanto a barra da errata está no ar — as duas grudam no mesmo pé de
   // janela. Nas telas que não têm barra de ações (financeiro, conferência
@@ -772,7 +806,10 @@ function PlanilhaDoJob({
   const [descartePendente, setDescartePendente] = React.useState(false);
   const [erroDescarte, setErroDescarte] = React.useState<string | null>(null);
   const prontaAberta = abertaDaPronta ? errataPronta : null;
-  useProtegerSaida(errata.ativo && errata.temMudanca, (href) => setSaidaDaErrata(href));
+  useProtegerSaida(
+    errata.ativo && (errata.temMudanca || camposDosParametros.length > 0),
+    (href) => setSaidaDaErrata(href),
+  );
 
   // Quem ainda não disse se sai mais PP (decisão 052) — o alcance do
   // botão "Concluir PPs" da barra. O servidor refaz esta lista antes de
@@ -818,7 +855,9 @@ function PlanilhaDoJob({
   // Os dois lados da conta, pela MESMA função que o card de Totais e o
   // servidor usam. Reimplementar aqui faria a barra mostrar um número e a
   // gravação outro.
-  const paraTotais = React.useCallback(
+  // `paraTotaisSalvos` usa os parâmetros gravados — o "antes"; `paraTotais`,
+  // os do rascunho quando o "Editar planilha" mexe neles.
+  const paraTotaisSalvos = React.useCallback(
     (lista: ItemPlanilhaJob[]) =>
       calcularTotaisVersao(
         lista.map((i) => ({
@@ -837,8 +876,27 @@ function PlanilhaDoJob({
       planilha.internacional,
     ],
   );
+  const paraTotais = React.useCallback(
+    (lista: ItemPlanilhaJob[]) =>
+      calcularTotaisVersao(
+        lista.map((i) => ({
+          tipo_custo: i.tipo_custo,
+          total_orcado: Number(i.total_orcado ?? 0),
+          em_save: i.em_save,
+          save_consumido: Number(i.save_consumido ?? 0),
+        })),
+        versaoDoRascunho.percentual_honorarios,
+        versaoDoRascunho.percentual_imposto,
+        planilhaDoRascunho.internacional,
+      ),
+    [
+      versaoDoRascunho.percentual_honorarios,
+      versaoDoRascunho.percentual_imposto,
+      planilhaDoRascunho.internacional,
+    ],
+  );
 
-  const totaisAntes = React.useMemo(() => paraTotais(itens), [paraTotais, itens]);
+  const totaisAntes = React.useMemo(() => paraTotaisSalvos(itens), [paraTotaisSalvos, itens]);
   const totaisDepois = React.useMemo(
     () => paraTotais(errata.itens),
     [paraTotais, errata.itens],
@@ -855,22 +913,30 @@ function PlanilhaDoJob({
         : [],
     [modoFinanceiro, errata.ativo, errata.itens, itens],
   );
-  const resumoDoFinanceiro =
+  const resumoDasLinhas =
     linhasDoFinanceiro.length === 0
       ? "nenhuma linha alterada ainda"
       : `${linhasDoFinanceiro.length} ${
           linhasDoFinanceiro.length === 1 ? "linha alterada" : "linhas alteradas"
         }`;
 
-  async function confirmarEdicaoDoFinanceiro(
-    motivo: string,
-    recebimentosNovos: Array<{ mes: string | null; data_prevista: string }>,
-  ) {
-    setSalvando(true);
-    setErroErrata(null);
-    const r = await registrarAlteracaoDoFinanceiro(job.id, {
-      motivo,
-      recebimentos_novos: recebimentosNovos,
+  const resumoDoFinanceiro =
+    camposDosParametros.length === 0
+      ? resumoDasLinhas
+      : [
+          linhasDoFinanceiro.length > 0 ? resumoDasLinhas : null,
+          camposDosParametros.length === 1
+            ? "1 parâmetro alterado"
+            : `${camposDosParametros.length} parâmetros alterados`,
+        ]
+          .filter(Boolean)
+          .join(" · ");
+  const temMudancaDoFinanceiro =
+    linhasDoFinanceiro.length > 0 || camposDosParametros.length > 0;
+
+  /** As linhas e os parâmetros do rascunho, no formato das actions. */
+  function mudancaDoFinanceiro(): MudancaDoFinanceiro {
+    return {
       linhas: linhasDoFinanceiro.map((l) => ({
         job_item_orcado_id: l.id,
         valor_unitario: l.valorUnitarioPara,
@@ -887,6 +953,140 @@ function PlanilhaDoJob({
             }
           : {}),
       })),
+      parametros: paramsDoRascunho
+        ? {
+            percentual_honorarios: paramsDoRascunho.percentual_honorarios,
+            percentual_imposto: paramsDoRascunho.percentual_imposto,
+            percentual_int_taxes: paramsDoRascunho.percentual_int_taxes,
+            int_transaction_costs: paramsDoRascunho.int_transaction_costs,
+            moeda_estrangeira: paramsDoRascunho.moeda_estrangeira,
+            cambio_cotacao: paramsDoRascunho.cambio_cotacao,
+            cambio_data: paramsDoRascunho.cambio_data,
+            percentual_veiculo: paramsDoRascunho.percentual_veiculo,
+            base_honorarios: paramsDoRascunho.base_honorarios === "liquido" ? "liquido" : "negociado",
+          }
+        : null,
+    };
+  }
+
+  // ---- A revisão da abertura pelo "Editar planilha" (opção C, 30/10/2026) --
+  // Com o job aberto, a barra não grava: "Continuar para a abertura" leva o
+  // rascunho até a aba Abertura do Job, que revisa as previsões sobre os
+  // números novos; o rodapé de lá abre este pop-up, que grava as duas
+  // juntas. Na fila (e fora das abas do financeiro) é o "Confirmar" de
+  // sempre.
+  const revisaoPelaPlanilha = useRevisaoPelaPlanilha();
+  const comRevisao =
+    modoFinanceiro && job.status !== "aguardando_abertura" && revisaoPelaPlanilha !== null;
+  const emRevisao = comRevisao && revisaoPelaPlanilha!.rascunho !== null;
+  const registroDaRevisao = React.useRef<EdicaoRegistroAberturaInput | null>(null);
+  const [continuando, setContinuando] = React.useState(false);
+  const [avisoDaRevisao, setAvisoDaRevisao] = React.useState<string | null>(null);
+
+  async function continuarParaAbertura() {
+    if (!revisaoPelaPlanilha) return;
+    setErroErrata(null);
+    setContinuando(true);
+    const r = await preverAlteracaoComRevisao(job.id, mudancaDoFinanceiro());
+    setContinuando(false);
+    if (!r.ok) {
+      setErroErrata(r.message);
+      return;
+    }
+    revisaoPelaPlanilha.definirRascunho({
+      numeros: r.numeros,
+      linhas: linhasDoFinanceiro.length,
+      campos: camposDosParametros,
+      atualizando: false,
+      erro: null,
+    });
+    revisaoPelaPlanilha.irPara("abertura");
+  }
+
+  // O rascunho mudou com a revisão no ar (a pessoa voltou à planilha): os
+  // números da aba Abertura do Job se refazem pela conta do servidor. Sem
+  // mudança nenhuma, a revisão sai de cena.
+  const chaveDaMudanca = JSON.stringify(emRevisao ? mudancaDoFinanceiro() : null);
+  React.useEffect(() => {
+    if (!emRevisao || !revisaoPelaPlanilha) return;
+    if (!temMudancaDoFinanceiro) {
+      revisaoPelaPlanilha.definirRascunho(null);
+      return;
+    }
+    const atual = revisaoPelaPlanilha.rascunho;
+    if (atual) revisaoPelaPlanilha.definirRascunho({ ...atual, atualizando: true });
+    let vale = true;
+    const t = setTimeout(async () => {
+      const r = await preverAlteracaoComRevisao(job.id, JSON.parse(chaveDaMudanca));
+      if (!vale) return;
+      revisaoPelaPlanilha.definirRascunho(
+        r.ok
+          ? {
+              numeros: r.numeros,
+              linhas: linhasDoFinanceiro.length,
+              campos: camposDosParametros,
+              atualizando: false,
+              erro: null,
+            }
+          : { ...(atual as NonNullable<typeof atual>), atualizando: false, erro: r.message },
+      );
+    }, 400);
+    return () => {
+      vale = false;
+      clearTimeout(t);
+    };
+    // Só a mudança do rascunho refaz a conta.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveDaMudanca]);
+
+  // A edição fechou (Descartar, ou gravou): a revisão sai junto.
+  React.useEffect(() => {
+    if (!errata.ativo && revisaoPelaPlanilha?.rascunho) revisaoPelaPlanilha.definirRascunho(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [errata.ativo]);
+
+  // O rodapé da aba Abertura do Job abre este pop-up com o registro.
+  React.useEffect(() => {
+    if (!revisaoPelaPlanilha || !comRevisao) return;
+    revisaoPelaPlanilha.definirRegistrar((registro) => {
+      registroDaRevisao.current = registro;
+      setErroErrata(null);
+      setConfirmando(true);
+    });
+    return () => revisaoPelaPlanilha.definirRegistrar(null);
+  }, [revisaoPelaPlanilha, comRevisao]);
+
+  async function confirmarEdicaoDoFinanceiro(
+    motivo: string,
+    recebimentosNovos: Array<{ mes: string | null; data_prevista: string }>,
+  ) {
+    setSalvando(true);
+    setErroErrata(null);
+    const registro = emRevisao ? registroDaRevisao.current : null;
+    if (registro) {
+      const r = await registrarAlteracaoComRevisao(
+        job.id,
+        { ...mudancaDoFinanceiro(), motivo },
+        registro,
+      );
+      setSalvando(false);
+      if (!r.ok && !r.alteracaoGravada) {
+        setErroErrata(r.message);
+        return;
+      }
+      setConfirmando(false);
+      registroDaRevisao.current = null;
+      revisaoPelaPlanilha?.definirRascunho(null);
+      errata.descartar();
+      router.refresh();
+      // A alteração entrou e a revisão não: o aviso diz o que fazer.
+      if (!r.ok) setAvisoDaRevisao(r.message);
+      return;
+    }
+    const r = await registrarAlteracaoDoFinanceiro(job.id, {
+      ...mudancaDoFinanceiro(),
+      motivo,
+      recebimentos_novos: recebimentosNovos,
     });
     setSalvando(false);
     if (!r.ok) {
@@ -1395,7 +1595,7 @@ function PlanilhaDoJob({
     // 28/10/2026): o pop-up pede a data. Na fila não — lá a previsão é do
     // formulário da abertura.
     const semPrevisao: RecebimentoSemPrevisao[] = [];
-    if (!edicaoDoFinanceiro || linhasDoFinanceiro.length === 0) {
+    if (!edicaoDoFinanceiro || !temMudancaDoFinanceiro) {
       return { envio, recebimento, semPrevisao };
     }
     const deltaTotal = emReais(
@@ -1406,7 +1606,7 @@ function PlanilhaDoJob({
       const mesDoGrupo = new Map(grupos.map((g) => [g.id, g.mes_id]));
       for (const d of dadosDosMeses) {
         const salvosDoMes = itens.filter((it) => mesDoGrupo.get(it.grupo_id) === d.mes.id);
-        const antes = emReais(paraTotais(salvosDoMes).faturamentoPrevisto);
+        const antes = emReais(paraTotaisSalvos(salvosDoMes).faturamentoPrevisto);
         const delta = emReais(emReais(d.faturamento) - antes);
         if (Math.abs(delta) >= 0.005) deltaDoMes.set(d.mes.mes.slice(0, 7), delta);
       }
@@ -1456,14 +1656,14 @@ function PlanilhaDoJob({
   }, [
     job.status,
     edicaoDoFinanceiro,
-    linhasDoFinanceiro,
+    temMudancaDoFinanceiro,
     totaisAntes,
     totaisDepois,
     mensal,
     grupos,
     dadosDosMeses,
     itens,
-    paraTotais,
+    paraTotaisSalvos,
   ]);
 
   const faturamentoDoMes = new Map(faturamentoMensal.map((m) => [m.mesId, m]));
@@ -1543,7 +1743,7 @@ function PlanilhaDoJob({
           categoriasMap={categoriasMap}
           moeda={versao.moeda}
           moedaEstrangeira={planilha.moedaEstrangeira}
-          percentualImposto={versao.percentual_imposto}
+          percentualImposto={versaoDoRascunho.percentual_imposto}
           visao={visao}
           estaAberto={recolher.estaAberto}
           onAlternarGrupo={recolher.alternar}
@@ -1616,11 +1816,11 @@ function PlanilhaDoJob({
         realizadosMap={realizadosMap}
         bvsPorItem={bvsPorItem}
         jobAberto={!preAbertura}
-        percentualHonorarios={versao.percentual_honorarios}
-        percentualImposto={versao.percentual_imposto}
+        percentualHonorarios={versaoDoRascunho.percentual_honorarios}
+        percentualImposto={versaoDoRascunho.percentual_imposto}
         moeda={versao.moeda}
         modeloPlanilha={modeloPlanilha}
-        internacional={planilha.internacional}
+        internacional={planilhaDoRascunho.internacional}
         moedaEstrangeira={planilha.moedaEstrangeira}
         titulo={titulo}
         subtitulo={subtitulo}
@@ -1647,6 +1847,14 @@ function PlanilhaDoJob({
       parametros={parametrosDoJob.parametros}
       edicao={parametrosDoJob.edicao}
       alteracoes={parametrosDoJob.alteracoes}
+      // Onde há "Editar planilha" os parâmetros abrem com ele (30/10/2026).
+      // Na Mídia Off, e com a planilha travada pela nota, a linha segue com
+      // os botões próprios — o câmbio do internacional edita até o fim.
+      pelaPlanilha={
+        modoFinanceiro && !midia && motivoEdicaoTravada === null
+          ? { ativa: errata.ativo, onRascunho: setRascunhoDosParametros }
+          : null
+      }
       itens={itens.map((i) => ({
         tipo_custo: i.tipo_custo,
         total_orcado: Number(i.total_orcado ?? 0),
@@ -2109,9 +2317,9 @@ function PlanilhaDoJob({
         }
         saldos={saldosDeSave}
         moeda={versao.moeda}
-        percentualHonorarios={versao.percentual_honorarios}
-        percentualImposto={versao.percentual_imposto}
-        internacional={planilha.internacional}
+        percentualHonorarios={versaoDoRascunho.percentual_honorarios}
+        percentualImposto={versaoDoRascunho.percentual_imposto}
+        internacional={planilhaDoRascunho.internacional}
         clienteNome={clienteNome}
       />
 
@@ -2156,7 +2364,7 @@ function PlanilhaDoJob({
       {errata.ativo && modoFinanceiro && (
         <EdicaoFinanceiroBarra
           resumo={resumoDoFinanceiro}
-          temMudanca={linhasDoFinanceiro.length > 0}
+          temMudanca={temMudancaDoFinanceiro}
           faturamento={{
             antes: totaisAntes.faturamentoPrevisto,
             depois: totaisDepois.faturamentoPrevisto,
@@ -2170,10 +2378,18 @@ function PlanilhaDoJob({
           onDesfazer={errata.desfazer}
           podeDesfazer={errata.podeDesfazer}
           onConfirmar={() => {
+            if (comRevisao) {
+              void continuarParaAbertura();
+              return;
+            }
             setErroErrata(null);
             setConfirmando(true);
           }}
           naAbertura={job.status === "aguardando_abertura"}
+          comRevisao={comRevisao}
+          continuando={continuando}
+          acimaDoRodape={emRevisao}
+          erro={comRevisao && !confirmando ? erroErrata : null}
         />
       )}
 
@@ -2274,13 +2490,29 @@ function PlanilhaDoJob({
         }}
         moeda={versao.moeda}
         envio={acompanhamDoFinanceiro.envio}
-        recebimento={acompanhamDoFinanceiro.recebimento}
-        recebimentoSemPrevisao={acompanhamDoFinanceiro.semPrevisao}
+        recebimento={emRevisao ? [] : acompanhamDoFinanceiro.recebimento}
+        recebimentoSemPrevisao={emRevisao ? [] : acompanhamDoFinanceiro.semPrevisao}
+        parametros={camposDosParametros}
+        revisao={emRevisao ? registroDaRevisao.current : null}
         planejadoAcompanha={interno}
         naAbertura={job.status === "aguardando_abertura"}
         salvando={salvando}
         erro={erroErrata}
         onConfirmar={confirmarEdicaoDoFinanceiro}
+      />
+
+      {/* A alteração entrou e a revisão da abertura não (opção C): raro —
+          o registro é conferido antes de gravar —, mas a pessoa precisa
+          saber o que ficou para trás. */}
+      <ConfirmDialog
+        open={avisoDaRevisao !== null}
+        onOpenChange={(aberto) => {
+          if (!aberto) setAvisoDaRevisao(null);
+        }}
+        title="A revisão da abertura não foi gravada"
+        description={avisoDaRevisao ?? ""}
+        confirmLabel="Entendi"
+        onConfirm={() => setAvisoDaRevisao(null)}
       />
 
       <ErrataConfirmarDialog

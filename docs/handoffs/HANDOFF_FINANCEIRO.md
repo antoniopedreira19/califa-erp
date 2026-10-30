@@ -8683,3 +8683,20 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   "Teste Always On" pelo painel, conferido na visão agregada e devolvido
   pela lista. A recusa de projeto de outra empresa foi testada pela action
   com o payload do TES-1036/26, sem gravar.
+
+## ⚠️ Nota de 2026-10-30 (3) — "Editar planilha" e a revisão da abertura junto (decisão 115, §13)
+
+- O "Editar orçado" virou **"Editar planilha"** e abre também os parâmetros
+  do job (decisão 224), que perderam os botões próprios — menos na Mídia
+  Off e com a planilha travada pela nota.
+- **Com o job aberto nada acompanha sozinho.** "Continuar para a abertura"
+  leva o rascunho à aba Abertura do Job, em revisão sobre os números novos
+  (`preverAlteracaoComRevisao`); o rodapé "Registrar alteração e revisão"
+  fica embaixo de todas as abas e grava a alteração e o registro juntos
+  (`registrarAlteracaoComRevisao` → `editarRegistroDaAbertura` com a foto
+  `revisao_financeiro`, migration `20261030300001`). O envio sem nota
+  continua acompanhando. Na fila, como antes.
+- Revisão da abertura (esta e a da errata): linha com R$ 0,00 pede
+  confirmação e é apagada no registrar.
+- Teste no TES-1029/26 (P-0006/26), desfeito; ficaram 4 alterações de
+  teste no histórico dele.

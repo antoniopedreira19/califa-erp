@@ -236,12 +236,25 @@ export function ResumoDaAberturaAnterior({
   foto,
   revisao,
   aprovacaoSave,
+  alteracaoDaPlanilha,
 }: {
   /** A última foto — o registro que a revisão vai substituir. */
   foto: FotoDaAbertura | null;
   revisao: RevisaoDeErrata | null;
   /** O pedido de save que esta revisão aprova (decisão 099), ou `null`. */
   aprovacaoSave: AprovacaoDeSave | null;
+  /**
+   * A alteração do "Editar planilha" que esta revisão acompanha, ainda não
+   * gravada (opção C, 30/10/2026), ou `null`. Obrigatória: quem não tem
+   * manda `null`.
+   */
+  alteracaoDaPlanilha: {
+    faturamentoAntes: number;
+    faturamentoDepois: number;
+    linhas: number;
+    campos: Array<{ rotulo: string; de: string; para: string }>;
+    onVoltar: () => void;
+  } | null;
 }) {
   const [aberta, setAberta] = React.useState(false);
 
@@ -275,7 +288,9 @@ export function ResumoDaAberturaAnterior({
         <span className="text-[12.5px] font-semibold">
           {aprovacaoSave
             ? "Aprovação de save · revisão da abertura"
-            : "Revisão da abertura após errata"}
+            : alteracaoDaPlanilha
+              ? "Revisão da abertura junto com a alteração da planilha"
+              : "Revisão da abertura após errata"}
         </span>
         <span className="text-[12.5px] text-muted-foreground">
           {outras?.soOrganizacao && !aprovacaoSave
@@ -333,6 +348,33 @@ export function ResumoDaAberturaAnterior({
             />
           )}
         </div>
+      )}
+
+      {/* A alteração da planilha que esta revisão grava junto: nada dela
+          foi gravado ainda, e a planilha continua aberta para voltar. */}
+      {alteracaoDaPlanilha && (
+        <p className="mt-1.5 flex flex-wrap items-center gap-x-2 text-[12px] leading-relaxed text-muted-foreground">
+          <span>
+            <span className="font-semibold text-foreground">Nada foi gravado ainda</span> · alteração da
+            planilha em andamento · faturamento previsto{" "}
+            <span className="font-mono line-through">
+              {formatCurrency(alteracaoDaPlanilha.faturamentoAntes)}
+            </span>{" "}
+            <span className="font-mono font-semibold text-foreground">
+              {formatCurrency(alteracaoDaPlanilha.faturamentoDepois)}
+            </span>
+            {alteracaoDaPlanilha.linhas > 0 &&
+              ` · ${alteracaoDaPlanilha.linhas} ${alteracaoDaPlanilha.linhas === 1 ? "linha alterada" : "linhas alteradas"}`}
+            {alteracaoDaPlanilha.campos.map((c) => ` · ${c.rotulo} ${c.de} → ${c.para}`).join("")}
+          </span>
+          <button
+            type="button"
+            onClick={alteracaoDaPlanilha.onVoltar}
+            className="font-semibold text-california-red hover:underline"
+          >
+            Voltar à planilha
+          </button>
+        </p>
       )}
 
       {/* TODAS as erratas desde a última foto (decisão do Tiago,

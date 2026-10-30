@@ -1515,6 +1515,13 @@ export async function editarRegistroDaAbertura(
    * `null` na edição e na revisão de sempre.
    */
   aprovarSaveId: string | null,
+  /**
+   * A alteração do financeiro que esta revisão acompanha (revisão das
+   * decisões 115 e 224, 30/10/2026): o "Editar planilha" grava a alteração
+   * e, em seguida, este registro, e a foto sai como "alteração do
+   * financeiro". Só `registrarAlteracaoComRevisao` passa; `null` no resto.
+   */
+  alteracaoDoFinanceiroId: string | null = null,
 ): Promise<ActionResult> {
   const session = await requireSession();
 
@@ -2200,6 +2207,7 @@ export async function editarRegistroDaAbertura(
       errata_id: errataDaRevisao,
       erratas_ids: erratasDaRevisao,
       aprovou_save: aprovacao?.id ?? null,
+      alteracao_do_financeiro_id: alteracaoDoFinanceiroId,
       de: {
         nome_financeiro: job.nome_financeiro,
         projeto_financeiro_id: job.projeto_financeiro_id,
@@ -2241,12 +2249,17 @@ export async function editarRegistroDaAbertura(
     },
   });
 
-  // A foto desta confirmação (decisão 059): revisão de errata ou edição
-  // livre, com a errata pendurada quando é o caso.
+  // A foto desta confirmação (decisão 059): revisão de errata, revisão pela
+  // alteração do financeiro ou edição livre, com a errata pendurada quando
+  // é o caso.
   await registrarFotoDaAbertura(supabase, {
     tenantId: session.activeTenant.id,
     jobId,
-    tipo: eraRevisao ? "revisao_errata" : "edicao",
+    tipo: eraRevisao
+      ? "revisao_errata"
+      : alteracaoDoFinanceiroId
+        ? "revisao_financeiro"
+        : "edicao",
     errataId: errataDaRevisao,
     profileId: session.profile.id,
     registro: {

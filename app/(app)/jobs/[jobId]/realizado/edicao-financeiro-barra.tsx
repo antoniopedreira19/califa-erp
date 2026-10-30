@@ -1,10 +1,12 @@
 "use client";
 
 /**
- * A barra da edição do orçado pelo financeiro (decisão 115) — o rodapé que
+ * A barra do "Editar planilha" do financeiro (decisão 115) — o rodapé que
  * aparece com o modo ligado. Mesma barra da errata (`ErrataBarra`), com o
- * texto do que a confirmação FAZ aqui: grava na hora, sem aprovação e sem
- * revisão da abertura.
+ * texto do que a confirmação FAZ aqui. Na fila da abertura, grava na hora
+ * e o formulário da abertura acompanha; com o job aberto (opção C,
+ * 30/10/2026), não grava: "Continuar para a abertura" leva o rascunho até a
+ * aba Abertura do Job, que registra a alteração e a revisão juntas.
  */
 
 import * as React from "react";
@@ -29,6 +31,16 @@ interface Props {
   /** Job ainda na fila da abertura: não há revisão a falar, e quem
    *  acompanha é o formulário da aba Abertura do Job. */
   naAbertura: boolean;
+  /** Job aberto, nas abas do financeiro: o botão continua para a aba
+   *  Abertura do Job em vez de gravar (opção C). */
+  comRevisao: boolean;
+  /** A conta do rascunho está indo ao servidor. */
+  continuando: boolean;
+  /** A revisão está no ar: o rodapé dela ocupa o pé da tela, e a barra
+   *  sobe por cima dele. */
+  acimaDoRodape: boolean;
+  /** O que impediu de continuar para a abertura. */
+  erro: string | null;
 }
 
 function corDoDelta(delta: number): string {
@@ -77,9 +89,18 @@ export function EdicaoFinanceiroBarra({
   onDesfazer,
   podeDesfazer,
   naAbertura,
+  comRevisao,
+  continuando,
+  acimaDoRodape,
+  erro,
 }: Props) {
   return (
-    <div className="sticky bottom-0 z-30 -mx-1 mt-2 rounded-2xl border border-california-red/30 bg-card/95 px-4 py-3 shadow-elevated backdrop-blur">
+    <div
+      className={cn(
+        "sticky z-30 -mx-1 mt-2 rounded-2xl border border-california-red/30 bg-card/95 px-4 py-3 shadow-elevated backdrop-blur",
+        acimaDoRodape ? "bottom-[80px]" : "bottom-0",
+      )}
+    >
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex min-w-0 items-start gap-2.5">
           <div className="mt-0.5 rounded-lg bg-california-red/10 p-1.5">
@@ -87,12 +108,14 @@ export function EdicaoFinanceiroBarra({
           </div>
           <div className="min-w-0">
             <p className="text-[13px] font-semibold text-foreground">
-              Edição do orçado · {resumo}
+              Edição da planilha · {resumo}
             </p>
             <p className="text-[11.5px] leading-relaxed text-muted-foreground">
-              {naAbertura
-                ? "Confirmar grava a alteração na hora, sem aprovação, e a registra em Alterações do Financeiro com o seu nome. O formulário da abertura acompanha."
-                : "Confirmar grava a alteração na hora, sem aprovação e sem revisão da abertura, e a registra em Alterações do Financeiro com o seu nome."}
+              {comRevisao
+                ? "Nada é gravado ainda: continue para a aba Abertura do Job, ajuste as previsões e registre a alteração e a revisão juntas."
+                : naAbertura
+                  ? "Confirmar grava a alteração na hora, sem aprovação, e a registra em Alterações do Financeiro com o seu nome. O formulário da abertura acompanha."
+                  : "Confirmar grava a alteração na hora, sem aprovação e sem revisão da abertura, e a registra em Alterações do Financeiro com o seu nome."}
             </p>
           </div>
         </div>
@@ -123,15 +146,24 @@ export function EdicaoFinanceiroBarra({
             <button
               type="button"
               onClick={onConfirmar}
-              disabled={!temMudanca}
+              disabled={!temMudanca || continuando}
               className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-xs font-bold text-white transition-colors hover:bg-california-red-hover disabled:cursor-not-allowed disabled:opacity-45"
             >
               <FilePenLine className="h-3.5 w-3.5" />
-              Confirmar alteração
+              {comRevisao
+                ? continuando
+                  ? "Calculando…"
+                  : "Continuar para a abertura"
+                : "Confirmar alteração"}
             </button>
           </div>
         </div>
       </div>
+      {erro && (
+        <p role="alert" className="mt-2 text-[12px] font-medium text-california-red">
+          {erro}
+        </p>
+      )}
     </div>
   );
 }

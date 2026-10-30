@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 import { abaDaUrl, type TabKey } from "./abas";
+import { RevisaoPelaPlanilhaProvider } from "./revisao-pela-planilha";
 
 interface Props {
   abertura: React.ReactNode;
@@ -95,15 +96,18 @@ export function JobFinanceiroTabs({
    * link continua copiável, e os outros parâmetros (`aprovarSave`, `mes`)
    * ficam como estão.
    */
-  function irPara(nova: TabKey) {
-    if (lembrarRolagem) rolagens.current[tab] = window.scrollY;
-    setTab(nova);
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      url.searchParams.set("aba", nova);
-      window.history.replaceState(null, "", url.toString());
-    }
-  }
+  const irPara = React.useCallback(
+    (nova: TabKey) => {
+      if (lembrarRolagem) rolagens.current[tab] = window.scrollY;
+      setTab(nova);
+      if (typeof window !== "undefined") {
+        const url = new URL(window.location.href);
+        url.searchParams.set("aba", nova);
+        window.history.replaceState(null, "", url.toString());
+      }
+    },
+    [tab, lembrarRolagem],
+  );
 
   // Antes da pintura, para a aba não aparecer um quadro na rolagem da
   // anterior e só depois pular.
@@ -125,6 +129,8 @@ export function JobFinanceiroTabs({
 
   return (
     <IrParaAbaContext.Provider value={irPara}>
+      <RevisaoPelaPlanilhaProvider abaAtual={tab} irPara={irPara}>
+        {(rodape, revisando) => (
       <div className="space-y-6">
         <div
           ref={barraRef}
@@ -191,7 +197,14 @@ export function JobFinanceiroTabs({
               montar, e montar escondido zeraria o badge sem ninguém ler. */}
           {tab === "chat" && chat}
         </div>
+        {/* O rodapé da revisão pelo "Editar planilha" (opção C, 30/10/2026):
+            embaixo de todas as abas, para a revisão não ficar esquecida. O
+            contêiner é que prende no fim da tela — o sticky do rodapé só
+            anda dentro do pai, e aqui o pai é este contêiner. */}
+        <div ref={rodape} hidden={!revisando} className="sticky bottom-0 z-10" />
       </div>
+        )}
+      </RevisaoPelaPlanilhaProvider>
     </IrParaAbaContext.Provider>
   );
 }

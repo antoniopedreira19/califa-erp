@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -104,6 +105,8 @@ import {
   renomearProjetoFinanceiro,
 } from "../actions";
 import { ReprovarDialog } from "../reprovar-dialog";
+import { useRevisaoPelaPlanilha } from "@/app/(app)/financeiro/jobs/[jobId]/revisao-pela-planilha";
+import { LinhasZeradasDialog, type LinhaZerada } from "./linhas-zeradas-dialog";
 import {
   HistoricoDaAbertura,
   ResumoDaAberturaAnterior,
@@ -488,12 +491,12 @@ export function AberturaForm({
   projetos,
   sugestaoDeProjeto,
   contas,
-  custoPrevisto,
-  faturamentoPrevisto,
-  impostoPrevisto,
+  custoPrevisto: custoPrevistoDoServidor,
+  faturamentoPrevisto: faturamentoPrevistoDoServidor,
+  impostoPrevisto: impostoPrevistoDoServidor,
   aliquotaImposto,
   aliquotaIntTaxes,
-  rentabilidade,
+  rentabilidade: rentabilidadeDoServidor,
   saveConsumido,
   saveGerado,
   linhasDoSave,
@@ -501,7 +504,7 @@ export function AberturaForm({
   curvaInicial,
   recebimentoInicial,
   impostosIniciais,
-  faturamentoPorMes,
+  faturamentoPorMes: faturamentoPorMesDoServidor,
   trimestreSugerido,
   anoSugerido,
   competenciasIniciais,
@@ -529,8 +532,38 @@ export function AberturaForm({
   // errata É editar, e pedir um clique a mais para isso era o que deixava
   // o financeiro numa tela de leitura sem saber por quê (decisão 059).
   const [editando, setEditando] = React.useState(false);
-  const ehRevisao = modo === "revisao";
-  const travado = modo === "leitura" && !editando;
+
+  // A revisão pelo "Editar planilha" (opção C, 30/10/2026): com o job
+  // aberto, a planilha leva o rascunho até aqui, sem gravar nada. O
+  // formulário revisa sobre os números do rascunho, nada acompanha sozinho,
+  // e o rodapé — embaixo de todas as abas — grava a alteração e a revisão
+  // juntas, pelo pop-up da planilha.
+  const revisaoPelaPlanilha = useRevisaoPelaPlanilha();
+  const rascunhoDaPlanilha =
+    modo === "leitura" || modo === "revisao" ? (revisaoPelaPlanilha?.rascunho ?? null) : null;
+  const pelaPlanilha = rascunhoDaPlanilha !== null;
+  const numerosDaPlanilha = rascunhoDaPlanilha?.numeros ?? null;
+  const faturamentoPrevisto = numerosDaPlanilha
+    ? numerosDaPlanilha.faturamentoPrevisto
+    : faturamentoPrevistoDoServidor;
+  const impostoPrevisto = numerosDaPlanilha
+    ? numerosDaPlanilha.impostoPrevisto
+    : impostoPrevistoDoServidor;
+  const custoPrevisto = numerosDaPlanilha
+    ? emCentavos(custoPrevistoDoServidor + numerosDaPlanilha.deltaCustoPrevisto)
+    : custoPrevistoDoServidor;
+  const faturamentoPorMes =
+    numerosDaPlanilha?.faturamentoPorMes ?? faturamentoPorMesDoServidor;
+  const rentabilidade = numerosDaPlanilha
+    ? {
+        valorJob: numerosDaPlanilha.valorJob,
+        deducoes: numerosDaPlanilha.deducoesDoResultado,
+        custoPlanejado: rentabilidadeDoServidor.custoPlanejado,
+      }
+    : rentabilidadeDoServidor;
+
+  const ehRevisao = modo === "revisao" || pelaPlanilha;
+  const travado = modo === "leitura" && !editando && !pelaPlanilha;
   // Decisão 216: a caixa "Mídia System" — na fila nasce desmarcada; no job
   // aberto, como está gravada.
   const [midiaSystem, setMidiaSystem] = React.useState(job.midia_system);
@@ -548,7 +581,9 @@ export function AberturaForm({
     ? aprovacaoSave.tipo === "gera"
       ? "Aprovar save e registrar revisão"
       : "Aprovar consumo e registrar revisão"
-    : "Registrar revisão de abertura";
+    : pelaPlanilha
+      ? "Registrar alteração e revisão"
+      : "Registrar revisão de abertura";
 
   // Na abertura o nome vem do job da produção; num job já aberto, do nome
   // que o financeiro gravou. Até 16/10/2026 nascia sempre do da produção, e
@@ -723,7 +758,7 @@ export function AberturaForm({
         : "todo"
       : null;
   const curvaDatasOk = curva.every((l) => l.data.length === 10);
-  const curvaValoresOk = linhasCurva.every((l) => l.valor > 0);
+  const curvaValoresOk = linhasCurva.every((l) => l.valor > 0 || (ehRevisao && l.valor === 0));
   const curvaOk =
     semDesembolso ||
     (curva.length > 0 && curvaDatasOk && curvaValoresOk && curvaBate);
@@ -747,7 +782,7 @@ export function AberturaForm({
   // direto pelo cliente ao fornecedor) abre sem previsão de entrada.
   const semRecebimento = faturamentoPrevisto <= 0;
   const recebDatasOk = recebimento.every((l) => l.data.length === 10);
-  const recebValoresOk = linhasReceb.every((l) => l.valor > 0);
+  const recebValoresOk = linhasReceb.every((l) => l.valor > 0 || (ehRevisao && l.valor === 0));
   const recebOk =
     semRecebimento ||
     (recebimento.length > 0 && recebDatasOk && recebValoresOk && recebBate);
@@ -795,7 +830,43 @@ export function AberturaForm({
   const impostosBate = curvaFecha(linhasImp, impostoPrevisto);
   const difImpostos = emCentavos(somaDosImpostos - impostoPrevisto);
   const impDatasOk = impostos.every((l) => l.data.length === 10);
-  const impValoresOk = linhasImp.every((l) => l.valor > 0);
+  const impValoresOk = linhasImp.every((l) => l.valor > 0 || (ehRevisao && l.valor === 0));
+
+  // ---------- Linha zerada na revisão (30/10/2026) ----------
+  // O registro não guarda linha sem valor: no "Registrar", o aviso lista as
+  // zeradas, e continuar as apaga.
+  const [zeradasAberto, setZeradasAberto] = React.useState(false);
+  const zeradas: LinhaZerada[] = ehRevisao
+    ? [
+        ...(semRecebimento
+          ? []
+          : recebimento.map((l, i) => ({
+              id: l.id,
+              bloco: "Previsão de recebimento",
+              rotulo: l.mes ? mesCurto(l.mes) : `Parcela ${i + 1}`,
+              data: l.data,
+              valor: parseMoeda(l.valorTexto),
+            }))),
+        ...(semDesembolso
+          ? []
+          : curva.map((l, i) => ({
+              id: l.id,
+              bloco: "Curva de desembolso",
+              rotulo: `Data ${i + 1}`,
+              data: l.data,
+              valor: parseMoeda(l.valorTexto),
+            }))),
+        ...(semImposto
+          ? []
+          : impostos.map((l, i) => ({
+              id: l.id,
+              bloco: "Recolhimento de impostos",
+              rotulo: `Recolhimento ${i + 1}`,
+              data: l.data,
+              valor: parseMoeda(l.valorTexto),
+            }))),
+      ].filter((z) => emCentavos(z.valor) === 0)
+    : [];
 
   // ---------- Os números do servidor mudaram (decisão 115) ----------
   // O "Editar orçado" do financeiro grava na hora, pela aba Planilha desta
@@ -848,6 +919,7 @@ export function AberturaForm({
       setRodadaDoDia((r) => r + 1);
       return;
     }
+    if (pelaPlanilha && !faturamentoPorMes) return;
     if (faturamentoPorMes) {
       setRecebimento((atual) =>
         recebimentoMensalParaForm(
@@ -869,7 +941,7 @@ export function AberturaForm({
             : acompanharTotal(atual, faturamentoPrevisto - antes.faturamento),
       );
     }
-    if (antes.imposto !== impostoPrevisto) {
+    if (antes.imposto !== impostoPrevisto && !pelaPlanilha) {
       setImpostosSoltos((atual) =>
         atual === null || atual.length === 0
           ? atual
@@ -879,6 +951,7 @@ export function AberturaForm({
   }, [
     chaveDoServidor,
     travado,
+    pelaPlanilha,
     faturamentoPrevisto,
     impostoPrevisto,
     curvaInicial,
@@ -947,7 +1020,9 @@ export function AberturaForm({
     impostosOk &&
     (semRecebimento || contaRecebId !== null) &&
     (semDesembolso || contaPagId !== null) &&
-    !faltaAprovarSaves;
+    !faltaAprovarSaves &&
+    !rascunhoDaPlanilha?.atualizando &&
+    !rascunhoDaPlanilha?.erro;
 
   const categoriaNome =
     categorias.find((c) => c.id === categoriaId)?.nome ?? "— não informada";
@@ -1098,7 +1173,11 @@ export function AberturaForm({
       ? "1 data"
       : `${impostos.length} datas`;
 
-  const textoValidacao = !nomeOk
+  const textoValidacao = rascunhoDaPlanilha?.erro
+    ? rascunhoDaPlanilha.erro
+    : rascunhoDaPlanilha?.atualizando
+      ? "Atualizando os números da planilha…"
+      : !nomeOk
     ? "Informe o nome do job."
     : !projetoOk
       ? "Selecione o projeto unificado do job."
@@ -1604,6 +1683,42 @@ export function AberturaForm({
     });
   }
 
+  /** "Registrar revisão de abertura": a confirmação de sempre — ou, na
+   *  revisão pela planilha, o pop-up dela, que grava as duas juntas. */
+  function registrarRevisao(payload = montarPayload()) {
+    if (pelaPlanilha) {
+      revisaoPelaPlanilha?.registrar(payload);
+      return;
+    }
+    setConfirmarAberto(true);
+  }
+
+  /** Continuar depois do aviso: as linhas zeradas saem do formulário e do
+   *  registro. */
+  function apagarZeradasERegistrar() {
+    const ids = new Set(zeradas.map((z) => z.id));
+    const fora = (l: { valor: number }) => emCentavos(l.valor) !== 0;
+    setRecebimento((atual) => atual.filter((l) => !ids.has(l.id)));
+    setCurva((atual) => atual.filter((l) => !ids.has(l.id)));
+    if (impostosSoltos) setImpostosSoltos(impostosSoltos.filter((l) => !ids.has(l.id)));
+    setZeradasAberto(false);
+    const p = montarPayload();
+    registrarRevisao({
+      ...p,
+      recebimento: p.recebimento.filter(fora),
+      curva: p.curva.filter(fora),
+      impostos: p.impostos.filter(fora),
+    });
+  }
+
+  /** Na revisão pela planilha o rodapé sai da aba e fica embaixo de todas
+   *  elas (o contêiner é das abas do job). */
+  function noRodapeDasAbas(el: React.ReactElement) {
+    return pelaPlanilha && revisaoPelaPlanilha?.rodape
+      ? createPortal(el, revisaoPelaPlanilha.rodape)
+      : el;
+  }
+
   /** Desfaz a edição voltando tudo ao que veio do servidor. */
   function cancelarEdicao() {
     setErro(null);
@@ -1700,6 +1815,17 @@ export function AberturaForm({
           foto={ultimaFoto}
           revisao={revisao}
           aprovacaoSave={aprovacaoSave}
+          alteracaoDaPlanilha={
+            rascunhoDaPlanilha
+              ? {
+                  faturamentoAntes: rascunhoDaPlanilha.numeros.faturamentoPrevistoAntes,
+                  faturamentoDepois: rascunhoDaPlanilha.numeros.faturamentoPrevisto,
+                  linhas: rascunhoDaPlanilha.linhas,
+                  campos: rascunhoDaPlanilha.campos,
+                  onVoltar: () => revisaoPelaPlanilha?.irPara("planilha"),
+                }
+              : null
+          }
         />
       )}
 
@@ -3835,7 +3961,7 @@ export function AberturaForm({
       {/* ---------- Barra fixa de ação ---------- */}
       {/* Registro travado não tem barra: não há nada para confirmar, e
           "Editar registro" mora na faixa do topo. */}
-      {!travado && (
+      {!travado && noRodapeDasAbas(
         <div className="sticky bottom-0 z-10 -mx-5 -mb-6 flex flex-wrap items-center justify-between gap-4 border-t border-border bg-white/95 px-5 py-3.5 backdrop-blur md:-mx-8 md:-mb-8 md:px-8">
           <span
             className={cn(
@@ -3853,6 +3979,15 @@ export function AberturaForm({
           <div className="flex items-center gap-2.5">
             {ehRevisao ? (
               <>
+                {pelaPlanilha && revisaoPelaPlanilha?.abaAtual !== "abertura" && (
+                  <button
+                    type="button"
+                    onClick={() => revisaoPelaPlanilha?.irPara("abertura")}
+                    className="rounded-lg border border-border bg-white px-4 py-2.5 text-[13.5px] font-semibold transition-colors hover:bg-muted"
+                  >
+                    Ir para a Abertura do Job
+                  </button>
+                )}
                 {/* O mesmo destino do voltar do topo (decisão 108): a fila
                     para quem veio dela, Visualizar Jobs para quem veio de lá. */}
                 <Link
@@ -3870,7 +4005,7 @@ export function AberturaForm({
                 </Link>
                 <button
                   type="button"
-                  onClick={() => setConfirmarAberto(true)}
+                  onClick={() => (zeradas.length > 0 ? setZeradasAberto(true) : registrarRevisao())}
                   disabled={!podeAbrir || pending}
                   className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-5 py-2.5 text-[13.5px] font-bold text-white transition-colors hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-45"
                 >
@@ -3922,6 +4057,13 @@ export function AberturaForm({
           </div>
         </div>
       )}
+
+      <LinhasZeradasDialog
+        open={zeradasAberto}
+        onOpenChange={setZeradasAberto}
+        linhas={zeradas}
+        onContinuar={apagarZeradasERegistrar}
+      />
 
       {/* ---------- Confirmação ---------- */}
       <Dialog open={confirmarAberto} onOpenChange={setConfirmarAberto}>

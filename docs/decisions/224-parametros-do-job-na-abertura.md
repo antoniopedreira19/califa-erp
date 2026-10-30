@@ -106,3 +106,12 @@ entre as duas leituras: **as regras do "Editar orçado"** (decisão 115).
   imposto acompanharam (impostos R$ 10.619,67 → 10.713,65); a foto da
   abertura ficou em R$ 54.109,67. TES-1029/26 (nacional, sem nota) abre o
   "Editar" e o pop-up (sem gravar); TES-1001/26 (com nota) mostra o cadeado.
+
+## ⚠️ Revisão de 2026-10-30 — os parâmetros entram no "Editar planilha"
+
+Com o "Editar planilha" (decisão 115, §13), os parâmetros abrem junto com a
+planilha e perdem o "Editar" e o "Editar câmbio" próprios; um pop-up só
+grava linhas e parâmetros. Com o job aberto, nada acompanha sozinho: a aba
+Abertura do Job revisa as previsões e grava junto. A Mídia Off (sem "Editar
+planilha") e a planilha travada pela nota seguem com os botões próprios e
+`alterarParametrosDoJob`.
