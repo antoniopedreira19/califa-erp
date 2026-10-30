@@ -13,6 +13,11 @@
  *
  * Quando a NF da linha sai, o recebido vira a parcela 1 dela, já quitada
  * (o Faturar monta a parcela travada; `emitir_faturamento` confere).
+ *
+ * No job internacional (decisão 229) o registro é o câmbio fechado: valor
+ * na moeda e cotação do dia dão o bruto em R$ (o crédito do banco), com o
+ * IOF e a tarifa à parte. A diferença do bruto para o saldo é a variação
+ * cambial, e a nota fecha pelo convertido. Uma vez por nota.
  */
 
 import * as React from "react";
@@ -34,6 +39,8 @@ import {
   SelectItem,
 } from "@/components/ui/select";
 import { MoneyInput } from "@/components/ui/money-input";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import type { ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 
 /** Um recebimento antes da NF que ainda espera a nota. */
@@ -45,6 +52,27 @@ export interface RecebidoAntesDaNf {
   /** O tipo do plano de contas, "01 · Receita". */
   centroNome: string;
   subtipoNome: string;
+  /** O câmbio fechado do internacional (decisão 229); nulo no recebimento
+   *  em reais. */
+  cambio: CambioDoRecebido | null;
+}
+
+/** O câmbio de um recebimento antes da NF do internacional (decisão 229). */
+export interface CambioDoRecebido {
+  moeda: string;
+  valorMoeda: number;
+  cotacao: number;
+  iof: number;
+  tarifa: number;
+  /** Bruto menos o saldo a faturar da nota: + ganho, − perda. */
+  variacao: number;
+}
+
+/** O que o job internacional traz para o câmbio (decisão 229): a moeda e a
+ *  cotação de compra da versão aprovada, que convertem o envio. */
+export interface CambioDoJob {
+  moeda: string;
+  cotacaoDaVersao: number;
 }
 
 /** A linha da aba Faturamento em que o recebimento entra. */
@@ -63,6 +91,9 @@ export interface AlvoDoRecebidoAntes {
   /** Saldo a faturar da linha (a nota inteira, ou o BV). */
   saldo: number;
   recebidos: RecebidoAntesDaNf[];
+  /** Job internacional: o registro é o câmbio fechado (decisão 229). Nulo
+   *  no job nacional e no BV. */
+  cambio: CambioDoJob | null;
 }
 
 function formatMoney(n: number): string {
@@ -90,6 +121,37 @@ export interface RecebidoAntesPayload {
   plano_conta_subtipo_id: string;
 }
 
+/** O câmbio que o formulário do internacional manda junto (decisão 229);
+ *  `valor` do payload é o bruto em R$. */
+export interface CambioPayload {
+  valor_moeda: number;
+  cotacao: number;
+  iof: number;
+  tarifa: number;
+}
+
+/** O IOF do câmbio no banco: 0,38% do crédito (o extrato real do BB). Só a
+ *  sugestão do campo, que se edita. */
+const IOF_DO_CAMBIO = 0.0038;
+
+const r2 = (v: number) => Math.round(v * 100) / 100;
+
+/** "US$" para USD; o código nas outras moedas. */
+function simboloDaMoeda(moeda: string): string {
+  return ({ USD: "US$", EUR: "€", GBP: "£" } as Record<string, string>)[moeda] ?? moeda;
+}
+
+/** "5,05" ou "5.05" → 5.05; inválido → 0. */
+function lerCotacao(t: string): number {
+  const limpo = t.trim().replace(/\s/g, "");
+  const n = Number(limpo.includes(",") ? limpo.replace(/\./g, "").replace(",", ".") : limpo);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function formatarCotacao(n: number): string {
+  return n.toLocaleString("pt-BR", { minimumFractionDigits: 4, maximumFractionDigits: 6 });
+}
+
 export function RecebimentoAntesNfDialog({
   alvo,
   onOpenChange,
@@ -107,7 +169,8 @@ export function RecebimentoAntesNfDialog({
   subtipos: PlanoContaSubtipo[];
   pending: boolean;
   erro: string | null;
-  onConfirm: (payload: RecebidoAntesPayload) => void;
+  /** `cambio` vem só do formulário do internacional (decisão 229). */
+  onConfirm: (payload: RecebidoAntesPayload, cambio: CambioPayload | null) => void;
 }) {
   return (
     <Dialog open={alvo !== null} onOpenChange={onOpenChange}>
@@ -118,7 +181,20 @@ export function RecebimentoAntesNfDialog({
             Recebimento antes da NF
           </DialogTitle>
         </DialogHeader>
-        {alvo && (
+        {alvo && alvo.cambio ? (
+          <FormularioDoCambio
+            key={alvo.chave}
+            alvo={alvo}
+            cambio={alvo.cambio}
+            contas={contas}
+            tipos={tipos}
+            subtipos={subtipos}
+            pending={pending}
+            erro={erro}
+            onCancelar={() => onOpenChange(false)}
+            onConfirm={onConfirm}
+          />
+        ) : alvo ? (
           <FormularioDoRecebido
             key={alvo.chave}
             alvo={alvo}
@@ -128,9 +204,9 @@ export function RecebimentoAntesNfDialog({
             pending={pending}
             erro={erro}
             onCancelar={() => onOpenChange(false)}
-            onConfirm={onConfirm}
+            onConfirm={(payload) => onConfirm(payload, null)}
           />
-        )}
+        ) : null}
       </DialogContent>
     </Dialog>
   );
@@ -379,6 +455,311 @@ function FormularioDoRecebido({
 }
 
 // ---------------------------------------------------------------------------
+// O câmbio fechado do internacional (decisão 229)
+// ---------------------------------------------------------------------------
+
+/**
+ * O formulário nasce com o job, para só conferir (pedido do Tiago,
+ * 29/10/2026): o que falta receber na moeda, pela cotação de compra da
+ * versão, essa cotação e o centro de custo da receita. Com os dois intactos
+ * o bruto é o próprio saldo (o envio já é essa conversão) e a variação é
+ * zero; trocar a cotação pela do dia dá o bruto que o banco creditou.
+ */
+function FormularioDoCambio({
+  alvo,
+  cambio,
+  contas,
+  tipos,
+  subtipos,
+  pending,
+  erro,
+  onCancelar,
+  onConfirm,
+}: {
+  alvo: AlvoDoRecebidoAntes;
+  cambio: CambioDoJob;
+  contas: ContaBancaria[];
+  tipos: PlanoContaTipo[];
+  subtipos: PlanoContaSubtipo[];
+  pending: boolean;
+  erro: string | null;
+  onCancelar: () => void;
+  onConfirm: (payload: RecebidoAntesPayload, cambio: CambioPayload) => void;
+}) {
+  const hoje = format(new Date(), "yyyy-MM-dd");
+  const simbolo = simboloDaMoeda(cambio.moeda);
+  const resta = r2(alvo.saldo - somaDosRecebidos(alvo.recebidos));
+  const moedaInicial = r2(resta / cambio.cotacaoDaVersao);
+
+  // O centro de custo da receita: o tipo 01 e, se ele tiver um subtipo só,
+  // esse subtipo.
+  const tiposAtivos = tipos.filter((t) => t.ativo);
+  const tipoReceita = tiposAtivos.find((t) => t.codigo === "01") ?? null;
+  const subtiposDaReceita = tipoReceita
+    ? subtipos.filter((x) => x.tipo_id === tipoReceita.id && x.ativo)
+    : [];
+
+  const [data, setData] = React.useState(hoje);
+  const [contaId, setContaId] = React.useState("");
+  const [valorMoeda, setValorMoeda] = React.useState(moedaInicial);
+  const [cotacaoTxt, setCotacaoTxt] = React.useState(formatarCotacao(cambio.cotacaoDaVersao));
+  // O IOF acompanha o bruto até ser editado à mão.
+  const [iofManual, setIofManual] = React.useState<number | null>(null);
+  const [tarifa, setTarifa] = React.useState(0);
+  const [tipoId, setTipoId] = React.useState(tipoReceita?.id ?? "");
+  const [subtipoId, setSubtipoId] = React.useState(
+    subtiposDaReceita.length === 1 ? subtiposDaReceita[0].id : "",
+  );
+  const [erroLocal, setErroLocal] = React.useState<string | null>(null);
+
+  const cotacao = lerCotacao(cotacaoTxt);
+  const intacto = valorMoeda === moedaInicial && cotacao === cambio.cotacaoDaVersao;
+  const bruto = intacto ? resta : r2(valorMoeda * cotacao);
+  const iof = iofManual ?? r2(bruto * IOF_DO_CAMBIO);
+  const liquido = r2(bruto - iof - tarifa);
+  const variacao = r2(bruto - resta);
+
+  const contasAtivas = contas.filter((c) => c.ativo);
+  const subtiposDoTipo = tipoId ? subtipos.filter((x) => x.tipo_id === tipoId && x.ativo) : [];
+
+  function handleSubmit() {
+    setErroLocal(null);
+    if (!data || !contaId || valorMoeda <= 0 || cotacao <= 0) {
+      setErroLocal(`Informe a data, a conta que recebeu, o valor em ${simbolo} e a cotação do dia.`);
+      return;
+    }
+    if (iof + tarifa >= bruto) {
+      setErroLocal("O IOF e a tarifa passam do bruto recebido.");
+      return;
+    }
+    if (!tipoId || !subtipoId) {
+      setErroLocal("Selecione o centro de custo do recebimento.");
+      return;
+    }
+    onConfirm(
+      {
+        data,
+        conta_bancaria_id: contaId,
+        valor: bruto,
+        plano_conta_tipo_id: tipoId,
+        plano_conta_subtipo_id: subtipoId,
+      },
+      { valor_moeda: valorMoeda, cotacao, iof, tarifa },
+    );
+  }
+
+  const mensagemErro = erro ?? erroLocal;
+
+  return (
+    <>
+      <div className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 rounded-xl border border-border bg-muted/50 p-4 text-[13px]">
+        <span className="text-muted-foreground">Job</span>
+        <span className="font-semibold">{alvo.titulo}</span>
+        <span className="text-muted-foreground">Cliente</span>
+        <span>{alvo.contraparte}</span>
+        {alvo.notaRotulo && (
+          <>
+            <span className="text-muted-foreground">Nota do envio</span>
+            <span className="font-mono">{alvo.notaRotulo}</span>
+          </>
+        )}
+        <span className="text-muted-foreground">Saldo a faturar</span>
+        <span className="font-mono font-bold">{formatMoney(alvo.saldo)}</span>
+      </div>
+
+      {mensagemErro && (
+        <div className="flex items-start gap-2 rounded-lg border border-california-red/40 bg-california-red/5 p-3 text-sm text-california-red">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{mensagemErro}</span>
+        </div>
+      )}
+
+      <div className="space-y-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold">
+              Data do recebimento <span className="text-california-red">*</span>
+            </label>
+            <DatePicker
+              name="data_recebimento_antes_nf"
+              defaultValue={hoje}
+              onDateChange={(d) => {
+                setData(d ? format(d, "yyyy-MM-dd") : "");
+                setErroLocal(null);
+              }}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold">
+              Conta que recebeu <span className="text-california-red">*</span>
+            </label>
+            <Select
+              value={contaId}
+              onValueChange={(v) => {
+                setContaId(v);
+                setErroLocal(null);
+              }}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione a conta..." />
+              </SelectTrigger>
+              <SelectContent>
+                {contasAtivas.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.nome} · {c.banco}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold">
+              Valor em {simbolo} <span className="text-california-red">*</span>
+            </label>
+            <MoneyInput
+              symbol={simbolo}
+              value={valorMoeda}
+              onValueChange={(v) => {
+                setValorMoeda(v);
+                setIofManual(null);
+                setErroLocal(null);
+              }}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold">
+              Cotação do dia <span className="text-california-red">*</span>
+            </label>
+            <Input
+              value={cotacaoTxt}
+              inputMode="decimal"
+              placeholder="0,0000"
+              aria-label="Cotação do dia"
+              className="font-mono"
+              onChange={(e) => {
+                setCotacaoTxt(e.target.value);
+                setIofManual(null);
+                setErroLocal(null);
+              }}
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold">Bruto em R$</label>
+            <div className="flex h-11 items-center rounded-lg border border-border bg-muted/50 px-3.5 font-mono text-sm font-semibold">
+              {formatMoney(bruto)}
+            </div>
+          </div>
+        </div>
+        <p className="-mt-1.5 text-[11.5px] text-muted-foreground">
+          Preenchidos com o job, pela cotação da versão: confira com o contrato de câmbio. O bruto é o crédito
+          do banco (“ORPAG ORIGEM EXTERIOR”).
+        </p>
+
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1">
+            <label className="text-xs font-semibold">
+              IOF <span className="text-california-red">*</span>
+            </label>
+            <MoneyInput value={iof} onValueChange={(v) => setIofManual(v)} />
+            <p className="text-[11.5px] text-muted-foreground">0,38% do bruto; edite se o banco cobrou outro valor.</p>
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-semibold">Tarifa de câmbio</label>
+            <MoneyInput value={tarifa} onValueChange={setTarifa} />
+            <p className="text-[11.5px] text-muted-foreground">Só se o banco cobrou.</p>
+          </div>
+        </div>
+
+        {bruto > 0 && (
+          <div className="grid grid-cols-[1fr_max-content] gap-x-4 gap-y-1 rounded-xl border border-border bg-muted/50 p-3 text-[13px]">
+            <span className="text-muted-foreground">Líquido na conta</span>
+            <span className="text-right font-mono font-semibold">{formatMoney(liquido)}</span>
+            <span className="text-muted-foreground">Variação cambial do job</span>
+            <span
+              className={cn(
+                "text-right font-mono font-semibold",
+                variacao < -0.004 ? "text-california-red" : variacao > 0.004 ? "text-emerald-700" : "",
+              )}
+            >
+              {variacao > 0.004 ? "+" : ""}
+              {formatMoney(variacao)}
+            </span>
+          </div>
+        )}
+
+        <div className="space-y-1">
+          <label className="text-xs font-semibold">
+            Centro de custo do recebimento <span className="text-california-red">*</span>
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <Combobox
+              items={tiposAtivos.map((t) => ({ value: t.id, label: `${t.codigo} · ${t.nome}` }))}
+              value={tipoId || null}
+              onChange={(v) => {
+                const novo = v ?? "";
+                setTipoId(novo);
+                setSubtipoId((atual) => (subtipos.find((x) => x.id === atual)?.tipo_id === novo ? atual : ""));
+                setErroLocal(null);
+              }}
+              placeholder={tiposAtivos.length === 0 ? "Nenhum tipo cadastrado" : "Tipo..."}
+              buscaPlaceholder="Escreva o código ou o nome"
+              disabled={tiposAtivos.length === 0}
+              className={COMBOBOX_COMO_SELECT}
+            />
+            <Combobox
+              items={subtiposDoTipo.map((x) => ({ value: x.id, label: x.nome }))}
+              value={subtipoId || null}
+              onChange={(v) => {
+                setSubtipoId(v ?? "");
+                setErroLocal(null);
+              }}
+              disabled={!tipoId || subtiposDoTipo.length === 0}
+              placeholder={
+                !tipoId ? "Escolha o tipo primeiro" : subtiposDoTipo.length === 0 ? "Nenhum subtipo cadastrado" : "Subtipo..."
+              }
+              buscaPlaceholder="Escreva o nome do subtipo"
+              className={COMBOBOX_COMO_SELECT}
+            />
+          </div>
+          <p className="text-[11.5px] text-muted-foreground">O mesmo da baixa do título: define onde a receita entra no DRE.</p>
+        </div>
+
+        <div className="flex items-start gap-2 rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
+          <HandCoins className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700" />
+          <span>
+            Entram no extrato o bruto, o IOF e a tarifa, cada um ligado ao job. A nota sai pelo bruto, como a{" "}
+            <strong className="font-semibold text-foreground">parcela 1, já recebida</strong>; a variação cambial
+            fecha o envio.
+          </span>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-end gap-2 border-t border-border pt-4">
+        <button
+          type="button"
+          onClick={onCancelar}
+          className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted"
+        >
+          Cancelar
+        </button>
+        <button
+          type="button"
+          onClick={handleSubmit}
+          disabled={pending}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
+        >
+          <HandCoins className="h-4 w-4" />
+          {pending ? "Registrando..." : "Registrar recebimento"}
+        </button>
+      </div>
+    </>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Ver e cancelar
 // ---------------------------------------------------------------------------
 
@@ -496,6 +877,30 @@ function ListaDosRecebidos({
                   {r.centroNome}
                   <span className="text-muted-foreground"> · {r.subtipoNome}</span>
                 </span>
+                {r.cambio && (
+                  <>
+                    <span className="text-muted-foreground">Câmbio</span>
+                    <span className="font-mono">
+                      {simboloDaMoeda(r.cambio.moeda)}{" "}
+                      {r.cambio.valorMoeda.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}{" "}
+                      × {formatarCotacao(r.cambio.cotacao)}
+                    </span>
+                    <span className="text-muted-foreground">IOF e tarifa</span>
+                    <span className="font-mono">
+                      {formatMoney(r.cambio.iof)} · {formatMoney(r.cambio.tarifa)}
+                    </span>
+                    <span className="text-muted-foreground">Variação cambial</span>
+                    <span
+                      className={cn(
+                        "font-mono font-semibold",
+                        r.cambio.variacao < -0.004 ? "text-california-red" : r.cambio.variacao > 0.004 ? "text-emerald-700" : "",
+                      )}
+                    >
+                      {r.cambio.variacao > 0.004 ? "+" : ""}
+                      {formatMoney(r.cambio.variacao)}
+                    </span>
+                  </>
+                )}
               </div>
 
               {emCancelamento && (
@@ -504,7 +909,8 @@ function ListaDosRecebidos({
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-california-red" />
                     <span>
                       O recebimento é desfeito: o lançamento de{" "}
-                      <b className="font-mono">{formatMoney(r.valor)}</b> sai do extrato,
+                      <b className="font-mono">{formatMoney(r.valor)}</b>
+                      {r.cambio ? ", o IOF e a tarifa saem" : " sai"} do extrato,
                       sem linha nova, e o valor sai do selo da linha. Fica no log de
                       auditoria quem cancelou, quando e por quê.
                     </span>

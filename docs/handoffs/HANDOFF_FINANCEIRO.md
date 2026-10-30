@@ -8640,3 +8640,33 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - `conferirProjetoEContas` recusa projeto com job de outra empresa.
 - Sem migration. Ver a §§7–11 da
   [decisão 228](../decisions/228-projeto-do-financeiro-com-jobs-de-clientes-diferentes.md).
+
+## O câmbio fechado no recebimento do job internacional — 29/10/2026 (decisão 229)
+
+- Contas a Receber › Faturamento: no job internacional (modelo
+  `internacional`, moeda e cotação de compra na versão aprovada), o
+  "Registrar recebimento antes da NF" abre o formulário do câmbio:
+  valor na moeda e cotação (preenchidos com o job), bruto em R$, IOF (0,38%
+  sugerido), tarifa, líquido e variação cambial. `cambioPorJob` vem do
+  `page.tsx`; a action é `registrarRecebimentoCambio`
+  (`actions-recebimento-antes-nf.ts`) → RPC
+  `registrar_recebimento_antes_nf_cambio`.
+- Três lançamentos do job: o bruto (`recebimento_antes_nf`), o IOF e a
+  tarifa (origem nova `cambio_custo`, em 16 · Despesas de câmbio). A
+  variação fica em `recebimentos_antes_nf.variacao_cambial` e soma no saldo
+  da primeira parcela da nota: fila (`vw_faturamento_pendente.variacao_cambial`,
+  mostrada debaixo do saldo), Faturar, fluxo de caixa,
+  `saldoAFaturarDoJob` e a trilha de faturamento do job
+  (`FaturamentoDoEnvioUnico.variacaoCambial`).
+- Cancelar o recebimento apaga os três lançamentos. Uma vez por nota.
+- Testado no TES-1036/26 (P-0006/26): envio pela página do job, câmbio a
+  5,05 com tarifa (três lançamentos, previsão do envio zerada para o
+  usuário), cancelamento, câmbio a 5,35 (+R$ 1.574,55, acima do envio) e a
+  emissão da nota pelo convertido numa transação desfeita (fila zerada,
+  parcela 1 paga). O recebimento a 5,35 ficou registrado como dado de teste.
+- ⚠️ Das 22h23 às 22h27 (horário de Brasília) de 29/10/2026 as duas FKs
+  novas de `recebimentos_antes_nf` para `lancamentos_financeiros` deixaram
+  ambíguos o embed `lancamento:lancamentos_financeiros(...)` do Contas a
+  Receber e o `antes_nf:recebimentos_antes_nf(id)` das baixas; a migration
+  `20261029950004` as tirou. Ver a
+  [decisão 229](../decisions/229-cambio-fechado-no-recebimento-do-internacional.md).

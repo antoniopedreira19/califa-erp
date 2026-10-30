@@ -3629,7 +3629,12 @@ export type OrigemLancamento =
   // O pagamento que o banco devolveu no mesmo dia (decisão 200): a saída e
   // a devolução, fora do DRE, sem empresa e sem plano, como as pernas de
   // uma transferência. Só a Conciliação automática grava.
-  | "devolucao_bancaria";
+  | "devolucao_bancaria"
+  // O IOF e a tarifa do câmbio fechado no recebimento antes da NF do job
+  // internacional (decisão 229): saídas da conta, com job, em 16 · Despesas
+  // de câmbio, ligadas ao recebimento (`recebimentos_antes_nf.iof_lancamento_id`
+  // e `tarifa_lancamento_id`). Cancelar o recebimento apaga os três.
+  | "cambio_custo";
 
 export interface LancamentoFinanceiro {
   id: string;
