@@ -131,6 +131,7 @@ export type AuditAction =
   | "categoria_dominio.reativada"
   | "job.criado"
   | "job.enviado_para_abertura"
+  | "job.envio_para_abertura_recusado"
   | "job.atualizado"
   | "job.hierarquia_alterada"
   | "job.status_alterado"

@@ -6061,3 +6061,20 @@ A exceção da 204 deixou de ser "só o administrador". Quando uma regra ligada 
 - Vale também para a planilha interna do job mensal (produção e
   financeiro); o job comum e a Mídia Off seguem como eram. Ver a nota de
   30/10 na decisão 219.
+
+⚠️ **Recusa do envio para abertura à vista (2026-10-30).** Relato da produção:
+o formulário "ficava voltando" pedindo para alterar o nome, sem mensagem. O
+nome nunca foi o problema: na recusa do servidor o formulário reabria, o Radix
+focava e selecionava o Nome do Job (contorno vermelho igual ao de erro), e o
+motivo ficava no fim da janela, depois do Descritivo.
+- A abertura do formulário não foca mais o nome; o foco fica no diálogo.
+- A recusa aparece numa faixa dentro do cabeçalho, acima da linha divisória
+  ("O job não foi enviado."), com a tela levada ao início do campo recusado.
+  Erro de campo sem lugar na tela entra na faixa.
+- "Confirmar dados" com pendência rola até o primeiro campo e lista no rodapé
+  o que falta.
+- Toda recusa grava `job.envio_para_abertura_recusado` na auditoria (versão,
+  mensagem e campos). Sem isso não havia como saber o que o servidor respondeu.
+  Conferido no P-0006/26 com e-mail acentuado, que a tela aceita e o servidor
+  recusa. O motivo das recusas relatadas continua desconhecido até a próxima
+  tentativa ser registrada.
