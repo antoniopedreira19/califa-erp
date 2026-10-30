@@ -6049,3 +6049,14 @@ A exceção da 204 deixou de ser "só o administrador". Quando uma regra ligada 
 - No Histórico do orçamento mensal, o mês que a errata do job incluiu não
   aparece mais nas vistas anteriores a ela ("Aprovada pelo cliente"); volta
   no momento da errata. Conferido no orçamento do TES-1035/26.
+
+## ⚠️ Nota de 2026-10-30 — barra, "Recolher" e linha do mês no mensal (decisão 219)
+
+- "Recolher grupos" na célula vazia do cabeçalho da tabela; no Total, o dos
+  meses vira "Recolher meses", ao lado do título do trimestre.
+- Tela de um mês: "Save"/"Histórico"/"Exibir" na linha do título do mês.
+  Total: a barra do primeiro mês aberto na linha do título do trimestre.
+- Linha do mês aberto colada à planilha, com Faturamento, Resultado op. e
+  Rentabilidade; sem Custo planejado e sem "Abrir {mês}".
+- Só no orçamento mensal; job, abertura e Mídia Off seguem como eram.
+  Ver a nota de 30/10 na decisão 219.

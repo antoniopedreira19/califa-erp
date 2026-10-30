@@ -1,7 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { BarraDaPlanilha } from "@/app/(app)/_planilha/lugar-da-barra";
+import {
+  BarraDaPlanilha,
+  usePlanilhaColada,
+  useRecolherNoCabecalho,
+} from "@/app/(app)/_planilha/lugar-da-barra";
 import type {
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
@@ -102,6 +106,10 @@ export function GruposSection({
   // usam a MESMA, e quatro cópias divergiriam na primeira correção.
   const ids = React.useMemo(() => secoes.map((s) => s.grupo.id), [secoes]);
   const recolher = useGruposRecolhiveis(ids);
+  // No orçamento mensal o "Recolher grupos" mora no cabeçalho da tabela, e
+  // a planilha da vista Total encosta na linha do mês (lugar-da-barra.tsx).
+  const recolherNoCabecalho = useRecolherNoCabecalho();
+  const colada = usePlanilhaColada();
 
   // Blocos ocultáveis pelo menu "Exibir" (03/09/2026). Estado de TELA:
   // não vai para o banco nem para a URL — recarregar a página traz a
@@ -128,7 +136,7 @@ export function GruposSection({
         {/* Sem agrupamento não há o que recolher — e o botão leria
             "Expandir todos", porque nenhum grupo está aberto. O `span`
             segura o lugar para as chaves continuarem à direita. */}
-        {secoes.length > 0 ? (
+        {secoes.length > 0 && !recolherNoCabecalho ? (
           <BotaoRecolherTodos
             algumAberto={recolher.algumAberto}
             onAlternarTodos={recolher.alternarTodos}
@@ -189,7 +197,13 @@ export function GruposSection({
         </div>
       </BarraDaPlanilha>
 
-      {faixaDoSave}
+      {/* Colada na linha do mês, a faixa do save vira uma faixa do card:
+          sem margem, sem cantos e sem a borda de cima, que é a da linha. */}
+      {colada && faixaDoSave ? (
+        <div className="[&>div]:mb-0 [&>div]:rounded-none [&>div]:border-t-0">{faixaDoSave}</div>
+      ) : (
+        faixaDoSave
+      )}
 
       {/* O card da planilha é desenhado pela própria `ItensTable` — a
           dica de teclado que vem embaixo dele precisa ficar fora do
@@ -221,6 +235,11 @@ export function GruposSection({
         orcadoVisivel={orcadoVisivel}
         rentabilidadeVisivel={rentabilidadeVisivel}
         rotuloTotal={rotuloTotal}
+        recolherNoCabecalho={
+          recolherNoCabecalho && secoes.length > 0
+            ? { algumAberto: recolher.algumAberto, onAlternarTodos: recolher.alternarTodos }
+            : undefined
+        }
       />
     </div>
   );

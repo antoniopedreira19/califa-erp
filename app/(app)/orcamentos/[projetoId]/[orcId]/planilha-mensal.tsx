@@ -42,6 +42,10 @@ import { TotaisCard } from "./versoes/[versaoId]/totais-card";
 import { ReguaMeses } from "./versoes/[versaoId]/regua-meses";
 import { CopiarItensDoMes } from "./versoes/[versaoId]/copiar-itens-mes";
 import { TrimestreEmpilhado } from "./versoes/[versaoId]/trimestre-empilhado";
+import {
+  ComRecolherNoCabecalho,
+  TituloComABarra,
+} from "@/app/(app)/_planilha/lugar-da-barra";
 import { SemBotaoDoHistorico } from "./versoes/[versaoId]/historico-do-orcamento";
 import { ImportarPlanilhaVersao } from "./versoes/importar-planilha-versao";
 
@@ -254,8 +258,11 @@ export function PlanilhaMensal({
     }`;
   }
 
+  // Decisão 219, revista em 30/10/2026: o "Recolher grupos" de cada mês
+  // mora no cabeçalho da tabela, e a barra ("Save", "Exibir") na linha do
+  // título — do mês, na tela de um mês só; do trimestre, no Total.
   return (
-    <>
+    <ComRecolherNoCabecalho>
       <ReguaMeses
         moeda={moeda}
         descricao={descricao}
@@ -301,8 +308,8 @@ export function PlanilhaMensal({
       />
 
       {mesAtual ? (
-        <>
-          <div className="flex flex-wrap items-center justify-between gap-3">
+        <TituloComABarra
+          titulo={
             <div className="flex items-baseline gap-2.5">
               <h2 className="text-xl font-semibold tracking-tight">
                 {rotuloMes(mesAtual.mes.mes)}
@@ -311,7 +318,9 @@ export function PlanilhaMensal({
                 {resumo(mesAtual.grupos.length, mesAtual.itens.length)}
               </span>
             </div>
-            {!readOnly && (
+          }
+          acoes={
+            !readOnly && (
               <CopiarItensDoMes
                 destinoId={mesAtual.mes.id}
                 destinoNome={nomeDoMes(mesAtual.mes.mes)}
@@ -329,10 +338,11 @@ export function PlanilhaMensal({
                     : undefined
                 }
               />
-            )}
-          </div>
+            )
+          }
+        >
           <div className={cn("space-y-6", calha)}>{planilhaDoMes(mesAtual)}</div>
-        </>
+        </TituloComABarra>
       ) : dados.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-12 text-center">
           <p className="text-sm font-semibold text-foreground">
@@ -345,53 +355,57 @@ export function PlanilhaMensal({
           </p>
         </div>
       ) : (
-        <>
-          <div className="flex items-baseline gap-2.5">
-            <h2 className="text-xl font-semibold tracking-tight">{trimestreRotulo}</h2>
-            <span className="text-[13px] text-muted-foreground">
-              {dados.length === 1 ? "1 mês" : `${dados.length} meses`}
-            </span>
-          </div>
-          <div className={cn("space-y-6", calha)}>
-            <TrimestreEmpilhado
-              barraAcimaDoMes
-              moeda={moeda}
-              meses={dados.map((d, k) => ({
-                id: d.mes.id,
-                titulo: rotuloMes(d.mes.mes),
-                nome: nomeDoMes(d.mes.mes),
-                resumo: resumo(d.grupos.length, d.itens.length),
-                faturamento: d.faturamento,
-                custoPlanejado: d.custoPlanejado,
-                resultadoOperacional: d.resultadoOperacional,
-                resultadoGeral: d.resultadoGeral,
-                href: d.href,
-                // Decisão 226: um botão de Histórico só, no primeiro mês.
-                conteudo:
-                  k === 0 ? (
-                    planilhaDoMes(d, { semTotais: true })
-                  ) : (
-                    <SemBotaoDoHistorico>{planilhaDoMes(d, { semTotais: true })}</SemBotaoDoHistorico>
-                  ),
-              }))}
-            />
-            <TotaisCard
-              itens={itensDosMeses}
-              bvsPorItem={bvsPorItem}
-              visao="bruto"
-              percentualHonorarios={honorarios}
-              percentualImposto={imposto}
-              moeda={moeda}
-              modeloPlanilha={planilha.modeloPlanilha}
-              internacional={planilha.internacional}
-              moedaEstrangeira={planilha.moedaEstrangeira}
-              interno={interno}
-              linhasEmExcecao={[]}
-              titulo="Totais do trimestre"
-              subtitulo="Orçado × Planejado · soma dos meses."
-            />
-          </div>
-        </>
+        // O título do trimestre entra no `TrimestreEmpilhado`, dentro da
+        // calha: na mesma linha dele ficam o "Recolher meses" e a barra do
+        // primeiro mês aberto, alinhada à borda da planilha.
+        <div className={cn("space-y-6", calha)}>
+          <TrimestreEmpilhado
+            barraAcimaDoMes
+            linhaColada
+            titulo={
+              <div className="flex items-baseline gap-2.5">
+                <h2 className="text-xl font-semibold tracking-tight">{trimestreRotulo}</h2>
+                <span className="text-[13px] text-muted-foreground">
+                  {dados.length === 1 ? "1 mês" : `${dados.length} meses`}
+                </span>
+              </div>
+            }
+            moeda={moeda}
+            meses={dados.map((d, k) => ({
+              id: d.mes.id,
+              titulo: rotuloMes(d.mes.mes),
+              nome: nomeDoMes(d.mes.mes),
+              resumo: resumo(d.grupos.length, d.itens.length),
+              faturamento: d.faturamento,
+              custoPlanejado: d.custoPlanejado,
+              resultadoOperacional: d.resultadoOperacional,
+              resultadoGeral: d.resultadoGeral,
+              href: d.href,
+              // Decisão 226: um botão de Histórico só, no primeiro mês.
+              conteudo:
+                k === 0 ? (
+                  planilhaDoMes(d, { semTotais: true })
+                ) : (
+                  <SemBotaoDoHistorico>{planilhaDoMes(d, { semTotais: true })}</SemBotaoDoHistorico>
+                ),
+            }))}
+          />
+          <TotaisCard
+            itens={itensDosMeses}
+            bvsPorItem={bvsPorItem}
+            visao="bruto"
+            percentualHonorarios={honorarios}
+            percentualImposto={imposto}
+            moeda={moeda}
+            modeloPlanilha={planilha.modeloPlanilha}
+            internacional={planilha.internacional}
+            moedaEstrangeira={planilha.moedaEstrangeira}
+            interno={interno}
+            linhasEmExcecao={[]}
+            titulo="Totais do trimestre"
+            subtitulo="Orçado × Planejado · soma dos meses."
+          />
+        </div>
       )}
 
       <div className="flex items-start gap-2 rounded-xl border border-border bg-muted/30 px-4 py-3 text-xs text-muted-foreground">
@@ -401,6 +415,6 @@ export function PlanilhaMensal({
           Always On ainda não estão disponíveis.
         </p>
       </div>
-    </>
+    </ComRecolherNoCabecalho>
   );
 }

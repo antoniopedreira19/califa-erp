@@ -83,6 +83,8 @@ import {
   ERRATA,
 } from "@/app/(app)/_planilha/blocos";
 import { useHistoricoDoOrcamento } from "./historico-do-orcamento";
+import { BotaoRecolherTodos } from "@/app/(app)/_planilha/recolher-grupos";
+import { usePlanilhaColada } from "@/app/(app)/_planilha/lugar-da-barra";
 import {
   Calha,
   LinhaDaCalha,
@@ -199,6 +201,10 @@ interface Props {
    *  vista Líquido acrescenta o sufixo sozinha, para o rótulo não ter que
    *  ser reescrito em cada tela. */
   rotuloTotal?: string;
+  /** "Recolher grupos" na célula vazia do cabeçalho, acima de "Grupo ·
+   *  Item" — o orçamento mensal (decisão 219, revista em 30/10/2026).
+   *  Ausente ⇒ a célula fica vazia e o botão continua na barra. */
+  recolherNoCabecalho?: { algumAberto: boolean; onAlternarTodos: () => void };
   /** Liga a coluna SAVE. Desligada, a grade volta às 13 colunas de sempre
    *  e nada nesta tabela muda — é o estado de quem nunca usou save. */
   saveVisivel?: boolean;
@@ -549,6 +555,7 @@ export function ItensTable({
   acoesDoGrupo,
   novoGrupo,
   rotuloTotal,
+  recolherNoCabecalho,
   saveVisivel: saveVisivelProp = false,
   onAlternarSave: onAlternarSaveProp,
   savePorItem,
@@ -559,6 +566,8 @@ export function ItensTable({
   interno,
 }: Props) {
   const historico = useHistoricoDoOrcamento();
+  // Na vista Total do mensal a linha do mês fecha o topo do card.
+  const colada = usePlanilhaColada();
   // O Interno não tem save (decisão 105): nem a coluna, nem a alça que a
   // abre — mesmo que a tela de cima esqueça de desligar.
   const saveVisivel = saveVisivelProp && !interno;
@@ -1414,7 +1423,10 @@ export function ItensTable({
         // poder ter foco, sem anel — a moldura da célula é o foco visível.
         tabIndex={0}
         onKeyDown={aoTeclar}
-        className="relative rounded-2xl border border-border bg-card shadow-soft outline-none"
+        className={cn(
+          "relative rounded-2xl border border-border bg-card shadow-soft outline-none",
+          colada && "rounded-t-none border-t-0",
+        )}
       >
         {/* Onde o item arrastado vai cair (decisão 104). O gesto a
             posiciona direto no DOM; aqui ela só existe, escondida. */}
@@ -1435,7 +1447,12 @@ export function ItensTable({
           </div>
         )}
         {erro && (
-          <div className="flex items-center justify-between gap-3 rounded-t-2xl border-b border-california-red/20 bg-california-red/5 px-6 py-2 text-xs text-california-red">
+          <div
+            className={cn(
+              "flex items-center justify-between gap-3 border-b border-california-red/20 bg-california-red/5 px-6 py-2 text-xs text-california-red",
+              !colada && "rounded-t-2xl",
+            )}
+          >
             <span>{erro}</span>
             <button
               type="button"
@@ -1453,7 +1470,7 @@ export function ItensTable({
         <div
           className={cn(
             "overflow-x-auto rounded-b-2xl",
-            !erro && "rounded-t-2xl",
+            !erro && !colada && "rounded-t-2xl",
           )}
         >
           <table
@@ -1469,7 +1486,16 @@ export function ItensTable({
                   o handoff "Grupos Unificados" veio eliminar. */}
               <tr>
                 {saveVisivel && <CabecalhoSaveFaixa />}
-                <th colSpan={3} className={FAIXA_GRUPO} />
+                <th colSpan={3} className={FAIXA_GRUPO}>
+                  {recolherNoCabecalho && (
+                    <BotaoRecolherTodos
+                      algumAberto={recolherNoCabecalho.algumAberto}
+                      onAlternarTodos={recolherNoCabecalho.onAlternarTodos}
+                      rotulos={["Recolher grupos", "Expandir grupos"]}
+                      className="-ml-2 inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[11px] font-semibold tracking-normal text-muted-foreground transition-colors hover:bg-accent hover:text-california-red"
+                    />
+                  )}
+                </th>
                 {orcadoVisivel && (
                   <th
                     colSpan={colunasDoOrcado(colunas)}

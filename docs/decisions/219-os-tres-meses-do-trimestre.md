@@ -141,3 +141,38 @@ aparece a partir do momento em que tem linha
 (`planilha-mensal-do-historico.tsx`). Conferido no orçamento do
 TES-1035/26: "Aprovada pelo cliente" só com outubro (R$ 6.959,12); o
 momento da errata com outubro e novembro.
+
+## ⚠️ Nota de 2026-10-30 — a barra, o "Recolher" e a linha do mês (revê o item 4)
+
+Dois pontos que sobraram da entrega 1, levados a protótipo e escolhidos
+pelo Tiago depois de nove comentários
+(https://claude.ai/artifact/NdCGhD1iwLv9cRjPSbiYLt, proposta "C ·
+Recolher no cabeçalho", linha do mês "Junto, com os 3 números"):
+na tela de um mês só a barra continuava entre a linha do mês e a planilha,
+e na vista Total apareciam dois "Recolher todos" seguidos (o dos meses e
+o dos grupos do mês aberto).
+
+1. **"Recolher grupos" no cabeçalho da tabela**, na célula vazia acima de
+   "Grupo · Item", ao lado da faixa ORÇADO — nas duas telas do mensal. Na
+   vista Total o botão dos meses vira **"Recolher meses"** e fica ao lado
+   do título do trimestre.
+2. **Tela de um mês só:** "Save", "Histórico" e "Exibir" sobem para a linha
+   do título ("Outubro de 2026"), à direita, ao lado de "Copiar itens de
+   outro mês". A planilha começa logo abaixo dela.
+3. **Vista Total:** a barra do primeiro mês, quando ele está aberto, fica
+   na linha do título do trimestre, à direita; os outros meses abertos
+   mantêm a sua acima da linha deles. Fechado o primeiro mês, o título
+   fica sozinho. As distâncias são as da tela de um mês: 24px da régua ao
+   título e do título ao primeiro mês.
+4. **A linha do mês aberto encosta na planilha** (um card só, sem o vão) e
+   mostra **Faturamento, Resultado op. e Rentabilidade** (o "Geral" de
+   antes) em colunas iguais. Saíram o Custo planejado e o "Abrir {mês}" —
+   a régua já abre o mês. "Valor do job" foi mostrado e o Tiago tirou.
+5. **Só no orçamento mensal.** A planilha do job, a da conferência da
+   abertura e a da Mídia Off usam o mesmo `TrimestreEmpilhado` e ficaram
+   como eram — as mudanças entram por props (`titulo`, `linhaColada`) e
+   por contexto (`ComRecolherNoCabecalho`, `ComPlanilhaColada`,
+   `TituloComABarra`, em `app/(app)/_planilha/lugar-da-barra.tsx`).
+
+Conferido no `ZZ Teste 158 planilha de um mês` (rascunho, três meses) e na
+versão aprovada do `ZZ Teste 219 mês pela errata` (com o "Histórico").
