@@ -1,7 +1,7 @@
 # 228 — O projeto do financeiro junta jobs de clientes diferentes
 
 **Data:** 2026-10-29
-**Status:** aceita e implementada (29/10/2026); revista em 30/10/2026 (§§7–11).
+**Status:** aceita e implementada (29/10/2026); revista em 30/10/2026 (§§7–12).
 **Quem decidiu:** Tiago, em 29/10/2026, ao ver que jobs de um mesmo evento
 não puderam ser unificados na abertura.
 **Revê:** a [021](021-projeto-do-financeiro-e-edicao-da-abertura.md) (o combo
@@ -56,10 +56,10 @@ com o nome do parceiro na frente), e não aparecem numa visão agregada só.
 - **A reclassificação dos jobs já abertos** é do financeiro, pelo "Editar
   registro" de cada job. Projeto que fica sem job some sozinho (gatilho
   `projeto_financeiro_sem_job_some`).
-- **Ver os jobs de cada projeto na hora de escolher** está em protótipo
-  ([Projetos e Jobs](https://claude.ai/artifact/6eefxVmN5sCYVDDquuZfed)):
-  expandir dentro do campo, um painel com todos os projetos, ou os dois. O
-  Tiago decide depois.
+- ~~**Ver os jobs de cada projeto na hora de escolher**~~ — entrou em
+  30/10/2026, opção A+B do protótipo
+  ([Projetos e Jobs](https://claude.ai/artifact/6eefxVmN5sCYVDDquuZfed)).
+  Ver §12.
 
 ## Revisão de 30/10/2026: só os projetos da empresa do job, e o nome "Projeto unificado"
 
@@ -81,3 +81,19 @@ Pedido do Tiago no protótipo, versão 2.
 11. **O servidor recusa** projeto com job de outra empresa: "Este projeto
     unificado é de outra empresa. Troque a empresa do job ou escolha outro
     projeto."
+
+## Ver os jobs de cada projeto na hora de escolher (30/10/2026)
+
+12. **A+B do protótipo**, as duas formas juntas:
+    - **A.** Cada linha da lista do campo tem, à direita, o "N jobs ▾".
+      Ele abre embaixo os jobs que já estão no projeto (código, nome do
+      financeiro, cliente e valor do job), com a soma, sem escolher o
+      projeto. Escolher continua sendo o clique no nome.
+    - **B.** No pé da lista, "Ver todos os projetos unificados e os jobs de
+      cada um" abre um painel largo com os projetos da empresa do job: os
+      do cliente do job em cima, a busca por projeto, cliente ou job (o
+      projeto que só casou por um job abre sozinho, com o job em
+      destaque), o filtro "Só deste cliente", e os jobs de cada projeto
+      com competência e status. "Escolher" põe o job no projeto e fecha.
+    - O job que está sendo aberto ou editado não entra na contagem nem na
+      lista de jobs do projeto.

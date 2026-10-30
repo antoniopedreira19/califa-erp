@@ -8670,3 +8670,16 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   Receber e o `antes_nf:recebimentos_antes_nf(id)` das baixas; a migration
   `20261029950004` as tirou. Ver a
   [decisão 229](../decisions/229-cambio-fechado-no-recebimento-do-internacional.md).
+
+## ⚠️ Nota de 2026-10-30 (2) — os jobs de cada projeto unificado no campo e no painel (decisão 228 §12)
+
+- Opção A+B do protótipo "Projetos e Jobs": o "N jobs ▾" em cada linha da
+  lista do campo Projeto unificado e o painel "Ver todos os projetos
+  unificados e os jobs de cada um", no pé da lista
+  (`abertura-de-job/[jobId]/projetos-unificados.tsx`).
+- `ProjetoFinanceiroOpcao.jobs` vem da mesma consulta aos jobs que já dava
+  clientes e empresas (sem consulta nova); o job em edição fica de fora.
+- Testado em 30/10 com o TES-1013/26: levado de "Testes Sistema" para
+  "Teste Always On" pelo painel, conferido na visão agregada e devolvido
+  pela lista. A recusa de projeto de outra empresa foi testada pela action
+  com o payload do TES-1036/26, sem gravar.

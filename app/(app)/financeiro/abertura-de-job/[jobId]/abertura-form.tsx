@@ -109,7 +109,11 @@ import {
   ResumoDaAberturaAnterior,
 } from "./historico-abertura";
 import type { ProjetoFinanceiroOpcao } from "@/lib/data/projetos-financeiro";
-import { resumoDosClientes } from "@/lib/resumo-dos-clientes";
+import {
+  BotaoTodosOsProjetos,
+  LinhaDoProjetoUnificado,
+  TodosOsProjetosDialog,
+} from "./projetos-unificados";
 import type { AprovacaoDeSave } from "../aprovacao-save";
 // Só os TIPOS: `saves-da-abertura.ts` lê o banco (servidor) e não pode
 // entrar no bundle do cliente (decisão 155).
@@ -566,6 +570,12 @@ export function AberturaForm({
     () => job.projeto_financeiro_id ?? "",
   );
   const [projetoAberto, setProjetoAberto] = React.useState(false);
+  // Os jobs abertos embaixo de cada linha da lista (opção A) e o painel
+  // com todos os projetos unificados (opção B) — decisão 228, 30/10/2026.
+  const [projetosComJobsAbertos, setProjetosComJobsAbertos] = React.useState<
+    Set<string>
+  >(new Set());
+  const [painelDeProjetosAberto, setPainelDeProjetosAberto] = React.useState(false);
   const [buscaProjeto, setBuscaProjeto] = React.useState("");
   /**
    * O projeto novo do "+": só o nome, reservado no formulário. Ele nasce
@@ -977,6 +987,7 @@ export function AberturaForm({
             cliente_nome: job.cliente_nome,
             clientes: [{ id: job.cliente_id ?? "", nome: job.cliente_nome }],
             empresas: [],
+            jobs: [],
             novo: true,
           },
           ...lista,
@@ -1019,6 +1030,14 @@ export function AberturaForm({
     setProjetoId(id);
     setProjetoAberto(false);
     setBuscaProjeto("");
+  }
+  function alternarJobsDoProjeto(id: string) {
+    setProjetosComJobsAbertos((atual) => {
+      const novo = new Set(atual);
+      if (novo.has(id)) novo.delete(id);
+      else novo.add(id);
+      return novo;
+    });
   }
   /** O ✕ do campo: zera a escolha e devolve o "+". O projeto novo
    *  reservado, que ainda não existe, sai junto. */
@@ -1877,36 +1896,43 @@ export function AberturaForm({
                                 {grupo.titulo}
                               </p>
                               {grupo.itens.map((pr) => (
-                                <button
+                                <LinhaDoProjetoUnificado
                                   key={pr.id}
-                                  type="button"
-                                  onClick={() => escolherProjeto(pr.id)}
-                                  className={cn(
-                                    "block w-full rounded-lg px-2.5 py-2 text-left text-[13px] transition-colors hover:bg-muted",
-                                    pr.id === projetoId &&
-                                      "bg-california-red/[0.06] text-california-red",
-                                  )}
-                                >
-                                  <span className="flex items-baseline justify-between gap-3">
-                                    <span className="truncate font-semibold">
-                                      {pr.nome}
-                                    </span>
-                                    {pr.novo && <SeloProjetoNovo />}
-                                  </span>
-                                  <span
-                                    className="mt-0.5 block truncate text-[11px] text-muted-foreground"
-                                    title={pr.clientes.map((c) => c.nome ?? "—").join(", ")}
-                                  >
-                                    {resumoDosClientes(pr.clientes.map((c) => c.nome))}
-                                  </span>
-                                </button>
+                                  pr={pr}
+                                  selecionado={pr.id === projetoId}
+                                  seloNovo={<SeloProjetoNovo />}
+                                  aberta={projetosComJobsAbertos.has(pr.id)}
+                                  onEscolher={() => escolherProjeto(pr.id)}
+                                  onAlternar={() => alternarJobsDoProjeto(pr.id)}
+                                />
                               ))}
                             </div>
                           ))
                         )}
                       </div>
+                      <BotaoTodosOsProjetos
+                        onAbrir={() => {
+                          setProjetoAberto(false);
+                          setBuscaProjeto("");
+                          setPainelDeProjetosAberto(true);
+                        }}
+                      />
                     </PopoverContent>
                   </Popover>
+                  <TodosOsProjetosDialog
+                    open={painelDeProjetosAberto}
+                    onOpenChange={setPainelDeProjetosAberto}
+                    projetos={projetosVisiveis}
+                    ehDoClienteDoJob={ehDoClienteDoJob}
+                    clienteDoJobNome={job.cliente_nome}
+                    empresaNome={empresaNomeEscolhida}
+                    jobCodigo={job.codigo}
+                    selecionadoId={projetoId}
+                    onEscolher={(id) => {
+                      escolherProjeto(id);
+                      setPainelDeProjetosAberto(false);
+                    }}
+                  />
 
                   {/* "+" cria, lápis revisa o escolhido — o MESMO botão
                       trocando de ícone, como no campo de fornecedor

@@ -1,4 +1,11 @@
 import { createClient } from "@/lib/supabase/server";
+import {
+  competenciaLabel,
+  jobStatusExibido,
+  nomeDoJobNoFinanceiro,
+  type JobStatus,
+  type JobStatusExibido,
+} from "@/lib/types";
 
 /**
  * Projeto na visão do financeiro (`projetos_financeiro`).
@@ -33,6 +40,25 @@ export interface ProjetoFinanceiroOpcao {
    * prende a empresa.
    */
   empresas: string[];
+  /**
+   * Os jobs que já estão no projeto, fora o que está sendo aberto, na
+   * ordem de criação: o campo abre a lista deles e o painel "Ver todos os
+   * projetos unificados" mostra a mesma coisa (decisão 228, 30/10/2026).
+   */
+  jobs: JobDoProjetoUnificado[];
+}
+
+export interface JobDoProjetoUnificado {
+  id: string;
+  codigo: string;
+  /** O nome que o financeiro vê. */
+  nome: string;
+  cliente: string | null;
+  /** `jobs.valor_total`, o valor do job. */
+  valor: number;
+  status: JobStatusExibido;
+  /** "4T/2026", ou "—" sem competência. */
+  competencia: string;
 }
 
 /**
@@ -56,8 +82,9 @@ export async function listarProjetosFinanceiro(
 ): Promise<ProjetoFinanceiroOpcao[]> {
   const supabase = createClient();
 
-  // Independentes — em paralelo (`docs/PERFORMANCE.md`). Os clientes vêm
-  // dos jobs numa consulta enxuta à parte, e não num embed por projeto.
+  // Independentes — em paralelo (`docs/PERFORMANCE.md`). Os clientes, as
+  // empresas e os jobs de cada projeto vêm de uma consulta só aos jobs, à
+  // parte, e não num embed por projeto.
   const [projetosRes, jobsRes] = await Promise.all([
     supabase
       .from("projetos_financeiro")
@@ -70,7 +97,9 @@ export async function listarProjetosFinanceiro(
     supabase
       .from("jobs")
       .select(
-        "id, projeto_financeiro_id, cliente_id, empresa_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia)",
+        "id, codigo, nome, nome_financeiro, status, faturamento_enviado_em, valor_total, " +
+          "competencia_trimestre, competencia_ano, projeto_financeiro_id, cliente_id, empresa_id, " +
+          "cliente:clientes!jobs_cliente_id_fkey(nome_fantasia)",
       )
       .eq("tenant_id", tenantId)
       .not("projeto_financeiro_id", "is", null)
@@ -89,11 +118,25 @@ export async function listarProjetosFinanceiro(
 
   const clientesPorProjeto = new Map<string, Map<string, string | null>>();
   const empresasPorProjeto = new Map<string, Set<string>>();
+  const jobsPorProjeto = new Map<string, JobDoProjetoUnificado[]>();
   for (const j of (jobsRes.data ?? []) as any[]) {
-    if (j.empresa_id && j.id !== jobId) {
-      const doProjeto = empresasPorProjeto.get(j.projeto_financeiro_id) ?? new Set<string>();
-      doProjeto.add(j.empresa_id);
-      empresasPorProjeto.set(j.projeto_financeiro_id, doProjeto);
+    if (j.id !== jobId) {
+      if (j.empresa_id) {
+        const doProjeto = empresasPorProjeto.get(j.projeto_financeiro_id) ?? new Set<string>();
+        doProjeto.add(j.empresa_id);
+        empresasPorProjeto.set(j.projeto_financeiro_id, doProjeto);
+      }
+      const jobs = jobsPorProjeto.get(j.projeto_financeiro_id) ?? [];
+      jobs.push({
+        id: j.id,
+        codigo: j.codigo,
+        nome: nomeDoJobNoFinanceiro(j),
+        cliente: j.cliente?.nome_fantasia ?? null,
+        valor: Number(j.valor_total ?? 0),
+        status: jobStatusExibido(j.status as JobStatus, j.faturamento_enviado_em ?? null),
+        competencia: competenciaLabel(j.competencia_trimestre, j.competencia_ano),
+      });
+      jobsPorProjeto.set(j.projeto_financeiro_id, jobs);
     }
     if (!j.cliente_id) continue;
     const doProjeto =
@@ -121,6 +164,7 @@ export async function listarProjetosFinanceiro(
             },
           ],
       empresas: Array.from(empresasPorProjeto.get(p.id) ?? []),
+      jobs: jobsPorProjeto.get(p.id) ?? [],
     };
   });
 
