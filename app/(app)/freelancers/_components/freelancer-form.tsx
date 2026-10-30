@@ -299,6 +299,7 @@ export function FreelancerForm({ modo, freelancer }: Props) {
               defaultValue={state.cep}
               disabled={pending}
               required
+              onDigitsChange={(d) => set("cep", d)}
               onEnderecoEncontrado={(d) => {
                 setState((s) => ({
                   ...s,

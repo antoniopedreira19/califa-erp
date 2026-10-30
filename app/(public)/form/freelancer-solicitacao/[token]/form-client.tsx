@@ -192,6 +192,7 @@ export function FormClient({ token, nomePreenchido, cpfPreenchido }: Props) {
             <CepInput
               defaultValue={state.cep}
               required
+              onDigitsChange={(d) => set("cep", d)}
               onEnderecoEncontrado={(d) =>
                 setState((s) => ({
                   ...s,
