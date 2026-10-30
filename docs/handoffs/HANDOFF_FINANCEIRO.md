@@ -8741,3 +8741,10 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   casar: favorecido e valor iguais podem ser o pagamento do mês seguinte.
 - 13 PPs aprovadas baixadas contra 10 linhas do banco. 17 linhas seguem com PP
   em avaliação, aguardando aprovação.
+
+## ⚠️ Nota de 2026-10-30 (8) — as PPs já pagas que estavam em avaliação (decisão 211)
+
+- **O que mudou:** 19 PPs aprovadas pelo fluxo de sempre e baixadas contra 17 linhas da California Santander (R$ 423.551,20), com autorização do Tiago. Sem mudança de código.
+- **Notas:** as 10 PPs com NF usaram os dados que o GP digitou; os PDFs não foram abertos. Foram pagas pelo valor cheio, então nenhuma retenção foi registrada.
+- **Correção:** a PP-00194 foi para a linha de 21/10 (estava na de 20/10). A linha de 20/10 voltou a pendente.
+- **Em aberto:** a PP-00264 tem os valores das parcelas trocados no sistema, e a parcela de R$ 1.241,60 paga em 23/10 não tem linha própria no extrato.

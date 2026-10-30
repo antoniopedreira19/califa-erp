@@ -1310,8 +1310,29 @@ ficam só os jobs do 4T." Os jobs do 3T que já existem no sistema (cerca de
   Geral provisório). Duas têm o código de uma PP cancelada na planilha: PP-00180
   e PP-00391 são as reemitidas, conferidas pelo favorecido, job e valor.
 - **Sobrou do que já está no sistema:** 17 linhas (R$ 423.551,20) com PP em
-  avaliação, que precisam ser aprovadas antes da baixa. Só a conta de teste e a
-  PP-00290, de 26/10, seguem sem linha do banco.
+  avaliação. Aprovadas e baixadas no mesmo dia, com autorização do Tiago: 19 PPs,
+  pela aprovação de sempre (`aprovarPPComData` / `aprovarPPComNotaFiscal`), e
+  depois `baixarEConciliar`. Só a conta de teste e a PP-00290, de 26/10, seguem
+  sem linha do banco.
+  - **As 10 PPs com NF** usaram o que o GP digitou na PP (número, emissão, valor e
+    tomador). A soma bate com a PP e com o banco, e o tomador é o CNPJ da PP; os
+    PDFs não foram abertos. O crédito de PIS/COFINS ficou na regra automática.
+  - **Sem retenção:** todas foram pagas pelo valor cheio. Quatro são de fornecedor
+    do regime normal (R$ 267.236,00: PP-00205, 00398, 00401 e 00403): se devia ter
+    retenção, ela não foi feita no pagamento. Nada foi registrado que o banco não
+    mostre.
+  - **Data da aprovação:** a data da linha do banco. Nas três PPs com duas parcelas
+    (00216, 00264 e 00325), a do 1º vencimento, para a segunda não andar.
+  - **PP-00264:** marcada como pagamento fora do cadastro (boleto). Os valores das
+    parcelas estão trocados no sistema: a planilha paga 01/02 de R$ 1.241,20 em
+    05/10 e 02/02 de R$ 1.241,60 em 23/10. A linha de 05/10 baixou a parcela 2, que
+    fecha ao centavo. Os R$ 1.241,60 de 23/10 não têm linha própria no extrato e
+    a parcela 1 segue em aberto.
+  - **Linha que mudou:** a PP-00194 foi para a linha de 21/10, e não a de 20/10.
+    Com valores iguais, o inventário pareava a primeira linha livre com a primeira
+    da planilha, e a planilha diz 21/10. Conferidas as 27 linhas: foi o único caso
+    com data diferente. A linha de R$ 7.000 de 20/10 (ordem 1282) segue pendente;
+    a linha da planilha que sobra é de pessoal, sem job, de 23/10.
 - **Três jobs têm código diferente** na planilha e no sistema: AMB-1002 × AMB-1001,
   DEE-1002 × DEE-1001 e ANI-1013 × ANI-1012. O Realizado do job segue o sistema.
 - **Recebimentos, só o mapa:** nada pronto para baixa (o sistema tem 2 títulos em
