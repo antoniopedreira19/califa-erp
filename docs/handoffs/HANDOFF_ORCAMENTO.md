@@ -6068,9 +6068,9 @@ nome nunca foi o problema: na recusa do servidor o formulário reabria, o Radix
 focava e selecionava o Nome do Job (contorno vermelho igual ao de erro), e o
 motivo ficava no fim da janela, depois do Descritivo.
 - A abertura do formulário não foca mais o nome; o foco fica no diálogo.
-- A recusa aparece numa faixa fixa acima da rolagem ("O job não foi enviado."),
-  com a tela levada ao campo recusado. Erro de campo sem lugar na tela entra
-  na faixa.
+- A recusa aparece numa faixa dentro do cabeçalho, acima da linha divisória
+  ("O job não foi enviado."), com a tela levada ao início do campo recusado.
+  Erro de campo sem lugar na tela entra na faixa.
 - "Confirmar dados" com pendência rola até o primeiro campo e lista no rodapé
   o que falta.
 - Toda recusa grava `job.envio_para_abertura_recusado` na auditoria (versão,

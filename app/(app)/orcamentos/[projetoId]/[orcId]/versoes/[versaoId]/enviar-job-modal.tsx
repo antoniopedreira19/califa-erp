@@ -479,10 +479,10 @@ export function EnviarJobModal({
     .flatMap(([, erros]) => erros);
 
   /** O cabeçalho e o rodapé ficam: só o miolo rola até o campo. */
-  function rolarAte(campo: CampoObrigatorio) {
+  function rolarAte(campo: CampoObrigatorio, behavior: ScrollBehavior = "smooth") {
     miolo.current
       ?.querySelector(`[data-campo="${campo}"]`)
-      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      ?.scrollIntoView({ behavior, block: "start" });
   }
 
   function handleConfirmar() {
@@ -495,14 +495,21 @@ export function EnviarJobModal({
   /** O Radix focaria o primeiro campo e selecionaria o nome. Quando o
    *  formulário voltava de uma recusa do servidor, o nome selecionado e com
    *  contorno vermelho parecia ser o problema, e a produção trocava o nome
-   *  sem ver o motivo (30/10/2026). O foco fica no diálogo, e a recusa leva
-   *  ao campo recusado. */
+   *  sem ver o motivo (30/10/2026). O foco fica no diálogo. */
   function aoAbrir(e: Event) {
     e.preventDefault();
     (e.currentTarget as HTMLElement).focus();
-    const recusado = ROTULOS.find(([campo]) => fieldErrors[campo]?.length);
-    if (recusado) requestAnimationFrame(() => rolarAte(recusado[0]));
   }
+
+  // A recusa leva ao campo recusado. Aqui, e não em `aoAbrir`: com a
+  // confirmação ainda fechando, o Radix não avisa que o formulário reabriu.
+  React.useEffect(() => {
+    if (!open) return;
+    const recusado = ROTULOS.find(([campo]) => fieldErrors[campo]?.length);
+    if (!recusado) return;
+    const espera = window.setTimeout(() => rolarAte(recusado[0], "auto"), 250);
+    return () => window.clearTimeout(espera);
+  }, [open, fieldErrors]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -521,35 +528,38 @@ export function EnviarJobModal({
         onOpenAutoFocus={aoAbrir}
         className="flex max-h-[97vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
       >
-        <DialogHeader className="shrink-0 flex-row items-start gap-4 border-b border-border px-6 py-5 pr-14">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-california-red/10 text-california-red">
-            <Briefcase className="h-5 w-5" />
-          </div>
-          <div className="min-w-0 space-y-1">
-            <DialogTitle className="text-xl">Enviar job para abertura</DialogTitle>
-            <DialogDescription>
-              {`Confira as informações essenciais. Alterações em nome, cliente, marca, GP, produtor, cidade, regional e datas são gravadas também no orçamento “${orcamentoNome}”.`}
-            </DialogDescription>
-          </div>
-        </DialogHeader>
-
-        {/* Fora do miolo: a recusa do servidor fica à vista com a rolagem em
-            qualquer ponto. No fim do formulário, ninguém a via. */}
-        {erroGeral && (
-          <div
-            role="alert"
-            className="flex shrink-0 items-start gap-2 border-b border-california-red/20 bg-california-red/5 px-6 py-3 text-sm text-california-red"
-          >
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-            <div className="min-w-0">
-              <p className="font-semibold">O job não foi enviado.</p>
-              <p>{erroGeral}</p>
-              {errosSemCampo.map((erro) => (
-                <p key={erro}>{erro}</p>
-              ))}
+        <div className="shrink-0 border-b border-border">
+          <DialogHeader className="flex-row items-start gap-4 px-6 py-5 pr-14">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-california-red/10 text-california-red">
+              <Briefcase className="h-5 w-5" />
             </div>
-          </div>
-        )}
+            <div className="min-w-0 space-y-1">
+              <DialogTitle className="text-xl">Enviar job para abertura</DialogTitle>
+              <DialogDescription>
+                {`Confira as informações essenciais. Alterações em nome, cliente, marca, GP, produtor, cidade, regional e datas são gravadas também no orçamento “${orcamentoNome}”.`}
+              </DialogDescription>
+            </div>
+          </DialogHeader>
+
+          {/* Dentro do cabeçalho, acima da linha: a recusa do servidor fica à
+              vista com a rolagem em qualquer ponto, sem parecer que cobre os
+              campos. No fim do formulário, ninguém a via. */}
+          {erroGeral && (
+            <div
+              role="alert"
+              className="mx-6 mb-4 flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-2.5 text-sm text-california-red"
+            >
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="min-w-0">
+                <p className="font-semibold">O job não foi enviado.</p>
+                <p>{erroGeral}</p>
+                {errosSemCampo.map((erro) => (
+                  <p key={erro}>{erro}</p>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
 
         <div
           ref={miolo}
@@ -1173,7 +1183,7 @@ function RecebimentoPorMes({
 }) {
   const primeiro = meses.find((m) => m.faturamento > 0.004)?.mes ?? null;
   return (
-    <div data-campo="data_prevista_faturamento" className="space-y-1.5 md:col-span-3">
+    <div data-campo="data_prevista_faturamento" className="scroll-mt-4 space-y-1.5 md:col-span-3">
       <Label>
         Datas previstas para recebimento
         <span className="ml-1 text-california-red">*</span>
@@ -1259,7 +1269,7 @@ function Campo({
   children: React.ReactNode;
 }) {
   return (
-    <div data-campo={campo} className={cn("space-y-1.5", className)}>
+    <div data-campo={campo} className={cn("scroll-mt-4 space-y-1.5", className)}>
       <Label>
         {rotulo}
         {obrigatorio && <span className="ml-1 text-california-red">*</span>}
