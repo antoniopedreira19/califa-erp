@@ -8712,3 +8712,15 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   digital, conta e valor, em vez de soltar todas as linhas do banco.
 - Textos da tela (Histórico, aba Banco, Extrato, fluxo de caixa) dizem
   "competência até o 3T".
+
+## ⚠️ Nota de 2026-10-30 (5) — a soma do histórico só junta o mesmo favorecido (decisão 211)
+
+- `lib/conciliacao/historico.ts`: a soma de várias linhas da cauda (mesmo
+  job, todas do dia, duas a três) passa a exigir o mesmo favorecido; a linha
+  sem favorecido só casa sozinha. A cauda traz o `fornecedor` para o motor.
+- Imposto retido na fonte pelo cliente ("… retido na fonte"): nunca casa com
+  saída; entra no recebimento do mesmo cliente, a nota mais as retenções
+  dela (`notaComRetencoes`).
+- 29 ligações antigas que somavam favorecidos diferentes foram desfeitas;
+  14 recebimentos ligados à nota mais as retenções; a regra nova ligou mais 24.
+

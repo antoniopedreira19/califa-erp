@@ -1239,6 +1239,28 @@ ficam só os jobs do 4T." Os jobs do 3T que já existem no sistema (cerca de
   conciliadas. A conciliação passou a casar a cauda nova com 328 linhas da
   California Santander, ligadas pela seção "Do histórico da planilha".
 
+### A varredura, os recebimentos com retenção e a soma do mesmo favorecido (30/10/2026)
+
+- **Varredura** (só leitura, pedido do Tiago): as linhas pendentes do banco
+  contra as linhas da cauda sem banco, pelo valor exato. Ligadas com o OK
+  dele 25 saídas da California Santander (R$ 305.304,11) pela action
+  `conciliarPeloHistorico`; 5 delas (somas de 4 linhas) eram coincidência e
+  foram desfeitas.
+- **Recebimentos com retenção:** a planilha lança a nota cheia e, no mesmo
+  dia, uma linha por imposto retido pelo cliente ("Imposto retido na fonte
+  …": IR 1,5%, CSLL 1%, PIS 0,65%, COFINS 3%, ISS 5%), com o cliente como
+  favorecido. A nota mais as retenções dão o líquido do banco. 14 ligados à
+  mão (R$ 1.275.386,97) e 2 pela regra nova. Os 5 de 14/10 esperam o 4T: as
+  retenções desse dia têm competência 4T na planilha.
+- **A soma do histórico exige o mesmo favorecido** (Tiago, 30/10: "Sim,
+  corrigir"): um PIX paga um favorecido só. 29 ligações do automático
+  (27 e 30/10) somavam favorecidos diferentes e foram desfeitas. Em
+  `lib/conciliacao/historico.ts`: a soma só junta linhas do mesmo favorecido
+  (nome normalizado); a linha sem favorecido só casa sozinha; o imposto
+  retido na fonte nunca casa com saída e entra só no recebimento do mesmo
+  cliente, junto da nota (`notaComRetencoes`). O "ISS retido" da folha de PJ
+  e da PP é pagamento e casa normalmente. A regra nova ligou mais 24 linhas.
+
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas
   85 e 91 da Res. Jobs 2026; R$ 1.520.000,00 de benefício): o histórico segue a
