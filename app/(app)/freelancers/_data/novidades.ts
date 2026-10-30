@@ -59,14 +59,18 @@ export async function carregarNovidades(
       .limit(50),
 
     // 2. Aditivos: contratos criados após cutoff, sem PDF, com nome_job,
-    // em freelas que já têm algum contrato (count > 1)
+    // em freelas que já têm algum contrato (count > 1).
+    //
+    // Sem filtro de origem_sistema (30/10/2026): o filtro `= califa_erp`
+    // excluía todo contrato vindo da migração do RH antigo. Como o RH
+    // continua operando lá no antigo e os aditivos chegam pelo sync, nada
+    // aparecia no card. O cutoff já faz o papel de "só coisas novas".
     supabase
       .from("freelancer_contratos")
       .select(
         "id, freelancer_id, nome_job, cargo, created_at, data_termino, arquivo_url, freelancers!inner(nome_social)",
       )
       .eq("tenant_id", tenantId)
-      .eq("origem_sistema", "califa_erp")
       .is("arquivo_url", null)
       .not("nome_job", "is", null)
       .gte("created_at", CUTOFF_NOVIDADES)
