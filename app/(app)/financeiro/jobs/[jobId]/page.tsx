@@ -305,7 +305,7 @@ export default async function JobNoFinanceiroPage({
     : [];
 
   const [projetos, irmaosRes, opcoesDoRegistro] = await Promise.all([
-    listarProjetosFinanceiro(tenantId, jobNaFila.cliente_id),
+    listarProjetosFinanceiro(tenantId, jobNaFila.cliente_id, jobNaFila.id),
     // Irmãos no projeto do FINANCEIRO — não os do projeto da produção,
     // que é outro agrupamento. Sem projeto do financeiro (job aberto
     // antes da migration 20260820000011) a lista fica vazia em vez de

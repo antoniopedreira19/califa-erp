@@ -26,6 +26,13 @@ export interface ProjetoFinanceiroOpcao {
    * dentro. Vazio só no projeto novo, que ainda não tem job.
    */
   clientes: { id: string; nome: string | null }[];
+  /**
+   * As empresas dos jobs do projeto, fora o job que está sendo aberto: o
+   * campo só oferece os projetos da empresa escolhida no job (revisão da
+   * 228, 30/10/2026). Vazio quando o projeto só tem este job — aí ele não
+   * prende a empresa.
+   */
+  empresas: string[];
 }
 
 /**
@@ -38,11 +45,14 @@ export interface ProjetoFinanceiroOpcao {
  * nome — "Fair Culture & Business" virou dez projetos, um por cliente.
  * Agora a busca acha qualquer projeto aberto (decisão 228); os do cliente
  * do job (`clienteDoJob`) vêm primeiro, e cada linha mostra os clientes
- * que já estão dentro.
+ * que já estão dentro. A lista vem inteira, com as empresas de cada
+ * projeto (`jobId` fica de fora da conta): quem filtra pela empresa é o
+ * formulário, porque a empresa do job se troca ali mesmo.
  */
 export async function listarProjetosFinanceiro(
   tenantId: string,
-  clienteDoJob?: string | null,
+  clienteDoJob: string | null,
+  jobId: string,
 ): Promise<ProjetoFinanceiroOpcao[]> {
   const supabase = createClient();
 
@@ -60,7 +70,7 @@ export async function listarProjetosFinanceiro(
     supabase
       .from("jobs")
       .select(
-        "projeto_financeiro_id, cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia)",
+        "id, projeto_financeiro_id, cliente_id, empresa_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia)",
       )
       .eq("tenant_id", tenantId)
       .not("projeto_financeiro_id", "is", null)
@@ -78,7 +88,13 @@ export async function listarProjetosFinanceiro(
   }
 
   const clientesPorProjeto = new Map<string, Map<string, string | null>>();
+  const empresasPorProjeto = new Map<string, Set<string>>();
   for (const j of (jobsRes.data ?? []) as any[]) {
+    if (j.empresa_id && j.id !== jobId) {
+      const doProjeto = empresasPorProjeto.get(j.projeto_financeiro_id) ?? new Set<string>();
+      doProjeto.add(j.empresa_id);
+      empresasPorProjeto.set(j.projeto_financeiro_id, doProjeto);
+    }
     if (!j.cliente_id) continue;
     const doProjeto =
       clientesPorProjeto.get(j.projeto_financeiro_id) ?? new Map();
@@ -104,6 +120,7 @@ export async function listarProjetosFinanceiro(
               nome: (p.cliente?.nome_fantasia as string | undefined) ?? null,
             },
           ],
+      empresas: Array.from(empresasPorProjeto.get(p.id) ?? []),
     };
   });
 

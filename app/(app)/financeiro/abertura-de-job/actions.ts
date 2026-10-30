@@ -505,6 +505,7 @@ export async function abrirJobNoFinanceiro(
   const refsErro = await conferirProjetoEContas(
     supabase,
     session.activeTenant.id,
+    jobId,
     job.cliente_id ?? null,
     parsed.data,
   );
@@ -1091,8 +1092,10 @@ function conferirImpostos(
 async function conferirProjetoEContas(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
+  jobId: string,
   clienteDoJob: string | null,
   input: {
+    empresa_id: string;
     projeto_financeiro_id: string | null;
     projeto_financeiro_novo: string | null;
     conta_recebimento_id: string | null;
@@ -1118,7 +1121,7 @@ async function conferirProjetoEContas(
     ),
   );
 
-  const [projetoRes, nomeRes, contasRes] = await Promise.all([
+  const [projetoRes, outrosJobsRes, nomeRes, contasRes] = await Promise.all([
     input.projeto_financeiro_id
       ? supabase
           .from("projetos_financeiro")
@@ -1127,6 +1130,17 @@ async function conferirProjetoEContas(
           .eq("tenant_id", tenantId)
           .maybeSingle<{ id: string; ativo: boolean; cliente_id: string }>()
       : Promise.resolve({ data: null }),
+    // A empresa do projeto unificado é a dos jobs que já estão nele, fora
+    // este (decisão 228, revisão de 30/10/2026).
+    input.projeto_financeiro_id
+      ? supabase
+          .from("jobs")
+          .select("empresa_id")
+          .eq("tenant_id", tenantId)
+          .eq("projeto_financeiro_id", input.projeto_financeiro_id)
+          .neq("id", jobId)
+          .not("status", "in", "(cancelado,rejeitado_financeiro)")
+      : Promise.resolve({ data: [], error: null }),
     input.projeto_financeiro_novo
       ? projetoComONome(supabase, tenantId, input.projeto_financeiro_novo, null)
       : Promise.resolve(null),
@@ -1152,6 +1166,18 @@ async function conferirProjetoEContas(
     // Projeto de outro cliente é permitido desde a decisão 228: os
     // parceiros de um mesmo evento são clientes diferentes e o financeiro
     // quer vê-los juntos. Até 29/10/2026 isto recusava.
+    //
+    // De outra empresa, não (revisão de 30/10/2026): o projeto unificado
+    // é sempre de uma empresa só. Para usar o de outra, troca-se antes a
+    // empresa do job.
+    if (outrosJobsRes.error) {
+      console.error("[abertura-job.empresa-do-projeto]", outrosJobsRes.error.message);
+      return "Não foi possível conferir a empresa do projeto unificado.";
+    }
+    const outrosJobs = (outrosJobsRes.data ?? []) as { empresa_id: string | null }[];
+    if (outrosJobs.some((j) => j.empresa_id && j.empresa_id !== input.empresa_id)) {
+      return "Este projeto unificado é de outra empresa. Troque a empresa do job ou escolha outro projeto.";
+    }
   }
 
   if (contasRes.error) {
@@ -1709,6 +1735,7 @@ export async function editarRegistroDaAbertura(
   const refsErro = await conferirProjetoEContas(
     supabase,
     session.activeTenant.id,
+    jobId,
     job.cliente_id ?? null,
     parsed.data,
   );

@@ -86,7 +86,7 @@ export default async function AbrirJobNoFinanceiroPage({
       if (!carregado) return null;
       const [projetos, faturamentoMensal, ultimoDoProjetoRes, opcoesDoRegistro] =
         await Promise.all([
-          listarProjetosFinanceiro(tenantId, carregado.job.cliente_id),
+          listarProjetosFinanceiro(tenantId, carregado.job.cliente_id, carregado.job.id),
           // A Mídia Off também fatura por mês (decisão 167).
           carregado.job.modelo_planilha_orcamento === "mensal" ||
           carregado.job.modelo_planilha_orcamento === "midia_off"

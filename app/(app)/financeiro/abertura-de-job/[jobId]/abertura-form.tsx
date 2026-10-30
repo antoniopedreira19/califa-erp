@@ -143,6 +143,12 @@ const PROJETO_NOVO = "novo";
 /** Uma linha do combo de projeto: as do servidor e a do projeto novo. */
 type OpcaoDeProjeto = ProjetoFinanceiroOpcao & { novo: boolean };
 
+/** O projeto unificado é da empresa dos jobs que já estão nele; o que só
+ *  tem este job não prende a empresa (revisão da 228, 30/10/2026). */
+function projetoDaEmpresa(p: ProjetoFinanceiroOpcao, empresaId: string) {
+  return p.empresas.length === 0 || p.empresas.includes(empresaId);
+}
+
 /** "Novo": o projeto ainda não existe, e só nasce com o job. */
 function SeloProjetoNovo() {
   return (
@@ -635,6 +641,11 @@ export function AberturaForm({
   const regionaisDaEmpresa = regionais.filter((r) => r.empresa_id === empresaId);
   function trocarEmpresa(id: string) {
     setEmpresaId(id);
+    // O projeto unificado é de uma empresa só (revisão da 228, 30/10/2026):
+    // o escolhido sai se for de outra. O novo do "+" fica — ele nasce na
+    // empresa do job.
+    const escolhido = projetos.find((p) => p.id === projetoId);
+    if (escolhido && !projetoDaEmpresa(escolhido, id)) setProjetoId("");
     const daNova = regionais.filter((r) => r.empresa_id === id);
     // Com uma regional só, ela já fica escolhida; com mais, a pessoa
     // escolhe — a de antes era de outra empresa.
@@ -950,7 +961,7 @@ export function AberturaForm({
   // A lista do servidor, com os nomes do lápis, e o projeto novo reservado
   // no topo — ele ainda não tem código: o sistema gera ao gravar.
   const projetosVisiveis = React.useMemo<OpcaoDeProjeto[]>(() => {
-    const lista = projetos.map((p) => ({
+    const lista = projetos.filter((p) => projetoDaEmpresa(p, empresaId)).map((p) => ({
       ...p,
       nome: nomesEditados[p.id] ?? p.nome,
       novo: false,
@@ -965,11 +976,12 @@ export function AberturaForm({
             cliente_id: job.cliente_id ?? "",
             cliente_nome: job.cliente_nome,
             clientes: [{ id: job.cliente_id ?? "", nome: job.cliente_nome }],
+            empresas: [],
             novo: true,
           },
           ...lista,
         ];
-  }, [projetos, nomesEditados, nomeProjetoNovo, job.cliente_id, job.cliente_nome]);
+  }, [projetos, nomesEditados, nomeProjetoNovo, job.cliente_id, job.cliente_nome, empresaId]);
   const projetoSel = projetosVisiveis.find((p) => p.id === projetoId) ?? null;
   // Sem acento e sem caixa, no nome e no código — o mesmo critério do
   // campo de fornecedor (`components/ui/combobox.tsx`).
@@ -1014,7 +1026,7 @@ export function AberturaForm({
     if (projetoId === PROJETO_NOVO) setNomeProjetoNovo(null);
     setProjetoId("");
   }
-  const projetoLabel = projetoSel?.nome ?? "Selecione o projeto";
+  const projetoLabel = projetoSel?.nome ?? "Selecione o projeto unificado";
   // Sem o código do projeto, que não aparece para o usuário (pedido do
   // Tiago, 27/10/2026).
   const projetoResumo = projetoSel
@@ -1070,7 +1082,7 @@ export function AberturaForm({
   const textoValidacao = !nomeOk
     ? "Informe o nome do job."
     : !projetoOk
-      ? "Selecione o projeto do job."
+      ? "Selecione o projeto unificado do job."
       : categoriaId === ""
       ? "Selecione a categoria do job."
       : !servicoOk
@@ -1743,7 +1755,7 @@ export function AberturaForm({
                   produção (migration 20260820000011). */}
               <div className="flex flex-col gap-1.5">
                 <span className="text-[12.5px] font-semibold">
-                  Projeto <span className="text-california-red">*</span>
+                  Projeto unificado <span className="text-california-red">*</span>
                 </span>
                 <div className="flex items-center gap-2">
                   <Popover
@@ -1838,11 +1850,18 @@ export function AberturaForm({
                           className="h-9 text-[13px]"
                         />
                       </div>
+                      <p className="border-b border-border px-4 py-2 text-[11.5px] text-muted-foreground">
+                        Só os projetos unificados de{" "}
+                        <strong className="font-semibold text-foreground">
+                          {empresaNomeEscolhida}
+                        </strong>
+                        . Para ver os de outra empresa, troque a empresa do job.
+                      </p>
                       <div className="max-h-72 overflow-y-auto px-1.5 pb-1.5">
                         {projetosVisiveis.length === 0 ? (
                           <p className="px-2.5 pb-2 pt-2.5 text-[12px] text-muted-foreground">
-                            Nenhum projeto aberto no financeiro. Crie um no
-                            “+” ao lado.
+                            Nenhum projeto unificado aberto nesta empresa.
+                            Crie um no “+” ao lado.
                           </p>
                         ) : projetosFiltrados.length === 0 ? (
                           <p className="px-2.5 pb-2 pt-2.5 text-[12px] text-muted-foreground">
@@ -3645,7 +3664,7 @@ export function AberturaForm({
             </p>
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-[12.5px] text-muted-foreground">
-                Projeto
+                Projeto unificado
               </span>
               <span className="text-right text-[12.5px] font-semibold">
                 {projetoResumo}
@@ -3912,7 +3931,7 @@ export function AberturaForm({
 
           <div className="flex flex-col gap-2.5 rounded-xl border border-border px-4 py-4">
             <ResumoLinha rotulo="Nome do job" valor={nome.trim()} />
-            <ResumoLinha rotulo="Projeto" valor={projetoResumo} />
+            <ResumoLinha rotulo="Projeto unificado" valor={projetoResumo} />
             <ResumoLinha rotulo="Categoria" valor={categoriaNome} />
             <ResumoLinha rotulo="Serviço" valor={servicoNome} />
             <ResumoLinha rotulo="Mídia System" valor={resumoMidia} />

@@ -8629,3 +8629,14 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - Sem migration. A reclassificação retroativa (Fair Culture & Business em
   nove projetos, Festa Debut em três) fica com o financeiro, pelo "Editar
   registro". Ver a [decisão 228](../decisions/228-projeto-do-financeiro-com-jobs-de-clientes-diferentes.md).
+
+## ⚠️ Nota de 2026-10-30 — "Projeto unificado", só da empresa do job (revisão da decisão 228)
+
+- O campo Projeto da abertura e do "Editar registro" passa a se chamar
+  "Projeto unificado" e lista só os projetos da empresa escolhida no job.
+  A empresa do projeto é a dos jobs dele, fora o job em edição
+  (`empresas` em `ProjetoFinanceiroOpcao`; `listarProjetosFinanceiro`
+  recebe o id do job). Trocar a empresa tira o projeto de outra empresa.
+- `conferirProjetoEContas` recusa projeto com job de outra empresa.
+- Sem migration. Ver a §§7–11 da
+  [decisão 228](../decisions/228-projeto-do-financeiro-com-jobs-de-clientes-diferentes.md).

@@ -1,7 +1,7 @@
 # 228 — O projeto do financeiro junta jobs de clientes diferentes
 
 **Data:** 2026-10-29
-**Status:** aceita e implementada (29/10/2026).
+**Status:** aceita e implementada (29/10/2026); revista em 30/10/2026 (§§7–11).
 **Quem decidiu:** Tiago, em 29/10/2026, ao ver que jobs de um mesmo evento
 não puderam ser unificados na abertura.
 **Revê:** a [021](021-projeto-do-financeiro-e-edicao-da-abertura.md) (o combo
@@ -60,3 +60,24 @@ com o nome do parceiro na frente), e não aparecem numa visão agregada só.
   ([Projetos e Jobs](https://claude.ai/artifact/6eefxVmN5sCYVDDquuZfed)):
   expandir dentro do campo, um painel com todos os projetos, ou os dois. O
   Tiago decide depois.
+
+## Revisão de 30/10/2026: só os projetos da empresa do job, e o nome "Projeto unificado"
+
+Pedido do Tiago no protótipo, versão 2.
+
+7. **O campo se chama "Projeto unificado"** (rótulo, texto de fundo, aviso
+   do rodapé e as linhas "Projeto unificado" do resumo e da confirmação).
+8. **A lista mostra só os projetos unificados da empresa escolhida no
+   job.** No topo da lista: "Só os projetos unificados de [empresa]. Para
+   ver os de outra empresa, troque a empresa do job." O cliente continua
+   livre (§1); a empresa, não.
+9. **A empresa do projeto unificado é a dos jobs que já estão nele**, fora
+   o job que está sendo aberto ou editado. A tabela `projetos_financeiro`
+   não tem empresa. Projeto que só tem este job não prende a empresa.
+   Em 30/10/2026 nenhum projeto tinha jobs de duas empresas.
+10. **Trocar a empresa do job tira o projeto escolhido**, se ele for de
+    outra empresa. O projeto novo do "+" fica: ele nasce com o job, na
+    empresa do job.
+11. **O servidor recusa** projeto com job de outra empresa: "Este projeto
+    unificado é de outra empresa. Troque a empresa do job ou escolha outro
+    projeto."
