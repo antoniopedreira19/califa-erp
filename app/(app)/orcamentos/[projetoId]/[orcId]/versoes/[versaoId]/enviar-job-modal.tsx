@@ -202,6 +202,24 @@ type CampoObrigatorio =
   | "observacoes"
   | "contatos_cobranca";
 
+/** Os campos na ordem em que aparecem na tela: é a ordem da lista do que
+ *  falta e a que decide até onde a tela rola. */
+const ROTULOS: [CampoObrigatorio, string][] = [
+  ["nome", "Nome do Job"],
+  ["cliente_id", "Cliente"],
+  ["produto_id", "Marca"],
+  ["gp_responsavel_id", "GP Responsável"],
+  ["regional_id", "Regional"],
+  ["cidade_id", "Cidade"],
+  ["produtor_id", "Produtor Responsável"],
+  ["data_inicio_prevista", "Data de início"],
+  ["data_fim_prevista", "Data de fim"],
+  ["data_evento", "Data Evento"],
+  ["data_prevista_faturamento", "Data prevista para recebimento"],
+  ["contatos_cobranca", "Contato de cobrança"],
+  ["observacoes", "Descritivo"],
+];
+
 /** Versão curta da regra do servidor: só evita que o usuário descubra o
  *  e-mail torto no envio. O Zod da action é quem tem a palavra final. */
 const EMAIL_PLAUSIVEL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -385,6 +403,7 @@ export function EnviarJobModal({
   erroGeral,
 }: Props) {
   const [tentou, setTentou] = React.useState(false);
+  const miolo = React.useRef<HTMLDivElement>(null);
 
   // Cada abertura limpa só o realce de "faltou preencher" — os valores
   // ficam no pai, então voltar da confirmação preserva o formulário.
@@ -439,7 +458,7 @@ export function EnviarJobModal({
       return "Informe ao menos um contato de cobrança.";
     }
     if (faltando.contatos_cobranca) {
-      return "Preencha nome e e-mail de todos os contatos de cobrança.";
+      return "Preencha o nome e o e-mail de todos os contatos de cobrança.";
     }
     return null;
   })();
@@ -452,10 +471,37 @@ export function EnviarJobModal({
     });
   }
 
+  const pendentes = ROTULOS.filter(([campo]) => faltando[campo]);
+  // Chave que o servidor devolveu e não tem campo nesta tela: sem isto o
+  // erro sumiria calado.
+  const errosSemCampo = Object.entries(fieldErrors)
+    .filter(([campo]) => !ROTULOS.some(([c]) => c === campo))
+    .flatMap(([, erros]) => erros);
+
+  /** O cabeçalho e o rodapé ficam: só o miolo rola até o campo. */
+  function rolarAte(campo: CampoObrigatorio) {
+    miolo.current
+      ?.querySelector(`[data-campo="${campo}"]`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
   function handleConfirmar() {
     setTentou(true);
+    if (pendentes.length > 0) rolarAte(pendentes[0][0]);
     if (!completo || faltandoHerdados.length > 0) return;
     onConfirmar();
+  }
+
+  /** O Radix focaria o primeiro campo e selecionaria o nome. Quando o
+   *  formulário voltava de uma recusa do servidor, o nome selecionado e com
+   *  contorno vermelho parecia ser o problema, e a produção trocava o nome
+   *  sem ver o motivo (30/10/2026). O foco fica no diálogo, e a recusa leva
+   *  ao campo recusado. */
+  function aoAbrir(e: Event) {
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).focus();
+    const recusado = ROTULOS.find(([campo]) => fieldErrors[campo]?.length);
+    if (recusado) requestAnimationFrame(() => rolarAte(recusado[0]));
   }
 
   return (
@@ -471,7 +517,10 @@ export function EnviarJobModal({
           As medidas apertadas daqui pra baixo (97vh, gap-y-3, py-5) são
           o que fecha a conta num notebook de ~970px de altura: com as
           folgas antigas o formulário abria cortado. */}
-      <DialogContent className="flex max-h-[97vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl">
+      <DialogContent
+        onOpenAutoFocus={aoAbrir}
+        className="flex max-h-[97vh] flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
+      >
         <DialogHeader className="shrink-0 flex-row items-start gap-4 border-b border-border px-6 py-5 pr-14">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-california-red/10 text-california-red">
             <Briefcase className="h-5 w-5" />
@@ -484,7 +533,28 @@ export function EnviarJobModal({
           </div>
         </DialogHeader>
 
-        <div className="grid min-h-0 flex-1 gap-x-5 gap-y-3 overflow-y-auto px-6 py-4 md:grid-cols-3 md:content-start">
+        {/* Fora do miolo: a recusa do servidor fica à vista com a rolagem em
+            qualquer ponto. No fim do formulário, ninguém a via. */}
+        {erroGeral && (
+          <div
+            role="alert"
+            className="flex shrink-0 items-start gap-2 border-b border-california-red/20 bg-california-red/5 px-6 py-3 text-sm text-california-red"
+          >
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <div className="min-w-0">
+              <p className="font-semibold">O job não foi enviado.</p>
+              <p>{erroGeral}</p>
+              {errosSemCampo.map((erro) => (
+                <p key={erro}>{erro}</p>
+              ))}
+            </div>
+          </div>
+        )}
+
+        <div
+          ref={miolo}
+          className="grid min-h-0 flex-1 gap-x-5 gap-y-3 overflow-y-auto px-6 py-4 md:grid-cols-3 md:content-start"
+        >
           {/* Linha 1 — identificação, tudo travado. O código do projeto
               saiu em 30/09/2026 (decisão 135): o único código do
               formulário é o do job. */}
@@ -509,6 +579,7 @@ export function EnviarJobModal({
             rotulo="Nome do Job"
             obrigatorio
             className="md:col-span-2"
+            campo="nome"
             erro={erroDe("nome")}
             apoio="Se alterar, o orçamento é atualizado na confirmação."
           >
@@ -541,6 +612,7 @@ export function EnviarJobModal({
           <Campo
             rotulo="Cliente"
             obrigatorio
+            campo="cliente_id"
             erro={erroDe("cliente_id")}
             apoio="Se alterar, o orçamento é atualizado na confirmação."
           >
@@ -565,6 +637,7 @@ export function EnviarJobModal({
           <Campo
             rotulo="Marca"
             obrigatorio
+            campo="produto_id"
             erro={erroDe("produto_id")}
             apoio="Se alterar, o orçamento é atualizado na confirmação."
           >
@@ -590,6 +663,7 @@ export function EnviarJobModal({
           <Campo
             rotulo="GP Responsável"
             obrigatorio
+            campo="gp_responsavel_id"
             erro={erroDe("gp_responsavel_id")}
             apoio={
               gpDeFora(gps, dados.gpId)
@@ -617,6 +691,7 @@ export function EnviarJobModal({
           <Campo
             rotulo="Regional"
             obrigatorio
+            campo="regional_id"
             erro={erroDe("regional_id")}
             apoio={
               regionaisDoProjeto.length === 0
@@ -656,6 +731,7 @@ export function EnviarJobModal({
           <Campo
             rotulo="Cidade"
             obrigatorio
+            campo="cidade_id"
             erro={erroDe("cidade_id")}
             apoio="Se alterar, o orçamento é atualizado na confirmação."
           >
@@ -674,6 +750,7 @@ export function EnviarJobModal({
           <Campo
             rotulo="Produtor Responsável"
             obrigatorio
+            campo="produtor_id"
             erro={erroDe("produtor_id")}
             apoio="Se alterar, o orçamento é atualizado na confirmação."
           >
@@ -696,6 +773,7 @@ export function EnviarJobModal({
           <Campo
             rotulo="Data de início"
             obrigatorio
+            campo="data_inicio_prevista"
             erro={erroDe("data_inicio_prevista")}
           >
             <DatePicker
@@ -711,7 +789,12 @@ export function EnviarJobModal({
             />
           </Campo>
 
-          <Campo rotulo="Data de fim" obrigatorio erro={erroDe("data_fim_prevista")}>
+          <Campo
+            rotulo="Data de fim"
+            obrigatorio
+            campo="data_fim_prevista"
+            erro={erroDe("data_fim_prevista")}
+          >
             <DatePicker
               key={`fim-${dados.dataFim}`}
               name="__job_data_fim"
@@ -732,6 +815,7 @@ export function EnviarJobModal({
             <Campo
               rotulo="Data Evento"
               obrigatorio
+              campo="data_evento"
               erro={erroDe("data_evento")}
             >
               <DatePicker
@@ -774,6 +858,7 @@ export function EnviarJobModal({
               <Campo
                 rotulo="Data prevista para recebimento"
                 obrigatorio={!semRecebimento}
+                campo="data_prevista_faturamento"
                 erro={semRecebimento ? null : erroDe("data_prevista_faturamento")}
               >
                 {semRecebimento ? (
@@ -809,6 +894,7 @@ export function EnviarJobModal({
             rotulo="Contato de cobrança"
             obrigatorio={!semRecebimento}
             className="md:col-span-3"
+            campo="contatos_cobranca"
             erro={erroContatos}
             apoio={
               semRecebimento
@@ -985,6 +1071,7 @@ export function EnviarJobModal({
             rotulo="Descritivo"
             obrigatorio
             className="md:col-span-3"
+            campo="observacoes"
             erro={erroDe("observacoes")}
             apoio={
               dados.observacoes.length > 0
@@ -1018,20 +1105,20 @@ export function EnviarJobModal({
             </div>
           )}
 
-          {erroGeral && (
-            <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red md:col-span-3">
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-              <span>{erroGeral}</span>
-            </div>
-          )}
         </div>
 
         <div className="flex shrink-0 items-center justify-between gap-4 border-t border-border bg-muted/30 px-6 py-3">
-          <span className="text-xs text-muted-foreground">
-            Campos com <span className="text-california-red">*</span> são
-            obrigatórios para a abertura.
-          </span>
-          <div className="flex items-center gap-2.5">
+          {tentou && pendentes.length > 0 ? (
+            <span role="alert" className="text-xs font-medium text-california-red">
+              Falta preencher: {pendentes.map(([, rotulo]) => rotulo).join(", ")}.
+            </span>
+          ) : (
+            <span className="text-xs text-muted-foreground">
+              Campos com <span className="text-california-red">*</span> são
+              obrigatórios para a abertura.
+            </span>
+          )}
+          <div className="flex shrink-0 items-center gap-2.5">
             <button
               type="button"
               onClick={() => onOpenChange(false)}
@@ -1086,7 +1173,7 @@ function RecebimentoPorMes({
 }) {
   const primeiro = meses.find((m) => m.faturamento > 0.004)?.mes ?? null;
   return (
-    <div className="space-y-1.5 md:col-span-3">
+    <div data-campo="data_prevista_faturamento" className="space-y-1.5 md:col-span-3">
       <Label>
         Datas previstas para recebimento
         <span className="ml-1 text-california-red">*</span>
@@ -1155,6 +1242,7 @@ function Campo({
   rotulo,
   obrigatorio,
   opcional,
+  campo,
   erro,
   apoio,
   className,
@@ -1163,13 +1251,15 @@ function Campo({
   rotulo: string;
   obrigatorio?: boolean;
   opcional?: boolean;
+  /** A chave de `CampoObrigatorio`: é por ela que a tela rola até o campo. */
+  campo?: CampoObrigatorio;
   erro?: string | null;
   apoio?: React.ReactNode;
   className?: string;
   children: React.ReactNode;
 }) {
   return (
-    <div className={cn("space-y-1.5", className)}>
+    <div data-campo={campo} className={cn("space-y-1.5", className)}>
       <Label>
         {rotulo}
         {obrigatorio && <span className="ml-1 text-california-red">*</span>}

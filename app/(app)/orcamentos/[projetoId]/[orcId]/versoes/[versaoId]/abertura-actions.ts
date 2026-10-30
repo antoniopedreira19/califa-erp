@@ -193,8 +193,29 @@ async function barrarConsumoSemSaldoAprovado(
  *   do formulário;
  * - nome, datas, cidade e regional informados no modal são gravados
  *   TAMBÉM no orçamento.
+ *
+ * A recusa fica na auditoria: sem ela, não há como saber depois o que o
+ * servidor respondeu a quem relata que o envio "fica voltando" (30/10/2026).
  */
 export async function enviarJobParaAbertura(
+  versaoId: string,
+  formData: FormData,
+): Promise<AberturaResult> {
+  const res = await tentarEnviarJobParaAbertura(versaoId, formData);
+  if (!res.ok) {
+    const session = await requireSession();
+    await logAuditEvent({
+      acao: "job.envio_para_abertura_recusado",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "versao_orcamento",
+      entidadeId: versaoId,
+      metadata: { mensagem: res.message, campos: res.fieldErrors ?? {} },
+    });
+  }
+  return res;
+}
+
+async function tentarEnviarJobParaAbertura(
   versaoId: string,
   formData: FormData,
 ): Promise<AberturaResult> {
