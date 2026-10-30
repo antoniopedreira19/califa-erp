@@ -141,42 +141,64 @@ export function parseFolhaContabilidadeTexto(texto: string): ParsedFolha {
     const codigo = cpfMatch[2];
     const nome = cpfMatch[3].trim();
 
-    // As próximas 2 linhas não-vazias devem ser data e valor (nessa ordem).
+    // Procura data e valor nas próximas linhas. No PDF da contabilidade,
+    // nomes compridos estouram a coluna "Nome do empregado" e o pdf-parse
+    // quebra o nome em 2+ linhas — a continuação do nome aparece entre a
+    // linha-CPF e a linha-data. Tratamos esse texto como continuação do
+    // nome, sem descartar o colaborador. Ver fixture folha-nome-quebrado.txt.
     let dataMatch: RegExpMatchArray | null = null;
     let valorMatch: RegExpMatchArray | null = null;
+    const nomeExtras: string[] = [];
     let j = i + 1;
     while (j < linhasBrutas.length && (!dataMatch || !valorMatch)) {
       const prox = linhasBrutas[j];
-      if (prox) {
-        if (!dataMatch) {
-          const m = prox.match(RE_DATA);
-          if (m) {
-            dataMatch = m;
-            j++;
-            continue;
-          }
+      if (!prox) {
+        j++;
+        continue;
+      }
+
+      // Barreiras contra o loop vazar: nova linha-CPF (próxima pessoa) ou
+      // header de seção fecham o bloco atual sem casar com campos de outra
+      // pessoa nem com o rodapé totalizador.
+      if (RE_LINHA_CPF_CODIGO_NOME.test(prox)) break;
+      if (RE_HEADER_SECAO.test(prox)) break;
+
+      if (!dataMatch) {
+        const m = prox.match(RE_DATA);
+        if (m) {
+          dataMatch = m;
+          j++;
+          continue;
         }
-        if (dataMatch && !valorMatch) {
-          const m = prox.match(RE_VALOR);
-          if (m) {
-            valorMatch = m;
-            j++;
-            continue;
-          }
+        // Antes da data: é continuação do nome quebrado em várias linhas.
+        nomeExtras.push(prox);
+        j++;
+        continue;
+      }
+      if (dataMatch && !valorMatch) {
+        const m = prox.match(RE_VALOR);
+        if (m) {
+          valorMatch = m;
+          j++;
+          continue;
         }
-        // Linha inesperada entre CPF e data/valor: aborta esse match pra evitar
-        // casamento errado com totalizador no rodapé.
+        // Entre data e valor não deveria aparecer texto solto; aborta pra
+        // não casar com algo errado.
         break;
       }
-      j++;
     }
 
     if (!dataMatch || !valorMatch) continue;
 
+    const nomeCompleto =
+      nomeExtras.length > 0
+        ? `${nome} ${nomeExtras.join(" ")}`.replace(/\s+/g, " ").trim()
+        : nome;
+
     linhas.push({
       secao: secaoAtual,
       codigo_contabilidade: codigo,
-      nome,
+      nome: nomeCompleto,
       cpf,
       valor: brlParaCentavos(valorMatch[1]),
       data_pagamento: dataBrParaIso(dataMatch[1]),

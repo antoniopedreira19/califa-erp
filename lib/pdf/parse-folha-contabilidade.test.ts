@@ -9,6 +9,11 @@ const fixture = readFileSync(
   "utf8",
 );
 
+const fixtureNomeQuebrado = readFileSync(
+  join(__dirname, "__fixtures__", "folha-nome-quebrado.txt"),
+  "utf8",
+);
+
 test("extrai header: CNPJ e competência", () => {
   const r = parseFolhaContabilidadeTexto(fixture);
   assert.equal(r.cnpj_emissor, "19437976000154");
@@ -106,4 +111,41 @@ test("texto sem Competência dispara erro claro", () => {
     () => parseFolhaContabilidadeTexto(textoSemComp),
     /Compet[eê]ncia.*não encontrada/i,
   );
+});
+
+// Regressão: PDF 10/2026 da contabilidade trunca nomes compridos na coluna
+// "Nome do empregado" e o pdf-parse quebra o nome em 2 linhas. O parser
+// antigo descartava a pessoa inteira (nome + CPF + valor) por causa da linha
+// de continuação entre CPF e data. Ver conversa de 2026-10-30.
+
+test("extrai colaborador cujo nome quebra em 2 linhas (regressão PDF 10/2026)", () => {
+  const r = parseFolhaContabilidadeTexto(fixtureNomeQuebrado);
+  const col02 = r.linhas.find((l) => l.cpf === "19000000200");
+  assert.ok(col02, "colaborador com nome quebrado deve ser extraído, não descartado");
+  assert.equal(col02!.nome, "COLABORADOR DE NOME MUITO LONGO EXEMPLO 02");
+  assert.equal(col02!.valor, 200000);
+  assert.equal(col02!.data_pagamento, "2026-11-05");
+  assert.equal(col02!.secao, "empregados");
+});
+
+test("extrai dois colaboradores com nome quebrado em sequência", () => {
+  const r = parseFolhaContabilidadeTexto(fixtureNomeQuebrado);
+  const col03 = r.linhas.find((l) => l.cpf === "19000000300");
+  assert.ok(col03, "segundo colaborador com nome quebrado seguido do primeiro");
+  assert.equal(col03!.nome, "OUTRO COLABORADOR DE NOME MUITO LONGO EXEMPLO 03");
+  assert.equal(col03!.valor, 300000);
+});
+
+test("fixture com nomes quebrados: todas as 6 linhas extraídas", () => {
+  const r = parseFolhaContabilidadeTexto(fixtureNomeQuebrado);
+  assert.equal(r.linhas.length, 6);
+  assert.equal(r.linhas.filter((l) => l.secao === "empregados").length, 4);
+  assert.equal(r.linhas.filter((l) => l.secao === "estagiarios").length, 1);
+  assert.equal(r.linhas.filter((l) => l.secao === "contribuintes").length, 1);
+});
+
+test("fixture com nomes quebrados: soma bate", () => {
+  const r = parseFolhaContabilidadeTexto(fixtureNomeQuebrado);
+  const soma = r.linhas.reduce((acc, l) => acc + l.valor, 0);
+  assert.equal(soma, 1110000); // R$ 11.100,00 em centavos
 });
