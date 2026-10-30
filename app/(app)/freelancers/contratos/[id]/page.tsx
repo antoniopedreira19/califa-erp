@@ -60,11 +60,14 @@ export default async function EditarContratoPage({
     redirect(`/freelancers/${freelancer.id}?reason=sem_permissao_editar`);
   }
 
-  const [jobsCarregados, respRes, cargosRes] = await Promise.all([
+  // Em 2 etapas: a FK de tenant_members.user_id aponta pra auth.users, não
+  // pra profiles — embed `profiles(...)` retornava null em toda linha e o
+  // picker aparecia como "Nenhum resultado". Mesmo padrão da page do perfil.
+  const [jobsCarregados, membrosRes, cargosRes] = await Promise.all([
     jobsProPickerDeFreelancer(supabase, session.activeTenant.id),
     supabase
       .from("tenant_members")
-      .select("role, user_id, profiles(id, nome, email)")
+      .select("role, user_id")
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo")
       .in("role", ROLES_RESPONSAVEL),
@@ -75,6 +78,24 @@ export default async function EditarContratoPage({
       .order("nome", { ascending: true })
       .returns<FreelancerCargo[]>(),
   ]);
+
+  const membros = (membrosRes.data ?? []) as Array<{
+    role: AppRole;
+    user_id: string;
+  }>;
+  const roleByUser = new Map<string, AppRole>(
+    membros.map((m) => [m.user_id, m.role]),
+  );
+  const userIds = Array.from(new Set(membros.map((m) => m.user_id)));
+  const profilesRes =
+    userIds.length > 0
+      ? await supabase
+          .from("profiles")
+          .select("id, nome, email")
+          .in("id", userIds)
+          .eq("ativo", true)
+          .order("nome", { ascending: true })
+      : { data: [], error: null };
 
   const jobs = [...jobsCarregados];
 
@@ -102,23 +123,16 @@ export default async function EditarContratoPage({
     });
   }
 
-  const responsaveis = (respRes.data ?? [])
-    .map((m: any) => {
-      const p = m.profiles;
-      if (!p) return null;
-      return {
-        id: p.id as string,
-        nome: p.nome as string,
-        email: p.email as string,
-        role: m.role as AppRole,
-      };
-    })
-    .filter(Boolean) as Array<{
+  const responsaveis = ((profilesRes.data ?? []) as Array<{
     id: string;
     nome: string;
-    email: string;
-    role: AppRole;
-  }>;
+    email: string | null;
+  }>).map((p) => ({
+    id: p.id,
+    nome: p.nome,
+    email: p.email ?? "",
+    role: roleByUser.get(p.id) ?? ("produtor" as AppRole),
+  }));
 
   const cargos = cargosRes.data ?? [];
 
