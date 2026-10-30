@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MoneyInput } from "@/components/ui/money-input";
+import { DatePicker } from "@/components/ui/date-picker";
+import { format as formatDate } from "date-fns";
 import {
   RadioGroup,
   RadioGroupItem,
@@ -58,6 +60,13 @@ export function ContratoForm({
   const [pending, startTransition] = React.useTransition();
   const [erroGeral, setErroGeral] = React.useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = React.useState<FieldErrors>({});
+  const erroBannerRef = React.useRef<HTMLDivElement>(null);
+
+  // Legados vêm do RH antigo (ag_california_rh). Esses contratos nasceram
+  // sem vínculo a um job do califa-erp — o form não deve exigir job pra deixar
+  // o RH corrigir data/valor/cargo sem precisar migrar a vinculação agora.
+  const ehLegado =
+    modo === "editar" && contrato?.origem_sistema === "ag_california_rh";
 
   // Pro form, o `jobId` representa a escolha visível no picker — pode vir de
   // qualquer uma das duas fontes. A origem é inferida pelo item escolhido na
@@ -127,7 +136,14 @@ export function ContratoForm({
       if (!result.ok) {
         setErroGeral(result.message);
         if (result.fieldErrors) setFieldErrors(result.fieldErrors);
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        // scrollIntoView com um offset no topo pra não ficar atrás do header
+        // fixo (o window.scrollTo({top:0}) antigo escondia a mensagem).
+        requestAnimationFrame(() => {
+          erroBannerRef.current?.scrollIntoView({
+            behavior: "smooth",
+            block: "center",
+          });
+        });
         return;
       }
 
@@ -141,7 +157,10 @@ export function ContratoForm({
   return (
     <form onSubmit={onSubmit} className="space-y-8">
       {erroGeral && (
-        <div className="rounded-lg border border-california-red/30 bg-california-red/5 p-4 flex items-start gap-3">
+        <div
+          ref={erroBannerRef}
+          className="rounded-lg border border-california-red/30 bg-california-red/5 p-4 flex items-start gap-3"
+        >
           <AlertCircle className="h-5 w-5 text-california-red shrink-0 mt-0.5" />
           <p className="text-sm text-california-red font-medium">{erroGeral}</p>
         </div>
@@ -174,9 +193,16 @@ export function ContratoForm({
       {/* Job */}
       <Secao
         titulo="Job"
-        descricao="Qual job do califa-erp este freelancer vai atender. O nome é guardado como snapshot no momento do cadastro."
+        descricao={
+          ehLegado
+            ? `Contrato migrado do RH antigo — vincular a um job do califa-erp é opcional. O nome "${contrato?.nome_job ?? ""}" fica como snapshot.`
+            : "Qual job do califa-erp este freelancer vai atender. O nome é guardado como snapshot no momento do cadastro."
+        }
       >
-        <Campo rotulo="Job *" erro={fieldErrors.job_id}>
+        <Campo
+          rotulo={ehLegado ? "Job" : "Job *"}
+          erro={fieldErrors.job_id}
+        >
           <JobPicker
             jobs={jobs}
             value={jobId}
@@ -253,25 +279,31 @@ export function ContratoForm({
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Campo rotulo="Data de início" erro={fieldErrors.data_inicio}>
-            <Input
-              type="date"
+            <DatePicker
+              name="data_inicio_display"
               value={dataInicio}
-              onChange={(e) => {
-                setDataInicio(e.target.value);
+              onDateChange={(d) => {
+                setDataInicio(d ? formatDate(d, "yyyy-MM-dd") : "");
                 clearField("data_inicio");
               }}
               disabled={pending}
+              comSeletorAnoMes
+              fromYear={2000}
+              toYear={new Date().getFullYear() + 5}
             />
           </Campo>
           <Campo rotulo="Data de término" erro={fieldErrors.data_termino}>
-            <Input
-              type="date"
+            <DatePicker
+              name="data_termino_display"
               value={dataTermino}
-              onChange={(e) => {
-                setDataTermino(e.target.value);
+              onDateChange={(d) => {
+                setDataTermino(d ? formatDate(d, "yyyy-MM-dd") : "");
                 clearField("data_termino");
               }}
               disabled={pending}
+              comSeletorAnoMes
+              fromYear={2000}
+              toYear={new Date().getFullYear() + 5}
             />
           </Campo>
         </div>

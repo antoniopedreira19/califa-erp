@@ -63,6 +63,13 @@ export async function criarFreelancerContrato(
   }
 
   const origem = parsed.data.job_origem;
+  if (!parsed.data.job_id) {
+    return {
+      ok: false,
+      message: "Dados inválidos",
+      fieldErrors: { job_id: ["Escolha um job"] },
+    };
+  }
   const nomeJob = await nomeJobSnapshot(
     parsed.data.job_id,
     origem,
@@ -143,27 +150,62 @@ export async function atualizarFreelancerContrato(
     };
   }
 
+  const supabase = createClient();
+
+  // Lê o contrato pra decidir o que fazer com o job vazio:
+  //   - novo (origem_sistema = califa_erp): job_id obrigatório
+  //   - legado (origem_sistema = ag_california_rh): aceita vazio e mantém
+  //     o nome_job atual (o legado não tem job vinculado no califa-erp)
+  const { data: contratoExistente, error: readErr } = await supabase
+    .from("freelancer_contratos")
+    .select("origem_sistema, nome_job")
+    .eq("id", id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+  if (readErr || !contratoExistente) {
+    return { ok: false, message: "Contrato não encontrado" };
+  }
+  const ehLegado =
+    (contratoExistente as { origem_sistema: string }).origem_sistema ===
+    "ag_california_rh";
+
   const origem = parsed.data.job_origem;
-  const nomeJob = await nomeJobSnapshot(
-    parsed.data.job_id,
-    origem,
-    session.activeTenant.id,
-  );
-  if (!nomeJob) {
-    return {
-      ok: false,
-      message: "Job não encontrado ou fora do seu tenant",
-      fieldErrors: { job_id: ["Job inválido"] },
-    };
+  let nomeJob: string;
+  if (parsed.data.job_id) {
+    const snap = await nomeJobSnapshot(
+      parsed.data.job_id,
+      origem,
+      session.activeTenant.id,
+    );
+    if (!snap) {
+      return {
+        ok: false,
+        message: "Job não encontrado ou fora do seu tenant",
+        fieldErrors: { job_id: ["Job inválido"] },
+      };
+    }
+    nomeJob = snap;
+  } else {
+    if (!ehLegado) {
+      return {
+        ok: false,
+        message: "Dados inválidos",
+        fieldErrors: { job_id: ["Escolha um job"] },
+      };
+    }
+    nomeJob = (contratoExistente as { nome_job: string }).nome_job;
   }
 
-  const supabase = createClient();
   const { error } = await supabase
     .from("freelancer_contratos")
     .update({
       freelancer_id: parsed.data.freelancer_id,
-      job_id: origem === "producao" ? parsed.data.job_id : null,
-      job_interno_id: origem === "interno" ? parsed.data.job_id : null,
+      // Em legado sem job escolhido, mantém as duas colunas como null (CHECK
+      // do banco permite — o legado nasce assim).
+      job_id:
+        parsed.data.job_id && origem === "producao" ? parsed.data.job_id : null,
+      job_interno_id:
+        parsed.data.job_id && origem === "interno" ? parsed.data.job_id : null,
       responsavel_id: parsed.data.responsavel_id ?? null,
       nome_job: nomeJob,
       cargo: parsed.data.cargo ?? null,

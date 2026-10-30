@@ -30,7 +30,18 @@ const textoOpcional = (max: number) =>
 export const contratoSchema = z
   .object({
     freelancer_id: z.string().uuid({ message: "Freelancer inválido" }),
-    job_id: z.string().uuid({ message: "Escolha um job" }),
+    /** Opcional pra permitir editar contratos legados (`origem_sistema =
+     *  ag_california_rh`), que nasceram sem job vinculado no califa-erp e só
+     *  carregam `nome_job` como snapshot. A action rejeita vazio quando o
+     *  contrato é novo. */
+    job_id: z
+      .string()
+      .refine((v) => v === "" || /^[0-9a-f-]{36}$/i.test(v), {
+        message: "Escolha um job",
+      })
+      .transform((v) => (v === "" ? null : v))
+      .nullable()
+      .optional(),
     /** 'producao' = grava em `job_id` da tabela; 'interno' = grava em
      *  `job_interno_id`. Default 'producao' pra compat (form antigo sem campo). */
     job_origem: z
