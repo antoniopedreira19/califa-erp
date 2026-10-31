@@ -1382,6 +1382,39 @@ ficam só os jobs do 4T." Os jobs do 3T que já existem no sistema (cerca de
   saldo (na cauda e na regra). A PP-00406 (R$ 6.000) está na linha de 20/10, a
   planilha diz 23/10 e o total fecha.
 
+### A ordem do resto de outubro e as transferências com a XP (31/10/2026)
+
+- **Decidido** (Tiago, 31/10): a conciliação dos jobs do 4T que estão na planilha
+  e não no sistema, custos e recebimentos, fica por último. Ele vai lançar esses
+  jobs no sistema, e o que não conseguir vai para o histórico. Nada deles entrou
+  nas cargas: a PP-00276, que parecia ser, é do QPC-1001/26, que existe no sistema
+  e só não tem a ligação no de-para.
+- **Ordem:** transferências com XP e Paypal; mútuo; linhas sem job, pela cauda;
+  linhas soltas; o empréstimo de 25/10, quando houver comprovante ou extrato; e,
+  por último, os jobs dentro e fora do sistema, com uma passada final nas linhas.
+- **Fica reservado para esses jobs** (106 linhas da planilha): BB California
+  +R$ 3.968.769,09, California Santander −R$ 893.344,91 e Santander GoCrazy
+  −R$ 266.058,37. Terminadas as outras etapas, a diferença entre banco e sistema
+  tem de ser essa.
+- **Transferências:** das 24 linhas de outubro fora da cauda, 12 já estavam no
+  sistema (BB e Santander). Registradas as 8 linhas do banco que faltavam, de
+  TR-00058 a TR-00065 (4 com a XP California, 3 com a XP GoCrazy e 1 com o
+  Paypal), na data e no valor do banco. O lado da XP não tem extrato, como o da
+  ContaMax.
+- **A XP fica negativa até o saldo inicial entrar:** XP California
+  −R$ 1.850.964,31 e XP GoCrazy −R$ 2.000.895,65, com saldo inicial zerado. A
+  planilha não traz o resgate de R$ 3.000.963,93 na aba da XP nem os três da XP
+  GoCrazy: confere-se quando o extrato chegar.
+- **As linhas soltas ficam depois** porque dependem do resto: dia a dia, as
+  pendentes do banco fecham com o que falta ligar ou carregar. O BB fecha em 7 de 8
+  dias; até 22/10, sobram R$ 209.184,03 na California Santander e R$ 2.445,10 na
+  GoCrazy. O dia 23/10 não fecha (R$ 850.582,42 e R$ 138.158,50). Como 24 e 25 foram
+  fim de semana, a suspeita é que esses pagamentos caíram em 26/10, ainda sem
+  conferência.
+- **R$ 3,5 mi de 26/10:** a linha tem o mesmo histórico das aplicações de R$ 1,2 mi
+  e R$ 500 mil na XP. Pode ser XP, e não devolução de empréstimo. Só o comprovante
+  confirma.
+
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas
   85 e 91 da Res. Jobs 2026; R$ 1.520.000,00 de benefício): o histórico segue a

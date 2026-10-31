@@ -8756,3 +8756,10 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **A lista** vem da conferência com o banco, em `<versão>/so-dre/linhas.json`, fora do git. Gere com `empacotar.ts --so-dre`.
 - **Regra:** a mesma linha não pode estar na cauda e no só DRE. O empacotador e o banco recusam.
 - **Índice:** `uq_historico_cargas_ativa_periodo` passou a incluir o tipo.
+
+## ⚠️ Nota de 2026-10-31 — a ordem do resto de outubro e as transferências com a XP (decisão 211)
+
+- **Ordem:** transferências; mútuo; linhas sem job; linhas soltas; empréstimo de 25/10; por último, os jobs dentro e fora do sistema.
+- **Transferências:** 8 linhas do banco registradas e conciliadas, de TR-00058 a TR-00065. Sem mudança de código.
+- **Atenção:** a XP California e a XP GoCrazy ficam negativas até o saldo inicial entrar pelo extrato.
+- **Linha de chegada:** a diferença final entre banco e sistema tem de ser a dos jobs reservados, com os valores na decisão 211.
