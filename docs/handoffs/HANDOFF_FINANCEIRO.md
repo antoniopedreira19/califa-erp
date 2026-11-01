@@ -8772,4 +8772,5 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Fluxo de caixa:** linhas (−) e (+) Mútuo interno; o mútuo a transferir aparece como previsto.
 - **Extrato:** a perna traz a outra empresa como fornecedor e o trimestre do Tipo.
 - **Saldo de abertura:** carregado por SQL em `mutuos_saldo_abertura`, sem valores no repositório.
-- **A Apuração do IOF** é a etapa seguinte. Ver a decisão 230.
+- **Apuração do IOF:** uma guia por CNPJ que emprestou e por mês, só para empresa de fora, a partir de outubro. Vale o valor da guia, e o calculado fica ao lado. Código em `lib/fiscal/iof-mutuo.ts`.
+- **Impostos a Pagar:** o detalhe do título em aberto ganhou "Corrigir o valor".

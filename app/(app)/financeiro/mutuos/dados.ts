@@ -22,7 +22,7 @@ type Supabase = ReturnType<typeof createClient>;
  * formulário também usa.
  */
 export async function carregarMutuos(supabase: Supabase, tenantId: string): Promise<DadosDoMutuo> {
-  const [contasRes, cnpjsRes, forasRes, mutuosRes, aberturasRes, iofsRes] = await Promise.all([
+  const [contasRes, cnpjsRes, forasRes, mutuosRes, aberturasRes, iofsRes, guiasRes] = await Promise.all([
     supabase
       .from("contas_bancarias")
       .select("id, nome, banco, empresa_contabil_id, cartao_credito_id")
@@ -61,6 +61,12 @@ export async function carregarMutuos(supabase: Supabase, tenantId: string): Prom
       .from("mutuos_iof")
       .select("pagador_empresa_contabil_id, com_empresa_contabil_id, com_fornecedor_id, lancamento:lancamentos_financeiros(valor)")
       .eq("tenant_id", tenantId),
+    supabase
+      .from("impostos_a_pagar")
+      .select("empresa_contabil_id, rotulo_competencia, valor, status, multa_juros")
+      .eq("tenant_id", tenantId)
+      .eq("tributo", "IOF")
+      .in("status", ["a_pagar", "pago"]),
   ]);
 
   for (const [nome, res] of [
@@ -70,6 +76,7 @@ export async function carregarMutuos(supabase: Supabase, tenantId: string): Prom
     ["mútuos", mutuosRes],
     ["abertura", aberturasRes],
     ["iof", iofsRes],
+    ["guias de iof", guiasRes],
   ] as const) {
     if (res.error) throw new Error(`Falha ao carregar ${nome} do mútuo: ${res.error.message}`);
   }
@@ -152,7 +159,19 @@ export async function carregarMutuos(supabase: Supabase, tenantId: string): Prom
     valor: Number(i.lancamento?.valor ?? 0),
   }));
 
-  return { hoje: hojeEmSaoPauloIso(), contas, partes, mutuos, aberturas, iofs };
+  // A guia paga soma no IOF do par. Só a empresa de fora tem guia por enquanto:
+  // com mais de uma para o mesmo CNPJ, a guia não diz de qual delas é.
+  const guias = (guiasRes.data ?? []) as Array<{ empresa_contabil_id: string; rotulo_competencia: string; valor: string | number; status: string }>;
+  for (const g of guias.filter((x) => x.status === "pago")) {
+    const pagador = parteDoCnpj(g.empresa_contabil_id);
+    const foras = aberturas.filter((a) => a.credor === pagador && a.devedor.startsWith("f:"));
+    iofs.push({ pagador, com: foras.length === 1 ? foras[0].devedor : null, valor: Number(g.valor) });
+  }
+  const guiasAbertas = guias
+    .filter((x) => x.status === "a_pagar")
+    .map((x) => ({ parte: parteDoCnpj(x.empresa_contabil_id), competencia: x.rotulo_competencia, valor: Number(x.valor) }));
+
+  return { hoje: hojeEmSaoPauloIso(), contas, partes, mutuos, aberturas, iofs, guiasAbertas };
 }
 
 /** O que a aba Conciliação automática precisa para reconhecer um mútuo na linha. */

@@ -1,10 +1,10 @@
 # 230 — Mútuo entre empresas
 
 **Data:** 2026-10-31
-**Status:** aceita. Primeira etapa implementada em 31/10/2026; a Apuração do IOF é a segunda etapa, logo depois.
+**Status:** aceita e implementada em 31/10/2026, em duas etapas: o mútuo e a Apuração do IOF.
 **Quem decidiu:** Tiago, ao aprovar o protótipo em 31/10/2026 ("Ok. Aprovado, vamos implementar").
 **Revê:** a [124](124-recebimento-avulso-transferencia-e-rendimento.md), D4: entre CNPJs diferentes o dinheiro muda de dono, e agora isso tem nome.
-**Migrations:** `20261031100001` (origens do lançamento), `20261031100002` (estrutura e funções) e `20261031100003` (IOF e saídas da abertura).
+**Migrations:** `20261031100001` (origens do lançamento), `20261031100002` (estrutura e funções) `20261031100003` (IOF e saídas da abertura) e `20261031100004` (o IOF na Apuração).
 
 ## O problema
 
@@ -41,11 +41,25 @@ Na DRE e no fluxo da planilha, as linhas `(−) MÚTUO INTERNO` e `(+) MÚTUO IN
 
 Se quem paga é quem deve, a linha aparece como "Devolução de mútuo". Se houver previsão do mesmo mútuo, a linha a baixa em vez de criar outro.
 
+## A Apuração do IOF
+
+Só o IOF do mútuo tem guia nossa: quem concede o crédito recolhe (Decreto 6.306/2007, art. 5º, III). Câmbio, cartão e crédito de banco são cobrados pelo banco.
+
+- **Uma guia por CNPJ que emprestou e por mês,** só para empresa de fora. Nos mútuos do grupo nada é apurado por enquanto, seguindo os registros.
+- **Base:** a soma dos saldos de cada dia (art. 7º, I, "a"), a 0,0082% ao dia.
+- **Adicional:** 0,38% sobre o que aumentou o saldo no mês (art. 7º, § 16): as saídas e os juros que entraram nele.
+- **Vencimento:** 3º dia útil depois do dia 10 do mês seguinte (art. 10). A primeira guia real é a de outubro, com vencimento em 13/11.
+- **Vale o valor da guia.** O calculado fica ao lado, com o motivo da diferença. Essa diferença mês a mês é a calibragem que o Tiago quer ver.
+- **Juros:** o campo mostra os juros até hoje e entra na base, sem lançar nada até o dinheiro passar pelo banco.
+- **Baixa:** o centro vem do CNPJ, como D6. A guia paga soma no IOF do par.
+- **Guia aprovada com valor errado:** o Corrigir de Impostos a Pagar passa a ter botão, em "Corrigir o valor". Antes ele existia, mas nenhuma tela o abria.
+- **Código 1150:** tomador pessoa jurídica, segundo fontes não oficiais. A confirmar com a contabilidade.
+- **Só o regime mensal.** Mútuo com valor fixo em contrato tem IOF na entrega do dinheiro (art. 10, VII) e fica para quando aparecer.
+
 ## O que ficou de fora
 
-- **Apuração do IOF no Fiscal:** é a segunda etapa, logo depois deste mútuo. A primeira guia real é a de outubro, com vencimento em 13/11.
 - **"Abate qual mútuo":** não entra. Cada devolução abate a saída mais antiga, por regra automática. O vínculo pode ser calculado a qualquer momento, e um campo de escolha única não cobre uma volta sobre duas saídas.
-- **Cálculo de juros:** o campo só guarda e mostra.
+- **Lançamento de juros:** o campo só informa e alimenta a base do IOF.
 - **DRE:** só lê `historico_movimentos`. Lançamento novo, inclusive mútuo, não chega nela.
 - **Mútuos do grupo sem IOF:** seguem os registros, com o campo vazio. Está com a contabilidade.
 - **Notas de sócio da GoCrazy:** outra entrega. Não abatem saldo de mútuo.

@@ -68,6 +68,12 @@ export interface IofDoMutuo {
   valor: number;
 }
 
+export interface GuiaAbertaDoIof {
+  parte: string;
+  competencia: string;
+  valor: number;
+}
+
 export interface DadosDoMutuo {
   hoje: string;
   contas: ContaDoMutuo[];
@@ -75,6 +81,8 @@ export interface DadosDoMutuo {
   mutuos: MutuoDaLista[];
   aberturas: AberturaDoPar[];
   iofs: IofDoMutuo[];
+  /** As guias de IOF ainda não pagas: avisam antes de lançar pela linha do banco. */
+  guiasAbertas: GuiaAbertaDoIof[];
 }
 
 export interface SaldoDoPar {

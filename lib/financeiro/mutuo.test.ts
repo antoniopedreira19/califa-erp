@@ -40,6 +40,7 @@ const base: DadosDoMutuo = {
   ],
   mutuos: [],
   iofs: [],
+  guiasAbertas: [],
 };
 
 const mutuo = (m: Partial<MutuoDaLista>): MutuoDaLista => ({

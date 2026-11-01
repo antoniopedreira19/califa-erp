@@ -5625,7 +5625,7 @@ export interface NotaFiscalDaPP {
 // (`lib/fiscal/apuracao.ts`); o banco guarda a aprovação e os títulos.
 // ---------------------------------------------------------------------------
 
-export type TributoFiscal = "ISS" | "PIS" | "COFINS" | "IRPJ" | "CSLL" | "ISS_RET" | "CSRF" | "IRRF";
+export type TributoFiscal = "ISS" | "PIS" | "COFINS" | "IRPJ" | "CSLL" | "ISS_RET" | "CSRF" | "IRRF" | "IOF";
 
 export interface FiscalAprovacao {
   id: string;

@@ -173,6 +173,7 @@ export function DialogoDoIof({
         .filter((p) => p.a === aqui || p.b === aqui)
         .map((p) => (p.a === aqui ? p.b : p.a))
     : [];
+  const guiaAberta = dados?.guiasAbertas.find((g) => g.parte === aqui);
   const eCalifornia = dados ? nomeDaParte(dados, aqui) === "California" : false;
   const centro = eCalifornia ? "12 · Empréstimos · Mútuo interno" : "03 · Custo Tributário · IOF do mútuo";
   const efeito = eCalifornia ? "Abaixo do lucro, como a planilha faz na California." : "Entra no resultado, como a planilha faz na GoCrazy.";
@@ -220,6 +221,11 @@ export function DialogoDoIof({
                 </div>
               ))}
             </div>
+            {guiaAberta && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
+                Já existe a guia de {guiaAberta.competencia} em Impostos a Pagar, de {formatCurrency(guiaAberta.valor, "BRL")}. Se esta linha é essa guia, não lance aqui: o IOF contaria duas vezes.
+              </div>
+            )}
             <div className="space-y-1">
               <label className="text-xs font-semibold">Referente a (opcional)</label>
               <Select value={ref} onValueChange={setRef}>
