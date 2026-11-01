@@ -4,7 +4,7 @@
 **Status:** aceita e implementada em 31/10/2026, em duas etapas: o mútuo e a Apuração do IOF.
 **Quem decidiu:** Tiago, ao aprovar o protótipo em 31/10/2026 ("Ok. Aprovado, vamos implementar").
 **Revê:** a [124](124-recebimento-avulso-transferencia-e-rendimento.md), D4: entre CNPJs diferentes o dinheiro muda de dono, e agora isso tem nome.
-**Migrations:** `20261031100001` (origens do lançamento), `20261031100002` (estrutura e funções) `20261031100003` (IOF e saídas da abertura) e `20261031100004` (o IOF na Apuração).
+**Migrations:** `20261031100001` (origens do lançamento), `20261031100002` (estrutura e funções) `20261031100003` (IOF e saídas da abertura), `20261031100004` (o IOF na Apuração) e `20261031100005` (o trimestre do IOF).
 
 ## O problema
 
@@ -25,7 +25,7 @@ Na DRE e no fluxo da planilha, as linhas `(−) MÚTUO INTERNO` e `(+) MÚTUO IN
 | D3 | Devolução | Um mútuo no sentido contrário. Um saldo por par de empresas |
 | D4 | Trimestre | O do mútuo original, não o da data. Um só para as duas pernas, com a sugestão do par e troca à mão. O ano também é do Tipo: a volta de um mútuo de 2025 cai na DRE de 2025 |
 | D5 | Saldo de abertura | Pela planilha, em 30/09/2026, em `mutuos_saldo_abertura`. Não mexe em DRE, fluxo nem banco |
-| D6 | IOF | Como a planilha, por conta: California junto do mútuo (Tipo 12, abaixo do lucro), GoCrazy em 03 · 007 IOF do mútuo, regional SS. Entra pela linha do banco, e "Referente a" é opcional. Fica nas nossas contas, sem cobrar da outra parte |
+| D6 | IOF | Como a planilha, por conta: California junto do mútuo (Tipo 12, abaixo do lucro), GoCrazy em 03 · 007 IOF do mútuo, regional SS. Entra pela linha do banco, e "Referente a" é opcional. Com ele preenchido, fica no trimestre do mútuo, como a planilha. Fica nas nossas contas, sem cobrar da outra parte |
 | D7 | Juros | Campo opcional, no mútuo e no saldo de abertura. Vazio é sem juros. Só informa: nada é lançado até o dinheiro passar pelo banco |
 | D8 | Empresa de fora | Não entra como empresa do sistema. Cadastro em Fornecedores com `empresa_de_fora`, uma perna só e bloco próprio na tela de mútuos. A volta prevista é um título a receber |
 | D9 | Quem lança | Admin e financeiro, como a transferência |

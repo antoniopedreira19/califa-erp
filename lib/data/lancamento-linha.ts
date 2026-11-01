@@ -34,6 +34,7 @@ export const SELECT_LANCAMENTO_LINHA = `id, data_movimento, descricao, natureza,
            conta_origem:contas_bancarias!conta_origem_id(empresa_contabil:empresas_contabeis(nome_fantasia)),
            conta_destino:contas_bancarias!conta_destino_id(empresa_contabil:empresas_contabeis(nome_fantasia))
          ),
+         iof_do_mutuo:mutuos_iof(trimestre),
          forma_pagamento,
          pedido_compra:pedidos_compra(
            codigo,
@@ -95,6 +96,7 @@ export type LancamentoRaw = {
   // sem plano: a transferência entraria no saldo e sumiria do extrato.
   plano_contas_tipos: { codigo: string; nome: string } | null;
   plano_contas_subtipos: { codigo: string; nome: string } | null;
+  iof_do_mutuo: { trimestre: number | null } | null;
   transferencia: {
     codigo: string;
     tipo: string;
@@ -208,7 +210,11 @@ export async function montarLinhasDeLancamentos(
           ? (r.natureza === "saida" ? r.transferencia.conta_destino : r.transferencia.conta_origem)?.empresa_contabil?.nome_fantasia ?? null
           : null),
       // O trimestre do Tipo do mútuo não acompanha a data (decisão 230).
-      tri_do_tipo: r.transferencia?.trimestre ? `T${r.transferencia.trimestre}` : null,
+      tri_do_tipo: r.transferencia?.trimestre
+        ? `T${r.transferencia.trimestre}`
+        : r.iof_do_mutuo?.trimestre
+          ? `T${r.iof_do_mutuo.trimestre}`
+          : null,
       job_id: r.jobs?.id ?? null,
       job_codigo: r.jobs?.codigo ?? null,
       // Mesma regra da `vw_fluxo_caixa` (decisão 069, 10/09/2026): a
