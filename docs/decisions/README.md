@@ -246,6 +246,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 227 | [A PP paga por guia: taxa, licença ou alvará de órgão público, sem NF](227-pp-paga-por-guia.md) | 2026-10-29 |
 | 228 | [O projeto do financeiro junta jobs de clientes diferentes (revisão: "Projeto unificado", só da empresa do job)](228-projeto-do-financeiro-com-jobs-de-clientes-diferentes.md) | 2026-10-29 |
 | 229 | [O câmbio fechado no recebimento do job internacional: IOF e tarifa no job, variação cambial e a nota pelo convertido](229-cambio-fechado-no-recebimento-do-internacional.md) | 2026-10-29 |
+| 230 | [Mútuo entre empresas: uma perna ou duas, saldo por par, abertura pela planilha e IOF pela linha do banco](230-mutuo-entre-empresas.md) | 2026-10-31 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -258,4 +259,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 230**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 231**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)

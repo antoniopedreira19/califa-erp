@@ -12,6 +12,8 @@ export type LancamentoLinha = {
   natureza: "entrada" | "saida";
   valor: number;
   fornecedor_nome: string | null;
+  /** O trimestre do Tipo do mútuo, que não acompanha a data (decisão 230). */
+  tri_do_tipo: string | null;
   job_id: string | null;
   job_codigo: string | null;
   /** Do plano de contas. A tela mostra os dois separados desde 27/08/2026:

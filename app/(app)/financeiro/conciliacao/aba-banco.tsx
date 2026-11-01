@@ -50,6 +50,8 @@ import { ContaAvulsaDrawer } from "../contas-a-pagar/conta-avulsa-drawer";
 import { darBaixaTitulo as darBaixaTituloAPagar } from "../contas-a-pagar/actions-titulos";
 import { darBaixaTitulo as darBaixaTituloAReceber } from "../contas-a-receber/actions";
 import { darBaixaRecebimentoAvulso, darBaixaTransferencia } from "../contas-a-receber/actions-recebimento-avulso";
+import { mutuoDaLinha } from "@/lib/financeiro/mutuo";
+import { DialogoDoIof, DialogoDoMutuoNaLinha } from "./mutuo-na-linha";
 import { cancelarBaixa, type TipoDeBaixa } from "../actions-baixa-registrada";
 import { carregarDadosDoNovoLancamento, type DadosDoNovoLancamento } from "./actions-novo-lancamento";
 import type { DadosDaAbaTitulos } from "./titulos-dados";
@@ -137,6 +139,19 @@ interface Baixando {
 // O componente
 // ---------------------------------------------------------------------------
 
+/** Tira de "Sem correspondência" a linha que é um mútuo (decisão 230): o passo
+ *  depois de tudo o que o motor já faz. */
+function comMutuos(secoes: SecoesDoBanco, banco: DadosDaAbaBanco): SecoesDoBanco {
+  const mutuo: ResultadoDaLinha[] = [];
+  const sem: ResultadoDaLinha[] = [];
+  for (const r of secoes.sem) {
+    const m = mutuoDaLinha(banco.mutuo, banco.mutuo.partes, { data: r.mov.data, valor: r.mov.valor, historico: r.mov.linha.historico }, banco.lancamentos);
+    if (m) mutuo.push({ ...r, mutuo: m });
+    else sem.push(r);
+  }
+  return { ...secoes, mutuo, sem };
+}
+
 export function AbaBanco({
   banco,
   dados,
@@ -172,6 +187,8 @@ export function AbaBanco({
   const [regraDe, setRegraDe] = React.useState<{ historico: string; l: Linha | null } | null>(null);
   // O "Lançar avulso": os cadastros dos formulários, lidos na primeira vez.
   const [dadosNovo, setDadosNovo] = React.useState<DadosDoNovoLancamento | null>(null);
+  const [mutuoDaLinhaAberto, setMutuoDaLinha] = React.useState<ResultadoDaLinha | null>(null);
+  const [iofDaLinha, setIofDaLinha] = React.useState<ResultadoDaLinha | null>(null);
   const [avulso, setAvulso] = React.useState<{ r: ResultadoDaLinha; lado: "pagar" | "receber" } | null>(null);
   const [baixarAposCriar, setBaixarAposCriar] = React.useState<{ r: ResultadoDaLinha; lado: "pagar" | "receber"; id: string } | null>(null);
 
@@ -207,7 +224,7 @@ export function AbaBanco({
       return { conciliacao: conciliarConta(banco, [], contaId, {}, dados.hoje), falhaDoMotor: true };
     }
   }, [banco, linhasDaPlanilha, contaId, dados.documentoDaParte, dados.hoje]);
-  const secoes = React.useMemo(() => secoesDoBanco(conciliacao.resultados), [conciliacao]);
+  const secoes = React.useMemo(() => comMutuos(secoesDoBanco(conciliacao.resultados), banco), [conciliacao, banco]);
   const regraPorId = React.useMemo(() => new Map(banco.regras.map((g) => [g.id, g])), [banco.regras]);
   const titulosDoMotor = React.useMemo(() => [...conciliacao.titulos.values()], [conciliacao]);
 
@@ -489,6 +506,8 @@ export function AbaBanco({
         }
       });
     },
+    lancarMutuo: (r) => setMutuoDaLinha(r),
+    lancarIof: (r) => setIofDaLinha(r),
     procurar: (r) => setProcurando({ r, marcados: [] }),
     ignorar: (r) => executar(() => ignorarLinha(r.mov.id, null)),
     desfazer: (r) => {
@@ -831,6 +850,13 @@ export function AbaBanco({
       ),
     ],
     [
+      "mutuo",
+      "Mútuo entre empresas",
+      "Dinheiro entre CNPJs diferentes. Lançar cria o mútuo e concilia.",
+      "sky",
+      null,
+    ],
+    [
       "sem",
       "Sem correspondência",
       "Nada no sistema tem esse valor. Lance como avulso (a linha já vem preenchida) ou procure um título.",
@@ -1073,6 +1099,31 @@ export function AbaBanco({
         />
       )}
 
+      {mutuoDaLinhaAberto && (
+        <DialogoDoMutuoNaLinha
+          r={mutuoDaLinhaAberto}
+          m={mutuoDaLinhaAberto.mutuo ?? null}
+          conta={banco.conta}
+          onFechar={() => setMutuoDaLinha(null)}
+          onFeito={(texto) => {
+            setMutuoDaLinha(null);
+            setAviso({ tom: "ok", texto });
+            router.refresh();
+          }}
+        />
+      )}
+      {iofDaLinha && (
+        <DialogoDoIof
+          r={iofDaLinha}
+          conta={banco.conta}
+          onFechar={() => setIofDaLinha(null)}
+          onFeito={(texto) => {
+            setIofDaLinha(null);
+            setAviso({ tom: "ok", texto });
+            router.refresh();
+          }}
+        />
+      )}
       {dadosNovo && (
         <>
           <ContaAvulsaDrawer

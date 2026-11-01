@@ -228,6 +228,8 @@ export interface Fornecedor {
   tenant_id: string;
   tipo_pessoa: TipoPessoa;
   nome: string;
+  /** Faz mútuo com o grupo sem ter conta no sistema (decisão 230). */
+  empresa_de_fora?: boolean;
   razao_social: string | null;
   cpf_cnpj: string | null;
   email: string | null;
@@ -3492,6 +3494,12 @@ export interface EmpresaContabil {
   id: string;
   tenant_id: string;
   razao_social: string;
+  /** A gerencial dos lançamentos sem documento deste CNPJ (decisão 230). */
+  empresa_gerencial_id?: string | null;
+  /** A regional do que este CNPJ paga sem documento. Vazia é TD. */
+  regional_padrao_id?: string | null;
+  /** IOF do mútuo: true fica junto dele; false entra em Custo Tributário. */
+  iof_do_mutuo_abaixo_do_lucro?: boolean;
   nome_fantasia: string | null;
   cnpj: string; // sempre 14 dígitos, sem máscara
   ativo: boolean;
@@ -3619,6 +3627,8 @@ export type OrigemLancamento =
   // empresa e sem plano de contas, fora do DRE e do fluxo consolidado.
   | "transferencia_saida"
   | "transferencia_entrada"
+  | "mutuo_saida"
+  | "mutuo_entrada"
   // O recebimento antes da NF (decisão 130), enquanto a nota não sai. Na
   // emissão ele vira `titulo_baixa` da parcela 1.
   | "recebimento_antes_nf"

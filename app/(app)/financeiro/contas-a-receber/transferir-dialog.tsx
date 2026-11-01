@@ -49,6 +49,9 @@ export function TransferirDialog({
   erro: string | null;
   onConfirmar: (data: string) => void;
 }) {
+  // O mútuo (decisão 230) usa o mesmo título: o código diz qual é.
+  const mutuo = alvo?.codigo.startsWith("MU-") ?? false;
+  const umaPerna = /fora do sistema/.test(alvo?.contas ?? "");
   const [data, setData] = React.useState("");
   const [erroLocal, setErroLocal] = React.useState<string | null>(null);
   const chave = alvo?.id ?? null;
@@ -71,12 +74,12 @@ export function TransferirDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <ArrowLeftRight className="h-5 w-5 text-emerald-700" />
-            Registrar a transferência
+            {mutuo ? "Registrar o mútuo" : "Registrar a transferência"}
           </DialogTitle>
         </DialogHeader>
 
         <div className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 rounded-xl border border-border bg-muted/50 p-4 text-[13px]">
-          <span className="text-muted-foreground">Transferência</span>
+          <span className="text-muted-foreground">{mutuo ? "Mútuo" : "Transferência"}</span>
           <span className="font-mono font-bold">{alvo.codigo}</span>
           <span className="text-muted-foreground">Contas</span>
           <span className="font-semibold">{alvo.contas}</span>
@@ -101,7 +104,7 @@ export function TransferirDialog({
 
         <div className="space-y-1">
           <label className="text-xs font-semibold">
-            Data da transferência <span className="text-california-red">*</span>
+            {mutuo ? "Data do mútuo" : "Data da transferência"} <span className="text-california-red">*</span>
           </label>
           <DatePicker
             key={alvo.id}
@@ -113,8 +116,7 @@ export function TransferirDialog({
             }}
           />
           <p className="text-[11px] text-muted-foreground">
-            As duas linhas entram no extrato nesta data: a saída na conta de origem e a
-            entrada na de destino.
+            {umaPerna ? "A linha entra no extrato nesta data, na nossa conta." : "As duas linhas entram no extrato nesta data: a saída na conta de origem e a entrada na de destino."}
           </p>
         </div>
 
@@ -132,7 +134,7 @@ export function TransferirDialog({
             disabled={pending}
             onClick={() => {
               if (!data) {
-                setErroLocal("Informe a data da transferência.");
+                setErroLocal(mutuo ? "Informe a data do mútuo." : "Informe a data da transferência.");
                 return;
               }
               onConfirmar(data);
@@ -140,7 +142,7 @@ export function TransferirDialog({
             className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
           >
             <ArrowLeftRight className="h-4 w-4" />
-            {pending ? "Registrando..." : "Registrar transferência"}
+            {pending ? "Registrando..." : mutuo ? "Registrar mútuo" : "Registrar transferência"}
           </button>
         </div>
       </DialogContent>

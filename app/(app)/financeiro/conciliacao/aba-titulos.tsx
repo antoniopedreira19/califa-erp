@@ -371,7 +371,7 @@ export function AbaTitulos({
     }
     if ((l.lado === "receber" && l.t.origem !== "nf" && l.t.baixas.length === 0) || l.lado === "transferencia") {
       acoes.push({
-        rotulo: l.lado === "transferencia" ? "Excluir a transferência" : "Excluir este título",
+        rotulo: l.lado === "transferencia" ? (l.t.codigo_avulsa?.startsWith("MU-") ? "Excluir o mútuo" : "Excluir a transferência") : "Excluir este título",
         icone: Trash2,
         perigo: true,
         onClick: () => setExcluindo(l),
@@ -741,7 +741,7 @@ export function AbaTitulos({
               setErro(res.message);
               return;
             }
-            await concluirBaixa(`Transferência registrada · ${formatBRL(alvo.valor)} em ${formatDate(data)}, com as duas linhas no extrato.`);
+            await concluirBaixa(`${alvo.codigo_avulsa?.startsWith("MU-") ? "Mútuo" : "Transferência"} registrad${alvo.codigo_avulsa?.startsWith("MU-") ? "o" : "a"} · ${formatBRL(alvo.valor)} em ${formatDate(data)}, com ${/fora do sistema/.test(alvo.contraparte_nome) ? "a linha" : "as duas linhas"} no extrato.`);
           });
         }}
       />

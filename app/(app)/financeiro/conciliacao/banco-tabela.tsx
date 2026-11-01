@@ -13,7 +13,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowLeftRight, CheckCheck, ChevronDown, CircleSlash, Layers, Link2, Plus, Search, Undo2, Wand2 } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, CheckCheck, ChevronDown, CircleSlash, Handshake, Layers, Link2, Plus, Search, Undo2, Wand2 } from "lucide-react";
+import { BotaoLancar, CelulaDoMutuo, SituacaoDoMutuo } from "./mutuo-na-linha";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import type { GrupoDeIguais, TituloDoMotor } from "@/lib/conciliacao/motor";
@@ -48,6 +49,8 @@ export interface AcoesDoBanco {
   /** Uma regra para o histórico desta linha (lançamento ou transferência). */
   criarRegra: (r: ResultadoDaLinha) => void;
   lancarAvulso: (r: ResultadoDaLinha) => void;
+  lancarMutuo: (r: ResultadoDaLinha) => void;
+  lancarIof: (r: ResultadoDaLinha) => void;
   procurar: (r: ResultadoDaLinha) => void;
   ignorar: (r: ResultadoDaLinha) => void;
   desfazer: (r: ResultadoDaLinha) => void;
@@ -249,6 +252,7 @@ function Situacao({ r }: { r: ResultadoDaLinha }) {
         {r.resolvido.estado === "ignorado" ? "Ignorado" : r.resolvido.sozinho ? "Conciliado sozinho" : "Conciliado"}
       </span>
     );
+  if (r.mutuo) return <SituacaoDoMutuo m={r.mutuo} />;
   const m: Record<ResultadoDaLinha["estado"], [string, string]> = {
     sugestao: ["Título encontrado", "text-emerald-700"],
     soma: ["Remessa encontrada", "text-emerald-700"],
@@ -317,6 +321,7 @@ function TituloNaCelula({ t, l }: { t: TituloDoMotor; l: Linha | undefined }) {
 
 /** O que o sistema tem para a linha do banco, em uma célula. */
 function NoSistema({ r, contexto }: { r: ResultadoDaLinha; contexto: ContextoDasCelulas }) {
+  if (r.mutuo) return <CelulaDoMutuo r={r} m={r.mutuo} />;
   if (r.estado === "historico" && r.historicos?.length) {
     const hs = r.historicos;
     const jobs = [...new Set(hs.map((h) => h.job ?? h.descricao ?? "sem job"))];
@@ -497,6 +502,19 @@ function AcoesDaLinha({ r, acoes, contexto }: { r: ResultadoDaLinha; acoes: Acoe
         }
       />
     );
+  if (r.mutuo)
+    return (
+      <Vagas
+        principal={
+          <button type="button" disabled={off} onClick={() => acoes.lancarMutuo(r)} className={VERDE}>
+            <Handshake className="h-3 w-3" />
+            Lançar mútuo
+          </button>
+        }
+        segundo={procurar("Procurar um título")}
+        quarto={ignorar}
+      />
+    );
   switch (r.estado) {
     case "ja_lancado":
       return (
@@ -625,10 +643,7 @@ function AcoesDaLinha({ r, acoes, contexto }: { r: ResultadoDaLinha; acoes: Acoe
       return (
         <Vagas
           principal={
-            <button type="button" disabled={off} onClick={() => acoes.lancarAvulso(r)} className={CONTORNO}>
-              <Plus className="h-3 w-3" />
-              Lançar avulso
-            </button>
+            <BotaoLancar r={r} classe={CONTORNO} off={off} onAvulso={() => acoes.lancarAvulso(r)} onMutuo={() => acoes.lancarMutuo(r)} onIof={() => acoes.lancarIof(r)} />
           }
           segundo={procurar("Procurar um título")}
           terceiro={

@@ -8763,3 +8763,13 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Transferências:** 8 linhas do banco registradas e conciliadas, de TR-00058 a TR-00065. Sem mudança de código.
 - **Atenção:** a XP California e a XP GoCrazy ficam negativas até o saldo inicial entrar pelo extrato.
 - **Linha de chegada:** a diferença final entre banco e sistema tem de ser a dos jobs reservados, com os valores na decisão 211.
+
+## ⚠️ Nota de 2026-10-31 (2) — Mútuo entre empresas (decisão 230)
+
+- **O que mudou:** o mútuo entra pelo Novo lançamento, pela linha do banco e pela tela nova Financeiro › Mútuos entre empresas. Mora em `transferencias_contas`, com `tipo = 'mutuo'`.
+- **Pernas:** duas entre CNPJs do grupo; uma com empresa de fora (`fornecedores.empresa_de_fora`). Tipo 12 · 998 Mútuo interno, regional TD.
+- **Conciliação:** seção nova "Mútuo entre empresas", com "Lançar mútuo", e "IOF do mútuo" no "Lançar avulso".
+- **Fluxo de caixa:** linhas (−) e (+) Mútuo interno; o mútuo a transferir aparece como previsto.
+- **Extrato:** a perna traz a outra empresa como fornecedor e o trimestre do Tipo.
+- **Saldo de abertura:** carregado por SQL em `mutuos_saldo_abertura`, sem valores no repositório.
+- **A Apuração do IOF** é a etapa seguinte. Ver a decisão 230.

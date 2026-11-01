@@ -29,7 +29,11 @@ export const SELECT_LANCAMENTO_LINHA = `id, data_movimento, descricao, natureza,
          empresas(nome_fantasia, razao_social),
          plano_contas_tipos(codigo, nome),
          plano_contas_subtipos(codigo, nome),
-         transferencia:transferencias_contas(codigo),
+         transferencia:transferencias_contas(
+           codigo, tipo, trimestre,
+           conta_origem:contas_bancarias!conta_origem_id(empresa_contabil:empresas_contabeis(nome_fantasia)),
+           conta_destino:contas_bancarias!conta_destino_id(empresa_contabil:empresas_contabeis(nome_fantasia))
+         ),
          forma_pagamento,
          pedido_compra:pedidos_compra(
            codigo,
@@ -91,7 +95,13 @@ export type LancamentoRaw = {
   // sem plano: a transferência entraria no saldo e sumiria do extrato.
   plano_contas_tipos: { codigo: string; nome: string } | null;
   plano_contas_subtipos: { codigo: string; nome: string } | null;
-  transferencia: { codigo: string } | null;
+  transferencia: {
+    codigo: string;
+    tipo: string;
+    trimestre: number | null;
+    conta_origem: { empresa_contabil: { nome_fantasia: string | null } | null } | null;
+    conta_destino: { empresa_contabil: { nome_fantasia: string | null } | null } | null;
+  } | null;
   forma_pagamento: string | null;
   fatura: { codigo: string } | null;
   pedido_compra: { codigo: string; anexos: AnexoRaw[] } | null;
@@ -190,7 +200,15 @@ export async function montarLinhasDeLancamentos(
       descricao: r.descricao,
       natureza: r.natureza,
       valor: Number(r.valor),
-      fornecedor_nome: r.fornecedores?.razao_social ?? r.fornecedores?.nome ?? null,
+      fornecedor_nome:
+        r.fornecedores?.razao_social ??
+        r.fornecedores?.nome ??
+        // A perna do mútuo entre CNPJs: como a planilha, o fornecedor é a outra empresa.
+        (r.transferencia?.tipo === "mutuo"
+          ? (r.natureza === "saida" ? r.transferencia.conta_destino : r.transferencia.conta_origem)?.empresa_contabil?.nome_fantasia ?? null
+          : null),
+      // O trimestre do Tipo do mútuo não acompanha a data (decisão 230).
+      tri_do_tipo: r.transferencia?.trimestre ? `T${r.transferencia.trimestre}` : null,
       job_id: r.jobs?.id ?? null,
       job_codigo: r.jobs?.codigo ?? null,
       // Mesma regra da `vw_fluxo_caixa` (decisão 069, 10/09/2026): a

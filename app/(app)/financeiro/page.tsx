@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Landmark, Clock, ArrowRight, FileText, Receipt, Scale, TrendingUp, Wallet, BookOpen, FolderKanban, PieChart, type LucideIcon } from "lucide-react";
+import { Landmark, Clock, ArrowRight, FileText, Handshake, Receipt, Scale, TrendingUp, Wallet, BookOpen, FolderKanban, PieChart, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
@@ -100,6 +100,12 @@ export default async function CentralFinanceiraPage() {
           icon={BookOpen}
           title="Conciliação Bancária"
           description="Extrato por conta bancária. Base pra bater com o extrato do banco e pra o DRE."
+        />
+        <FinanceiroCard
+          href="/financeiro/mutuos"
+          icon={Handshake}
+          title="Mútuos entre empresas"
+          description="Quem deve a quem entre os CNPJs do grupo e com as empresas de fora."
         />
         <FinanceiroCard
           href="/financeiro/cadastros"

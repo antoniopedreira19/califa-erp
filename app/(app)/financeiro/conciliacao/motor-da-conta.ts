@@ -9,6 +9,7 @@
  * importação, decisão 201) e no teste.
  */
 
+import type { MutuoDaLinha } from "@/lib/financeiro/mutuo";
 import {
   casar,
   diasEntre,
@@ -194,6 +195,8 @@ export interface Resolucao {
 
 export type ResultadoDaLinha = ResultadoDoMotor<MovimentoDaLinha> & {
   resolvido: Resolucao | null;
+  /** A linha sem correspondência que é um mútuo (decisão 230): a aba preenche. */
+  mutuo?: MutuoDaLinha;
 };
 
 function aspas(s: string) {
@@ -234,7 +237,10 @@ export function resolucaoDaLinha(
         : `Baixa corrigida pelo valor do banco: ${primeira}`;
       break;
     case "regra":
-      texto = l.transferenciaId
+      // O IOF do mútuo entra como o avulso da regra, sem regra (decisão 230).
+      texto = !l.regraId
+        ? `Lançado pela linha do banco: ${primeira}`
+        : l.transferenciaId
         ? `${l.resolvidaSozinha === "regra" ? "Transferência feita sozinha" : "Transferência feita"} pela regra: ${regra}`
         : l.resolvidaSozinha === "regra"
           ? `Lançado sozinho pela regra: ${regra}`
@@ -409,6 +415,8 @@ export interface SecoesDoBanco {
   regra: ResultadoDaLinha[];
   /** A cauda do histórico da planilha (A6). */
   historico: ResultadoDaLinha[];
+  /** A linha entre CNPJs, reconhecida depois de tudo o mais (decisão 230). */
+  mutuo: ResultadoDaLinha[];
   sem: ResultadoDaLinha[];
   conciliados: ResultadoDaLinha[];
 }
@@ -440,6 +448,7 @@ export function secoesDoBanco(resultados: ResultadoDaLinha[]): SecoesDoBanco {
     par: pend.filter((r) => r.estado === "par"),
     regra: pend.filter((r) => r.estado === "regra"),
     historico: pend.filter((r) => r.estado === "historico"),
+    mutuo: [],
     sem: pend.filter((r) => r.estado === "sem_par"),
     conciliados: resolvidos.filter((r) => !r.resolvido?.ligados),
   };

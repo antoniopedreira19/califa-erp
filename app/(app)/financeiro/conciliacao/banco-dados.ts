@@ -29,6 +29,8 @@ import type { createClient } from "@/lib/supabase/server";
 import type { ConciliadaComo, ExtratoLinhaComSituacao, ResolucaoSozinha } from "@/lib/types";
 import type { LancamentoDoMotor, RegraDoMotor } from "@/lib/conciliacao/motor";
 import type { HistoricoDoMotor } from "@/lib/conciliacao/historico";
+import type { ContextoDoMutuoNaConta, ParteDoMutuo } from "@/lib/financeiro/mutuo";
+import { contextoDoMutuoNaConta } from "../mutuos/dados";
 import { somaDias } from "@/lib/conciliacao/motor";
 import { contaTemNumero } from "@/lib/conciliacao/ofx";
 import { calcularSaldoAnterior } from "@/lib/calculos/saldo-conta";
@@ -167,6 +169,8 @@ export interface DadosDaAbaBanco {
   remessasBaixadas: RemessaBaixada[];
   remessas: RemessaDaConta[];
   regras: RegraDaConta[];
+  /** O mútuo na conta aberta: o que reconhece a linha entre CNPJs (decisão 230). */
+  mutuo: ContextoDoMutuoNaConta & { partes: ParteDoMutuo[] };
   /** O saldo do sistema no fim do último dia do extrato. */
   saldoSistemaNoFim: number | null;
   /** A cauda do histórico da conta ainda sem linha do banco (A6). */
@@ -263,6 +267,8 @@ function cancelamentoDe(l: LancamentoCru): CancelamentoDaBaixa | null {
       return l.fatura_cartao_id ? { tipo: "fatura_cartao", id: l.fatura_cartao_id } : null;
     case "transferencia_saida":
     case "transferencia_entrada":
+    case "mutuo_saida":
+    case "mutuo_entrada":
       return l.transferencia_id ? { tipo: "transferencia", id: l.transferencia_id } : null;
     case "imposto_baixa":
       return l.imposto_a_pagar_id ? { tipo: "imposto", id: l.imposto_a_pagar_id } : null;
@@ -618,6 +624,12 @@ export async function carregarBancoDaConciliacao(
     remessas,
     regras,
     remessasBaixadas,
+    mutuo: await contextoDoMutuoNaConta(
+      supabase,
+      tenantId,
+      contaId,
+      linhas.filter((l) => !l.conciliada && !l.ignorada),
+    ),
     saldoSistemaNoFim: saldoNoFim === null ? null : r2(saldoNoFim),
     historico,
     regionais: ((regionaisRes.data ?? []) as Array<{ id: string; nome: string; empresa_id: string }>).map((r) => ({

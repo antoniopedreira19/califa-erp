@@ -32,6 +32,7 @@ import {
   ArrowRight,
   Banknote,
   CalendarPlus,
+  Handshake,
   Info,
   Plus,
   TrendingUp,
@@ -54,6 +55,7 @@ import {
 } from "@/components/ui/select";
 import { RateioRegionalEditor } from "../contas-a-pagar/rateio-regional-editor";
 import { cn, formatCurrency } from "@/lib/utils";
+import { MutuoFormComDados, type InicialDoMutuo } from "../mutuos/mutuo-form";
 import type {
   ContaBancaria,
   PlanoContaSubtipo,
@@ -66,7 +68,7 @@ import {
   saldoDaContaNoDia,
 } from "./actions-recebimento-avulso";
 
-export type TipoDoRecebimentoAvulso = "recebimento_avulso" | "transferencia" | "rendimento";
+export type TipoDoRecebimentoAvulso = "recebimento_avulso" | "transferencia" | "rendimento" | "mutuo";
 
 /** Um rendimento já lançado: a tela avisa antes de o banco recusar o
  *  segundo da mesma conta no mesmo mês. */
@@ -97,6 +99,12 @@ const TIPOS: Array<{
     sub: "Dinheiro que só muda de conta",
   },
   {
+    chave: "mutuo",
+    icone: Handshake,
+    rotulo: "Mútuo entre empresas",
+    sub: "Empréstimo a outra empresa",
+  },
+  {
     chave: "rendimento",
     icone: TrendingUp,
     rotulo: "Rendimento de aplicação",
@@ -109,6 +117,7 @@ const EXPLICA: Record<TipoDoRecebimentoAvulso, string> = {
     "Reembolso, devolução de fornecedor, juros ou qualquer entrada que não passa por nota fiscal. Entra em Títulos a Receber sem job: a receita fica nas regionais do rateio.",
   transferencia:
     "Não é receita nem despesa: fica fora do DRE e do fluxo de caixa consolidado. Aparece no extrato das duas contas, e cancelar desfaz as duas linhas juntas. Não pede empresa: a conta já diz de qual CNPJ é o dinheiro.",
+  mutuo: "Dinheiro que muda de dono entre empresas: fica abaixo do Lucro líquido.",
   rendimento:
     "O valor líquido (depois do IR e do IOF), que é o que de fato entrou na aplicação. Entra como Receita Financeira, um lançamento por conta e por mês.",
 };
@@ -241,6 +250,7 @@ export function RecebimentoAvulsoDialog({
   /** Troca a chave dos campos não controlados (valor, datas) a cada
    *  abertura e a cada troca de tipo: eles montam de novo, vazios. */
   const [geracao, setGeracao] = React.useState(0);
+  const [mutuoInicial, setMutuoInicial] = React.useState<InicialDoMutuo | undefined>(undefined);
 
   React.useEffect(() => {
     if (!open) return;
@@ -258,6 +268,7 @@ export function RecebimentoAvulsoDialog({
 
   function limpar() {
     setErro(null);
+    setMutuoInicial(undefined);
     setCentavos("");
     setDescricao("");
     setDataPrevista(hoje());
@@ -365,7 +376,7 @@ export function RecebimentoAvulsoDialog({
     }
     if (cnpjsDiferentes) {
       return setErro(
-        "Transferência só entre contas do mesmo CNPJ. Entre CNPJs diferentes o dinheiro muda de dono, e esse caso ainda vai ser definido.",
+        "Transferência só entre contas do mesmo CNPJ. Entre CNPJs diferentes é mútuo.",
       );
     }
     if (!valor) return setErro("Informe o valor da transferência.");
@@ -463,15 +474,15 @@ export function RecebimentoAvulsoDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[660px]">
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[780px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Plus className="h-5 w-5 text-california-red" />
-            Recebimento avulso
+            {tipo === "mutuo" ? "Mútuo entre empresas" : "Recebimento avulso"}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           {TIPOS.map((t) => {
             const Icone = t.icone;
             const ativo = tipo === t.chave;
@@ -505,6 +516,21 @@ export function RecebimentoAvulsoDialog({
           })}
         </div>
 
+        {tipo === "mutuo" ? (
+          <MutuoFormComDados
+            key={geracao}
+            alvo={{ modo: "novo", inicial: mutuoInicial }}
+            onFechar={() => onOpenChange(false)}
+            onFeito={(mensagem: string) => onCriado("", false, mensagem)}
+            onTransferencia={(o: string, d: string) => {
+              setTipo("transferencia");
+              limpar();
+              setContaOrigem(o);
+              setContaDestino(d);
+            }}
+          />
+        ) : (
+        <>
         {erro && (
           <div className="flex items-start gap-2 rounded-lg border border-california-red/40 bg-california-red/5 p-3 text-sm text-california-red">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -698,10 +724,21 @@ export function RecebimentoAvulsoDialog({
                 />
               </Campo>
               {cnpjsDiferentes && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
-                  As contas são de CNPJs diferentes. Entre CNPJs o dinheiro muda de dono, não
-                  só de conta: esse caso ainda vai ser definido, e por enquanto a
-                  transferência não é aceita.
+                <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
+                  <span className="flex-1">As contas são de CNPJs diferentes: o dinheiro muda de dono. Isso é um mútuo.</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const inicial = { origem: contaOrigem, destino: contaDestino, valor, data: dataTransferencia };
+                      setTipo("mutuo");
+                      limpar();
+                      setMutuoInicial(inicial);
+                    }}
+                    className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-amber-300 bg-white px-2.5 text-[11.5px] font-semibold text-amber-900 hover:bg-amber-100"
+                  >
+                    <Handshake className="h-3 w-3" />
+                    Lançar como mútuo
+                  </button>
                 </div>
               )}
               <div className="overflow-hidden rounded-xl border border-border text-[12.5px]">
@@ -918,6 +955,8 @@ export function RecebimentoAvulsoDialog({
             </button>
           </div>
         </div>
+        </>
+        )}
       </DialogContent>
     </Dialog>
   );

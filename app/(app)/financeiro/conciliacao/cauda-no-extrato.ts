@@ -71,6 +71,7 @@ export async function carregarCaudaDoExtrato(
         natureza: valor >= 0 ? "entrada" : "saida",
         valor: Math.abs(valor),
         fornecedor_nome: h.fornecedor,
+        tri_do_tipo: null,
         job_id: null,
         job_codigo: null,
         tipo_codigo: "",

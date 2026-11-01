@@ -484,7 +484,7 @@ async function daTransferencia(supabase: Supabase, tenantId: string, id: string)
   const { data: tr } = await supabase
     .from("transferencias_contas")
     .select(
-      "codigo, created_at, origem:contas_bancarias!conta_origem_id(nome), destino:contas_bancarias!conta_destino_id(nome)",
+      "codigo, tipo, created_at, fornecedor:fornecedores(nome), origem:contas_bancarias!conta_origem_id(nome), destino:contas_bancarias!conta_destino_id(nome)",
     )
     .eq("id", id)
     .eq("tenant_id", tenantId)
@@ -494,9 +494,12 @@ async function daTransferencia(supabase: Supabase, tenantId: string, id: string)
     ok: true,
     detalhes: {
       referencia: tr.codigo ?? "—",
-      trilha: [`Criada em ${formatDiaBr(tr.created_at)}`, "Fica fora do DRE e do fluxo consolidado"],
+      trilha:
+        tr.tipo === "mutuo"
+          ? [`Criado em ${formatDiaBr(tr.created_at)}`, "Mútuo entre empresas: fica abaixo do Lucro líquido"]
+          : [`Criada em ${formatDiaBr(tr.created_at)}`, "Fica fora do DRE e do fluxo consolidado"],
       parcela: null,
-      pagamento: { linha: `Sai da ${tr.origem?.nome ?? "conta de origem"}`, detalhe: `Entra na ${tr.destino?.nome ?? "conta de destino"}` },
+      pagamento: { linha: `Sai da ${tr.origem?.nome ?? tr.fornecedor?.nome ?? "conta de origem"}`, detalhe: `Entra na ${tr.fornecedor && !tr.destino ? tr.fornecedor.nome : tr.destino?.nome ?? "conta de destino"}` },
       origensDoDinheiro: [],
       retido: [],
         saidaDaBaixa: null,
