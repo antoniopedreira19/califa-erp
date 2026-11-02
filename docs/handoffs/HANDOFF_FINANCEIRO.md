@@ -8777,7 +8777,12 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 
 ## ⚠️ Nota de 2026-11-02 — o IOF que já está no histórico (decisão 230)
 
-- **O que mudou:** a guia de 15/10 da GoCrazy, do mútuo com a Community, continua como linha do histórico e agora soma no IOF do par. `mutuos_iof_historico` marca a linha pela digital, e `vw_mutuos_iof_historico` traz o valor da carga ativa.
+- **O que mudou:** a guia de 15/10 da GoCrazy, do mútuo com a Community, continua como linha do histórico e agora soma no IOF do par. `mutuos_iof_historico` marca a linha do banco, e `vw_mutuos_iof_historico` traz o valor dela.
 - **Sem contar duas vezes:** nenhum movimento foi criado ou alterado. DRE, fluxo de caixa e saldo não mudam.
 - **Abertura:** o IOF pago da abertura GoCrazy × Community volta ao valor de 30/09. O total da tela não muda.
-- **Atenção:** se a descrição, o fornecedor ou o Tipo dessa linha mudarem na planilha, a digital muda e o IOF pago da tela perde a guia até a marcação ser refeita.
+
+## ⚠️ Nota de 2026-11-02 (2) — a guia presa à linha do banco e o trimestre do histórico (decisões 230 e 211)
+
+- **Guia:** a marcação passou da digital da planilha para a linha do banco. Editar a linha na planilha não tira mais a guia do IOF pago. A digital fica só como registro.
+- **Índice:** a FK do pagador de `mutuos_iof_historico` ganhou índice.
+- **Extrato:** as linhas do histórico mostram o trimestre do Tipo da planilha, e não o da data. Só muda a coluna: saldo, fluxo e DRE ficam iguais. Vale para as 1.661 linhas da cauda, e 1.652 delas mudam de trimestre.

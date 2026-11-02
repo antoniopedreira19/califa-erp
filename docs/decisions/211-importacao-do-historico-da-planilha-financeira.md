@@ -1192,6 +1192,9 @@ ficam só os jobs do 4T." Os jobs do 3T que já existem no sistema (cerca de
   do banco também para eles. A cauda nova substitui a ativa e solta as
   linhas do extrato ligadas a ela, que voltam a pendentes para a tela ligar
   à cauda nova.
+- **O Extrato mostra o trimestre do Tipo (02/11/2026):** a coluna da linha da
+  cauda vem de `competencia_trimestre`, como na planilha, e não da data do
+  pagamento. Só muda a coluna: saldo, fluxo e DRE ficam iguais.
 - **Simulação com os extratos de outubro (27/10/2026, sem gravar):** na
   California Santander, 644 das 1.478 linhas se resolvem pelo histórico e
   sobram 318 linhas da cauda sem linha do banco (R$ 1,66 mi: sobretudo

@@ -25,6 +25,7 @@ type CaudaCrua = {
   fornecedor: string | null;
   empresa_nome: string | null;
   regional_nome: string | null;
+  competencia_trimestre: number | null;
   extrato_linha_id: string | null;
 };
 
@@ -41,7 +42,7 @@ export async function carregarCaudaDoExtrato(
     const { data, error } = await supabase
       .from("historico_movimentos")
       .select(
-        "id, data, valor, job_nome, descricao, fornecedor, empresa_nome, regional_nome, extrato_linha_id, carga:historico_cargas!inner(tipo, situacao)",
+        "id, data, valor, job_nome, descricao, fornecedor, empresa_nome, regional_nome, competencia_trimestre, extrato_linha_id, carga:historico_cargas!inner(tipo, situacao)",
       )
       .eq("tenant_id", args.tenantId)
       .eq("conta_bancaria_id", args.contaId)
@@ -71,7 +72,8 @@ export async function carregarCaudaDoExtrato(
         natureza: valor >= 0 ? "entrada" : "saida",
         valor: Math.abs(valor),
         fornecedor_nome: h.fornecedor,
-        tri_do_tipo: null,
+        // O trimestre do Tipo da planilha: a data é a do pagamento, em outubro.
+        tri_do_tipo: h.competencia_trimestre ? `T${h.competencia_trimestre}` : null,
         job_id: null,
         job_codigo: null,
         tipo_codigo: "",
