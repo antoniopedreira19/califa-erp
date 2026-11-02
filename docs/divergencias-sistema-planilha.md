@@ -83,6 +83,7 @@ Rentabilidade: 2.738 jobs de 2023 a 2026. As abas de 2021 e 2022 ficam de fora, 
 | DIV-044 | Extrato · Entradas e saídas de 26 a 30/10 sem linha na planilha | Pendência de conciliação | +R$ 76.533,34 e −R$ 36.386,97 | Aberta: falta saber o que são |
 | DIV-045 | Extrato · Linhas da planilha de 27/10 a 01/11 sem linha no banco | Pendência de conciliação | −R$ 66.923,42 no saldo | Aberta: o extrato até 03/11 não as tem |
 | DIV-046 | Regional · CCH, custo operacional da Agency no 3T | Omissão da planilha com prova | R$ 7.000,01 | O sistema segue a DRE |
+| DIV-047 | Contas a pagar · PP-00040, 2ª parcela | Pendência de conciliação | R$ 7.250,00 | Aberta: paga no banco, aberta no sistema |
 
 ---
 
@@ -259,7 +260,7 @@ As abas Gerencial são as da planilha de 01/11. As linhas de faturamento, impost
 - **Por quê:** o Fechamento divide o benefício job a job em alguns trimestres, põe a CMH de 1T e 2T 2023 toda na Agency e traz valores digitados nos projetos proprietários. O benefício da CCH no 1T 2026 acompanha esse digitado.
 - **Qual vale:** o sistema, que rateia pelo faturamento e não reproduz o digitado.
 - **Para a gestão:** o sistema aplica uma regra só. A planilha muda de critério em alguns trimestres.
-- **Planilha de fechamento (conferida em 02/11/2026):** o custo dos dois projetos proprietários da CCH no 3T (R$ 73.015,51) está na Agency, e o sistema o põe na Doca, pela regional dos lançamentos. Na aba DRE CMH Regional, linha 252, a fórmula que soma esse custo fica na coluna da Doca no 1T e no 2T e passa para a coluna da Agency no 3T. A célula da Doca no 3T tem 0 digitado. Falta o Tiago confirmar de qual regional são os dois projetos do 3T.
+- **Planilha de fechamento (conferida em 02/11/2026):** o custo dos dois projetos proprietários da CCH no 3T (R$ 73.015,51) está na Agency, e o sistema o põe na Doca, pela regional dos lançamentos. Na aba DRE CMH Regional, linha 252, a fórmula que soma esse custo fica na coluna da Doca no 1T e no 2T e passa para a coluna da Agency no 3T. A célula da Doca no 3T tem 0 digitado. O sistema segue uma regra fixa, "projeto da CCH é 100% Doca" (`lib/historico-financeiro/regional.ts`). As linhas dos dois jobs têm regionais diferentes: um, de R$ 32.518,00, está marcado Agency; o outro, de R$ 40.497,51, Doca. São três leituras possíveis: tudo na Doca (o sistema hoje), tudo na Agency (a planilha no 3T) ou pela regional das linhas. Falta o Tiago decidir.
 
 ### DIV-019 · Gerencial da CMH em 2023 e 2024
 
@@ -442,6 +443,13 @@ Apuradas na conciliação de outubro, em 02/11/2026.
 - **Qual vale:** o sistema, que tira o regional dos mesmos lançamentos da DRE.
 - **Para a gestão:** a DRE da CCH é a mesma nos dois lados. Só a divisão por regional do 3T muda em R$ 7.000.
 - **Situação:** o job que a aba Res. Jobs conta a mais não foi identificado.
+
+### DIV-047 · PP-00040: a 2ª parcela paga no banco e aberta no sistema
+
+- **Diferença:** a PP-00040 (job AMB-1003/26, R$ 14.500,00 em duas parcelas) tem a 1ª parcela baixada no sistema em 08/09. A 2ª, de R$ 7.250,00, saiu da California Santander em 08/10 e está na planilha, mas no sistema a parcela continua aberta.
+- **Por quê:** a planilha não cita o código do job, então a linha de 08/10 entrou na cauda e ficou ligada à saída do banco. A baixa da PP não aconteceu.
+- **Risco:** a parcela aparece como a pagar e pode ser paga de novo.
+- **Situação:** aberta. Se o Tiago confirmar o pagamento, a linha sai da cauda para o só DRE e a parcela é baixada pela saída de 08/10.
 
 ---
 
