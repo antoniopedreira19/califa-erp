@@ -78,6 +78,7 @@ Rentabilidade: 2.738 jobs de 2023 a 2026. As abas de 2021 e 2022 ficam de fora, 
 | DIV-040 | Extrato · Linhas que só fecham em conjunto | Pendência de conciliação | R$ 95.780,30 e R$ 39.901,46 | Fecham no conjunto, não linha a linha |
 | DIV-041 | Extrato · Um pagamento, vários favorecidos | Pendência de conciliação | Quatro pagamentos | Aberta: quando os jobs entrarem |
 | DIV-042 | Extrato · Saída sem linha na planilha | Pendência de conciliação | R$ 4.200,00 | Aberta: extrato de 26/10 parcial |
+| DIV-043 | Extrato · Quatro linhas sem Tipo na planilha | Pendência de conciliação | R$ 25.025,92 e R$ 464,72 no saldo | Aberta: falta saber o que são |
 
 ---
 
@@ -400,6 +401,12 @@ Apuradas na conciliação de outubro, em 02/11/2026.
 
 - **Diferença:** −R$ 4.200,00 de 26/10 na California Santander, sem linha na planilha.
 - **Situação:** aberta. O extrato desse dia é parcial: foi gerado antes do fim do dia.
+
+### DIV-043 · Quatro linhas sem Tipo na planilha
+
+- **Diferença:** a planilha tem estas linhas com a coluna Tipo vazia: +R$ 1.000,00 (13/10), +R$ 24.000,00 (19/10) e +R$ 25,92 (22/10) na California Santander, e −R$ 464,72 (09/10) na Santander Hitlab. O banco tem as mesmas quatro.
+- **Por quê:** sem Tipo, a DRE da planilha não as conta, e a carga as deixou de fora. O saldo do sistema fica R$ 25.025,92 abaixo do banco na California Santander e R$ 464,72 acima na Hitlab.
+- **Situação:** aberta. Falta saber o que são, para lançar com o Tipo certo.
 
 ---
 
