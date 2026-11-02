@@ -1605,6 +1605,15 @@ ficam só os jobs do 4T." Os jobs do 3T que já existem no sistema (cerca de
   corrente e a ContaMax. O extrato da ContaMax de outubro confirma.
 - **XP California:** fica negativa em 31/10 (−R$ 1.650.965,35), porque o sistema não
   tem o saldo dela em 30/09 (A5).
+- **O 3T contra a planilha de fechamento (02/11):** com as previsões, a DRE do 3T bate
+  até o lucro líquido na Agência California, na CCH e na Hitlab, com no máximo
+  R$ 0,05 de arredondamento por linha. A tela mostra o mesmo lucro do 3T: R$ 2.961.951,88,
+  R$ 638.149,93 e R$ 1.653.334,84. Abaixo do
+  lucro, só as diferenças já registradas: distribuição de lucro (DIV-001), empréstimo à
+  Hitlab (DIV-007) e o texto com espaço do empréstimo à CCH (DIV-015). No regional da
+  CCH: os projetos do 3T (DIV-018) e R$ 7.000,01 de custo da Agency (DIV-046). Sem as
+  previsões, o 3T mostra só o que já passou pelo banco: o que falta acontecer espera a
+  conciliação.
 
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas

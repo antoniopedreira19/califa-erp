@@ -82,6 +82,7 @@ Rentabilidade: 2.738 jobs de 2023 a 2026. As abas de 2021 e 2022 ficam de fora, 
 | DIV-043 | Extrato · Seis linhas sem Tipo na planilha | Pendência de conciliação | R$ 160.546,59 e R$ 464,72 no saldo | Aberta: falta saber o que são |
 | DIV-044 | Extrato · Entradas e saídas de 26 a 30/10 sem linha na planilha | Pendência de conciliação | +R$ 76.533,34 e −R$ 36.386,97 | Aberta: falta saber o que são |
 | DIV-045 | Extrato · Linhas da planilha de 27/10 a 01/11 sem linha no banco | Pendência de conciliação | −R$ 66.923,42 no saldo | Aberta: o extrato até 03/11 não as tem |
+| DIV-046 | Regional · CCH, custo operacional da Agency no 3T | Omissão da planilha com prova | R$ 7.000,01 | O sistema segue a DRE |
 
 ---
 
@@ -258,6 +259,7 @@ As abas Gerencial são as da planilha de 01/11. As linhas de faturamento, impost
 - **Por quê:** o Fechamento divide o benefício job a job em alguns trimestres, põe a CMH de 1T e 2T 2023 toda na Agency e traz valores digitados nos projetos proprietários. O benefício da CCH no 1T 2026 acompanha esse digitado.
 - **Qual vale:** o sistema, que rateia pelo faturamento e não reproduz o digitado.
 - **Para a gestão:** o sistema aplica uma regra só. A planilha muda de critério em alguns trimestres.
+- **Planilha de fechamento (conferida em 02/11/2026):** o custo dos dois projetos proprietários da CCH no 3T (R$ 73.015,51) está na Agency, e o sistema o põe na Doca, pela regional dos lançamentos. Na aba DRE CMH Regional, linha 252, a fórmula que soma esse custo fica na coluna da Doca no 1T e no 2T e passa para a coluna da Agency no 3T. A célula da Doca no 3T tem 0 digitado. Falta o Tiago confirmar de qual regional são os dois projetos do 3T.
 
 ### DIV-019 · Gerencial da CMH em 2023 e 2024
 
@@ -432,6 +434,14 @@ Apuradas na conciliação de outubro, em 02/11/2026.
   - 7 entradas CT de 01/11, um domingo: +R$ 7.378,89.
 - **Por quê:** a planilha as dá como realizadas. O saldo do sistema fica R$ 66.923,42 abaixo do banco.
 - **Situação:** aberta. Se o extrato seguinte não as trouxer, a planilha precisa dizer quando e por onde foram pagas.
+
+### DIV-046 · Regional da CCH: custo operacional da Agency no 3T
+
+- **Diferença:** na planilha de fechamento, o custo operacional da Agency no 3T de 2026 é −R$ 1.060.558,48. No sistema, −R$ 1.053.558,47.
+- **Prova:** a aba DRE CMH Regional soma o custo pela aba Res. Jobs CMH 2026, cujo total do 3T é R$ 4.360.437,80. A aba DRE CMH, pelos Tipos, dá R$ 4.353.437,80 de custo operacional no 3T. A própria planilha tem R$ 7.000,00 a mais no resultado dos jobs do que na DRE. O sistema fecha com a DRE: Agency, Doca e projetos somam R$ 4.353.437,80.
+- **Qual vale:** o sistema, que tira o regional dos mesmos lançamentos da DRE.
+- **Para a gestão:** a DRE da CCH é a mesma nos dois lados. Só a divisão por regional do 3T muda em R$ 7.000.
+- **Situação:** o job que a aba Res. Jobs conta a mais não foi identificado.
 
 ---
 
