@@ -156,6 +156,8 @@ export interface DadosDaAbaBanco {
     numero: string | null;
     /** Tem agência e número para reconhecer o arquivo. */
     temNumero: boolean;
+    /** A empresa gerencial do CNPJ da conta (decisão 230, D10). */
+    empresaId: string | null;
   };
   ultima: ImportacaoDoBanco | null;
   /** Os períodos de todas as importações: os dias que o extrato cobre. */
@@ -300,7 +302,9 @@ export async function carregarBancoDaConciliacao(
   const [contaRes, importacoesRes, linhasCruas, itensRes, regrasRes, regionaisRes] = await Promise.all([
     supabase
       .from("contas_bancarias")
-      .select("id, nome, banco, agencia, numero_conta, numero_conta_dv, saldo_inicial_data")
+      .select(
+        "id, nome, banco, agencia, numero_conta, numero_conta_dv, saldo_inicial_data, empresa:empresas_contabeis!empresa_contabil_id(empresa_gerencial_id)",
+      )
       .eq("tenant_id", tenantId)
       .eq("id", contaId)
       .maybeSingle(),
@@ -366,6 +370,7 @@ export async function carregarBancoDaConciliacao(
     numero_conta: string | null;
     numero_conta_dv: string | null;
     saldo_inicial_data: string;
+    empresa: { empresa_gerencial_id: string | null } | null;
   } | null;
   const conta: DadosDaAbaBanco["conta"] = {
     id: contaId,
@@ -374,6 +379,7 @@ export async function carregarBancoDaConciliacao(
     agencia: c?.agencia ?? null,
     numero: c?.numero_conta ? `${c.numero_conta}${c.numero_conta_dv ? `-${c.numero_conta_dv}` : ""}` : null,
     temNumero: c ? contaTemNumero(c) : false,
+    empresaId: c?.empresa?.empresa_gerencial_id ?? null,
   };
 
   const importacoes: ImportacaoDoBanco[] = (

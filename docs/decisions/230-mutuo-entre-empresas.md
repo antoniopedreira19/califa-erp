@@ -41,6 +41,8 @@ Na DRE e no fluxo da planilha, as linhas `(−) MÚTUO INTERNO` e `(+) MÚTUO IN
 
 Se quem paga é quem deve, a linha aparece como "Devolução de mútuo". Se houver previsão do mesmo mútuo, a linha a baixa em vez de criar outro.
 
+⚠️ **PIX de empresa de fora (2026-11-02).** O crédito com o CNPJ de empresa de fora não aparece mais como "Devolução de mútuo": a linha pergunta, entre notas de sócio, avulso e devolução. Ver a [231](231-notas-de-socio-no-tipo-15.md). Entre CNPJs do grupo, nada mudou.
+
 ## A Apuração do IOF
 
 Só o IOF do mútuo tem guia nossa: quem concede o crédito recolhe (Decreto 6.306/2007, art. 5º, III). Câmbio, cartão e crédito de banco são cobrados pelo banco.
@@ -62,5 +64,5 @@ Só o IOF do mútuo tem guia nossa: quem concede o crédito recolhe (Decreto 6.3
 - **Lançamento de juros:** o campo só informa e alimenta a base do IOF.
 - **DRE:** só lê `historico_movimentos`. Lançamento novo, inclusive mútuo, não chega nela.
 - **Mútuos do grupo sem IOF:** seguem os registros, com o campo vazio. Está com a contabilidade.
-- **Notas de sócio da GoCrazy:** outra entrega. Não abatem saldo de mútuo.
+- **Notas de sócio da GoCrazy:** não abatem saldo de mútuo. Entregues na [231](231-notas-de-socio-no-tipo-15.md).
 - **Saldos no razão:** o novo plano de contas, em partidas dobradas, vai ler estes mútuos como documento.

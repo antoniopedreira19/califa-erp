@@ -417,6 +417,8 @@ export interface SecoesDoBanco {
   historico: ResultadoDaLinha[];
   /** A linha entre CNPJs, reconhecida depois de tudo o mais (decisão 230). */
   mutuo: ResultadoDaLinha[];
+  /** O PIX de quem tem cadastro de empresa de fora (decisão 231). */
+  empresaDeFora: ResultadoDaLinha[];
   sem: ResultadoDaLinha[];
   conciliados: ResultadoDaLinha[];
 }
@@ -449,6 +451,7 @@ export function secoesDoBanco(resultados: ResultadoDaLinha[]): SecoesDoBanco {
     regra: pend.filter((r) => r.estado === "regra"),
     historico: pend.filter((r) => r.estado === "historico"),
     mutuo: [],
+    empresaDeFora: [],
     sem: pend.filter((r) => r.estado === "sem_par"),
     conciliados: resolvidos.filter((r) => !r.resolvido?.ligados),
   };

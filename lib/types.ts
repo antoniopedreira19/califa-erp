@@ -4427,6 +4427,8 @@ export interface ContaAvulsa {
   /** Rendimento: o mês, sempre no dia 1 ("2026-09-01"). Um por conta e
    *  por mês. `null` fora do rendimento. */
   competencia: string | null;
+  /** Número da nota, nas notas de sócio (decisão 231). `null` nas outras. */
+  numero_nf: string | null;
   criado_por: string;
   created_at: string;
   updated_at: string;

@@ -68,22 +68,26 @@ function revalidar() {
 // Criar
 // ---------------------------------------------------------------------
 
-const rateioSchema = z
-  .array(
-    z.object({
-      regional_id: z.string().uuid("Escolha a regional de cada linha do rateio."),
-      percentual: z.number().positive("Percentual do rateio precisa ser maior que zero."),
-    }),
-  )
+const linhasDoRateio = z.array(
+  z.object({
+    regional_id: z.string().uuid("Escolha a regional de cada linha do rateio."),
+    percentual: z.number().positive("Percentual do rateio precisa ser maior que zero."),
+  }),
+);
+const somaCem = (linhas: Array<{ percentual: number }>) =>
+  Math.abs(linhas.reduce((s, l) => s + l.percentual, 0) - 100) < 0.01;
+const semRepetir = (linhas: Array<{ regional_id: string }>) =>
+  new Set(linhas.map((l) => l.regional_id)).size === linhas.length;
+
+const rateioSchema = linhasDoRateio
   .min(1, "Informe o rateio de regional: ao menos uma regional.")
-  .refine(
-    (linhas) => Math.abs(linhas.reduce((s, l) => s + l.percentual, 0) - 100) < 0.01,
-    "Rateio de regional: a soma dos percentuais deve ser 100,00.",
-  )
-  .refine(
-    (linhas) => new Set(linhas.map((l) => l.regional_id)).size === linhas.length,
-    "A mesma regional aparece duas vezes no rateio.",
-  );
+  .refine(somaCem, "Rateio de regional: a soma dos percentuais deve ser 100,00.")
+  .refine(semRepetir, "A mesma regional aparece duas vezes no rateio.");
+
+/** A nota de sócio vem sem rateio (decisão 231). Só ela: o banco recusa as outras. */
+const rateioOuTd = linhasDoRateio
+  .refine((l) => l.length === 0 || somaCem(l), "Rateio de regional: a soma dos percentuais deve ser 100,00.")
+  .refine(semRepetir, "A mesma regional aparece duas vezes no rateio.");
 
 const criarSchema = z.discriminatedUnion("tipo_entrada", [
   z.object({
@@ -96,7 +100,8 @@ const criarSchema = z.discriminatedUnion("tipo_entrada", [
     fornecedor_id: z.string().uuid().nullable(),
     plano_conta_tipo_id: z.string().uuid("Selecione o centro de custo."),
     plano_conta_subtipo_id: z.string().uuid("Selecione o subtipo do centro de custo."),
-    rateio: rateioSchema,
+    numero_nf: z.string().trim().max(30, "Número da nota muito longo.").nullable(),
+    rateio: rateioOuTd,
   }),
   z.object({
     tipo_entrada: z.literal("rendimento"),
@@ -154,7 +159,7 @@ export async function criarRecebimentoAvulso(
       data_prevista: d.data_prevista,
       ...(d.tipo_entrada === "rendimento"
         ? { conta_bancaria_prevista_id: d.conta_bancaria_prevista_id, competencia: d.competencia }
-        : { descricao: d.descricao }),
+        : { descricao: d.descricao, numero_nf: d.numero_nf }),
     },
   });
 

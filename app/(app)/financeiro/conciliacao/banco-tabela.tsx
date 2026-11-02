@@ -15,6 +15,7 @@ import * as React from "react";
 import Link from "next/link";
 import { AlertTriangle, ArrowLeftRight, CheckCheck, ChevronDown, CircleSlash, Handshake, Layers, Link2, Plus, Search, Undo2, Wand2 } from "lucide-react";
 import { BotaoLancar, CelulaDoMutuo, SituacaoDoMutuo } from "./mutuo-na-linha";
+import { pixDeEmpresaDeFora } from "@/lib/financeiro/mutuo";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import type { GrupoDeIguais, TituloDoMotor } from "@/lib/conciliacao/motor";
@@ -50,6 +51,7 @@ export interface AcoesDoBanco {
   criarRegra: (r: ResultadoDaLinha) => void;
   lancarAvulso: (r: ResultadoDaLinha) => void;
   lancarMutuo: (r: ResultadoDaLinha) => void;
+  lancarNotas: (r: ResultadoDaLinha) => void;
   lancarIof: (r: ResultadoDaLinha) => void;
   procurar: (r: ResultadoDaLinha) => void;
   ignorar: (r: ResultadoDaLinha) => void;
@@ -502,6 +504,25 @@ function AcoesDaLinha({ r, acoes, contexto }: { r: ResultadoDaLinha; acoes: Acoe
         }
       />
     );
+  if (r.mutuo && pixDeEmpresaDeFora(r.mutuo))
+    return (
+      <Vagas
+        principal={
+          <BotaoLancar
+            r={r}
+            classe={VERDE}
+            off={off}
+            rotulo="Lançar"
+            onAvulso={() => acoes.lancarAvulso(r)}
+            onMutuo={() => acoes.lancarMutuo(r)}
+            onIof={() => acoes.lancarIof(r)}
+            onNotas={() => acoes.lancarNotas(r)}
+          />
+        }
+        segundo={procurar("Procurar um título")}
+        quarto={ignorar}
+      />
+    );
   if (r.mutuo)
     return (
       <Vagas
@@ -643,7 +664,7 @@ function AcoesDaLinha({ r, acoes, contexto }: { r: ResultadoDaLinha; acoes: Acoe
       return (
         <Vagas
           principal={
-            <BotaoLancar r={r} classe={CONTORNO} off={off} onAvulso={() => acoes.lancarAvulso(r)} onMutuo={() => acoes.lancarMutuo(r)} onIof={() => acoes.lancarIof(r)} />
+            <BotaoLancar r={r} classe={CONTORNO} off={off} onAvulso={() => acoes.lancarAvulso(r)} onMutuo={() => acoes.lancarMutuo(r)} onIof={() => acoes.lancarIof(r)} onNotas={() => acoes.lancarNotas(r)} />
           }
           segundo={procurar("Procurar um título")}
           terceiro={

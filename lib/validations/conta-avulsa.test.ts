@@ -41,6 +41,16 @@ test("criar sem data prevista é recusado no PIX, na transferência e no boleto"
   }
 });
 
+test("rateio vazio só passa nas notas de sócio, com sem_rateio (decisão 231)", () => {
+  for (const schema of [criarContaAvulsaSchema, editarContaAvulsaSchema]) {
+    const sem = schema.safeParse({ ...base, rateio: [] });
+    assert.deepEqual(sem.success ? [] : sem.error.flatten().fieldErrors.rateio, ["Adicione pelo menos uma regional."]);
+    assert.equal(schema.safeParse({ ...base, rateio: [], sem_rateio: true }).success, true);
+    assert.equal(schema.safeParse(base).success, true);
+    assert.equal(schema.safeParse({ ...base, rateio: [{ regional_id: ID(4), percentual: 90 }] }).success, false);
+  }
+});
+
 test("criar com data prevista passa", () => {
   const r = criarContaAvulsaSchema.safeParse(base);
   assert.equal(r.success, true);

@@ -42,6 +42,7 @@ import type {
 } from "@/lib/types";
 import type { DocumentoDoAnexo } from "@/lib/types";
 import { formatCurrency } from "@/lib/utils";
+import { ehNotasDeSocio } from "@/lib/financeiro/notas-de-socio";
 import { RateioRegionalEditor } from "./rateio-regional-editor";
 import {
   FormaPagamentoField,
@@ -306,6 +307,8 @@ export function ContaAvulsaDrawer(props: Props) {
       props.subtipos.filter((s) => s.tipo_id === tipoId && s.ativo),
     [props.subtipos, tipoId],
   );
+  // Nota de sócio não tem rateio: a regional é TD (decisão 231).
+  const ehNotas = ehNotasDeSocio(props.tipos, props.subtipos, subtipoId);
 
   // Ao mudar o tipo, resetar subtipo se não pertence mais ao tipo
   React.useEffect(() => {
@@ -449,7 +452,8 @@ export function ContaAvulsaDrawer(props: Props) {
       plano_conta_subtipo_id: subtipoId,
       forma_pagamento: formaPagamento,
       cartao_credito_id: cartaoCreditoId,
-      rateio,
+      rateio: ehNotas ? [] : rateio,
+      sem_rateio: ehNotas,
       ...(props.mode === "criar" ? { anexos } : {}),
     };
 
@@ -511,9 +515,9 @@ export function ContaAvulsaDrawer(props: Props) {
   // Rateio válido: pelo menos 1 linha e soma = 100
   const somaRateio = rateio.reduce((s, l) => s + l.percentual, 0);
   const rateioValido =
-    rateio.length > 0 && Math.abs(somaRateio - 100) < 0.01;
+    ehNotas || (rateio.length > 0 && Math.abs(somaRateio - 100) < 0.01);
   // Bloqueia salvar se qualquer linha referencia regional inativa (spec 5.9)
-  const rateioTemInativa = rateio.some(
+  const rateioTemInativa = !ehNotas && rateio.some(
     (r) => props.regionais.find((rr) => rr.id === r.regional_id)?.ativo === false,
   );
 
@@ -788,12 +792,19 @@ export function ContaAvulsaDrawer(props: Props) {
             </div>
 
             {/* Rateio de regional */}
-            <RateioRegionalEditor
-              linhas={rateio}
-              onChange={setRateio}
-              regionais={props.regionais.filter((r) => r.empresa_id === empresaId)}
-              disabled={pending}
-            />
+            {ehNotas ? (
+              <div className="flex items-center justify-between rounded-lg bg-muted/60 px-3 py-2 text-[12px]">
+                <span className="text-muted-foreground">Regional</span>
+                <span className="font-medium">Todas (TD), como na planilha</span>
+              </div>
+            ) : (
+              <RateioRegionalEditor
+                linhas={rateio}
+                onChange={setRateio}
+                regionais={props.regionais.filter((r) => r.empresa_id === empresaId)}
+                disabled={pending}
+              />
+            )}
 
             {/* Tipo do plano de contas */}
             <div className="space-y-2">

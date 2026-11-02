@@ -272,6 +272,13 @@ export interface MutuoDaLinha {
   devolucao: boolean;
 }
 
+/**
+ * O PIX de uma empresa de fora (decisão 231): o CNPJ diz quem pagou, não o que é.
+ * Pode ser devolução de mútuo ou nota de sócio, e quem lança escolhe. A volta
+ * prevista tem título e casa antes de chegar aqui.
+ */
+export const pixDeEmpresaDeFora = (m: MutuoDaLinha) => m.parte.deFora && !m.par;
+
 /** O PIX traz o CNPJ de quem mandou em 14 dígitos, com ou sem pontuação. */
 export function cnpjNoHistorico(historico: string): string | null {
   const m = historico.replace(/[.\-/]/g, "").match(/(?<!\d)\d{14}(?!\d)/);

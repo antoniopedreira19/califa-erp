@@ -3,6 +3,7 @@ import type { DocumentoTipo } from "@/lib/types";
 import { DOCUMENTO_TIPOS_FISCAIS, documentoTipoLabel } from "@/lib/types";
 import type { LancamentoLinha, OrigemDaTransacao } from "@/lib/calculos/saldo-conta";
 import { folhaDaBaixa } from "@/lib/financeiro/folha-no-extrato";
+import { ehCentroDasNotas, REGIONAL_DAS_NOTAS } from "@/lib/financeiro/notas-de-socio";
 
 /**
  * A LINHA DO EXTRATO, montada num lugar só (20/09/2026).
@@ -228,7 +229,9 @@ export async function montarLinhasDeLancamentos(
       // as mesmas que a coluna Job já usava (15/09/2026).
       regional_nome:
         r.jobs?.regional?.nome ??
-        (rateio.length === 1 ? rateio[0].regional_nome : null),
+        (rateio.length === 1 ? rateio[0].regional_nome : null) ??
+        // Nota de sócio não tem rateio: é TD, como na planilha (decisão 231).
+        (ehCentroDasNotas(r.plano_contas_tipos?.codigo, r.plano_contas_subtipos?.codigo) ? REGIONAL_DAS_NOTAS : null),
       // A ordem é a das origens que têm identificador próprio. O
       // recebimento fica por último porque ali a origem É a nota — o
       // faturamento não tem código interno, e inventar um só faria a

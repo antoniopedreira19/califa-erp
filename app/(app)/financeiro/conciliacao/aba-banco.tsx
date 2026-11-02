@@ -50,7 +50,7 @@ import { ContaAvulsaDrawer } from "../contas-a-pagar/conta-avulsa-drawer";
 import { darBaixaTitulo as darBaixaTituloAPagar } from "../contas-a-pagar/actions-titulos";
 import { darBaixaTitulo as darBaixaTituloAReceber } from "../contas-a-receber/actions";
 import { darBaixaRecebimentoAvulso, darBaixaTransferencia } from "../contas-a-receber/actions-recebimento-avulso";
-import { mutuoDaLinha } from "@/lib/financeiro/mutuo";
+import { mutuoDaLinha, pixDeEmpresaDeFora } from "@/lib/financeiro/mutuo";
 import { DialogoDoIof, DialogoDoMutuoNaLinha } from "./mutuo-na-linha";
 import { cancelarBaixa, type TipoDeBaixa } from "../actions-baixa-registrada";
 import { carregarDadosDoNovoLancamento, type DadosDoNovoLancamento } from "./actions-novo-lancamento";
@@ -143,13 +143,15 @@ interface Baixando {
  *  depois de tudo o que o motor já faz. */
 function comMutuos(secoes: SecoesDoBanco, banco: DadosDaAbaBanco): SecoesDoBanco {
   const mutuo: ResultadoDaLinha[] = [];
+  const empresaDeFora: ResultadoDaLinha[] = [];
   const sem: ResultadoDaLinha[] = [];
   for (const r of secoes.sem) {
     const m = mutuoDaLinha(banco.mutuo, banco.mutuo.partes, { data: r.mov.data, valor: r.mov.valor, historico: r.mov.linha.historico }, banco.lancamentos);
-    if (m) mutuo.push({ ...r, mutuo: m });
+    if (m && pixDeEmpresaDeFora(m)) empresaDeFora.push({ ...r, mutuo: m });
+    else if (m) mutuo.push({ ...r, mutuo: m });
     else sem.push(r);
   }
-  return { ...secoes, mutuo, sem };
+  return { ...secoes, mutuo, empresaDeFora, sem };
 }
 
 export function AbaBanco({
@@ -189,7 +191,7 @@ export function AbaBanco({
   const [dadosNovo, setDadosNovo] = React.useState<DadosDoNovoLancamento | null>(null);
   const [mutuoDaLinhaAberto, setMutuoDaLinha] = React.useState<ResultadoDaLinha | null>(null);
   const [iofDaLinha, setIofDaLinha] = React.useState<ResultadoDaLinha | null>(null);
-  const [avulso, setAvulso] = React.useState<{ r: ResultadoDaLinha; lado: "pagar" | "receber" } | null>(null);
+  const [avulso, setAvulso] = React.useState<{ r: ResultadoDaLinha; lado: "pagar" | "receber"; notas?: boolean } | null>(null);
   const [baixarAposCriar, setBaixarAposCriar] = React.useState<{ r: ResultadoDaLinha; lado: "pagar" | "receber"; id: string } | null>(null);
 
   React.useEffect(() => {
@@ -264,6 +266,29 @@ export function AbaBanco({
       return true;
     }
     return false;
+  }
+
+  /** O formulário de avulso com a linha; `notas` já abre nas notas de sócio. */
+  function abrirAvulso(r: ResultadoDaLinha, notas = false) {
+    const lado = r.mov.valor < 0 ? "pagar" : "receber";
+    if (dadosNovo) {
+      setAvulso({ r, lado, notas });
+      return;
+    }
+    setAviso(null);
+    startTransition(async () => {
+      try {
+        const res = await carregarDadosDoNovoLancamento();
+        if (!res.ok) {
+          setAviso({ tom: "erro", texto: res.message });
+          return;
+        }
+        setDadosNovo(res.dados);
+        setAvulso({ r, lado, notas });
+      } catch {
+        setAviso({ tom: "erro", texto: "Não foi possível abrir o formulário. Tente de novo." });
+      }
+    });
   }
 
   function executar(acao: () => Promise<Resultado>, depois?: () => void) {
@@ -485,27 +510,8 @@ export function AbaBanco({
         (r) => (r.historicos?.length ? conciliarPeloHistorico(r.mov.id, r.historicos.map((h) => h.id)) : null),
         (n) => (n === 1 ? "1 linha do banco conciliada pelo histórico" : `${n} linhas do banco conciliadas pelo histórico`),
       ),
-    lancarAvulso: (r) => {
-      const lado = r.mov.valor < 0 ? "pagar" : "receber";
-      if (dadosNovo) {
-        setAvulso({ r, lado });
-        return;
-      }
-      setAviso(null);
-      startTransition(async () => {
-        try {
-          const res = await carregarDadosDoNovoLancamento();
-          if (!res.ok) {
-            setAviso({ tom: "erro", texto: res.message });
-            return;
-          }
-          setDadosNovo(res.dados);
-          setAvulso({ r, lado });
-        } catch {
-          setAviso({ tom: "erro", texto: "Não foi possível abrir o formulário. Tente de novo." });
-        }
-      });
-    },
+    lancarAvulso: (r) => abrirAvulso(r),
+    lancarNotas: (r) => abrirAvulso(r, true),
     lancarMutuo: (r) => setMutuoDaLinha(r),
     lancarIof: (r) => setIofDaLinha(r),
     procurar: (r) => setProcurando({ r, marcados: [] }),
@@ -850,6 +856,13 @@ export function AbaBanco({
       ),
     ],
     [
+      "empresaDeFora",
+      "Empresa de fora",
+      "PIX de quem tem cadastro de empresa de fora. Pode ser nota de sócio ou devolução de mútuo.",
+      "sky",
+      null,
+    ],
+    [
       "mutuo",
       "Mútuo entre empresas",
       "Dinheiro entre CNPJs diferentes. Lançar cria o mútuo e concilia.",
@@ -1157,7 +1170,16 @@ export function AbaBanco({
             subtipos={dadosNovo.subtipos}
             contas={dadosNovo.contas}
             rendimentosLancados={dadosNovo.rendimentosLancados}
-            inicial={avulso ? inicialDoAvulso(avulso.r) : undefined}
+            inicial={
+              avulso
+                ? {
+                    ...inicialDoAvulso(avulso.r),
+                    // O PIX de empresa de fora já diz quem pagou: a chave da parte é
+                    // o mesmo `f:<id>` do "Recebido de".
+                    notasDeSocio: avulso.notas ? { empresaId: banco.conta.empresaId, recebidoDe: avulso.r.mutuo?.parte.chave ?? null } : undefined,
+                  }
+                : undefined
+            }
             onCriado={(id, abrirBaixa, mensagem) => {
               const a = avulso;
               setAvulso(null);

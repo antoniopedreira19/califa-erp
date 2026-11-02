@@ -8,7 +8,8 @@
  * - **Recebimento avulso** — dinheiro que entra sem nota fiscal (reembolso,
  *   devolução de fornecedor, juros). Empresa, descrição, valor, "Recebido
  *   de" opcional, rateio por regional e centro de custo. Sem job: a receita
- *   fica nas regionais do rateio.
+ *   fica nas regionais do rateio. Nas notas de sócio (decisão 231), o número
+ *   da nota no lugar do rateio: a regional é TD.
  * - **Transferência entre contas** — dinheiro que só muda de conta. Sem
  *   empresa, regional nem plano (D17.2), só entre contas do mesmo CNPJ
  *   (D4 pendente), fora do DRE e do fluxo consolidado. Aqui "Criar e dar
@@ -56,6 +57,7 @@ import {
 import { RateioRegionalEditor } from "../contas-a-pagar/rateio-regional-editor";
 import { cn, formatCurrency } from "@/lib/utils";
 import { MutuoFormComDados, type InicialDoMutuo } from "../mutuos/mutuo-form";
+import { centroDasNotasDeSocio, DESCRICAO_DAS_NOTAS, ehNotasDeSocio } from "@/lib/financeiro/notas-de-socio";
 import type {
   ContaBancaria,
   PlanoContaSubtipo,
@@ -216,8 +218,14 @@ export function RecebimentoAvulsoDialog({
    *  conciliação abre o rendimento e a transferência direto, decisão 195). */
   tipoInicial?: TipoDoRecebimentoAvulso;
   /** O "Lançar avulso" da conciliação com o banco (decisão 200): o
-   *  recebimento avulso abre com a descrição, o valor e a data da linha. */
-  inicial?: { descricao: string; valor: number; data: string };
+   *  recebimento avulso abre com a descrição, o valor e a data da linha.
+   *  `notasDeSocio` abre já no centro das notas (decisão 231). */
+  inicial?: {
+    descricao: string;
+    valor: number;
+    data: string;
+    notasDeSocio?: { empresaId: string | null; recebidoDe: string | null };
+  };
 }) {
   const [pending, startTransition] = React.useTransition();
   const [tipo, setTipo] = React.useState<TipoDoRecebimentoAvulso>("recebimento_avulso");
@@ -233,6 +241,7 @@ export function RecebimentoAvulsoDialog({
   const [recebidoDe, setRecebidoDe] = React.useState<string | null>(null);
   const [tipoId, setTipoId] = React.useState("");
   const [subtipoId, setSubtipoId] = React.useState("");
+  const [numeroNf, setNumeroNf] = React.useState("");
   // Rendimento
   const listaCompetencias = React.useMemo(competencias, []);
   const [contaAplicacao, setContaAplicacao] = React.useState("");
@@ -263,6 +272,15 @@ export function RecebimentoAvulsoDialog({
     }
     setEmpresaId(empresas.length === 1 ? empresas[0].id : "");
     setRateio(RATEIO_INICIAL);
+    const notas = inicial?.notasDeSocio;
+    const centro = notas ? centroDasNotasDeSocio(tipos, subtipos) : null;
+    if (notas && centro) {
+      setTipoId(centro.tipoId);
+      setSubtipoId(centro.subtipoId);
+      setDescricao(DESCRICAO_DAS_NOTAS);
+      if (notas.empresaId) setEmpresaId(notas.empresaId);
+      setRecebidoDe(notas.recebidoDe);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -275,6 +293,7 @@ export function RecebimentoAvulsoDialog({
     setRecebidoDe(null);
     setTipoId("");
     setSubtipoId("");
+    setNumeroNf("");
     setContaAplicacao("");
     setCompetencia(listaCompetencias[0].valor);
     setDataRendimento(ultimoDiaDoMes(listaCompetencias[0].valor));
@@ -308,6 +327,7 @@ export function RecebimentoAvulsoDialog({
   const subtiposDoTipo = tipoId
     ? subtipos.filter((s) => s.tipo_id === tipoId && s.ativo)
     : [];
+  const ehNotas = tipo === "recebimento_avulso" && ehNotasDeSocio(tipos, subtipos, subtipoId);
   const itensRecebidoDe = [
     ...clientes.map((c) => ({ value: `c:${c.id}`, label: c.nome, descricao: "Cliente" })),
     ...fornecedores.map((f) => ({ value: `f:${f.id}`, label: f.nome, descricao: "Fornecedor" })),
@@ -415,7 +435,7 @@ export function RecebimentoAvulsoDialog({
           : "Informe o valor.",
       );
     }
-    if (!rateioValido(rateio)) {
+    if (!ehNotas && !rateioValido(rateio)) {
       return setErro(
         "Rateio de regional: escolha a regional de cada linha, e a soma dos percentuais deve ser 100,00.",
       );
@@ -427,6 +447,7 @@ export function RecebimentoAvulsoDialog({
       if (descricao.trim().length < 3) return setErro("Informe a descrição.");
       if (!dataPrevista) return setErro("Informe a data prevista do recebimento.");
       if (!tipoId || !subtipoId) return setErro("Selecione o centro de custo.");
+      if (ehNotas && !numeroNf.trim()) return setErro("Informe o número da nota.");
       payload = {
         tipo_entrada: "recebimento_avulso",
         empresa_id: empresaId,
@@ -437,9 +458,12 @@ export function RecebimentoAvulsoDialog({
         fornecedor_id: recebidoDe?.startsWith("f:") ? recebidoDe.slice(2) : null,
         plano_conta_tipo_id: tipoId,
         plano_conta_subtipo_id: subtipoId,
-        rateio,
+        numero_nf: ehNotas ? numeroNf.trim() : null,
+        rateio: ehNotas ? [] : rateio,
       };
-      resumo = `Recebimento avulso de ${formatCurrency(valor, "BRL")}`;
+      resumo = ehNotas
+        ? `Nota de sócio de ${formatCurrency(valor, "BRL")} criada`
+        : `Recebimento avulso de ${formatCurrency(valor, "BRL")} criado`;
     } else {
       if (!contaAplicacao) return setErro("Escolha a conta de aplicação.");
       if (!dataRendimento) return setErro("Informe a data do lançamento.");
@@ -457,7 +481,7 @@ export function RecebimentoAvulsoDialog({
         competencia: `${competencia}-01`,
         rateio,
       };
-      resumo = `Rendimento de ${formatCurrency(valor, "BRL")}`;
+      resumo = `Rendimento de ${formatCurrency(valor, "BRL")} criado`;
     }
 
     startTransition(async () => {
@@ -466,7 +490,7 @@ export function RecebimentoAvulsoDialog({
         setErro(res.message);
         return;
       }
-      onCriado(res.id, darBaixa, `${resumo} criado em Títulos a Receber.`);
+      onCriado(res.id, darBaixa, `${resumo} em Títulos a Receber.`);
     });
   }
 
@@ -591,25 +615,57 @@ export function RecebimentoAvulsoDialog({
                   className="flex h-11 w-full rounded-lg border border-border bg-white px-3.5 py-2 text-sm placeholder:text-muted-foreground/60 focus-visible:border-california-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-california-red/15"
                 />
               </Campo>
-              <Campo rotulo="Recebido de (opcional)">
-                <Combobox
-                  items={itensRecebidoDe}
-                  value={recebidoDe}
-                  onChange={setRecebidoDe}
-                  placeholder="Cliente ou fornecedor..."
-                  buscaPlaceholder="Escreva o nome"
-                  limpavel
-                  className={COMBOBOX_COMO_SELECT}
+              <div className={ehNotas ? "grid grid-cols-[1fr_180px] gap-3" : ""}>
+                <Campo rotulo="Recebido de (opcional)">
+                  <Combobox
+                    items={itensRecebidoDe}
+                    value={recebidoDe}
+                    onChange={setRecebidoDe}
+                    placeholder="Cliente ou fornecedor..."
+                    buscaPlaceholder="Escreva o nome"
+                    limpavel
+                    className={COMBOBOX_COMO_SELECT}
+                  />
+                </Campo>
+                {ehNotas && (
+                  <Campo rotulo="Número da nota" obrigatorio>
+                    <input
+                      type="text"
+                      value={numeroNf}
+                      maxLength={30}
+                      onChange={(e) => {
+                        setNumeroNf(e.target.value);
+                        setErro(null);
+                      }}
+                      placeholder="Ex.: 44"
+                      className="flex h-11 w-full rounded-lg border border-border bg-white px-3.5 py-2 text-sm placeholder:text-muted-foreground/60 focus-visible:border-california-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-california-red/15"
+                    />
+                  </Campo>
+                )}
+              </div>
+              {ehNotas ? (
+                <div className="flex items-center justify-between rounded-lg bg-muted/60 px-3 py-2 text-[12px]">
+                  <span className="text-muted-foreground">Regional</span>
+                  <span className="font-medium">Todas (TD), como na planilha</span>
+                </div>
+              ) : (
+                <RateioDaEmpresa
+                  empresaId={empresaId}
+                  rateio={rateio}
+                  setRateio={setRateio}
+                  regionais={regionaisDaEmpresa}
+                  pending={pending}
                 />
-              </Campo>
-              <RateioDaEmpresa
-                empresaId={empresaId}
-                rateio={rateio}
-                setRateio={setRateio}
-                regionais={regionaisDaEmpresa}
-                pending={pending}
-              />
-              <Campo rotulo="Centro de custo" obrigatorio ajuda="Define onde a receita entra no DRE.">
+              )}
+              <Campo
+                rotulo="Centro de custo"
+                obrigatorio
+                ajuda={
+                  ehNotas
+                    ? "Não é receita: fica na Distribuição de lucro, abaixo do Lucro líquido."
+                    : "Define onde a receita entra no DRE."
+                }
+              >
                 <div className="grid grid-cols-2 gap-3">
                   <Combobox
                     items={tiposDeEntrada.map((t) => ({
@@ -913,7 +969,7 @@ export function RecebimentoAvulsoDialog({
 
           <div className="flex items-start gap-2 rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-700" />
-            <span>{EXPLICA[tipo]}</span>
+            <span>{ehNotas ? "Nota de sócio paga à empresa. Não abate o saldo de mútuo." : EXPLICA[tipo]}</span>
           </div>
         </div>
 

@@ -8793,3 +8793,14 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Só DRE:** passa a ter também "a planilha diz, o sistema ainda não tem". São 322 linhas: 97 com caixa no sistema e 225 sem, estas listadas à parte em `so-dre/linhas-sem-caixa.json`.
 - **Cuidados:** job não lançado sai do só DRE e vai para a cauda. A futura DRE do sistema precisa de corte, ou as baixas somam com essas linhas.
 - **Carga:** primeiro a cauda, depois o só DRE. A lista do só DRE sai da conferência com o banco e precisa ser refeita a cada planilha: o `id` muda, e a `digital` muda se data, texto, fornecedor, Tipo ou job mudarem.
+
+## ⚠️ Nota de 2026-11-02 (4) — Notas de sócio no Tipo 15 (decisão 231)
+
+- **Plano:** o Tipo 15 passa a Ambos e ganha o subtipo 15.001 "Notas de sócio". Regra em `lib/financeiro/notas-de-socio.ts` e, no banco, em `_eh_notas_de_socio`.
+- **Conciliação:** seção nova "Empresa de fora". O PIX de quem tem esse cadastro não aparece mais como "Devolução de mútuo": a linha pergunta em "Lançar". O "Lançar avulso" das outras linhas de crédito também oferece Notas de sócio, já preenchido.
+- **Recebimento avulso:** com esse subtipo, pede o número da nota (`contas_avulsas.numero_nf`) e não pede rateio. O número vai para a descrição.
+- **Pagamento avulso:** no mesmo subtipo, também sem rateio, ao criar e ao editar.
+- **Regional:** Extrato e Títulos mostram TD. A trava do rateio (`exige_rateio_conta_avulsa`, `criar_conta_avulsa`, `substituir_rateio_conta_avulsa`) abre exceção só para este subtipo.
+- **Empresa:** `banco.conta.empresaId` traz a gerencial do CNPJ da conta, e a nota já abre com ela.
+- **Conferido:** funções em transação desfeita; tela real na Conta Teste, com extrato simulado: criar, baixar, conciliar, desfazer, editar e excluir. As 4 linhas do arquivo `teste-notas-de-socio.ofx` ficaram ignoradas nessa conta.
+- **Planilha:** segue diferente na linha da DRE (DIV-001). Ver a decisão.

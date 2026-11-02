@@ -7,12 +7,12 @@
  */
 
 import * as React from "react";
-import { AlertCircle, ChevronDown, CircleSlash, Handshake, Link2, Loader2, Plus, Receipt } from "lucide-react";
+import { AlertCircle, ChevronDown, CircleSlash, HandCoins, Handshake, Link2, Loader2, Plus, Receipt } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn, formatCurrency } from "@/lib/utils";
-import { ehParteDeFora, nomeDaParte, parteDoLado, saldosDosPares, type DadosDoMutuo, type MutuoDaLinha } from "@/lib/financeiro/mutuo";
+import { ehParteDeFora, nomeDaParte, parteDoLado, pixDeEmpresaDeFora, saldosDosPares, type DadosDoMutuo, type MutuoDaLinha } from "@/lib/financeiro/mutuo";
 import { carregarDadosDoMutuo, lancarIofDoMutuo } from "../mutuos/actions";
 import { MutuoFormComDados } from "../mutuos/mutuo-form";
 import type { ResultadoDaLinha } from "./motor-da-conta";
@@ -30,48 +30,72 @@ export function SituacaoDoMutuo({ m }: { m: MutuoDaLinha }) {
 
 export function CelulaDoMutuo({ r, m }: { r: ResultadoDaLinha; m: MutuoDaLinha }) {
   const saiuDaqui = r.mov.valor < 0;
+  // O CNPJ diz quem pagou, não o que é: a linha não afirma nada (decisão 231).
+  if (pixDeEmpresaDeFora(m)) {
+    return (
+      <div className="min-w-0">
+        <p className="truncate text-xs font-semibold">PIX da {m.parte.nome}</p>
+        <p className="truncate text-[11px] text-muted-foreground">Notas de sócio ou devolução de mútuo? Escolha em Lançar</p>
+      </div>
+    );
+  }
   return (
     <div className="min-w-0">
       <p className="truncate text-xs font-semibold">{m.devolucao ? `Devolução de mútuo · ${m.parte.nome}` : `Mútuo com a ${m.parte.nome}`}</p>
       <p className="truncate text-[11px] text-muted-foreground">
         {m.par
           ? `${m.par.contaNome} · ${saiuDaqui ? "entrou" : "saiu"} o mesmo valor em ${diaMes(m.par.data)}`
-          : m.parte.deFora
-            ? `CNPJ da ${m.parte.nome} no PIX · só a nossa perna entra`
-            : `CNPJ da ${m.parte.nome} no PIX · o extrato dela ainda não chegou`}
+          : `CNPJ da ${m.parte.nome} no PIX · o extrato dela ainda não chegou`}
       </p>
     </div>
   );
 }
+
+type ItemDoLancar = [string, string, typeof Plus, () => void, string?];
 
 /** O "Lançar avulso" da linha sem correspondência, agora com a escolha. */
 export function BotaoLancar({
   r,
   classe,
   off,
+  rotulo = "Lançar avulso",
   onAvulso,
   onMutuo,
   onIof,
+  onNotas,
 }: {
   r: ResultadoDaLinha;
   classe: string;
   off: boolean;
+  rotulo?: string;
   onAvulso: () => void;
   onMutuo: () => void;
   onIof: () => void;
+  onNotas: () => void;
 }) {
   const [aberto, setAberto] = React.useState(false);
-  const itens: Array<[string, string, typeof Plus, () => void, string?]> = [
-    ["Avulso", "O formulário de sempre", Receipt, onAvulso],
-    ["Mútuo entre empresas", "Empréstimo a outra empresa", Handshake, onMutuo, "text-sky-700"],
-    ...(r.mov.valor < 0 ? ([["IOF do mútuo", "Lança e concilia esta linha", CircleSlash, onIof]] as Array<[string, string, typeof Plus, () => void]>) : []),
+  const entrada = r.mov.valor > 0;
+  const devolucao = r.mutuo?.devolucao ?? false;
+  const avulso: ItemDoLancar = ["Avulso", "O formulário de sempre", Receipt, onAvulso];
+  const notas: ItemDoLancar = ["Notas de sócio", "Tipo 15 · não abate o mútuo", HandCoins, onNotas, "text-emerald-700"];
+  const mutuo: ItemDoLancar = [
+    devolucao ? "Devolução de mútuo" : "Mútuo entre empresas",
+    devolucao ? `A ${r.mutuo?.parte.nome} devolvendo o empréstimo` : "Empréstimo a outra empresa",
+    Handshake,
+    onMutuo,
+    "text-sky-700",
   ];
+  const itens: ItemDoLancar[] = !entrada
+    ? [avulso, mutuo, ["IOF do mútuo", "Lança e concilia esta linha", CircleSlash, onIof]]
+    : r.mutuo
+      ? [notas, avulso, mutuo]
+      : [avulso, notas, mutuo];
   return (
     <Popover open={aberto} onOpenChange={setAberto}>
       <PopoverTrigger asChild>
         <button type="button" disabled={off} className={classe}>
           <Plus className="h-3 w-3" />
-          Lançar avulso
+          {rotulo}
           <ChevronDown className={cn("h-3 w-3 transition-transform", aberto && "rotate-180")} />
         </button>
       </PopoverTrigger>

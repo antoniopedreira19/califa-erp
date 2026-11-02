@@ -6,6 +6,7 @@ import {
   jurosCompostos,
   jurosDaAbertura,
   mutuoDaLinha,
+  pixDeEmpresaDeFora,
   previstoDe,
   quemDeve,
   saldoDepois,
@@ -170,6 +171,13 @@ test("o crédito se reconhece pelo CNPJ do PIX; o débito, não", () => {
   const historico = "PIX RECEBIDO 11222333000181";
   assert.equal(mutuoDaLinha(ctx, base.partes, { data: "2026-10-26", valor: 1_500, historico }, [])?.parte.nome, "Community");
   assert.equal(mutuoDaLinha(ctx, base.partes, { data: "2026-10-26", valor: -1_500, historico }, []), null);
+});
+
+test("o PIX de empresa de fora pergunta; o do grupo segue como mútuo", () => {
+  const deFora = mutuoDaLinha(ctx, base.partes, { data: "2026-11-03", valor: 1_500, historico: "PIX RECEBIDO 11222333000181" }, []);
+  assert.equal(deFora && pixDeEmpresaDeFora(deFora), true);
+  const doGrupo = mutuoDaLinha(ctx, base.partes, { data: "2026-10-20", valor: 600, historico: "PIX RECEBIDO" }, []);
+  assert.equal(doGrupo && pixDeEmpresaDeFora(doGrupo), false);
 });
 
 test("com mútuo sem linha por perto, não oferece outro", () => {
