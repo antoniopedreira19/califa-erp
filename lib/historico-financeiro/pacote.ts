@@ -138,12 +138,14 @@ export const ESQUEMA_DO_CABECALHO = z.object({
   formato: z.literal(FORMATO_DO_PACOTE),
   // `cauda` (A6): depois do corte, só os jobs até o 3T que não existem no
   // sistema. `so_dre`: depois do corte, o que já foi pago pelo sistema, que
-  // conta no resultado e não no saldo. O pacote antigo, sem o campo, é de período.
+  // conta no resultado e não no saldo. `previsao` (decisão 232): o que a
+  // planilha prevê para depois da exportação, que conta só depois de ligado ao
+  // banco. O pacote antigo, sem o campo, é de período.
   carga: z.object({
     nome: z.string().trim().min(1).max(80),
     de: z.string().regex(DATA),
     ate: z.string().regex(DATA),
-    tipo: z.enum(["periodo", "cauda", "so_dre"]).default("periodo"),
+    tipo: z.enum(["periodo", "cauda", "so_dre", "previsao"]).default("periodo"),
   }),
   planilha: z.object({
     versao: z.string().regex(DATA),

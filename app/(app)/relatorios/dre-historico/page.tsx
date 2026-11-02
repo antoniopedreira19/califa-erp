@@ -41,12 +41,14 @@ export default async function DreDoHistoricoPage({ searchParams }: Props) {
   const anoPedido = typeof params.ano === "string" ? Number(params.ano) : NaN;
   // Sem ano na URL, o ano passado: o último inteiro no histórico.
   const ano = Number.isInteger(anoPedido) ? anoPedido : Number(hojeEmSaoPauloIso().slice(0, 4)) - 1;
+  // Com previsões: soma também o que a planilha prevê e ainda não aconteceu (decisão 232).
+  const comPrevisoes = params.previsoes === "1";
 
-  const somas = await carregarSomasDaDre(createClient(), session.activeTenant.id, ano);
+  const somas = await carregarSomasDaDre(createClient(), session.activeTenant.id, ano, comPrevisoes);
   const cobertura = somas?.cobertura ?? null;
   const anos = cobertura ? anosEntre(cobertura.de, cobertura.ate) : [];
   const noHistorico = anos.includes(ano);
-  const href = (e: string, a: number) => `/relatorios/dre-historico?empresa=${e}&ano=${a}`;
+  const href = (e: string, a: number, p = comPrevisoes) => `/relatorios/dre-historico?empresa=${e}&ano=${a}${p ? "&previsoes=1" : ""}`;
 
   return (
     <div className="space-y-6">
@@ -84,6 +86,14 @@ export default async function DreDoHistoricoPage({ searchParams }: Props) {
                 </Opcao>
               ))}
             </Filtro>
+            <Filtro rotulo="Mostrar">
+              <Opcao href={href(slug, ano, false)} ativa={!comPrevisoes}>
+                Só realizado
+              </Opcao>
+              <Opcao href={href(slug, ano, true)} ativa={comPrevisoes}>
+                Com previsões
+              </Opcao>
+            </Filtro>
           </Filtros>
 
           {noHistorico ? (
@@ -91,6 +101,8 @@ export default async function DreDoHistoricoPage({ searchParams }: Props) {
               empresa={empresa}
               ano={ano}
               cobertura={cobertura}
+              comPrevisoes={comPrevisoes}
+              previstas={somas.previstas}
               linhas={montarDre(empresa, somas.porGrupo, somas.porJobs)}
             />
           ) : (
@@ -108,11 +120,15 @@ function ConteudoDoAno({
   empresa,
   ano,
   cobertura,
+  comPrevisoes,
+  previstas,
   linhas,
 }: {
   empresa: EmpresaDaDre;
   ano: number;
   cobertura: { de: string; ate: string };
+  comPrevisoes: boolean;
+  previstas: number;
   linhas: ReturnType<typeof montarDre>;
 }) {
   const depoisDoHistorico = [1, 2, 3, 4].map((t) => fimDoTrimestre(ano, t) > cobertura.ate) as [boolean, boolean, boolean, boolean];
@@ -123,8 +139,10 @@ function ConteudoDoAno({
       <div className="space-y-1 text-xs text-muted-foreground">
         <p>
           Lançamentos do histórico de {formatDiaBr(cobertura.de)} a {fim}, numa regra só por linha: receita é crédito −
-          débito; custo e despesa, débito − crédito. Não entram as previsões (lançamentos com data futura), que a DRE da
-          planilha soma.
+          débito; custo e despesa, débito − crédito.{" "}
+          {comPrevisoes
+            ? `Com as previsões da planilha que ainda não aconteceram (${previstas.toLocaleString("pt-BR")} com competência em ${ano}), como a DRE da planilha soma.`
+            : `As previsões entram só depois de ligadas ao banco${previstas > 0 ? `; ${previstas.toLocaleString("pt-BR")} com competência em ${ano} ainda não aconteceram` : ""}.`}
         </p>
         {depoisDoHistorico.some(Boolean) && <p>* Trimestre que termina depois de {fim}: só o que a planilha lançou até lá.</p>}
         {String(ano) === cobertura.de.slice(0, 4) && (

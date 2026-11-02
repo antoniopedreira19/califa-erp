@@ -177,6 +177,10 @@ export interface DadosDaAbaBanco {
   saldoSistemaNoFim: number | null;
   /** A cauda do histórico da conta ainda sem linha do banco (A6). */
   historico: HistoricoDoMotor[];
+  /** As previsões da planilha da conta que ainda não aconteceram (decisão 232). */
+  previsoes: HistoricoDoMotor[];
+  /** O dia da planilha das previsões: a linha do banco até esse dia já estaria na planilha como realizada. */
+  previsoesDesde: string | null;
   /** As regionais ativas, para a regional da regra. */
   regionais: Array<{ id: string; nome: string; empresaId: string }>;
 }
@@ -288,6 +292,7 @@ type CaudaCrua = {
   descricao: string | null;
   fornecedor: string | null;
   extrato_linha_id: string | null;
+  carga: { tipo: string; planilha_versao: string | null } | null;
 };
 
 const assinado = (l: LancamentoCru) => (l.natureza === "entrada" ? Number(l.valor) : -Number(l.valor));
@@ -547,16 +552,16 @@ export async function carregarBancoDaConciliacao(
           .in("extrato_linha_id", corrigidas)
           .is("desfeita_em", null)
       : Promise.resolve({ data: [], error: null }),
-    // A cauda do histórico (A6): desde o início da conta, da carga ativa.
+    // A cauda do histórico (A6) e as previsões (decisão 232): desde o início da conta, das cargas ativas.
     c?.saldo_inicial_data
       ? todasAsPaginas<CaudaCrua>(
           (de, ate) =>
             supabase
               .from("historico_movimentos")
-              .select("id, data, valor, job_nome, descricao, fornecedor, extrato_linha_id, carga:historico_cargas!inner(tipo, situacao)")
+              .select("id, data, valor, job_nome, descricao, fornecedor, extrato_linha_id, carga:historico_cargas!inner(tipo, situacao, planilha_versao)")
               .eq("tenant_id", tenantId)
               .eq("conta_bancaria_id", contaId)
-              .eq("carga.tipo", "cauda")
+              .in("carga.tipo", ["cauda", "previsao"])
               .eq("carga.situacao", "ativa")
               .gte("data", c.saldo_inicial_data)
               .order("data", { ascending: true })
@@ -589,10 +594,16 @@ export async function carregarBancoDaConciliacao(
   }
   const caudaPorLinha = new Map<string, LinhaDoBanco["historicos"]>();
   const historico: HistoricoDoMotor[] = [];
+  const previsoes: HistoricoDoMotor[] = [];
+  let previsoesDesde: string | null = null;
   for (const h of caudaCrua) {
     const item = { id: h.id, data: h.data, valor: Number(h.valor), job: h.job_nome, descricao: h.descricao, fornecedor: h.fornecedor };
     if (h.extrato_linha_id) {
       caudaPorLinha.set(h.extrato_linha_id, [...(caudaPorLinha.get(h.extrato_linha_id) ?? []), item]);
+    } else if (h.carga?.tipo === "previsao") {
+      previsoes.push(item);
+      const dia = h.carga.planilha_versao;
+      if (dia && (!previsoesDesde || dia > previsoesDesde)) previsoesDesde = dia;
     } else {
       historico.push(item);
     }
@@ -638,6 +649,8 @@ export async function carregarBancoDaConciliacao(
     ),
     saldoSistemaNoFim: saldoNoFim === null ? null : r2(saldoNoFim),
     historico,
+    previsoes,
+    previsoesDesde,
     regionais: ((regionaisRes.data ?? []) as Array<{ id: string; nome: string; empresa_id: string }>).map((r) => ({
       id: r.id,
       nome: r.nome,

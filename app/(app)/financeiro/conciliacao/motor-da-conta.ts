@@ -281,10 +281,13 @@ export interface ConciliacaoDaConta {
   naoApareceu: LancamentoSemLinha[];
 }
 
+/** Até quantos dias da data prevista a linha do banco reconhece a previsão da planilha (decisão 232). */
+const JANELA_DA_PREVISAO = 10;
+
 /** Roda o motor nas linhas do banco ainda sem solução. */
 export function conciliarConta(
   dados: Pick<DadosDaAbaBanco, "linhas" | "lancamentos" | "remessasBaixadas" | "remessas" | "regras" | "periodos"> &
-    Partial<Pick<DadosDaAbaBanco, "historico">>,
+    Partial<Pick<DadosDaAbaBanco, "historico" | "previsoes" | "previsoesDesde">>,
   linhasDaPlanilha: Linha[],
   contaId: string,
   documentoDaParte: Record<string, string>,
@@ -345,6 +348,33 @@ export function conciliarConta(
         ? `A linha do histórico de ${diaMes(historicos[0].data)} com o mesmo valor.`
         : `${historicos.length} linhas do histórico de ${diaMes(historicos[0].data)} que somam o valor do banco.`,
     });
+  }
+  // Por último, as previsões da planilha (decisão 232): o que ainda ficou sem
+  // par procura a previsão de mesmo valor até 10 dias da data prevista. O
+  // título do sistema vem antes. Só se resolve sozinha a previsão única desse
+  // valor na janela; com outra igual por perto, pede conferência. A linha do
+  // banco até o dia da planilha não é previsão: a planilha já a teria como
+  // realizada.
+  const previsoes = dados.previsoes ?? [];
+  if (previsoes.length) {
+    const desde = dados.previsoesDesde ?? "";
+    const aindaSemPar = semPar.filter((m) => !depois.has(m) && m.data > desde);
+    for (const [m, historicos] of casarComHistorico(aindaSemPar, previsoes, { janela: JANELA_DA_PREVISAO })) {
+      const um = historicos.length === 1;
+      const iguais = previsoes.filter(
+        (h) => Math.round(h.valor * 100) === Math.round(m.valor * 100) && Math.abs(diasEntre(m.data, h.data)) <= JANELA_DA_PREVISAO,
+      ).length;
+      porId.set(m.id, {
+        mov: m,
+        estado: "historico",
+        confianca: um && iguais === 1 ? "alta" : "media",
+        candidatos: [],
+        historicos,
+        motivo: um
+          ? `A previsão da planilha para ${diaMes(historicos[0].data)}, com o mesmo valor${iguais > 1 ? `; há ${iguais} previsões desse valor por perto, confira` : ""}.`
+          : `${historicos.length} previsões da planilha de ${diaMes(historicos[0].data)} que somam o valor do banco.`,
+      });
+    }
   }
   const regras = new Map(dados.regras.map((g) => [g.id as string, { centro: g.centro }]));
   const resultados: ResultadoDaLinha[] = movimentos.map((m) => {
@@ -496,7 +526,7 @@ export function automacaoDaLeitura(resultados: ResultadoDaLinha[]): AutomacaoDaL
     titulos: novas.filter((r) => r.estado === "sugestao" && r.confianca === "alta" && comCentro(r.titulo)),
     remessas: novas.filter((r) => r.estado === "soma" && !!r.lote),
     regras: novas.filter((r) => r.estado === "regra" && !!r.regra?.id),
-    historicos: novas.filter((r) => r.estado === "historico" && !!r.historicos?.length),
+    historicos: novas.filter((r) => r.estado === "historico" && r.confianca === "alta" && !!r.historicos?.length),
   };
 }
 
@@ -517,7 +547,7 @@ export function textoDosSozinhos(resultados: ResultadoDaLinha[]): { quantas: num
     remessa && (remessa === 1 ? "a remessa, que soma centavo a centavo" : `${remessa} remessas, que somam centavo a centavo`),
     regra && `${regra === 1 ? "1 tarifa" : `${regra} tarifas`} pela regra do histórico`,
     historico &&
-      `${historico === 1 ? "1 linha" : `${historico} linhas`} do histórico da planilha (competência até o 3T fora do sistema), pelo valor e pelo dia`,
+      `${historico === 1 ? "1 linha" : `${historico} linhas`} do histórico ou das previsões da planilha, pelo valor e pelo dia`,
   ].filter((p): p is string => !!p);
   return { quantas, partes };
 }

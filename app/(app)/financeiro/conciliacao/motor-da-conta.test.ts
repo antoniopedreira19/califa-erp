@@ -392,6 +392,49 @@ test("a cauda do histórico (A6): do mesmo dia antes do título, até 5 dias e p
   assert.equal(automacaoDaLeitura(resultados).historicos.length, 3);
 });
 
+test("as previsões da planilha (decisão 232): depois da cauda, até 10 dias; só a única se resolve sozinha", () => {
+  const base = { lancamentos: [], remessasBaixadas: [], remessas: [], regras: [], periodos: [] };
+  const historico = [{ id: "h1", data: "2026-10-21", valor: -500, job: "Job Exemplo 3T", descricao: null, fornecedor: "Fornecedor 001 Exemplo" }];
+  const previsoes = [
+    { id: "p1", data: "2026-10-28", valor: -500, job: "Job Exemplo 4T", descricao: null, fornecedor: "Fornecedor 001 Exemplo" },
+    { id: "p2", data: "2026-10-28", valor: 9000, job: "Job Exemplo 4T", descricao: null, fornecedor: "Cliente Exemplo" },
+    { id: "p3", data: "2026-10-15", valor: -750, job: null, descricao: "Custo fixo", fornecedor: null },
+    { id: "p4", data: "2026-10-18", valor: -750, job: null, descricao: "Custo fixo", fornecedor: null },
+    { id: "p5", data: "2026-11-20", valor: -1200, job: null, descricao: "Custo fixo", fornecedor: null },
+  ];
+  const { resultados } = conciliarConta(
+    {
+      ...base,
+      historico,
+      previsoes,
+      previsoesDesde: "2026-10-12",
+      linhas: [
+        linhaDoBanco("1", { valor: -500 }),
+        linhaDoBanco("2", { valor: 9000, ordem: 1 }),
+        linhaDoBanco("3", { valor: -750, ordem: 2 }),
+        linhaDoBanco("4", { valor: -1200, ordem: 3 }),
+      ],
+    },
+    [],
+    "conta",
+    {},
+    "2026-10-21",
+  );
+  assert.deepEqual(
+    resultados.map((r) => [r.mov.id, r.estado, r.confianca ?? "", (r.historicos ?? []).map((h) => h.id).join("+")]),
+    [
+      ["1", "historico", "alta", "h1"],
+      ["2", "historico", "alta", "p2"],
+      ["3", "historico", "media", "p4"],
+      ["4", "sem_par", "", ""],
+    ],
+  );
+  assert.deepEqual(
+    automacaoDaLeitura(resultados).historicos.map((r) => r.mov.id),
+    ["1", "2"],
+  );
+});
+
 test("a soma do histórico só junta linhas do mesmo favorecido", () => {
   const base = { lancamentos: [], remessasBaixadas: [], remessas: [], regras: [], periodos: [] };
   const historico = [

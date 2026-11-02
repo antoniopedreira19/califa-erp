@@ -8820,3 +8820,12 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Achados novos com prova:** espaço sobrando no texto da aba Santander, que o SUMIFS deixa de fora (DIV-015, seis casos); TOTAL CO da Hitlab sem a coluna do PayPal (DIV-027); um job em duas linhas por espaço no nome (DIV-028); crédito no Tipo CO somado como receita (DIV-026).
 - **Repositório público:** o registro tem só totais. A tabela mensal do repasse aos sócios e as linhas da planilha ficam fora. O comparador temporário é uma página privada, sem as linhas; a versão com as linhas é um arquivo local, fora do git.
 - **Decisão 211:** os códigos DIV foram postos ao lado das frases, sem reescrever o texto, com uma nota datada sobre os R$ 630.000.
+
+## ⚠️ Nota de 2026-11-02 (7) — As previsões da planilha no sistema (decisão 232)
+
+- **Carga nova, tipo `previsao`:** as 3.044 previsões da planilha de 01/11 (R$ 70,4 mi de entradas e R$ 54,4 mi de saídas), carregadas pela tela de Cadastros › Histórico da planilha. Pacote com `empacotar.ts --previsoes`.
+- **Antes de acontecer, não somam:** saldo, Extrato, fluxo de caixa, regional e rentabilidade leem só a previsão ligada ao banco. A DRE do histórico ganha o seletor "Só realizado / Com previsões" (`historico_dre` com `p_previsoes`; a versão de três argumentos segue e chama a nova com falso).
+- **Conciliação:** depois da cauda e dos títulos, a linha do banco posterior ao dia da planilha procura a previsão de mesmo valor na conta, até 10 dias. Só a única se resolve sozinha. Ligada, a previsão fica com a data do banco (gatilho `trg_historico_previsao_na_data_do_banco`; a prevista fica em `data_prevista`), e o Desfazer devolve a data prevista.
+- **Troca de versão:** a mesma previsão herda a ligação; a já ligada que a versão nova não traz continua; a cauda que a traz como realizada herda a ligação, e a previsão sai.
+- **Conferido:** o realizado não mudou (DRE, regional, rentabilidade, saldos, resumo e fluxo iguais antes e depois); com previsões, a DRE de 2026 dá planilha − regra − falta carregar em cada empresa e trimestre. A tela da DRE e a conciliação da California Santander conferidas no navegador.
+

@@ -320,5 +320,7 @@ test("cabeçalho: o pacote sem tipo é de período; a cauda declara o tipo", () 
   assert.ok(cauda.ok && cauda.pacote.carga.tipo === "cauda");
   const soDre = lerPacote(base({ nome: "Outubro 2026 · só DRE", de: "2026-10-01", ate: "2026-10-25", tipo: "so_dre" }));
   assert.ok(soDre.ok && soDre.pacote.carga.tipo === "so_dre");
+  const previsoes = lerPacote(base({ nome: "Previsões da planilha", de: "2026-11-02", ate: "2027-12-31", tipo: "previsao" }));
+  assert.ok(previsoes.ok && previsoes.pacote.carga.tipo === "previsao");
   assert.equal(lerPacote(base({ nome: "X", de: "2026-10-01", ate: "2026-10-25", tipo: "outro" })).ok, false);
 });

@@ -40,7 +40,7 @@ Rentabilidade: 2.738 jobs de 2023 a 2026. As abas de 2021 e 2022 ficam de fora, 
 | DIV-002 | Mútuo GoCrazy → California · trimestre do Tipo | Regra do sistema | R$ 1.400.000 em outro Tipo; saldo igual | Decidido: um trimestre só |
 | DIV-003 | Mútuo de R$ 600.000 · data na GoCrazy | Regra do sistema | 1 dia; valor igual | O sistema usa a data do banco |
 | DIV-004 | IOF de R$ 2.549,69 · fornecedor | Falta carregar | Sem valor; só o campo | Aberta: falta a Receita Federal no cadastro |
-| DIV-005 | Todos os relatórios · previsões | Regra do sistema | Varia | Some quando a previsão se realiza |
+| DIV-005 | Todos os relatórios · previsões | Regra do sistema | Varia | A DRE com previsões mostra igual à planilha (decisão 232) |
 | DIV-006 | DRE 2026 · Custo tributário, 1T | Regra do sistema | R$ 10.250,20 | O sistema conta o crédito |
 | DIV-007 | DRE 2026 · Empréstimo à Hitlab | Regra do sistema | R$ 1.064.357,82 no 2T e R$ 528.850,34 no 3T | O sistema soma todas as contas |
 | DIV-008 | DRE 2026 · Mútuo interno | Regra do sistema | ±R$ 350.000; efeito líquido zero | O sistema soma as duas pontas |
@@ -163,8 +163,8 @@ Desde a decisão 231 (02/11/2026), a entrada pode ser lançada no sistema, no Ti
 | CCH | 24.925,44 | 23.000,00 | 578.153,31 | 14.876.817,09 |
 | Hitlab | | 49.000,00 | 10.000,00 | 2.457.177,97 |
 
-- **Qual vale:** o sistema, para o realizado. O comparador mostra as duas visões.
-- **Para a gestão:** a planilha mistura o que aconteceu com o que se espera que aconteça. A diferença some quando a previsão vira pagamento ou recebimento.
+- **Qual vale:** o sistema, para o realizado. Desde a decisão 232 (02/11/2026), as previsões estão no sistema e a DRE tem o seletor "Só realizado / Com previsões": com previsões, a DRE do sistema dá a célula da planilha menos as outras divergências e o que falta carregar.
+- **Para a gestão:** a planilha mistura o que aconteceu com o que se espera que aconteça. O sistema mostra as duas coisas separadas, e a previsão passa a realizada quando o banco mostra o pagamento ou o recebimento.
 
 ### DIV-006 · Custo tributário, 1T 2026
 

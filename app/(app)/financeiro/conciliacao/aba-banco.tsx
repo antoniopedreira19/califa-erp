@@ -1447,8 +1447,8 @@ function ZonaDeArquivo({
         <p className="text-xs text-muted-foreground">
           O arquivo que o internet banking do Santander, Itaú ou qualquer banco exporta. O sistema guarda só as linhas do
           extrato, sem repetir as que já vieram. O que é certo se resolve sozinho, com Desfazer: a baixa feita à mão que
-          bate, o título de valor exato, a remessa, a regra do histórico e a linha do histórico da planilha (a competência até
-          o 3T fora do sistema); o resto espera você.
+          bate, o título de valor exato, a remessa, a regra do histórico, a linha do histórico da planilha (a competência até
+          o 3T fora do sistema) e a previsão da planilha, quando é a única daquele valor por perto; o resto espera você.
           {!compacta && ` A conta vem do próprio arquivo: ele só é aceito se for da ${contaNome}, a conta aberta no topo.`}
         </p>
       </div>

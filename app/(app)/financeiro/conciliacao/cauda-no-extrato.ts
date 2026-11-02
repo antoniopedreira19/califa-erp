@@ -7,6 +7,9 @@
  * só de leitura ("Histórico da planilha · job"), para o saldo de cada linha
  * bater com o do banco. O id leva o prefixo `historico:` e a origem é
  * `historico`: a tela não abre detalhe de lançamento para elas.
+ *
+ * A previsão da planilha (decisão 232) entra igual, mas só depois de ligada a
+ * uma linha do banco: aí ela aconteceu, com a data do banco.
  */
 import type { createClient } from "@/lib/supabase/server";
 import type { LinhaSemSaldo } from "@/lib/data/lancamento-linha";
@@ -27,6 +30,7 @@ type CaudaCrua = {
   regional_nome: string | null;
   competencia_trimestre: number | null;
   extrato_linha_id: string | null;
+  carga: { tipo: string } | null;
 };
 
 /** As linhas da cauda da conta no período (desde o início da conta) e as já conciliadas com o banco. */
@@ -46,7 +50,7 @@ export async function carregarCaudaDoExtrato(
       )
       .eq("tenant_id", args.tenantId)
       .eq("conta_bancaria_id", args.contaId)
-      .eq("carga.tipo", "cauda")
+      .in("carga.tipo", ["cauda", "previsao"])
       .eq("carga.situacao", "ativa")
       .gte("data", de)
       .lte("data", args.dataAte)
@@ -58,7 +62,8 @@ export async function carregarCaudaDoExtrato(
       console.error("[conciliacao.cauda]", error.message);
       break;
     }
-    crus.push(...(data ?? []));
+    // A previsão só entra depois de acontecer (ligada ao banco).
+    crus.push(...(data ?? []).filter((h) => h.carga?.tipo !== "previsao" || h.extrato_linha_id));
     if (!data || data.length < PAGINA) break;
   }
   return {
@@ -68,7 +73,7 @@ export async function carregarCaudaDoExtrato(
         id: `historico:${h.id}`,
         folha: null,
         data_movimento: h.data,
-        descricao: `Histórico da planilha · ${h.job_nome ?? h.descricao ?? "competência até o 3T"}`,
+        descricao: `${h.carga?.tipo === "previsao" ? "Previsão da planilha" : "Histórico da planilha"} · ${h.job_nome ?? h.descricao ?? "competência até o 3T"}`,
         natureza: valor >= 0 ? "entrada" : "saida",
         valor: Math.abs(valor),
         fornecedor_nome: h.fornecedor,

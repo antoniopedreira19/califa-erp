@@ -148,7 +148,8 @@ export async function calcularSaldoAnterior(
 /**
  * A cauda do histórico (decisão 211, A6) antes de `dataDe`: os movimentos dos
  * jobs até o 3T depois do início da conta também são da conta. Valor com
- * sinal. Página a página: a cauda de uma conta passa de mil linhas.
+ * sinal. Página a página: a cauda de uma conta passa de mil linhas. A previsão
+ * da planilha (decisão 232) soma só depois de ligada a uma linha do banco.
  */
 async function somaDaCauda(
   supabase: SupabaseClient,
@@ -159,10 +160,10 @@ async function somaDaCauda(
   for (let de = 0; de < 50_000; de += PAGINA) {
     const { data, error } = await supabase
       .from("historico_movimentos")
-      .select("valor, carga:historico_cargas!inner(tipo, situacao)")
+      .select("valor, extrato_linha_id, carga:historico_cargas!inner(tipo, situacao)")
       .eq("tenant_id", args.tenantId)
       .eq("conta_bancaria_id", args.contaId)
-      .eq("carga.tipo", "cauda")
+      .in("carga.tipo", ["cauda", "previsao"])
       .eq("carga.situacao", "ativa")
       .gte("data", args.saldoInicialData)
       .lt("data", args.dataDe)
@@ -172,7 +173,12 @@ async function somaDaCauda(
       console.error("[saldo-conta.cauda]", error.message);
       break;
     }
-    for (const h of (data ?? []) as Array<{ valor: string | number }>) soma += Number(h.valor);
+    type Linha = { valor: string | number; extrato_linha_id: string | null; carga: { tipo: string } | { tipo: string }[] | null };
+    for (const h of (data ?? []) as unknown as Linha[]) {
+      const tipo = Array.isArray(h.carga) ? h.carga[0]?.tipo : h.carga?.tipo;
+      if (tipo === "previsao" && !h.extrato_linha_id) continue;
+      soma += Number(h.valor);
+    }
     if (!data || data.length < PAGINA) break;
   }
   return soma;

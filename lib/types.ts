@@ -3881,8 +3881,10 @@ export type SituacaoDaCargaHistorico = "carregando" | "ativa" | "substituida" | 
 /** `periodo`: a planilha de um período até 30/09/2026. `cauda`: depois do
  *  corte, só os movimentos e as notas dos jobs até o 3T que não existem no
  *  sistema (decisão 211, A6). `so_dre`: depois do corte, as linhas já pagas
- *  pelo sistema, que contam no resultado e não no saldo. */
-export type TipoDaCargaHistorico = "periodo" | "cauda" | "so_dre";
+ *  pelo sistema, que contam no resultado e não no saldo. `previsao` (decisão
+ *  232): o que a planilha prevê para depois da exportação; conta no saldo e no
+ *  resultado só depois de ligado a uma linha do banco. */
+export type TipoDaCargaHistorico = "periodo" | "cauda" | "so_dre" | "previsao";
 
 export type TabelaDoHistorico = "rateio" | "saldos" | "jobs" | "notas" | "movimentos";
 

@@ -12,6 +12,7 @@
  *
  *   npx tsx scripts/historico-financeiro/empacotar.ts <pasta-da-versao> --cauda
  *   npx tsx scripts/historico-financeiro/empacotar.ts <pasta-da-versao> --so-dre
+ *   npx tsx scripts/historico-financeiro/empacotar.ts <pasta-da-versao> --previsoes
  *
  * A cauda (A6) vai do dia seguinte ao corte até o extrato de cada conta
  * (<pasta-da-versao>/so-dre/cortes.json, { "padrao": "AAAA-MM-DD", "contas":
@@ -26,6 +27,11 @@
  * sem contar no saldo. Essas linhas saem da cauda. Leva também os jobs citados,
  * porque o relatório regional divide o custo pelo job da mesma carga. Sem
  * notas, rateio nem saldos.
+ *
+ * As previsões (decisão 232) levam todas as linhas de previsoes.csv com conta:
+ * o que a planilha prevê para depois da exportação. Contam no saldo e no
+ * resultado só depois de ligadas a uma linha do banco. Levam os jobs citados,
+ * sem notas, rateio nem saldos.
  *
  * Com `--conta` (pode repetir), a carga leva só os movimentos e os saldos
  * daquelas contas e só os jobs que os movimentos e as notas citam: serve para
@@ -72,25 +78,37 @@ const USO =
   'Uso: npx tsx scripts/historico-financeiro/empacotar.ts <pasta-da-versao> --carga "1ª carga"\n' +
   '  ou: … <pasta-da-versao> --nome "Teste da A1" --de 2023-01-01 --ate 2023-01-31 [--conta "BB California"]\n' +
   '  ou: … <pasta-da-versao> --cauda\n' +
-  '  ou: … <pasta-da-versao> --so-dre';
+  '  ou: … <pasta-da-versao> --so-dre\n' +
+  '  ou: … <pasta-da-versao> --previsoes';
 
 const NOME_DA_CAUDA = "Outubro 2026 · até o extrato de cada conta";
 const NOME_DO_SO_DRE = "Outubro 2026 · só DRE";
+const NOME_DAS_PREVISOES = "Previsões da planilha";
 
 const PERIODOS: Record<string, [string, string]> = {
   "1ª carga": ["2023-01-01", "2026-06-30"],
   "3T 2026": ["2026-07-01", "2026-09-30"],
 };
 
-type Opcoes = { carga?: string; nome?: string; de?: string; ate?: string; contas: string[]; cauda?: boolean; soDre?: boolean };
+type Opcoes = {
+  carga?: string;
+  nome?: string;
+  de?: string;
+  ate?: string;
+  contas: string[];
+  cauda?: boolean;
+  soDre?: boolean;
+  previsoes?: boolean;
+};
 
 function lerArgumentos(args: string[]): { pasta: string | undefined; opcoes: Opcoes } {
   const opcoes: Opcoes = { contas: [] };
   for (let k = 1; k < args.length; k += 2) {
     const chave = args[k];
-    if (chave === "--cauda" || chave === "--so-dre") {
+    if (chave === "--cauda" || chave === "--so-dre" || chave === "--previsoes") {
       if (chave === "--cauda") opcoes.cauda = true;
-      else opcoes.soDre = true;
+      else if (chave === "--so-dre") opcoes.soDre = true;
+      else opcoes.previsoes = true;
       k -= 1; // sem valor
       continue;
     }
@@ -138,6 +156,7 @@ async function main() {
   const versao = resolve(pasta);
   if (opcoes.cauda) return empacotarCauda(versao);
   if (opcoes.soDre) return empacotarSoDre(versao);
+  if (opcoes.previsoes) return empacotarPrevisoes(versao);
   const padrao = opcoes.carga ? PERIODOS[opcoes.carga] : undefined;
   if (opcoes.carga && !padrao) {
     throw new Error(`Carga desconhecida: ${opcoes.carga}. Use ${Object.keys(PERIODOS).join(" ou ")}, ou --nome com --de e --ate.`);
@@ -320,6 +339,26 @@ async function empacotarSoDre(versao: string) {
     movimentos: embalar("movimentos", movs.map(linhaDeMovimento)),
   };
   await gravarPacote(versao, manifesto, { nome: NOME_DO_SO_DRE, de, ate, tipo: "so_dre" }, tabelas);
+}
+
+/** As previsões (decisão 232): as linhas de data futura da planilha, com conta, e os jobs delas. */
+async function empacotarPrevisoes(versao: string) {
+  const manifesto: Manifesto = JSON.parse(await readFile(join(versao, "bruto", "manifesto.json"), "utf8"));
+  const [previsoes, jobs] = await Promise.all([lerTabelaCsv(join(versao, "padronizado", "previsoes.csv")), lerTabelaCsv(join(versao, "padronizado", "jobs.csv"))]);
+  if (!previsoes || !jobs) throw new Error("Não achei previsoes.csv e jobs.csv do padronizado: rode a padronização (E2) antes.");
+  const movs = previsoes.filter((m) => m.conta && m.data > CORTE);
+  if (movs.length === 0) throw new Error("A planilha não tem previsões com conta depois do corte.");
+  const datas = movs.map((m) => m.data).sort();
+  const citados = new Set(movs.map((m) => m.job_id).filter(Boolean));
+
+  const tabelas: Pacote["tabelas"] = {
+    rateio: embalar("rateio", []),
+    saldos: embalar("saldos", []),
+    jobs: embalar("jobs", jobs.filter((j) => citados.has(j.id)).map(linhaDeJob)),
+    notas: embalar("notas", []),
+    movimentos: embalar("movimentos", movs.map(linhaDeMovimento)),
+  };
+  await gravarPacote(versao, manifesto, { nome: NOME_DAS_PREVISOES, de: datas[0], ate: datas[datas.length - 1], tipo: "previsao" }, tabelas);
 }
 
 const diaSeguinte = (data: string) => {

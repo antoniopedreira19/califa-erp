@@ -15,7 +15,9 @@ o extrato de cada conta, da versão de 01/11, em 02/11/2026. Próximo: as linhas
 soltas, fechar conta a conta e a interface da conciliação para os usuários.
 Toda diferença entre o sistema e a planilha fica no registro
 `docs/divergencias-sistema-planilha.md` (02/11/2026), com o código DIV que
-aparece ao lado das frases desta decisão.
+aparece ao lado das frases desta decisão. As previsões da planilha entraram no
+sistema pela decisão 232 (02/11/2026): "Só o realizado" continua a visão padrão
+da DRE, e o seletor mostra também as previsões.
 **Quem decidiu:** Tiago, no plano "Importação do histórico financeiro"
 (página privada de 25/10/2026), com as respostas D1, D2 e D3 dadas no mesmo
 dia: "Aprovo D1, D2 e D3 como você recomendou".
