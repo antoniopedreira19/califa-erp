@@ -11,8 +11,10 @@ A3 (o histórico de cada conta no Extrato da Conciliação) e a A4 (a DRE do
 histórico, o resultado por regional, a rentabilidade e o faturamento dos jobs
 do histórico, em Relatórios) no mesmo dia. A5: o 3T carregado em 27/10/2026,
 da versão de 25/10. A carga só DRE do 4T, em 30/10/2026; a cauda e o só DRE até
-o extrato de cada conta, da versão de 01/11, em 02/11/2026. Próximo: as linhas
-soltas, fechar conta a conta e a interface da conciliação para os usuários.
+o extrato de cada conta, da versão de 01/11, em 02/11/2026, e no mesmo dia até
+01/11 em todas as contas, com o extrato da California Santander de 31/10.
+Próximo: as linhas soltas, fechar conta a conta e a interface da conciliação
+para os usuários.
 Toda diferença entre o sistema e a planilha fica no registro
 `docs/divergencias-sistema-planilha.md` (02/11/2026), com o código DIV que
 aparece ao lado das frases desta decisão. As previsões da planilha entraram no
@@ -1541,6 +1543,68 @@ ficam só os jobs do 4T." Os jobs do 3T que já existem no sistema (cerca de
   conciliação pelo histórico exige soma exata e uma linha do banco por vez.
 - **A diferença de saldo não muda:** ligar não mexe no saldo. Ela segue a tabela
   acima, ao centavo.
+
+### A carga até 01/11 (02/11/2026)
+
+- **Decidido** (Tiago, 02/11): "Sim, preparar" e "Sim, carregar". Com o extrato da
+  California Santander até 31/10, a cauda e o só DRE vão até 01/11 em todas as contas
+  (`so-dre/cortes.json` com o padrão em 01/11). O que a planilha tem depois do extrato
+  de cada conta fica "a conciliar" até o extrato chegar: cerca de +R$ 2,75 mi no BB
+  California, −R$ 466 mil na Santander GoCrazy e −R$ 347 no Fundo Fixo.
+- **Empréstimo:** as duas devoluções que a planilha de 25/10 punha em 25/10 aparecem
+  no extrato em 28/10, principal mais juros, e a planilha de 01/11 já as tem em 28/10.
+  O empacotador aceita o empréstimo até 28/10 (`EMPRESTIMO_NO_EXTRATO_ATE`).
+- **Cauda:** 1.930 linhas, −R$ 4.133.840,82, com 67 notas e 216 jobs. **Só DRE:** 384
+  linhas, +R$ 2.918.161,32, com 78 jobs: as 322 de antes, 59 linhas de job fora da
+  cauda e 3 tarifas que a regra já paga.
+- **Conferido:** antes de carregar, a simulação zerou o "falta carregar" em toda
+  célula de 2026. Depois, o banco devolve os mesmos 1.017 agregados da simulação.
+  1.632 ligações herdadas.
+- **California Santander, 27 a 31/10:** 63 pares de mesma data e valor
+  (−R$ 198.079,41) e 5 somas do mesmo dia e fornecedor, pelo botão Conciliar:
+  - as duas devoluções de empréstimo, principal mais juros (−R$ 3.221.441,08);
+  - três linhas de R$ 12.900,00 numa saída de R$ 38.700,00;
+  - duas de imóvel numa de R$ 6.450,00;
+  - uma de R$ 500,00, entre três saídas iguais do banco.
+
+  O resgate de R$ 3.300.001,04 da XP, de 28/10, virou a TR-00068, da XP California
+  para a California Santander, ligada à linha do banco.
+- **As 50 linhas que sobram de 27 a 31/10:**
+
+  | Motivo | Linhas | Soma |
+  |---|---:|---:|
+  | Par no só DRE: espera o job do 4T | 40 | −182.074,67 |
+  | Entradas sem Tipo na planilha (DIV-043) | 2 | 135.520,67 |
+  | Entradas sem linha na planilha (DIV-044) | 3 | 76.533,34 |
+  | Saídas sem linha na planilha (DIV-044) | 4 | −12.386,97 |
+  | Duas linhas da planilha de fornecedores diferentes (DIV-045) | 1 | −350,00 |
+
+  Entre as 40, a saída de R$ 5.000,00 de 30/10 tem três linhas da planilha do mesmo
+  dia e valor (DP, CF e o DA da CCH), além de uma de job no só DRE. A de 03/11
+  (−R$ 13.000,00) tem a previsão de mesmo valor e dia. Como é custo de job do 4T,
+  fica para a PP.
+- **Linhas da planilha sem linha no banco, de 27/10 a 01/11 (DIV-045):** 22, que somam
+  −R$ 66.923,42:
+  - as duas de R$ 350,00 de 28/10, e uma delas é a do banco;
+  - uma de 29/10;
+  - 12 de 30/10 (−R$ 72.602,31);
+  - 7 entradas CT de 01/11 (+R$ 7.378,89).
+
+  O extrato vai até 03/11 e não as tem.
+- **A soma fecha no sistema:** o saldo do sistema, mais as pendentes do banco, menos as
+  linhas da planilha e os lançamentos sem banco, dá a soma das linhas do extrato, ao
+  centavo.
+- **O saldo do extrato de 31/10 (R$ 401.229,23)** não sai da soma das linhas, por dois
+  motivos:
+  - as três linhas de 26/10 esperam o OK do Tiago para serem ignoradas: −R$ 3.500.000,00
+    e −R$ 1.823,33, repetidas pelo extrato novo com outro texto, e −R$ 4.200,00, que só
+    o extrato parcial tem (DIV-042);
+  - o formato novo não traz as aplicações e os resgates automáticos da ContaMax.
+
+  Tirando as três, faltam R$ 2.092.475,58, que deve ser a divisão entre a conta
+  corrente e a ContaMax. O extrato da ContaMax de outubro confirma.
+- **XP California:** fica negativa em 31/10 (−R$ 1.650.965,35), porque o sistema não
+  tem o saldo dela em 30/09 (A5).
 
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas

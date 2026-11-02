@@ -271,7 +271,8 @@ test("cauda: sem job, o DRE até o 4T de 2026, fora o mútuo e o empréstimo que
   assert.equal(movimentoDaCauda(mov({ competencia_trimestre: "4" }), jobs), true);
   assert.equal(movimentoDaCauda(mov({ competencia_ano: "2027", competencia_trimestre: "1" }), jobs), false);
   assert.equal(movimentoDaCauda(mov({ grupo: "EMP", data: "2026-10-21" }), jobs), true);
-  assert.equal(movimentoDaCauda(mov({ grupo: "EMP", data: "2026-10-25" }), jobs), false);
+  assert.equal(movimentoDaCauda(mov({ grupo: "EMP", data: "2026-10-28" }), jobs), true);
+  assert.equal(movimentoDaCauda(mov({ grupo: "EMP", data: "2026-10-29" }), jobs), false);
   assert.equal(movimentoDaCauda(mov({ grupo: "EMP" }), jobs), false);
   assert.equal(movimentoDaCauda(mov({ grupo: "MÚTUO INT", data: "2026-10-20" }), jobs), false);
   assert.equal(movimentoDaCauda(mov({ classe: "transferencia" }), jobs), false);

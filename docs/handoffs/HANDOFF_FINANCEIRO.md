@@ -8829,3 +8829,11 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Troca de versão:** a mesma previsão herda a ligação; a já ligada que a versão nova não traz continua; a cauda que a traz como realizada herda a ligação, e a previsão sai.
 - **Conferido:** o realizado não mudou (DRE, regional, rentabilidade, saldos, resumo e fluxo iguais antes e depois); com previsões, a DRE de 2026 dá planilha − regra − falta carregar em cada empresa e trimestre. A tela da DRE e a conciliação da California Santander conferidas no navegador.
 
+
+## ⚠️ Nota de 2026-11-02 (8) — a carga até 01/11 e a California Santander até 31/10 (decisão 211)
+
+- **Cargas novas, pela tela de Cadastros › Histórico da planilha:** cauda (1.930 linhas, −R$ 4.133.840,82) e só DRE (384 linhas, +R$ 2.918.161,32) até 01/11 em todas as contas, da planilha de 01/11. O que vem depois do extrato de cada conta fica "a conciliar" até o extrato chegar.
+- **Empacotador:** `EMPRESTIMO_NO_EXTRATO_ATE` passa a 28/10, a data em que as duas devoluções de empréstimo aparecem no extrato da California Santander.
+- **Conferido:** o banco devolve os mesmos 1.017 agregados da simulação, que zerava o "falta carregar" em 2026. 1.632 ligações herdadas.
+- **Conciliação da California Santander:** 63 pares e 5 somas do mesmo dia e fornecedor pela ação Conciliar, e a TR-00068 (XP California → California Santander, R$ 3.300.001,04, 28/10) ligada à linha do banco. Sobram 50 linhas de 27 a 31/10: 40 esperam o job do 4T; as outras estão nas DIV-043, DIV-044 e DIV-045.
+- **Esperando o Tiago:** o OK para ignorar as três linhas de 26/10 (DIV-042) e o extrato da ContaMax de outubro, que explica o saldo do extrato de 31/10.

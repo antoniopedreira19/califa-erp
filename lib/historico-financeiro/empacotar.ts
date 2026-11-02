@@ -117,10 +117,11 @@ export function jobDaCauda(j: LinhaLida): boolean {
   return ano === 2026 && tri >= 1 && tri <= 3;
 }
 
-/** O empréstimo só entra depois de aparecer no extrato. Até aqui, as devoluções
- *  de 20 e 21/10; as de 25/10 estão na planilha e não no banco (extratos até
- *  26/10). Quando aparecerem, esta data anda. */
-const EMPRESTIMO_NO_EXTRATO_ATE = "2026-10-21";
+/** O empréstimo só entra depois de aparecer no extrato. As devoluções de 20 e
+ *  21/10 entraram primeiro; as duas que a planilha punha em 25/10 aparecem no
+ *  extrato da California Santander em 28/10 (extrato de 31/10), principal mais
+ *  juros, e a planilha de 01/11 já as tem em 28/10. */
+const EMPRESTIMO_NO_EXTRATO_ATE = "2026-10-28";
 
 /**
  * O movimento depois do corte que vai para a cauda: o do job da cauda

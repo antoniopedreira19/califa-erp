@@ -27,6 +27,7 @@ planilha − previsões − falta carregar − diferença de regra = sistema
 | Diferença de regra sem explicação | Nenhuma |
 | Coluna Sistema contra o banco | Igual: 66.112 linhas, a mesma soma de `valor` e os mesmos 1.013 agregados da DRE |
 | Linhas até 30/09/2026 | 64.038 na planilha e no sistema, com o mesmo valor, data, Tipo e job; 24 têm texto diferente (DIV-029) |
+| Cargas até 01/11, no mesmo dia (decisão 211) | "Falta carregar" zero em toda célula de 2026; o banco devolve os 1.017 agregados da simulação |
 
 **O 3T está carregado.** O que ainda separa a planilha do sistema em 2026 são as previsões (DIV-005) e o que falta carregar: linhas depois do extrato de cada conta, PPs e jobs ainda sem lançamento. Em 2026, faltam carregar R$ 2.794.419,25 de receita na Agência California, R$ 28.043,02 na CCH e R$ 751,58 na Hitlab.
 
@@ -77,8 +78,10 @@ Rentabilidade: 2.738 jobs de 2023 a 2026. As abas de 2021 e 2022 ficam de fora, 
 | DIV-039 | Extrato · Centavos | Regra do sistema | 1 ou 2 centavos em 11 linhas | Decidido: pendentes até a fase da interface |
 | DIV-040 | Extrato · Linhas que só fecham em conjunto | Pendência de conciliação | R$ 95.780,30 e R$ 39.901,46 | Decidido: pendentes até a fase da interface |
 | DIV-041 | Extrato · Um pagamento, vários favorecidos | Pendência de conciliação | Quatro pagamentos | Aberta: quando os jobs entrarem |
-| DIV-042 | Extrato · Saída sem linha na planilha | Pendência de conciliação | R$ 4.200,00 | Aberta: extrato de 26/10 parcial |
-| DIV-043 | Extrato · Quatro linhas sem Tipo na planilha | Pendência de conciliação | R$ 25.025,92 e R$ 464,72 no saldo | Aberta: falta saber o que são |
+| DIV-042 | Extrato · Saída sem linha na planilha | Pendência de conciliação | R$ 4.200,00 | Aberta: só o extrato parcial tem a linha; espera o OK para ignorar |
+| DIV-043 | Extrato · Seis linhas sem Tipo na planilha | Pendência de conciliação | R$ 160.546,59 e R$ 464,72 no saldo | Aberta: falta saber o que são |
+| DIV-044 | Extrato · Entradas e saídas de 26 a 30/10 sem linha na planilha | Pendência de conciliação | +R$ 76.533,34 e −R$ 36.386,97 | Aberta: falta saber o que são |
+| DIV-045 | Extrato · Linhas da planilha de 27/10 a 01/11 sem linha no banco | Pendência de conciliação | −R$ 66.923,42 no saldo | Aberta: o extrato até 03/11 não as tem |
 
 ---
 
@@ -402,13 +405,33 @@ Apuradas na conciliação de outubro, em 02/11/2026.
 ### DIV-042 · Saída sem linha na planilha
 
 - **Diferença:** −R$ 4.200,00 de 26/10 na California Santander, sem linha na planilha.
-- **Situação:** aberta. O extrato desse dia é parcial: foi gerado antes do fim do dia.
+- **Situação:** aberta. O extrato desse dia era parcial: foi gerado antes do fim do dia. O extrato completo, de 31/10, não tem essa linha. Ela é uma das três linhas de 26/10 que esperam o OK do Tiago para serem ignoradas, com as duas que o extrato novo repetiu com outro texto (−R$ 3.500.000,00 e −R$ 1.823,33).
 
-### DIV-043 · Quatro linhas sem Tipo na planilha
+### DIV-043 · Seis linhas sem Tipo na planilha
 
-- **Diferença:** a planilha tem estas linhas com a coluna Tipo vazia: +R$ 1.000,00 (13/10), +R$ 24.000,00 (19/10) e +R$ 25,92 (22/10) na California Santander, e −R$ 464,72 (09/10) na Santander Hitlab. O banco tem as mesmas quatro.
-- **Por quê:** sem Tipo, a DRE da planilha não as conta, e a carga as deixou de fora. O saldo do sistema fica R$ 25.025,92 abaixo do banco na California Santander e R$ 464,72 acima na Hitlab.
-- **Situação:** aberta. Falta saber o que são, para lançar com o Tipo certo.
+- **Diferença:** a planilha tem estas linhas com a coluna Tipo vazia. O banco tem as mesmas seis.
+  - Na California Santander: +R$ 1.000,00 (13/10), +R$ 24.000,00 (19/10), +R$ 25,92 (22/10), +R$ 98.188,17 (27/10) e +R$ 37.332,50 (29/10). As duas últimas vieram com a planilha de 01/11.
+  - Na Santander Hitlab: −R$ 464,72 (09/10).
+- **Por quê:** sem Tipo, a DRE da planilha não as conta, e a carga as deixou de fora. O saldo do sistema fica R$ 160.546,59 abaixo do banco na California Santander e R$ 464,72 acima na Hitlab.
+- **Situação:** aberta. Falta saber o que são, para lançar com o Tipo certo. As duas de 27 e 29/10 são Pix recebidos de empresas.
+
+### DIV-044 · Entradas e saídas de 26 a 30/10 sem linha na planilha
+
+- **Diferença:** linhas do extrato da California Santander que a planilha de 01/11 não tem, com nenhum Tipo e em nenhuma data próxima.
+  - Entradas: +R$ 50.026,41, +R$ 26.500,00 e +R$ 6,93, de 30/10. A planilha tem a de R$ 26.500,00 só como previsão de recebimento da CCH no BB California, em 03/11.
+  - Saídas: −R$ 24.000,00 (26/10), −R$ 7.700,00 e −R$ 3.150,00 (28/10), −R$ 1.300,00 e −R$ 236,97 (30/10).
+- **Para a gestão:** movimentos do banco que a planilha ainda não registrou.
+- **Situação:** aberta. Falta saber o que são, ou a próxima versão da planilha as traz.
+
+### DIV-045 · Linhas da planilha de 27/10 a 01/11 sem linha no banco
+
+- **Diferença:** 22 linhas da cauda na California Santander, −R$ 66.923,42 no total. O extrato vai até 03/11 e não as tem.
+  - Duas de −R$ 350,00 em 28/10, de fornecedores diferentes, contra uma saída do banco: não dá para saber qual das duas ela paga.
+  - Uma de −R$ 1.000,00 em 29/10.
+  - 12 de 30/10, −R$ 72.602,31, com uma de −R$ 50.000,00 e três de −R$ 5.000,00 (DP, CF e o DA da CCH) contra uma saída de R$ 5.000,00 do banco.
+  - 7 entradas CT de 01/11, um domingo: +R$ 7.378,89.
+- **Por quê:** a planilha as dá como realizadas. O saldo do sistema fica R$ 66.923,42 abaixo do banco.
+- **Situação:** aberta. Se o extrato seguinte não as trouxer, a planilha precisa dizer quando e por onde foram pagas.
 
 ---
 
