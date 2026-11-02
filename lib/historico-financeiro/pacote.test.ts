@@ -7,7 +7,7 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { jobDaCauda, linhaDeJob, linhaDeMovimento, linhasDeSaldo, linhasDoRateio, movimentoDaCauda, movimentosSoDre, type FonteDoRateio, type LinhaLida } from "./empacotar";
+import { jobDaCauda, linhaDeJob, linhaDeMovimento, linhasDeSaldo, linhasDoRateio, dentroDoCorte, movimentoDaCauda, separarCaudaESoDre, type FonteDoRateio, type LinhaLida } from "./empacotar";
 import {
   COLUNAS_DO_PACOTE,
   FORMATO_DO_PACOTE,
@@ -261,14 +261,15 @@ test("cauda: só o job até o 3T de 2026, ou de ano anterior, que não existe no
   assert.equal(jobDaCauda(job("", "3T")), false);
 });
 
-test("cauda: sem job, o DRE com competência até o 3T, fora o mútuo e o empréstimo que não está no extrato", () => {
+test("cauda: sem job, o DRE até o 4T de 2026, fora o mútuo e o empréstimo que não está no extrato", () => {
   const jobs = new Set(["j3"]);
   const mov = (extra: LinhaLida): LinhaLida => ({ job_id: "", classe: "dre", grupo: "DP", competencia_ano: "2026", competencia_trimestre: "3", ...extra });
   assert.equal(movimentoDaCauda(mov({ job_id: "j3" }), jobs), true);
   assert.equal(movimentoDaCauda(mov({ job_id: "j4" }), jobs), false);
   assert.equal(movimentoDaCauda(mov({}), jobs), true);
   assert.equal(movimentoDaCauda(mov({ grupo: "CF", competencia_ano: "2025", competencia_trimestre: "4" }), jobs), true);
-  assert.equal(movimentoDaCauda(mov({ competencia_trimestre: "4" }), jobs), false);
+  assert.equal(movimentoDaCauda(mov({ competencia_trimestre: "4" }), jobs), true);
+  assert.equal(movimentoDaCauda(mov({ competencia_ano: "2027", competencia_trimestre: "1" }), jobs), false);
   assert.equal(movimentoDaCauda(mov({ grupo: "EMP", data: "2026-10-21" }), jobs), true);
   assert.equal(movimentoDaCauda(mov({ grupo: "EMP", data: "2026-10-25" }), jobs), false);
   assert.equal(movimentoDaCauda(mov({ grupo: "EMP" }), jobs), false);
@@ -277,16 +278,25 @@ test("cauda: sem job, o DRE com competência até o 3T, fora o mútuo e o empré
   assert.equal(movimentoDaCauda(mov({ competencia_trimestre: "" }), jobs), false);
 });
 
-test("só DRE: leva as linhas da lista; recusa a que falta na planilha e a que iria para a cauda", () => {
+test("só DRE: a linha da lista sai da cauda, mesmo de job da cauda; recusa a que falta na planilha", () => {
   const mov = (id: string, extra: Partial<LinhaLida> = {}): LinhaLida => ({
     id, classe: "dre", grupo: "CO", competencia_ano: "2026", competencia_trimestre: "4", job_id: "", ...extra,
   });
   const jobs = new Set(["j3"]);
-  const linhas = [mov("a", { job_id: "j4" }), mov("b", { grupo: "CF" }), mov("c", { job_id: "j3" }), mov("d", { competencia_trimestre: "3" })];
-  assert.deepEqual(movimentosSoDre(linhas, new Set(["a", "b"]), jobs).map((m) => m.id), ["a", "b"]);
-  assert.throws(() => movimentosSoDre(linhas, new Set(["a", "z"]), jobs), /traz 2 linhas e a planilha tem 1/);
-  assert.throws(() => movimentosSoDre(linhas, new Set(["a", "c"]), jobs), /1 linhas da lista também iriam para a cauda: c/);
-  assert.throws(() => movimentosSoDre(linhas, new Set(["d"]), jobs), /iriam para a cauda: d/);
+  const linhas = [mov("a", { job_id: "j4" }), mov("b", { grupo: "CF" }), mov("c", { job_id: "j3" }), mov("d", { grupo: "DA" })];
+  const { cauda, soDre } = separarCaudaESoDre(linhas, new Set(["a", "b"]), jobs);
+  assert.deepEqual(soDre.map((m) => m.id), ["a", "b"]);
+  assert.deepEqual(cauda.map((m) => m.id), ["c", "d"]);
+  assert.throws(() => separarCaudaESoDre(linhas, new Set(["a", "z"]), jobs), /traz 2 linhas e a planilha tem 1/);
+  assert.deepEqual(separarCaudaESoDre(linhas, new Set(["c"]), jobs).cauda.map((m) => m.id), ["b", "d"]);
+});
+
+test("corte: cada conta vai até o extrato dela, e a sem extrato usa o padrão", () => {
+  const cortes = { padrao: "2026-10-26", contas: { "Santander GoCrazy": "2026-10-27" } };
+  assert.equal(dentroDoCorte({ conta: "Santander GoCrazy", data: "2026-10-27" }, cortes), true);
+  assert.equal(dentroDoCorte({ conta: "Santander GoCrazy", data: "2026-10-28" }, cortes), false);
+  assert.equal(dentroDoCorte({ conta: "XP California", data: "2026-10-26" }, cortes), true);
+  assert.equal(dentroDoCorte({ conta: "XP California", data: "2026-10-27" }, cortes), false);
 });
 
 test("cabeçalho: o pacote sem tipo é de período; a cauda declara o tipo", () => {

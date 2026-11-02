@@ -8786,3 +8786,10 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Guia:** a marcação passou da digital da planilha para a linha do banco. Editar a linha na planilha não tira mais a guia do IOF pago. A digital fica só como registro.
 - **Índice:** a FK do pagador de `mutuos_iof_historico` ganhou índice.
 - **Extrato:** as linhas do histórico mostram o trimestre do Tipo da planilha, e não o da data. Só muda a coluna: saldo, fluxo e DRE ficam iguais. Vale para as 1.661 linhas da cauda, e 1.652 delas mudam de trimestre.
+
+## ⚠️ Nota de 2026-11-02 (3) — a cauda e o só DRE até o extrato de cada conta (decisão 211)
+
+- **O que mudou:** a cauda leva também o DRE sem job do 4T, e as duas cargas vão até o extrato de cada conta (`so-dre/cortes.json`). Base: a planilha de 01/11.
+- **Só DRE:** passa a ter também "a planilha diz, o sistema ainda não tem". São 322 linhas: 97 com caixa no sistema e 225 sem, estas listadas à parte em `so-dre/linhas-sem-caixa.json`.
+- **Cuidados:** job não lançado sai do só DRE e vai para a cauda. A futura DRE do sistema precisa de corte, ou as baixas somam com essas linhas.
+- **Carga:** primeiro a cauda, depois o só DRE. A lista do só DRE sai da conferência com o banco e precisa ser refeita a cada planilha: o `id` muda, e a `digital` muda se data, texto, fornecedor, Tipo ou job mudarem.

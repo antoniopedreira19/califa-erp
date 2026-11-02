@@ -127,8 +127,12 @@ const EMPRESTIMO_NO_EXTRATO_ATE = "2026-10-21";
  * (`jobDaCauda`) e, sem job, o do DRE com competência até o 3T de 2026 ou de
  * ano anterior — a folha de setembro, os impostos, os custos fixos, as contas
  * avulsas e as devoluções de empréstimo pagos em outubro (Tiago, 30/10/2026:
- * "no sistema ficam só os do 4T"). Ficam de fora o mútuo, que espera a função
+ * "no sistema ficam só os do 4T"). Ficam de fora o mútuo, que tem função
  * própria, a transferência, o estorno e o que não tem competência.
+ *
+ * Sem job, o 4T também entra: o histórico vai até o extrato de cada conta
+ * (Tiago, 02/11/2026), e o que já foi pago pelo sistema sai pela lista do só
+ * DRE (`separarCaudaESoDre`).
  */
 export function movimentoDaCauda(m: LinhaLida, jobsDaCauda: ReadonlySet<string>): boolean {
   if (m.job_id) return jobsDaCauda.has(m.job_id);
@@ -137,29 +141,34 @@ export function movimentoDaCauda(m: LinhaLida, jobsDaCauda: ReadonlySet<string>)
   const ano = Number(m.competencia_ano);
   const tri = Number(m.competencia_trimestre);
   if (!ano || !tri) return false;
-  return ano < 2026 || (ano === 2026 && tri >= 1 && tri <= 3);
+  return ano < 2026 || (ano === 2026 && tri >= 1 && tri <= 4);
+}
+
+/** Até que dia cada conta tem extrato. A conta sem extrato usa o `padrao`. */
+export type CortesDoExtrato = { padrao: string; contas: Readonly<Record<string, string>> };
+
+/** A linha depois do extrato da conta fica para a rodada seguinte: não há banco com que bater. */
+export function dentroDoCorte(m: LinhaLida, cortes: CortesDoExtrato): boolean {
+  return m.data <= (cortes.contas[m.conta] ?? cortes.padrao);
 }
 
 /**
- * As linhas da carga só DRE: as que já foram pagas pelo sistema (a PP baixada,
- * a tarifa lançada pela regra). A lista vem da conferência com o banco, e não
- * de uma regra da planilha. A linha que falta na planilha, ou que iria também
- * para a cauda, para o pacote: na cauda, contaria duas vezes no resultado.
+ * Separa a cauda do só DRE. O só DRE são as linhas já pagas pelo sistema (a PP
+ * baixada, a tarifa lançada pela regra): a lista vem da conferência com o
+ * banco, e não de uma regra da planilha. Elas saem da cauda, ou contariam duas
+ * vezes no saldo, mesmo quando a planilha põe a linha em outro job: quem manda
+ * é a baixa. A linha que falta na planilha para o pacote.
  */
-export function movimentosSoDre(
+export function separarCaudaESoDre(
   movimentos: readonly LinhaLida[],
   ids: ReadonlySet<string>,
   jobsDaCauda: ReadonlySet<string>,
-): LinhaLida[] {
-  const escolhidas = movimentos.filter((m) => ids.has(m.id));
-  if (escolhidas.length !== ids.size) {
-    throw new Error(`A lista traz ${ids.size} linhas e a planilha tem ${escolhidas.length} delas.`);
+): { cauda: LinhaLida[]; soDre: LinhaLida[] } {
+  const soDre = movimentos.filter((m) => ids.has(m.id));
+  if (soDre.length !== ids.size) {
+    throw new Error(`A lista traz ${ids.size} linhas e a planilha tem ${soDre.length} delas.`);
   }
-  const naCauda = escolhidas.filter((m) => movimentoDaCauda(m, jobsDaCauda));
-  if (naCauda.length > 0) {
-    throw new Error(`${naCauda.length} linhas da lista também iriam para a cauda: ${naCauda.map((m) => m.id).slice(0, 5).join(", ")}.`);
-  }
-  return escolhidas;
+  return { cauda: movimentos.filter((m) => !ids.has(m.id) && movimentoDaCauda(m, jobsDaCauda)), soDre };
 }
 
 export function linhaDeJob(j: LinhaLida): ValorDoPacote[] {
