@@ -72,7 +72,7 @@ const MAX_CANDIDATAS = 30;
 export function casarComHistorico<M extends Movimento>(
   movimentos: M[],
   historico: HistoricoDoMotor[],
-  opcoes: { soNoDia?: boolean; janela?: number } = {},
+  opcoes: { soNoDia?: boolean; janela?: number; semLimiteDeAtraso?: boolean } = {},
 ): Map<M, HistoricoDoMotor[]> {
   const livres = new Set(historico);
   const pares = new Map<M, HistoricoDoMotor[]>();
@@ -84,8 +84,10 @@ export function casarComHistorico<M extends Movimento>(
     let melhor: HistoricoDoMotor | null = null;
     for (const h of livres) {
       if (ehRetencao(h) || cents(h.valor) !== cents(m.valor)) continue;
-      const d = Math.abs(diasEntre(m.data, h.data));
-      if (d > janela) continue;
+      // Positivo: a linha do histórico é depois da do banco (pagou antes).
+      const dd = diasEntre(m.data, h.data);
+      if (dd > janela || (dd < -janela && !opcoes.semLimiteDeAtraso)) continue;
+      const d = Math.abs(dd);
       if (!melhor || d < Math.abs(diasEntre(m.data, melhor.data))) melhor = h;
     }
     if (melhor) {

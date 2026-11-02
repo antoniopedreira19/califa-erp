@@ -281,7 +281,7 @@ export interface ConciliacaoDaConta {
   naoApareceu: LancamentoSemLinha[];
 }
 
-/** Até quantos dias da data prevista a linha do banco reconhece a previsão da planilha (decisão 232). */
+/** Até quantos dias antes da data prevista a linha do banco reconhece a previsão da planilha (decisão 232). Depois dela, sem limite. */
 const JANELA_DA_PREVISAO = 10;
 
 /** Roda o motor nas linhas do banco ainda sem solução. */
@@ -350,20 +350,23 @@ export function conciliarConta(
     });
   }
   // Por último, as previsões da planilha (decisão 232): o que ainda ficou sem
-  // par procura a previsão de mesmo valor até 10 dias da data prevista. O
-  // título do sistema vem antes. Só se resolve sozinha a previsão única desse
-  // valor na janela; com outra igual por perto, pede conferência. A linha do
-  // banco até o dia da planilha não é previsão: a planilha já a teria como
-  // realizada.
+  // par procura a previsão de mesmo valor, até 10 dias antes da data prevista
+  // e sem limite depois dela. A previsão vencida e não paga continua valendo,
+  // como a do título a receber, que rola até o pagamento: o atraso e a
+  // inadimplência não a perdem. O título do sistema vem antes. Só se resolve
+  // sozinha a previsão única desse valor no alcance; com outra igual, pede
+  // conferência. A linha do banco até o dia da planilha não é previsão: a
+  // planilha já a teria como realizada.
   const previsoes = dados.previsoes ?? [];
   if (previsoes.length) {
     const desde = dados.previsoesDesde ?? "";
     const aindaSemPar = semPar.filter((m) => !depois.has(m) && m.data > desde);
-    for (const [m, historicos] of casarComHistorico(aindaSemPar, previsoes, { janela: JANELA_DA_PREVISAO })) {
+    for (const [m, historicos] of casarComHistorico(aindaSemPar, previsoes, { janela: JANELA_DA_PREVISAO, semLimiteDeAtraso: true })) {
       const um = historicos.length === 1;
       const iguais = previsoes.filter(
-        (h) => Math.round(h.valor * 100) === Math.round(m.valor * 100) && Math.abs(diasEntre(m.data, h.data)) <= JANELA_DA_PREVISAO,
+        (h) => Math.round(h.valor * 100) === Math.round(m.valor * 100) && diasEntre(m.data, h.data) <= JANELA_DA_PREVISAO,
       ).length;
+      const atraso = um ? -diasEntre(m.data, historicos[0].data) : 0;
       porId.set(m.id, {
         mov: m,
         estado: "historico",
@@ -371,7 +374,7 @@ export function conciliarConta(
         candidatos: [],
         historicos,
         motivo: um
-          ? `A previsão da planilha para ${diaMes(historicos[0].data)}, com o mesmo valor${iguais > 1 ? `; há ${iguais} previsões desse valor por perto, confira` : ""}.`
+          ? `A previsão da planilha para ${diaMes(historicos[0].data)}, com o mesmo valor${atraso > JANELA_DA_PREVISAO ? `, paga com ${atraso} dias de atraso` : ""}${iguais > 1 ? `; há ${iguais} previsões desse valor em aberto, confira` : ""}.`
           : `${historicos.length} previsões da planilha de ${diaMes(historicos[0].data)} que somam o valor do banco.`,
       });
     }

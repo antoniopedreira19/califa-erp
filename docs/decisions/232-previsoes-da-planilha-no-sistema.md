@@ -20,7 +20,7 @@ Cerca de dois terços das previsões já têm um módulo próprio no sistema: o 
 |---|---|---|
 | D1 | Onde moram | Uma carga do histórico de tipo `previsao`, com conta, data prevista, valor, Tipo e job de cada linha de `previsoes.csv`. Cada versão nova da planilha troca a carga |
 | D2 | Antes de acontecer | Não soma no saldo nem na DRE do realizado. A DRE ganha o seletor "Só realizado / Com previsões" |
-| D3 | Na conciliação | Depois da cauda e dos títulos do sistema, a linha do banco procura a previsão de mesmo valor na mesma conta, até 10 dias da data prevista. Só se resolve sozinha a previsão única desse valor na janela; com outra igual por perto, pede conferência |
+| D3 | Na conciliação | Depois da cauda e dos títulos do sistema, a linha do banco procura a previsão de mesmo valor na mesma conta, de 10 dias antes da data prevista em diante, sem limite de atraso. Só se resolve sozinha a previsão única desse valor nesse alcance; com outra igual em aberto, pede conferência. Revisto no mesmo dia (abaixo) |
 | D4 | Linha antes da planilha | A linha do banco até o dia da planilha não casa com previsão: a planilha já a teria como realizada |
 | D5 | Ligada ao banco | A previsão vira realizada: passa a ter a data do banco (a prevista fica em `data_prevista`), entra no saldo, no Extrato, no fluxo de caixa e na DRE do realizado, no trimestre que a planilha deu a ela. Desfazer a conciliação devolve a data prevista |
 | D6 | Título do sistema de mesmo valor | A conciliação dá preferência ao título (PP, título a receber). A previsão continua prevista até a próxima versão da planilha, sem contar duas vezes: o saldo vem da baixa, e a DRE vem da planilha |
@@ -44,7 +44,13 @@ Cerca de dois terços das previsões já têm um módulo próprio no sistema: o 
 - **Acesso:** a função da DRE nova tem GRANT para `authenticated` e nada para `anon`; o gatilho e a soma da cauda não têm GRANT.
 - **Testes:** 135 passam, com o caso das previsões no motor da conciliação. Lint e tsc limpos.
 
+### Revisão de 02/11/2026: a previsão vencida continua valendo
+
+O Tiago perguntou se a janela seguia a regra de rolagem das previsões que já estão no sistema: "Se não for o caso, acho bom implementar para que possamos nos prevenir a casos de atraso e inadimplencia". Não seguia: a primeira versão aceitava só até 10 dias da data prevista. O título a receber vencido rola de semana em semana até ser pago (migration `20260831110001`), e a previsão do fluxo de caixa rola para a próxima data (decisão 018). Agora a previsão da planilha também continua valendo depois da data prevista: a linha do banco a reconhece com qualquer atraso, e o motivo da sugestão diz quantos dias ela atrasou. Antes da data prevista, o limite segue em 10 dias.
+
 ## O que fica para depois
+
+- O registro de quem atrasou (como o `inadimplente_desde` do título a receber) e a lista das previsões vencidas e não pagas: entram com a fase da interface, quando o faturamento assumir os recebimentos.
 
 - O fluxo de caixa ainda não mostra as previsões que não aconteceram como previsto.
 - Na troca da cauda, a previsão realizada só passa a ligação para a linha da cauda de mesmo dia; com data diferente, a conferência é à mão.
