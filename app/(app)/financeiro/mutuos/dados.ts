@@ -22,7 +22,7 @@ type Supabase = ReturnType<typeof createClient>;
  * formulário também usa.
  */
 export async function carregarMutuos(supabase: Supabase, tenantId: string): Promise<DadosDoMutuo> {
-  const [contasRes, cnpjsRes, forasRes, mutuosRes, aberturasRes, iofsRes, guiasRes] = await Promise.all([
+  const [contasRes, cnpjsRes, forasRes, mutuosRes, aberturasRes, iofsRes, iofsDoHistoricoRes, guiasRes] = await Promise.all([
     supabase
       .from("contas_bancarias")
       .select("id, nome, banco, empresa_contabil_id, cartao_credito_id")
@@ -62,6 +62,10 @@ export async function carregarMutuos(supabase: Supabase, tenantId: string): Prom
       .select("pagador_empresa_contabil_id, com_empresa_contabil_id, com_fornecedor_id, lancamento:lancamentos_financeiros(valor)")
       .eq("tenant_id", tenantId),
     supabase
+      .from("vw_mutuos_iof_historico")
+      .select("pagador_empresa_contabil_id, com_empresa_contabil_id, com_fornecedor_id, valor")
+      .eq("tenant_id", tenantId),
+    supabase
       .from("impostos_a_pagar")
       .select("empresa_contabil_id, rotulo_competencia, valor, status, multa_juros")
       .eq("tenant_id", tenantId)
@@ -76,6 +80,7 @@ export async function carregarMutuos(supabase: Supabase, tenantId: string): Prom
     ["mútuos", mutuosRes],
     ["abertura", aberturasRes],
     ["iof", iofsRes],
+    ["iof do histórico", iofsDoHistoricoRes],
     ["guias de iof", guiasRes],
   ] as const) {
     if (res.error) throw new Error(`Falha ao carregar ${nome} do mútuo: ${res.error.message}`);
@@ -158,6 +163,15 @@ export async function carregarMutuos(supabase: Supabase, tenantId: string): Prom
         : null,
     valor: Number(i.lancamento?.valor ?? 0),
   }));
+
+  // A guia que já está no histórico da planilha: a linha fica lá, e só soma aqui.
+  for (const h of iofsDoHistoricoRes.data ?? []) {
+    iofs.push({
+      pagador: parteDoCnpj(h.pagador_empresa_contabil_id),
+      com: h.com_fornecedor_id ? parteDeFora(h.com_fornecedor_id) : parteDoCnpj(h.com_empresa_contabil_id as string),
+      valor: Number(h.valor),
+    });
+  }
 
   // A guia paga soma no IOF do par. Só a empresa de fora tem guia por enquanto:
   // com mais de uma para o mesmo CNPJ, a guia não diz de qual delas é.

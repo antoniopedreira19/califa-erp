@@ -8774,3 +8774,10 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Saldo de abertura:** carregado por SQL em `mutuos_saldo_abertura`, sem valores no repositório.
 - **Apuração do IOF:** uma guia por CNPJ que emprestou e por mês, só para empresa de fora, a partir de outubro. Vale o valor da guia, e o calculado fica ao lado. Código em `lib/fiscal/iof-mutuo.ts`.
 - **Impostos a Pagar:** o detalhe do título em aberto ganhou "Corrigir o valor".
+
+## ⚠️ Nota de 2026-11-02 — o IOF que já está no histórico (decisão 230)
+
+- **O que mudou:** a guia de 15/10 da GoCrazy, do mútuo com a Community, continua como linha do histórico e agora soma no IOF do par. `mutuos_iof_historico` marca a linha pela digital, e `vw_mutuos_iof_historico` traz o valor da carga ativa.
+- **Sem contar duas vezes:** nenhum movimento foi criado ou alterado. DRE, fluxo de caixa e saldo não mudam.
+- **Abertura:** o IOF pago da abertura GoCrazy × Community volta ao valor de 30/09. O total da tela não muda.
+- **Atenção:** se a descrição, o fornecedor ou o Tipo dessa linha mudarem na planilha, a digital muda e o IOF pago da tela perde a guia até a marcação ser refeita.
