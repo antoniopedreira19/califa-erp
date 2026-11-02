@@ -8804,3 +8804,10 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Empresa:** `banco.conta.empresaId` traz a gerencial do CNPJ da conta, e a nota já abre com ela.
 - **Conferido:** funções em transação desfeita; tela real na Conta Teste, com extrato simulado: criar, baixar, conciliar, desfazer, editar e excluir. As 4 linhas do arquivo `teste-notas-de-socio.ofx` ficaram ignoradas nessa conta.
 - **Planilha:** segue diferente na linha da DRE (DIV-001). Ver a decisão.
+
+## ⚠️ Nota de 2026-11-02 (5) — as linhas soltas, pelo favorecido do dia inteiro (decisão 211)
+
+- **Achado:** a linha do banco é sempre a soma das linhas de **um** favorecido no mesmo dia. As "somas de favorecidos diferentes" vinham de pares ligados só pelo valor: a linha da planilha ficava presa a outra linha do banco, de mesmo valor ou de outro dia. Banco e planilha batem por dia depois de soltar 40 ligações de data errada.
+- **Refeito na California Santander e na GoCrazy:** pareamento do mês inteiro por favorecido (programação inteira, `scipy`), conferido contra o que estava gravado: 115 linhas desfeitas e 137 religadas (136 conferidas iguais ao plano; a outra é a da migration abaixo). Nenhuma linha segue ligada a outra data. Também: 8 somas do mesmo favorecido (BB, California Santander, Hitlab), a nota com retenção de 13/10 e a PP-00406 na linha de 23/10 (estava na de 20/10).
+- **Migration `20261102500001`:** na troca da cauda, a linha do banco que perde parte das linhas da planilha voltava a pendente com a outra parte presa, e nem conciliar nem desfazer resolviam. A conclusão da cauda agora solta essa parte. A linha da GoCrazy (ordem 3) recuperou a ligação de 30/10.
+- **As 210 pendentes têm motivo:** 171 esperam os jobs do 4T (o par está no só DRE) e 19 têm parte no só DRE; 10 diferem em 1 ou 2 centavos; 5 só fecham em conjunto (3 TEDs de 14/10 e 2 créditos do BB de 20/10); 4 sem classificação; 1 sem explicação (−R$ 4.200 de 26/10). A conciliação pelo histórico exige soma exata e uma linha só: centavos e conjunto esperam o Tiago.

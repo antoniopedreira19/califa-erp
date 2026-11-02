@@ -1486,6 +1486,49 @@ ficam só os jobs do 4T." Os jobs do 3T que já existem no sistema (cerca de
   +1.316.183,79; sem classificação e estorno +29.225,92; 26/10 −368.297,04, porque o
   extrato foi gerado às 15:17.
 
+### As linhas soltas: o favorecido do dia inteiro (02/11/2026)
+
+- **A regra de 30/10 vale e explica tudo.** A linha do banco é a soma das linhas de
+  um favorecido no mesmo dia. As somas que pareciam de favorecidos diferentes vinham
+  de pares ligados só pelo valor: a linha da planilha ficava presa a outra linha do
+  banco, de mesmo valor ou de outro dia. Exemplo: −R$ 171.800,00 de 20/10 fecha com 7
+  linhas do mesmo favorecido quando a de R$ 2.000,00, ligada a outro dia, se solta.
+- **A prova:** com as 40 ligações de outra data soltas, banco e planilha batem ao
+  centavo em cada dia da California Santander. As sobras do dia são as conhecidas:
+  o estorno de 02/10, os R$ 500 de 08 para 09/10, as entradas sem classificação, a
+  PP-00406 de 20 para 23/10 e o 26/10 parcial. O texto "PAGFOR PIX ... 9999.9999999999"
+  não identifica o favorecido: o número é a conta da própria empresa.
+- **Refeito:** o pareamento de outubro da California Santander e da GoCrazy, por
+  programação inteira: cada linha do banco recebe linhas da planilha de um
+  favorecido do mesmo dia, com soma exata, e o par que já existia fica quando serve.
+  O que já ligava várias linhas no mesmo dia não foi mexido. 115 linhas desfeitas, 137
+  religadas, conferidas no banco. Nenhuma linha segue ligada a outra data.
+- **Herança parcial na troca da cauda** (migration `20261102500001`): a linha do
+  banco que perdia parte das linhas da planilha voltava a pendente com a outra parte
+  presa. A conclusão da cauda agora solta essa parte. Uma linha da GoCrazy (ordem 3,
+  R$ 3.004,31) recuperou a ligação de 30/10.
+- **O estorno de 02/10 (R$ 4.200,00):** a planilha tem a saída e o estorno; o banco,
+  um "saiu e voltou". A cauda levou só a saída, porque o estorno não é DRE, e o saldo
+  do sistema fica R$ 4.200,00 abaixo. A saída conta na DRE da planilha. Na próxima
+  carga, ela vai para o só DRE.
+- **As 210 linhas pendentes, por motivo:**
+
+  | Motivo | California Santander | GoCrazy | BB | Hitlab |
+  |---|---:|---:|---:|---:|
+  | Par no só DRE: espera o job do 4T | 147 | 20 | 4 | – |
+  | Parte no só DRE: espera o job do 4T | 15 | 3 | 1 | – |
+  | 1 ou 2 centavos de diferença | 10 | – | – | – |
+  | Só fecha em conjunto | 3 | – | 2 | – |
+  | Sem classificação | 3 | – | – | 1 |
+  | Sem explicação (−R$ 4.200,00 de 26/10) | 1 | – | – | – |
+
+  Os centavos vêm das retenções e dos rateios da planilha. O conjunto: 3 TEDs de
+  14/10 (R$ 95.780,30) fecham ao centavo com 3 notas e 14 retenções, mas não nota a
+  nota; 2 créditos do BB de 20/10 (R$ 39.901,46) contra 2 linhas de outro valor. A
+  conciliação pelo histórico exige soma exata e uma linha do banco por vez.
+- **A diferença de saldo não muda:** ligar não mexe no saldo. Ela segue a tabela
+  acima, ao centavo.
+
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas
   85 e 91 da Res. Jobs 2026; R$ 1.520.000,00 de benefício): o histórico segue a
