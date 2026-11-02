@@ -13,6 +13,9 @@ do histórico, em Relatórios) no mesmo dia. A5: o 3T carregado em 27/10/2026,
 da versão de 25/10. A carga só DRE do 4T, em 30/10/2026; a cauda e o só DRE até
 o extrato de cada conta, da versão de 01/11, em 02/11/2026. Próximo: as linhas
 soltas, fechar conta a conta e a interface da conciliação para os usuários.
+Toda diferença entre o sistema e a planilha fica no registro
+`docs/divergencias-sistema-planilha.md` (02/11/2026), com o código DIV que
+aparece ao lado das frases desta decisão.
 **Quem decidiu:** Tiago, no plano "Importação do histórico financeiro"
 (página privada de 25/10/2026), com as respostas D1, D2 e D3 dadas no mesmo
 dia: "Aprovo D1, D2 e D3 como você recomendou".
@@ -737,25 +740,33 @@ planilha (saída em `validacao/dre*.csv`).
   previsões), 2023 a 2025 batem nas quatro empresas, menos quatro células,
   todas explicadas pela planilha:
   - California 2024, perda, 3T: −40.000 digitados na fórmula, sem
-    lançamento;
+    lançamento (DIV-010);
   - California 2024, despesa administrativa, 4T: R$ 147,10 de uma linha do
-    Fundo Fixo que a padronização deixou de fora (E3);
+    Fundo Fixo que a padronização deixou de fora (E3) (DIV-011);
   - CMH 2023, custo tributário, 4T: a célula da Santander soma a coluna de
-    crédito em vez da de débito; o histórico conta os R$ 58.426,48;
+    crédito em vez da de débito; o histórico conta os R$ 58.426,48 (DIV-012);
   - Hitlab 2024, receita financeira, 3T: a planilha só soma o crédito; o
-    histórico desconta R$ 389,63 de débito.
+    histórico desconta R$ 389,63 de débito (DIV-013).
   Nos subtotais, além disso, só a posição da bonificação (o resultado líquido
   operacional da California em 2023, da CMH em 2023 e 2025 e da Hitlab em
-  2025) e o reinvestimento do ano da Hitlab, que a planilha deixa em zero.
+  2025) (DIV-014) e o reinvestimento do ano da Hitlab, que a planilha deixa em
+  zero (DIV-016).
 - **2026**, além do que falta carregar, difere pela regra em: crédito
-  negativo no custo tributário (R$ 10.250,24, que a planilha ignora);
+  negativo no custo tributário (R$ 10.250,24, que a planilha ignora) (DIV-006);
   créditos na distribuição de lucro (R$ 630.000 na Santander GoCrazy, que a
-  planilha ignora); a Santander GoCrazy, que a planilha deixa "n/a" no
+  planilha ignora) (DIV-001); a Santander GoCrazy, que a planilha deixa "n/a" no
   empréstimo à Hitlab (na 1ª carga, R$ 1.140.710 de custo da Hitlab pago por
-  ela); o mútuo na BB GoCrazy, que a planilha não soma (±350.000, sem efeito
-  no reinvestimento); e o total do ano da CMH, que na planilha não soma os
-  trimestres. Ficam também os espaços sobrando e a linha excluída que a E3
-  já apontava.
+  ela) (DIV-007); o mútuo na BB GoCrazy, que a planilha não soma (±350.000, sem
+  efeito no reinvestimento) (DIV-008); e o total do ano da CMH, que na planilha
+  não soma os trimestres (DIV-009). Ficam também os espaços sobrando (DIV-015) e
+  a linha excluída que a E3 já apontava.
+
+  ⚠️ **Os R$ 630.000 da distribuição de lucro (2026-11-02).** Na planilha de
+  01/11, a diferença é de R$ 630.000: as seis entradas de maio a outubro na
+  Santander GoCrazy (R$ 540.000, já nas cargas) e a de 01/11 (R$ 90.000, fora
+  das cargas). Não são os R$ 630.000 que entraram de abril a outubro nas duas
+  contas, porque a entrada de abril foi para a BB GoCrazy, que a planilha soma.
+  A explicação e a prova estão na DIV-001 de `docs/divergencias-sistema-planilha.md`.
 - **A tela hoje (1ª carga)** fica abaixo da planilha porque a carga vai de
   01/01/2023 a 30/06/2026 e não tem as previsões. Receita e lucro líquido da
   California, em milhões:
@@ -943,7 +954,7 @@ Uma linha da Hitlab de 2024 não tem a fórmula.
   - Das 610 células das abas DRE e Gerencial com critério do 3T 2026, 608
     batem. A linha "Empréstimo a CMH" do 3T na DRE da California soma
     R$ 9.759,00 a mais no histórico: é um lançamento com espaço sobrando no
-    texto, que o SUMIFS da planilha deixa de fora. A linha FIT do 3T na DRE CMH
+    texto, que o SUMIFS da planilha deixa de fora (DIV-015). A linha FIT do 3T na DRE CMH
     é um `#REF!` da própria planilha.
   - Os saldos de julho a setembro (30 contas × mês) batem e encadeiam.
   - O faturamento (14 abas × mês) bate, com 2 centavos de fração na Go Crazy
