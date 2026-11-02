@@ -8836,4 +8836,5 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Empacotador:** `EMPRESTIMO_NO_EXTRATO_ATE` passa a 28/10, a data em que as duas devoluções de empréstimo aparecem no extrato da California Santander.
 - **Conferido:** o banco devolve os mesmos 1.017 agregados da simulação, que zerava o "falta carregar" em 2026. 1.632 ligações herdadas.
 - **Conciliação da California Santander:** 63 pares e 5 somas do mesmo dia e fornecedor pela ação Conciliar, e a TR-00068 (XP California → California Santander, R$ 3.300.001,04, 28/10) ligada à linha do banco. Sobram 50 linhas de 27 a 31/10: 40 esperam o job do 4T; as outras estão nas DIV-043, DIV-044 e DIV-045.
-- **Esperando o Tiago:** o OK para ignorar as três linhas de 26/10 (DIV-042) e o extrato da ContaMax de outubro, que explica o saldo do extrato de 31/10.
+- **Três linhas de 26/10 ignoradas** com o OK do Tiago ("Pode ignorar"): duas repetidas pelo extrato novo com outro texto e a de R$ 4.200,00, que só o extrato parcial tinha (DIV-042). Cada uma guarda o motivo, e a auditoria registra `extrato.linha_ignorada`.
+- **Esperando o Tiago:** o extrato da ContaMax de outubro, que explica o saldo do extrato de 31/10.

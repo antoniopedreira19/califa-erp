@@ -1596,9 +1596,9 @@ ficam só os jobs do 4T." Os jobs do 3T que já existem no sistema (cerca de
   centavo.
 - **O saldo do extrato de 31/10 (R$ 401.229,23)** não sai da soma das linhas, por dois
   motivos:
-  - as três linhas de 26/10 esperam o OK do Tiago para serem ignoradas: −R$ 3.500.000,00
-    e −R$ 1.823,33, repetidas pelo extrato novo com outro texto, e −R$ 4.200,00, que só
-    o extrato parcial tem (DIV-042);
+  - as três linhas de 26/10, ignoradas com o OK do Tiago ("Pode ignorar", 02/11):
+    −R$ 3.500.000,00 e −R$ 1.823,33, repetidas pelo extrato novo com outro texto, e
+    −R$ 4.200,00, que só o extrato parcial tinha (DIV-042);
   - o formato novo não traz as aplicações e os resgates automáticos da ContaMax.
 
   Tirando as três, faltam R$ 2.092.475,58, que deve ser a divisão entre a conta

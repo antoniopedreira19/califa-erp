@@ -78,7 +78,7 @@ Rentabilidade: 2.738 jobs de 2023 a 2026. As abas de 2021 e 2022 ficam de fora, 
 | DIV-039 | Extrato · Centavos | Regra do sistema | 1 ou 2 centavos em 11 linhas | Decidido: pendentes até a fase da interface |
 | DIV-040 | Extrato · Linhas que só fecham em conjunto | Pendência de conciliação | R$ 95.780,30 e R$ 39.901,46 | Decidido: pendentes até a fase da interface |
 | DIV-041 | Extrato · Um pagamento, vários favorecidos | Pendência de conciliação | Quatro pagamentos | Aberta: quando os jobs entrarem |
-| DIV-042 | Extrato · Saída sem linha na planilha | Pendência de conciliação | R$ 4.200,00 | Aberta: só o extrato parcial tem a linha; espera o OK para ignorar |
+| DIV-042 | Extrato · Saída sem linha na planilha | Pendência de conciliação | R$ 4.200,00 | Resolvida: só o extrato parcial tinha a linha; ignorada em 02/11 |
 | DIV-043 | Extrato · Seis linhas sem Tipo na planilha | Pendência de conciliação | R$ 160.546,59 e R$ 464,72 no saldo | Aberta: falta saber o que são |
 | DIV-044 | Extrato · Entradas e saídas de 26 a 30/10 sem linha na planilha | Pendência de conciliação | +R$ 76.533,34 e −R$ 36.386,97 | Aberta: falta saber o que são |
 | DIV-045 | Extrato · Linhas da planilha de 27/10 a 01/11 sem linha no banco | Pendência de conciliação | −R$ 66.923,42 no saldo | Aberta: o extrato até 03/11 não as tem |
@@ -405,7 +405,7 @@ Apuradas na conciliação de outubro, em 02/11/2026.
 ### DIV-042 · Saída sem linha na planilha
 
 - **Diferença:** −R$ 4.200,00 de 26/10 na California Santander, sem linha na planilha.
-- **Situação:** aberta. O extrato desse dia era parcial: foi gerado antes do fim do dia. O extrato completo, de 31/10, não tem essa linha. Ela é uma das três linhas de 26/10 que esperam o OK do Tiago para serem ignoradas, com as duas que o extrato novo repetiu com outro texto (−R$ 3.500.000,00 e −R$ 1.823,33).
+- **Situação:** resolvida. O extrato desse dia era parcial: foi gerado antes do fim do dia. O extrato completo, de 31/10, não tem essa linha. Com o OK do Tiago ("Pode ignorar", 02/11/2026), ela foi ignorada na conciliação junto com as duas que o extrato novo repetiu com outro texto (−R$ 3.500.000,00 e −R$ 1.823,33). Cada uma guarda o motivo, e o Desfazer em Conciliados volta atrás.
 
 ### DIV-043 · Seis linhas sem Tipo na planilha
 
