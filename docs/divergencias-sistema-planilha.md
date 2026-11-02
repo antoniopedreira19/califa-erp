@@ -74,8 +74,8 @@ Rentabilidade: 2.738 jobs de 2023 a 2026. As abas de 2021 e 2022 ficam de fora, 
 | DIV-036 | Paypal · R$ 12.873,47 | Falta carregar | R$ 12.873,47 | Aberta: até o lançamento |
 | DIV-037 | Contas a pagar · Retenção em quatro PPs | Pendência de conciliação | R$ 267.236,00 | Aberta: falta decidir |
 | DIV-038 | Extrato · Estorno de 02/10 | Pendência de conciliação | R$ 4.200,00 no saldo | Aberta: o saldo do sistema fica abaixo |
-| DIV-039 | Extrato · Centavos | Regra do sistema | 1 ou 2 centavos em 11 linhas | Sem efeito acima de centavos |
-| DIV-040 | Extrato · Linhas que só fecham em conjunto | Pendência de conciliação | R$ 95.780,30 e R$ 39.901,46 | Fecham no conjunto, não linha a linha |
+| DIV-039 | Extrato · Centavos | Regra do sistema | 1 ou 2 centavos em 11 linhas | Decidido: pendentes até a fase da interface |
+| DIV-040 | Extrato · Linhas que só fecham em conjunto | Pendência de conciliação | R$ 95.780,30 e R$ 39.901,46 | Decidido: pendentes até a fase da interface |
 | DIV-041 | Extrato · Um pagamento, vários favorecidos | Pendência de conciliação | Quatro pagamentos | Aberta: quando os jobs entrarem |
 | DIV-042 | Extrato · Saída sem linha na planilha | Pendência de conciliação | R$ 4.200,00 | Aberta: extrato de 26/10 parcial |
 | DIV-043 | Extrato · Quatro linhas sem Tipo na planilha | Pendência de conciliação | R$ 25.025,92 e R$ 464,72 no saldo | Aberta: falta saber o que são |
@@ -385,12 +385,14 @@ Apuradas na conciliação de outubro, em 02/11/2026.
 - **Diferença:** 1 ou 2 centavos por linha, de retenções e rateios, em 11 linhas da California Santander.
 - **Linhas:** pagamentos de R$ 232,75, R$ 10.646,18, R$ 201.747,15, R$ 3.859,63, R$ 3.119,99 e R$ 17.250,55; recebimentos de R$ 277.114,49, R$ 225.886,04, R$ 141.373,45 e R$ 20.441,58; uma do só DRE, de R$ 10.938,52.
 - **Para a gestão:** arredondamento. Nenhum valor muda acima de centavos.
+- **Situação:** decidido pelo Tiago em 02/11/2026: as linhas ficam pendentes na conciliação até a fase da interface. Hoje a ligação com o histórico só aceita valor exato. A regra para diferença de centavos será desenhada para os usuários, que vão encontrar os mesmos casos.
 
 ### DIV-040 · Linhas que só fecham em conjunto
 
 - **California Santander, 14/10:** três TEDs (R$ 25.766,50, R$ 30.209,00 e R$ 39.804,80, R$ 95.780,30 no total) fecham ao centavo com três notas (R$ 29.000,00, R$ 31.600,00 e R$ 44.800,00) e 14 retenções, mas não nota a nota: o TED de R$ 30.209,00 é o líquido da nota de R$ 34.000,00.
 - **BB California, 20/10:** os créditos de R$ 14.977,91 e R$ 24.923,55 do banco contra as linhas de R$ 5.110,54 e R$ 34.790,92 da planilha. São R$ 39.901,46 dos dois lados.
 - **Para a gestão:** o total bate. A planilha divide os valores de outro jeito.
+- **Situação:** decidido pelo Tiago em 02/11/2026: as linhas ficam pendentes até a fase da interface. Hoje a ligação com o histórico aceita uma linha do banco por vez. Ligar várias linhas do banco a várias da planilha será desenhado para os usuários.
 
 ### DIV-041 · Um pagamento, vários favorecidos
 
