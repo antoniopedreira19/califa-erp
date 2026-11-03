@@ -56,7 +56,7 @@ const montar = (notasFornecedor: NotaDoBanco[], pagamentos: Entrada["pagamentos"
     notas: [],
     jobs: [],
     recebimentos: [],
-    notasFornecedor,
+    notasFornecedor, mutuos: [],
     pagamentos,
     aprovacoes: [],
   }).fatos.notasFornecedor;
@@ -165,6 +165,7 @@ test("o adiantamento conta na emissão da nota, com a retenção junto; o recebi
       recebimento("depois", "nf1", "2026-11-03"),
     ],
     notasFornecedor: [],
+    mutuos: [],
     pagamentos: [],
     aprovacoes: [],
   });

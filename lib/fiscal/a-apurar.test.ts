@@ -182,6 +182,7 @@ function fatosEm(hoje: string, extras: RecebimentoFiscal[] = []): FatosFiscais {
     notas: [NF1204, NF1205, NF2051].filter((n) => n.conhecida_em <= hoje),
     recebimentos: [RC3, RC7, ...extras].filter((r) => r.data <= hoje),
     notasFornecedor: [],
+    mutuos: [],
   };
 }
 
@@ -290,7 +291,7 @@ test("nota com vários jobs: os códigos no rótulo, sem job no item e o PIS + C
     { ...J1107, valor: 7500 },
     { ...job("j9", "TES-1109/26", "Podcast", "hitlab-g", "Podcast"), valor: 2500 },
   ]);
-  const fatos: FatosFiscais = { notas: [nf], recebimentos: [], notasFornecedor: [] };
+  const fatos: FatosFiscais = { notas: [nf], recebimentos: [], notasFornecedor: [], mutuos: [] };
   const [l] = blocosAApurar(CAD, fatos, [titulo("td", "nf-dupla", 1, 1, 10000, "2026-11-10")], "2026-10-21")[0].linhas;
   assert.equal(l.rotulo, "NF 1300 · parcela 1/1 · TES-1107/26 e TES-1109/26");
   assert.equal(l.job_id, null);
@@ -433,7 +434,7 @@ test("no fluxo: cota única sem 'cota 1/1'; IRPJ/CSLL rateado na proporção do 
   const hoje = "2026-11-04";
   const nfA = nota("nf-a", "1400", "hit:90.01-9-99:2026-01-01", "2026-10-20", 9000, [{ ...J1107, valor: 9000 }]);
   const nfB = nota("nf-b", "1401", "hit:90.01-9-99:2026-01-01", "2026-10-21", 3000, [{ ...job("j9", "TES-1109/26", "Podcast", "hitlab-g", "Podcast"), valor: 3000 }]);
-  const fatos: FatosFiscais = { notas: [nfA, nfB], recebimentos: [], notasFornecedor: [] };
+  const fatos: FatosFiscais = { notas: [nfA, nfB], recebimentos: [], notasFornecedor: [], mutuos: [] };
   const blocos = blocosAApurar(CAD, fatos, [titulo("ta", "nf-a", 1, 1, 9000, "2026-11-10"), titulo("tb", "nf-b", 1, 1, 3000, "2026-11-12")], hoje);
   const [t4] = irpjCsllAApurar(CAD, fatos, blocos, hoje);
   // R$ 12 mil: base 3.840; IRPJ 576 e CSLL 345,60 — abaixo de R$ 2 mil, cota única.

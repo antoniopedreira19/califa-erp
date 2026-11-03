@@ -228,6 +228,8 @@ export interface Fornecedor {
   tenant_id: string;
   tipo_pessoa: TipoPessoa;
   nome: string;
+  /** Faz mútuo com o grupo sem ter conta no sistema (decisão 230). */
+  empresa_de_fora?: boolean;
   razao_social: string | null;
   cpf_cnpj: string | null;
   email: string | null;
@@ -3492,6 +3494,12 @@ export interface EmpresaContabil {
   id: string;
   tenant_id: string;
   razao_social: string;
+  /** A gerencial dos lançamentos sem documento deste CNPJ (decisão 230). */
+  empresa_gerencial_id?: string | null;
+  /** A regional do que este CNPJ paga sem documento. Vazia é TD. */
+  regional_padrao_id?: string | null;
+  /** IOF do mútuo: true fica junto dele; false entra em Custo Tributário. */
+  iof_do_mutuo_abaixo_do_lucro?: boolean;
   nome_fantasia: string | null;
   cnpj: string; // sempre 14 dígitos, sem máscara
   ativo: boolean;
@@ -3619,6 +3627,8 @@ export type OrigemLancamento =
   // empresa e sem plano de contas, fora do DRE e do fluxo consolidado.
   | "transferencia_saida"
   | "transferencia_entrada"
+  | "mutuo_saida"
+  | "mutuo_entrada"
   // O recebimento antes da NF (decisão 130), enquanto a nota não sai. Na
   // emissão ele vira `titulo_baixa` da parcela 1.
   | "recebimento_antes_nf"
@@ -3871,8 +3881,10 @@ export type SituacaoDaCargaHistorico = "carregando" | "ativa" | "substituida" | 
 /** `periodo`: a planilha de um período até 30/09/2026. `cauda`: depois do
  *  corte, só os movimentos e as notas dos jobs até o 3T que não existem no
  *  sistema (decisão 211, A6). `so_dre`: depois do corte, as linhas já pagas
- *  pelo sistema, que contam no resultado e não no saldo. */
-export type TipoDaCargaHistorico = "periodo" | "cauda" | "so_dre";
+ *  pelo sistema, que contam no resultado e não no saldo. `previsao` (decisão
+ *  232): o que a planilha prevê para depois da exportação; conta no saldo e no
+ *  resultado só depois de ligado a uma linha do banco. */
+export type TipoDaCargaHistorico = "periodo" | "cauda" | "so_dre" | "previsao";
 
 export type TabelaDoHistorico = "rateio" | "saldos" | "jobs" | "notas" | "movimentos";
 
@@ -4417,6 +4429,8 @@ export interface ContaAvulsa {
   /** Rendimento: o mês, sempre no dia 1 ("2026-09-01"). Um por conta e
    *  por mês. `null` fora do rendimento. */
   competencia: string | null;
+  /** Número da nota, nas notas de sócio (decisão 231). `null` nas outras. */
+  numero_nf: string | null;
   criado_por: string;
   created_at: string;
   updated_at: string;
@@ -5615,7 +5629,7 @@ export interface NotaFiscalDaPP {
 // (`lib/fiscal/apuracao.ts`); o banco guarda a aprovação e os títulos.
 // ---------------------------------------------------------------------------
 
-export type TributoFiscal = "ISS" | "PIS" | "COFINS" | "IRPJ" | "CSLL" | "ISS_RET" | "CSRF" | "IRRF";
+export type TributoFiscal = "ISS" | "PIS" | "COFINS" | "IRPJ" | "CSLL" | "ISS_RET" | "CSRF" | "IRRF" | "IOF";
 
 export interface FiscalAprovacao {
   id: string;

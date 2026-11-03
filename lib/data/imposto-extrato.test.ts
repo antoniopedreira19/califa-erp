@@ -26,6 +26,7 @@ function linha(p: Partial<LinhaSemSaldo> & Pick<LinhaSemSaldo, "id" | "valor">):
     descricao: "Lançamento",
     natureza: "saida",
     fornecedor_nome: null,
+    tri_do_tipo: null,
     job_id: null,
     job_codigo: null,
     tipo_codigo: "02",

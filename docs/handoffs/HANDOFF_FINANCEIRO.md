@@ -8756,3 +8756,104 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **A lista** vem da conferência com o banco, em `<versão>/so-dre/linhas.json`, fora do git. Gere com `empacotar.ts --so-dre`.
 - **Regra:** a mesma linha não pode estar na cauda e no só DRE. O empacotador e o banco recusam.
 - **Índice:** `uq_historico_cargas_ativa_periodo` passou a incluir o tipo.
+
+## ⚠️ Nota de 2026-10-31 — a ordem do resto de outubro e as transferências com a XP (decisão 211)
+
+- **Ordem:** transferências; mútuo; linhas sem job; linhas soltas; empréstimo de 25/10; por último, os jobs dentro e fora do sistema.
+- **Transferências:** 8 linhas do banco registradas e conciliadas, de TR-00058 a TR-00065. Sem mudança de código.
+- **Atenção:** a XP California e a XP GoCrazy ficam negativas até o saldo inicial entrar pelo extrato.
+- **Linha de chegada:** a diferença final entre banco e sistema tem de ser a dos jobs reservados, com os valores na decisão 211.
+
+## ⚠️ Nota de 2026-10-31 (2) — Mútuo entre empresas (decisão 230)
+
+- **O que mudou:** o mútuo entra pelo Novo lançamento, pela linha do banco e pela tela nova Financeiro › Mútuos entre empresas. Mora em `transferencias_contas`, com `tipo = 'mutuo'`.
+- **Pernas:** duas entre CNPJs do grupo; uma com empresa de fora (`fornecedores.empresa_de_fora`). Tipo 12 · 998 Mútuo interno, regional TD.
+- **Conciliação:** seção nova "Mútuo entre empresas", com "Lançar mútuo", e "IOF do mútuo" no "Lançar avulso".
+- **Fluxo de caixa:** linhas (−) e (+) Mútuo interno; o mútuo a transferir aparece como previsto.
+- **Extrato:** a perna traz a outra empresa como fornecedor e o trimestre do Tipo.
+- **Saldo de abertura:** carregado por SQL em `mutuos_saldo_abertura`, sem valores no repositório.
+- **Apuração do IOF:** uma guia por CNPJ que emprestou e por mês, só para empresa de fora, a partir de outubro. Vale o valor da guia, e o calculado fica ao lado. Código em `lib/fiscal/iof-mutuo.ts`.
+- **Impostos a Pagar:** o detalhe do título em aberto ganhou "Corrigir o valor".
+
+## ⚠️ Nota de 2026-11-02 — o IOF que já está no histórico (decisão 230)
+
+- **O que mudou:** a guia de 15/10 da GoCrazy, do mútuo com a Community, continua como linha do histórico e agora soma no IOF do par. `mutuos_iof_historico` marca a linha do banco, e `vw_mutuos_iof_historico` traz o valor dela.
+- **Sem contar duas vezes:** nenhum movimento foi criado ou alterado. DRE, fluxo de caixa e saldo não mudam.
+- **Abertura:** o IOF pago da abertura GoCrazy × Community volta ao valor de 30/09. O total da tela não muda.
+
+## ⚠️ Nota de 2026-11-02 (2) — a guia presa à linha do banco e o trimestre do histórico (decisões 230 e 211)
+
+- **Guia:** a marcação passou da digital da planilha para a linha do banco. Editar a linha na planilha não tira mais a guia do IOF pago. A digital fica só como registro.
+- **Índice:** a FK do pagador de `mutuos_iof_historico` ganhou índice.
+- **Extrato:** as linhas do histórico mostram o trimestre do Tipo da planilha, e não o da data. Só muda a coluna: saldo, fluxo e DRE ficam iguais. Vale para as 1.661 linhas da cauda, e 1.652 delas mudam de trimestre.
+
+## ⚠️ Nota de 2026-11-02 (3) — a cauda e o só DRE até o extrato de cada conta (decisão 211)
+
+- **O que mudou:** a cauda leva também o DRE sem job do 4T, e as duas cargas vão até o extrato de cada conta (`so-dre/cortes.json`). Base: a planilha de 01/11.
+- **Só DRE:** passa a ter também "a planilha diz, o sistema ainda não tem". São 322 linhas: 97 com caixa no sistema e 225 sem, estas listadas à parte em `so-dre/linhas-sem-caixa.json`.
+- **Cuidados:** job não lançado sai do só DRE e vai para a cauda. A futura DRE do sistema precisa de corte, ou as baixas somam com essas linhas.
+- **Carga:** primeiro a cauda, depois o só DRE. A lista do só DRE sai da conferência com o banco e precisa ser refeita a cada planilha: o `id` muda, e a `digital` muda se data, texto, fornecedor, Tipo ou job mudarem.
+
+## ⚠️ Nota de 2026-11-02 (4) — Notas de sócio no Tipo 15 (decisão 231)
+
+- **Plano:** o Tipo 15 passa a Ambos e ganha o subtipo 15.001 "Notas de sócio". Regra em `lib/financeiro/notas-de-socio.ts` e, no banco, em `_eh_notas_de_socio`.
+- **Conciliação:** seção nova "Empresa de fora". O PIX de quem tem esse cadastro não aparece mais como "Devolução de mútuo": a linha pergunta em "Lançar". O "Lançar avulso" das outras linhas de crédito também oferece Notas de sócio, já preenchido.
+- **Recebimento avulso:** com esse subtipo, pede o número da nota (`contas_avulsas.numero_nf`) e não pede rateio. O número vai para a descrição.
+- **Pagamento avulso:** no mesmo subtipo, também sem rateio, ao criar e ao editar.
+- **Regional:** Extrato e Títulos mostram TD. A trava do rateio (`exige_rateio_conta_avulsa`, `criar_conta_avulsa`, `substituir_rateio_conta_avulsa`) abre exceção só para este subtipo.
+- **Empresa:** `banco.conta.empresaId` traz a gerencial do CNPJ da conta, e a nota já abre com ela.
+- **Conferido:** funções em transação desfeita; tela real na Conta Teste, com extrato simulado: criar, baixar, conciliar, desfazer, editar e excluir. As 4 linhas do arquivo `teste-notas-de-socio.ofx` ficaram ignoradas nessa conta.
+- **Planilha:** segue diferente na linha da DRE (DIV-001). Ver a decisão.
+
+## ⚠️ Nota de 2026-11-02 (5) — as linhas soltas, pelo favorecido do dia inteiro (decisão 211)
+
+- **Achado:** a linha do banco é sempre a soma das linhas de **um** favorecido no mesmo dia. As "somas de favorecidos diferentes" vinham de pares ligados só pelo valor: a linha da planilha ficava presa a outra linha do banco, de mesmo valor ou de outro dia. Banco e planilha batem por dia depois de soltar 40 ligações de data errada.
+- **Refeito na California Santander e na GoCrazy:** pareamento do mês inteiro por favorecido (programação inteira, `scipy`), conferido contra o que estava gravado: 115 linhas desfeitas e 137 religadas (136 conferidas iguais ao plano; a outra é a da migration abaixo). Nenhuma linha segue ligada a outra data. Também: 8 somas do mesmo favorecido (BB, California Santander, Hitlab), a nota com retenção de 13/10 e a PP-00406 na linha de 23/10 (estava na de 20/10).
+- **Migration `20261102500001`:** na troca da cauda, a linha do banco que perde parte das linhas da planilha voltava a pendente com a outra parte presa, e nem conciliar nem desfazer resolviam. A conclusão da cauda agora solta essa parte. A linha da GoCrazy (ordem 3) recuperou a ligação de 30/10.
+- **As 210 pendentes têm motivo:** 171 esperam os jobs do 4T (o par está no só DRE) e 19 têm parte no só DRE; 10 diferem em 1 ou 2 centavos; 5 só fecham em conjunto (3 TEDs de 14/10 e 2 créditos do BB de 20/10); 4 sem classificação; 1 sem explicação (−R$ 4.200 de 26/10). A conciliação pelo histórico exige soma exata e uma linha só: centavos e conjunto esperam o Tiago.
+
+## ⚠️ Nota de 2026-11-02 (6) — o registro de divergências com a planilha (decisão 211)
+
+- **Pedido do Tiago (31/10):** toda diferença do sistema em relação à planilha no histórico documentada num lugar só, explicável para a gestão. Ficou em `docs/divergencias-sistema-planilha.md`: DIV-001 a DIV-042, cada uma com valor, causa, qual número vale e uma frase para a gestão. Só "omissão da planilha" com a fórmula ou o texto da célula como prova.
+- **Conferência (planilha de 01/11, cargas de 02/11):** DRE, regional, rentabilidade e faturamento, célula a célula, decompostos em planilha − previsões − falta carregar − regra = sistema. A soma fecha nas 25.927 células, e nenhuma diferença de regra ficou sem explicação. A coluna do sistema é igual ao banco: 66.112 linhas e os mesmos 1.013 agregados da DRE.
+- **3T:** as 64.038 linhas até 30/09 estão no sistema com valor, data, Tipo e job iguais; 24 só têm texto diferente (DIV-029).
+- **Achados novos com prova:** espaço sobrando no texto da aba Santander, que o SUMIFS deixa de fora (DIV-015, seis casos); TOTAL CO da Hitlab sem a coluna do PayPal (DIV-027); um job em duas linhas por espaço no nome (DIV-028); crédito no Tipo CO somado como receita (DIV-026).
+- **Repositório público:** o registro tem só totais. A tabela mensal do repasse aos sócios e as linhas da planilha ficam fora. O comparador temporário é uma página privada, sem as linhas; a versão com as linhas é um arquivo local, fora do git.
+- **Decisão 211:** os códigos DIV foram postos ao lado das frases, sem reescrever o texto, com uma nota datada sobre os R$ 630.000.
+
+## ⚠️ Nota de 2026-11-02 (7) — As previsões da planilha no sistema (decisão 232)
+
+- **Carga nova, tipo `previsao`:** as 3.044 previsões da planilha de 01/11 (R$ 70,4 mi de entradas e R$ 54,4 mi de saídas), carregadas pela tela de Cadastros › Histórico da planilha. Pacote com `empacotar.ts --previsoes`.
+- **Antes de acontecer, não somam:** saldo, Extrato, fluxo de caixa, regional e rentabilidade leem só a previsão ligada ao banco. A DRE do histórico ganha o seletor "Só realizado / Com previsões" (`historico_dre` com `p_previsoes`; a versão de três argumentos segue e chama a nova com falso).
+- **Conciliação:** depois da cauda e dos títulos, a linha do banco posterior ao dia da planilha procura a previsão de mesmo valor na conta, de 10 dias antes da data prevista em diante, sem limite de atraso (revisto no mesmo dia, para a previsão vencida não se perder). Só a única se resolve sozinha. Ligada, a previsão fica com a data do banco (gatilho `trg_historico_previsao_na_data_do_banco`; a prevista fica em `data_prevista`), e o Desfazer devolve a data prevista.
+- **Troca de versão:** a mesma previsão herda a ligação; a já ligada que a versão nova não traz continua; a cauda que a traz como realizada herda a ligação, e a previsão sai.
+- **Conferido:** o realizado não mudou (DRE, regional, rentabilidade, saldos, resumo e fluxo iguais antes e depois); com previsões, a DRE de 2026 dá planilha − regra − falta carregar em cada empresa e trimestre. A tela da DRE e a conciliação da California Santander conferidas no navegador.
+
+
+## ⚠️ Nota de 2026-11-02 (8) — a carga até 01/11 e a California Santander até 31/10 (decisão 211)
+
+- **Cargas novas, pela tela de Cadastros › Histórico da planilha:** cauda (1.930 linhas, −R$ 4.133.840,82) e só DRE (384 linhas, +R$ 2.918.161,32) até 01/11 em todas as contas, da planilha de 01/11. O que vem depois do extrato de cada conta fica "a conciliar" até o extrato chegar.
+- **Empacotador:** `EMPRESTIMO_NO_EXTRATO_ATE` passa a 28/10, a data em que as duas devoluções de empréstimo aparecem no extrato da California Santander.
+- **Conferido:** o banco devolve os mesmos 1.017 agregados da simulação, que zerava o "falta carregar" em 2026. 1.632 ligações herdadas.
+- **Conciliação da California Santander:** 63 pares e 5 somas do mesmo dia e fornecedor pela ação Conciliar, e a TR-00068 (XP California → California Santander, R$ 3.300.001,04, 28/10) ligada à linha do banco. Sobram 50 linhas de 27 a 31/10: 40 esperam o job do 4T; as outras estão nas DIV-043, DIV-044 e DIV-045.
+- **Três linhas de 26/10 ignoradas** com o OK do Tiago ("Pode ignorar"): duas repetidas pelo extrato novo com outro texto e a de R$ 4.200,00, que só o extrato parcial tinha (DIV-042). Cada uma guarda o motivo, e a auditoria registra `extrato.linha_ignorada`.
+- **Esperando o Tiago:** o extrato da ContaMax de outubro, que explica o saldo do extrato de 31/10.
+
+## ⚠️ Nota de 2026-11-02 (9) — a aba Banco não quebra mais depois de importar um extrato (decisão 029)
+
+- **O erro:** depois de importar um extrato, a aba Banco da Conciliação parava com "Cannot read properties of undefined (reading 'id')", e só voltava recarregando a página. No grupo de linhas iguais (mesmo dia e valor, mais títulos que linhas), a tela guarda o título escolhido para cada linha. A importação faz o motor rodar de novo, e ele pode dar a outra linha o título que estava marcado ali: o grupo continuava com as mesmas linhas, mas a escolha guardada apontava para um título que tinha saído dele.
+- **A correção:** a chave do grupo (`chaveDoGrupo`, em `banco-tabela.tsx`) passa a incluir, além das linhas, o título marcado em cada uma e os títulos para trocar. Quando qualquer um deles muda, o grupo recomeça da escolha do motor. Uma troca feita pelo "Trocar…" continua valendo enquanto os dados do grupo não mudam.
+- **Conferido:** com os dados reais da California Santander, montando a tabela fora da página, sem gravar nada no banco. Antes da correção, o mesmo erro; depois, os 8 grupos com mais títulos que linhas mostram o título novo, sem erro. O "Trocar…" segue funcionando na página.
+
+## ⚠️ Nota de 2026-11-03 — as previsões da planilha no fluxo de caixa (decisão 232)
+
+- **O que entrou:** a `vw_fluxo_caixa` ganhou o ramo `previsao_planilha` (classe `previsao`), com as previsões da planilha que o sistema ainda não prevê. Ficam de fora:
+  - os jobs do sistema;
+  - a folha (DP) dos meses com folha no sistema;
+  - o imposto sem job de competência do 4T em diante, que vale o do Fiscal;
+  - o mútuo a transferir já cadastrado.
+- **A previsão ligada ao banco** passa a contar como realizada no fluxo, como o saldo já contava.
+- **Na carga de 01/11:** 2.433 previsões, com R$ 52,20 mi de entradas e R$ 44,14 mi de saídas.
+- **Na tela:** a linha virou "Só previsão (jobs, recorrências e planilha)", e a descrição da página cita a planilha.
+- **Migrations:** `20261103100001` e `20261103100002`. A segunda corrige o nulo do Tipo vazio.
+- **Decidido (Tiago, 03/11):** as saídas "Salário" do Tipo CO em novembro e o imposto dos jobs do 4T ficam como estão até os jobs entrarem no sistema.

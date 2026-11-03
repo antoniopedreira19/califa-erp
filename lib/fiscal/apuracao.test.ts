@@ -396,7 +396,7 @@ const NOTAS_FORNECEDOR = [
 ];
 
 /** Todos os fatos, sem filtro de data: o motor filtra por `asOf`. */
-const FATOS: FatosFiscais = { notas: NOTAS, recebimentos: RECEBIMENTOS, notasFornecedor: NOTAS_FORNECEDOR };
+const FATOS: FatosFiscais = { mutuos: [], notas: NOTAS, recebimentos: RECEBIMENTOS, notasFornecedor: NOTAS_FORNECEDOR };
 
 // ---------------------------------------------------------------------------
 // Utilidades dos testes
@@ -902,7 +902,7 @@ describe("equivalência com o protótipo aprovado em 02/10/2026", () => {
 // 2. Casos de borda
 // ---------------------------------------------------------------------------
 
-const SEM_FATOS: FatosFiscais = { notas: [], recebimentos: [], notasFornecedor: [] };
+const SEM_FATOS: FatosFiscais = { notas: [], recebimentos: [], notasFornecedor: [], mutuos: [] };
 
 const notaDeTeste = (parcial: Partial<NotaSaidaFiscal> & Pick<NotaSaidaFiscal, "id" | "emissao" | "valor">): NotaSaidaFiscal => ({
   numero: parcial.id.toUpperCase(),
@@ -1068,6 +1068,7 @@ describe("casos de borda", () => {
 
   test("saldo credor passa para o mês seguinte, inclusive por um mês sem movimento", () => {
     const fatos: FatosFiscais = {
+      mutuos: [],
       notas: [notaDeTeste({ id: "n1", emissao: "2026-10-10", valor: 10000 }), notaDeTeste({ id: "n2", emissao: "2026-12-10", valor: 100000 })],
       recebimentos: [],
       notasFornecedor: [nfDeTeste({ id: "c1", emissao: "2026-10-15", valor: 50000 })],
@@ -1148,6 +1149,7 @@ describe("casos de borda", () => {
 
   test("rateio proporcional do crédito (decisão 146): sai a parte da receita do mês no 12.08, e o job não entra", () => {
     const fatos: FatosFiscais = {
+      mutuos: [],
       notas: [
         // Novembro: 55 mil no 12.08 de 100 mil emitidos → sai 55% do crédito do mês.
         notaDeTeste({ id: "n1208", cnae_id: "ca-ssa:82.30-0-01-12.08", emissao: "2026-11-11", valor: 55000, jobs: [{ ...J.j1102, valor: 55000 }] }),
@@ -1206,6 +1208,7 @@ describe("casos de borda", () => {
 
   test("12.08 no lucro real: guia própria (8109/2172), o crédito não a abate, e a retenção da nota do 12.08 sim", () => {
     const fatos: FatosFiscais = {
+      mutuos: [],
       notas: [
         notaDeTeste({ id: "n-normal", emissao: "2026-11-03", valor: 100000, jobs: [{ ...J.j1101, valor: 100000 }] }),
         notaDeTeste({ id: "n-1208", cnae_id: "ca-ssa:82.30-0-01-12.08", emissao: "2026-11-05", valor: 50000, jobs: [{ ...J.j1102, valor: 50000 }] }),
@@ -1407,6 +1410,7 @@ describe("casos de borda", () => {
     const sp = notaDeTeste({ id: "nsp", estabelecimento_id: "ca-sp", cnae_id: "ca-sp:73.19-0-99", emissao: "2026-10-09", valor: 10000 });
     const ssa = notaDeTeste({ id: "nssa", emissao: "2026-10-09", valor: 10000 });
     const fatos: FatosFiscais = {
+      mutuos: [],
       notas: [sp, ssa, notaDeTeste({ id: "nssa2", emissao: "2026-11-09", valor: 50000 })],
       recebimentos: [recebimento("rsp", "nsp", "2026-11-20", 10000, { ISS: 500 }), recebimento("rssa", "nssa", "2026-11-20", 10000, { ISS: 200 })],
       notasFornecedor: [],

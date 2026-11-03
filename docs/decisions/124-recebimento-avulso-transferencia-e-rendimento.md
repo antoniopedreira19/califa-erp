@@ -31,7 +31,7 @@ na tela (pedido dele): ela só mostra as linhas.
 | Recebimento avulso | Sem job; empresa; rateio em uma ou mais regionais com percentual; centro de custo pela lista com busca; "Recebido de" opcional. |
 | Rendimento (D3 b) | Pede **empresa e regional** (rateio se mais de uma): a DRE gerencial precisa. Só o **valor líquido**. |
 | Transferência (D17.2) | **Sem empresa, sem regional e sem plano de contas**: a conta já diz de qual CNPJ é o dinheiro. |
-| Transferência entre CNPJs (D4) | **Pendente.** Por ora só entre contas do mesmo CNPJ; entre CNPJs diferentes é recusada. |
+| Transferência entre CNPJs (D4) | Só entre contas do mesmo CNPJ; entre CNPJs diferentes é mútuo ([decisão 230](230-mutuo-entre-empresas.md)). |
 | Como gravar a transferência sem empresa e sem plano? (29/09) | **Opção A**: empresa e plano vazios só nas linhas de transferência, visíveis a administrador e financeiro, fora do DRE e do fluxo consolidado. "No futuro iremos revisar esse fluxo." |
 
 **Aprovado junto (29/09):** recebimento avulso e rendimento moram na conta
@@ -108,7 +108,7 @@ admin ou financeiro e o log na mesma transação.
 
 ## 5. Pendências
 
-- **D4:** transferência entre CNPJs diferentes (empréstimo entre empresas).
+- **D4:** transferência entre CNPJs diferentes (empréstimo entre empresas). Resolvida pela [decisão 230](230-mutuo-entre-empresas.md) em 31/10/2026.
 - **Home:** os números de "a receber" do mês continuam lendo só os títulos
   das notas.
 - **Conciliação, visão consolidada:** "Entradas" e "Saídas" do período somam

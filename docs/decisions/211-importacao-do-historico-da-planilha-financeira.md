@@ -10,8 +10,16 @@ California e BB Americas criadas antes) feitas e conferidas em 26/10/2026,
 A3 (o histórico de cada conta no Extrato da Conciliação) e a A4 (a DRE do
 histórico, o resultado por regional, a rentabilidade e o faturamento dos jobs
 do histórico, em Relatórios) no mesmo dia. A5: o 3T carregado em 27/10/2026,
-da versão de 25/10. A carga só DRE do 4T, em 30/10/2026. Próximo: o saldo
-inicial das contas em 01/10, pelo extrato de 30/09, e a trilha do 4T no sistema.
+da versão de 25/10. A carga só DRE do 4T, em 30/10/2026; a cauda e o só DRE até
+o extrato de cada conta, da versão de 01/11, em 02/11/2026, e no mesmo dia até
+01/11 em todas as contas, com o extrato da California Santander de 31/10.
+Próximo: as linhas soltas, fechar conta a conta e a interface da conciliação
+para os usuários.
+Toda diferença entre o sistema e a planilha fica no registro
+`docs/divergencias-sistema-planilha.md` (02/11/2026), com o código DIV que
+aparece ao lado das frases desta decisão. As previsões da planilha entraram no
+sistema pela decisão 232 (02/11/2026): "Só o realizado" continua a visão padrão
+da DRE, e o seletor mostra também as previsões.
 **Quem decidiu:** Tiago, no plano "Importação do histórico financeiro"
 (página privada de 25/10/2026), com as respostas D1, D2 e D3 dadas no mesmo
 dia: "Aprovo D1, D2 e D3 como você recomendou".
@@ -736,25 +744,33 @@ planilha (saída em `validacao/dre*.csv`).
   previsões), 2023 a 2025 batem nas quatro empresas, menos quatro células,
   todas explicadas pela planilha:
   - California 2024, perda, 3T: −40.000 digitados na fórmula, sem
-    lançamento;
+    lançamento (DIV-010);
   - California 2024, despesa administrativa, 4T: R$ 147,10 de uma linha do
-    Fundo Fixo que a padronização deixou de fora (E3);
+    Fundo Fixo que a padronização deixou de fora (E3) (DIV-011);
   - CMH 2023, custo tributário, 4T: a célula da Santander soma a coluna de
-    crédito em vez da de débito; o histórico conta os R$ 58.426,48;
+    crédito em vez da de débito; o histórico conta os R$ 58.426,48 (DIV-012);
   - Hitlab 2024, receita financeira, 3T: a planilha só soma o crédito; o
-    histórico desconta R$ 389,63 de débito.
+    histórico desconta R$ 389,63 de débito (DIV-013).
   Nos subtotais, além disso, só a posição da bonificação (o resultado líquido
   operacional da California em 2023, da CMH em 2023 e 2025 e da Hitlab em
-  2025) e o reinvestimento do ano da Hitlab, que a planilha deixa em zero.
+  2025) (DIV-014) e o reinvestimento do ano da Hitlab, que a planilha deixa em
+  zero (DIV-016).
 - **2026**, além do que falta carregar, difere pela regra em: crédito
-  negativo no custo tributário (R$ 10.250,24, que a planilha ignora);
+  negativo no custo tributário (R$ 10.250,24, que a planilha ignora) (DIV-006);
   créditos na distribuição de lucro (R$ 630.000 na Santander GoCrazy, que a
-  planilha ignora); a Santander GoCrazy, que a planilha deixa "n/a" no
+  planilha ignora) (DIV-001); a Santander GoCrazy, que a planilha deixa "n/a" no
   empréstimo à Hitlab (na 1ª carga, R$ 1.140.710 de custo da Hitlab pago por
-  ela); o mútuo na BB GoCrazy, que a planilha não soma (±350.000, sem efeito
-  no reinvestimento); e o total do ano da CMH, que na planilha não soma os
-  trimestres. Ficam também os espaços sobrando e a linha excluída que a E3
-  já apontava.
+  ela) (DIV-007); o mútuo na BB GoCrazy, que a planilha não soma (±350.000, sem
+  efeito no reinvestimento) (DIV-008); e o total do ano da CMH, que na planilha
+  não soma os trimestres (DIV-009). Ficam também os espaços sobrando (DIV-015) e
+  a linha excluída que a E3 já apontava.
+
+  ⚠️ **Os R$ 630.000 da distribuição de lucro (2026-11-02).** Na planilha de
+  01/11, a diferença é de R$ 630.000: as seis entradas de maio a outubro na
+  Santander GoCrazy (R$ 540.000, já nas cargas) e a de 01/11 (R$ 90.000, fora
+  das cargas). Não são os R$ 630.000 que entraram de abril a outubro nas duas
+  contas, porque a entrada de abril foi para a BB GoCrazy, que a planilha soma.
+  A explicação e a prova estão na DIV-001 de `docs/divergencias-sistema-planilha.md`.
 - **A tela hoje (1ª carga)** fica abaixo da planilha porque a carga vai de
   01/01/2023 a 30/06/2026 e não tem as previsões. Receita e lucro líquido da
   California, em milhões:
@@ -942,7 +958,7 @@ Uma linha da Hitlab de 2024 não tem a fórmula.
   - Das 610 células das abas DRE e Gerencial com critério do 3T 2026, 608
     batem. A linha "Empréstimo a CMH" do 3T na DRE da California soma
     R$ 9.759,00 a mais no histórico: é um lançamento com espaço sobrando no
-    texto, que o SUMIFS da planilha deixa de fora. A linha FIT do 3T na DRE CMH
+    texto, que o SUMIFS da planilha deixa de fora (DIV-015). A linha FIT do 3T na DRE CMH
     é um `#REF!` da própria planilha.
   - Os saldos de julho a setembro (30 contas × mês) batem e encadeiam.
   - O faturamento (14 abas × mês) bate, com 2 centavos de fração na Go Crazy
@@ -1192,6 +1208,9 @@ ficam só os jobs do 4T." Os jobs do 3T que já existem no sistema (cerca de
   do banco também para eles. A cauda nova substitui a ativa e solta as
   linhas do extrato ligadas a ela, que voltam a pendentes para a tela ligar
   à cauda nova.
+- **O Extrato mostra o trimestre do Tipo (02/11/2026):** a coluna da linha da
+  cauda vem de `competencia_trimestre`, como na planilha, e não da data do
+  pagamento. Só muda a coluna: saldo, fluxo e DRE ficam iguais.
 - **Simulação com os extratos de outubro (27/10/2026, sem gravar):** na
   California Santander, 644 das 1.478 linhas se resolvem pelo histórico e
   sobram 318 linhas da cauda sem linha do banco (R$ 1,66 mi: sobretudo
@@ -1381,6 +1400,252 @@ ficam só os jobs do 4T." Os jobs do 3T que já existem no sistema (cerca de
 - **Dois casos novos:** a tarifa de R$ 10 da GoCrazy de 01/10 conta duas vezes no
   saldo (na cauda e na regra). A PP-00406 (R$ 6.000) está na linha de 20/10, a
   planilha diz 23/10 e o total fecha.
+
+### A ordem do resto de outubro e as transferências com a XP (31/10/2026)
+
+- **Decidido** (Tiago, 31/10): a conciliação dos jobs do 4T que estão na planilha
+  e não no sistema, custos e recebimentos, fica por último. Ele vai lançar esses
+  jobs no sistema, e o que não conseguir vai para o histórico. Nada deles entrou
+  nas cargas: a PP-00276, que parecia ser, é do QPC-1001/26, que existe no sistema
+  e só não tem a ligação no de-para.
+- **Ordem:** transferências com XP e Paypal; mútuo; linhas sem job, pela cauda;
+  linhas soltas; o empréstimo de 25/10, quando houver comprovante ou extrato; e,
+  por último, os jobs dentro e fora do sistema, com uma passada final nas linhas.
+- **Fica reservado para esses jobs** (106 linhas da planilha): BB California
+  +R$ 3.968.769,09, California Santander −R$ 893.344,91 e Santander GoCrazy
+  −R$ 266.058,37. Terminadas as outras etapas, a diferença entre banco e sistema
+  tem de ser essa.
+- **Transferências:** das 24 linhas de outubro fora da cauda, 12 já estavam no
+  sistema (BB e Santander). Registradas as 8 linhas do banco que faltavam, de
+  TR-00058 a TR-00065 (4 com a XP California, 3 com a XP GoCrazy e 1 com o
+  Paypal), na data e no valor do banco. O lado da XP não tem extrato, como o da
+  ContaMax.
+- **A XP fica negativa até o saldo inicial entrar:** XP California
+  −R$ 1.850.964,31 e XP GoCrazy −R$ 2.000.895,65, com saldo inicial zerado. A
+  planilha não traz o resgate de R$ 3.000.963,93 na aba da XP nem os três da XP
+  GoCrazy: confere-se quando o extrato chegar.
+- **As linhas soltas ficam depois** porque dependem do resto: dia a dia, as
+  pendentes do banco fecham com o que falta ligar ou carregar. O BB fecha em 7 de 8
+  dias; até 22/10, sobram R$ 209.184,03 na California Santander e R$ 2.445,10 na
+  GoCrazy. O dia 23/10 não fecha (R$ 850.582,42 e R$ 138.158,50). Como 24 e 25 foram
+  fim de semana, a suspeita é que esses pagamentos caíram em 26/10, ainda sem
+  conferência.
+- **R$ 3,5 mi de 26/10:** a linha tem o mesmo histórico das aplicações de R$ 1,2 mi
+  e R$ 500 mil na XP. Pode ser XP, e não devolução de empréstimo. Só o comprovante
+  confirma.
+
+### Fechar o histórico até os extratos: as cargas de 02/11/2026
+
+- **Decidido** (Tiago, 02/11): "bater todo o historico até o que foi enviado, para
+  depois focarmos na interface e como os usuarios poderão estar lançando os
+  proximos e fazendo a conciliação por conta propria". Extratos novos entram na
+  fase da interface.
+- **Base:** a planilha exportada em 01/11, com cada conta até o seu extrato:
+  California Santander e BB até 26/10, GoCrazy até 27/10, Hitlab até 28/10, as
+  contas sem extrato até 26/10 (`<versão>/so-dre/cortes.json`). O que veio depois
+  fica de fora, como as devoluções de empréstimo e o resgate de R$ 3,3 mi de 28/10.
+- **Banco e planilha batem:** sem as varreduras para a ContaMax, a soma do dia bate
+  ao centavo em todos os dias até 23/10 na California Santander, na GoCrazy inteira
+  e no BB, exceto os R$ 400 mil de 26/10. A planilha de 25/10 não batia: 61 impostos
+  de 23/10 (R$ 935 mil) não existem com esses valores na planilha seguinte, e outras
+  linhas mudaram de data. Linha recente na planilha pode ser previsão.
+- **Cauda (1.752 linhas, −R$ 2.889.880,94):** sem job, passa a levar o DRE do 4T.
+  A regra de job não muda: só os até o 3T que não existem no sistema.
+- **O só DRE muda de sentido.** Tinha "o caixa já está no sistema". Passa a ter
+  também "a planilha diz, o sistema ainda não tem": são 322 linhas, R$ 3.073.714,05.
+  - 97 com o caixa no sistema (−R$ 1.047.641,25): as baixas de PP, as tarifas da
+    regra e as 7 linhas do mútuo. A linha sai da cauda mesmo quando a planilha a põe
+    em outro job: quem manda é a baixa.
+  - 225 sem o caixa (R$ 4.121.355,30): todas as linhas de job, dentro e fora do
+    sistema, listadas à parte em `<versão>/so-dre/linhas-sem-caixa.json`. Tiago, em
+    02/11, depois de ver os riscos: "Sim, carregar tudo".
+- **Os cuidados dessas 225:**
+  - O job que não for lançado no sistema sai do só DRE e vai para a cauda. Senão, o
+    caixa nunca entra no saldo.
+  - A futura DRE do sistema precisa de corte, ou as baixas somam com essas linhas.
+  - Se a baixa sair com outro valor ou competência, o DRE do histórico segue a
+    planilha.
+  - Os recebimentos entram sem imposto na rentabilidade do histórico: as notas só
+    vêm para os jobs da cauda.
+- **Ordem da carga:** primeiro a cauda, depois o só DRE. Uma linha que troca de carga
+  (a tarifa de R$ 10 da GoCrazy) trava a conclusão na ordem inversa. A tarifa contava
+  duas vezes no saldo, na cauda e na regra, e isso acabou.
+- **Índice de carga ativa:** o só DRE tem o mesmo período da cauda, e o índice passou
+  a incluir o tipo (migration `20261030500002`).
+- **Conferido:** saldos ao centavo antes e depois do só DRE; DRE da tela igual à
+  simulação; nenhuma linha nas duas cargas; a guia de R$ 4.426,17 do mútuo segue
+  marcada na mesma linha do banco. 1.199 ligações herdadas; das 27 soltas pela troca,
+  a tela refez parte sozinha.
+- **Lucro líquido de 2026 depois das cargas:**
+
+  | Empresa | 1T | 2T | 3T | 4T |
+  |---|---:|---:|---:|---:|
+  | Agência California | 5.191.590,51 | −9.178.994,68 | −9.161.246,03 | 4.354.021,82 |
+  | CCH | −1.738.836,94 | 1.615.251,44 | 10.298,36 | 1.008.183,02 |
+  | Hitlab | −73.420,59 | 695.965,60 | 211.525,89 | 199.918,47 |
+
+- **Ligações e transferências:** 111 linhas de mesma data e valor e 5 somas do mesmo
+  dia e favorecido, pela ação do botão Conciliar. 3 sugestões com data diferente não
+  foram aceitas: a planilha fecha com o banco no dia, então a linha tende a ser de um
+  job de mesmo valor. TR de R$ 3,5 mi para a XP e TR de R$ 400 mil do BB, de 26/10.
+- **Diferença entre banco e sistema, no corte:**
+
+  | Conta | Diferença | O que explica |
+  |---|---:|---|
+  | BB California | 3.968.769,09 | Recebimentos dos jobs fora do sistema |
+  | Santander GoCrazy | −290.924,07 | Custos de jobs |
+  | Santander Hitlab | −464,72 | 1 linha sem classificação |
+  | California Santander | 91.565,69 | Jobs, sem classificação, estorno e o 26/10 parcial |
+
+  Na California Santander: jobs fora do sistema −885.546,98; jobs do sistema
+  +1.316.183,79; sem classificação e estorno +29.225,92; 26/10 −368.297,04, porque o
+  extrato foi gerado às 15:17.
+
+### As linhas soltas: o favorecido do dia inteiro (02/11/2026)
+
+- **A regra de 30/10 vale e explica tudo.** A linha do banco é a soma das linhas de
+  um favorecido no mesmo dia. As somas que pareciam de favorecidos diferentes vinham
+  de pares ligados só pelo valor: a linha da planilha ficava presa a outra linha do
+  banco, de mesmo valor ou de outro dia. Exemplo: −R$ 171.800,00 de 20/10 fecha com 7
+  linhas do mesmo favorecido quando a de R$ 2.000,00, ligada a outro dia, se solta.
+- **A prova:** com as 40 ligações de outra data soltas, banco e planilha batem ao
+  centavo em cada dia da California Santander. As sobras do dia são as conhecidas:
+  o estorno de 02/10, os R$ 500 de 08 para 09/10, as entradas sem classificação, a
+  PP-00406 de 20 para 23/10 e o 26/10 parcial. O texto "PAGFOR PIX ... 9999.9999999999"
+  não identifica o favorecido: o número é a conta da própria empresa.
+- **Refeito:** o pareamento de outubro da California Santander e da GoCrazy, por
+  programação inteira: cada linha do banco recebe linhas da planilha de um
+  favorecido do mesmo dia, com soma exata, e o par que já existia fica quando serve.
+  O que já ligava várias linhas no mesmo dia não foi mexido. 115 linhas desfeitas, 137
+  religadas, conferidas no banco. Nenhuma linha segue ligada a outra data.
+- **Herança parcial na troca da cauda** (migration `20261102500001`): a linha do
+  banco que perdia parte das linhas da planilha voltava a pendente com a outra parte
+  presa. A conclusão da cauda agora solta essa parte. Uma linha da GoCrazy (ordem 3,
+  R$ 3.004,31) recuperou a ligação de 30/10.
+- **O estorno de 02/10 (R$ 4.200,00):** a planilha tem a saída e o estorno; o banco,
+  um "saiu e voltou". A cauda levou só a saída, porque o estorno não é DRE, e o saldo
+  do sistema fica R$ 4.200,00 abaixo. A saída conta na DRE da planilha. Na próxima
+  carga, ela vai para o só DRE.
+- **As 210 linhas pendentes, por motivo:**
+
+  | Motivo | California Santander | GoCrazy | BB | Hitlab |
+  |---|---:|---:|---:|---:|
+  | Par no só DRE: espera o job do 4T | 147 | 20 | 4 | – |
+  | Parte no só DRE: espera o job do 4T | 15 | 3 | 1 | – |
+  | 1 ou 2 centavos de diferença | 10 | – | – | – |
+  | Só fecha em conjunto | 3 | – | 2 | – |
+  | Sem classificação | 3 | – | – | 1 |
+  | Sem explicação (−R$ 4.200,00 de 26/10) | 1 | – | – | – |
+
+  Os centavos vêm das retenções e dos rateios da planilha. O conjunto: 3 TEDs de
+  14/10 (R$ 95.780,30) fecham ao centavo com 3 notas e 14 retenções, mas não nota a
+  nota; 2 créditos do BB de 20/10 (R$ 39.901,46) contra 2 linhas de outro valor. A
+  conciliação pelo histórico exige soma exata e uma linha do banco por vez.
+- **A diferença de saldo não muda:** ligar não mexe no saldo. Ela segue a tabela
+  acima, ao centavo.
+
+### A carga até 01/11 (02/11/2026)
+
+- **Decidido** (Tiago, 02/11): "Sim, preparar" e "Sim, carregar". Com o extrato da
+  California Santander até 31/10, a cauda e o só DRE vão até 01/11 em todas as contas
+  (`so-dre/cortes.json` com o padrão em 01/11). O que a planilha tem depois do extrato
+  de cada conta fica "a conciliar" até o extrato chegar: cerca de +R$ 2,75 mi no BB
+  California, −R$ 466 mil na Santander GoCrazy e −R$ 347 no Fundo Fixo.
+- **Empréstimo:** as duas devoluções que a planilha de 25/10 punha em 25/10 aparecem
+  no extrato em 28/10, principal mais juros, e a planilha de 01/11 já as tem em 28/10.
+  O empacotador aceita o empréstimo até 28/10 (`EMPRESTIMO_NO_EXTRATO_ATE`).
+- **Cauda:** 1.930 linhas, −R$ 4.133.840,82, com 67 notas e 216 jobs. **Só DRE:** 384
+  linhas, +R$ 2.918.161,32, com 78 jobs: as 322 de antes, 59 linhas de job fora da
+  cauda e 3 tarifas que a regra já paga.
+- **Conferido:** antes de carregar, a simulação zerou o "falta carregar" em toda
+  célula de 2026. Depois, o banco devolve os mesmos 1.017 agregados da simulação.
+  1.632 ligações herdadas.
+- **California Santander, 27 a 31/10:** 63 pares de mesma data e valor
+  (−R$ 198.079,41) e 5 somas do mesmo dia e fornecedor, pelo botão Conciliar:
+  - as duas devoluções de empréstimo, principal mais juros (−R$ 3.221.441,08);
+  - três linhas de R$ 12.900,00 numa saída de R$ 38.700,00;
+  - duas de imóvel numa de R$ 6.450,00;
+  - uma de R$ 500,00, entre três saídas iguais do banco.
+
+  O resgate de R$ 3.300.001,04 da XP, de 28/10, virou a TR-00068, da XP California
+  para a California Santander, ligada à linha do banco.
+- **As 50 linhas que sobram de 27 a 31/10:**
+
+  | Motivo | Linhas | Soma |
+  |---|---:|---:|
+  | Par no só DRE: espera o job do 4T | 40 | −182.074,67 |
+  | Entradas sem Tipo na planilha (DIV-043) | 2 | 135.520,67 |
+  | Entradas sem linha na planilha (DIV-044) | 3 | 76.533,34 |
+  | Saídas sem linha na planilha (DIV-044) | 4 | −12.386,97 |
+  | Duas linhas da planilha de fornecedores diferentes (DIV-045) | 1 | −350,00 |
+
+  Entre as 40, a saída de R$ 5.000,00 de 30/10 tem três linhas da planilha do mesmo
+  dia e valor (DP, CF e o DA da CCH), além de uma de job no só DRE. A de 03/11
+  (−R$ 13.000,00) tem a previsão de mesmo valor e dia. Como é custo de job do 4T,
+  fica para a PP.
+- **Linhas da planilha sem linha no banco, de 27/10 a 01/11 (DIV-045):** 22, que somam
+  −R$ 66.923,42:
+  - as duas de R$ 350,00 de 28/10, e uma delas é a do banco;
+  - uma de 29/10;
+  - 12 de 30/10 (−R$ 72.602,31);
+  - 7 entradas CT de 01/11 (+R$ 7.378,89).
+
+  O extrato vai até 03/11 e não as tem.
+- **A soma fecha no sistema:** o saldo do sistema, mais as pendentes do banco, menos as
+  linhas da planilha e os lançamentos sem banco, dá a soma das linhas do extrato, ao
+  centavo.
+- **O saldo do extrato de 31/10 (R$ 401.229,23)** não sai da soma das linhas, por dois
+  motivos:
+  - as três linhas de 26/10, ignoradas com o OK do Tiago ("Pode ignorar", 02/11):
+    −R$ 3.500.000,00 e −R$ 1.823,33, repetidas pelo extrato novo com outro texto, e
+    −R$ 4.200,00, que só o extrato parcial tinha (DIV-042);
+  - o formato novo não traz as aplicações e os resgates automáticos da ContaMax.
+
+  Tirando as três, faltam R$ 2.092.475,58, que deve ser a divisão entre a conta
+  corrente e a ContaMax. O extrato da ContaMax de outubro confirma.
+- **XP California:** fica negativa em 31/10 (−R$ 1.650.965,35), porque o sistema não
+  tem o saldo dela em 30/09 (A5).
+- **O 3T contra a planilha de fechamento (02/11):** com as previsões, a DRE do 3T bate
+  até o lucro líquido na Agência California, na CCH e na Hitlab, com no máximo
+  R$ 0,05 de arredondamento por linha. A tela mostra o mesmo lucro do 3T: R$ 2.961.951,88,
+  R$ 638.149,93 e R$ 1.653.334,84. Abaixo do
+  lucro, só as diferenças já registradas: distribuição de lucro (DIV-001), empréstimo à
+  Hitlab (DIV-007) e o texto com espaço do empréstimo à CCH (DIV-015). No regional da
+  CCH: os projetos do 3T (DIV-018) e R$ 7.000,01 de custo da Agency (DIV-046). Sem as
+  previsões, o 3T mostra só o que já passou pelo banco: o que falta acontecer espera a
+  conciliação.
+
+### Recomeçar as contas no último extrato (03/11/2026)
+
+O treinamento da conciliação precisa do saldo do sistema batendo com o banco, e hoje nenhuma
+conta principal bate na data do último extrato. A diferença vem de quatro lugares:
+- as aplicações e os resgates automáticos que o extrato novo da California Santander não traz;
+- as 50 linhas pendentes de 27 a 31/10;
+- os jobs do 4T, que ainda vão entrar no sistema;
+- as contas sem extrato.
+
+| Conta | Último extrato | Banco | Sistema na mesma data |
+|---|---|---|---|
+| California Santander | 31/10 | R$ 401.229,23 | −R$ 2.242.953,73 |
+| BB California | 26/10 | −R$ 100.000,00 | −R$ 4.068.769,09 |
+| Santander GoCrazy | 27/10 | R$ 53.668,60 | R$ 344.592,67 |
+| Santander Hitlab | 28/10 | R$ 0,00 | R$ 464,72 |
+
+**Decidido (Tiago, 03/11/2026):** "Faremos o recomendado de recomeçar no ultimo extrato, e
+depois vamos preenchendo as lacunas por aqui". O Tiago traz os extratos atualizados em 04/11.
+
+- Cada conta recomeça com o saldo do banco no dia do extrato mais recente, numa data só para
+  todas. O que vem antes vira histórico, na seção própria do Extrato, como na California
+  Santander em 27/10 (de 01/08 para 01/10).
+- A conta corrente e a aplicação recomeçam juntas, porque o banco aplica sozinho o que sobra
+  na corrente: California Santander com ContaMax, BB California com Rende Fácil.
+- As contas sem extrato (XP California, XP GoCrazy, Paypal, BB GoCrazy, Bradesco e Fundo Fixo)
+  precisam do saldo do banco numa data, por extrato ou pelo internet banking.
+- A troca do saldo inicial de conta com lançamento é destrutiva, e a tela não deixa. Vai por
+  migration, com os valores conferidos pelo Tiago conta a conta antes de aplicar.
+- Depois do recomeço, as lacunas e as divergências se resolvem no histórico, sem mexer no
+  saldo. Cada conta guarda um número de controle: o histórico somado até o corte menos o
+  saldo do banco no corte. Ele chega a zero quando não houver mais lacuna.
 
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas

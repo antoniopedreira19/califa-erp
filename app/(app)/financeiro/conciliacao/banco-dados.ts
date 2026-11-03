@@ -29,6 +29,8 @@ import type { createClient } from "@/lib/supabase/server";
 import type { ConciliadaComo, ExtratoLinhaComSituacao, ResolucaoSozinha } from "@/lib/types";
 import type { LancamentoDoMotor, RegraDoMotor } from "@/lib/conciliacao/motor";
 import type { HistoricoDoMotor } from "@/lib/conciliacao/historico";
+import type { ContextoDoMutuoNaConta, ParteDoMutuo } from "@/lib/financeiro/mutuo";
+import { contextoDoMutuoNaConta } from "../mutuos/dados";
 import { somaDias } from "@/lib/conciliacao/motor";
 import { contaTemNumero } from "@/lib/conciliacao/ofx";
 import { calcularSaldoAnterior } from "@/lib/calculos/saldo-conta";
@@ -154,6 +156,8 @@ export interface DadosDaAbaBanco {
     numero: string | null;
     /** Tem agência e número para reconhecer o arquivo. */
     temNumero: boolean;
+    /** A empresa gerencial do CNPJ da conta (decisão 230, D10). */
+    empresaId: string | null;
   };
   ultima: ImportacaoDoBanco | null;
   /** Os períodos de todas as importações: os dias que o extrato cobre. */
@@ -167,10 +171,16 @@ export interface DadosDaAbaBanco {
   remessasBaixadas: RemessaBaixada[];
   remessas: RemessaDaConta[];
   regras: RegraDaConta[];
+  /** O mútuo na conta aberta: o que reconhece a linha entre CNPJs (decisão 230). */
+  mutuo: ContextoDoMutuoNaConta & { partes: ParteDoMutuo[] };
   /** O saldo do sistema no fim do último dia do extrato. */
   saldoSistemaNoFim: number | null;
   /** A cauda do histórico da conta ainda sem linha do banco (A6). */
   historico: HistoricoDoMotor[];
+  /** As previsões da planilha da conta que ainda não aconteceram (decisão 232). */
+  previsoes: HistoricoDoMotor[];
+  /** O dia da planilha das previsões: a linha do banco até esse dia já estaria na planilha como realizada. */
+  previsoesDesde: string | null;
   /** As regionais ativas, para a regional da regra. */
   regionais: Array<{ id: string; nome: string; empresaId: string }>;
 }
@@ -263,6 +273,8 @@ function cancelamentoDe(l: LancamentoCru): CancelamentoDaBaixa | null {
       return l.fatura_cartao_id ? { tipo: "fatura_cartao", id: l.fatura_cartao_id } : null;
     case "transferencia_saida":
     case "transferencia_entrada":
+    case "mutuo_saida":
+    case "mutuo_entrada":
       return l.transferencia_id ? { tipo: "transferencia", id: l.transferencia_id } : null;
     case "imposto_baixa":
       return l.imposto_a_pagar_id ? { tipo: "imposto", id: l.imposto_a_pagar_id } : null;
@@ -280,6 +292,7 @@ type CaudaCrua = {
   descricao: string | null;
   fornecedor: string | null;
   extrato_linha_id: string | null;
+  carga: { tipo: string; planilha_versao: string | null } | null;
 };
 
 const assinado = (l: LancamentoCru) => (l.natureza === "entrada" ? Number(l.valor) : -Number(l.valor));
@@ -294,7 +307,9 @@ export async function carregarBancoDaConciliacao(
   const [contaRes, importacoesRes, linhasCruas, itensRes, regrasRes, regionaisRes] = await Promise.all([
     supabase
       .from("contas_bancarias")
-      .select("id, nome, banco, agencia, numero_conta, numero_conta_dv, saldo_inicial_data")
+      .select(
+        "id, nome, banco, agencia, numero_conta, numero_conta_dv, saldo_inicial_data, empresa:empresas_contabeis!empresa_contabil_id(empresa_gerencial_id)",
+      )
       .eq("tenant_id", tenantId)
       .eq("id", contaId)
       .maybeSingle(),
@@ -360,6 +375,7 @@ export async function carregarBancoDaConciliacao(
     numero_conta: string | null;
     numero_conta_dv: string | null;
     saldo_inicial_data: string;
+    empresa: { empresa_gerencial_id: string | null } | null;
   } | null;
   const conta: DadosDaAbaBanco["conta"] = {
     id: contaId,
@@ -368,6 +384,7 @@ export async function carregarBancoDaConciliacao(
     agencia: c?.agencia ?? null,
     numero: c?.numero_conta ? `${c.numero_conta}${c.numero_conta_dv ? `-${c.numero_conta_dv}` : ""}` : null,
     temNumero: c ? contaTemNumero(c) : false,
+    empresaId: c?.empresa?.empresa_gerencial_id ?? null,
   };
 
   const importacoes: ImportacaoDoBanco[] = (
@@ -535,16 +552,16 @@ export async function carregarBancoDaConciliacao(
           .in("extrato_linha_id", corrigidas)
           .is("desfeita_em", null)
       : Promise.resolve({ data: [], error: null }),
-    // A cauda do histórico (A6): desde o início da conta, da carga ativa.
+    // A cauda do histórico (A6) e as previsões (decisão 232): desde o início da conta, das cargas ativas.
     c?.saldo_inicial_data
       ? todasAsPaginas<CaudaCrua>(
           (de, ate) =>
             supabase
               .from("historico_movimentos")
-              .select("id, data, valor, job_nome, descricao, fornecedor, extrato_linha_id, carga:historico_cargas!inner(tipo, situacao)")
+              .select("id, data, valor, job_nome, descricao, fornecedor, extrato_linha_id, carga:historico_cargas!inner(tipo, situacao, planilha_versao)")
               .eq("tenant_id", tenantId)
               .eq("conta_bancaria_id", contaId)
-              .eq("carga.tipo", "cauda")
+              .in("carga.tipo", ["cauda", "previsao"])
               .eq("carga.situacao", "ativa")
               .gte("data", c.saldo_inicial_data)
               .order("data", { ascending: true })
@@ -577,10 +594,16 @@ export async function carregarBancoDaConciliacao(
   }
   const caudaPorLinha = new Map<string, LinhaDoBanco["historicos"]>();
   const historico: HistoricoDoMotor[] = [];
+  const previsoes: HistoricoDoMotor[] = [];
+  let previsoesDesde: string | null = null;
   for (const h of caudaCrua) {
     const item = { id: h.id, data: h.data, valor: Number(h.valor), job: h.job_nome, descricao: h.descricao, fornecedor: h.fornecedor };
     if (h.extrato_linha_id) {
       caudaPorLinha.set(h.extrato_linha_id, [...(caudaPorLinha.get(h.extrato_linha_id) ?? []), item]);
+    } else if (h.carga?.tipo === "previsao") {
+      previsoes.push(item);
+      const dia = h.carga.planilha_versao;
+      if (dia && (!previsoesDesde || dia > previsoesDesde)) previsoesDesde = dia;
     } else {
       historico.push(item);
     }
@@ -618,8 +641,16 @@ export async function carregarBancoDaConciliacao(
     remessas,
     regras,
     remessasBaixadas,
+    mutuo: await contextoDoMutuoNaConta(
+      supabase,
+      tenantId,
+      contaId,
+      linhas.filter((l) => !l.conciliada && !l.ignorada),
+    ),
     saldoSistemaNoFim: saldoNoFim === null ? null : r2(saldoNoFim),
     historico,
+    previsoes,
+    previsoesDesde,
     regionais: ((regionaisRes.data ?? []) as Array<{ id: string; nome: string; empresa_id: string }>).map((r) => ({
       id: r.id,
       nome: r.nome,

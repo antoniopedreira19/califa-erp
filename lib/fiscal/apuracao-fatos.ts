@@ -28,6 +28,8 @@
  * de uma baixa (`*_estorno`) não reduz o bruto aqui; a nota de BV e a avulsa
  * não sabem a regional (o rateio dela cai na empresa, sem regional).
  */
+import { carregarMutuosDoIof } from "./iof-mutuo-dados";
+import type { MutuoDoIof } from "./iof-mutuo";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { ImpostoRetido } from "@/lib/types";
 import { carregarCadastroFiscal, type CadastroFiscal } from "./cadastro";
@@ -177,8 +179,9 @@ function jobDoFato(j: JobDoBanco): JobDoFato {
 // ---------------------------------------------------------------------------
 
 export async function carregarFatosFiscais(supabase: SupabaseClient, tenantId: string): Promise<FatosDoBanco> {
-  const [cadastro, notasRes, recebimentosRes, ppsRes, aprovacoesRes] = await Promise.all([
+  const [cadastro, mutuos, notasRes, recebimentosRes, ppsRes, aprovacoesRes] = await Promise.all([
     carregarCadastroFiscal(supabase, tenantId),
+    carregarMutuosDoIof(supabase, tenantId),
     supabase
       .from("faturamentos")
       .select(
@@ -270,6 +273,7 @@ export async function carregarFatosFiscais(supabase: SupabaseClient, tenantId: s
     jobs: (jobsRes.data ?? []) as unknown as JobDoBanco[],
     recebimentos: (recebimentosRes.data ?? []) as unknown as RecebimentoDoBanco[],
     notasFornecedor: notasFornecedorBanco,
+    mutuos,
     pagamentos: (pagamentosRes.data ?? []) as unknown as PagamentoDoBanco[],
     aprovacoes: (aprovacoesRes.data ?? []) as unknown as AprovacaoDoBanco[],
   });
@@ -282,6 +286,7 @@ export function montarFatos(e: {
   jobs: JobDoBanco[];
   recebimentos: RecebimentoDoBanco[];
   notasFornecedor: NotaFornecedorDoBanco[];
+  mutuos: MutuoDoIof[];
   pagamentos: PagamentoDoBanco[];
   aprovacoes: AprovacaoDoBanco[];
 }): FatosDoBanco {
@@ -456,5 +461,5 @@ export function montarFatos(e: {
     cotas: Array.isArray(a.cotas) ? (a.cotas as Cota[]) : null,
   }));
 
-  return { cadastro: e.cadastro, fatos: { notas, recebimentos, notasFornecedor }, aprovacoes };
+  return { cadastro: e.cadastro, fatos: { notas, recebimentos, notasFornecedor, mutuos: e.mutuos }, aprovacoes };
 }

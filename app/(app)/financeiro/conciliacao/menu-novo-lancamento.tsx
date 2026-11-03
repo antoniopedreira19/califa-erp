@@ -18,6 +18,7 @@ import {
   Banknote,
   ChevronDown,
   HandCoins,
+  Handshake,
   Loader2,
   PiggyBank,
   Plus,
@@ -41,7 +42,8 @@ type Formulario =
   | "recebimento_avulso"
   | "antes_da_nf"
   | "rendimento"
-  | "transferencia";
+  | "transferencia"
+  | "mutuo";
 
 const ITENS: Array<
   | { secao: string }
@@ -92,12 +94,20 @@ const ITENS: Array<
     icone: ArrowLeftRight,
     cor: "text-sky-700",
   },
+  {
+    chave: "mutuo",
+    rotulo: "Mútuo entre empresas",
+    ajuda: "Empréstimo a outra empresa: fica abaixo do lucro",
+    icone: Handshake,
+    cor: "text-sky-700",
+  },
 ];
 
 const TIPO_DO_RECEBIMENTO: Partial<Record<Formulario, TipoDoRecebimentoAvulso>> = {
   recebimento_avulso: "recebimento_avulso",
   rendimento: "rendimento",
   transferencia: "transferencia",
+  mutuo: "mutuo",
 };
 
 export function MenuNovoLancamento({

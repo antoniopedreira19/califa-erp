@@ -3,6 +3,7 @@ import type { DocumentoTipo } from "@/lib/types";
 import { DOCUMENTO_TIPOS_FISCAIS, documentoTipoLabel } from "@/lib/types";
 import type { LancamentoLinha, OrigemDaTransacao } from "@/lib/calculos/saldo-conta";
 import { folhaDaBaixa } from "@/lib/financeiro/folha-no-extrato";
+import { ehCentroDasNotas, REGIONAL_DAS_NOTAS } from "@/lib/financeiro/notas-de-socio";
 
 /**
  * A LINHA DO EXTRATO, montada num lugar só (20/09/2026).
@@ -29,7 +30,12 @@ export const SELECT_LANCAMENTO_LINHA = `id, data_movimento, descricao, natureza,
          empresas(nome_fantasia, razao_social),
          plano_contas_tipos(codigo, nome),
          plano_contas_subtipos(codigo, nome),
-         transferencia:transferencias_contas(codigo),
+         transferencia:transferencias_contas(
+           codigo, tipo, trimestre,
+           conta_origem:contas_bancarias!conta_origem_id(empresa_contabil:empresas_contabeis(nome_fantasia)),
+           conta_destino:contas_bancarias!conta_destino_id(empresa_contabil:empresas_contabeis(nome_fantasia))
+         ),
+         iof_do_mutuo:mutuos_iof(trimestre),
          forma_pagamento,
          pedido_compra:pedidos_compra(
            codigo,
@@ -91,7 +97,14 @@ export type LancamentoRaw = {
   // sem plano: a transferência entraria no saldo e sumiria do extrato.
   plano_contas_tipos: { codigo: string; nome: string } | null;
   plano_contas_subtipos: { codigo: string; nome: string } | null;
-  transferencia: { codigo: string } | null;
+  iof_do_mutuo: { trimestre: number | null } | null;
+  transferencia: {
+    codigo: string;
+    tipo: string;
+    trimestre: number | null;
+    conta_origem: { empresa_contabil: { nome_fantasia: string | null } | null } | null;
+    conta_destino: { empresa_contabil: { nome_fantasia: string | null } | null } | null;
+  } | null;
   forma_pagamento: string | null;
   fatura: { codigo: string } | null;
   pedido_compra: { codigo: string; anexos: AnexoRaw[] } | null;
@@ -190,7 +203,19 @@ export async function montarLinhasDeLancamentos(
       descricao: r.descricao,
       natureza: r.natureza,
       valor: Number(r.valor),
-      fornecedor_nome: r.fornecedores?.razao_social ?? r.fornecedores?.nome ?? null,
+      fornecedor_nome:
+        r.fornecedores?.razao_social ??
+        r.fornecedores?.nome ??
+        // A perna do mútuo entre CNPJs: como a planilha, o fornecedor é a outra empresa.
+        (r.transferencia?.tipo === "mutuo"
+          ? (r.natureza === "saida" ? r.transferencia.conta_destino : r.transferencia.conta_origem)?.empresa_contabil?.nome_fantasia ?? null
+          : null),
+      // O trimestre do Tipo do mútuo não acompanha a data (decisão 230).
+      tri_do_tipo: r.transferencia?.trimestre
+        ? `T${r.transferencia.trimestre}`
+        : r.iof_do_mutuo?.trimestre
+          ? `T${r.iof_do_mutuo.trimestre}`
+          : null,
       job_id: r.jobs?.id ?? null,
       job_codigo: r.jobs?.codigo ?? null,
       // Mesma regra da `vw_fluxo_caixa` (decisão 069, 10/09/2026): a
@@ -204,7 +229,9 @@ export async function montarLinhasDeLancamentos(
       // as mesmas que a coluna Job já usava (15/09/2026).
       regional_nome:
         r.jobs?.regional?.nome ??
-        (rateio.length === 1 ? rateio[0].regional_nome : null),
+        (rateio.length === 1 ? rateio[0].regional_nome : null) ??
+        // Nota de sócio não tem rateio: é TD, como na planilha (decisão 231).
+        (ehCentroDasNotas(r.plano_contas_tipos?.codigo, r.plano_contas_subtipos?.codigo) ? REGIONAL_DAS_NOTAS : null),
       // A ordem é a das origens que têm identificador próprio. O
       // recebimento fica por último porque ali a origem É a nota — o
       // faturamento não tem código interno, e inventar um só faria a

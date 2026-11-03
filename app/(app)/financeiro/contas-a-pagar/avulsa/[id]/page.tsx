@@ -311,6 +311,7 @@ export default async function AvulsaDetalhesPage({
     tipo_entrada: (c.tipo_entrada as ContaAvulsa["tipo_entrada"]) ?? null,
     conta_bancaria_prevista_id: (c.conta_bancaria_prevista_id as string | null) ?? null,
     competencia: (c.competencia as string | null) ?? null,
+    numero_nf: (c.numero_nf as string | null) ?? null,
     criado_por: c.criado_por,
     created_at: c.created_at,
     updated_at: c.updated_at,

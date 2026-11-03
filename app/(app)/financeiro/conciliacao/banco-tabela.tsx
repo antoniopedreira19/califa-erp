@@ -13,7 +13,9 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, ArrowLeftRight, CheckCheck, ChevronDown, CircleSlash, Layers, Link2, Plus, Search, Undo2, Wand2 } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, CheckCheck, ChevronDown, CircleSlash, Handshake, Layers, Link2, Plus, Search, Undo2, Wand2 } from "lucide-react";
+import { BotaoLancar, CelulaDoMutuo, SituacaoDoMutuo } from "./mutuo-na-linha";
+import { pixDeEmpresaDeFora } from "@/lib/financeiro/mutuo";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import type { GrupoDeIguais, TituloDoMotor } from "@/lib/conciliacao/motor";
@@ -48,6 +50,9 @@ export interface AcoesDoBanco {
   /** Uma regra para o histórico desta linha (lançamento ou transferência). */
   criarRegra: (r: ResultadoDaLinha) => void;
   lancarAvulso: (r: ResultadoDaLinha) => void;
+  lancarMutuo: (r: ResultadoDaLinha) => void;
+  lancarNotas: (r: ResultadoDaLinha) => void;
+  lancarIof: (r: ResultadoDaLinha) => void;
   procurar: (r: ResultadoDaLinha) => void;
   ignorar: (r: ResultadoDaLinha) => void;
   desfazer: (r: ResultadoDaLinha) => void;
@@ -192,7 +197,7 @@ export function TabelaDoBanco({
         </thead>
         <tbody>
           {grupos.map((g) => (
-            <GrupoNaTabela key={`${g.chave}|${g.linhas.map((r) => r.mov.id).join(",")}`} g={g} contexto={contexto} acoes={acoes} />
+            <GrupoNaTabela key={chaveDoGrupo(g)} g={g} contexto={contexto} acoes={acoes} />
           ))}
           {linhas.map((r) => (
             <tr key={r.mov.id} className="border-b border-border last:border-0">
@@ -249,6 +254,7 @@ function Situacao({ r }: { r: ResultadoDaLinha }) {
         {r.resolvido.estado === "ignorado" ? "Ignorado" : r.resolvido.sozinho ? "Conciliado sozinho" : "Conciliado"}
       </span>
     );
+  if (r.mutuo) return <SituacaoDoMutuo m={r.mutuo} />;
   const m: Record<ResultadoDaLinha["estado"], [string, string]> = {
     sugestao: ["Título encontrado", "text-emerald-700"],
     soma: ["Remessa encontrada", "text-emerald-700"],
@@ -317,6 +323,7 @@ function TituloNaCelula({ t, l }: { t: TituloDoMotor; l: Linha | undefined }) {
 
 /** O que o sistema tem para a linha do banco, em uma célula. */
 function NoSistema({ r, contexto }: { r: ResultadoDaLinha; contexto: ContextoDasCelulas }) {
+  if (r.mutuo) return <CelulaDoMutuo r={r} m={r.mutuo} />;
   if (r.estado === "historico" && r.historicos?.length) {
     const hs = r.historicos;
     const jobs = [...new Set(hs.map((h) => h.job ?? h.descricao ?? "sem job"))];
@@ -497,6 +504,38 @@ function AcoesDaLinha({ r, acoes, contexto }: { r: ResultadoDaLinha; acoes: Acoe
         }
       />
     );
+  if (r.mutuo && pixDeEmpresaDeFora(r.mutuo))
+    return (
+      <Vagas
+        principal={
+          <BotaoLancar
+            r={r}
+            classe={VERDE}
+            off={off}
+            rotulo="Lançar"
+            onAvulso={() => acoes.lancarAvulso(r)}
+            onMutuo={() => acoes.lancarMutuo(r)}
+            onIof={() => acoes.lancarIof(r)}
+            onNotas={() => acoes.lancarNotas(r)}
+          />
+        }
+        segundo={procurar("Procurar um título")}
+        quarto={ignorar}
+      />
+    );
+  if (r.mutuo)
+    return (
+      <Vagas
+        principal={
+          <button type="button" disabled={off} onClick={() => acoes.lancarMutuo(r)} className={VERDE}>
+            <Handshake className="h-3 w-3" />
+            Lançar mútuo
+          </button>
+        }
+        segundo={procurar("Procurar um título")}
+        quarto={ignorar}
+      />
+    );
   switch (r.estado) {
     case "ja_lancado":
       return (
@@ -625,10 +664,7 @@ function AcoesDaLinha({ r, acoes, contexto }: { r: ResultadoDaLinha; acoes: Acoe
       return (
         <Vagas
           principal={
-            <button type="button" disabled={off} onClick={() => acoes.lancarAvulso(r)} className={CONTORNO}>
-              <Plus className="h-3 w-3" />
-              Lançar avulso
-            </button>
+            <BotaoLancar r={r} classe={CONTORNO} off={off} onAvulso={() => acoes.lancarAvulso(r)} onMutuo={() => acoes.lancarMutuo(r)} onIof={() => acoes.lancarIof(r)} onNotas={() => acoes.lancarNotas(r)} />
           }
           segundo={procurar("Procurar um título")}
           terceiro={
@@ -652,6 +688,18 @@ function AcoesDaLinha({ r, acoes, contexto }: { r: ResultadoDaLinha; acoes: Acoe
 // ---------------------------------------------------------------------------
 // O grupo de linhas iguais
 // ---------------------------------------------------------------------------
+
+/**
+ * A chave do grupo muda quando muda o que a escolha guardada supõe: as
+ * linhas, o título que o motor marcou em cada uma e os títulos para trocar.
+ * Depois de importar um extrato, o motor pode dar a outra linha o título que
+ * estava marcado aqui; com a chave só das linhas, a escolha guardada apontava
+ * para um título que tinha saído do grupo, e a aba Banco quebrava.
+ */
+function chaveDoGrupo(g: GrupoDeIguais<MovimentoDaLinha>): string {
+  const linhas = g.linhas.map((r) => `${r.mov.id}:${r.titulo?.id ?? ""}`).join(",");
+  return `${g.chave}|${linhas}|${g.titulos.map((t) => t.id).join(",")}`;
+}
 
 /**
  * As linhas iguais do banco (mesmo dia, mesmo valor) com mais títulos que

@@ -18,6 +18,7 @@ import type { createClient } from "@/lib/supabase/server";
 import type { ImpostoRetido } from "@/lib/types";
 import { carregarExtratoDaFatura, type ExtratoDaFatura } from "@/lib/data/fatura-cartao-extrato";
 import { limparDescricaoDaFatura } from "@/lib/cartoes/descricao-fatura";
+import { ehCentroDasNotas, REGIONAL_DAS_NOTAS } from "@/lib/financeiro/notas-de-socio";
 import {
   rateioPonderado,
   type ItemDaFatura,
@@ -166,6 +167,7 @@ export async function carregarExtrasDaPlanilha(
         .from("contas_avulsas")
         .select(
           "id, regional:regionais!regional_id(nome), " +
+            "subtipo:plano_contas_subtipos!plano_conta_subtipo_id(codigo, tipo:plano_contas_tipos!tipo_id(codigo)), " +
             "rateio:contas_avulsas_regionais!conta_avulsa_id(percentual, regional:regionais!regional_id(nome))",
         )
         .eq("tenant_id", tenantId)
@@ -259,7 +261,8 @@ export async function carregarExtrasDaPlanilha(
     const chave = origemDaAvulsa.get(a.id);
     if (!chave) continue;
     const rateio = doRateio(a.rateio);
-    extras.rateio[chave] = rateio.length ? rateio : daRegional(a.regional?.nome);
+    const ehNotas = ehCentroDasNotas(a.subtipo?.tipo?.codigo, a.subtipo?.codigo);
+    extras.rateio[chave] = rateio.length ? rateio : daRegional(a.regional?.nome ?? (ehNotas ? REGIONAL_DAS_NOTAS : null));
   }
 
   // ---- Desembolso: a regional do job, senão o rateio ----

@@ -204,12 +204,12 @@ const COMPONENTES: { campo: Campo; rotulo: string }[][] = [
   [
     { campo: "e_mov", rotulo: "Já movimentado nas contas" },
     { campo: "e_tit", rotulo: "Títulos em aberto (a receber)" },
-    { campo: "e_prev", rotulo: "Só previsão (jobs e recorrências)" },
+    { campo: "e_prev", rotulo: "Só previsão (jobs, recorrências e planilha)" },
   ],
   [
     { campo: "s_mov", rotulo: "Já movimentado nas contas" },
     { campo: "s_tit", rotulo: "Títulos em aberto (a pagar)" },
-    { campo: "s_prev", rotulo: "Só previsão (jobs e recorrências)" },
+    { campo: "s_prev", rotulo: "Só previsão (jobs, recorrências e planilha)" },
   ],
 ];
 
@@ -298,11 +298,18 @@ export function FluxoCaixaView({
 
     // ---- rateio volta a ser uma linha por documento
     const porChave = new Map<string, ItemAgrupado & { campo: Campo }>();
+    const mutuoE = colunas.map(() => 0);
+    const mutuoS = colunas.map(() => 0);
     for (const i of filtrados) {
       const coluna = colunas.findIndex(
         (c) => i.data_evento >= c.ini && i.data_evento <= c.fim,
       );
       if (coluna < 0) continue;
+      // As duas linhas da planilha, abaixo do resultado (decisão 230).
+      if (i.origem_tipo === "mutuo") {
+        (i.natureza === "entrada" ? mutuoE : mutuoS)[coluna] += i.valor;
+        continue;
+      }
       const campo = campoDe(i);
       const chave = `${campo}|${i.origem_tipo}|${i.origem_id}|${i.data_evento}`;
       const existente = porChave.get(chave);
@@ -345,12 +352,14 @@ export function FluxoCaixaView({
     }
 
     let saldo = saldoAbertura;
-    const serie = celulas.map((b) => {
+    const serie = celulas.map((b, idx) => {
       const entradas = b.e_mov + b.e_tit + b.e_prev;
       const saidas = b.s_mov + b.s_tit + b.s_prev;
-      const liquido = entradas - saidas;
+      const mutuoMais = mutuoE[idx];
+      const mutuoMenos = mutuoS[idx];
+      const liquido = entradas - saidas + mutuoMais - mutuoMenos;
       saldo += liquido;
-      return { ...b, entradas, saidas, liquido, saldo };
+      return { ...b, entradas, saidas, mutuoMais, mutuoMenos, liquido, saldo };
     });
 
     return { serie, porCampo, saldoHoje };
@@ -667,6 +676,22 @@ export function FluxoCaixaView({
               );
             })}
 
+            <tr>
+              <th className="sticky left-0 z-10 bg-card text-left px-4 py-3 border-t border-border text-[13px] font-medium">
+                (−) Mútuo interno
+              </th>
+              {serie.map((b, i) => (
+                <Celula key={i} valor={b.mutuoMenos} colunas={colunas} i={i} cor={VERMELHO} peso={500} classe="px-4 py-3 text-[13px] border-t border-border" />
+              ))}
+            </tr>
+            <tr>
+              <th className="sticky left-0 z-10 bg-card text-left px-4 py-3 border-t border-border text-[13px] font-medium">
+                (+) Mútuo interno
+              </th>
+              {serie.map((b, i) => (
+                <Celula key={i} valor={b.mutuoMais} colunas={colunas} i={i} cor={VERDE} peso={500} classe="px-4 py-3 text-[13px] border-t border-border" />
+              ))}
+            </tr>
             <tr>
               <th className="sticky left-0 z-10 bg-card text-left px-4 py-3 border-t border-border text-[13px] font-semibold">
                 Líquido do período

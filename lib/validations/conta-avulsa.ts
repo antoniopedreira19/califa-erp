@@ -10,25 +10,47 @@ export const formaPagamentoEnum = z.enum([
   "cartao_credito",
 ]);
 
-export const rateioSchema = z
-  .array(
-    z.object({
-      regional_id: z.string().uuid("Selecione a regional."),
-      percentual: z
-        .number({ invalid_type_error: "Informe o percentual." })
-        .min(0.01, "Percentual mínimo 0,01.")
-        .max(100, "Percentual máximo 100."),
-    }),
-  )
+const linhasDoRateio = z.array(
+  z.object({
+    regional_id: z.string().uuid("Selecione a regional."),
+    percentual: z
+      .number({ invalid_type_error: "Informe o percentual." })
+      .min(0.01, "Percentual mínimo 0,01.")
+      .max(100, "Percentual máximo 100."),
+  }),
+);
+
+const REGIONAL_REPETIDA = { message: "Cada regional só pode aparecer uma vez.", path: ["_dup"] };
+const SOMA_ERRADA = { message: "A soma dos percentuais deve ser 100,00.", path: ["_sum"] };
+const somaCem = (a: Array<{ percentual: number }>) => Math.abs(a.reduce((s, r) => s + r.percentual, 0) - 100) < 0.01;
+const semRepetir = (a: Array<{ regional_id: string }>) => new Set(a.map((r) => r.regional_id)).size === a.length;
+
+/**
+ * O rateio da conta avulsa. Vazio só com `sem_rateio`, nas notas de sócio
+ * (decisão 231): a regional é TD. O banco recusa o vazio em qualquer outro
+ * subtipo.
+ */
+const rateioDaAvulsa = linhasDoRateio
+  .refine((a) => a.length === 0 || somaCem(a), SOMA_ERRADA)
+  .refine(semRepetir, REGIONAL_REPETIDA);
+
+function aplicarRefinementRateio(
+  d: { rateio: unknown[]; sem_rateio: boolean },
+  ctx: z.RefinementCtx,
+) {
+  if (d.rateio.length === 0 && !d.sem_rateio) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Adicione pelo menos uma regional.",
+      path: ["rateio"],
+    });
+  }
+}
+
+export const rateioSchema = linhasDoRateio
   .min(1, "Adicione pelo menos uma regional.")
-  .refine(
-    (a) => Math.abs(a.reduce((s, r) => s + r.percentual, 0) - 100) < 0.01,
-    { message: "A soma dos percentuais deve ser 100,00.", path: ["_sum"] },
-  )
-  .refine(
-    (a) => new Set(a.map((r) => r.regional_id)).size === a.length,
-    { message: "Cada regional só pode aparecer uma vez.", path: ["_dup"] },
-  );
+  .refine(somaCem, SOMA_ERRADA)
+  .refine(semRepetir, REGIONAL_REPETIDA);
 
 /**
  * Refinement compartilhado: cartão de crédito exige cartao_credito_id e
@@ -160,9 +182,11 @@ export const criarContaAvulsaSchema = z
         }),
       )
       .default([]),
-    rateio: rateioSchema,
+    rateio: rateioDaAvulsa,
+    sem_rateio: z.boolean().default(false),
   })
-  .superRefine(aplicarRefinementFormaPagamento);
+  .superRefine(aplicarRefinementFormaPagamento)
+  .superRefine(aplicarRefinementRateio);
 
 /**
  * Editar não aceita empresa_id (imutável) nem anexos (fluxo separado — anexar
@@ -206,12 +230,14 @@ const baseFields = {
     .uuid()
     .nullable()
     .or(z.literal("").transform(() => null)),
-  rateio: rateioSchema,
+  rateio: rateioDaAvulsa,
+  sem_rateio: z.boolean().default(false),
 } as const;
 
 export const editarContaAvulsaSchema = z
   .object(baseFields)
-  .superRefine(aplicarRefinementFormaPagamento);
+  .superRefine(aplicarRefinementFormaPagamento)
+  .superRefine(aplicarRefinementRateio);
 
 export type RateioLinhaInput = z.infer<typeof rateioSchema>[number];
 export type CriarContaAvulsaInput = z.infer<typeof criarContaAvulsaSchema>;

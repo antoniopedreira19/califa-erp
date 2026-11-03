@@ -18,6 +18,7 @@ import {
   CalendarClock,
   CheckCheck,
   FileText,
+  Pencil,
   Info,
   Plus,
   Search,
@@ -45,6 +46,7 @@ import {
   BaixaImpostoDialog,
   BaixaRegistradaDialog,
   CancelarImpostoDialog,
+  CorrigirDialog,
   CENTRO,
   hojeIso,
   moeda,
@@ -80,6 +82,7 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
   const [busca, setBusca] = React.useState("");
   const [baixandoId, setBaixandoId] = React.useState<string | null>(null);
   const [cancelandoId, setCancelandoId] = React.useState<string | null>(null);
+  const [corrigindoId, setCorrigindoId] = React.useState<string | null>(null);
   const [vendoId, setVendoId] = React.useState<string | null>(null);
   const [criando, setCriando] = React.useState(false);
   /** "Criar e dar baixa": a baixa abre quando o imposto novo chega da página. */
@@ -194,6 +197,7 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
 
   const baixando = porId(baixandoId);
   const cancelando = porId(cancelandoId);
+  const corrigindo = porId(corrigindoId);
   const vendo = porId(vendoId);
 
   return (
@@ -312,12 +316,13 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
         onVerBaixas={(l) => setVendoId(impostoDe(l).id)}
         detalhes={(l) => {
           const t = impostoDe(l);
-          // O valor da guia só muda na Apuração, onde ela é aprovada; aqui, na
-          // baixa, só entram multa e juros (decisão 195).
+          // Na baixa só entram multa e juros (decisão 195). O valor de uma guia
+          // aprovada errada se corrige aqui, com justificativa (decisão 230).
           const acoes: AcaoDoDetalhe[] = [
             { rotulo: "Abrir na Apuração", icone: FileText, onClick: () => router.push("/financeiro/fiscal?aba=apuracao") },
           ];
           if (estaEmAberto(t)) {
+            acoes.push({ rotulo: "Corrigir o valor", icone: Pencil, onClick: () => setCorrigindoId(t.id) });
             acoes.push({ rotulo: "Cancelar o imposto", icone: XCircle, perigo: true, onClick: () => setCancelandoId(t.id) });
           }
           return (
@@ -382,6 +387,18 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
           setToast(mensagem);
         }}
       />
+      {corrigindo && (
+        <CorrigirDialog
+          imposto={corrigindo}
+          tenantId={dados.tenantId}
+          onClose={() => setCorrigindoId(null)}
+          onCorrigido={(mensagem) => {
+            setCorrigindoId(null);
+            setToast(mensagem);
+            router.refresh();
+          }}
+        />
+      )}
       {cancelando && (
         <CancelarImpostoDialog
           imposto={cancelando}

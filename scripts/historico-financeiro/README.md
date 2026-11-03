@@ -104,16 +104,17 @@ marcas, plano de contas, serviços, regionais, contas e os jobs abertos. O
   `lib/historico-financeiro/pacote.ts`, o mesmo da tela e do servidor, e o
   script confere o pacote como eles vão conferir.
 - **Cauda, `empacotar.ts --cauda` (A6):** depois do corte, do dia 01/10 até
-  o dia em que a planilha foi baixada, só os movimentos e as notas dos jobs
+  o extrato de cada conta, só os movimentos e as notas dos jobs
   até o 3T de 2026 (ou de ano anterior) que não existem no sistema (sem
-  `job_sistema` no de-para). O resto de outubro entra pelo sistema. A cauda
+  `job_sistema` no de-para) e, sem job, o DRE com competência até o 4T. A cauda
   nova substitui a ativa, qualquer que seja o período.
 - **Só DRE, `empacotar.ts --so-dre`:** as linhas de outubro já pagas pelo
-  sistema (PP baixada, tarifa lançada pela regra), listadas em
+  sistema (PP baixada, tarifa lançada pela regra, mútuo), listadas em
   `<versão>/so-dre/linhas.json`. Contam no resultado e não no saldo: o DRE lê
   todas as cargas ativas, e o saldo, o extrato e a conciliação só as de tipo
-  `cauda`. A mesma linha não pode estar na cauda e no só DRE: o empacotador e
-  o banco recusam.
+  `cauda`. Essas linhas saem da cauda, e o banco recusa a mesma linha nas duas.
+  A cauda e o só DRE vão até o extrato de cada conta
+  (`<versão>/so-dre/cortes.json`).
 - **Carga, na tela:** Financeiro › Cadastros › Histórico da planilha (admin e
   financeiro). Ela lê o pacote no navegador, avisa as contas que faltam
   cadastrar e envia em partes; o banco liga os textos aos cadastros, confere

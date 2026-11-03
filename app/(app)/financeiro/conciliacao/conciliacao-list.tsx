@@ -127,7 +127,7 @@ export function colunasDoExtrato<L extends Omit<LancamentoLinha, "saldo">>({
       rotulo: "Trimestre",
       tipo: "texto",
       alinhar: "center",
-      celula: (l) => celulaTexto(trimestreDe(l.data_movimento)),
+      celula: (l) => celulaTexto(l.tri_do_tipo ?? trimestreDe(l.data_movimento)),
     },
     { chave: "empresa", rotulo: "Empresa", tipo: "texto", celula: (l) => celulaTexto(empresa(l)) },
     {
@@ -447,7 +447,7 @@ export function ConciliacaoList({
           )}
         </td>
         <td className="whitespace-nowrap px-3 py-2 text-center font-mono text-xs text-muted-foreground">
-          {trimestreDe(l.data_movimento)}
+          {l.tri_do_tipo ?? trimestreDe(l.data_movimento)}
         </td>
         <td className="px-3 py-2 text-xs">
           <span className="block truncate" title={l.empresa_nome ?? undefined}>

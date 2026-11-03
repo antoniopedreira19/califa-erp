@@ -27,6 +27,7 @@
  * O que muda em relação ao protótipo está anotado onde acontece: procure
  * "Diferença do protótipo".
  */
+import { guiasDoIofDoMutuo, type MutuoDoIof } from "./iof-mutuo";
 import { formatBRL } from "@/lib/format";
 import type { FiscalCnae, FiscalEstabelecimento, ImpostoRetido, RegimeTributarioPJ } from "@/lib/types";
 import { feriadosDoCalculo, parametroVigente, regimeDaPJ, type CadastroFiscal } from "./cadastro";
@@ -52,7 +53,7 @@ export type { ImpostoRetido } from "@/lib/types";
 // Contrato
 // ---------------------------------------------------------------------------
 
-export type Tributo = "ISS" | "PIS" | "COFINS" | "IRPJ" | "CSLL" | "ISS_RET" | "CSRF" | "IRRF";
+export type Tributo = "ISS" | "PIS" | "COFINS" | "IRPJ" | "CSLL" | "ISS_RET" | "CSRF" | "IRRF" | "IOF";
 
 /** O job de um fato, com a empresa gerencial e a regional (as chaves do rateio). */
 export interface JobDoFato {
@@ -148,6 +149,8 @@ export interface FatosFiscais {
   notas: NotaSaidaFiscal[];
   recebimentos: RecebimentoFiscal[];
   notasFornecedor: NotaFornecedorFiscal[];
+  /** Os mútuos que geram IOF (decisão 230). */
+  mutuos: MutuoDoIof[];
 }
 
 /** Cota do IRPJ/CSLL: a 1ª sem juros, a 2ª com 1% e a 3ª com a Selic + 1%. */
@@ -1691,6 +1694,7 @@ export function calcularApuracao(cad: CadastroFiscal, fatos: FatosFiscais, asOf:
       }
       out.push(...guiasRetencoes(ctx, pj, comp));
     }
+    out.push(...guiasDoIofDoMutuo(fatos.mutuos, comp, cad.feriados));
   }
   const trimestres = [...new Set(competencias.map(trimestreDe))];
   for (const t of trimestres)

@@ -356,12 +356,12 @@ export function linhaAReceber(t: TituloAReceber, ctx: ContextoDasLinhas): Linha 
   const descricao = nota
     ? `Recebimento NF ${t.fat_numero_nf}/${t.numero_parcela} — ${t.fat_descricao}`
     : transferencia
-      ? `Transferência ${t.codigo_avulsa ?? ""} · ${t.contraparte_nome}`.replace("  ", " ")
+      ? `${t.codigo_avulsa?.startsWith("MU-") ? "Mútuo" : "Transferência"} ${t.codigo_avulsa ?? ""} · ${t.contraparte_nome}`.replace("  ", " ")
       : t.fat_descricao;
   const etiqueta: LinhaDaPlanilha["etiqueta"] = nota
     ? { texto: "NOTA FISCAL", tom: "vermelho" }
     : transferencia
-      ? { texto: "TRANSFERÊNCIA", tom: "ceu" }
+      ? { texto: t.codigo_avulsa?.startsWith("MU-") ? "MÚTUO" : "TRANSFERÊNCIA", tom: "ceu" }
       : t.origem === "rendimento"
         ? { texto: "RENDIMENTO", tom: "verde" }
         : { texto: "RECEB. AVULSO", tom: "violeta" };

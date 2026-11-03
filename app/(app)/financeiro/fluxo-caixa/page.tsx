@@ -114,7 +114,7 @@ export default async function FluxoCaixaPage({
     return qr;
   })();
 
-  const [fluxoRes, contasRes, regionaisRes, saldosRes, fiscal] = await Promise.all([
+  const [fluxoRes, contasRes, regionaisRes, saldosRes, fiscal, iofDoMutuoRes, mutuosPrevistosRes] = await Promise.all([
     queryFluxo,
     supabase
       .from("contas_bancarias")
@@ -137,15 +137,43 @@ export default async function FluxoCaixaPage({
         baixaDoLancamento: new Map<string, { impostoId: string; descricao: string }>(),
       };
     }),
+    // O IOF do mútuo que fica junto dele (decisão 230): soma nas linhas de
+    // Mútuo interno, como a planilha faz na California.
+    supabase
+      .from("mutuos_iof")
+      .select("lancamento_id, lancamento:lancamentos_financeiros(plano_contas_subtipos(codigo))")
+      .eq("tenant_id", session.activeTenant.id),
+    // O mútuo a transferir é a previsão: não passa pela view.
+    supabase
+      .from("transferencias_contas")
+      .select("id, codigo, conta_origem_id, conta_destino_id, valor, data_prevista, descricao")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("tipo", "mutuo")
+      .eq("status", "a_transferir")
+      .gte("data_prevista", ancora)
+      .lte("data_prevista", fim),
   ]);
 
   if (fluxoRes.error) console.error("[fluxo-caixa] view", fluxoRes.error.message);
   if (saldosRes.error) console.error("[fluxo-caixa] saldos", saldosRes.error.message);
 
+  if (iofDoMutuoRes.error) console.error("[fluxo-caixa] iof do mútuo", iofDoMutuoRes.error.message);
+  if (mutuosPrevistosRes.error) console.error("[fluxo-caixa] mútuos previstos", mutuosPrevistosRes.error.message);
+
+  const iofJuntoDoMutuo = new Set(
+    ((iofDoMutuoRes.data ?? []) as unknown as Array<{ lancamento_id: string; lancamento: { plano_contas_subtipos: { codigo: string } | null } | null }>)
+      .filter((i) => i.lancamento?.plano_contas_subtipos?.codigo === "998")
+      .map((i) => i.lancamento_id),
+  );
+
   const itensDaView: FluxoItem[] = (fluxoRes.data ?? []).map((r) => {
+    const doMutuo =
+      r.origem_lancamento === "mutuo_saida" ||
+      r.origem_lancamento === "mutuo_entrada" ||
+      iofJuntoDoMutuo.has(r.origem_id as string);
     const item: FluxoItem = {
       classe: r.classe as FluxoItem["classe"],
-      origem_tipo: r.origem_tipo as string,
+      origem_tipo: doMutuo ? "mutuo" : (r.origem_tipo as string),
       origem_id: r.origem_id as string,
       conta_bancaria_id: (r.conta_bancaria_id as string | null) ?? null,
       regional_id: (r.regional_id as string | null) ?? null,
@@ -185,7 +213,45 @@ export default async function FluxoCaixaPage({
       job_id: s.job_id,
     }));
 
-  const itens: FluxoItem[] = [...itensDaView, ...itensFiscais];
+  // Uma linha por conta do grupo: com empresa de fora, só a nossa perna.
+  const itensDoMutuo: FluxoItem[] =
+    empresaFiltroIds.length > 0
+      ? []
+      : ((mutuosPrevistosRes.data ?? []) as Array<{
+          id: string;
+          codigo: string;
+          conta_origem_id: string | null;
+          conta_destino_id: string | null;
+          valor: string | number;
+          data_prevista: string;
+          descricao: string | null;
+        }>).flatMap((m) =>
+          (
+            [
+              [m.conta_origem_id, "saida"],
+              [m.conta_destino_id, "entrada"],
+            ] as const
+          ).flatMap(([conta, natureza]) =>
+            conta
+              ? [
+                  {
+                    classe: "titulo" as const,
+                    origem_tipo: "mutuo",
+                    origem_id: `${m.id}-${natureza}`,
+                    conta_bancaria_id: conta,
+                    regional_id: null,
+                    data_evento: m.data_prevista,
+                    valor: Number(m.valor),
+                    natureza,
+                    descricao: `Mútuo ${m.codigo}${m.descricao ? ` — ${m.descricao}` : ""}`,
+                    job_id: null,
+                  },
+                ]
+              : [],
+          ),
+        );
+
+  const itens: FluxoItem[] = [...itensDaView, ...itensFiscais, ...itensDoMutuo];
 
   // A conta-espelho do cartão não é dinheiro em banco: fica fora do
   // seletor e do escopo "todas" (decisão 093, entrega 3). Os lançamentos
@@ -215,7 +281,7 @@ export default async function FluxoCaixaPage({
       <PageHeader
         eyebrow="FINANCEIRO"
         title="Fluxo de caixa"
-        description="Do passado ao futuro: o realizado (movimentos das contas) mais o previsto (títulos em aberto, previsões da abertura do job e recorrências que ainda não viraram título)."
+        description="Do passado ao futuro: o realizado (movimentos das contas) mais o previsto (títulos em aberto, previsões da abertura do job, recorrências que ainda não viraram título e as previsões da planilha que o sistema ainda não tem)."
         icon={TrendingUp}
         showEmpresaFilter
         empresas={session.empresasVisiveis}

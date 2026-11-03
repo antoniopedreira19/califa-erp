@@ -8,7 +8,8 @@
  * - **Recebimento avulso** — dinheiro que entra sem nota fiscal (reembolso,
  *   devolução de fornecedor, juros). Empresa, descrição, valor, "Recebido
  *   de" opcional, rateio por regional e centro de custo. Sem job: a receita
- *   fica nas regionais do rateio.
+ *   fica nas regionais do rateio. Nas notas de sócio (decisão 231), o número
+ *   da nota no lugar do rateio: a regional é TD.
  * - **Transferência entre contas** — dinheiro que só muda de conta. Sem
  *   empresa, regional nem plano (D17.2), só entre contas do mesmo CNPJ
  *   (D4 pendente), fora do DRE e do fluxo consolidado. Aqui "Criar e dar
@@ -32,6 +33,7 @@ import {
   ArrowRight,
   Banknote,
   CalendarPlus,
+  Handshake,
   Info,
   Plus,
   TrendingUp,
@@ -54,6 +56,8 @@ import {
 } from "@/components/ui/select";
 import { RateioRegionalEditor } from "../contas-a-pagar/rateio-regional-editor";
 import { cn, formatCurrency } from "@/lib/utils";
+import { MutuoFormComDados, type InicialDoMutuo } from "../mutuos/mutuo-form";
+import { centroDasNotasDeSocio, DESCRICAO_DAS_NOTAS, ehNotasDeSocio } from "@/lib/financeiro/notas-de-socio";
 import type {
   ContaBancaria,
   PlanoContaSubtipo,
@@ -66,7 +70,7 @@ import {
   saldoDaContaNoDia,
 } from "./actions-recebimento-avulso";
 
-export type TipoDoRecebimentoAvulso = "recebimento_avulso" | "transferencia" | "rendimento";
+export type TipoDoRecebimentoAvulso = "recebimento_avulso" | "transferencia" | "rendimento" | "mutuo";
 
 /** Um rendimento já lançado: a tela avisa antes de o banco recusar o
  *  segundo da mesma conta no mesmo mês. */
@@ -97,6 +101,12 @@ const TIPOS: Array<{
     sub: "Dinheiro que só muda de conta",
   },
   {
+    chave: "mutuo",
+    icone: Handshake,
+    rotulo: "Mútuo entre empresas",
+    sub: "Empréstimo a outra empresa",
+  },
+  {
     chave: "rendimento",
     icone: TrendingUp,
     rotulo: "Rendimento de aplicação",
@@ -109,6 +119,7 @@ const EXPLICA: Record<TipoDoRecebimentoAvulso, string> = {
     "Reembolso, devolução de fornecedor, juros ou qualquer entrada que não passa por nota fiscal. Entra em Títulos a Receber sem job: a receita fica nas regionais do rateio.",
   transferencia:
     "Não é receita nem despesa: fica fora do DRE e do fluxo de caixa consolidado. Aparece no extrato das duas contas, e cancelar desfaz as duas linhas juntas. Não pede empresa: a conta já diz de qual CNPJ é o dinheiro.",
+  mutuo: "Dinheiro que muda de dono entre empresas: fica abaixo do Lucro líquido.",
   rendimento:
     "O valor líquido (depois do IR e do IOF), que é o que de fato entrou na aplicação. Entra como Receita Financeira, um lançamento por conta e por mês.",
 };
@@ -207,8 +218,14 @@ export function RecebimentoAvulsoDialog({
    *  conciliação abre o rendimento e a transferência direto, decisão 195). */
   tipoInicial?: TipoDoRecebimentoAvulso;
   /** O "Lançar avulso" da conciliação com o banco (decisão 200): o
-   *  recebimento avulso abre com a descrição, o valor e a data da linha. */
-  inicial?: { descricao: string; valor: number; data: string };
+   *  recebimento avulso abre com a descrição, o valor e a data da linha.
+   *  `notasDeSocio` abre já no centro das notas (decisão 231). */
+  inicial?: {
+    descricao: string;
+    valor: number;
+    data: string;
+    notasDeSocio?: { empresaId: string | null; recebidoDe: string | null };
+  };
 }) {
   const [pending, startTransition] = React.useTransition();
   const [tipo, setTipo] = React.useState<TipoDoRecebimentoAvulso>("recebimento_avulso");
@@ -224,6 +241,7 @@ export function RecebimentoAvulsoDialog({
   const [recebidoDe, setRecebidoDe] = React.useState<string | null>(null);
   const [tipoId, setTipoId] = React.useState("");
   const [subtipoId, setSubtipoId] = React.useState("");
+  const [numeroNf, setNumeroNf] = React.useState("");
   // Rendimento
   const listaCompetencias = React.useMemo(competencias, []);
   const [contaAplicacao, setContaAplicacao] = React.useState("");
@@ -241,6 +259,7 @@ export function RecebimentoAvulsoDialog({
   /** Troca a chave dos campos não controlados (valor, datas) a cada
    *  abertura e a cada troca de tipo: eles montam de novo, vazios. */
   const [geracao, setGeracao] = React.useState(0);
+  const [mutuoInicial, setMutuoInicial] = React.useState<InicialDoMutuo | undefined>(undefined);
 
   React.useEffect(() => {
     if (!open) return;
@@ -253,17 +272,28 @@ export function RecebimentoAvulsoDialog({
     }
     setEmpresaId(empresas.length === 1 ? empresas[0].id : "");
     setRateio(RATEIO_INICIAL);
+    const notas = inicial?.notasDeSocio;
+    const centro = notas ? centroDasNotasDeSocio(tipos, subtipos) : null;
+    if (notas && centro) {
+      setTipoId(centro.tipoId);
+      setSubtipoId(centro.subtipoId);
+      setDescricao(DESCRICAO_DAS_NOTAS);
+      if (notas.empresaId) setEmpresaId(notas.empresaId);
+      setRecebidoDe(notas.recebidoDe);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   function limpar() {
     setErro(null);
+    setMutuoInicial(undefined);
     setCentavos("");
     setDescricao("");
     setDataPrevista(hoje());
     setRecebidoDe(null);
     setTipoId("");
     setSubtipoId("");
+    setNumeroNf("");
     setContaAplicacao("");
     setCompetencia(listaCompetencias[0].valor);
     setDataRendimento(ultimoDiaDoMes(listaCompetencias[0].valor));
@@ -297,6 +327,7 @@ export function RecebimentoAvulsoDialog({
   const subtiposDoTipo = tipoId
     ? subtipos.filter((s) => s.tipo_id === tipoId && s.ativo)
     : [];
+  const ehNotas = tipo === "recebimento_avulso" && ehNotasDeSocio(tipos, subtipos, subtipoId);
   const itensRecebidoDe = [
     ...clientes.map((c) => ({ value: `c:${c.id}`, label: c.nome, descricao: "Cliente" })),
     ...fornecedores.map((f) => ({ value: `f:${f.id}`, label: f.nome, descricao: "Fornecedor" })),
@@ -365,7 +396,7 @@ export function RecebimentoAvulsoDialog({
     }
     if (cnpjsDiferentes) {
       return setErro(
-        "Transferência só entre contas do mesmo CNPJ. Entre CNPJs diferentes o dinheiro muda de dono, e esse caso ainda vai ser definido.",
+        "Transferência só entre contas do mesmo CNPJ. Entre CNPJs diferentes é mútuo.",
       );
     }
     if (!valor) return setErro("Informe o valor da transferência.");
@@ -404,7 +435,7 @@ export function RecebimentoAvulsoDialog({
           : "Informe o valor.",
       );
     }
-    if (!rateioValido(rateio)) {
+    if (!ehNotas && !rateioValido(rateio)) {
       return setErro(
         "Rateio de regional: escolha a regional de cada linha, e a soma dos percentuais deve ser 100,00.",
       );
@@ -416,6 +447,7 @@ export function RecebimentoAvulsoDialog({
       if (descricao.trim().length < 3) return setErro("Informe a descrição.");
       if (!dataPrevista) return setErro("Informe a data prevista do recebimento.");
       if (!tipoId || !subtipoId) return setErro("Selecione o centro de custo.");
+      if (ehNotas && !numeroNf.trim()) return setErro("Informe o número da nota.");
       payload = {
         tipo_entrada: "recebimento_avulso",
         empresa_id: empresaId,
@@ -426,9 +458,12 @@ export function RecebimentoAvulsoDialog({
         fornecedor_id: recebidoDe?.startsWith("f:") ? recebidoDe.slice(2) : null,
         plano_conta_tipo_id: tipoId,
         plano_conta_subtipo_id: subtipoId,
-        rateio,
+        numero_nf: ehNotas ? numeroNf.trim() : null,
+        rateio: ehNotas ? [] : rateio,
       };
-      resumo = `Recebimento avulso de ${formatCurrency(valor, "BRL")}`;
+      resumo = ehNotas
+        ? `Nota de sócio de ${formatCurrency(valor, "BRL")} criada`
+        : `Recebimento avulso de ${formatCurrency(valor, "BRL")} criado`;
     } else {
       if (!contaAplicacao) return setErro("Escolha a conta de aplicação.");
       if (!dataRendimento) return setErro("Informe a data do lançamento.");
@@ -446,7 +481,7 @@ export function RecebimentoAvulsoDialog({
         competencia: `${competencia}-01`,
         rateio,
       };
-      resumo = `Rendimento de ${formatCurrency(valor, "BRL")}`;
+      resumo = `Rendimento de ${formatCurrency(valor, "BRL")} criado`;
     }
 
     startTransition(async () => {
@@ -455,7 +490,7 @@ export function RecebimentoAvulsoDialog({
         setErro(res.message);
         return;
       }
-      onCriado(res.id, darBaixa, `${resumo} criado em Títulos a Receber.`);
+      onCriado(res.id, darBaixa, `${resumo} em Títulos a Receber.`);
     });
   }
 
@@ -463,15 +498,15 @@ export function RecebimentoAvulsoDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[660px]">
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[780px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Plus className="h-5 w-5 text-california-red" />
-            Recebimento avulso
+            {tipo === "mutuo" ? "Mútuo entre empresas" : "Recebimento avulso"}
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-4 gap-2">
           {TIPOS.map((t) => {
             const Icone = t.icone;
             const ativo = tipo === t.chave;
@@ -505,6 +540,21 @@ export function RecebimentoAvulsoDialog({
           })}
         </div>
 
+        {tipo === "mutuo" ? (
+          <MutuoFormComDados
+            key={geracao}
+            alvo={{ modo: "novo", inicial: mutuoInicial }}
+            onFechar={() => onOpenChange(false)}
+            onFeito={(mensagem: string) => onCriado("", false, mensagem)}
+            onTransferencia={(o: string, d: string) => {
+              setTipo("transferencia");
+              limpar();
+              setContaOrigem(o);
+              setContaDestino(d);
+            }}
+          />
+        ) : (
+        <>
         {erro && (
           <div className="flex items-start gap-2 rounded-lg border border-california-red/40 bg-california-red/5 p-3 text-sm text-california-red">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -565,25 +615,57 @@ export function RecebimentoAvulsoDialog({
                   className="flex h-11 w-full rounded-lg border border-border bg-white px-3.5 py-2 text-sm placeholder:text-muted-foreground/60 focus-visible:border-california-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-california-red/15"
                 />
               </Campo>
-              <Campo rotulo="Recebido de (opcional)">
-                <Combobox
-                  items={itensRecebidoDe}
-                  value={recebidoDe}
-                  onChange={setRecebidoDe}
-                  placeholder="Cliente ou fornecedor..."
-                  buscaPlaceholder="Escreva o nome"
-                  limpavel
-                  className={COMBOBOX_COMO_SELECT}
+              <div className={ehNotas ? "grid grid-cols-[1fr_180px] gap-3" : ""}>
+                <Campo rotulo="Recebido de (opcional)">
+                  <Combobox
+                    items={itensRecebidoDe}
+                    value={recebidoDe}
+                    onChange={setRecebidoDe}
+                    placeholder="Cliente ou fornecedor..."
+                    buscaPlaceholder="Escreva o nome"
+                    limpavel
+                    className={COMBOBOX_COMO_SELECT}
+                  />
+                </Campo>
+                {ehNotas && (
+                  <Campo rotulo="Número da nota" obrigatorio>
+                    <input
+                      type="text"
+                      value={numeroNf}
+                      maxLength={30}
+                      onChange={(e) => {
+                        setNumeroNf(e.target.value);
+                        setErro(null);
+                      }}
+                      placeholder="Ex.: 44"
+                      className="flex h-11 w-full rounded-lg border border-border bg-white px-3.5 py-2 text-sm placeholder:text-muted-foreground/60 focus-visible:border-california-red focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-california-red/15"
+                    />
+                  </Campo>
+                )}
+              </div>
+              {ehNotas ? (
+                <div className="flex items-center justify-between rounded-lg bg-muted/60 px-3 py-2 text-[12px]">
+                  <span className="text-muted-foreground">Regional</span>
+                  <span className="font-medium">Todas (TD), como na planilha</span>
+                </div>
+              ) : (
+                <RateioDaEmpresa
+                  empresaId={empresaId}
+                  rateio={rateio}
+                  setRateio={setRateio}
+                  regionais={regionaisDaEmpresa}
+                  pending={pending}
                 />
-              </Campo>
-              <RateioDaEmpresa
-                empresaId={empresaId}
-                rateio={rateio}
-                setRateio={setRateio}
-                regionais={regionaisDaEmpresa}
-                pending={pending}
-              />
-              <Campo rotulo="Centro de custo" obrigatorio ajuda="Define onde a receita entra no DRE.">
+              )}
+              <Campo
+                rotulo="Centro de custo"
+                obrigatorio
+                ajuda={
+                  ehNotas
+                    ? "Não é receita: fica na Distribuição de lucro, abaixo do Lucro líquido."
+                    : "Define onde a receita entra no DRE."
+                }
+              >
                 <div className="grid grid-cols-2 gap-3">
                   <Combobox
                     items={tiposDeEntrada.map((t) => ({
@@ -698,10 +780,21 @@ export function RecebimentoAvulsoDialog({
                 />
               </Campo>
               {cnpjsDiferentes && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
-                  As contas são de CNPJs diferentes. Entre CNPJs o dinheiro muda de dono, não
-                  só de conta: esse caso ainda vai ser definido, e por enquanto a
-                  transferência não é aceita.
+                <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-900">
+                  <span className="flex-1">As contas são de CNPJs diferentes: o dinheiro muda de dono. Isso é um mútuo.</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const inicial = { origem: contaOrigem, destino: contaDestino, valor, data: dataTransferencia };
+                      setTipo("mutuo");
+                      limpar();
+                      setMutuoInicial(inicial);
+                    }}
+                    className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md border border-amber-300 bg-white px-2.5 text-[11.5px] font-semibold text-amber-900 hover:bg-amber-100"
+                  >
+                    <Handshake className="h-3 w-3" />
+                    Lançar como mútuo
+                  </button>
                 </div>
               )}
               <div className="overflow-hidden rounded-xl border border-border text-[12.5px]">
@@ -876,7 +969,7 @@ export function RecebimentoAvulsoDialog({
 
           <div className="flex items-start gap-2 rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-700" />
-            <span>{EXPLICA[tipo]}</span>
+            <span>{ehNotas ? "Nota de sócio paga à empresa. Não abate o saldo de mútuo." : EXPLICA[tipo]}</span>
           </div>
         </div>
 
@@ -918,6 +1011,8 @@ export function RecebimentoAvulsoDialog({
             </button>
           </div>
         </div>
+        </>
+        )}
       </DialogContent>
     </Dialog>
   );

@@ -65,9 +65,10 @@ export const SELECT_BAIXA_DA_AVULSA_A_RECEBER = `conta_avulsa_id, ${SELECT_BAIXA
 /** `transferencias_contas` (decisão 124). Duas FKs para contas_bancarias:
  *  o embed precisa dizer qual é qual. */
 export const SELECT_TRANSFERENCIA = `
-        id, codigo, valor, data_prevista, descricao, status, transferida_em,
+        id, codigo, tipo, valor, data_prevista, descricao, status, transferida_em,
         origem:contas_bancarias!conta_origem_id(nome, banco),
-        destino:contas_bancarias!conta_destino_id(nome, banco)
+        destino:contas_bancarias!conta_destino_id(nome, banco),
+        fornecedor:fornecedores(nome)
 `;
 
 /**
@@ -396,8 +397,10 @@ export function montarTitulosAReceber(e: {
     descricao: string | null;
     status: "a_transferir" | "transferida";
     transferida_em: string | null;
+    tipo: "transferencia" | "mutuo";
     origem: { nome: string; banco: string } | null;
     destino: { nome: string; banco: string } | null;
+    fornecedor: { nome: string } | null;
   }>)
     .filter(
       (t) =>
@@ -405,10 +408,13 @@ export function montarTitulosAReceber(e: {
         (t.status === "a_transferir" && t.data_prevista < e.hoje),
     )
     .map((t) => {
-      const contas = `${t.origem ? `${t.origem.nome} · ${t.origem.banco}` : "—"} → ${
-        t.destino ? `${t.destino.nome} · ${t.destino.banco}` : "—"
+      // No mútuo com empresa de fora, um dos lados não é conta (decisão 230).
+      const fora = t.fornecedor ? `${t.fornecedor.nome} · fora do sistema` : "—";
+      const contas = `${t.origem ? `${t.origem.nome} · ${t.origem.banco}` : fora} → ${
+        t.destino ? `${t.destino.nome} · ${t.destino.banco}` : fora
       }`;
-      const descricao = t.descricao?.trim() || "Transferência entre contas";
+      const mutuo = t.tipo === "mutuo";
+      const descricao = t.descricao?.trim() || (mutuo ? "Mútuo entre empresas" : "Transferência entre contas");
       return {
         id: t.id,
         numero_parcela: 1,
@@ -439,8 +445,8 @@ export function montarTitulosAReceber(e: {
                   data: t.transferida_em,
                   contaNome: contas,
                   contaBancariaId: null,
-                  centroNome: "Transferência entre contas",
-                  subtipoNome: "fora do DRE",
+                  centroNome: mutuo ? "Empréstimos" : "Transferência entre contas",
+                  subtipoNome: mutuo ? "Mútuo interno" : "fora do DRE",
                   movimentado: Number(t.valor),
                   retencoes: [],
                   estornos: [],
