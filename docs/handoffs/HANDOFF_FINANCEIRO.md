@@ -8857,3 +8857,23 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Na tela:** a linha virou "Só previsão (jobs, recorrências e planilha)", e a descrição da página cita a planilha.
 - **Migrations:** `20261103100001` e `20261103100002`. A segunda corrige o nulo do Tipo vazio.
 - **Decidido (Tiago, 03/11):** as saídas "Salário" do Tipo CO em novembro e o imposto dos jobs do 4T ficam como estão até os jobs entrarem no sistema.
+
+## ⚠️ Nota de 2026-11-03 (2) — a revisão do financeiro pelo protótipo (decisão 234)
+
+- **Faturar:** Nº da PO e anexo da PO, opcionais, na avulsa (abaixo do job ou do cliente) e na nota de job (um par por job, já com o que veio do envio). Ficam no registro do faturamento: `faturamentos_po` e `faturamentos_po_anexos`. O anexo novo sobe por `uploadPoPdf` para o bucket `faturamentos-nf`; o do envio vai por referência.
+- **Resultado de Job e Visualizar Jobs:** Empresa e Regional depois da Rentabilidade; "Por projeto" sem a coluna Projeto.
+- **Conciliação:** o extrato do banco (OFX) só aparece na Conciliação automática. O Extrato perdeu a coluna Banco, a faixa vermelha e o botão de importar; os Títulos perderam a faixa verde e o sinal nas linhas. O botão de importar foi para o topo da Automática.
+- **Planilha de títulos:** Descrição em até 2 linhas, origem numa linha, o texto inteiro ao passar o mouse quando cortado; na Conciliação › Títulos, a coluna é "Fornecedor".
+- **Conciliação automática:** a fila dividida (opção E do protótipo): uma tabela, uma divisão por tipo, ações Conciliar / Revisar / Lançar / Cancelar baixa com a dica de cada uma, lupa à vista, "Agrupar lançamentos" no lugar do "Conciliar em conjunto", achado sozinho e com pop-up novo.
+- **Fora:** o "Save do cliente" aguarda a aprovação de um protótipo próprio.
+- **Migration:** `20261103700001` (aditiva).
+
+## ⚠️ Nota de 2026-11-03 (3) — os custos fixos como recorrências (decisão 235)
+
+- **O que entrou:** 133 recorrências mensais no Contas a Pagar, R$ 454.963,59 por mês. São os CF, DA e DM do 4T da relação de custos fixos de 27/10: Agência California 109 (inclui a Go Crazy, regional SS), CCH 21 e Hitlab 3. Os 133 títulos de novembro já nasceram aprovados (dias 04, 08, 10 e 20).
+- **Sem fornecedor:** só 3 dos 73 estavam cadastrados. A descrição leva "descrição · fornecedor" da planilha. Até alguém ligar o fornecedor, o título não sai por remessa.
+- **Rateio TD:** pela tabela `empresas_rateios_regionais` de 2026, a mesma da folha.
+- **Previsão da planilha:** a recorrência guarda `previsao_chave` (md5 de fornecedor e descrição normalizados). A `vw_fluxo_caixa` tira do ramo `previsao_planilha` a previsão de mesma empresa, Tipo e chave, de competência igual ou posterior ao trimestre em que a recorrência nasceu. As contas de outubro com data em novembro ficam. Recorrência criada pela tela nasce sem chave e não tira nada.
+- **Gravado pela ação da tela**, com auditoria, a partir de um pacote local. O repositório não tem nenhuma linha da relação, porque as descrições têm nomes.
+- **Pendente:** a data de fim de duas linhas de R$ 75.000,00 que a planilha não prevê em janeiro, e o cadastro dos 70 fornecedores.
+- **Migration:** `20261103800001` (aditiva).

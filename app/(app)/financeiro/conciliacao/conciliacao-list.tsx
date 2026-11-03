@@ -1,7 +1,7 @@
 "use client";
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, CheckCheck, ChevronDown, CreditCard, ExternalLink, Info, Lock, Upload } from "lucide-react";
+import { AlertTriangle, CheckCheck, ChevronDown, CreditCard, ExternalLink, Info, Lock } from "lucide-react";
 import type { LancamentoLinha } from "@/lib/calculos/saldo-conta";
 import type { DetalheDoImposto } from "@/lib/data/imposto-extrato";
 import { Dica } from "@/components/ui/dica";
@@ -504,14 +504,6 @@ export function ConciliacaoList({
   return (
     <>
     <div className="flex flex-wrap items-center gap-3">
-      <Link
-        href={`/financeiro/conciliacao?conta=${contaId}&aba=banco`}
-        prefetch={false}
-        className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm font-semibold hover:bg-muted/50"
-      >
-        <Upload className="h-4 w-4" />
-        Importar extrato do banco (OFX)
-      </Link>
       {comBanco && (
         <span className="text-xs text-muted-foreground">
           <span className="font-semibold text-emerald-700">

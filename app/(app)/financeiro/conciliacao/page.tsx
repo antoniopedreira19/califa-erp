@@ -1,5 +1,4 @@
-import Link from "next/link";
-import { AlertTriangle, Receipt } from "lucide-react";
+import { Receipt } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
@@ -22,7 +21,7 @@ import {
   derivarSaldo,
 } from "@/lib/calculos/saldo-conta";
 import { FiltrosConta } from "./filtros-conta";
-import { ConciliacaoList, type MarcasDoBanco } from "./conciliacao-list";
+import { ConciliacaoList } from "./conciliacao-list";
 import { HubConciliacao } from "./hub";
 import { lerPeriodo, lerVisao } from "./hub-periodo";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
@@ -36,7 +35,6 @@ import { FaixaDoFechamento } from "./fechamento";
 import { carregarHistoricoDoExtrato } from "./historico-dados";
 import { carregarCaudaDoExtrato, juntarNaOrdemDoDia } from "./cauda-no-extrato";
 import { AvisoDoHistorico, HistoricoNoExtrato } from "./historico-no-extrato";
-import { alertasDoExtrato } from "./motor-da-conta";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { fimDoMes, somaDias, type ItemDaFatura } from "@/lib/financeiro/planilha-de-titulos";
 
@@ -176,8 +174,6 @@ export default async function ConciliacaoPage({
   let jurosDasBaixas: Record<string, number> = {};
   let creditos = 0;
   let debitos = 0;
-  /** As marcas da coluna Banco (decisão 202); `null` sem extrato importado. */
-  let marcasDoBanco: MarcasDoBanco | null = null;
 
   if (contaId && aba === "extrato") {
     const s = await calcularSaldoAnterior(supabase, {
@@ -220,22 +216,12 @@ export default async function ConciliacaoPage({
     const idsDasGuias = (brutos as Array<{ id: string; origem: string }>)
       .filter((r) => r.origem === "imposto_baixa")
       .map((r) => r.id);
-    const [montadas, lancamentosDasGuias, conciliadosRes, cauda] = await Promise.all([
+    // O extrato do banco (OFX) não aparece aqui desde a decisão 234: as
+    // marcas da coluna Banco (decisão 202) e a faixa "não batem" saíram, e o
+    // que não bate fica na Conciliação automática.
+    const [montadas, lancamentosDasGuias, cauda] = await Promise.all([
       montarLinhasDeLancamentos(supabase, session.activeTenant.id, brutos),
       carregarLancamentosDasGuias(supabase, session.activeTenant.id, idsDasGuias),
-      // Os lançamentos do período já ligados a uma linha do extrato do banco
-      // (o ✓ da coluna Banco). Só com extrato importado.
-      dadosBanco.ultima
-        ? supabase
-            .from("lancamentos_financeiros")
-            .select("id")
-            .eq("tenant_id", session.activeTenant.id)
-            .eq("conta_bancaria_id", contaId)
-            .gte("data_movimento", dataDe)
-            .lte("data_movimento", dataAte)
-            .not("extrato_linha_id", "is", null)
-            .returns<Array<{ id: string }>>()
-        : Promise.resolve({ data: [] as Array<{ id: string }>, error: null }),
       // A cauda do histórico da planilha (decisão 211, A6): conta no saldo
       // desde o início da conta, então entra no Extrato na ordem do dia.
       carregarCaudaDoExtrato(supabase, {
@@ -246,7 +232,6 @@ export default async function ConciliacaoPage({
         inicioDaConta: s.saldoInicialData,
       }),
     ]);
-    if (conciliadosRes.error) console.error("[conciliacao.conciliados]", conciliadosRes.error.message);
     // Uma linha por guia, na posição do primeiro lançamento dela e com a
     // soma de todos: o saldo acumulado e os totais do período não mudam.
     const comGuias = agruparGuiasDeImposto(montadas, lancamentosDasGuias);
@@ -282,25 +267,7 @@ export default async function ConciliacaoPage({
     }
     creditos = linhas.reduce((acc, l) => acc + l.credito, 0);
     debitos = linhas.reduce((acc, l) => acc + l.debito, 0);
-
-    if (dadosBanco.ultima) {
-      let alertas: Record<string, string> = {};
-      try {
-        alertas = alertasDoExtrato(dadosBanco, contaId, hojeBr);
-      } catch (e) {
-        // Sem o ⚠, o Extrato continua de pé; a Conciliação automática avisa.
-        console.error("[conciliacao.alertas]", e);
-      }
-      marcasDoBanco = {
-        conciliados: [...(conciliadosRes.data ?? []).map((r) => r.id), ...cauda.conciliadas],
-        alertas,
-        fechadoAte: fechamento.ativo?.ate ?? null,
-      };
-    }
   }
-  const lancamentosQueNaoBatem = marcasDoBanco
-    ? linhas.filter((l) => marcasDoBanco?.alertas[l.id]).length
-    : 0;
 
   const saldoFinal = saldoAnterior + creditos - debitos;
   const contaAberta = listaContas.find((c) => c.id === contaId);
@@ -393,27 +360,6 @@ export default async function ConciliacaoPage({
               )}
               {mostrarSistema && (
                 <>
-                  {lancamentosQueNaoBatem > 0 && (
-                    <div className="flex flex-wrap items-center gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs text-red-900">
-                      <AlertTriangle className="h-4 w-4 shrink-0 text-california-red" />
-                      <span className="flex-1">
-                        <strong>
-                          {lancamentosQueNaoBatem === 1
-                            ? "1 lançamento não bate"
-                            : `${lancamentosQueNaoBatem} lançamentos não batem`}
-                        </strong>{" "}
-                        com o extrato do banco importado: {lancamentosQueNaoBatem === 1 ? "está marcado" : "estão marcados"} com
-                        ⚠ na coluna Banco. A conciliação não fecha até a correção.
-                      </span>
-                      <Link
-                        href={`/financeiro/conciliacao?conta=${contaId}&aba=banco`}
-                        prefetch={false}
-                        className="rounded-lg bg-california-red px-3 py-1.5 text-xs font-semibold text-white hover:bg-california-red-hover"
-                      >
-                        Corrigir na Conciliação automática
-                      </Link>
-                    </div>
-                  )}
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <SaldoCard label="Saldo anterior" valor={saldoAnterior} muted />
                     <SaldoCard
@@ -437,7 +383,6 @@ export default async function ConciliacaoPage({
                     jurosDasBaixas={jurosDasBaixas}
                     contexto={`${contaId}|${dataDe}|${dataAte}`}
                     contaId={contaId}
-                    banco={marcasDoBanco}
                   />
                 </>
               )}

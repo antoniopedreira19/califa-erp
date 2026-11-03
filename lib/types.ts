@@ -1419,6 +1419,37 @@ export interface JobEnvioFaturamentoAnexo {
   created_at: string;
 }
 
+/** A PO registrada no faturamento (decisão 234): uma na nota avulsa (sem
+ *  job), uma por job (e mês) na nota de job. Imutável, como a nota. */
+export interface FaturamentoPo {
+  id: string;
+  tenant_id: string;
+  faturamento_id: string;
+  job_id: string | null;
+  /** O mês do envio na planilha mensal (`chaveInfoDoEnvio`). */
+  mes: string | null;
+  numero_po: string | null;
+  created_by: string;
+  created_at: string;
+}
+
+/** Arquivo da PO registrada no faturamento (decisão 234): o do envio por
+ *  referência (bucket `envios-faturamento`), o anexado no Faturar no bucket
+ *  `faturamentos-nf`. */
+export interface FaturamentoPoAnexo {
+  id: string;
+  tenant_id: string;
+  faturamento_po_id: string;
+  envio_anexo_id: string | null;
+  bucket: "envios-faturamento" | "faturamentos-nf";
+  path: string;
+  nome_arquivo: string;
+  mime_type: "application/pdf" | "image/png" | "image/jpeg";
+  tamanho_bytes: number | null;
+  created_by: string;
+  created_at: string;
+}
+
 /** Uma data da curva de desembolso do job. */
 export interface JobPrevisaoCusto {
   id: string;
@@ -4358,6 +4389,9 @@ export interface ContaAvulsaRecorrente {
   data_fim: string | null; // YYYY-MM-DD
   forma_pagamento: FormaPagamento | null;
   cartao_credito_id: string | null;
+  // md5 de fornecedor|descrição da planilha: tira a previsão da planilha do
+  // fluxo (decisão 235). Nulo na recorrência criada pela tela.
+  previsao_chave: string | null;
   ativo: boolean;
   criado_por: string;
   created_at: string;

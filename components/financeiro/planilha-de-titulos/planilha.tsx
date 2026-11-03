@@ -22,6 +22,7 @@
  */
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { ArrowLeftRight, ChevronDown, CreditCard, Eye, Landmark, Pencil, Receipt, Undo2 } from "lucide-react";
 import { Dica } from "@/components/ui/dica";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
@@ -125,6 +126,65 @@ export interface SinalDoBanco {
   data: string;
   /** Por que o motor achou (o motivo da sugestão). */
   motivo: string;
+}
+
+/** O texto que pode ser cortado (truncate ou line-clamp): passando o mouse,
+ *  o cartão com o texto inteiro abre — só quando houve corte. É o cartão do
+ *  `TruncateTooltip` (components/ui), aceitando filhos (selo, asterisco).
+ *  Mantém a linha da planilha com altura regular (decisão 234): Descrição em
+ *  até 2 linhas, origem numa linha só, justificativa da urgência na dica do
+ *  selo. */
+function TextoCortado({
+  texto,
+  className,
+  children,
+}: {
+  texto: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  const ref = React.useRef<HTMLSpanElement>(null);
+  const [pos, setPos] = React.useState<{ top: number; left: number; minWidth: number } | null>(null);
+  function abrir() {
+    const el = ref.current;
+    if (!el) return;
+    // O corte pode estar num filho (a origem é flex com o complemento em truncate).
+    const cortado = [el, ...Array.from(el.querySelectorAll<HTMLElement>("*"))].some(
+      (n) => n.scrollHeight > n.clientHeight + 1 || n.scrollWidth > n.clientWidth + 1,
+    );
+    if (!cortado) return;
+    const r = el.getBoundingClientRect();
+    setPos({ top: r.bottom + 4, left: r.left, minWidth: r.width });
+  }
+  React.useEffect(() => {
+    if (!pos) return;
+    const fechar = () => setPos(null);
+    window.addEventListener("scroll", fechar, true);
+    window.addEventListener("resize", fechar);
+    return () => {
+      window.removeEventListener("scroll", fechar, true);
+      window.removeEventListener("resize", fechar);
+    };
+  }, [pos]);
+  return (
+    <>
+      <span ref={ref} className={className} onMouseEnter={abrir} onMouseLeave={() => setPos(null)}>
+        {children}
+      </span>
+      {pos && typeof document !== "undefined"
+        ? createPortal(
+            <div
+              role="tooltip"
+              style={{ position: "fixed", top: pos.top, left: pos.left, minWidth: pos.minWidth, maxWidth: 360 }}
+              className="pointer-events-none z-50 whitespace-normal break-words rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs leading-snug text-popover-foreground shadow-elevated"
+            >
+              {texto}
+            </div>,
+            document.body,
+          )
+        : null}
+    </>
+  );
 }
 
 export function PlanilhaDeTitulos<L extends LinhaDaPlanilha>(p: PropsDaPlanilha<L>) {
@@ -526,22 +586,24 @@ function LinhaDaTabela<L extends LinhaDaPlanilha>({
         </td>
       )}
       <td className="px-3 py-2 text-xs">
-        <span className="block break-words">
+        <TextoCortado
+          className="line-clamp-2 break-words leading-snug"
+          texto={l.urgente?.justificativa ? `${l.descricao} — Urgente: “${l.urgente.justificativa}”` : l.descricao}
+        >
           {l.urgente && (
-            <span className="mr-1.5 inline-block rounded-md bg-california-red px-1.5 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wider text-white">
+            <span
+              title={l.urgente.justificativa ? `Urgente: “${l.urgente.justificativa}”` : "Urgente"}
+              className="mr-1.5 inline-block rounded-md bg-california-red px-1.5 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wider text-white"
+            >
               Urgente
             </span>
           )}
           {l.descricao}
-        </span>
-        {/* A justificativa da aprovação (decisão 077) — some quando o título
-            é pago. */}
-        {l.urgente?.justificativa && (
-          <span title={l.urgente.justificativa} className="line-clamp-2 text-[11px] leading-snug text-california-red">
-            “{l.urgente.justificativa}”
-          </span>
-        )}
-        <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10.5px] text-muted-foreground">
+        </TextoCortado>
+        <TextoCortado
+          className="mt-0.5 flex items-center gap-1.5 overflow-hidden whitespace-nowrap text-[10.5px] text-muted-foreground"
+          texto={[l.etiqueta.texto, ...l.complementos].join(" · ")}
+        >
           <span
             className={cn(
               "inline-block whitespace-nowrap rounded border px-1.5 py-px text-[9.5px] font-bold uppercase tracking-wide",
@@ -550,9 +612,7 @@ function LinhaDaTabela<L extends LinhaDaPlanilha>({
           >
             {l.etiqueta.texto}
           </span>
-          {l.complementos.map((c) => (
-            <span key={c}>{c}</span>
-          ))}
+          {l.complementos.length > 0 && <span className="min-w-0 truncate">{l.complementos.join(" · ")}</span>}
           {l.bv && (
             <Dica
               conteudo={
@@ -578,10 +638,10 @@ function LinhaDaTabela<L extends LinhaDaPlanilha>({
               <ChevronDown className={cn("h-3 w-3 transition-transform", itensAbertos && "rotate-180")} />
             </button>
           )}
-        </span>
+        </TextoCortado>
       </td>
       <td className="px-3 py-2 text-xs">
-        <span className="block truncate" title={l.contraparte}>
+        <TextoCortado className="block truncate" texto={l.contraparte}>
           {l.contraparte}
           {/* Asterisco da decisão 067: o cadastro de hoje já não é o que este
               pedido manda pagar. */}
@@ -590,13 +650,13 @@ function LinhaDaTabela<L extends LinhaDaPlanilha>({
               *
             </Dica>
           )}
-        </span>
+        </TextoCortado>
       </td>
       <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
         {l.job ? (
-          <span className="block truncate text-california-red" title={l.job.nome || l.job.codigo}>
+          <TextoCortado className="block truncate text-california-red" texto={l.job.nome ? `${l.job.codigo} · ${l.job.nome}` : l.job.codigo}>
             {l.job.codigo}
-          </span>
+          </TextoCortado>
         ) : l.jobsDaFatura.length > 0 ? (
           <Dica conteudo={l.jobsDaFatura.join(" · ")} className="font-sans underline decoration-dotted underline-offset-2">
             {l.jobsDaFatura.length} {l.jobsDaFatura.length === 1 ? "job" : "jobs"}
@@ -612,9 +672,9 @@ function LinhaDaTabela<L extends LinhaDaPlanilha>({
         {trimestreDe(dataEfetiva(l, p.hoje))}
       </td>
       <td className="px-3 py-2 text-xs">
-        <span className="block truncate" title={l.empresa ?? undefined}>
+        <TextoCortado className="block truncate" texto={l.empresa ?? "—"}>
           {l.empresa ?? "—"}
-        </span>
+        </TextoCortado>
       </td>
       <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
         {textoReg === "—" ? (

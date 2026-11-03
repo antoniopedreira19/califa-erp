@@ -72,6 +72,43 @@ export async function uploadNfPdf(formData: FormData): Promise<Result<{ path: st
   return { ok: true, path };
 }
 
+/**
+ * O arquivo da PO anexado no Faturar (decisão 234): PDF ou imagem, no mesmo
+ * bucket do PDF da nota. O registro na nota sai com o `emitirFaturamento`.
+ */
+export async function uploadPoPdf(
+  formData: FormData,
+): Promise<Result<{ path: string; nome_arquivo: string; mime_type: "application/pdf" | "image/png" | "image/jpeg"; tamanho_bytes: number }>> {
+  const session = await requireSession();
+  if (session.activeRole !== "administrador" && session.activeRole !== "financeiro") {
+    return { ok: false, message: "Apenas admin ou financeiro pode fazer upload." };
+  }
+  const supabase = createClient();
+
+  const file = formData.get("file");
+  if (!(file instanceof File)) {
+    return { ok: false, message: "Arquivo inválido." };
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    return { ok: false, message: "Arquivo maior que 10 MB." };
+  }
+  const tipo = file.type;
+  if (tipo !== "application/pdf" && tipo !== "image/png" && tipo !== "image/jpeg") {
+    return { ok: false, message: "A PO vai em PDF, PNG ou JPG." };
+  }
+
+  const nome = file.name.replace(/[^\w.\-]+/g, "_").slice(-120) || "po";
+  const path = `${session.activeTenant.id}/${crypto.randomUUID()}/po-${nome}`;
+
+  const { error } = await supabase.storage
+    .from("faturamentos-nf")
+    .upload(path, file, { contentType: tipo, upsert: false });
+
+  if (error) return { ok: false, message: `Falha no upload: ${error.message}` };
+
+  return { ok: true, path, nome_arquivo: file.name, mime_type: tipo, tamanho_bytes: file.size };
+}
+
 /** URL assinada para ver o PDF da NF dentro do drawer (modo leitura). */
 export async function urlAnexoNf(path: string): Promise<Result<{ url: string }>> {
   const gate = await checarGateFinanceiro(path, "faturamento", "faturamento.anexo_lido");
@@ -111,6 +148,21 @@ const itemSchema = z.object({
   origem_id: z.string().uuid().nullable(),
   envio_parcela_id: z.string().uuid().nullable(),
   valor: z.number().positive(),
+});
+
+const anexoDaPoSchema = z.object({
+  envio_anexo_id: z.string().uuid().nullable(),
+  path: z.string().min(1).max(500),
+  nome_arquivo: z.string().trim().min(1).max(200),
+  mime_type: z.enum(["application/pdf", "image/png", "image/jpeg"]),
+  tamanho_bytes: z.number().int().nonnegative().nullable(),
+});
+
+const poSchema = z.object({
+  job_id: z.string().uuid().nullable(),
+  mes: z.string().max(20).nullable(),
+  numero_po: z.string().trim().max(120, "O Nº da PO tem no máximo 120 caracteres.").nullable(),
+  anexos: z.array(anexoDaPoSchema).max(20),
 });
 
 const emitirSchema = z.object({
@@ -157,6 +209,10 @@ const emitirSchema = z.object({
   cnpj_tomador: z.string().nullable().default(null),
   tomador_exterior: z.boolean().default(false),
   job_referencia_id: z.string().uuid().nullable().default(null),
+  // Decisão 234: o Nº e o anexo da PO, opcionais, registrados na nota — uma
+  // PO na avulsa (sem job), uma por job (e mês) na nota de job. O arquivo do
+  // envio vai por referência; o anexado no Faturar subiu por `uploadPoPdf`.
+  pos: z.array(poSchema).max(50).default([]),
 });
 
 /** Hoje no fuso da casa (o servidor roda em UTC): o mesmo dia da aba Apuração. */
@@ -229,6 +285,15 @@ export async function emitirFaturamento(
       message:
         "Só a nota avulsa leva rateio de regional: a nota de job ou de BV fica na regional do job.",
     };
+  }
+
+  // A PO (decisão 234): BV não tem; o arquivo novo é da pasta do tenant.
+  const pos = d.pos.filter((p) => (p.numero_po ?? "").trim() !== "" || p.anexos.length > 0);
+  if (pos.length > 0 && d.origem_tipo === "bv") {
+    return { ok: false, message: "BV não leva PO." };
+  }
+  if (pos.some((p) => p.anexos.some((a) => !a.envio_anexo_id && !a.path.startsWith(`${session.activeTenant.id}/`)))) {
+    return { ok: false, message: "Anexo da PO inválido: anexe o arquivo de novo." };
   }
 
   // BV nunca entra em NF agrupada: a contraparte dele é o fornecedor.
@@ -347,6 +412,13 @@ export async function emitirFaturamento(
     console.error("[faturamento.registrar_fiscal_da_nota]", fatId, erroFiscal.message);
   }
 
+  // A PO da nota (decisão 234), também depois da emissão: se falhar, a nota
+  // já saiu, e o aviso diz que a PO não ficou registrada.
+  const erroPo = pos.length > 0 ? await registrarPoDaNota(supabase, session, fatId as string, pos) : null;
+  if (erroPo) {
+    console.error("[faturamento.po]", fatId, erroPo);
+  }
+
   // O aviso depois de emitir diz em que Apuração os impostos da nota
   // entraram (`avisoDaApuracao`, protótipo aprovado do módulo fiscal) ou
   // que a guia já aprovada da competência passa a mostrar a diferença. A
@@ -393,6 +465,9 @@ export async function emitirFaturamento(
         cnae: cnaeTexto,
         fiscal_registrado: !erroFiscal,
         ...(erroFiscal ? { erro_fiscal: erroFiscal.message } : {}),
+        qtd_pos: pos.length,
+        qtd_anexos_po: pos.reduce((s, p) => s + p.anexos.length, 0),
+        ...(erroPo ? { erro_po: erroPo } : {}),
       },
     }),
   ]);
@@ -420,11 +495,112 @@ export async function emitirFaturamento(
   return {
     ok: true,
     faturamento_id: fatId as string,
-    avisoFiscal: erroFiscal
-      ? `A NF ${d.numero_nf} foi emitida, mas o CNPJ emissor e o CNAE não foram registrados nela (${erroFiscal.message}). Não emita a nota de novo: avise o administrador do sistema para completar o registro.`
-      : null,
+    avisoFiscal:
+      [
+        erroFiscal
+          ? `A NF ${d.numero_nf} foi emitida, mas o CNPJ emissor e o CNAE não foram registrados nela (${erroFiscal.message}). Não emita a nota de novo: avise o administrador do sistema para completar o registro.`
+          : null,
+        erroPo
+          ? `A NF ${d.numero_nf} foi emitida, mas a PO não ficou registrada nela (${erroPo}). Não emita a nota de novo: avise o administrador do sistema.`
+          : null,
+      ]
+        .filter(Boolean)
+        .join(" ") || null,
     apuracao: erroFiscal ? null : { hoje, primeira_competencia: PRIMEIRA_COMPETENCIA, aprovadas },
   };
+}
+
+/**
+ * Grava a PO da nota recém-emitida (decisão 234): uma linha por PO e os
+ * arquivos dela. O arquivo do envio vai pelo caminho que o envio gravou
+ * (relido aqui, e conferido de novo pela RLS). Devolve a mensagem do erro, ou
+ * nulo.
+ */
+async function registrarPoDaNota(
+  supabase: ReturnType<typeof createClient>,
+  session: Awaited<ReturnType<typeof requireSession>>,
+  faturamentoId: string,
+  pos: Array<z.infer<typeof poSchema>>,
+): Promise<string | null> {
+  const tenantId = session.activeTenant.id;
+  const idsDoEnvio = pos.flatMap((p) => p.anexos.flatMap((a) => (a.envio_anexo_id ? [a.envio_anexo_id] : [])));
+  const doEnvio = new Map<string, { path: string; nome_arquivo: string; mime_type: string; tamanho_bytes: number | null }>();
+  if (idsDoEnvio.length > 0) {
+    const { data, error } = await supabase
+      .from("jobs_envio_faturamento_anexos")
+      .select("id, path, nome_arquivo, mime_type, tamanho_bytes")
+      .eq("tenant_id", tenantId)
+      .in("id", idsDoEnvio);
+    if (error) return error.message;
+    for (const a of (data ?? []) as Array<{ id: string; path: string; nome_arquivo: string; mime_type: string; tamanho_bytes: number | null }>) {
+      doEnvio.set(a.id, a);
+    }
+  }
+
+  const { data: linhas, error: erroPo } = await supabase
+    .from("faturamentos_po")
+    .insert(
+      pos.map((p) => ({
+        tenant_id: tenantId,
+        faturamento_id: faturamentoId,
+        job_id: p.job_id,
+        mes: p.job_id ? p.mes : null,
+        numero_po: (p.numero_po ?? "").trim() || null,
+        created_by: session.profile.id,
+      })),
+    )
+    .select("id, job_id, mes");
+  if (erroPo) return erroPo.message;
+
+  const idDaPo = new Map(
+    ((linhas ?? []) as Array<{ id: string; job_id: string | null; mes: string | null }>).map((l) => [`${l.job_id ?? ""}|${l.mes ?? ""}`, l.id]),
+  );
+  type AnexoParaGravar = {
+    tenant_id: string;
+    faturamento_po_id: string;
+    envio_anexo_id: string | null;
+    bucket: "envios-faturamento" | "faturamentos-nf";
+    path: string;
+    nome_arquivo: string;
+    mime_type: string;
+    tamanho_bytes: number | null;
+    created_by: string;
+  };
+  const anexos = pos.flatMap((p): AnexoParaGravar[] => {
+    const poId = idDaPo.get(`${p.job_id ?? ""}|${(p.job_id ? p.mes : null) ?? ""}`);
+    if (!poId) return [];
+    return p.anexos.flatMap((a): AnexoParaGravar[] => {
+      if (a.envio_anexo_id) {
+        const e = doEnvio.get(a.envio_anexo_id);
+        if (!e) return [];
+        return [{
+          tenant_id: tenantId,
+          faturamento_po_id: poId,
+          envio_anexo_id: a.envio_anexo_id,
+          bucket: "envios-faturamento",
+          path: e.path,
+          nome_arquivo: e.nome_arquivo,
+          mime_type: e.mime_type,
+          tamanho_bytes: e.tamanho_bytes,
+          created_by: session.profile.id,
+        }];
+      }
+      return [{
+        tenant_id: tenantId,
+        faturamento_po_id: poId,
+        envio_anexo_id: null,
+        bucket: "faturamentos-nf",
+        path: a.path,
+        nome_arquivo: a.nome_arquivo,
+        mime_type: a.mime_type,
+        tamanho_bytes: a.tamanho_bytes,
+        created_by: session.profile.id,
+      }];
+    });
+  });
+  if (anexos.length === 0) return null;
+  const { error: erroAnexos } = await supabase.from("faturamentos_po_anexos").insert(anexos);
+  return erroAnexos ? erroAnexos.message : null;
 }
 
 // ---------------------------------------------------------------------------
