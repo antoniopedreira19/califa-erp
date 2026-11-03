@@ -51,7 +51,7 @@ export async function carregarNovidades(
     // 1. Novos cadastros
     supabase
       .from("freelancers")
-      .select("id, nome_social, created_at, origem")
+      .select("id, nome_social, nome_completo, created_at, origem")
       .eq("tenant_id", tenantId)
       .in("origem", ["manual", "form_publico"])
       .gte("created_at", CUTOFF_NOVIDADES)
@@ -73,7 +73,7 @@ export async function carregarNovidades(
     supabase
       .from("freelancer_contratos")
       .select(
-        "id, freelancer_id, nome_job, cargo, created_at, data_termino, arquivo_url, freelancers!inner(nome_social)",
+        "id, freelancer_id, nome_job, cargo, created_at, data_termino, arquivo_url, freelancers!inner(nome_social, nome_completo)",
       )
       .eq("tenant_id", tenantId)
       .is("arquivo_url", null)
@@ -86,7 +86,7 @@ export async function carregarNovidades(
     supabase
       .from("freelancer_contrato_historico")
       .select(
-        "contrato_id, valor_novo, alterado_em, alterado_por, freelancer_contratos!inner(freelancer_id, nome_job, cargo, freelancers!inner(nome_social))",
+        "contrato_id, valor_novo, alterado_em, alterado_por, freelancer_contratos!inner(freelancer_id, nome_job, cargo, freelancers!inner(nome_social, nome_completo))",
       )
       .eq("tenant_id", tenantId)
       .eq("campo", "nome_job")
@@ -100,7 +100,7 @@ export async function carregarNovidades(
     supabase
       .from("freelancer_contratos")
       .select(
-        "id, freelancer_id, nome_job, cargo, distrato_solicitado_em, distrato_solicitado_por, distrato_data_proposta, freelancers!inner(nome_social)",
+        "id, freelancer_id, nome_job, cargo, distrato_solicitado_em, distrato_solicitado_por, distrato_data_proposta, freelancers!inner(nome_social, nome_completo)",
       )
       .eq("tenant_id", tenantId)
       .not("distrato_solicitado_em", "is", null)
@@ -135,7 +135,8 @@ export async function carregarNovidades(
 
   const novos: NovoCadastroItem[] = (novosRes.data ?? []).map((f: any) => ({
     id: f.id,
-    nome_social: f.nome_social,
+    // Prefere nome_completo; cai pro nome_social quando o completo está vazio.
+    nome_social: f.nome_completo || f.nome_social,
     created_at: f.created_at,
     origem: f.origem,
   }));
@@ -171,7 +172,7 @@ export async function carregarNovidades(
         return {
           contrato_id: c.id,
           freelancer_id: c.freelancer_id,
-          freelancer_nome: freela?.nome_social ?? "—",
+          freelancer_nome: freela?.nome_completo ?? freela?.nome_social ?? "—",
           nome_job: c.nome_job,
           cargo: c.cargo,
           created_at: c.created_at,
@@ -206,7 +207,7 @@ export async function carregarNovidades(
       return {
         contrato_id: p.contrato_id,
         freelancer_id: contrato.freelancer_id,
-        freelancer_nome: freela?.nome_social ?? "—",
+        freelancer_nome: freela?.nome_completo ?? freela?.nome_social ?? "—",
         nome_job: p.valor_novo,
         cargo: contrato.cargo,
         alterado_em: p.alterado_em,
@@ -243,7 +244,7 @@ export async function carregarNovidades(
       return {
         contrato_id: d.id,
         freelancer_id: d.freelancer_id,
-        freelancer_nome: freela?.nome_social ?? "—",
+        freelancer_nome: freela?.nome_completo ?? freela?.nome_social ?? "—",
         nome_job: d.nome_job,
         cargo: d.cargo,
         solicitado_em: d.distrato_solicitado_em,
@@ -293,10 +294,37 @@ export async function carregarNovidades(
     concluidasInternosMap.set(j.id, j.nome);
   }
 
+  // Lookup pra preferir nome_completo do cadastro em vez do texto que o
+  // solicitante digitou (geralmente apelido tipo "Nat", "Tata").
+  const concluidasFreelaIds = Array.from(
+    new Set(
+      concluidasBrutas
+        .map((s) => s.freelancer_id as string | null)
+        .filter((id): id is string => !!id),
+    ),
+  );
+  const concluidasFreelaNomes = new Map<string, string>();
+  if (concluidasFreelaIds.length > 0) {
+    const { data: freelas } = await supabase
+      .from("freelancers")
+      .select("id, nome_social, nome_completo")
+      .in("id", concluidasFreelaIds);
+    for (const f of (freelas ?? []) as Array<{
+      id: string;
+      nome_social: string;
+      nome_completo: string | null;
+    }>) {
+      concluidasFreelaNomes.set(f.id, f.nome_completo || f.nome_social);
+    }
+  }
+
   const concluidas: SolicitacaoConcluidaItem[] = concluidasBrutas.map((s) => ({
     solicitacao_id: s.id,
     freelancer_id: s.freelancer_id,
-    freelancer_nome: s.nome_freela,
+    freelancer_nome:
+      (s.freelancer_id
+        ? concluidasFreelaNomes.get(s.freelancer_id)
+        : undefined) ?? s.nome_freela,
     nome_job:
       (s.job_id ? concluidasJobsMap.get(s.job_id) : undefined) ??
       (s.job_interno_id

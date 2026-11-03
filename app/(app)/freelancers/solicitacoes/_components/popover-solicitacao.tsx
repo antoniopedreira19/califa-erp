@@ -37,6 +37,9 @@ import {
 } from "../actions";
 
 interface SolicitacaoLinha extends FreelancerSolicitacao {
+  /** Prefere nome_completo do cadastro quando a solicitação já está vinculada
+   *  a um freelancer; cai no nome_freela (texto da solicitação) pra legados. */
+  nome_freela_display?: string;
   solicitante_nome: string | null;
   solicitante_email: string | null;
   job_codigo: string | null;
@@ -221,7 +224,7 @@ export function PopoverSolicitacao({
             status={s.status as FreelancerSolicitacaoStatus}
           />
           <h3 className="text-lg font-bold text-foreground mt-2">
-            {s.nome_freela}
+            {s.nome_freela_display ?? s.nome_freela}
           </h3>
           <p className="text-xs text-muted-foreground mt-0.5">
             {s.freelancer_id
