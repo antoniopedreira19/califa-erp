@@ -38,7 +38,7 @@ import {
   carregarLinhasDeFluxo,
   carregarPrazosDosJobs,
 } from "../../jobs/[jobId]/fluxo-do-job";
-import { alteracoesDosParametros, parametrosGravadosDe } from "@/lib/data/parametros-do-job";
+import { parametrosGravadosDe } from "@/lib/data/parametros-do-job";
 
 export const dynamic = "force-dynamic";
 
@@ -497,9 +497,8 @@ export default async function AbrirJobNoFinanceiroPage({
             parametrosDoJob={{
               parametros: parametrosGravadosDe(versaoAprovada),
               edicao: pode(session.activeRole, "jobs.editar_orcado_financeiro")
-                ? { naFila: true, travaDosParametros: null }
+                ? { naFila: true, travaDosParametros: null, cambioDepoisDaTrava: true }
                 : null,
-              alteracoes: alteracoesDosParametros(detalhe.alteracoesFinanceiro),
             }}
             interno={detalhe.interno}
             savePorItem={detalhe.savePorItem}

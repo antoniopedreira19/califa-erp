@@ -163,10 +163,10 @@ import { carregarHistoricoDaPlanilha } from "./actions-historico";
 import { BotaoHistorico, FaixaDaVersao, SeloDaLinha } from "./historico-da-planilha";
 import {
   ParametrosDoJob,
-  type AlteracaoDosParametros,
   type RascunhoDosParametros,
 } from "./parametros-do-job";
 import type { ParametrosDoJobGravados } from "@/lib/types";
+import type { ParametrosPedidos } from "@/lib/calculos/parametros-do-job";
 
 /** A linha de parâmetros do job no financeiro (decisão 224): os que valem
  *  hoje, quem edita e o que já mudou. */
@@ -174,8 +174,7 @@ export interface ParametrosDoJobNaPlanilha {
   parametros: ParametrosDoJobGravados;
   /** `null` = só leitura. `travaDosParametros`: por que honorários,
    *  impostos e taxas não mudam mais (a primeira nota); o câmbio segue. */
-  edicao: { naFila: boolean; travaDosParametros: string | null } | null;
-  alteracoes: AlteracaoDosParametros[];
+  edicao: { naFila: boolean; travaDosParametros: string | null; cambioDepoisDaTrava: boolean } | null;
 }
 
 const SEM_FATURAMENTO_MENSAL: MesDeFaturamento[] = [];
@@ -374,8 +373,9 @@ interface Props {
    *  `interno`. */
   edicaoDoFinanceiro: EdicaoDoFinanceiro | null;
   /** A linha de parâmetros do job, embaixo do rótulo da planilha (decisão
-   *  224). Só nas telas do financeiro; `null` na produção e na conferência
-   *  em leitura. Obrigatória pelo mesmo motivo de `interno`. */
+   *  224). Nas telas do financeiro e, desde a decisão 233, na da produção,
+   *  que os muda pela errata; `null` na conferência em leitura. Obrigatória
+   *  pelo mesmo motivo de `interno`. */
   parametrosDoJob: ParametrosDoJobNaPlanilha | null;
   /** O job como foi aberto (decisão 151, entrega 2): o card de Totais do
    *  job inteiro fecha a ótica Planejada sobre ele quando o valor do job
@@ -495,12 +495,8 @@ export function JobRealizadoSection({ comHistorico, ...props }: Props) {
   }, [assinatura]);
 
   const versoes = React.useMemo(() => (dados ? montarHistorico(dados) : null), [dados]);
-  const internacional = React.useMemo(
-    () => configDaPlanilha(modeloPlanilha, versao).internacional,
-    [modeloPlanilha, versao],
-  );
   // O valor do job de cada versão, pela mesma conta do cabeçalho e da barra
-  // da errata.
+  // da errata — com os parâmetros que valiam nela (decisão 233).
   const valores = React.useMemo(
     () =>
       new Map(
@@ -513,13 +509,13 @@ export function JobRealizadoSection({ comHistorico, ...props }: Props) {
               em_save: i.em_save,
               save_consumido: Number(i.save_consumido ?? 0),
             })),
-            versao.percentual_honorarios,
-            versao.percentual_imposto,
-            internacional,
+            v.parametros.percentual_honorarios,
+            v.parametros.percentual_imposto,
+            configDaPlanilha(modeloPlanilha, { ...versao, ...v.parametros }).internacional,
           ).valorJob,
         ]),
       ),
-    [versoes, versao.percentual_honorarios, versao.percentual_imposto, internacional],
+    [versoes, versao, modeloPlanilha],
   );
   const valorDe = React.useCallback((v: VersaoDaPlanilha) => valores.get(v.chave) ?? 0, [valores]);
 
@@ -583,6 +579,14 @@ export function JobRealizadoSection({ comHistorico, ...props }: Props) {
       // novo, e "Voltar para a atual" remonta a de hoje.
       key={antiga.chave}
       {...props}
+      // Os parâmetros que valiam na versão (decisão 233): a planilha, os
+      // Totais e a linha de parâmetros mostram os dela, só leitura.
+      versao={{ ...versao, ...antiga.parametros }}
+      parametrosDoJob={
+        props.parametrosDoJob
+          ? { ...props.parametrosDoJob, parametros: antiga.parametros, edicao: null }
+          : null
+      }
       itens={antiga.itens}
       grupos={antiga.grupos}
       realizadosMap={SEM_REALIZADOS}
@@ -724,10 +728,10 @@ function PlanilhaDoJob({
   // Os parâmetros do job abrem junto com o "Editar planilha" (revisão de
   // 30/10/2026): o rascunho deles vem da linha de parâmetros, e enquanto a
   // edição está no ar a planilha, os Totais e a barra fazem a conta com ele.
+  // Na produção é a errata que os leva (decisão 233).
   const [rascunhoDosParametros, setRascunhoDosParametros] =
     React.useState<RascunhoDosParametros | null>(null);
   const paramsDoRascunho =
-    modoFinanceiro &&
     errata.ativo &&
     rascunhoDosParametros &&
     rascunhoDosParametros.erro === null &&
@@ -935,6 +939,20 @@ function PlanilhaDoJob({
   const temMudancaDoFinanceiro =
     linhasDoFinanceiro.length > 0 || camposDosParametros.length > 0;
 
+  // Decisão 233: na errata, os parâmetros entram no resumo e tiram a
+  // edição do "só linha vermelha" (que não é errata, decisão 226).
+  const rotuloDosParametros =
+    camposDosParametros.length === 1
+      ? "1 parâmetro alterado"
+      : `${camposDosParametros.length} parâmetros alterados`;
+  const resumoDaErrata =
+    camposDosParametros.length === 0
+      ? errata.resumo
+      : errata.temMudanca
+        ? `${errata.resumo} · ${rotuloDosParametros}`
+        : rotuloDosParametros;
+  const soVermelhas = errata.soVermelhas && camposDosParametros.length === 0;
+
   /** As linhas e os parâmetros do rascunho, no formato das actions. */
   function mudancaDoFinanceiro(): MudancaDoFinanceiro {
     return {
@@ -954,19 +972,24 @@ function PlanilhaDoJob({
             }
           : {}),
       })),
-      parametros: paramsDoRascunho
-        ? {
-            percentual_honorarios: paramsDoRascunho.percentual_honorarios,
-            percentual_imposto: paramsDoRascunho.percentual_imposto,
-            percentual_int_taxes: paramsDoRascunho.percentual_int_taxes,
-            int_transaction_costs: paramsDoRascunho.int_transaction_costs,
-            moeda_estrangeira: paramsDoRascunho.moeda_estrangeira,
-            cambio_cotacao: paramsDoRascunho.cambio_cotacao,
-            cambio_data: paramsDoRascunho.cambio_data,
-            percentual_veiculo: paramsDoRascunho.percentual_veiculo,
-            base_honorarios: paramsDoRascunho.base_honorarios === "liquido" ? "liquido" : "negociado",
-          }
-        : null,
+      parametros: parametrosDoPedido(),
+    };
+  }
+
+  /** Os parâmetros do rascunho no formato das actions — do financeiro e,
+   *  desde a decisão 233, da errata. `null` quando nada mudou. */
+  function parametrosDoPedido(): ParametrosPedidos | null {
+    if (!paramsDoRascunho) return null;
+    return {
+      percentual_honorarios: paramsDoRascunho.percentual_honorarios,
+      percentual_imposto: paramsDoRascunho.percentual_imposto,
+      percentual_int_taxes: paramsDoRascunho.percentual_int_taxes,
+      int_transaction_costs: paramsDoRascunho.int_transaction_costs,
+      moeda_estrangeira: paramsDoRascunho.moeda_estrangeira,
+      cambio_cotacao: paramsDoRascunho.cambio_cotacao,
+      cambio_data: paramsDoRascunho.cambio_data,
+      percentual_veiculo: paramsDoRascunho.percentual_veiculo,
+      base_honorarios: paramsDoRascunho.base_honorarios === "liquido" ? "liquido" : "negociado",
     };
   }
 
@@ -1104,7 +1127,12 @@ function PlanilhaDoJob({
     setErroErrata(null);
     const { descricao: _descricao, ...doRascunho } = errata.payload(descricao);
     void _descricao;
-    const conteudo = { ...doRascunho, meses_novos: mesesNovosDoPayload() };
+    const conteudo = {
+      ...doRascunho,
+      meses_novos: mesesNovosDoPayload(),
+      // Decisão 233: os parâmetros do job, quando a errata mexe neles.
+      parametros: parametrosDoPedido(),
+    };
     // Quem prepara grava a errata pronta para envio (decisão 159); quem
     // registra envia ao financeiro — e, se a errata veio da pronta, a
     // consome no mesmo passo.
@@ -1864,14 +1892,23 @@ function PlanilhaDoJob({
       modelo={modeloPlanilha}
       parametros={parametrosDoJob.parametros}
       edicao={parametrosDoJob.edicao}
-      alteracoes={parametrosDoJob.alteracoes}
       // Onde há "Editar planilha" os parâmetros abrem com ele (30/10/2026).
       // Na Mídia Off, e com a planilha travada pela nota, a linha segue com
       // os botões próprios — o câmbio do internacional edita até o fim.
+      // Na produção, só pela errata (decisão 233): sem botão próprio, e a
+      // errata pronta reabre com os parâmetros que ela guardou.
       pelaPlanilha={
-        modoFinanceiro && !midia && motivoEdicaoTravada === null
-          ? { ativa: errata.ativo, onRascunho: setRascunhoDosParametros }
-          : null
+        midia
+          ? null
+          : modoFinanceiro
+            ? motivoEdicaoTravada === null
+              ? { ativa: errata.ativo, onRascunho: setRascunhoDosParametros, inicial: null }
+              : null
+            : {
+                ativa: errata.ativo,
+                onRascunho: setRascunhoDosParametros,
+                inicial: prontaAberta?.conteudo?.parametros ?? null,
+              }
       }
       itens={itens.map((i) => ({
         tipo_custo: i.tipo_custo,
@@ -2427,9 +2464,13 @@ function PlanilhaDoJob({
 
       {errata.ativo && !modoFinanceiro && (
         <ErrataBarra
-          resumo={errata.resumo}
-          soOrganizacao={errata.mudancas.length === 0 && errata.estrutura.length > 0}
-          temMudanca={errata.temMudanca}
+          resumo={resumoDaErrata}
+          soOrganizacao={
+            errata.mudancas.length === 0 &&
+            errata.estrutura.length > 0 &&
+            camposDosParametros.length === 0
+          }
+          temMudanca={errata.temMudanca || camposDosParametros.length > 0}
           faturamento={{
             antes: totaisAntes.faturamentoPrevisto,
             depois: totaisDepois.faturamentoPrevisto,
@@ -2445,7 +2486,7 @@ function PlanilhaDoJob({
           onConfirmar={() => {
             setErroErrata(null);
             // Decisão 226: só linha vermelha salva direto, sem pop-up.
-            if (errata.soVermelhas && !prontaAberta) {
+            if (soVermelhas && !prontaAberta) {
               void salvarSoVermelhas();
               return;
             }
@@ -2461,7 +2502,7 @@ function PlanilhaDoJob({
               : null
           }
           vermelhas={
-            errata.soVermelhas && !prontaAberta
+            soVermelhas && !prontaAberta
               ? "so"
               : errata.vermelhasForaDaErrata.length > 0
                 ? "junto"
@@ -2554,7 +2595,7 @@ function PlanilhaDoJob({
         }}
         jobCodigo={job.codigo}
         jobNome={job.nome}
-        resumo={errata.resumo}
+        resumo={resumoDaErrata}
         mudancas={errata.mudancas}
         estrutura={errata.estrutura}
         mesesNovos={mesesNovos.map((mes) => {
@@ -2594,6 +2635,7 @@ function PlanilhaDoJob({
           return { chave, grupo: errata.grupos.find((g) => g.id === grupoId)?.nome ?? "—" };
         })}
         gruposForaDaErrata={errata.gruposForaDaErrata}
+        parametros={camposDosParametros}
       />
     </div>
   );

@@ -28,14 +28,17 @@
  * Rodar o teste: `npm run test:historico-da-planilha`.
  */
 import type {
+  CategoriaModeloPlanilha,
   ErrataAcao,
   ItemPlanilhaJob,
   JobAlteracaoFinanceiroComItens,
   JobErrataComItens,
   JobGrupo,
+  ParametrosDoJobGravados,
   TipoCusto,
   VersaoOrcamentoGrupo,
 } from "@/lib/types";
+import { camposDaAlteracao } from "@/lib/calculos/parametros-do-job";
 
 type Numero = number | string | null | undefined;
 
@@ -140,6 +143,10 @@ export interface DadosDoHistorico {
   revisoes: RevisaoNoHistorico[];
   /** Decisão 226: as linhas vermelhas que entraram sem errata. */
   linhasVermelhas: LinhaVermelhaNoHistorico[];
+  /** Decisão 233: os parâmetros do job hoje (`vw_parametros_do_job`) e o
+   *  modelo, para os rótulos do de → para da alteração do financeiro. */
+  parametros: ParametrosDoJobGravados;
+  modeloPlanilha: CategoriaModeloPlanilha;
 }
 
 export type TipoDoMomento =
@@ -191,6 +198,12 @@ export interface VersaoDaPlanilha {
   mudancas: MudancaNaLinha[];
   /** O que a errata mudou nos agrupamentos, em texto. */
   estrutura: string[];
+  /** Decisão 233: o que o momento mudou nos parâmetros do job (honorários,
+   *  impostos, taxas, câmbio), nos rótulos do modelo. */
+  mudancaDeParametros: Array<{ rotulo: string; de: string; para: string }>;
+  /** Os parâmetros do job que valem nesta versão: o valor do job dela sai
+   *  deles, e não dos de hoje. */
+  parametros: ParametrosDoJobGravados;
   /** O valor do job que o histórico gravou depois do momento. Serve para
    *  conferir a reconstrução; nulo nos marcos sem valor gravado. */
   valorJobGravado: number | null;
@@ -316,6 +329,9 @@ interface Momento {
   descricao: string | null;
   revisao: VersaoDaPlanilha["revisao"];
   valorJobGravado: number | null;
+  /** Decisão 233: os parâmetros de antes do momento e o de → para dele.
+   *  `null` no momento que não mexeu neles. */
+  parametros: { de: ParametrosDoJobGravados; campos: VersaoDaPlanilha["mudancaDeParametros"] } | null;
   /** Recebe a planilha DEPOIS do momento e devolve a de ANTES, com o que
    *  mudou (visto do depois). */
   desfazer: (depois: Estado) => { antes: Estado; mudancas: MudancaNaLinha[]; estrutura: string[] };
@@ -347,7 +363,7 @@ export function montarHistorico(d: DadosDoHistorico): VersaoDaPlanilha[] {
  * abertura são marcos do job e saem.
  */
 export function historicoDoOrcamento(d: DadosDoHistorico, aprovadaEm: string | null): VersaoDaPlanilha[] {
-  const { versoes, inicio } = reconstruir(d);
+  const { versoes, inicio, parametrosIniciais } = reconstruir(d);
   const [atual, ...anteriores] = versoes;
   const momentos = anteriores
     .filter((v) => v.tipo !== "envio" && v.tipo !== "abertura" && v.tipo !== "linha_vermelha")
@@ -355,7 +371,7 @@ export function historicoDoOrcamento(d: DadosDoHistorico, aprovadaEm: string | n
       const vermelhas = new Set(v.itens.filter((i) => i.linha_vermelha).map((i) => i.id));
       return { ...v, mudancas: v.mudancas.filter((m) => !(m.itemId && vermelhas.has(m.itemId))) };
     })
-    .filter((v) => v.mudancas.length > 0 || v.estrutura.length > 0);
+    .filter((v) => v.mudancas.length > 0 || v.estrutura.length > 0 || v.mudancaDeParametros.length > 0);
   return [
     atual,
     ...momentos,
@@ -371,6 +387,8 @@ export function historicoDoOrcamento(d: DadosDoHistorico, aprovadaEm: string | n
       grupos: inicio.grupos,
       mudancas: [],
       estrutura: [],
+      mudancaDeParametros: [],
+      parametros: parametrosIniciais,
       valorJobGravado: null,
     },
   ];
@@ -378,7 +396,12 @@ export function historicoDoOrcamento(d: DadosDoHistorico, aprovadaEm: string | n
 
 /** A planilha de hoje desfeita momento a momento; `inicio` é a de antes do
  *  primeiro momento — a da versão aprovada. */
-function reconstruir(d: DadosDoHistorico): { versoes: VersaoDaPlanilha[]; inicio: Estado } {
+function reconstruir(d: DadosDoHistorico): {
+  versoes: VersaoDaPlanilha[];
+  inicio: Estado;
+  /** Os parâmetros de antes do primeiro momento (decisão 233). */
+  parametrosIniciais: ParametrosDoJobGravados;
+} {
   const aberturaMs = d.abertoEm ? Date.parse(d.abertoEm) : null;
   const gruposPorId = new Map(d.grupos.map((g) => [g.id, g]));
   const grupoDoJobDaAncora = new Map(d.grupos.map((g) => [g.grupo_versao_id, g.id]));
@@ -413,6 +436,7 @@ function reconstruir(d: DadosDoHistorico): { versoes: VersaoDaPlanilha[]; inicio
       descricao: null,
       revisao: null,
       valorJobGravado: null,
+      parametros: null,
       desfazer: SEM_MUDANCA,
     });
   }
@@ -428,6 +452,12 @@ function reconstruir(d: DadosDoHistorico): { versoes: VersaoDaPlanilha[]; inicio
       descricao: a.motivo || null,
       revisao: null,
       valorJobGravado: numOuNulo(a.valor_job_depois),
+      parametros: a.parametros
+        ? {
+            de: a.parametros.de,
+            campos: camposDaAlteracao(a.parametros.de, a.parametros.para, d.modeloPlanilha),
+          }
+        : null,
       desfazer: (depois) => {
         const antes = copiar(depois);
         const mudancas: MudancaNaLinha[] = [];
@@ -477,6 +507,7 @@ function reconstruir(d: DadosDoHistorico): { versoes: VersaoDaPlanilha[]; inicio
       descricao: null,
       revisao: null,
       valorJobGravado: null,
+      parametros: null,
       desfazer: SEM_MUDANCA,
     });
   }
@@ -501,6 +532,8 @@ function reconstruir(d: DadosDoHistorico): { versoes: VersaoDaPlanilha[]; inicio
       descricao: e.titulo || null,
       revisao: revisaoDaErrata.get(e.id) ?? null,
       valorJobGravado: numOuNulo(e.valor_job_depois),
+      // Decisão 233: os rótulos que a errata congelou.
+      parametros: e.parametros ? { de: e.parametros.de, campos: e.parametros.campos } : null,
       desfazer: (depois) => {
         let antes = copiar(depois);
         const mudancas: MudancaNaLinha[] = [];
@@ -686,6 +719,7 @@ function reconstruir(d: DadosDoHistorico): { versoes: VersaoDaPlanilha[]; inicio
       descricao: null,
       revisao: null,
       valorJobGravado: null,
+      parametros: null,
       desfazer: (depois) => {
         const antes = copiar(depois);
         const l = antes.itens.find((x) => x.id === s.job_item_orcado_id);
@@ -727,6 +761,7 @@ function reconstruir(d: DadosDoHistorico): { versoes: VersaoDaPlanilha[]; inicio
       descricao: null,
       revisao: null,
       valorJobGravado: null,
+      parametros: null,
       desfazer: (depois) => {
         const l = depois.itens.find((x) => x.id === v.id);
         if (!l) return { antes: depois, mudancas: [], estrutura: [] };
@@ -777,9 +812,13 @@ function reconstruir(d: DadosDoHistorico): { versoes: VersaoDaPlanilha[]; inicio
     grupos: estado.grupos,
     mudancas: [],
     estrutura: [],
+    mudancaDeParametros: [],
+    parametros: d.parametros,
     valorJobGravado: null,
   };
   const anteriores: VersaoDaPlanilha[] = [];
+  // Decisão 233: os parâmetros andam para trás junto com a planilha.
+  let parametros = d.parametros;
   for (let k = momentos.length - 1; k >= 0; k--) {
     const m = momentos[k];
     const { antes, mudancas, estrutura } = m.desfazer(estado);
@@ -795,9 +834,12 @@ function reconstruir(d: DadosDoHistorico): { versoes: VersaoDaPlanilha[]; inicio
       grupos: estado.grupos,
       mudancas,
       estrutura,
+      mudancaDeParametros: m.parametros?.campos ?? [],
+      parametros,
       valorJobGravado: m.valorJobGravado,
     });
     estado = antes;
+    if (m.parametros) parametros = m.parametros.de;
   }
-  return { versoes: [atual, ...anteriores], inicio: estado };
+  return { versoes: [atual, ...anteriores], inicio: estado, parametrosIniciais: parametros };
 }

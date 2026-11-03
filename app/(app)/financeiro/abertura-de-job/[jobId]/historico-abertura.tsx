@@ -446,6 +446,20 @@ export function ResumoDaAberturaAnterior({
                     ` · ${resumoDaEstrutura(e.organizacao).join(" · ")}`}
                 </>
               )}
+              {/* Decisão 233: os parâmetros do job que a errata mudou. */}
+              {e.parametros.length > 0 && (
+                <>
+                  {" · parâmetros: "}
+                  {e.parametros.map((c, k) => (
+                    <React.Fragment key={c.rotulo}>
+                      {k > 0 && ", "}
+                      {c.rotulo}{" "}
+                      <span className="font-mono line-through">{c.de}</span>{" "}
+                      <span className="font-mono font-semibold text-foreground">{c.para}</span>
+                    </React.Fragment>
+                  ))}
+                </>
+              )}
             </li>
           ))}
         </ol>

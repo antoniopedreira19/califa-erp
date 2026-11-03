@@ -864,6 +864,8 @@ export async function carregarDetalheDoJob(
           cancelamentos: prontaRaw.conteudo?.cancelamentos ?? [],
           // A organização da planilha (decisão 162); nula na pronta antiga.
           estrutura: prontaRaw.conteudo?.estrutura ?? null,
+          // Decisão 233: os parâmetros do job que a pronta muda.
+          parametros: prontaRaw.conteudo?.parametros ?? null,
         },
         descricao: prontaRaw.descricao ?? null,
         resumo: prontaRaw.resumo,

@@ -242,6 +242,28 @@ export function ResumoErrataDialog({
                 )}
               </div>
 
+              {/* Decisão 233: os parâmetros do job que a produção mudou pela
+                  errata — já valem no job, como as linhas. */}
+              {r.parametros.length > 0 && (
+                <div className="rounded-xl border border-border">
+                  <p className="border-b border-border px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                    O que mudou nos parâmetros
+                  </p>
+                  <ul className="divide-y divide-border">
+                    {r.parametros.map((c) => (
+                      <li key={c.rotulo} className="flex items-center justify-between gap-3 px-3.5 py-2">
+                        <span className="text-[12.5px] text-foreground">{c.rotulo}</span>
+                        <span className="flex items-baseline gap-2 whitespace-nowrap font-mono text-[11.5px]">
+                          <span className="text-muted-foreground">{c.de}</span>
+                          <span className="text-muted-foreground">→</span>
+                          <span className="font-bold text-foreground">{c.para}</span>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               {/* O que mudou na organização, como o GP confirmou. */}
               {r.organizacao.length > 0 && (
                 <div className="rounded-xl border border-border">
@@ -287,6 +309,8 @@ export function ResumoErrataDialog({
                           {e.soOrganizacao
                             ? `nenhum valor alterado · ${resumoDaEstrutura(e.organizacao).join(" · ")}`
                             : linhasAfetadas(e)}
+                          {e.parametros.length > 0 &&
+                            ` · ${e.parametros.length === 1 ? "1 parâmetro" : `${e.parametros.length} parâmetros`}`}
                         </p>
                         <p className="mt-0.5 flex flex-wrap gap-x-3 text-[11.5px] text-muted-foreground">
                           <span>

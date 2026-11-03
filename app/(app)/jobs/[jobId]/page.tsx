@@ -12,7 +12,13 @@ import { pode } from "@/lib/permissoes";
 import { listActiveMembers } from "@/lib/data/members";
 import { contatosDeCobrancaDoJob } from "@/lib/data/contatos-cobranca";
 import type { Job, JobStatus, Regional } from "@/lib/types";
-import { nomeDoCartaoCorporativo, rotuloDaVerba, tipoDaVerba } from "@/lib/types";
+import {
+  nomeDoCartaoCorporativo,
+  rotuloDaVerba,
+  tipoDaVerba,
+} from "@/lib/types";
+import { parametrosGravadosDe } from "@/lib/data/parametros-do-job";
+import { MENSAGEM_PARAMETROS_DEPOIS_DO_ENVIO } from "@/lib/calculos/parametros-do-job";
 import {
   jobStatusLabel,
   jobStatusExibido,
@@ -470,8 +476,25 @@ export default async function JobDetailPage({
             // O "Editar orçado" é do financeiro (decisão 115); aqui a
             // produção corrige pela errata.
             edicaoDoFinanceiro={null}
-            // A linha de parâmetros é do financeiro (decisão 224).
-            parametrosDoJob={null}
+            // A linha de parâmetros (decisão 224). A produção a muda pelo
+            // "Editar planilha", que vira errata (decisão 233), com a trava
+            // da errata: sem envio para faturamento (no mensal, de nenhum
+            // mês — os parâmetros mexem em todos). O câmbio não segue depois.
+            parametrosDoJob={{
+              parametros: parametrosGravadosDe(versaoAprovada),
+              edicao:
+                !comPedido && papelNaErrata !== null && jobAceitaAcoesPlanilha(job.status)
+                  ? {
+                      naFila: false,
+                      travaDosParametros:
+                        envioFaturamento !== null ||
+                        detalhe.faturamentoMensal.some((m) => m.envio !== null)
+                          ? MENSAGEM_PARAMETROS_DEPOIS_DO_ENVIO
+                          : null,
+                      cambioDepoisDaTrava: false,
+                    }
+                  : null,
+            }}
             // O Totais fecha sobre o job de hoje (15/10/2026).
             aberturaDoJob={null}
             // Decisão 159: o GP registra a errata; o produtor a deixa

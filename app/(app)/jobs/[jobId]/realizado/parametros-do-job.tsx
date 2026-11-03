@@ -17,7 +17,6 @@
  * - na fila da abertura tudo se edita; com o job aberto também, até a
  *   primeira nota (aí os campos ficam com o cadeado, e o câmbio do
  *   internacional continua) ou o encerramento (revisão de 28/10/2026);
- * - o selo "Alterado na abertura" mostra o de → para, quem e por quê.
  */
 
 import * as React from "react";
@@ -26,14 +25,12 @@ import {
   AlertCircle,
   CalendarClock,
   FilePenLine,
-  Landmark,
   Lock,
   Pencil,
   Save,
   X,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -62,17 +59,18 @@ import { comAContaDaMidia, fechamentoDosItens, parametrosDaVersao } from "@/lib/
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import { formatarTaxa } from "@/app/(app)/_planilha/moeda-estrangeira";
 import { ITENS_DE_MOEDA } from "@/app/(app)/orcamentos/[projetoId]/[orcId]/meta-versao";
-import type { CategoriaModeloPlanilha, ParametrosDoJobGravados, TipoCusto } from "@/lib/types";
+import type {
+  CategoriaModeloPlanilha,
+  ParametrosDoJobGravados,
+  ParametrosPedidosDoJob,
+  TipoCusto,
+} from "@/lib/types";
 import { alterarParametrosDoJob } from "./actions-parametros-do-job";
+import { camposDaAlteracao } from "@/lib/calculos/parametros-do-job";
 
-/** Uma alteração dos parâmetros já gravada, para o selo. */
-export interface AlteracaoDosParametros {
-  id: string;
-  created_at: string;
-  autor_nome: string | null;
-  motivo: string;
-  parametros: { de: ParametrosDoJobGravados; para: ParametrosDoJobGravados };
-}
+// A conta do de → para mora no módulo puro (decisão 233): a errata a
+// congela no servidor. Quem importava daqui continua importando.
+export { camposDaAlteracao };
 
 /** As linhas do orçado do job, como a conta dos Totais as soma. */
 export interface ItemDosParametros {
@@ -94,8 +92,14 @@ interface Props {
   /** Quem edita e quando. `null` = só leitura: sem a permissão, ou fora da
    *  janela (encerrado). `travaDosParametros`: por que honorários, impostos
    *  e taxas não mudam mais (a primeira nota); o câmbio segue editável. */
-  edicao: { naFila: boolean; travaDosParametros: string | null } | null;
-  alteracoes: AlteracaoDosParametros[];
+  edicao: {
+    naFila: boolean;
+    travaDosParametros: string | null;
+    /** O câmbio do internacional segue editável depois da trava (o
+     *  financeiro, até o encerramento). Na produção, não: a trava da errata
+     *  fecha tudo (decisão 233). */
+    cambioDepoisDaTrava: boolean;
+  } | null;
   itens: ItemDosParametros[];
   /**
    * O "Editar planilha" do financeiro (revisão de 30/10/2026): os
@@ -108,6 +112,9 @@ interface Props {
   pelaPlanilha: {
     ativa: boolean;
     onRascunho: (r: RascunhoDosParametros) => void;
+    /** Decisão 233: a errata pronta reabre com os parâmetros que guardou.
+     *  `null` = os de hoje. */
+    inicial: ParametrosPedidosDoJob | null;
   } | null;
 }
 
@@ -151,75 +158,6 @@ const texto = (n: number | null) => (n === null ? "" : String(n).replace(".", ",
 function formatarData(iso: string): string {
   const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})/);
   return m ? `${m[3]}/${m[2]}/${m[1]}` : iso;
-}
-
-/** Data e hora de Brasília da alteração. */
-function quando(iso: string): string {
-  const d = new Date(iso);
-  const data = d.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
-  const hora = d.toLocaleTimeString("pt-BR", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "America/Sao_Paulo",
-  });
-  return `${data} · ${hora}`;
-}
-
-/** O de → para de cada campo que mudou, nos rótulos do modelo do job. */
-export function camposDaAlteracao(
-  de: ParametrosDoJobGravados,
-  para: ParametrosDoJobGravados,
-  modelo: CategoriaModeloPlanilha,
-  moeda = "BRL",
-): Array<{ rotulo: string; de: string; para: string }> {
-  const intl = modelo === "internacional";
-  const c: Array<{ rotulo: string; de: string; para: string }> = [];
-  const se = (cond: boolean, rotulo: string, a: string, b: string) => {
-    if (cond) c.push({ rotulo, de: a, para: b });
-  };
-  se(
-    de.percentual_honorarios !== para.percentual_honorarios,
-    intl ? "Fee" : "Honorários",
-    pct(de.percentual_honorarios),
-    pct(para.percentual_honorarios),
-  );
-  se(de.base_honorarios !== para.base_honorarios, "Base dos honorários",
-    BASES_DOS_HONORARIOS.find((b) => b.value === de.base_honorarios)?.rotulo ?? de.base_honorarios,
-    BASES_DOS_HONORARIOS.find((b) => b.value === para.base_honorarios)?.rotulo ?? para.base_honorarios);
-  se(de.percentual_veiculo !== para.percentual_veiculo, "Veículo", pct(de.percentual_veiculo), pct(para.percentual_veiculo));
-  se(de.percentual_int_taxes !== para.percentual_int_taxes, "Int. taxes", pct(de.percentual_int_taxes), pct(para.percentual_int_taxes));
-  se(
-    de.percentual_imposto !== para.percentual_imposto,
-    intl ? "Impostos BR" : "Impostos",
-    pct(de.percentual_imposto),
-    pct(para.percentual_imposto),
-  );
-  se(
-    de.int_transaction_costs !== para.int_transaction_costs,
-    "Int. transaction costs",
-    formatCurrency(de.int_transaction_costs, moeda),
-    formatCurrency(para.int_transaction_costs, moeda),
-  );
-  se(de.moeda_estrangeira !== para.moeda_estrangeira, "Moeda", de.moeda_estrangeira || "—", para.moeda_estrangeira || "—");
-  se(
-    de.cambio_cotacao !== para.cambio_cotacao,
-    "Cotação",
-    de.cambio_cotacao ? formatarTaxa(de.cambio_cotacao) : "—",
-    para.cambio_cotacao ? formatarTaxa(para.cambio_cotacao) : "—",
-  );
-  se(
-    de.cambio_compra !== para.cambio_compra,
-    "Compra",
-    de.cambio_compra ? formatarTaxa(de.cambio_compra) : "—",
-    para.cambio_compra ? formatarTaxa(para.cambio_compra) : "—",
-  );
-  se(
-    de.cambio_data !== para.cambio_data,
-    "Data da cotação",
-    de.cambio_data ? formatarData(de.cambio_data) : "—",
-    para.cambio_data ? formatarData(para.cambio_data) : "—",
-  );
-  return c;
 }
 
 function rascunhoDe(p: ParametrosDoJobGravados, intl: boolean): Rascunho {
@@ -305,7 +243,6 @@ export function ParametrosDoJob({
   modelo,
   parametros: p,
   edicao,
-  alteracoes,
   itens,
   pelaPlanilha,
 }: Props) {
@@ -323,14 +260,22 @@ export function ParametrosDoJob({
   // primeira nota só o câmbio do internacional abre.
   const ativaPelaPlanilha = pelaPlanilha?.ativa === true;
   const comoAbrePelaPlanilha: Editando =
-    edicao === null ? null : edicao.travaDosParametros === null ? "tudo" : intl ? "cambio" : null;
+    edicao === null
+      ? null
+      : edicao.travaDosParametros === null
+        ? "tudo"
+        : intl && edicao.cambioDepoisDaTrava
+          ? "cambio"
+          : null;
+  // A errata pronta reabre com o que ela guardou (decisão 233).
+  const inicial = ativaPelaPlanilha ? (pelaPlanilha?.inicial ?? null) : null;
 
   // Depois do refresh os parâmetros novos chegam: a linha volta a ler deles.
   // Pelo conteúdo, e não pela referência — o objeto é remontado a cada render.
   const chaveDosParametros = JSON.stringify(p);
   React.useEffect(() => {
     setEditando(ativaPelaPlanilha ? comoAbrePelaPlanilha : null);
-    setRascunho(rascunhoDe(p, intl));
+    setRascunho(rascunhoDe(inicial ? { ...p, ...inicial } : p, intl));
     setConfirmando(false);
     setErro(null);
     // A planilha liga e desliga a linha; os parâmetros novos a releem.
@@ -419,10 +364,10 @@ export function ParametrosDoJob({
   // Pelo "Editar planilha" o erro do que foi digitado aparece na hora: não
   // há "Salvar" na linha.
   const erroVisivel = erro ?? (pelaPlanilha ? erroDoRascunho : null);
-  const podeCambio = intl && edicao !== null;
+  const podeCambio =
+    intl && edicao !== null && (edicao.travaDosParametros === null || edicao.cambioDepoisDaTrava);
   const antes = contas(p);
   const depois = contas(para);
-  const rotuloDoSelo = edicao?.naFila === false ? "Alterado pelo financeiro" : "Alterado na abertura";
 
   const linhaDosParametros =
     editando !== "parametros" && editando !== "tudo" ? (
@@ -476,7 +421,7 @@ export function ParametrosDoJob({
         ) : edicao?.travaDosParametros ? (
           <span
             title={
-              intl
+              intl && edicao.cambioDepoisDaTrava
                 ? `${edicao.travaDosParametros} O câmbio continua editável.`
                 : edicao.travaDosParametros
             }
@@ -485,9 +430,6 @@ export function ParametrosDoJob({
             <Lock className="h-3.5 w-3.5 text-muted-foreground" />
           </span>
         ) : null}
-        {alteracoes.length > 0 && (
-          <SeloAlterado alteracoes={alteracoes} modelo={modelo} moeda={moeda} rotulo={rotuloDoSelo} />
-        )}
       </div>
     ) : (
       <form
@@ -722,54 +664,6 @@ export function ParametrosDoJob({
         onConfirmar={confirmar}
       />
     </>
-  );
-}
-
-/* ---- O selo do que mudou ---------------------------------------------------- */
-
-function SeloAlterado({
-  alteracoes,
-  modelo,
-  moeda,
-  rotulo,
-}: {
-  alteracoes: AlteracaoDosParametros[];
-  modelo: CategoriaModeloPlanilha;
-  moeda: string;
-  rotulo: string;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span className="inline-flex h-[22px] cursor-help items-center gap-1 rounded-full border border-border bg-white px-2 text-[11px] font-semibold text-muted-foreground">
-          <Landmark className="h-3 w-3 text-california-red" />
-          {rotulo}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent side="bottom" className="max-w-[380px] text-xs leading-relaxed">
-        <div className="space-y-2.5">
-          {alteracoes.map((a) => (
-            <div key={a.id} className="space-y-1">
-              {camposDaAlteracao(a.parametros.de, a.parametros.para, modelo, moeda).map((c) => (
-                <div key={c.rotulo} className="flex justify-between gap-4">
-                  <span>{c.rotulo}</span>
-                  <span className="font-mono">
-                    <span className="text-muted-foreground line-through">{c.de}</span> → {c.para}
-                  </span>
-                </div>
-              ))}
-              <p className="border-t border-border pt-1">“{a.motivo}”</p>
-              <p className="text-muted-foreground">
-                {a.autor_nome ?? "—"} · {quando(a.created_at)}
-              </p>
-            </div>
-          ))}
-          <p className="border-t border-border pt-1.5 text-muted-foreground">
-            A versão aprovada no orçamento não muda.
-          </p>
-        </div>
-      </TooltipContent>
-    </Tooltip>
   );
 }
 

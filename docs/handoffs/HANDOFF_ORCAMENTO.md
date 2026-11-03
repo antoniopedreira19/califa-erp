@@ -6078,3 +6078,19 @@ motivo ficava no fim da janela, depois do Descritivo.
   Conferido no P-0006/26 com e-mail acentuado, que a tela aceita e o servidor
   recusa. O motivo das recusas relatadas continua desconhecido até a próxima
   tentativa ser registrada.
+
+## ⚠️ Nota de 2026-11-03 — a versão aprovada mostra os parâmetros do job (decisão 233)
+
+- `planilhaDoJobNaVersao` (`lib/data/versao-aprovada-do-job.ts`) traz os
+  `parametros` do job; a página da versão, a exportação da versão e a do
+  projeto passam a versão por `comParametrosDoJob`. Honorários, impostos,
+  taxas e câmbio que o financeiro ou uma errata mudaram aparecem no
+  orçamento; a versão gravada não muda.
+- O Histórico do orçamento põe no contexto os `parametros` da versão
+  escolhida: `PlanilhaVersao` e `PlanilhaMensalDoHistorico` fecham a
+  planilha e os Totais com eles. `HistoricoDoOrcamento` recebe
+  `modeloPlanilha` no lugar dos percentuais.
+- O estado do Histórico envolve a página inteira da versão (a faixa vai
+  por `FaixaDoHistorico`), e a linha de parâmetros e o resumo do topo
+  (`MetaVersaoDoHistorico`, `ResumoDoHistorico`) mostram a versão escolhida.
+

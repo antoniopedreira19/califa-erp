@@ -2449,6 +2449,10 @@ export interface JobErrata {
   /** Decisão 162: o que a errata mudou na organização da planilha, com os
    *  nomes daquele momento. `null` na errata que não mexeu nela. */
   estrutura: MudancaDeEstrutura[] | null;
+  /** Decisão 233: {de, para} dos parâmetros do job que a errata mudou, e
+   *  os rótulos de → para como o pop-up os mostrou (congelados, como os
+   *  nomes da organização). `null` na errata que não mexeu neles. */
+  parametros: ParametrosDaErrata | null;
 }
 
 /** Um agrupamento da Planilha Interna do job (`jobs_grupos`, decisão 162).
@@ -2581,6 +2585,31 @@ export interface ConteudoErrata {
    *  (`chave` = `mes-novo:AAAA-MM`, que os agrupamentos novos levam no
    *  `mes_id`). Ausente na pronta gravada antes de 27/10/2026. */
   meses_novos?: Array<{ chave: string; mes: string }>;
+  /** Decisão 233: os parâmetros do job como a errata os deixa. Nulo quando
+   *  ela não mexe neles. Obrigatório: quem remonta o conteúdo campo a campo
+   *  (a leitura da pronta) não pode esquecê-lo em silêncio. */
+  parametros: ParametrosPedidosDoJob | null;
+}
+
+/** Os parâmetros do job que uma errata mudou (decisão 233). */
+export interface ParametrosDaErrata {
+  de: ParametrosDoJobGravados;
+  para: ParametrosDoJobGravados;
+  campos: Array<{ rotulo: string; de: string; para: string }>;
+}
+
+/** Os parâmetros do job que a tela pede (decisões 224 e 233): o
+ *  `ParametrosDoJobGravados` sem compra e venda, que saem da cotação. */
+export interface ParametrosPedidosDoJob {
+  percentual_honorarios: number;
+  percentual_imposto: number;
+  percentual_int_taxes: number;
+  int_transaction_costs: number;
+  moeda_estrangeira: string | null;
+  cambio_cotacao: number | null;
+  cambio_data: string | null;
+  percentual_veiculo: number;
+  base_honorarios: "negociado" | "liquido";
 }
 
 /** O que a errata decide sobre a ORGANIZAÇÃO da planilha (decisão 162).

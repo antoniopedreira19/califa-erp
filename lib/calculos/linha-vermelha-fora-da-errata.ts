@@ -193,9 +193,12 @@ export function sobraErrata(c: {
   remocoes?: unknown[];
   meses_novos?: unknown[];
   estrutura?: { grupos_novos: unknown[]; grupos_renomeados: unknown[]; ordem: unknown[] | null } | null;
+  /** Decisão 233: os parâmetros do job que a errata muda. */
+  parametros?: unknown;
 }): boolean {
   const est = c.estrutura ?? null;
   return (
+    c.parametros != null ||
     c.alteracoes.length > 0 ||
     c.novas.length > 0 ||
     c.cancelamentos.length > 0 ||

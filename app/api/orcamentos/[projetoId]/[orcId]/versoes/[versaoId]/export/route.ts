@@ -24,6 +24,7 @@ import {
 import { pode } from "@/lib/permissoes";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import { planilhaDoJobNaVersao, versaoMostraOJob } from "@/lib/data/versao-aprovada-do-job";
+import { comParametrosDoJob } from "@/lib/data/parametros-do-job";
 import type {
   CategoriaModeloPlanilha,
   JobStatus,
@@ -121,7 +122,7 @@ export async function GET(
     );
   }
 
-  const versao = versaoRes.data;
+  let versao = versaoRes.data;
   const orcamento = orcRes.data;
   let grupos: VersaoOrcamentoGrupo[] = gruposRes.data ?? [];
   let itensLidos: VersaoOrcamentoItem[] = itensRes.data ?? [];
@@ -150,6 +151,8 @@ export async function GET(
     }
     grupos = doJob.planilha.grupos;
     itensLidos = doJob.planilha.itens;
+    // Decisão 233: os parâmetros do job, quando mudaram depois da aprovação.
+    versao = comParametrosDoJob(versao, doJob.planilha.parametros);
   }
 
   const itens = itensLidos.map((it: any) => ({

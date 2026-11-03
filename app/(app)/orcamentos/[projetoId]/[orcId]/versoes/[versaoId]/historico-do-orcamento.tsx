@@ -21,10 +21,13 @@ import {
   type DadosDoHistorico,
   type VersaoDaPlanilha,
 } from "@/lib/calculos/historico-da-planilha";
-import { calcularTotaisVersao, type ParametrosInternacionais } from "@/lib/calculos/versao-totais";
+import { calcularTotaisVersao } from "@/lib/calculos/versao-totais";
+import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import {
   CAMPOS_DE_MIDIA_VAZIOS,
+  type CategoriaModeloPlanilha,
   type ItemPlanilhaJob,
+  type ParametrosDoJobGravados,
   type VersaoOrcamentoGrupo,
   type VersaoOrcamentoItem,
 } from "@/lib/types";
@@ -36,6 +39,14 @@ interface ContextoDoHistorico {
   botao: React.ReactNode;
   /** As linhas que o momento escolhido mudou, quando o destaque está ligado. */
   destaque: Set<string> | null;
+  /** Decisão 233: os parâmetros (honorários, impostos, taxas, câmbio) da
+   *  versão antiga escolhida; `null` na atual. A planilha e os Totais fecham
+   *  com eles. */
+  parametros: ParametrosDoJobGravados | null;
+  /** A faixa da versão escolhida: `FaixaDoHistorico` a põe acima da
+   *  planilha, e o provedor fica em volta da página inteira da versão — o
+   *  cabeçalho também lê a versão escolhida (decisão 233). */
+  faixa: React.ReactNode;
 }
 
 const Contexto = React.createContext<ContextoDoHistorico | null>(null);
@@ -45,6 +56,11 @@ export function useHistoricoDoOrcamento(): ContextoDoHistorico | null {
 }
 
 /** Os meses do mensal depois do primeiro: sem um segundo botão. */
+/** A faixa da versão antiga escolhida no Histórico, onde a página a quiser. */
+export function FaixaDoHistorico() {
+  return <>{React.useContext(Contexto)?.faixa ?? null}</>;
+}
+
 export function SemBotaoDoHistorico({ children }: { children: React.ReactNode }) {
   const c = React.useContext(Contexto);
   if (!c) return <>{children}</>;
@@ -102,9 +118,7 @@ export function HistoricoDoOrcamento({
   versaoId,
   tenantId,
   moeda,
-  percentualHonorarios,
-  percentualImposto,
-  internacional,
+  modeloPlanilha,
   children,
 }: {
   jobId: string;
@@ -113,9 +127,9 @@ export function HistoricoDoOrcamento({
   versaoId: string;
   tenantId: string;
   moeda: string;
-  percentualHonorarios: number;
-  percentualImposto: number;
-  internacional: ParametrosInternacionais | null;
+  /** O modelo do orçamento: a cadeia do internacional de cada versão sai
+   *  dele com os parâmetros da versão (decisão 233). */
+  modeloPlanilha: CategoriaModeloPlanilha;
   children: React.ReactNode;
 }) {
   const [dados, setDados] = React.useState<DadosDoHistorico | null>(null);
@@ -142,15 +156,18 @@ export function HistoricoDoOrcamento({
     setDados(r.dados);
   }
 
+  // Decisão 233: cada versão fecha com os parâmetros que valiam nela — a
+  // "Aprovada pelo cliente" com os da versão, e cada alteração do
+  // financeiro ou errata que os mudou dali em diante.
   const valorDe = React.useCallback(
     (v: VersaoDaPlanilha) =>
       calcularTotaisVersao(
         itensDoCliente(v.itens, versaoId, tenantId),
-        percentualHonorarios,
-        percentualImposto,
-        internacional,
+        v.parametros.percentual_honorarios,
+        v.parametros.percentual_imposto,
+        configDaPlanilha(modeloPlanilha, v.parametros).internacional,
       ).valorJob,
-    [versaoId, tenantId, percentualHonorarios, percentualImposto, internacional],
+    [versaoId, tenantId, modeloPlanilha],
   );
 
   const k = versoes ? versoes.findIndex((v) => v.chave === selecionada) : -1;
@@ -160,6 +177,23 @@ export function HistoricoDoOrcamento({
   const valor = React.useMemo<ContextoDoHistorico>(
     () => ({
       versao: antiga ? versaoDoCliente(antiga, versaoId, tenantId) : null,
+      parametros: antiga ? antiga.parametros : null,
+      faixa:
+        antiga && versoes ? (
+          <FaixaDaVersao
+            versao={antiga}
+            valorJob={{ antes: versoes[k + 1] ? valorDe(versoes[k + 1]) : null, depois: valorDe(antiga) }}
+            moeda={moeda}
+            temAnterior={k < versoes.length - 1}
+            temProxima={k > 0}
+            onAnterior={() => setSelecionada(versoes[k + 1].chave)}
+            onProxima={() => setSelecionada(versoes[k - 1].chave)}
+            onAtual={() => setSelecionada("atual")}
+            destacar={destacar}
+            onDestacar={setDestacar}
+            nota="Só leitura: o que vale para o job é a versão atual."
+          />
+        ) : null,
       destaque:
         antiga && destacar
           ? new Set(antiga.mudancas.map((m) => m.itemId).filter((id): id is string => !!id))
@@ -184,24 +218,5 @@ export function HistoricoDoOrcamento({
     [antiga, destacar, versoes, carregando, erro, selecionada, valorDe, moeda, versaoId, tenantId],
   );
 
-  return (
-    <Contexto.Provider value={valor}>
-      {antiga && versoes && (
-        <FaixaDaVersao
-          versao={antiga}
-          valorJob={{ antes: versoes[k + 1] ? valorDe(versoes[k + 1]) : null, depois: valorDe(antiga) }}
-          moeda={moeda}
-          temAnterior={k < versoes.length - 1}
-          temProxima={k > 0}
-          onAnterior={() => setSelecionada(versoes[k + 1].chave)}
-          onProxima={() => setSelecionada(versoes[k - 1].chave)}
-          onAtual={() => setSelecionada("atual")}
-          destacar={destacar}
-          onDestacar={setDestacar}
-          nota="Só leitura: o que vale para o job é a versão atual."
-        />
-      )}
-      {children}
-    </Contexto.Provider>
-  );
+  return <Contexto.Provider value={valor}>{children}</Contexto.Provider>;
 }

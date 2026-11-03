@@ -13,6 +13,7 @@ import type {
   JobErrataComItens,
   JobErrataItem,
   JobGrupo,
+  ParametrosDoJobGravados,
 } from "@/lib/types";
 import {
   historicoDoOrcamento,
@@ -126,6 +127,7 @@ function errata(id: string, quando: string, itens: JobErrataItem[], extra: Parti
     created_at: quando,
     preparada_por: null,
     estrutura: null,
+    parametros: null,
     autor_nome: "Pessoa da produção",
     preparada_por_nome: null,
     itens: itens.map((i) => ({ ...i, errata_id: id })),
@@ -192,6 +194,20 @@ function alteracao(
   };
 }
 
+const PARAMETROS: ParametrosDoJobGravados = {
+  percentual_honorarios: 15,
+  percentual_imposto: 19.53,
+  percentual_int_taxes: 0,
+  int_transaction_costs: 0,
+  moeda_estrangeira: null,
+  cambio_cotacao: null,
+  cambio_compra: null,
+  cambio_venda: null,
+  cambio_data: null,
+  percentual_veiculo: 80,
+  base_honorarios: "negociado",
+};
+
 function base(extra: Partial<DadosDoHistorico>): DadosDoHistorico {
   return {
     versaoAprovadaId: VERSAO,
@@ -209,6 +225,8 @@ function base(extra: Partial<DadosDoHistorico>): DadosDoHistorico {
     savesDesfeitos: [],
     revisoes: [],
     linhasVermelhas: [],
+    parametros: PARAMETROS,
+    modeloPlanilha: "nacional",
     ...extra,
   };
 }
@@ -609,4 +627,53 @@ test("decisão 226 (29/10): o agrupamento criado com a linha vermelha sai com el
   );
   assert.ok(versoes[1].grupos.some((g) => g.id === "gv"));
   assert.equal(versoes[2].grupos.some((g) => g.id === "gv"), false);
+});
+
+test("decisão 233: a errata só de parâmetros é momento, e cada versão leva os parâmetros dela", () => {
+  const de = { ...PARAMETROS, percentual_honorarios: 12 };
+  const dados = base({
+    linhas: [linha("1", "ga", 1, 1000, 800)],
+    erratas: [
+      errata("e1", "2026-10-10T12:00:00Z", [], {
+        parametros: { de, para: PARAMETROS, campos: [{ rotulo: "Honorários", de: "12%", para: "15%" }] },
+      }),
+    ],
+  });
+  const versoes = montarHistorico(dados);
+  const e1 = versoes.find((v) => v.chave === "errata-e1")!;
+  assert.deepEqual(e1.mudancaDeParametros, [{ rotulo: "Honorários", de: "12%", para: "15%" }]);
+  assert.equal(e1.parametros.percentual_honorarios, 15);
+  assert.equal(versoes[0].parametros.percentual_honorarios, 15);
+  // A versão de antes da errata volta aos 12%.
+  const abertura = versoes.find((v) => v.chave === "abertura")!;
+  assert.equal(abertura.parametros.percentual_honorarios, 12);
+
+  const doOrcamento = historicoDoOrcamento(dados, "2026-09-30T12:00:00Z");
+  assert.deepEqual(doOrcamento.map((v) => v.chave), ["atual", "errata-e1", "aprovada"]);
+  assert.equal(doOrcamento[2].parametros.percentual_honorarios, 12);
+});
+
+test("decisão 233: a alteração do financeiro só de parâmetros ganha os rótulos pelo modelo", () => {
+  const de = { ...PARAMETROS, percentual_honorarios: 10 };
+  const versoes = montarHistorico(
+    base({
+      linhas: [linha("1", "ga", 1, 1000, 800)],
+      alteracoes: [
+        {
+          id: "a1",
+          tenant_id: T,
+          job_id: "job",
+          motivo: "Honorários renegociados",
+          parametros: { de, para: PARAMETROS },
+          created_by: null,
+          created_at: "2026-10-12T12:00:00Z",
+          autor_nome: null,
+          itens: [],
+        } as unknown as DadosDoHistorico["alteracoes"][number],
+      ],
+    }),
+  );
+  const a1 = versoes.find((v) => v.chave === "alteracao-a1")!;
+  assert.deepEqual(a1.mudancaDeParametros, [{ rotulo: "Honorários", de: "10%", para: "15%" }]);
+  assert.equal(versoes.find((v) => v.chave === "abertura")!.parametros.percentual_honorarios, 10);
 });

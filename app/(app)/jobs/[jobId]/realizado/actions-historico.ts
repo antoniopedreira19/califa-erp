@@ -22,8 +22,12 @@ import type {
   JobErrataComItens,
   JobGrupo,
   MudancaDeEstrutura,
+  CategoriaModeloPlanilha,
+  ParametrosDaErrata,
+  ParametrosDoJobGravados,
   TipoCusto,
 } from "@/lib/types";
+import { SELECT_VW_PARAMETROS_DO_JOB, parametrosAtuaisDe } from "@/lib/calculos/parametros-do-job";
 import type {
   DadosDoHistorico,
   LinhaDaVersaoNoHistorico,
@@ -66,6 +70,7 @@ interface ErrataBruta {
   created_at: string;
   preparada_por: string | null;
   estrutura: MudancaDeEstrutura[] | null;
+  parametros: ParametrosDaErrata | null;
   autor: { nome: string | null } | null;
   itens: Array<Record<string, unknown> & { acao: ErrataAcao; tipo_custo_de: TipoCusto; tipo_custo_para: TipoCusto }>;
 }
@@ -80,6 +85,8 @@ interface AlteracaoBruta {
   created_by: string | null;
   created_at: string;
   autor: { nome: string | null } | null;
+  /** Decisão 224: {de, para} quando a alteração mexeu nos parâmetros. */
+  parametros: { de: ParametrosDoJobGravados; para: ParametrosDoJobGravados } | null;
   itens: Array<Record<string, unknown> & { tipo_custo: TipoCusto; tipo_custo_para: TipoCusto }>;
 }
 
@@ -109,7 +116,7 @@ export async function carregarHistoricoDaPlanilha(jobId: unknown): Promise<Resul
   if (erroJob) console.error("[job.historico.job]", erroJob.message);
   if (!job) return { ok: false, message: "Job não encontrado." };
 
-  const [linhasRes, gruposRes, versaoRes, erratasRes, alteracoesRes, savesRes, desfeitosRes, revisoesRes] = await Promise.all([
+  const [linhasRes, gruposRes, versaoRes, erratasRes, alteracoesRes, savesRes, desfeitosRes, revisoesRes, parametrosRes, modeloRes] = await Promise.all([
     supabase
       .from("jobs_itens_orcado")
       .select(COLUNAS_DA_LINHA)
@@ -132,7 +139,7 @@ export async function carregarHistoricoDaPlanilha(jobId: unknown): Promise<Resul
       .from("jobs_erratas")
       .select(
         "id, tenant_id, job_id, titulo, custo_orcado_antes, custo_orcado_depois, valor_job_antes, valor_job_depois, " +
-          "faturamento_previsto_antes, faturamento_previsto_depois, created_by, created_at, preparada_por, estrutura, " +
+          "faturamento_previsto_antes, faturamento_previsto_depois, created_by, created_at, preparada_por, estrutura, parametros, " +
           "autor:profiles!created_by(nome), itens:jobs_erratas_itens(*)",
       )
       .eq("job_id", job.id)
@@ -141,7 +148,7 @@ export async function carregarHistoricoDaPlanilha(jobId: unknown): Promise<Resul
     supabase
       .from("jobs_alteracoes_financeiro")
       .select(
-        "id, tenant_id, job_id, motivo, valor_job_antes, valor_job_depois, created_by, created_at, " +
+        "id, tenant_id, job_id, motivo, valor_job_antes, valor_job_depois, created_by, created_at, parametros, " +
           "autor:profiles!created_by(nome), itens:jobs_alteracoes_financeiro_itens(*)",
       )
       .eq("job_id", job.id)
@@ -195,12 +202,26 @@ export async function carregarHistoricoDaPlanilha(jobId: unknown): Promise<Resul
       .not("errata_id", "is", null)
       .order("registrado_em", { ascending: true })
       .returns<Array<{ errata_id: string; registrado_em: string; registrado_por: string | null }>>(),
+    // Decisão 233: os parâmetros de hoje — o histórico os desfaz momento a
+    // momento — e o modelo, para os rótulos.
+    supabase
+      .from("vw_parametros_do_job")
+      .select(SELECT_VW_PARAMETROS_DO_JOB)
+      .eq("job_id", job.id)
+      .eq("tenant_id", tenantId)
+      .maybeSingle(),
+    supabase
+      .from("versoes_orcamento")
+      .select("orcamento:orcamentos!orcamento_id(categoria:categorias_dominio!categoria_id(modelo_planilha))")
+      .eq("id", job.versao_orcamento_aprovada_id)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<{ orcamento: { categoria: { modelo_planilha: CategoriaModeloPlanilha } | null } | null }>(),
   ]);
-  const erros = [linhasRes, gruposRes, versaoRes, erratasRes, alteracoesRes, savesRes, desfeitosRes, revisoesRes]
+  const erros = [linhasRes, gruposRes, versaoRes, erratasRes, alteracoesRes, savesRes, desfeitosRes, revisoesRes, parametrosRes, modeloRes]
     .map((r) => r.error?.message)
     .filter(Boolean);
-  if (erros.length > 0) {
-    console.error("[job.historico]", erros.join(" | "));
+  if (erros.length > 0 || !parametrosRes.data) {
+    console.error("[job.historico]", erros.join(" | ") || "sem parâmetros do job");
     return { ok: false, message: ERRO };
   }
 
@@ -276,10 +297,11 @@ export async function carregarHistoricoDaPlanilha(jobId: unknown): Promise<Resul
   // A alteração só dos parâmetros (decisão 224) não muda linha nenhuma: não
   // é uma versão da planilha.
   const alteracoes: JobAlteracaoFinanceiroComItens[] = (alteracoesRes.data ?? [])
-    .filter((a) => (a.itens ?? []).length > 0)
+    // A alteração só de parâmetros também é momento (decisão 233): o valor
+    // do job da versão anterior sai dos parâmetros de antes.
+    .filter((a) => (a.itens ?? []).length > 0 || a.parametros !== null)
     .map(({ autor, itens, ...a }) => ({
     ...a,
-    parametros: null,
     custo_orcado_antes: 0,
     custo_orcado_depois: 0,
     valor_job_antes: num(a.valor_job_antes),
@@ -310,6 +332,8 @@ export async function carregarHistoricoDaPlanilha(jobId: unknown): Promise<Resul
       linhasDaVersao: versaoRes.data ?? [],
       erratas,
       alteracoes,
+      parametros: parametrosAtuaisDe(parametrosRes.data as Record<string, unknown>),
+      modeloPlanilha: modeloRes.data?.orcamento?.categoria?.modelo_planilha ?? "nacional",
       saves: savesRes.data ?? [],
       savesDesfeitos: desfeitos.map((s) => ({
         id: s.id,
