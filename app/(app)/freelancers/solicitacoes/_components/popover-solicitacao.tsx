@@ -53,6 +53,11 @@ interface Props {
   /** Snapshot da contagem de nao-lidas recebida ao abrir. Zera ao visitar
    *  a aba Mensagens (o chat marca lidas no servidor). */
   naoLidas?: number;
+  /** Marca a linha com status forçado enquanto a aprovação está em voo
+   *  (otimista). O parent limpa o override quando o servidor confirma via
+   *  router.refresh(). */
+  onMarcarStatusOtimista?: (id: string, status: FreelancerSolicitacaoStatus) => void;
+  onLimparStatusOtimista?: (id: string) => void;
 }
 
 const APROVADORES = new Set(["administrador", "rh", "financeiro"]);
@@ -65,6 +70,8 @@ export function PopoverSolicitacao({
   userId,
   publicOrigin,
   naoLidas = 0,
+  onMarcarStatusOtimista,
+  onLimparStatusOtimista,
 }: Props) {
   const router = useRouter();
   const [aba, setAba] = React.useState<"detalhes" | "mensagens">("detalhes");
@@ -131,11 +138,21 @@ export function PopoverSolicitacao({
     !!s.freelancer_id;
 
   function aprovar() {
+    if (!s) return;
+    const id = s.id;
     setErro(null);
+    // Otimista: marca a linha como "aprovada" e fecha o modal antes do servidor
+    // responder. Em caso de falha, faz rollback + mostra alerta.
+    onMarcarStatusOtimista?.(id, "aprovada");
+    onOpenChange(false);
     startTransition(async () => {
-      const r = await aprovarSolicitacao(s!.id);
-      if (!r.ok) setErro(r.message);
-      else router.refresh();
+      const r = await aprovarSolicitacao(id);
+      if (!r.ok) {
+        onLimparStatusOtimista?.(id);
+        window.alert(`Falha ao aprovar: ${r.message}`);
+        return;
+      }
+      router.refresh();
     });
   }
 

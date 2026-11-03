@@ -119,6 +119,38 @@ export function SolicitacoesTabela({
   );
   const [aprovandoLote, setAprovandoLote] = React.useState(false);
 
+  // Aprovação otimista: id → status forçado. Enquanto o servidor confirma,
+  // a linha já exibe o novo status. useEffect limpa o override quando o
+  // server catches up (solicitações chegam com o status esperado).
+  const [statusOtimista, setStatusOtimista] = React.useState<
+    Map<string, FreelancerSolicitacaoStatus>
+  >(() => new Map());
+  React.useEffect(() => {
+    setStatusOtimista((atual) => {
+      if (atual.size === 0) return atual;
+      const novo = new Map(atual);
+      for (const s of solicitacoes) {
+        const esperado = novo.get(s.id);
+        if (esperado && s.status === esperado) novo.delete(s.id);
+      }
+      return novo.size === atual.size ? atual : novo;
+    });
+  }, [solicitacoes]);
+  const marcarStatusOtimista = React.useCallback(
+    (id: string, status: FreelancerSolicitacaoStatus) => {
+      setStatusOtimista((atual) => new Map(atual).set(id, status));
+    },
+    [],
+  );
+  const limparStatusOtimista = React.useCallback((id: string) => {
+    setStatusOtimista((atual) => {
+      if (!atual.has(id)) return atual;
+      const novo = new Map(atual);
+      novo.delete(id);
+      return novo;
+    });
+  }, []);
+
   // Sort explícito do usuário (null = ordem padrão por prioridade de status)
   const [sortKey, setSortKey] = React.useState<SortKey | null>(null);
   const [sortDir, setSortDir] = React.useState<SortDir>("asc");
@@ -562,6 +594,7 @@ export function SolicitacoesTabela({
                   <SolicitacaoRow
                     key={s.id}
                     s={s}
+                    statusOtimista={statusOtimista.get(s.id) ?? null}
                     naoLidas={naoLidasPorSolicitacao[s.id] ?? 0}
                     isAprovador={isAprovador}
                     selecionado={selecionadas.has(s.id)}
@@ -585,6 +618,8 @@ export function SolicitacoesTabela({
         naoLidas={
           selecionada ? (naoLidasPorSolicitacao[selecionada.id] ?? 0) : 0
         }
+        onMarcarStatusOtimista={marcarStatusOtimista}
+        onLimparStatusOtimista={limparStatusOtimista}
       />
 
       {/* Barra flutuante de bulk approval */}
@@ -694,6 +729,7 @@ function SortTh({
 
 function SolicitacaoRow({
   s,
+  statusOtimista,
   naoLidas,
   isAprovador,
   selecionado,
@@ -701,12 +737,15 @@ function SolicitacaoRow({
   onAbrir,
 }: {
   s: SolicitacaoLinha;
+  /** Override pro chip de status enquanto a aprovação otimista está em voo. */
+  statusOtimista: FreelancerSolicitacaoStatus | null;
   naoLidas: number;
   isAprovador: boolean;
   selecionado: boolean;
   onToggleSelecao: () => void;
   onAbrir: () => void;
 }) {
+  const statusAtivo = statusOtimista ?? (s.status as FreelancerSolicitacaoStatus);
   // Prazo em 3 linhas (igual AgCaliforniaRH): data inicio, seta, data termino.
   // Com data_termino nulo, mostra "A partir de" + inicio em bloco unico.
   const prazoNode =
@@ -734,7 +773,7 @@ function SolicitacaoRow({
           className="px-3 py-2.5 w-8 text-center"
           onClick={(e) => e.stopPropagation()}
         >
-          {s.status === "pendente" ? (
+          {statusAtivo === "pendente" ? (
             <input
               type="checkbox"
               checked={selecionado}
@@ -807,9 +846,7 @@ function SolicitacaoRow({
         })}
       </td>
       <td className="px-3 py-2.5 text-center">
-        <ChipStatusSolicitacao
-          status={s.status as FreelancerSolicitacaoStatus}
-        />
+        <ChipStatusSolicitacao status={statusAtivo} />
       </td>
     </tr>
   );
