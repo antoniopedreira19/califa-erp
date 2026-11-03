@@ -204,12 +204,12 @@ const COMPONENTES: { campo: Campo; rotulo: string }[][] = [
   [
     { campo: "e_mov", rotulo: "Já movimentado nas contas" },
     { campo: "e_tit", rotulo: "Títulos em aberto (a receber)" },
-    { campo: "e_prev", rotulo: "Só previsão (jobs e recorrências)" },
+    { campo: "e_prev", rotulo: "Só previsão (jobs, recorrências e planilha)" },
   ],
   [
     { campo: "s_mov", rotulo: "Já movimentado nas contas" },
     { campo: "s_tit", rotulo: "Títulos em aberto (a pagar)" },
-    { campo: "s_prev", rotulo: "Só previsão (jobs e recorrências)" },
+    { campo: "s_prev", rotulo: "Só previsão (jobs, recorrências e planilha)" },
   ],
 ];
 

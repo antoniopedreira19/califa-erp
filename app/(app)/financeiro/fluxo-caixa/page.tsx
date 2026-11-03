@@ -281,7 +281,7 @@ export default async function FluxoCaixaPage({
       <PageHeader
         eyebrow="FINANCEIRO"
         title="Fluxo de caixa"
-        description="Do passado ao futuro: o realizado (movimentos das contas) mais o previsto (títulos em aberto, previsões da abertura do job e recorrências que ainda não viraram título)."
+        description="Do passado ao futuro: o realizado (movimentos das contas) mais o previsto (títulos em aberto, previsões da abertura do job, recorrências que ainda não viraram título e as previsões da planilha que o sistema ainda não tem)."
         icon={TrendingUp}
         showEmpresaFilter
         empresas={session.empresasVisiveis}

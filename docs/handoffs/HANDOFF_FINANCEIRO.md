@@ -8844,3 +8844,16 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **O erro:** depois de importar um extrato, a aba Banco da Conciliação parava com "Cannot read properties of undefined (reading 'id')", e só voltava recarregando a página. No grupo de linhas iguais (mesmo dia e valor, mais títulos que linhas), a tela guarda o título escolhido para cada linha. A importação faz o motor rodar de novo, e ele pode dar a outra linha o título que estava marcado ali: o grupo continuava com as mesmas linhas, mas a escolha guardada apontava para um título que tinha saído dele.
 - **A correção:** a chave do grupo (`chaveDoGrupo`, em `banco-tabela.tsx`) passa a incluir, além das linhas, o título marcado em cada uma e os títulos para trocar. Quando qualquer um deles muda, o grupo recomeça da escolha do motor. Uma troca feita pelo "Trocar…" continua valendo enquanto os dados do grupo não mudam.
 - **Conferido:** com os dados reais da California Santander, montando a tabela fora da página, sem gravar nada no banco. Antes da correção, o mesmo erro; depois, os 8 grupos com mais títulos que linhas mostram o título novo, sem erro. O "Trocar…" segue funcionando na página.
+
+## ⚠️ Nota de 2026-11-03 — as previsões da planilha no fluxo de caixa (decisão 232)
+
+- **O que entrou:** a `vw_fluxo_caixa` ganhou o ramo `previsao_planilha` (classe `previsao`), com as previsões da planilha que o sistema ainda não prevê. Ficam de fora:
+  - os jobs do sistema;
+  - a folha (DP) dos meses com folha no sistema;
+  - o imposto sem job de competência do 4T em diante, que vale o do Fiscal;
+  - o mútuo a transferir já cadastrado.
+- **A previsão ligada ao banco** passa a contar como realizada no fluxo, como o saldo já contava.
+- **Na carga de 01/11:** 2.433 previsões, com R$ 52,20 mi de entradas e R$ 44,14 mi de saídas.
+- **Na tela:** a linha virou "Só previsão (jobs, recorrências e planilha)", e a descrição da página cita a planilha.
+- **Migrations:** `20261103100001` e `20261103100002`. A segunda corrige o nulo do Tipo vazio.
+- **Em aberto com o Tiago:** as saídas "Salário" do Tipo CO em novembro, que podem repetir a folha do sistema (decisão 232, revisão de 03/11).
