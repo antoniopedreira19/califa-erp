@@ -1,10 +1,10 @@
-import Link from "next/link";
 import { Briefcase } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type { FreelancerJobInterno } from "@/lib/types";
 import { AbasOrigem } from "./_components/abas-origem";
 import { JobsInternosTabela } from "./_components/jobs-internos-tabela";
+import { JobsProducaoTabela } from "./_components/jobs-producao-tabela";
 
 export const dynamic = "force-dynamic";
 
@@ -106,42 +106,7 @@ async function AbaProducao({
     );
   }
 
-  return (
-    <div className="rounded-2xl border border-border bg-card shadow-soft overflow-hidden">
-      <table className="w-full text-sm">
-        <thead className="bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
-          <tr>
-            <th className="text-left px-4 py-3 w-[140px]">Código</th>
-            <th className="text-left px-4 py-3">Nome</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {jobs.map((j) => (
-            <tr key={j.id} className="hover:bg-muted/20 transition-colors">
-              <td className="px-4 py-3">
-                <Link
-                  href={`/jobs/${j.id}`}
-                  prefetch={false}
-                  className="font-mono text-xs font-semibold text-california-red hover:underline"
-                >
-                  {j.codigo}
-                </Link>
-              </td>
-              <td className="px-4 py-3">
-                <Link
-                  href={`/jobs/${j.id}`}
-                  prefetch={false}
-                  className="hover:underline"
-                >
-                  {j.nome}
-                </Link>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+  return <JobsProducaoTabela jobs={jobs} />;
 }
 
 async function AbaInterno({

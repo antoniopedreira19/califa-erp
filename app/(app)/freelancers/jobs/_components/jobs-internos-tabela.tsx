@@ -1,7 +1,15 @@
 "use client";
 
 import * as React from "react";
-import { Archive, ArchiveRestore, Check, Pencil, Plus, X } from "lucide-react";
+import {
+  Archive,
+  ArchiveRestore,
+  Check,
+  Pencil,
+  Plus,
+  Search,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { FreelancerJobInterno } from "@/lib/types";
 import {
@@ -19,8 +27,20 @@ interface Props {
  * Tabela com CRUD inline dos jobs internos. Linha arquivada aparece com
  * texto esmaecido e badge "Arquivado" — nunca some, pra preservar contexto
  * dos contratos antigos. Edição inline por linha (nome + descrição).
+ *
+ * Busca por nome e descrição (acentuação-insensível, case-insensível).
  */
 export function JobsInternosTabela({ jobs, podeEscrever }: Props) {
+  const [busca, setBusca] = React.useState("");
+
+  const filtrados = React.useMemo(() => {
+    const alvo = norm(busca.trim());
+    if (!alvo) return jobs;
+    return jobs.filter(
+      (j) => norm(j.nome).includes(alvo) || norm(j.descricao).includes(alvo),
+    );
+  }, [jobs, busca]);
+
   return (
     <div className="space-y-4">
       {podeEscrever && <NovoJobInternoForm />}
@@ -34,25 +54,63 @@ export function JobsInternosTabela({ jobs, podeEscrever }: Props) {
           </p>
         </div>
       ) : (
-        <div className="rounded-2xl border border-border bg-card shadow-soft overflow-hidden">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="text-left px-4 py-3 w-[320px]">Nome</th>
-                <th className="text-left px-4 py-3">Descrição</th>
-                {podeEscrever && <th className="w-[120px]" />}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {jobs.map((j) => (
-                <JobInternoRow key={j.id} job={j} podeEscrever={podeEscrever} />
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <input
+              type="text"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar por nome do job interno..."
+              className="w-full h-10 rounded-lg border border-border bg-white pl-9 pr-9 text-sm focus:outline-none focus:ring-2 focus:border-california-red focus:ring-california-red/15"
+            />
+            {busca && (
+              <button
+                type="button"
+                onClick={() => setBusca("")}
+                aria-label="Limpar busca"
+                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          {filtrados.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-10 text-center">
+              <p className="text-sm text-muted-foreground">
+                Nenhum job interno encontrado para &ldquo;{busca}&rdquo;.
+              </p>
+            </div>
+          ) : (
+            <div className="rounded-2xl border border-border bg-card shadow-soft overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
+                  <tr>
+                    <th className="text-left px-4 py-3 w-[320px]">Nome</th>
+                    <th className="text-left px-4 py-3">Descrição</th>
+                    {podeEscrever && <th className="w-[120px]" />}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filtrados.map((j) => (
+                    <JobInternoRow key={j.id} job={j} podeEscrever={podeEscrever} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
+}
+
+function norm(s: string | null | undefined): string {
+  return (s ?? "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "");
 }
 
 function NovoJobInternoForm() {
