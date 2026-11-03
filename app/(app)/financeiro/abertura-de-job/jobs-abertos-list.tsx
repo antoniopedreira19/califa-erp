@@ -140,6 +140,9 @@ const COLUNAS: ColunaFiltravel<JobAberto>[] = [
     alinhar: "right",
     celula: (j) => celulaValor(j.rentabilidade, (n) => formatCurrency(n)),
   },
+  // Empresa e Regional depois da Rentabilidade (decisão 234).
+  { chave: "empresa", rotulo: "Empresa", tipo: "texto", celula: (j) => celulaTexto(j.empresa_nome) },
+  { chave: "regional", rotulo: "Regional", tipo: "texto", celula: (j) => celulaTexto(j.regional_nome) },
 ];
 
 interface GrupoProjeto {
@@ -759,13 +762,14 @@ export function JobsAbertosList({
                 <th className="w-8 px-2 py-3" aria-label="Expandir" />
                 <th className="px-4 py-3 font-semibold">{colunas.titulo("codigo")}</th>
                 <th className="px-4 py-3 font-semibold">{colunas.titulo("nome")}</th>
-                <th className="px-4 py-3 font-semibold">{colunas.titulo("projeto")}</th>
                 <th className="px-4 py-3 font-semibold">{colunas.titulo("cliente")}</th>
                 <th className="px-4 py-3 font-semibold">{colunas.titulo("gp")}</th>
                 <th className="px-4 py-3 font-semibold">{colunas.titulo("abertura")}</th>
                 <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("valor")}</th>
                 <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("faturamento")}</th>
                 <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("rentabilidade")}</th>
+                <th className="px-4 py-3 font-semibold">{colunas.titulo("empresa")}</th>
+                <th className="px-4 py-3 font-semibold">{colunas.titulo("regional")}</th>
               </tr>
             </thead>
             <tbody>
@@ -787,7 +791,7 @@ export function JobsAbertosList({
                       g.aberto ? "bg-muted/90" : "bg-muted/40",
                     )}
                   >
-                    <td colSpan={10} className="p-0">
+                    <td colSpan={11} className="p-0">
                       <div className="grid grid-cols-[32px_1fr_auto_auto_auto_auto_auto] items-center gap-4 py-[11px] pl-2 pr-4">
                         <div className="flex items-center justify-center">
                           <span
@@ -881,20 +885,6 @@ export function JobsAbertosList({
                         <td className="px-4 py-3">
                           <NomeDoJob j={j} />
                         </td>
-                        {/* Repete o projeto da faixa de propósito: com o
-                            grupo colapsado a linha vira resultado de busca
-                            solto, e "de que projeto é isso?" some. É o
-                            projeto do FINANCEIRO — o mesmo por que a faixa
-                            agrupa. */}
-                        <td className="px-4 py-3 text-muted-foreground">
-                          <div className="flex flex-col gap-0.5">
-                            <span className="text-[12px]">
-                              {j.projeto_financeiro_nome ??
-                                j.projeto_nome ??
-                                "—"}
-                            </span>
-                          </div>
-                        </td>
                         <td className="px-4 py-3 text-muted-foreground">
                           {j.cliente_nome ?? "—"}
                         </td>
@@ -913,6 +903,8 @@ export function JobsAbertosList({
                         <td className="px-4 py-3">
                           <CelulaRentabilidade j={j} />
                         </td>
+                        <td className="px-4 py-3 text-muted-foreground">{j.empresa_nome ?? "—"}</td>
+                        <td className="px-4 py-3 text-muted-foreground">{j.regional_nome ?? "—"}</td>
                       </tr>
                     ))}
                 </React.Fragment>
@@ -935,6 +927,8 @@ export function JobsAbertosList({
                 <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("valor")}</th>
                 <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("faturamento")}</th>
                 <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("rentabilidade")}</th>
+                <th className="px-4 py-3 font-semibold">{colunas.titulo("empresa")}</th>
+                <th className="px-4 py-3 font-semibold">{colunas.titulo("regional")}</th>
               </tr>
             </thead>
             <tbody>
@@ -1001,6 +995,8 @@ export function JobsAbertosList({
                   <td className="px-4 py-3">
                     <CelulaRentabilidade j={j} />
                   </td>
+                  <td className="px-4 py-3 text-muted-foreground">{j.empresa_nome ?? "—"}</td>
+                  <td className="px-4 py-3 text-muted-foreground">{j.regional_nome ?? "—"}</td>
                 </tr>
               ))}
             </tbody>

@@ -77,6 +77,8 @@ export interface JobAberto {
   cliente_nome: string | null;
   responsavel_nome: string | null;
   regional_nome: string | null;
+  /** Empresa (gerencial) do job — coluna do Resultado de Job. */
+  empresa_nome: string | null;
   produto: string | null;
   /**
    * As três datas que sustentam o Calendário de Jobs (aba de 07/09/2026).
@@ -177,6 +179,7 @@ const SELECT_JOB_ABERTO =
   // desde a decisão 055.
   "categoria:categorias_dominio!categoria_id(nome), " +
   "regional:regionais(nome), " +
+  "empresa:empresas(nome_fantasia, razao_social), " +
   "responsavel:profiles!responsavel_id(nome), " +
   "cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), projeto:projetos(nome, created_at)";
 
@@ -317,6 +320,7 @@ export async function listarJobsDoFinanceiro(
       cliente_nome: j.cliente?.nome_fantasia ?? null,
       responsavel_nome: j.responsavel?.nome ?? null,
       regional_nome: j.regional?.nome ?? null,
+      empresa_nome: j.empresa?.nome_fantasia ?? j.empresa?.razao_social ?? null,
       produto: j.produto,
       data_evento: j.data_evento ?? null,
       data_inicio_prevista: j.data_inicio_prevista ?? null,

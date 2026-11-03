@@ -249,6 +249,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 230 | [Mútuo entre empresas: uma perna ou duas, saldo por par, abertura pela planilha e IOF pela linha do banco](230-mutuo-entre-empresas.md) | 2026-10-31 |
 | 231 | [Notas de sócio no Tipo 15: a entrada lançada, TD sem rateio, e o PIX de empresa de fora pergunta na linha](231-notas-de-socio-no-tipo-15.md) | 2026-11-02 |
 | 233 | [A produção altera os parâmetros do job pela errata (honorários, impostos, taxas e câmbio), com a trava no envio para faturamento](233-producao-altera-parametros-do-job-pela-errata.md) | 2026-11-03 |
+| 234 | [A revisão do financeiro pelo protótipo: PO no faturamento, Empresa e Regional no Resultado de Job, e a Conciliação automática como fila dividida](234-revisao-do-financeiro-pelo-prototipo.md) | 2026-11-03 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -261,4 +262,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 234**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 235**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)

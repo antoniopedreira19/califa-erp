@@ -27,19 +27,20 @@
  *   liga com as três condições do banco, e "Reabrir o período". Com a
  *   conciliação fechada, desfazer, corrigir e cancelar com data até lá
  *   avisam antes de chamar (o banco recusa de qualquer jeito).
+ * - A tela (decisão 234): a fila dividida (fila-dividida.tsx) no lugar das
+ *   seções separadas, o "Importar extrato do banco (OFX)" no topo (saiu do
+ *   Extrato, que não mostra mais o banco) e o "Agrupar lançamentos" no lugar
+ *   do "Conciliar em conjunto".
  */
 
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CheckCheck, FileUp, Info, Link2, Upload, Wand2 } from "lucide-react";
+import { AlertTriangle, CheckCheck, FileUp, Upload, Wand2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatBRL } from "@/lib/format";
-import { decodificarOfx, lerOfx, rotuloDoBanco } from "@/lib/conciliacao/ofx";
+import { decodificarOfx, lerOfx } from "@/lib/conciliacao/ofx";
 import { formaDaBaixaPeloHistorico, RETENCOES_COMUNS, retencaoQueExplica, type TituloDoMotor } from "@/lib/conciliacao/motor";
-import { fimDoMes } from "@/lib/financeiro/planilha-de-titulos";
 import type { ImpostoRetido } from "@/lib/types";
-import { dataBR } from "@/components/financeiro/planilha-de-titulos/planilha";
 import { BaixaTituloDialog, type LinhaDoBancoNaBaixa } from "@/components/financeiro/baixa-titulo-dialog";
 import { BaixaImpostoDialog, CENTRO } from "../fiscal/impostos/dialogos";
 import { cancelarBaixaImposto } from "../fiscal/impostos/actions";
@@ -65,7 +66,6 @@ import {
   itemDoLote,
   parcialPeloBanco,
   secoesDoBanco,
-  textoDosSozinhos,
   type ResultadoDaLinha,
   type SecoesDoBanco,
 } from "./motor-da-conta";
@@ -89,23 +89,14 @@ import {
   registrarSaiuEVoltou,
   type ResultadoDaImportacao,
 } from "./actions-conciliacao";
-import {
-  BotaoDaSecao,
-  comCentro,
-  SemLinhaNoBanco,
-  Secao,
-  TabelaDoBanco,
-  type AcoesDoBanco,
-  type ContextoDasCelulas,
-  type Cor,
-} from "./banco-tabela";
-import { CancelarBaixaDialog, ConjuntoDialog, CorrigirBaixaDialog, ProcurarTituloDialog, RegraDialog } from "./banco-dialogos";
+import type { AcoesDoBanco, ContextoDasCelulas } from "./banco-tabela";
+import { CancelarBaixaDialog, CorrigirBaixaDialog, ProcurarTituloDialog, RegraDialog } from "./banco-dialogos";
+import { AgruparLancamentosDialog, type SelecaoDoAgrupamento } from "./agrupar-lancamentos";
+import { FilaDividida } from "./fila-dividida";
 import { BotoesDoFechamento } from "./fechamento";
 import { mensagemDoPeriodoFechado, noPeriodoFechado, type FechamentoDaConta } from "@/lib/conciliacao/fechamento";
 
-const moeda = formatBRL;
 const r2 = (n: number) => Math.round(n * 100) / 100;
-const final4 = (s: string | null | undefined) => (s ? `••••${s.replace(/\D/g, "").slice(-4)}` : "—");
 
 /** O maior arquivo que se lê aqui: um mês de um extrato movimentado cabe
  *  com folga. */
@@ -172,7 +163,6 @@ export function AbaBanco({
 }) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
-  const [abertas, setAbertas] = React.useState<Partial<Record<keyof SecoesDoBanco, boolean>>>({ conciliados: false });
   const [importando, setImportando] = React.useState(false);
   const [recusado, setRecusado] = React.useState<{ arquivo: string; r: Exclude<ResultadoDaImportacao, { ok: true }> } | null>(null);
   const [erroImportacao, setErroImportacao] = React.useState<string | null>(null);
@@ -185,7 +175,7 @@ export function AbaBanco({
   const [corrigindo, setCorrigindo] = React.useState<ResultadoDaLinha | null>(null);
   const [procurando, setProcurando] = React.useState<{ r: ResultadoDaLinha; marcados: string[] } | null>(null);
   const [cancelando, setCancelando] = React.useState<LancamentoSemLinha | null>(null);
-  const [conjuntoDe, setConjuntoDe] = React.useState<LancamentoSemLinha | null>(null);
+  const [agrupando, setAgrupando] = React.useState<SelecaoDoAgrupamento | null>(null);
   const [regraDe, setRegraDe] = React.useState<{ historico: string; l: Linha | null } | null>(null);
   // O "Lançar avulso": os cadastros dos formulários, lidos na primeira vez.
   const [dadosNovo, setDadosNovo] = React.useState<DadosDoNovoLancamento | null>(null);
@@ -530,13 +520,15 @@ export function AbaBanco({
       setErroDoDialogo(null);
       setCancelando(l);
     },
-    conciliarEmConjunto: (l) => {
-      if (bloqueado(l.data)) return;
+    agrupar: (sel) => {
+      if (bloqueado(sel.ref.data)) return;
       setErroDoDialogo(null);
-      setConjuntoDe(l);
+      setAgrupando(sel);
     },
-    linkDoLancamento: (l) =>
-      `/financeiro/conciliacao?conta=${contaId}&de=${l.data.slice(0, 8)}01&ate=${fimDoMes(l.data)}&highlight=${l.ids[0] ?? l.id}`,
+    conciliarAgrupamento: (linhaIds, lancamentoIds, datas) => {
+      if (bloqueado(...datas)) return;
+      executar(() => conciliarEmConjunto(linhaIds, lancamentoIds));
+    },
   };
 
   const conciliarVarios = (rs: ResultadoDaLinha[]) =>
@@ -761,201 +753,31 @@ export function AbaBanco({
     );
   }
 
-  const resultados = conciliacao.resultados;
-  const resolvidos = resultados.filter((r) => r.resolvido);
-  const saldoBanco = ultima.saldoBanco;
-  const saldoSistema = banco.saldoSistemaNoFim;
-  const dif = saldoBanco === null || saldoSistema === null ? null : r2(saldoBanco - saldoSistema);
-  const pct = resultados.length ? Math.round((resolvidos.length / resultados.length) * 100) : 0;
-  const diaEmAndamento = ultima.fim && ultima.geradoDia === ultima.fim ? { dia: ultima.fim, hora: ultima.geradoHora } : null;
-
-  const sozinhos = textoDosSozinhos(resultados);
   const contexto: ContextoDasCelulas = { linhaPorChave, regraPorId, lancamentos: conciliacao.lancamentos };
-  const manuaisPendentes = secoes.manual.filter((r) => !r.resolvido);
-  const sugestoesComCentro = secoes.conferir.filter((r) => r.estado === "sugestao" && comCentro(r.titulo));
-
-  const SECOES: Array<[keyof SecoesDoBanco, string, string, Cor, React.ReactNode]> = [
-    [
-      "divergencia",
-      "A baixa feita à mão não bate com o banco",
-      "O sistema já tem a baixa, com outro valor. Corrija para o valor do banco; se a baixa era de outro pagamento, procure o título certo.",
-      "red",
-      null,
-    ],
-    [
-      "manual",
-      "Baixas feitas à mão que bateram com o banco",
-      "A baixa já estava no sistema, e o banco mostra o mesmo valor até 3 dias depois. Conciliar só liga as duas linhas, com a data do banco: nenhuma baixa nova é criada. Na importação elas se conciliam sozinhas e ficam aqui, à vista.",
-      "sky",
-      manuaisPendentes.length > 1 && (
-        <BotaoDaSecao verde disabled={pending} onClick={() => conciliarVarios(manuaisPendentes)}>
-          <Link2 className="h-3.5 w-3.5" />
-          Conciliar as {manuaisPendentes.length}
-        </BotaoDaSecao>
-      ),
-    ],
-    [
-      "alta",
-      "Prontos: baixar e conciliar",
-      "Títulos ainda sem baixa, com valor exato, forma de pagamento e data batendo, ou a soma única de títulos do mesmo fornecedor ou cliente. Um clique dá a baixa com os dados do banco e já concilia.",
-      "emerald",
-      secoes.alta.length > 0 && (
-        <BotaoDaSecao verde disabled={pending} onClick={() => conciliarVarios(secoes.alta)}>
-          <CheckCheck className="h-3.5 w-3.5" />
-          Baixar e conciliar os {secoes.alta.length}
-        </BotaoDaSecao>
-      ),
-    ],
-    [
-      "conferir",
-      "Conferir antes",
-      "Mais títulos que linhas com o mesmo valor, diferença de juros, retenção, ou centro de custo a escolher. Linhas iguais em número igual ao de títulos não chegam aqui: cada linha paga um, e se baixam sozinhas.",
-      "amber",
-      sugestoesComCentro.length > 1 && (
-        <BotaoDaSecao disabled={pending} onClick={() => conciliarVarios(sugestoesComCentro)}>
-          Aceitar as {sugestoesComCentro.length} sugestões como estão
-        </BotaoDaSecao>
-      ),
-    ],
-    [
-      "soma",
-      "Uma linha do banco, vários títulos",
-      "A remessa sai do banco como um débito só e se concilia sozinha. Quando mais de uma soma de títulos do mesmo fornecedor ou cliente bate com a linha, escolha qual.",
-      "emerald",
-      null,
-    ],
-    [
-      "par",
-      "Saiu e voltou",
-      "O banco devolveu o pagamento no mesmo dia. Baixar o título estaria errado: as duas linhas entram no extrato e ele continua a pagar.",
-      "violet",
-      null,
-    ],
-    [
-      "regra",
-      "Pelas regras do histórico",
-      "Tarifas e outros débitos do próprio banco, que nunca têm título. A regra diz o centro de custo.",
-      "violet",
-      secoes.regra.length > 0 && (
-        <BotaoDaSecao disabled={pending} onClick={() => acoes.lancarRegra(secoes.regra)}>
-          <Wand2 className="h-3.5 w-3.5" />
-          Lançar as {secoes.regra.length}
-        </BotaoDaSecao>
-      ),
-    ],
-    [
-      "historico",
-      "Do histórico da planilha",
-      "Pagamentos e recebimentos de competência até o 3T que ficam fora do sistema — dos jobs até o 3T que não existem nele e, sem job, a folha, os impostos e as despesas do 3T: estão na cauda do histórico (decisão 211). Conciliar liga a linha do banco à linha da planilha, sem lançamento no sistema. Na importação elas se conciliam sozinhas.",
-      "violet",
-      secoes.historico.length > 1 && (
-        <BotaoDaSecao disabled={pending} onClick={() => acoes.conciliarHistorico(secoes.historico)}>
-          <Link2 className="h-3.5 w-3.5" />
-          Conciliar as {secoes.historico.length}
-        </BotaoDaSecao>
-      ),
-    ],
-    [
-      "empresaDeFora",
-      "Empresa de fora",
-      "PIX de quem tem cadastro de empresa de fora. Pode ser nota de sócio ou devolução de mútuo.",
-      "sky",
-      null,
-    ],
-    [
-      "mutuo",
-      "Mútuo entre empresas",
-      "Dinheiro entre CNPJs diferentes. Lançar cria o mútuo e concilia.",
-      "sky",
-      null,
-    ],
-    [
-      "sem",
-      "Sem correspondência",
-      "Nada no sistema tem esse valor. Lance como avulso (a linha já vem preenchida) ou procure um título.",
-      "red",
-      null,
-    ],
-    ["conciliados", "Conciliados", "Ligados a um lançamento do Extrato. Dá para desfazer até fechar a conciliação.", "neutral", null],
-  ];
 
   return (
     <div className="space-y-4">
-      {avisos}
-      <CabecalhoDoArquivo banco={banco} />
-      {sozinhos && (
-        <Nota tom="verde" icone={CheckCheck}>
-          <strong>
-            {sozinhos.quantas === 1 ? "1 linha do banco se resolveu sozinha" : `${sozinhos.quantas} linhas do banco se resolveram sozinhas`}:
-          </strong>{" "}
-          {sozinhos.partes.join("; ")}. A baixa feita à mão fica na seção dela, logo abaixo; o resto está em Conciliados. Tudo
-          com Desfazer.
-        </Nota>
-      )}
-      {diaEmAndamento && (
-        <Nota tom="ambar" icone={Info}>
-          <strong>{dataBR(diaEmAndamento.dia)} ainda está em andamento:</strong> o arquivo foi gerado às {diaEmAndamento.hora} desse
-          dia. As linhas de hoje podem ser conciliadas, mas o dia só entra no fechamento com um extrato gerado depois dele. A
-          baixa feita à mão hoje que ainda não está no banco não é divergência.
-        </Nota>
-      )}
-      <div className="grid gap-3 sm:grid-cols-4">
-        <Cartao rotulo={`Saldo no banco · ${dataBR(ultima.saldoEm ?? ultima.fim ?? "")}`} valor={saldoBanco === null ? "—" : moeda(saldoBanco)} />
-        <Cartao rotulo={`Saldo do sistema · fim de ${ultima.fim ? dataBR(ultima.fim) : "—"}`} valor={saldoSistema === null ? "—" : moeda(saldoSistema)} />
-        <Cartao
-          rotulo="Diferença"
-          valor={dif === null ? "—" : dif === 0 ? "Bate ✓" : moeda(dif)}
-          cor={dif === 0 ? "text-emerald-700" : "text-california-red"}
-          ajuda={dif === null ? "O arquivo não informou o saldo." : dif === 0 ? "Banco e sistema contam a mesma história." : "Some quando cada linha do banco tiver o seu lançamento."}
-        />
-        <div className="rounded-xl border border-border bg-card p-4">
-          <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Conciliados</p>
-          <p className="mt-1 font-mono text-lg font-semibold">
-            {resolvidos.length} de {resultados.length}
-          </p>
-          <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
-            <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
-          </div>
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground">As seções somem quando ficam vazias.</span>
-        {resolvendoSozinho ? (
-          <span className="text-xs font-semibold text-emerald-700">Resolvendo sozinho o que é certo…</span>
-        ) : (
-          pending && <span className="text-xs font-semibold text-muted-foreground">Trabalhando…</span>
-        )}
-        <BotoesDoFechamento
-          contaId={contaId}
-          contaNome={banco.conta.nome}
-          bancoNome={banco.conta.banco}
-          fechamento={fechamento}
-          ocupado={pending || resolvendoSozinho}
-        />
-      </div>
-      {SECOES.map(([k, titulo, ajuda, cor, botao]) => {
-        const linhas = secoes[k] as ResultadoDaLinha[];
-        const doGrupo = k === "conferir" ? secoes.grupos : [];
-        const quantas = linhas.length + doGrupo.reduce((s, g) => s + g.linhas.length, 0);
-        if (quantas === 0) return null;
-        const aberta = abertas[k] !== false;
-        return (
-          <Secao
-            key={k}
-            titulo={titulo}
-            ajuda={ajuda}
-            cor={cor}
-            quantas={quantas}
-            aberta={aberta}
-            onAlternar={() => setAbertas((p) => ({ ...p, [k]: !aberta }))}
-            botao={botao}
-          >
-            <TabelaDoBanco linhas={linhas} grupos={doGrupo} contexto={contexto} acoes={acoes} />
-          </Secao>
-        );
-      })}
-      {conciliacao.naoApareceu.length > 0 && <SemLinhaNoBanco lancs={conciliacao.naoApareceu} acoes={acoes} />}
-      {zona(true)}
+      <FilaDividida
+        banco={banco}
+        conciliacao={conciliacao}
+        secoes={secoes}
+        contexto={contexto}
+        acoes={acoes}
+        conciliarVarios={conciliarVarios}
+        importar={<BotaoImportarExtrato onArquivo={importar} importando={importando} />}
+        fechamento={
+          <BotoesDoFechamento
+            contaId={contaId}
+            contaNome={banco.conta.nome}
+            bancoNome={banco.conta.banco}
+            fechamento={fechamento}
+            ocupado={pending || resolvendoSozinho}
+          />
+        }
+        pending={pending}
+        resolvendoSozinho={resolvendoSozinho}
+        avisos={{ erroImportacao, falhaDoMotor, recusado, descartarRecusado: () => setRecusado(null) }}
+      />
 
       <Dialogos
         dados={dados}
@@ -1051,14 +873,14 @@ export function AbaBanco({
         />
       )}
 
-      {conjuntoDe && (
-        <ConjuntoDialog
-          inicial={conjuntoDe}
+      {agrupando && (
+        <AgruparLancamentosDialog
+          selecao={agrupando}
           linhas={banco.linhas.filter((l) => !l.conciliada && !l.ignorada)}
-          lancamentos={conciliacao.naoApareceu}
+          baixas={conciliacao.naoApareceu}
           pending={pending}
           erro={erroDoDialogo}
-          onFechar={() => setConjuntoDe(null)}
+          onFechar={() => setAgrupando(null)}
           onConfirmar={(linhaIds, lancamentoIds) =>
             startTransition(async () => {
               const res = await conciliarEmConjunto(linhaIds, lancamentoIds);
@@ -1066,7 +888,7 @@ export function AbaBanco({
                 setErroDoDialogo(res.message);
                 return;
               }
-              setConjuntoDe(null);
+              setAgrupando(null);
               avisar(res);
               router.refresh();
             })
@@ -1395,16 +1217,6 @@ function Nota({
   );
 }
 
-function Cartao({ rotulo, valor, cor, ajuda }: { rotulo: string; valor: string; cor?: string; ajuda?: string }) {
-  return (
-    <div className="rounded-xl border border-border bg-card p-4">
-      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">{rotulo}</p>
-      <p className={cn("mt-1 font-mono text-lg font-semibold", cor)}>{valor}</p>
-      {ajuda && <p className="text-[11px] text-muted-foreground">{ajuda}</p>}
-    </div>
-  );
-}
-
 function ZonaDeArquivo({
   compacta,
   contaNome,
@@ -1527,66 +1339,32 @@ function ArquivoRecusado({
   );
 }
 
-/**
- * O cabeçalho do extrato: a conta, reconhecida pelo próprio arquivo, e o
- * arquivo da última importação.
- */
-function CabecalhoDoArquivo({ banco }: { banco: DadosDaAbaBanco }) {
-  const ultima = banco.ultima;
-  if (!ultima) return null;
-  const repetidos = ultima.movimentos - ultima.novos;
-  const c = banco.conta;
+/** O "Importar extrato do banco (OFX)" do topo da aba, ao lado do arquivo
+ *  da última importação (decisão 234: antes ficava no Extrato). */
+function BotaoImportarExtrato({ onArquivo, importando }: { onArquivo: (f: File) => void; importando: boolean }) {
+  const ref = React.useRef<HTMLInputElement>(null);
   return (
-    <div className="space-y-2">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-border bg-card px-4 py-3 text-xs">
-        <span className="text-[11px] uppercase text-muted-foreground">Conta do extrato</span>
-        <strong className="text-sm">
-          {c.nome} · {c.banco}
-          {c.agencia || c.numero ? ` · ${c.agencia ?? "—"} / ${c.numero ?? "—"}` : ""}
-        </strong>
-        <span className="inline-flex items-center gap-1 text-emerald-700">
-          <CheckCheck className="h-3.5 w-3.5" />
-          reconhecida pelo arquivo (banco {ultima.bancoId || "—"}, conta {final4(ultima.conta)})
-        </span>
-      </div>
-      <div className="flex flex-wrap items-center gap-x-6 gap-y-1 rounded-xl border border-border bg-card px-4 py-3 text-xs">
-        <span className="font-semibold">{ultima.arquivo}</span>
-        <span>
-          Banco <strong>{rotuloDoBanco(ultima.bancoId ?? "")}</strong>
-        </span>
-        <span>
-          Conta <strong className="font-mono">{final4(ultima.conta)}</strong>
-        </span>
-        <span>
-          Período{" "}
-          <strong>
-            {ultima.inicio && ultima.fim
-              ? ultima.inicio === ultima.fim
-                ? dataBR(ultima.fim)
-                : `${dataBR(ultima.inicio)} a ${dataBR(ultima.fim)}`
-              : "—"}
-          </strong>
-        </span>
-        <span>
-          <strong>{ultima.movimentos}</strong> movimentos · <strong className="text-emerald-700">{ultima.novos} novos</strong>
-          {repetidos > 0 && <span className="text-amber-700"> · {repetidos} já importados</span>}
-        </span>
-        {ultima.saldoBanco !== null && (
-          <span>
-            Saldo informado pelo banco <strong className="font-mono">{moeda(ultima.saldoBanco)}</strong>
-          </span>
-        )}
-      </div>
-      {repetidos > 0 && ultima.novos === 0 && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>
-            <strong>Nada novo neste arquivo.</strong> Os {repetidos} movimentos já tinham sido importados. O Santander troca o
-            código de cada movimento (FITID) a cada download, então o sistema reconhece o repetido pela data, pelo valor, pelo
-            histórico e pela posição entre iguais.
-          </span>
-        </div>
-      )}
+    <div className="flex flex-wrap items-center gap-3">
+      <input
+        ref={ref}
+        type="file"
+        accept=".ofx,.OFX,application/x-ofx"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          if (f) onArquivo(f);
+          e.target.value = "";
+        }}
+      />
+      <button
+        type="button"
+        disabled={importando}
+        onClick={() => ref.current?.click()}
+        className="inline-flex h-9 items-center gap-2 rounded-lg border border-border bg-card px-3 text-sm font-semibold hover:bg-muted/50 disabled:cursor-wait disabled:opacity-60"
+      >
+        <Upload className="h-4 w-4" />
+        {importando ? "Importando…" : "Importar extrato do banco (OFX)"}
+      </button>
     </div>
   );
 }

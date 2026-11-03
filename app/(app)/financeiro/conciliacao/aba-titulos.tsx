@@ -21,8 +21,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
-import { AlertTriangle, CheckCheck, FileText, Info, Landmark, Search, Trash2, Undo2, XCircle, Eye } from "lucide-react";
+import { AlertTriangle, CheckCheck, FileText, Info, Search, Trash2, Undo2, XCircle, Eye } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import { BaixaTituloDialog, type LinhaDoBancoNaBaixa } from "@/components/financeiro/baixa-titulo-dialog";
@@ -70,7 +69,6 @@ import type { DadosDaAbaBanco } from "./banco-dados";
 import { conciliarConta, documentoDaLinha, parcialPeloBanco, type ResultadoDaLinha } from "./motor-da-conta";
 import { conciliarPelosDocumentos } from "./actions-conciliacao";
 import { formaDaBaixaPeloHistorico } from "@/lib/conciliacao/motor";
-import { diaIsoBr } from "@/lib/formatar-data-hora";
 import { gravarPrevia, type LinhaPrevista } from "./previa-do-extrato";
 import { MenuNovoLancamento } from "./menu-novo-lancamento";
 import { BotaoRemessaSantander } from "./botao-remessa";
@@ -255,7 +253,7 @@ export function AbaTitulos({
   };
   const doTopo = React.useMemo(() => (tipo === "todos" ? base : base.filter((l) => l.lado === tipo)), [base, tipo]);
   const colunasDoFiltro = React.useMemo(
-    () => colunasFiltraveis({ contaId, hoje, rotuloContraparte: "Fornecedor / Cliente", status: false }),
+    () => colunasFiltraveis({ contaId, hoje, rotuloContraparte: "Fornecedor", status: false }),
     [contaId, hoje],
   );
   const colunas = useFiltrosDeColuna<LinhaComSaldo<Linha>>(doTopo, colunasDoFiltro, {
@@ -406,25 +404,6 @@ export function AbaTitulos({
         </div>
       </div>
 
-      {sugestoes.size > 0 && banco?.ultima && (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-900">
-          <Landmark className="h-4 w-4 shrink-0" />
-          <span>
-            <strong>{sugestoes.size === 1 ? "1 título" : `${sugestoes.size} títulos`}</strong>{" "}
-            {sugestoes.size === 1 ? "já aparece" : "já aparecem"} no extrato do banco importado em{" "}
-            {formatDate(diaIsoBr(banco.ultima.importadaEm)).slice(0, 5)}. {sugestoes.size === 1 ? "Ele sai" : "Eles saem"} daqui pela
-            aba <strong>Conciliação automática</strong>, com a data do banco, sem digitar nada.
-          </span>
-          <Link
-            href={`/financeiro/conciliacao?conta=${contaId}&aba=banco`}
-            prefetch={false}
-            className="ml-auto rounded-lg bg-emerald-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-emerald-800"
-          >
-            Conciliar com o banco
-          </Link>
-        </div>
-      )}
-
       {/* O resumo: o que sai e entra no mês e onde o saldo termina. */}
       <div className="grid grid-cols-2 divide-x divide-border rounded-xl border border-border bg-card sm:grid-cols-4">
         {[
@@ -520,10 +499,6 @@ export function AbaTitulos({
           setErro(null);
           setBaixando(l);
           setDoBanco(sugestoes.get(l.chave) ?? null);
-        }}
-        sinalDoBanco={(l) => {
-          const r = sugestoes.get(l.chave);
-          return r ? { data: r.mov.data, motivo: r.motivo ?? "" } : null;
         }}
         onEditarData={(l) => {
           setErro(null);

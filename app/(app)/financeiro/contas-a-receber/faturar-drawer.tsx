@@ -76,7 +76,7 @@ import {
 import type { ContatoCobranca } from "@/lib/data/contatos-cobranca";
 import type { PlanoContaTipo, PlanoContaSubtipo, RateioLinhaInput } from "@/lib/types";
 import { RateioRegionalEditor } from "../contas-a-pagar/rateio-regional-editor";
-import { emitirFaturamento, uploadNfPdf } from "./actions";
+import { emitirFaturamento, uploadNfPdf, uploadPoPdf } from "./actions";
 import type { FaturamentoPendenteRow, FaturadoRow } from "./faturamento-list";
 import { chaveDoRecebidoAntes, chaveInfoDoEnvio } from "./chave-info";
 import { somaDosRecebidos, type RecebidoAntesDaNf } from "./recebimento-antes-nf-dialog";
@@ -249,6 +249,138 @@ function Campo({
   );
 }
 
+/** Um arquivo da PO no formulário (decisão 234): o do envio (`envio_anexo_id`)
+ *  ou o anexado aqui, já no bucket (`path`). `url`: só o anexado aqui abre,
+ *  pelo arquivo local. */
+interface ArquivoDaPo {
+  nome: string;
+  url: string | null;
+  envio_anexo_id: string | null;
+  path: string;
+  mime_type: "application/pdf" | "image/png" | "image/jpeg";
+  tamanho_bytes: number | null;
+}
+
+const MIME_DA_PO = new Set(["application/pdf", "image/png", "image/jpeg"]);
+
+/** O Nº e o anexo da PO, opcionais (decisão 234). O mesmo par na avulsa e na
+ *  nota de job — nesta, já com o que a produção mandou no envio. */
+function CamposDaPo({
+  numero,
+  onNumero,
+  arquivos,
+  onArquivos,
+  disabled,
+}: {
+  numero: string;
+  onNumero: (v: string) => void;
+  arquivos: ArquivoDaPo[];
+  onArquivos: (a: ArquivoDaPo[]) => void;
+  disabled?: boolean;
+}) {
+  const input = React.useRef<HTMLInputElement>(null);
+  const [enviando, setEnviando] = React.useState(false);
+  const [erro, setErro] = React.useState<string | null>(null);
+  async function anexar(f: File) {
+    setErro(null);
+    setEnviando(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", f);
+      const res = await uploadPoPdf(fd);
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+      onArquivos([
+        ...arquivos,
+        {
+          nome: res.nome_arquivo,
+          url: URL.createObjectURL(f),
+          envio_anexo_id: null,
+          path: res.path,
+          mime_type: res.mime_type,
+          tamanho_bytes: res.tamanho_bytes,
+        },
+      ]);
+    } catch {
+      setErro("Não foi possível anexar agora. Tente de novo.");
+    } finally {
+      setEnviando(false);
+    }
+  }
+  return (
+    <div className="grid grid-cols-2 gap-3.5">
+      <Campo rotulo="Nº da PO">
+        <Input value={numero} onChange={(e) => onNumero(e.target.value)} placeholder="Opcional" maxLength={120} disabled={disabled} />
+      </Campo>
+      <Campo rotulo="Anexo da PO">
+        <input
+          ref={input}
+          type="file"
+          accept="application/pdf,image/png,image/jpeg"
+          className="sr-only"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) void anexar(f);
+            e.target.value = "";
+          }}
+        />
+        {arquivos.length > 0 ? (
+          <div className="space-y-1.5">
+            {arquivos.map((a, i) => (
+              <div key={a.envio_anexo_id ?? a.path} className="flex h-11 items-center gap-2.5 rounded-lg border border-border bg-muted/50 px-3 text-[12.5px]">
+                <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                {a.url ? (
+                  <a href={a.url} target="_blank" rel="noreferrer" className="min-w-0 flex-1 truncate hover:underline">
+                    {a.nome}
+                  </a>
+                ) : (
+                  <span className="min-w-0 flex-1 truncate">{a.nome}</span>
+                )}
+                {a.envio_anexo_id && <span className="shrink-0 text-[11px] text-muted-foreground">do envio</span>}
+                <button
+                  type="button"
+                  onClick={() => onArquivos(arquivos.filter((_, j) => j !== i))}
+                  disabled={disabled}
+                  aria-label="Remover anexo da PO"
+                  title="Remover anexo da PO"
+                  className="shrink-0 rounded p-1 text-muted-foreground transition-colors hover:bg-accent hover:text-california-red"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => input.current?.click()}
+              disabled={disabled || enviando}
+              className="inline-flex items-center gap-1.5 text-[11.5px] font-semibold text-muted-foreground transition-colors hover:text-california-red disabled:cursor-wait disabled:opacity-60"
+            >
+              <Plus className="h-3 w-3" />
+              {enviando ? "Enviando..." : "Anexar outro arquivo"}
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => input.current?.click()}
+            disabled={disabled || enviando}
+            className="flex h-11 w-full items-center gap-2 rounded-lg border border-dashed border-border bg-muted/30 px-3 text-[12.5px] font-semibold text-muted-foreground transition-colors hover:border-california-red/50 hover:text-foreground disabled:cursor-wait disabled:opacity-60"
+          >
+            <Paperclip className="h-3.5 w-3.5" />
+            {enviando ? "Enviando..." : "Anexar a PO (opcional)"}
+          </button>
+        )}
+        {erro && <p className="text-[11.5px] font-semibold text-california-red">{erro}</p>}
+      </Campo>
+    </div>
+  );
+}
+
+/** A PO de cada job na nota de job: a chave do envio (job e mês). */
+type PoDoJob = { numero: string; arquivos: ArquivoDaPo[] };
+
 /** O que vem do job e não se edita aqui: cliente, empresa, regional. */
 function FaixaDoJob({ itens }: { itens: Array<{ rotulo: string; valor: React.ReactNode }> }) {
   return (
@@ -352,6 +484,9 @@ function FormularioDeFaturar({
   const [jobRefId, setJobRefId] = React.useState("");
   const jobRef = avulso && vinculo === "job" ? (jobPorId.get(jobRefId) ?? null) : null;
   const [clienteSemJob, setClienteSemJob] = React.useState("");
+  // A PO da avulsa (decisão 234): opcional, número e arquivos.
+  const [numeroPo, setNumeroPo] = React.useState("");
+  const [poArquivos, setPoArquivos] = React.useState<ArquivoDaPo[]>([]);
   const [empresaSemJob, setEmpresaSemJob] = React.useState("");
   // Rateio de regional da avulsa "Sem job" (decisão 086). Nasce com uma
   // linha em branco, como a despesa sem job: não há de onde sugerir.
@@ -422,6 +557,55 @@ function FormularioDeFaturar({
   );
   const notasAtivas = new Set(itensAtivos.map(chaveNota)).size;
   const jobsAtivos = new Set(itensAtivos.map((l) => l.origem_id)).size;
+  // A PO da nota de job (decisão 234): uma por job (e mês), já com o que a
+  // produção mandou no envio; o financeiro completa ou troca aqui. BV não
+  // tem PO.
+  const chavePo = (l: FaturamentoPendenteRow) => (l.job_id ? chaveInfoDoEnvio(l.job_id, l.mes_referencia) : l.origem_id);
+  const jobsDaPo = React.useMemo(() => {
+    if (avulso || ehBv) return [];
+    const vistos = new Map<string, { chave: string; jobId: string | null; mes: string | null; rotulo: string }>();
+    for (const l of itensAtivos) {
+      const k = chavePo(l);
+      if (!vistos.has(k)) {
+        vistos.set(k, {
+          chave: k,
+          jobId: l.job_id,
+          mes: l.mes_referencia,
+          rotulo: `${l.codigo ?? l.descricao}${l.mes_referencia ? ` · ${rotuloMes(l.mes_referencia)}` : ""}`,
+        });
+      }
+    }
+    return [...vistos.values()];
+    // `chavePo` só lê a linha.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [itensAtivos, avulso, ehBv]);
+  const [poDosJobs, setPoDosJobs] = React.useState<Record<string, PoDoJob>>(() => {
+    const ini: Record<string, PoDoJob> = {};
+    if (avulso || ehBv) return ini;
+    for (const l of linhas) {
+      const k = chavePo(l);
+      if (ini[k]) continue;
+      const dados = infoPorJob[k] ?? (l.job_id ? infoPorJob[l.job_id] : undefined);
+      ini[k] = {
+        numero: dados?.po ?? "",
+        arquivos: (dados?.anexos ?? []).flatMap((a) =>
+          MIME_DA_PO.has(a.mime_type)
+            ? [{
+                nome: a.nome_arquivo,
+                url: null,
+                envio_anexo_id: a.id,
+                path: a.path,
+                mime_type: a.mime_type as ArquivoDaPo["mime_type"],
+                tamanho_bytes: a.tamanho_bytes,
+              }]
+            : [],
+        ),
+      };
+    }
+    return ini;
+  });
+  const mudarPo = (k: string, m: Partial<PoDoJob>) =>
+    setPoDosJobs((atual) => ({ ...atual, [k]: { ...(atual[k] ?? { numero: "", arquivos: [] }), ...m } }));
   // Quem mandou cada job ou BV desta nota (decisão 136). Na nota do lote
   // os jobs foram juntos: uma linha só, sem o código.
   const autores = [
@@ -809,6 +993,21 @@ function FormularioDeFaturar({
         cnpj_tomador: ehBv || exterior ? null : cnpjTomador,
         tomador_exterior: !ehBv && exterior,
         job_referencia_id: jobRef?.id ?? null,
+        pos: (avulso
+          ? [{ job_id: null, mes: null, numero: numeroPo, arquivos: poArquivos }]
+          : jobsDaPo.map((j) => ({ job_id: j.jobId, mes: j.mes, ...(poDosJobs[j.chave] ?? { numero: "", arquivos: [] }) }))
+        ).map((po) => ({
+          job_id: po.job_id,
+          mes: po.mes,
+          numero_po: po.numero.trim() || null,
+          anexos: po.arquivos.map((a) => ({
+            envio_anexo_id: a.envio_anexo_id,
+            path: a.path,
+            nome_arquivo: a.nome,
+            mime_type: a.mime_type,
+            tamanho_bytes: a.tamanho_bytes,
+          })),
+        })),
       });
 
       if (!res.ok) {
@@ -1046,6 +1245,10 @@ function FormularioDeFaturar({
         </>
       )}
 
+      {(jobRef || (vinculo === "sem_job" && clienteSemJob)) && (
+        <CamposDaPo numero={numeroPo} onNumero={setNumeroPo} arquivos={poArquivos} onArquivos={setPoArquivos} disabled={pending} />
+      )}
+
       {clienteId && campoCnpjTomador}
     </div>
   ) : (
@@ -1207,6 +1410,18 @@ function FormularioDeFaturar({
           { rotulo: "Regional", valor: nomeDaRegional(jobDaOrigem?.regional_id ?? null) },
         ]}
       />
+      {jobsDaPo.map((j) => (
+        <div key={j.chave} className="space-y-1.5">
+          {jobsDaPo.length > 1 && <p className="font-mono text-[11px] font-semibold text-muted-foreground">{j.rotulo}</p>}
+          <CamposDaPo
+            numero={poDosJobs[j.chave]?.numero ?? ""}
+            onNumero={(v) => mudarPo(j.chave, { numero: v })}
+            arquivos={poDosJobs[j.chave]?.arquivos ?? []}
+            onArquivos={(a) => mudarPo(j.chave, { arquivos: a })}
+            disabled={pending}
+          />
+        </div>
+      ))}
       {!ehBv && campoCnpjTomador}
     </div>
   );
