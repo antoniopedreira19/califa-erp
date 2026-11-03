@@ -271,6 +271,27 @@ async function criarContratoDeRenovacao(
     !!solicitacao.job_id || !!solicitacao.job_interno_id;
   const origemSistema = temJobVinculado ? "califa_erp" : "ag_california_rh";
 
+  // Resolve o nome do job pra gravar como snapshot no contrato. Quando tem
+  // job_id ou job_interno_id, busca o nome oficial — o campo nome_job da
+  // solicitação só é preenchido em legados (texto solto, sem FK). Fallback
+  // "Importado (sem job vinculado)" só entra pra legado realmente sem job.
+  let nomeJobResolvido: string | null = null;
+  if (solicitacao.job_id) {
+    const { data: jobProd } = await supabase
+      .from("jobs")
+      .select("nome")
+      .eq("id", solicitacao.job_id)
+      .maybeSingle();
+    nomeJobResolvido = (jobProd as { nome: string } | null)?.nome ?? null;
+  } else if (solicitacao.job_interno_id) {
+    const { data: jobInt } = await supabase
+      .from("freelancer_jobs_internos")
+      .select("nome")
+      .eq("id", solicitacao.job_interno_id)
+      .maybeSingle();
+    nomeJobResolvido = (jobInt as { nome: string } | null)?.nome ?? null;
+  }
+
   const { data: contrato, error: insertErr } = await supabase
     .from("freelancer_contratos")
     .insert({
@@ -279,7 +300,10 @@ async function criarContratoDeRenovacao(
       job_id: solicitacao.job_id,
       job_interno_id: solicitacao.job_interno_id,
       responsavel_id: responsavelId,
-      nome_job: solicitacao.nome_job ?? "Importado (sem job vinculado)",
+      nome_job:
+        nomeJobResolvido ??
+        solicitacao.nome_job ??
+        "Importado (sem job vinculado)",
       cargo: solicitacao.cargo,
       tipo: solicitacao.tipo,
       valor: solicitacao.valor,
