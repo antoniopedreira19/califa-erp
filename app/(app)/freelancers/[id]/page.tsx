@@ -55,11 +55,18 @@ const PODE_EDITAR = new Set(["administrador", "rh", "financeiro"]);
 
 export default async function FreelancerPerfilPage({
   params,
+  searchParams,
 }: {
   params: { id: string };
+  searchParams: { aba?: string };
 }) {
   const session = await requireSession();
   const supabase = createClient();
+
+  const abaInicial: "dados" | "contratos" | "historico" =
+    searchParams.aba === "contratos" || searchParams.aba === "historico"
+      ? searchParams.aba
+      : "dados";
 
   const [freelancerRes, contratosRes, historicoRes, jobsCarregados, cargosRes] =
     await Promise.all([
@@ -580,6 +587,7 @@ export default async function FreelancerPerfilPage({
         botaoSolicitarContrato={botaoSolicitarContrato}
       />
       <AbasPerfil
+        defaultTab={abaInicial}
         dados={dadosPessoais}
         contratos={abaContratos}
         historico={<HistoricoContratoTimeline historico={historico} />}

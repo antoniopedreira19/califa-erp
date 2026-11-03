@@ -375,10 +375,11 @@ export function NovidadesPill({
                   {aditivosVisiveis.map((a) => (
                     <Linha
                       key={a.contrato_id}
-                      // Vai direto pra tela do contrato (não pro perfil) pra
-                      // o RH já cair nos botões "Gerar minuta" / "Anexar
-                      // assinado" sem navegar mais.
-                      href={`/freelancers/contratos/${a.contrato_id}`}
+                      // Perfil do freela com a aba Contratos ativa — RH vê
+                      // o card do contrato novo com os botões "Gerar minuta"
+                      // e "Anexar assinado" direto nele, mantendo também o
+                      // contexto dos outros contratos daquele freela.
+                      href={`/freelancers/${a.freelancer_id}?aba=contratos`}
                       corDestaque="text-sky-700"
                       corHoverCheck="hover:bg-sky-50 hover:text-sky-700"
                       nomePrincipal={a.freelancer_nome}

@@ -122,12 +122,13 @@ export function PopoverSolicitacao({
   // Copiar link so faz sentido quando o freela precisa preencher o form publico.
   const mostraCopiarLink = s.status === "aprovada" && !s.freelancer_id;
   const mostraAbrirPerfil = s.status === "cadastrada" && s.freelancer_id;
-  // Em renovação, aprovar já cria o contrato. Esse botão leva direto pra
-  // tela do contrato onde ficam gerar minuta / anexar PDF. Aparece em
-  // aprovada (antes da minuta) e em cadastrada (depois dela).
+  // Em renovação, aprovar já cria o contrato. Esse botão leva pro perfil
+  // do freela com a aba Contratos ativa, onde fica o card do contrato
+  // novo com os botões gerar minuta / anexar PDF.
   const mostraAbrirContrato =
     (s.status === "aprovada" || s.status === "cadastrada") &&
-    !!s.contrato_id;
+    !!s.contrato_id &&
+    !!s.freelancer_id;
 
   function aprovar() {
     setErro(null);
@@ -451,9 +452,9 @@ export function PopoverSolicitacao({
               </button>
             )}
 
-            {!mostraAprovar && mostraAbrirContrato && s.contrato_id && (
+            {!mostraAprovar && mostraAbrirContrato && s.freelancer_id && (
               <Link
-                href={`/freelancers/contratos/${s.contrato_id}`}
+                href={`/freelancers/${s.freelancer_id}?aba=contratos`}
                 onClick={() => onOpenChange(false)}
                 className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-california-red text-white text-xs font-semibold px-3 py-2.5 hover:bg-california-red-hover transition-colors"
               >
