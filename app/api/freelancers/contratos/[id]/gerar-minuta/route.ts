@@ -118,5 +118,40 @@ export async function POST(
     metadata: { path },
   });
 
+  // Se este contrato nasceu de uma solicitação de renovação aprovada, a
+  // geração da minuta é o checkpoint em que a solicitação transiciona de
+  // `aprovada` → `cadastrada`. Semanticamente: "aprovada = em processo",
+  // "cadastrada = documento oficial emitido". Filtra por aprovada pra não
+  // sobrescrever caminho concorrente (ex: form público).
+  const { data: solVinculada } = await supabase
+    .from("freelancer_solicitacoes")
+    .select("id")
+    .eq("tenant_id", session.activeTenant.id)
+    .eq("contrato_id", contrato.id)
+    .eq("status", "aprovada")
+    .maybeSingle();
+  if (solVinculada) {
+    const { error: solErr } = await supabase
+      .from("freelancer_solicitacoes")
+      .update({ status: "cadastrada" })
+      .eq("id", (solVinculada as { id: string }).id)
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "aprovada");
+    if (!solErr) {
+      await logAuditEvent({
+        acao: "freelancer_solicitacao.cadastrada_via_minuta",
+        tenantId: session.activeTenant.id,
+        entidadeTipo: "freelancer_solicitacao",
+        entidadeId: (solVinculada as { id: string }).id,
+        metadata: { contrato_id: contrato.id },
+      });
+    } else {
+      console.error(
+        "[contrato.gerar-minuta.solicitacao_update]",
+        solErr.message,
+      );
+    }
+  }
+
   return NextResponse.json({ ok: true, path });
 }

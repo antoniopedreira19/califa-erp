@@ -43,7 +43,6 @@ export async function carregarNovidades(
   const [
     novosRes,
     aditivosRaw,
-    renovacoesAprovadasRaw,
     preenchimentosRaw,
     distratosRaw,
     concluidasRaw,
@@ -67,11 +66,10 @@ export async function carregarNovidades(
     // continua operando lá no antigo e os aditivos chegam pelo sync, nada
     // aparecia no card. O cutoff já faz o papel de "só coisas novas".
     //
-    // Repare: além dos contratos sem PDF, o card também lista solicitações
-    // de renovação aprovadas e sem contrato (loader das solicitações no
-    // bloco seguinte). Ambos caem no mesmo card porque pro RH são a mesma
-    // coisa: "aditivo pendente de ação". A UI diferencia pela flag `tipo`
-    // em AditivoItem.
+    // Depois do fluxo novo de renovação (03/11/2026), aprovar uma
+    // solicitação de renovação cria o contrato na hora — então essas
+    // renovações caem naturalmente neste card como "contrato sem PDF".
+    // Sem necessidade de misturar fontes.
     supabase
       .from("freelancer_contratos")
       .select(
@@ -82,29 +80,6 @@ export async function carregarNovidades(
       .not("nome_job", "is", null)
       .gte("created_at", CUTOFF_NOVIDADES)
       .order("created_at", { ascending: false })
-      .limit(100),
-
-    // 2b. Renovações aprovadas sem contrato: solicitações `status=aprovada`
-    // com `freelancer_id` setado (freela já cadastrado, por isso é renovação)
-    // e sem `contrato_id`. Entram no mesmo card de Aditivos pra RH notar
-    // que precisa criar o contrato — hoje elas ficam presas aqui porque o
-    // fluxo público (que leva pra `cadastrada`) nunca foi oferecido pra
-    // renovação. Clique vai pra `/contratos/novo?from_solicitacao=<id>`.
-    //
-    // Sem cutoff aqui (lista com `.limit(100)` já contém o universo): o
-    // backlog existente de renovações presas também aparece. Pro RH é
-    // novidade mesmo que a solicitação seja antiga, porque a tela não
-    // mostrava antes.
-    supabase
-      .from("freelancer_solicitacoes")
-      .select(
-        "id, freelancer_id, nome_freela, nome_job, cargo, aprovado_em, freelancers!inner(nome_social)",
-      )
-      .eq("tenant_id", tenantId)
-      .eq("status", "aprovada")
-      .not("freelancer_id", "is", null)
-      .is("contrato_id", null)
-      .order("aprovado_em", { ascending: false })
       .limit(100),
 
     // 3. Preenchimentos: histórico de mudanças onde nome_job foi preenchido
@@ -165,12 +140,12 @@ export async function carregarNovidades(
     origem: f.origem,
   }));
 
-  // Pra Aditivos (contratos sem PDF): filtrar por freelas que têm > 1 contrato
+  // Pra Aditivos: filtrar por freelas que têm > 1 contrato efetivo
   const contratosRaw = (aditivosRaw.data ?? []) as any[];
   const freelasIds = Array.from(
     new Set(contratosRaw.map((c) => c.freelancer_id)),
   );
-  let aditivosContratos: AditivoItem[] = [];
+  let aditivos: AditivoItem[] = [];
   if (freelasIds.length > 0) {
     const { data: countRows } = await supabase
       .from("freelancer_contratos")
@@ -183,7 +158,7 @@ export async function carregarNovidades(
       porFreela.set(r.freelancer_id, (porFreela.get(r.freelancer_id) ?? 0) + 1);
     }
     const hojeISO = new Date().toISOString().slice(0, 10);
-    aditivosContratos = contratosRaw
+    aditivos = contratosRaw
       .filter((c) => {
         if ((porFreela.get(c.freelancer_id) ?? 0) < 2) return false;
         if (c.data_termino && c.data_termino < hojeISO) return false;
@@ -194,38 +169,15 @@ export async function carregarNovidades(
           ? c.freelancers[0]
           : c.freelancers;
         return {
-          tipo: "contrato_sem_pdf" as const,
-          entidade_id: c.id,
+          contrato_id: c.id,
           freelancer_id: c.freelancer_id,
           freelancer_nome: freela?.nome_social ?? "—",
           nome_job: c.nome_job,
           cargo: c.cargo,
-          quando: c.created_at,
+          created_at: c.created_at,
         };
       });
   }
-
-  // Renovações aprovadas sem contrato — mesma Secao, flag `tipo` diferencia
-  // o CTA no card.
-  const renovacoesRaw = (renovacoesAprovadasRaw.data ?? []) as any[];
-  const aditivosRenovacoes: AditivoItem[] = renovacoesRaw.map((s) => {
-    const freela = Array.isArray(s.freelancers)
-      ? s.freelancers[0]
-      : s.freelancers;
-    return {
-      tipo: "solicitacao_renovacao_aprovada" as const,
-      entidade_id: s.id,
-      freelancer_id: s.freelancer_id,
-      freelancer_nome: freela?.nome_social ?? s.nome_freela ?? "—",
-      nome_job: s.nome_job ?? "—",
-      cargo: s.cargo,
-      quando: s.aprovado_em ?? new Date().toISOString(),
-    };
-  });
-
-  // Ordena por `quando` desc pra misturar os dois tipos consistentemente.
-  const aditivos: AditivoItem[] = [...aditivosContratos, ...aditivosRenovacoes]
-    .sort((a, b) => (b.quando ?? "").localeCompare(a.quando ?? ""));
 
   // Pra Preenchimentos: buscar nome do profile alterador separado
   const preenchRaw = (preenchimentosRaw.data ?? []) as any[];

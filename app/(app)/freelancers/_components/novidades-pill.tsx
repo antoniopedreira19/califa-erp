@@ -36,28 +36,17 @@ export interface NovoCadastroItem {
 }
 
 /**
- * Item do card "Aditivos" — mistura duas origens:
- *
- *   - `contrato_sem_pdf`: linha de `freelancer_contratos` sem `arquivo_url`.
- *     RH precisa gerar minuta + anexar PDF (fluxo existente).
- *
- *   - `solicitacao_renovacao_aprovada`: solicitação de renovação aprovada
- *     (freela já cadastrado, `freelancer_id != null`, `status=aprovada`).
- *     RH precisa clicar e criar o contrato — leva pra /contratos/novo
- *     com pré-preenchimento dos dados da solicitação.
+ * Item do card "Aditivos" — contrato em freela existente, sem PDF.
+ * Inclui renovações aprovadas (que agora criam contrato na hora), já que o
+ * contrato recém-criado também nasce sem PDF e cai aqui naturalmente.
  */
-export type AditivoTipo = "contrato_sem_pdf" | "solicitacao_renovacao_aprovada";
-
 export interface AditivoItem {
-  tipo: AditivoTipo;
-  /** `contrato_id` quando contrato, `solicitacao_id` quando solicitação. */
-  entidade_id: string;
+  contrato_id: string;
   freelancer_id: string;
   freelancer_nome: string;
   nome_job: string;
   cargo: string | null;
-  /** `created_at` do contrato ou `aprovado_em` da solicitação. */
-  quando: string;
+  created_at: string;
 }
 
 export interface PreenchimentoItem {
@@ -103,24 +92,6 @@ interface Props {
 
 const rtf = new Intl.RelativeTimeFormat("pt-BR", { numeric: "auto" });
 
-/** Chave de dismiss por item do card Aditivos — distinta por tipo pra que
- *  descartar a solicitação não derrube o contrato que vai nascer dela
- *  depois, e vice-versa. */
-function dismissKeyDoAditivo(a: AditivoItem): string {
-  return a.tipo === "solicitacao_renovacao_aprovada"
-    ? `freelas:aditivo-sol:${a.entidade_id}`
-    : `freelas:aditivo:${a.entidade_id}`;
-}
-
-/** Pra onde a linha do Aditivo leva ao clicar. Contrato sem PDF vai pro
- *  perfil (histórico/anexar); solicitação aprovada vai pro form de novo
- *  contrato pré-preenchido com os dados da solicitação. */
-function hrefDoAditivo(a: AditivoItem): string {
-  if (a.tipo === "solicitacao_renovacao_aprovada") {
-    return `/freelancers/contratos/novo?from_solicitacao=${a.entidade_id}`;
-  }
-  return `/freelancers/${a.freelancer_id}`;
-}
 
 function diasAtras(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
@@ -234,7 +205,7 @@ export function NovidadesPill({
 
   const novosVisiveis = novos.filter((n) => !vistos.has(`freelas:novo:${n.id}`));
   const aditivosVisiveis = aditivos.filter(
-    (a) => !vistos.has(dismissKeyDoAditivo(a)),
+    (a) => !vistos.has(`freelas:aditivo:${a.contrato_id}`),
   );
   const preenchimentosVisiveis = preenchimentos.filter(
     (p) => !vistos.has(`freelas:preenchimento:${p.contrato_id}`),
@@ -397,28 +368,28 @@ export function NovidadesPill({
               {aditivosVisiveis.length > 0 && (
                 <Secao
                   titulo="Aditivos"
-                  descricao="Novos contratos em freelas existentes · aguardando PDF ou cadastro"
+                  descricao="Novos contratos em freelas existentes · gerar minuta e anexar PDF"
                   cor="sky"
                   icon={FilePlus}
                 >
                   {aditivosVisiveis.map((a) => (
                     <Linha
-                      key={`${a.tipo}:${a.entidade_id}`}
-                      href={hrefDoAditivo(a)}
+                      key={a.contrato_id}
+                      // Vai direto pra tela do contrato (não pro perfil) pra
+                      // o RH já cair nos botões "Gerar minuta" / "Anexar
+                      // assinado" sem navegar mais.
+                      href={`/freelancers/contratos/${a.contrato_id}`}
                       corDestaque="text-sky-700"
                       corHoverCheck="hover:bg-sky-50 hover:text-sky-700"
                       nomePrincipal={a.freelancer_nome}
                       destaque={a.nome_job}
                       cargo={a.cargo}
-                      quando={a.quando}
+                      quando={a.created_at}
                       por={null}
-                      extra={
-                        a.tipo === "solicitacao_renovacao_aprovada"
-                          ? "Renovação aprovada · criar contrato"
-                          : null
-                      }
                       onFechar={() => setAberto(false)}
-                      onDismiss={() => marcarVisto(dismissKeyDoAditivo(a))}
+                      onDismiss={() =>
+                        marcarVisto(`freelas:aditivo:${a.contrato_id}`)
+                      }
                     />
                   ))}
                 </Secao>

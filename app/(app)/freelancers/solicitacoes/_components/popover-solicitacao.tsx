@@ -122,6 +122,12 @@ export function PopoverSolicitacao({
   // Copiar link so faz sentido quando o freela precisa preencher o form publico.
   const mostraCopiarLink = s.status === "aprovada" && !s.freelancer_id;
   const mostraAbrirPerfil = s.status === "cadastrada" && s.freelancer_id;
+  // Em renovação, aprovar já cria o contrato. Esse botão leva direto pra
+  // tela do contrato onde ficam gerar minuta / anexar PDF. Aparece em
+  // aprovada (antes da minuta) e em cadastrada (depois dela).
+  const mostraAbrirContrato =
+    (s.status === "aprovada" || s.status === "cadastrada") &&
+    !!s.contrato_id;
 
   function aprovar() {
     setErro(null);
@@ -445,16 +451,30 @@ export function PopoverSolicitacao({
               </button>
             )}
 
-            {!mostraAprovar && mostraAbrirPerfil && s.freelancer_id && (
+            {!mostraAprovar && mostraAbrirContrato && s.contrato_id && (
               <Link
-                href={`/freelancers/${s.freelancer_id}`}
+                href={`/freelancers/contratos/${s.contrato_id}`}
                 onClick={() => onOpenChange(false)}
                 className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-california-red text-white text-xs font-semibold px-3 py-2.5 hover:bg-california-red-hover transition-colors"
               >
                 <ExternalLink className="h-3.5 w-3.5" />
-                Abrir perfil do freela
+                Abrir contrato
               </Link>
             )}
+
+            {!mostraAprovar &&
+              !mostraAbrirContrato &&
+              mostraAbrirPerfil &&
+              s.freelancer_id && (
+                <Link
+                  href={`/freelancers/${s.freelancer_id}`}
+                  onClick={() => onOpenChange(false)}
+                  className="flex-1 inline-flex items-center justify-center gap-1.5 rounded-lg bg-california-red text-white text-xs font-semibold px-3 py-2.5 hover:bg-california-red-hover transition-colors"
+                >
+                  <ExternalLink className="h-3.5 w-3.5" />
+                  Abrir perfil do freela
+                </Link>
+              )}
 
             <button
               type="button"

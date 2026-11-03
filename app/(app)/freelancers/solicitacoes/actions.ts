@@ -90,6 +90,27 @@ export async function aprovarSolicitacao(
   const agora = new Date();
   const expiraEm = new Date(agora.getTime() + 30 * 24 * 60 * 60 * 1000);
 
+  // Lê a solicitação antes de aprovar pra decidir o que fazer:
+  //   - freelancer_id setado = renovação → cria contrato automaticamente
+  //     com os dados da solicitação (herda job_id/job_interno_id se tiver,
+  //     ou nasce legado quando só vier `nome_job` em texto)
+  //   - freelancer_id null = contratação nova → só muda status, aguarda
+  //     o freela preencher o form público (fluxo que já existia)
+  const { data: solicitacao, error: readErr } = await supabase
+    .from("freelancer_solicitacoes")
+    .select("*")
+    .eq("id", id)
+    .eq("tenant_id", session.activeTenant.id)
+    .eq("status", "pendente")
+    .maybeSingle();
+  if (readErr) {
+    console.error("[solicitacao.aprovar.read]", readErr.message);
+    return { ok: false, message: readErr.message };
+  }
+  if (!solicitacao) {
+    return { ok: false, message: "Solicitação não encontrada ou já processada" };
+  }
+
   const { error } = await supabase
     .from("freelancer_solicitacoes")
     .update({
@@ -114,8 +135,114 @@ export async function aprovarSolicitacao(
     entidadeId: id,
   });
 
+  // Renovação: cria contrato na hora + aponta de volta pra solicitação.
+  // O status da solicitação segue `aprovada` (vira `cadastrada` só quando
+  // a minuta é gerada — ver endpoint gerar-minuta).
+  if (solicitacao.freelancer_id) {
+    const contratoRes = await criarContratoDeRenovacao(
+      supabase,
+      session,
+      solicitacao,
+    );
+    if (!contratoRes.ok) {
+      // Loga o erro mas não desfaz a aprovação — o RH consegue criar o
+      // contrato manualmente pelo perfil do freela se der problema.
+      console.error(
+        "[solicitacao.aprovar.criar_contrato]",
+        contratoRes.message,
+      );
+    }
+  }
+
   revalidatePath("/freelancers/solicitacoes");
+  revalidatePath("/freelancers");
   return { ok: true };
+}
+
+/**
+ * Cria o contrato na aprovação de uma renovação. Semântica importante:
+ *   - Solicitação com `job_id` (ou `job_interno_id`): contrato nasce
+ *     vinculado + origem_sistema = 'califa_erp'.
+ *   - Solicitação só com `nome_job` em texto (migrada do RH antigo):
+ *     contrato nasce legado + origem_sistema = 'ag_california_rh'. O
+ *     CHECK `freelancer_contratos_job_obrigatorio_em_novos` permite
+ *     contrato legado sem job.
+ *   - `responsavel_id` do contrato: puxa do dono estável do freela
+ *     (`freelancers.responsavel_id`) com fallback pro solicitante.
+ *
+ * Atualiza a solicitação com `contrato_id` pra fechar o vínculo.
+ */
+async function criarContratoDeRenovacao(
+  supabase: ReturnType<typeof createClient>,
+  session: Awaited<ReturnType<typeof requireSession>>,
+  solicitacao: any,
+): Promise<ActionResult<{ contrato_id: string }>> {
+  const { data: freela } = await supabase
+    .from("freelancers")
+    .select("id, responsavel_id")
+    .eq("id", solicitacao.freelancer_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+
+  const responsavelId =
+    (freela as { responsavel_id: string | null } | null)?.responsavel_id ??
+    solicitacao.solicitante_id ??
+    null;
+
+  const temJobVinculado =
+    !!solicitacao.job_id || !!solicitacao.job_interno_id;
+  const origemSistema = temJobVinculado ? "califa_erp" : "ag_california_rh";
+
+  const { data: contrato, error: insertErr } = await supabase
+    .from("freelancer_contratos")
+    .insert({
+      tenant_id: session.activeTenant.id,
+      freelancer_id: solicitacao.freelancer_id,
+      job_id: solicitacao.job_id,
+      job_interno_id: solicitacao.job_interno_id,
+      responsavel_id: responsavelId,
+      nome_job: solicitacao.nome_job ?? "Importado (sem job vinculado)",
+      cargo: solicitacao.cargo,
+      tipo: solicitacao.tipo,
+      valor: solicitacao.valor,
+      data_inicio: solicitacao.data_inicio,
+      data_termino: solicitacao.data_termino,
+      cidade: solicitacao.cidade,
+      observacoes: solicitacao.observacoes,
+      origem_sistema: origemSistema,
+      created_by: session.profile.id,
+      updated_by: session.profile.id,
+    })
+    .select("id")
+    .single();
+
+  if (insertErr || !contrato) {
+    return {
+      ok: false,
+      message: insertErr?.message ?? "Falha ao criar contrato",
+    };
+  }
+
+  await supabase
+    .from("freelancer_solicitacoes")
+    .update({ contrato_id: contrato.id })
+    .eq("id", solicitacao.id)
+    .eq("tenant_id", session.activeTenant.id);
+
+  await logAuditEvent({
+    acao: "freelancer_contrato.criado",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "freelancer_contrato",
+    entidadeId: contrato.id,
+    metadata: {
+      freelancer_id: solicitacao.freelancer_id,
+      solicitacao_id: solicitacao.id,
+      origem: "aprovacao_renovacao",
+      origem_sistema: origemSistema,
+    },
+  });
+
+  return { ok: true, data: { contrato_id: contrato.id } };
 }
 
 /**

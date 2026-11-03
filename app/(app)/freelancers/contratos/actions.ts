@@ -62,18 +62,6 @@ export async function criarFreelancerContrato(
     };
   }
 
-  // `solicitacao_id` é opcional e extra ao schema do contrato. Vem do form
-  // quando o novo contrato nasce de uma solicitação de renovação aprovada
-  // (`/contratos/novo?from_solicitacao=<id>`). Depois de criar o contrato,
-  // a solicitação é marcada como `cadastrada` e aponta pro novo contrato,
-  // fechando o ciclo que antes ficava preso.
-  const solicitacaoIdRaw = formData.get("solicitacao_id");
-  const solicitacaoId =
-    typeof solicitacaoIdRaw === "string" &&
-    /^[0-9a-f-]{36}$/i.test(solicitacaoIdRaw)
-      ? solicitacaoIdRaw
-      : null;
-
   const origem = parsed.data.job_origem;
   if (!parsed.data.job_id) {
     return {
@@ -136,43 +124,8 @@ export async function criarFreelancerContrato(
       job_id: parsed.data.job_id,
       job_origem: origem,
       nome_job: nomeJob,
-      solicitacao_id: solicitacaoId,
     },
   });
-
-  // Fecha o ciclo da solicitação de origem (quando houver). O UPDATE
-  // filtra por `status=aprovada` pra não sobrescrever uma solicitação
-  // que já foi cadastrada por outro caminho concorrente.
-  if (solicitacaoId) {
-    const { error: solErr } = await supabase
-      .from("freelancer_solicitacoes")
-      .update({
-        status: "cadastrada",
-        contrato_id: data.id,
-        freelancer_id: parsed.data.freelancer_id,
-      })
-      .eq("id", solicitacaoId)
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("status", "aprovada");
-    if (solErr) {
-      // Não desfaz o contrato — ele é válido mesmo que o update na
-      // solicitação falhe. Log pra RH conseguir diagnosticar depois.
-      console.error(
-        "[freelancer_solicitacao.cadastrar_via_contrato]",
-        solErr.message,
-      );
-    } else {
-      await logAuditEvent({
-        acao: "freelancer_solicitacao.cadastrada_via_contrato",
-        tenantId: session.activeTenant.id,
-        entidadeTipo: "freelancer_solicitacao",
-        entidadeId: solicitacaoId,
-        metadata: { contrato_id: data.id },
-      });
-      revalidatePath("/freelancers/solicitacoes");
-      revalidatePath("/freelancers");
-    }
-  }
 
   revalidatePath(`/freelancers/${parsed.data.freelancer_id}`);
   revalidatePath("/freelancers/lista");

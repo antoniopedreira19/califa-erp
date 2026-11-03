@@ -472,9 +472,9 @@ export type AuditAction =
   | "freelancer_solicitacao.aprovada_em_lote"
   | "freelancer_solicitacao.rejeitada"
   | "freelancer_solicitacao.cancelada"
-  // Renovação aprovada que foi fechada com criação direta de contrato pelo
-  // RH (03/11/2026), sem passar pelo link público.
-  | "freelancer_solicitacao.cadastrada_via_contrato"
+  // Renovação em que a geração da minuta oficializa o cadastro: solicitação
+  // sai de `aprovada` → `cadastrada` quando o DOCX é gerado (03/11/2026).
+  | "freelancer_solicitacao.cadastrada_via_minuta"
   // Módulo Freelancers — cadastramento via link público (Task 022).
   | "freelancer.cadastrado_via_solicitacao"
   // Módulo Freelancers — distrato (Task 025).
