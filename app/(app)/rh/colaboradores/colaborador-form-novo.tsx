@@ -27,16 +27,32 @@ type LiderOption = { id: string; nome: string };
 
 const NONE_SENTINEL = "__none__";
 
+/** Dados pré-preenchidos vindos do perfil do freelancer que está sendo
+ *  efetivado como colaborador. Todos opcionais — o form não força nada. */
+export interface ColaboradorFormDefaults {
+  nome?: string;
+  cpf?: string;
+  email?: string;
+  telefone?: string;
+  funcao?: string;
+  data_admissao?: string;
+  /** Id do contrato de freela que, ao salvar o colaborador, deve ser
+   *  encerrado via RPC `efetivar_contrato_freelancer`. */
+  from_freelancer_contrato_id?: string;
+}
+
 export function ColaboradorFormNovo({
   empresas,
   regionais,
   niveis,
   lideres,
+  defaults,
 }: {
   empresas: EmpresaOption[];
   regionais: RegionalOption[];
   niveis: NivelOption[];
   lideres: LiderOption[];
+  defaults?: ColaboradorFormDefaults;
 }) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -52,10 +68,12 @@ export function ColaboradorFormNovo({
   const [regionalId, setRegionalId] = React.useState<string>("");
   const [nivelSel, setNivelSel] = React.useState<string>(NONE_SENTINEL);
   const [liderSel, setLiderSel] = React.useState<string>(NONE_SENTINEL);
-  const [cpf, setCpf] = React.useState<string>("");
+  const [cpf, setCpf] = React.useState<string>(defaults?.cpf ?? "");
   const [cnpj, setCnpj] = React.useState<string>("");
-  const [telefone, setTelefone] = React.useState<string>("");
-  const [dataAdmissao, setDataAdmissao] = React.useState<string>(hoje());
+  const [telefone, setTelefone] = React.useState<string>(defaults?.telefone ?? "");
+  const [dataAdmissao, setDataAdmissao] = React.useState<string>(
+    defaults?.data_admissao ?? hoje(),
+  );
 
   const isPJ =
     tipoContratacao === "pj" || tipoContratacao === "clt_recibo";
@@ -92,6 +110,12 @@ export function ColaboradorFormNovo({
     formData.set("cnpj", cnpj);
     formData.set("telefone", telefone);
     formData.set("data_admissao", dataAdmissao);
+    if (defaults?.from_freelancer_contrato_id) {
+      formData.set(
+        "from_freelancer_contrato_id",
+        defaults.from_freelancer_contrato_id,
+      );
+    }
 
     startTransition(async () => {
       const res = await criarColaborador(formData);
@@ -127,6 +151,7 @@ export function ColaboradorFormNovo({
               required
               maxLength={200}
               placeholder="Ex.: Carolina Cerqueira Inácio"
+              defaultValue={defaults?.nome ?? ""}
             />
             {fieldErrors.nome?.map((msg, i) => (
               <p key={i} className="text-xs text-california-red">
@@ -168,6 +193,7 @@ export function ColaboradorFormNovo({
               id="cpf"
               mask="cpf"
               required
+              defaultValue={defaults?.cpf ?? ""}
               onDigitsChange={setCpf}
             />
             {fieldErrors.cpf?.map((msg, i) => (
@@ -206,6 +232,7 @@ export function ColaboradorFormNovo({
               required
               maxLength={200}
               placeholder="Ex.: Gerente de Projetos, Filmmaker"
+              defaultValue={defaults?.funcao ?? ""}
             />
             {fieldErrors.funcao?.map((msg, i) => (
               <p key={i} className="text-xs text-california-red">
@@ -257,6 +284,7 @@ export function ColaboradorFormNovo({
               type="email"
               maxLength={200}
               placeholder="colaborador@exemplo.com"
+              defaultValue={defaults?.email ?? ""}
             />
             {fieldErrors.email?.map((msg, i) => (
               <p key={i} className="text-xs text-california-red">
@@ -270,6 +298,7 @@ export function ColaboradorFormNovo({
             <MaskedInput
               id="telefone"
               mask="telefone"
+              defaultValue={defaults?.telefone ?? ""}
               onDigitsChange={setTelefone}
             />
             {fieldErrors.telefone?.map((msg, i) => (

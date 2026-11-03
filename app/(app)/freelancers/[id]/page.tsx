@@ -9,6 +9,7 @@ import {
   FileText,
   Plus,
   User,
+  ArrowLeftRight,
 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -335,6 +336,24 @@ export default async function FreelancerPerfilPage({
     />
   );
 
+  // "Efetivar como colaborador": só pra admin/rh (os únicos que podem
+  // cadastrar colaborador em /rh/colaboradores) E só se existe contrato
+  // vigente de freela (pessoa trabalhando agora). Encerramento acontece ao
+  // salvar o colaborador — a página /rh/colaboradores/novo faz o resto.
+  const podeEfetivar =
+    (session.activeRole === "administrador" || session.activeRole === "rh") &&
+    contratoAtualObj != null;
+  const botaoEfetivar = podeEfetivar ? (
+    <Link
+      href={`/rh/colaboradores/novo?from_freelancer=${freelancer.id}`}
+      prefetch={false}
+      className="inline-flex items-center gap-2 rounded-lg border border-emerald-400/50 bg-emerald-500/15 px-3 py-2 text-xs font-semibold text-emerald-100 hover:bg-emerald-500/25 hover:border-emerald-400 transition-all"
+    >
+      <ArrowLeftRight className="h-3.5 w-3.5" />
+      Efetivar como colaborador
+    </Link>
+  ) : null;
+
   const abaContratos = (() => {
     if (contratosOrdenados.length === 0) {
       return (
@@ -585,6 +604,7 @@ export default async function FreelancerPerfilPage({
         podeEditar={podeEditar}
         contratoAtual={heroContratoAtual}
         botaoSolicitarContrato={botaoSolicitarContrato}
+        botaoEfetivar={botaoEfetivar}
       />
       <AbasPerfil
         defaultTab={abaInicial}

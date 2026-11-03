@@ -198,6 +198,51 @@ export async function criarColaborador(
     },
   });
 
+  // 4) Se veio de "Efetivar como colaborador", encerra o contrato de
+  //    freelancer e linka de volta. A RPC é SECURITY INVOKER e respeita
+  //    RLS do caller; só precisa ser authenticated+rh/admin, o que já é
+  //    garantido pelo gate acima.
+  const freelancerContratoId = formData.get("from_freelancer_contrato_id")
+    ?.toString()
+    ?.trim();
+  if (freelancerContratoId) {
+    const { error: rpcErr } = await supabase.rpc(
+      "efetivar_contrato_freelancer",
+      {
+        p_contrato_id: freelancerContratoId,
+        p_data_efetivacao: colaboradorParsed.data.data_admissao,
+        p_colaborador_id: colaboradorId,
+      },
+    );
+    if (rpcErr) {
+      // Falha aqui NÃO desfaz o colaborador — ele é um dado válido por si só.
+      // Deixa trilha de auditoria pro RH resolver manualmente.
+      console.error("[rh.colaborador.criar.efetivar_freela]", rpcErr.message);
+      await logAuditEvent({
+        acao: "colaborador.efetivacao_freelancer_falhou",
+        tenantId: session.activeTenant.id,
+        entidadeTipo: "colaborador",
+        entidadeId: colaboradorId,
+        metadata: {
+          freelancer_contrato_id: freelancerContratoId,
+          erro: rpcErr.message,
+        },
+      });
+    } else {
+      await logAuditEvent({
+        acao: "freelancer_contrato.efetivado",
+        tenantId: session.activeTenant.id,
+        entidadeTipo: "freelancer_contrato",
+        entidadeId: freelancerContratoId,
+        metadata: {
+          colaborador_id: colaboradorId,
+          data_efetivacao: colaboradorParsed.data.data_admissao,
+        },
+      });
+      revalidatePath("/freelancers");
+    }
+  }
+
   revalidatePath("/rh");
   revalidatePath("/rh/colaboradores");
   return { ok: true, id: colaboradorId };

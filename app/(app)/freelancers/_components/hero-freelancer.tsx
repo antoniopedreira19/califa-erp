@@ -85,6 +85,8 @@ interface Props {
   contratoAtual?: HeroContratoAtual | null;
   /** Botão/dialog de solicitar novo contrato. Composto pela page (precisa de jobs/cargos). */
   botaoSolicitarContrato?: React.ReactNode;
+  /** Botão "Efetivar como colaborador" — só aparece quando RH/admin + há contrato ativo. */
+  botaoEfetivar?: React.ReactNode;
 }
 
 export function HeroFreelancer({
@@ -92,6 +94,7 @@ export function HeroFreelancer({
   podeEditar,
   contratoAtual,
   botaoSolicitarContrato,
+  botaoEfetivar,
 }: Props) {
   const [valorVisivel, setValorVisivel] = React.useState(false);
   const avatarIniciais = initials(f.nome_social);
@@ -250,6 +253,7 @@ export function HeroFreelancer({
                 Editar perfil
               </Link>
             )}
+            {botaoEfetivar}
             {botaoSolicitarContrato}
           </div>
         </div>

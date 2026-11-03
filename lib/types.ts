@@ -6138,6 +6138,10 @@ export interface FreelancerContrato {
   distrato_solicitado_em: string | null;
   distrato_solicitado_por: string | null;
 
+  /** Preenchido quando o contrato foi encerrado via "Efetivar como colaborador":
+   *  aponta pro colaborador criado em /rh/colaboradores. Null nos demais casos. */
+  efetivado_colaborador_id: string | null;
+
   // Origem
   origem_sistema: OrigemFreelancerContratoSistema;
 

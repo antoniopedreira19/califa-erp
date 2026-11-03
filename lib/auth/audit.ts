@@ -482,6 +482,10 @@ export type AuditAction =
   | "freelancer_contrato.distrato_minuta_gerada"
   | "freelancer_contrato.distrato_aplicado"
   | "freelancer_contrato.distrato_cancelado"
+  // Freelancer efetivado como colaborador CLT/PJ/estágio (03/11/2026).
+  // Encerra o contrato de freela e linka pro colaborador recém-criado.
+  | "freelancer_contrato.efetivado"
+  | "colaborador.efetivacao_freelancer_falhou"
   // Módulo Freelancers — ação prevista inline (Task 027).
   | "freelancer.acao_prevista_alterada"
   // Módulo Freelancers — transferência do dono da pessoa (ADR a seguir).
