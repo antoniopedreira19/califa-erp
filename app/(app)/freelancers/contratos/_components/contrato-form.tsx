@@ -42,6 +42,10 @@ type FieldErrors = Record<string, string[]>;
 interface Props {
   modo: Modo;
   contrato?: FreelancerContrato;
+  /** Id da solicitação de origem (modo novo vindo de renovação aprovada).
+   *  A action marca a solicitação como `cadastrada` + preenche `contrato_id`
+   *  depois de criar o contrato, fechando o ciclo. */
+  solicitacaoId?: string | null;
   freelancer: FreelancerResumo;
   jobs: JobItem[];
   responsaveis: ResponsavelItem[];
@@ -51,6 +55,7 @@ interface Props {
 export function ContratoForm({
   modo,
   contrato,
+  solicitacaoId,
   freelancer,
   jobs,
   responsaveis,
@@ -126,6 +131,7 @@ export function ContratoForm({
     fd.set("data_termino", dataTermino);
     fd.set("cidade", cidade);
     fd.set("observacoes", observacoes);
+    if (solicitacaoId) fd.set("solicitacao_id", solicitacaoId);
 
     startTransition(async () => {
       const result =
