@@ -8856,4 +8856,4 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Na carga de 01/11:** 2.433 previsões, com R$ 52,20 mi de entradas e R$ 44,14 mi de saídas.
 - **Na tela:** a linha virou "Só previsão (jobs, recorrências e planilha)", e a descrição da página cita a planilha.
 - **Migrations:** `20261103100001` e `20261103100002`. A segunda corrige o nulo do Tipo vazio.
-- **Em aberto com o Tiago:** as saídas "Salário" do Tipo CO em novembro, que podem repetir a folha do sistema (decisão 232, revisão de 03/11).
+- **Decidido (Tiago, 03/11):** as saídas "Salário" do Tipo CO em novembro e o imposto dos jobs do 4T ficam como estão até os jobs entrarem no sistema.

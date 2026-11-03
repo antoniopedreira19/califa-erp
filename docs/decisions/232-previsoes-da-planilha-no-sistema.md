@@ -79,7 +79,7 @@ Na carga de 01/11:
   - a view mantém o GRANT só para `authenticated`;
   - na tela, o fluxo mostra as previsões mês a mês até dez/2027, na linha "Só previsão (jobs, recorrências e planilha)".
   - Nenhuma previsão estava ligada nem vencida em 03/11, então o realizado e a rolagem ainda não passaram por dado real.
-- **Em aberto:** 12 saídas "Salário" do Tipo CO em novembro (R$ 85.418,75) continuam no fluxo, porque a regra tira só o Tipo DP. 6 delas (R$ 43.723,55) têm o valor exato de uma linha da folha do sistema no mesmo mês.
+- **Ficam como estão (Tiago, 03/11/2026):** 12 saídas "Salário" do Tipo CO em novembro (R$ 85.418,75) continuam no fluxo, porque a regra tira só o Tipo DP; 6 delas (R$ 43.723,55) têm o valor exato de uma linha da folha do sistema no mesmo mês. Junto com o imposto dos jobs do 4T, se resolvem quando os jobs forem lançados no sistema: "Não vamos mexer nesses casos de 4t por agora. Serão incluidos quando seus respectivos jobs forem lançados no sistema".
 
 ## O que fica para depois
 
