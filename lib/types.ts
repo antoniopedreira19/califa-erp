@@ -4389,6 +4389,9 @@ export interface ContaAvulsaRecorrente {
   data_fim: string | null; // YYYY-MM-DD
   forma_pagamento: FormaPagamento | null;
   cartao_credito_id: string | null;
+  // md5 de fornecedor|descrição da planilha: tira a previsão da planilha do
+  // fluxo (decisão 235). Nulo na recorrência criada pela tela.
+  previsao_chave: string | null;
   ativo: boolean;
   criado_por: string;
   created_at: string;

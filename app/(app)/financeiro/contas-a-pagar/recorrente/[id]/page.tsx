@@ -264,6 +264,7 @@ export default async function RecorrenteDetalhesPage({
     data_fim: string | null;
     forma_pagamento: FormaPagamento | null;
     cartao_credito_id: string | null;
+    previsao_chave: string | null;
     ativo: boolean;
     criado_por: string;
     created_at: string;
@@ -296,6 +297,7 @@ export default async function RecorrenteDetalhesPage({
     data_fim: r.data_fim,
     forma_pagamento: r.forma_pagamento as FormaPagamento | null,
     cartao_credito_id: (r.cartao_credito_id as string | null) ?? null,
+    previsao_chave: r.previsao_chave ?? null,
     ativo: r.ativo,
     criado_por: r.criado_por,
     created_at: r.created_at,
