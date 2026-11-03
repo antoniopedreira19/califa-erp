@@ -758,7 +758,7 @@ function SolicitacaoRow({
               {naoLidas}
             </span>
           )}
-          <p className="font-semibold text-foreground">
+          <p className="font-semibold text-foreground uppercase tracking-wide">
             {s.nome_freela_display}
           </p>
         </div>
