@@ -1615,6 +1615,38 @@ ficam só os jobs do 4T." Os jobs do 3T que já existem no sistema (cerca de
   previsões, o 3T mostra só o que já passou pelo banco: o que falta acontecer espera a
   conciliação.
 
+### Recomeçar as contas no último extrato (03/11/2026)
+
+O treinamento da conciliação precisa do saldo do sistema batendo com o banco, e hoje nenhuma
+conta principal bate na data do último extrato. A diferença vem de quatro lugares:
+- as aplicações e os resgates automáticos que o extrato novo da California Santander não traz;
+- as 50 linhas pendentes de 27 a 31/10;
+- os jobs do 4T, que ainda vão entrar no sistema;
+- as contas sem extrato.
+
+| Conta | Último extrato | Banco | Sistema na mesma data |
+|---|---|---|---|
+| California Santander | 31/10 | R$ 401.229,23 | −R$ 2.242.953,73 |
+| BB California | 26/10 | −R$ 100.000,00 | −R$ 4.068.769,09 |
+| Santander GoCrazy | 27/10 | R$ 53.668,60 | R$ 344.592,67 |
+| Santander Hitlab | 28/10 | R$ 0,00 | R$ 464,72 |
+
+**Decidido (Tiago, 03/11/2026):** "Faremos o recomendado de recomeçar no ultimo extrato, e
+depois vamos preenchendo as lacunas por aqui". O Tiago traz os extratos atualizados em 04/11.
+
+- Cada conta recomeça com o saldo do banco no dia do extrato mais recente, numa data só para
+  todas. O que vem antes vira histórico, na seção própria do Extrato, como na California
+  Santander em 27/10 (de 01/08 para 01/10).
+- A conta corrente e a aplicação recomeçam juntas, porque o banco aplica sozinho o que sobra
+  na corrente: California Santander com ContaMax, BB California com Rende Fácil.
+- As contas sem extrato (XP California, XP GoCrazy, Paypal, BB GoCrazy, Bradesco e Fundo Fixo)
+  precisam do saldo do banco numa data, por extrato ou pelo internet banking.
+- A troca do saldo inicial de conta com lançamento é destrutiva, e a tela não deixa. Vai por
+  migration, com os valores conferidos pelo Tiago conta a conta antes de aplicar.
+- Depois do recomeço, as lacunas e as divergências se resolvem no histórico, sem mexer no
+  saldo. Cada conta guarda um número de controle: o histórico somado até o corte menos o
+  saldo do banco no corte. Ele chega a zero quando não houver mais lacuna.
+
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas
   85 e 91 da Res. Jobs 2026; R$ 1.520.000,00 de benefício): o histórico segue a
