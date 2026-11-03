@@ -281,6 +281,13 @@ export function NovaSolicitacaoDialog({
     const fd = new FormData();
     fd.set("nome_freela", nomeFinal);
     fd.set("cpf_freela", cpfDigits);
+    // Se o form já identificou um freela cadastrado (via busca por CPF ou
+    // pré-travado pelo perfil), envia o id explícito — evita que a
+    // solicitação apareça como "contratação" na lista. O trigger do banco
+    // cobre o caso de alguém pular essa linha.
+    if (freelaSelecionado?.id) {
+      fd.set("freelancer_id", freelaSelecionado.id);
+    }
     fd.set("job_id", jobId);
     const jobEscolhido = jobs.find((j) => j.id === jobId);
     fd.set(

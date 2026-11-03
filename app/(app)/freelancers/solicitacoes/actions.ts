@@ -46,6 +46,9 @@ export async function criarSolicitacao(
       solicitante_id: session.profile.id,
       nome_freela: parsed.data.nome_freela,
       cpf_freela: parsed.data.cpf_freela ?? null,
+      // Vem preenchido quando o form já identificou o cadastro via CPF; se não
+      // vier, o trigger resolver_freelancer_id_por_cpf cuida no banco.
+      freelancer_id: parsed.data.freelancer_id ?? null,
       // Grava na coluna da fonte certa (CHECK no banco garante exclusividade).
       job_id: origem === "producao" ? parsed.data.job_id : null,
       job_interno_id: origem === "interno" ? parsed.data.job_id : null,
@@ -139,6 +142,16 @@ export async function aprovarSolicitacao(
   // O status da solicitação segue `aprovada` (vira `cadastrada` só quando
   // a minuta é gerada — ver endpoint gerar-minuta).
   if (solicitacao.freelancer_id) {
+    // Migração automática de responsável: se quem solicitou não é o dono
+    // atual do cadastro, troca o dono pra ela antes de criar o contrato.
+    // Assim o contrato já nasce com o responsável certo (criarContratoDeRenovacao
+    // puxa de freelancers.responsavel_id).
+    await migrarResponsavelSeNecessario(
+      supabase,
+      session,
+      solicitacao,
+    );
+
     const contratoRes = await criarContratoDeRenovacao(
       supabase,
       session,
@@ -160,6 +173,69 @@ export async function aprovarSolicitacao(
 }
 
 /**
+ * Transferência automática de responsável na aprovação (decisão 03/11/2026):
+ * quando o solicitante não é o dono atual do cadastro, o cadastro migra pra
+ * ele antes do contrato ser criado. Objetivo: "quem pede novo contrato pra um
+ * freela parado assume a pessoa — sem precisar de 'Transferir responsável'
+ * manual antes". Idempotente: se já é o mesmo responsável, não faz nada.
+ */
+async function migrarResponsavelSeNecessario(
+  supabase: ReturnType<typeof createClient>,
+  session: Awaited<ReturnType<typeof requireSession>>,
+  solicitacao: {
+    id: string;
+    freelancer_id: string;
+    solicitante_id: string | null;
+  },
+): Promise<void> {
+  if (!solicitacao.solicitante_id) return;
+
+  const { data: freela } = await supabase
+    .from("freelancers")
+    .select("id, responsavel_id")
+    .eq("id", solicitacao.freelancer_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+
+  if (!freela) return;
+  const responsavelAtual = (freela as { responsavel_id: string | null })
+    .responsavel_id;
+  if (responsavelAtual === solicitacao.solicitante_id) return;
+
+  const { error } = await supabase
+    .from("freelancers")
+    .update({
+      responsavel_id: solicitacao.solicitante_id,
+      updated_by: session.profile.id,
+    })
+    .eq("id", solicitacao.freelancer_id)
+    .eq("tenant_id", session.activeTenant.id);
+
+  if (error) {
+    // Não aborta a aprovação — se falhar aqui, o contrato ainda vai ser
+    // criado com o responsavel antigo e o RH pode transferir manualmente.
+    console.error(
+      "[solicitacao.aprovar.migrar_responsavel]",
+      error.message,
+    );
+    return;
+  }
+
+  await logAuditEvent({
+    acao: "freelancer.responsavel_transferido",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "freelancer",
+    entidadeId: solicitacao.freelancer_id,
+    metadata: {
+      de: responsavelAtual,
+      para: solicitacao.solicitante_id,
+      origem: "aprovacao_solicitacao",
+      solicitacao_id: solicitacao.id,
+    },
+  });
+}
+
+/**
  * Cria o contrato na aprovação de uma renovação. Semântica importante:
  *   - Solicitação com `job_id` (ou `job_interno_id`): contrato nasce
  *     vinculado + origem_sistema = 'califa_erp'.
@@ -168,7 +244,9 @@ export async function aprovarSolicitacao(
  *     CHECK `freelancer_contratos_job_obrigatorio_em_novos` permite
  *     contrato legado sem job.
  *   - `responsavel_id` do contrato: puxa do dono estável do freela
- *     (`freelancers.responsavel_id`) com fallback pro solicitante.
+ *     (`freelancers.responsavel_id`) com fallback pro solicitante. Quando
+ *     o solicitante ≠ responsável, migrarResponsavelSeNecessario já ajustou
+ *     o cadastro antes desta função rodar.
  *
  * Atualiza a solicitação com `contrato_id` pra fechar o vínculo.
  */

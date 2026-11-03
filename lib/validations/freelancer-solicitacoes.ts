@@ -35,6 +35,16 @@ export const criarSolicitacaoSchema = z
       .transform((v) => (v === "" ? null : v))
       .nullable()
       .optional(),
+    /** Quando o form já identificou um freela cadastrado (via debounce de CPF
+     *  → endpoint /api/freelancers/buscar-por-cpf), envia o id explícito. É
+     *  defesa em profundidade: o trigger do banco também resolve via CPF, mas
+     *  mandar daqui deixa o estado consistente antes do insert. */
+    freelancer_id: z
+      .string()
+      .uuid()
+      .optional()
+      .nullable()
+      .transform((v) => (v === "" || v === undefined ? null : v)),
     job_id: z.string().uuid({ message: "Escolha um job" }),
     /** 'producao' = grava em `job_id` da `freelancer_solicitacoes`;
      *  'interno' = grava em `job_interno_id`. Default 'producao' pra compat
