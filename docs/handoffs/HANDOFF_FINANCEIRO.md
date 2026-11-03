@@ -8838,3 +8838,9 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Conciliação da California Santander:** 63 pares e 5 somas do mesmo dia e fornecedor pela ação Conciliar, e a TR-00068 (XP California → California Santander, R$ 3.300.001,04, 28/10) ligada à linha do banco. Sobram 50 linhas de 27 a 31/10: 40 esperam o job do 4T; as outras estão nas DIV-043, DIV-044 e DIV-045.
 - **Três linhas de 26/10 ignoradas** com o OK do Tiago ("Pode ignorar"): duas repetidas pelo extrato novo com outro texto e a de R$ 4.200,00, que só o extrato parcial tinha (DIV-042). Cada uma guarda o motivo, e a auditoria registra `extrato.linha_ignorada`.
 - **Esperando o Tiago:** o extrato da ContaMax de outubro, que explica o saldo do extrato de 31/10.
+
+## ⚠️ Nota de 2026-11-02 (9) — a aba Banco não quebra mais depois de importar um extrato (decisão 029)
+
+- **O erro:** depois de importar um extrato, a aba Banco da Conciliação parava com "Cannot read properties of undefined (reading 'id')", e só voltava recarregando a página. No grupo de linhas iguais (mesmo dia e valor, mais títulos que linhas), a tela guarda o título escolhido para cada linha. A importação faz o motor rodar de novo, e ele pode dar a outra linha o título que estava marcado ali: o grupo continuava com as mesmas linhas, mas a escolha guardada apontava para um título que tinha saído dele.
+- **A correção:** a chave do grupo (`chaveDoGrupo`, em `banco-tabela.tsx`) passa a incluir, além das linhas, o título marcado em cada uma e os títulos para trocar. Quando qualquer um deles muda, o grupo recomeça da escolha do motor. Uma troca feita pelo "Trocar…" continua valendo enquanto os dados do grupo não mudam.
+- **Conferido:** com os dados reais da California Santander, montando a tabela fora da página, sem gravar nada no banco. Antes da correção, o mesmo erro; depois, os 8 grupos com mais títulos que linhas mostram o título novo, sem erro. O "Trocar…" segue funcionando na página.

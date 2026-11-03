@@ -197,7 +197,7 @@ export function TabelaDoBanco({
         </thead>
         <tbody>
           {grupos.map((g) => (
-            <GrupoNaTabela key={`${g.chave}|${g.linhas.map((r) => r.mov.id).join(",")}`} g={g} contexto={contexto} acoes={acoes} />
+            <GrupoNaTabela key={chaveDoGrupo(g)} g={g} contexto={contexto} acoes={acoes} />
           ))}
           {linhas.map((r) => (
             <tr key={r.mov.id} className="border-b border-border last:border-0">
@@ -688,6 +688,18 @@ function AcoesDaLinha({ r, acoes, contexto }: { r: ResultadoDaLinha; acoes: Acoe
 // ---------------------------------------------------------------------------
 // O grupo de linhas iguais
 // ---------------------------------------------------------------------------
+
+/**
+ * A chave do grupo muda quando muda o que a escolha guardada supõe: as
+ * linhas, o título que o motor marcou em cada uma e os títulos para trocar.
+ * Depois de importar um extrato, o motor pode dar a outra linha o título que
+ * estava marcado aqui; com a chave só das linhas, a escolha guardada apontava
+ * para um título que tinha saído do grupo, e a aba Banco quebrava.
+ */
+function chaveDoGrupo(g: GrupoDeIguais<MovimentoDaLinha>): string {
+  const linhas = g.linhas.map((r) => `${r.mov.id}:${r.titulo?.id ?? ""}`).join(",");
+  return `${g.chave}|${linhas}|${g.titulos.map((t) => t.id).join(",")}`;
+}
 
 /**
  * As linhas iguais do banco (mesmo dia, mesmo valor) com mais títulos que
