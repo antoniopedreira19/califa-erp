@@ -32,6 +32,7 @@ interface Props {
  */
 export function JobsInternosTabela({ jobs, podeEscrever }: Props) {
   const [busca, setBusca] = React.useState("");
+  const [aberto, setAberto] = React.useState(false);
 
   const filtrados = React.useMemo(() => {
     const alvo = norm(busca.trim());
@@ -41,9 +42,52 @@ export function JobsInternosTabela({ jobs, podeEscrever }: Props) {
     );
   }, [jobs, busca]);
 
+  const temBusca = jobs.length > 0;
+
   return (
     <div className="space-y-4">
-      {podeEscrever && <NovoJobInternoForm />}
+      {(temBusca || podeEscrever) && (
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          {temBusca ? (
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <input
+                type="text"
+                value={busca}
+                onChange={(e) => setBusca(e.target.value)}
+                placeholder="Buscar por nome do job interno..."
+                className="w-full h-10 rounded-lg border border-border bg-white pl-9 pr-9 text-sm focus:outline-none focus:ring-2 focus:border-california-red focus:ring-california-red/15"
+              />
+              {busca && (
+                <button
+                  type="button"
+                  onClick={() => setBusca("")}
+                  aria-label="Limpar busca"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <div />
+          )}
+          {podeEscrever && !aberto && (
+            <button
+              type="button"
+              onClick={() => setAberto(true)}
+              className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red-hover transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              Novo job interno
+            </button>
+          )}
+        </div>
+      )}
+
+      {podeEscrever && aberto && (
+        <NovoJobInternoForm onFechar={() => setAberto(false)} />
+      )}
 
       {jobs.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card p-12 shadow-soft text-center">
@@ -53,54 +97,29 @@ export function JobsInternosTabela({ jobs, podeEscrever }: Props) {
             outras estruturas sem orçamento, projeto ou cliente.
           </p>
         </div>
+      ) : filtrados.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-10 text-center">
+          <p className="text-sm text-muted-foreground">
+            Nenhum job interno encontrado para &ldquo;{busca}&rdquo;.
+          </p>
+        </div>
       ) : (
-        <>
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              type="text"
-              value={busca}
-              onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar por nome do job interno..."
-              className="w-full h-10 rounded-lg border border-border bg-white pl-9 pr-9 text-sm focus:outline-none focus:ring-2 focus:border-california-red focus:ring-california-red/15"
-            />
-            {busca && (
-              <button
-                type="button"
-                onClick={() => setBusca("")}
-                aria-label="Limpar busca"
-                className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-
-          {filtrados.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-10 text-center">
-              <p className="text-sm text-muted-foreground">
-                Nenhum job interno encontrado para &ldquo;{busca}&rdquo;.
-              </p>
-            </div>
-          ) : (
-            <div className="rounded-2xl border border-border bg-card shadow-soft overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
-                  <tr>
-                    <th className="text-left px-4 py-3 w-[320px]">Nome</th>
-                    <th className="text-left px-4 py-3">Descrição</th>
-                    {podeEscrever && <th className="w-[120px]" />}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {filtrados.map((j) => (
-                    <JobInternoRow key={j.id} job={j} podeEscrever={podeEscrever} />
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
+        <div className="rounded-2xl border border-border bg-card shadow-soft overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/40 text-[11px] uppercase tracking-wide text-muted-foreground">
+              <tr>
+                <th className="text-left px-4 py-3 w-[320px]">Nome</th>
+                <th className="text-left px-4 py-3">Descrição</th>
+                {podeEscrever && <th className="w-[120px]" />}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {filtrados.map((j) => (
+                <JobInternoRow key={j.id} job={j} podeEscrever={podeEscrever} />
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </div>
   );
@@ -113,24 +132,19 @@ function norm(s: string | null | undefined): string {
     .replace(/[̀-ͯ]/g, "");
 }
 
-function NovoJobInternoForm() {
-  const [aberto, setAberto] = React.useState(false);
+function NovoJobInternoForm({ onFechar }: { onFechar: () => void }) {
   const [nome, setNome] = React.useState("");
   const [descricao, setDescricao] = React.useState("");
   const [erros, setErros] = React.useState<Record<string, string[]>>({});
   const [erroGeral, setErroGeral] = React.useState<string | null>(null);
   const [pending, startTransition] = React.useTransition();
 
-  function reset() {
+  function fechar() {
     setNome("");
     setDescricao("");
     setErros({});
     setErroGeral(null);
-  }
-
-  function fechar() {
-    reset();
-    setAberto(false);
+    onFechar();
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -148,21 +162,6 @@ function NovoJobInternoForm() {
       }
       fechar();
     });
-  }
-
-  if (!aberto) {
-    return (
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => setAberto(true)}
-          className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red-hover transition-colors"
-        >
-          <Plus className="h-4 w-4" />
-          Novo job interno
-        </button>
-      </div>
-    );
   }
 
   return (
