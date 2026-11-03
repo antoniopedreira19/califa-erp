@@ -189,6 +189,8 @@ export function ErratasCard({
         const aberta = !!abertas[e.id];
         // A organização da planilha que a errata mudou (decisão 162).
         const estrutura = e.estrutura ?? [];
+        // Os parâmetros do job que a errata mudou (decisão 233).
+        const parametros = e.parametros?.campos ?? [];
         const deltaErrata = e.valor_job_depois - e.valor_job_antes;
         const deltaErrataFat =
           e.faturamento_previsto_antes === null ||
@@ -225,6 +227,9 @@ export function ErratasCard({
                       {estrutura.length === 1 ? "mudança" : "mudanças"} na organização
                     </span>
                   )}
+                  {(e.itens.length > 0 || estrutura.length > 0) && parametros.length > 0 && " · "}
+                  {parametros.length > 0 &&
+                    (parametros.length === 1 ? "1 parâmetro" : `${parametros.length} parâmetros`)}
                   {e.autor_nome ? ` · ${e.autor_nome}` : ""}
                   {e.preparada_por_nome && (
                     <span> · preparada por {e.preparada_por_nome}</span>
@@ -262,6 +267,23 @@ export function ErratasCard({
 
             {aberta && (
               <div className="border-t border-border bg-muted/30 px-6 pb-4 pt-1.5">
+                {parametros.length > 0 && (
+                  <div className="pb-2 pt-2.5">
+                    <p className="pb-1.5 text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Parâmetros do job
+                    </p>
+                    <ul className="flex flex-col gap-1.5">
+                      {parametros.map((c) => (
+                        <li key={c.rotulo} className="flex items-center gap-2 text-[12px]">
+                          <span className="text-foreground">{c.rotulo}</span>
+                          <span className="font-mono text-[11.5px] text-muted-foreground line-through">{c.de}</span>
+                          <span className="text-muted-foreground">→</span>
+                          <span className="font-mono text-[11.5px] font-bold text-foreground">{c.para}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 {estrutura.length > 0 && (
                   <div className="pb-2 pt-2.5">
                     <p className="pb-1.5 text-[9.5px] font-semibold uppercase tracking-wider text-muted-foreground">

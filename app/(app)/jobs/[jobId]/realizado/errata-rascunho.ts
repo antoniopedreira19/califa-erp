@@ -1033,6 +1033,9 @@ export function useRascunhoErrata(
         }),
         cancelamentos: canceladas,
         estrutura: estruturaDoPayload(),
+        // Decisão 233: os parâmetros do job não moram no rascunho das
+        // linhas — a seção da planilha os põe por cima.
+        parametros: null,
       };
     },
     [itens, itensSalvos, novas, canceladas, estruturaDoPayload, grupos, gruposQueSaem],

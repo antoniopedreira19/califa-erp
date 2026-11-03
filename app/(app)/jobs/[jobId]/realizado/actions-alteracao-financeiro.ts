@@ -51,7 +51,12 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
-import { isAliquotaConhecida } from "@/lib/impostos";
+import {
+  CAMPOS_DO_CAMBIO,
+  parametrosAtuaisDe,
+  parametrosDoPedido,
+  parametrosPedidosSchema,
+} from "@/lib/calculos/parametros-do-job";
 import {
   calcularEfeitoDaMudanca,
   TIPOS_CUSTO,
@@ -60,11 +65,6 @@ import {
 } from "@/lib/calculos/versao-totais";
 import type { FaturamentoDoMes } from "@/lib/calculos/faturamento-por-mes";
 import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
-import {
-  compraDaCotacao,
-  cotacaoValida,
-  vendaDaCotacao,
-} from "@/lib/calculos/excecao-fechamento";
 import { parametrosDaVersao } from "@/lib/calculos/midia-off";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import {
@@ -93,6 +93,7 @@ import {
   JOB_STATUS_ABERTO,
   type EnvioDaAlteracao,
   type JobStatus,
+  type CategoriaModeloPlanilha,
   type ParametrosDoJobGravados,
   type PrevisaoDaAlteracao,
   type TipoCusto,
@@ -116,20 +117,7 @@ const linhaSchema = z.object({
 });
 
 /** Os parâmetros do job depois da alteração (decisão 224). */
-const parametrosSchema = z.object({
-  percentual_honorarios: z.number().min(0, "Honorários não podem ser negativos.").max(100, "Honorários vão até 100%."),
-  percentual_imposto: z.number().min(0, "Impostos não podem ser negativos.").lt(100, "Impostos precisam ficar abaixo de 100%."),
-  percentual_int_taxes: z.number().min(0, "Int. taxes não podem ser negativas.").lt(100, "Int. taxes precisam ficar abaixo de 100%."),
-  int_transaction_costs: z.number().min(0, "O custo de transação não pode ser negativo."),
-  moeda_estrangeira: z.string().trim().max(3).nullable(),
-  cambio_cotacao: z.number().nullable(),
-  cambio_data: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data da cotação inválida.")
-    .nullable(),
-  percentual_veiculo: z.number().min(0).max(100, "A parte do veículo vai até 100%."),
-  base_honorarios: z.enum(["negociado", "liquido"]),
-});
+const parametrosSchema = parametrosPedidosSchema;
 
 const motivoSchema = z
   .string()
@@ -195,12 +183,6 @@ const SEM_DATA_PARA_ACOMPANHAR =
 function semDataDoRecebimento(rotulo: string): string {
   return `${rotulo} não tem previsão de recebimento para acompanhar a alteração: informe a data de recebimento no pop-up da alteração.`;
 }
-
-const CAMPOS_DO_CAMBIO = ["moeda_estrangeira", "cambio_cotacao", "cambio_data", "cambio_compra", "cambio_venda"];
-
-const num = (v: unknown): number => Number(v ?? 0);
-const numOuNulo = (v: unknown): number | null =>
-  v === null || v === undefined ? null : Number(v);
 
 /** O faturamento de cada mês (chave `yyyy-mm`) com as linhas e os
  *  parâmetros num estado — a MESMA conta que fecha o envio do mês e a
@@ -444,62 +426,13 @@ async function montarAlteracao(
   let parametros: { de: ParametrosDoJobGravados; para: ParametrosDoJobGravados; campos: string[] } | null =
     null;
   if (entrada.parametros && parametrosRes.data) {
-    const a = parametrosRes.data as Record<string, unknown>;
-    const atual: ParametrosDoJobGravados = {
-      percentual_honorarios: num(a.percentual_honorarios),
-      percentual_imposto: num(a.percentual_imposto),
-      percentual_int_taxes: num(a.percentual_int_taxes),
-      int_transaction_costs: num(a.int_transaction_costs),
-      moeda_estrangeira: (a.moeda_estrangeira as string | null) ?? null,
-      cambio_cotacao: numOuNulo(a.cambio_cotacao),
-      cambio_compra: numOuNulo(a.cambio_compra),
-      cambio_venda: numOuNulo(a.cambio_venda),
-      cambio_data: (a.cambio_data as string | null) ?? null,
-      percentual_veiculo: num(a.percentual_veiculo ?? 80),
-      base_honorarios: (a.base_honorarios as string) ?? "negociado",
-    };
-    const modelo = orcamento?.categoria?.modelo_planilha ?? "nacional";
-    const internacional = modelo === "internacional";
-    const p = entrada.parametros;
-    const para: ParametrosDoJobGravados = {
-      ...atual,
-      percentual_honorarios: p.percentual_honorarios,
-      percentual_imposto: p.percentual_imposto,
-    };
-    if (internacional) {
-      para.percentual_int_taxes = p.percentual_int_taxes;
-      para.int_transaction_costs = p.int_transaction_costs;
-      const moeda = p.moeda_estrangeira ? p.moeda_estrangeira.toUpperCase() : null;
-      const cambioMudou =
-        moeda !== atual.moeda_estrangeira ||
-        p.cambio_cotacao !== atual.cambio_cotacao ||
-        p.cambio_data !== atual.cambio_data;
-      if (cambioMudou) {
-        if (!moeda) return { ok: false, message: "Escolha a moeda do job." };
-        if (p.cambio_cotacao === null || !cotacaoValida(p.cambio_cotacao)) {
-          return {
-            ok: false,
-            message: "Informe a cotação do dia, maior que 0,20: compra e venda saem dela (−0,20 e +0,20).",
-          };
-        }
-        // Compra e venda saem da cotação, aqui, como no orçamento.
-        para.moeda_estrangeira = moeda;
-        para.cambio_cotacao = p.cambio_cotacao;
-        para.cambio_compra = compraDaCotacao(p.cambio_cotacao);
-        para.cambio_venda = vendaDaCotacao(p.cambio_cotacao);
-        para.cambio_data = p.cambio_data;
-      }
-    }
-    // Fora do internacional a alíquota sai da mesma lista do orçamento.
-    if (!internacional && para.percentual_imposto !== atual.percentual_imposto) {
-      if (!isAliquotaConhecida(para.percentual_imposto)) {
-        return { ok: false, message: "Escolha a alíquota de impostos na lista." };
-      }
-    }
-    const campos = (Object.keys(para) as Array<keyof ParametrosDoJobGravados>).filter(
-      (k) => para[k] !== atual[k],
+    const pedido = parametrosDoPedido(
+      parametrosAtuaisDe(parametrosRes.data as Record<string, unknown>),
+      entrada.parametros,
+      (orcamento?.categoria?.modelo_planilha ?? "nacional") as CategoriaModeloPlanilha,
     );
-    if (campos.length > 0) parametros = { de: atual, para, campos };
+    if (!pedido.ok) return pedido;
+    parametros = pedido.parametros;
   }
   const soCambio = !parametros || parametros.campos.every((k) => CAMPOS_DO_CAMBIO.includes(k));
 

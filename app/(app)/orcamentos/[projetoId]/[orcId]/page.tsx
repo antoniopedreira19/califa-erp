@@ -55,7 +55,9 @@ import { cn, formatCurrency } from "@/lib/utils";
 import { HONORARIOS_PADRAO_FALLBACK } from "@/lib/validations/clientes";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import { planilhaDoJobNaVersao, versaoMostraOJob } from "@/lib/data/versao-aprovada-do-job";
-import { HistoricoDoOrcamento } from "./versoes/[versaoId]/historico-do-orcamento";
+import { comParametrosDoJob } from "@/lib/data/parametros-do-job";
+import { FaixaDoHistorico, HistoricoDoOrcamento } from "./versoes/[versaoId]/historico-do-orcamento";
+import { MetaVersaoDoHistorico, ResumoDoHistorico } from "./versoes/[versaoId]/cabecalho-do-historico";
 import { PlanilhaMensalDoHistorico } from "./versoes/[versaoId]/planilha-mensal-do-historico";
 import {
   calcularTotaisVersao,
@@ -64,7 +66,6 @@ import {
 import { OrcamentoEditorDrawer } from "../orcamento-editor-drawer";
 import { AbasVersoes, type VersaoAba } from "./abas-versoes";
 import { AcoesVersao } from "./acoes-versao";
-import { MetaVersao } from "./meta-versao";
 import { ImportarPlanilhaVersao } from "./versoes/importar-planilha-versao";
 import { NovaVersaoDrawer } from "./versoes/nova-versao-drawer";
 import { PlanilhaVersao } from "./versoes/[versaoId]/planilha-versao";
@@ -74,7 +75,6 @@ import {
   type SaldoDeSave,
 } from "@/lib/data/saves";
 import type { EstadoSaveDaLinha } from "@/app/(app)/_planilha/save-coluna";
-import { ResumoRentabilidade } from "./versoes/[versaoId]/resumo-rentabilidade";
 import { mesesDaVersaoQuery, mesesSemItens } from "@/lib/data/meses-versao";
 import type { VersaoOrcamentoMes } from "@/lib/types";
 import { PlanilhaMensal } from "./planilha-mensal";
@@ -922,7 +922,11 @@ export default async function OrcamentoDetailPage({
       status: v.status,
       itens_count: agg.count,
       itens_total: agg.total,
-      percentual_honorarios: Number(v.percentual_honorarios ?? 0),
+      percentual_honorarios: Number(
+        (planilhaDoJob?.parametros && v.id === versaoAtiva?.id
+          ? planilhaDoJob.parametros.percentual_honorarios
+          : v.percentual_honorarios) ?? 0,
+      ),
       moeda: v.moeda ?? "BRL",
     };
   });
@@ -1159,7 +1163,10 @@ export default async function OrcamentoDetailPage({
           orcamento={orcamento}
           orcamentoRaw={orcamentoRaw}
           projetoRaw={projetoRaw}
-          versao={versaoAtiva}
+          // Decisão 233: na versão que mostra o job, os parâmetros são os
+          // do job — o que uma alteração do financeiro ou uma errata deixou.
+          // A versão que o cliente aprovou fica no Histórico.
+          versao={planilhaDoJob ? comParametrosDoJob(versaoAtiva, planilhaDoJob.parametros) : versaoAtiva}
           grupos={gruposDaTela}
           itensBrutos={itensDaTela}
           bvsBrutos={bvsDaTela}
@@ -1609,8 +1616,20 @@ function VersaoSelecionada({
   };
 
   // Decisão 226: com job aberto, a versão aprovada mostra a planilha do job
-  // e ganha o Histórico (a versão do cliente e cada errata depois dela).
+  // e ganha o Histórico (a versão do cliente e cada errata depois dela). O
+  // estado do Histórico envolve a página inteira da versão — o cabeçalho e o
+  // resumo do topo também mostram a versão escolhida (decisão 233) —, e a
+  // faixa da versão fica acima da planilha.
   const comHistorico = (conteudo: ReactNode) =>
+    historicoDoJob ? (
+      <>
+        <FaixaDoHistorico />
+        {conteudo}
+      </>
+    ) : (
+      conteudo
+    );
+  const comEstadoDoHistorico = (pagina: ReactNode) =>
     historicoDoJob ? (
       <HistoricoDoOrcamento
         jobId={historicoDoJob.jobId}
@@ -1618,18 +1637,16 @@ function VersaoSelecionada({
         versaoId={versao.id}
         tenantId={session.activeTenant.id}
         moeda={versao.moeda}
-        percentualHonorarios={Number(versao.percentual_honorarios)}
-        percentualImposto={Number(versao.percentual_imposto)}
-        internacional={planilha.internacional}
+        modeloPlanilha={planilha.modeloPlanilha}
       >
-        {conteudo}
+        {pagina}
       </HistoricoDoOrcamento>
     ) : (
-      conteudo
+      pagina
     );
   const Mensal = historicoDoJob ? PlanilhaMensalDoHistorico : PlanilhaMensal;
 
-  return (
+  return comEstadoDoHistorico(
     <>
       {/* Parâmetros da aba à esquerda, rentabilidade à direita — o resumo
           tem largura fixa e fica ancorado na borda. */}
@@ -1650,7 +1667,7 @@ function VersaoSelecionada({
               Devolvida pelo Comitê
             </span>
           )}
-          <MetaVersao
+          <MetaVersaoDoHistorico
             versaoId={versao.id}
             moeda={versao.moeda}
             percentualHonorarios={Number(versao.percentual_honorarios)}
@@ -1730,7 +1747,8 @@ function VersaoSelecionada({
           )}
         </div>
 
-        <ResumoRentabilidade
+        <ResumoDoHistorico
+          modeloPlanilha={planilha.modeloPlanilha}
           valorJob={valorDoJob}
           resultadoOperacional={resultadoOperacional}
           resultadoGeral={resultadoGeral}

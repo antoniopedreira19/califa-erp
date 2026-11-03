@@ -73,6 +73,9 @@ interface Props {
   /** Os agrupamentos novos só de linhas vermelhas, que nascem junto com
    *  elas fora da errata (revisão de 29/10/2026). */
   gruposForaDaErrata: string[];
+  /** Decisão 233: os parâmetros do job que a errata muda (de → para, nos
+   *  rótulos do modelo). Vazio quando ela não mexe neles. */
+  parametros: Array<{ rotulo: string; de: string; para: string }>;
 }
 
 function corDoDelta(delta: number): string {
@@ -224,6 +227,7 @@ export function ErrataConfirmarDialog({
   pronta,
   vermelhasForaDaErrata,
   gruposForaDaErrata,
+  parametros,
 }: Props) {
   const prepara = modo === "prepara";
   // Decisão 226: a linha vermelha nova não é errata — sai da lista do que
@@ -249,9 +253,13 @@ export function ErrataConfirmarDialog({
   // A errata que só reorganiza a planilha (decisão 162) não muda número
   // nenhum: o pop-up não mostra o bloco de valores. Ela devolve o job ao
   // mural como qualquer errata, e o financeiro vê que nenhum valor mudou.
-  const soOrganizacao = daErrata.length === 0 && estruturaDaErrata.length > 0;
+  const soOrganizacao =
+    daErrata.length === 0 && estruturaDaErrata.length > 0 && parametros.length === 0;
   const podeConfirmar =
-    descricaoOk && !faltaNomear && !salvando && (mudancas.length > 0 || estrutura.length > 0);
+    descricaoOk &&
+    !faltaNomear &&
+    !salvando &&
+    (mudancas.length > 0 || estrutura.length > 0 || parametros.length > 0);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -302,6 +310,30 @@ export function ErrataConfirmarDialog({
                     ) : (
                       <span className="text-amber-700">sem item: não entra no job</span>
                     )}
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+          {/* Decisão 233: os parâmetros do job, antes das linhas — o mesmo
+              bloco do "Editar planilha" do financeiro. */}
+          {parametros.length > 0 && (
+            <section className="rounded-xl border border-border">
+              <h3 className="border-b border-border px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-muted-foreground">
+                O que muda nos parâmetros
+              </h3>
+              <ul className="divide-y divide-border">
+                {parametros.map((c) => (
+                  <li key={c.rotulo} className="flex items-center justify-between gap-3 px-3.5 py-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className={ERRATA.tagAlterada}>Alterado</span>
+                      <span className="truncate text-[12.5px] text-foreground">{c.rotulo}</span>
+                    </div>
+                    <div className="flex items-baseline gap-2 whitespace-nowrap font-mono text-[11.5px]">
+                      <span className="text-muted-foreground">{c.de}</span>
+                      <span className="text-muted-foreground">→</span>
+                      <span className="font-bold text-foreground">{c.para}</span>
+                    </div>
                   </li>
                 ))}
               </ul>

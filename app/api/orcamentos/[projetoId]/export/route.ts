@@ -1,4 +1,5 @@
 import { planilhaDoJobNaVersao, versaoMostraOJob } from "@/lib/data/versao-aprovada-do-job";
+import { comParametrosDoJob } from "@/lib/data/parametros-do-job";
 import { NextResponse } from "next/server";
 import ExcelJS from "exceljs";
 import { requireSession } from "@/lib/auth/session";
@@ -366,6 +367,10 @@ export async function GET(
       itensLidos = itensLidos
         .filter((i) => i.versao_orcamento_id !== versaoId)
         .concat(r.planilha.itens);
+      // Decisão 233: os parâmetros do job, quando mudaram depois da aprovação.
+      for (const [orcamentoId, v] of versaoAlvo) {
+        if (v.id === versaoId) versaoAlvo.set(orcamentoId, comParametrosDoJob(v, r.planilha.parametros));
+      }
     }
   }
 

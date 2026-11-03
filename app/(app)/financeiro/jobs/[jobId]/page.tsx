@@ -73,7 +73,7 @@ import { linhasAlteradasNaRevisao } from "@/lib/data/linhas-da-revisao";
 import { midiaSystemDoJob, situacaoMidiaDaPP } from "@/lib/calculos/midia-system";
 import { SeloMidiaSystem } from "@/app/(app)/jobs/_midia-system/midia-system";
 import type { PPSemNfNaAuditoria } from "../../abertura-de-job/[jobId]/campo-midia-system";
-import { alteracoesDosParametros, parametrosGravadosDe } from "@/lib/data/parametros-do-job";
+import { parametrosGravadosDe } from "@/lib/data/parametros-do-job";
 
 export const dynamic = "force-dynamic";
 
@@ -865,9 +865,9 @@ export default async function JobNoFinanceiroPage({
                           detalhe.faturamentoMensal.some((m) => m.faturado > 0.004)
                             ? "O job já tem nota emitida: honorários, impostos e taxas não mudam mais pelo financeiro."
                             : null,
+                        cambioDepoisDaTrava: true,
                       }
                     : null,
-                alteracoes: alteracoesDosParametros(detalhe.alteracoesFinanceiro),
               }}
               // O Totais fecha sobre o job de hoje (15/10/2026).
               aberturaDoJob={null}

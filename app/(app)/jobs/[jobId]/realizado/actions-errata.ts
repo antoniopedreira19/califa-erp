@@ -31,6 +31,7 @@ import type {
   ErrataAcao,
   CategoriaModeloPlanilha,
   MudancaDeEstrutura,
+  ParametrosDoJobGravados,
 } from "@/lib/types";
 import { jobAceitaAcoesPlanilha } from "@/lib/types";
 import { travaDoJobDeMidia } from "@/lib/data/midia-do-job";
@@ -43,6 +44,14 @@ import {
   type Organizacao,
 } from "@/lib/calculos/organizacao-errata";
 import { comParametrosDoJob } from "@/lib/data/parametros-do-job";
+import {
+  MENSAGEM_PARAMETROS_DEPOIS_DO_ENVIO,
+  SELECT_VW_PARAMETROS_DO_JOB,
+  parametrosAtuaisDe,
+  camposDaAlteracao,
+  parametrosDoPedido,
+  parametrosPedidosSchema,
+} from "@/lib/calculos/parametros-do-job";
 import {
   separarLinhasVermelhas,
   sobraErrata,
@@ -368,6 +377,10 @@ const conteudoSchema = z.object({
       }),
     )
     .default([]),
+  /** Decisão 233: os parâmetros do job (honorários, impostos, a cadeia do
+   *  internacional e o câmbio) como a errata os deixa. Ausente ou nulo = os
+   *  de hoje. */
+  parametros: parametrosPedidosSchema.nullable().optional(),
 });
 
 const payloadSchema = conteudoSchema.extend({
@@ -644,8 +657,20 @@ export async function registrarErrata(
       ).length,
       // Decisão 162: a organização da planilha, e se a errata foi só isso.
       organizacao: montada.estrutura.map((m) => m.tipo),
-      so_organizacao: mudancas.length === 0,
+      so_organizacao: mudancas.length === 0 && !montada.parametros,
       devolveu_ao_mural: devolveAoMural,
+      // Decisão 233: os parâmetros do job que a errata mudou.
+      parametros_alterados: montada.parametros
+        ? {
+            campos: montada.parametros.campos,
+            de: Object.fromEntries(
+              montada.parametros.campos.map((k) => [k, montada.parametros!.de[k as keyof ParametrosDoJobGravados]]),
+            ),
+            para: Object.fromEntries(
+              montada.parametros.campos.map((k) => [k, montada.parametros!.para[k as keyof ParametrosDoJobGravados]]),
+            ),
+          }
+        : null,
       valor_job_antes: antes.valorJob,
       valor_job_depois: depois.valorJob,
       faturamento_previsto_antes: antes.faturamentoPrevisto,
@@ -720,11 +745,13 @@ export async function salvarErrataPronta(
     estrutura: dados.estrutura ?? null,
     // Decisão 219: o mês que a pronta inclui volta com ela.
     meses_novos: dados.meses_novos,
+    // Decisão 233: os parâmetros que a pronta muda, como a tela os pediu.
+    parametros: montada.parametros ? (dados.parametros ?? null) : null,
   };
   const numeros = {
     conteudo,
     descricao,
-    resumo: resumoDasMudancas(mudancas, estrutura),
+    resumo: resumoDasMudancas(mudancas, estrutura, montada.parametros !== null),
     custo_orcado_antes: dinheiro(antes.subtotalGeral),
     custo_orcado_depois: dinheiro(depois.subtotalGeral),
     valor_job_antes: dinheiro(antes.valorJob),
@@ -1061,7 +1088,12 @@ export async function salvarLinhasVermelhas(
 
 /** "2 linhas alteradas · 1 linha nova · 1 item movido" — o mesmo texto do
  *  rascunho da tela, com a organização (decisão 162) depois dos valores. */
-function resumoDasMudancas(mudancas: Mudanca[], estrutura: MudancaDeEstrutura[]): string {
+function resumoDasMudancas(
+  mudancas: Mudanca[],
+  estrutura: MudancaDeEstrutura[],
+  /** Decisão 233: a errata mexe nos parâmetros do job. */
+  comParametros = false,
+): string {
   const conta = (a: ErrataAcao) => mudancas.filter((m) => m.acao === a).length;
   const partes: string[] = [];
   const alt = conta("alterada");
@@ -1071,6 +1103,7 @@ function resumoDasMudancas(mudancas: Mudanca[], estrutura: MudancaDeEstrutura[])
   if (nov) partes.push(`${nov} ${nov === 1 ? "linha nova" : "linhas novas"}`);
   if (can) partes.push(`${can} ${can === 1 ? "linha cancelada" : "linhas canceladas"}`);
   partes.push(...resumoDaEstrutura(estrutura));
+  if (comParametros) partes.push("parâmetros do job alterados");
   return partes.join(" · ");
 }
 
@@ -1087,6 +1120,9 @@ interface ErrataMontada {
   depois: ReturnType<typeof totaisDoFinanceiro>;
   perderamBv: Mudanca[];
   devolveAoMural: boolean;
+  /** Decisão 233: o de → para dos parâmetros do job, quando a errata mexe
+   *  neles. */
+  parametros: { de: ParametrosDoJobGravados; para: ParametrosDoJobGravados; campos: string[] } | null;
 }
 
 /**
@@ -1117,7 +1153,14 @@ async function montarErrata(
   const pediuOrganizacao =
     est !== null &&
     (est.grupos_novos.length > 0 || est.grupos_renomeados.length > 0 || est.ordem !== null);
-  if (alteracoes.length + novas.length + cancelamentos.length === 0 && !pediuOrganizacao) {
+  // Decisão 233: ou só os parâmetros do job — se mudaram mesmo, a conferência
+  // fica mais abaixo.
+  const pediuParametros = conteudo.parametros != null;
+  if (
+    alteracoes.length + novas.length + cancelamentos.length === 0 &&
+    !pediuOrganizacao &&
+    !pediuParametros
+  ) {
     return { ok: false, message: "Nenhuma alteração informada." };
   }
   // Decisão 219: os meses do trimestre que esta errata inclui no job.
@@ -1194,18 +1237,61 @@ async function montarErrata(
   if (versaoErr || !versaoAprovada) {
     return { ok: false, message: "Versão aprovada do job não encontrada." };
   }
-  const versao = comParametrosDoJob(versaoAprovada, parametrosDoJob as any);
+  const versaoDeHoje = comParametrosDoJob(versaoAprovada, parametrosDoJob as any);
+  const modeloDoJob = ((versaoDeHoje as { orcamento?: { categoria?: { modelo_planilha?: string } } })
+    .orcamento?.categoria?.modelo_planilha ?? "nacional") as CategoriaModeloPlanilha;
+
+  // ---- Decisão 233: os parâmetros do job pela errata ----
+  // A trava é a da errata: depois do envio para faturamento (no mensal, de
+  // qualquer mês — os parâmetros mexem em todos), só o financeiro muda. A
+  // Mídia Off não tem errata. O banco confere de novo
+  // (`gravar_parametros_da_errata`), inclusive que o "de" é o de hoje.
+  let parametros: ErrataMontada["parametros"] = null;
+  if (conteudo.parametros) {
+    const [atuaisRes, enviosRes] = await Promise.all([
+      supabase
+        .from("vw_parametros_do_job")
+        .select(SELECT_VW_PARAMETROS_DO_JOB)
+        .eq("job_id", jobId)
+        .eq("tenant_id", session.activeTenant.id)
+        .maybeSingle(),
+      supabase
+        .from("jobs_envio_faturamento")
+        .select("id", { count: "exact", head: true })
+        .eq("job_id", jobId)
+        .eq("tenant_id", session.activeTenant.id),
+    ]);
+    if (atuaisRes.error || !atuaisRes.data || enviosRes.error) {
+      console.error("[errata.parametros]", atuaisRes.error?.message ?? enviosRes.error?.message);
+      return { ok: false, message: "Não foi possível ler os parâmetros do job agora. Tente de novo." };
+    }
+    const pedido = parametrosDoPedido(
+      parametrosAtuaisDe(atuaisRes.data as Record<string, unknown>),
+      conteudo.parametros,
+      modeloDoJob,
+    );
+    if (!pedido.ok) return pedido;
+    parametros = pedido.parametros;
+    if (parametros && (enviosRes.count ?? 0) > 0) {
+      return { ok: false, message: MENSAGEM_PARAMETROS_DEPOIS_DO_ENVIO };
+    }
+  }
+  if (
+    alteracoes.length + novas.length + cancelamentos.length === 0 &&
+    !pediuOrganizacao &&
+    !parametros
+  ) {
+    return { ok: false, message: "Nenhuma alteração informada." };
+  }
+
+  // Com os parâmetros da errata, a conta inteira (o efeito de cada linha, o
+  // "depois") é feita com eles.
+  const versao = parametros ? { ...versaoDeHoje, ...parametros.para } : versaoDeHoje;
 
   const pctHonorarios = Number(versao.percentual_honorarios ?? 0);
   const pctImposto = Number(versao.percentual_imposto ?? 0);
   // Quem decide a cadeia é a categoria do ORÇAMENTO (decisão 072).
-  const planilha = configDaPlanilha(
-    (versao as { orcamento?: { categoria?: { modelo_planilha?: string } } })
-      .orcamento?.categoria?.modelo_planilha as
-      | CategoriaModeloPlanilha
-      | undefined,
-    versao as never,
-  );
+  const planilha = configDaPlanilha(modeloDoJob, versao as never);
   // Serviço Interno (decisão 105): o planejado acompanha o orçado.
   const interno =
     (versao as { orcamento?: { servico?: { investimento_interno?: boolean } | null } })
@@ -1636,8 +1722,9 @@ async function montarErrata(
     });
   }
 
-  // A errata que só organiza a planilha não muda valor (decisão 162).
-  if (mudancas.length === 0 && organizacao.lista.length === 0) {
+  // A errata que só organiza a planilha não muda valor (decisão 162). A que
+  // só muda os parâmetros do job, sim (decisão 233).
+  if (mudancas.length === 0 && organizacao.lista.length === 0 && !parametros) {
     return { ok: false, message: "Nenhuma alteração informada." };
   }
 
@@ -1751,7 +1838,16 @@ async function montarErrata(
         save_consumido: 0,
       })),
   ];
-  const depois = totaisDoFinanceiro(depoisItens, base);
+  // Decisão 233: o "depois" com os parâmetros da errata.
+  const baseDepois = parametros
+    ? {
+        ...base,
+        percentualHonorarios: pctHonorarios,
+        percentualImposto: pctImposto,
+        internacional: planilha.internacional,
+      }
+    : base;
+  const depois = totaisDoFinanceiro(depoisItens, baseDepois);
   const espelhos = espelhosDe(depois);
 
   // Decisão 219: o mês novo entra com ao menos uma linha. A tela já não
@@ -1919,6 +2015,19 @@ async function montarErrata(
       estrutura: organizacao.paraFuncao,
       // Decisão 219: os meses que a função cria na versão aprovada.
       meses_novos: mesesNovos.map((m) => ({ chave: m.chave, mes: m.mes })),
+      // Decisão 233: a função grava o `para` em `jobs_parametros` e o par
+      // na errata. Ausente quando a errata não mexe neles.
+      // Os rótulos ficam congelados como o pop-up os mostrou, como os nomes
+      // da organização (162): o financeiro e o histórico leem daqui.
+      ...(parametros
+        ? {
+            parametros: {
+              de: parametros.de,
+              para: parametros.para,
+              campos: camposDaAlteracao(parametros.de, parametros.para, modeloDoJob),
+            },
+          }
+        : {}),
     },
     mudancas,
     estrutura: organizacao.lista,
@@ -1926,6 +2035,7 @@ async function montarErrata(
     depois,
     perderamBv,
     devolveAoMural,
+    parametros,
   };
 }
 

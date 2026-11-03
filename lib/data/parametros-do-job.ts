@@ -13,7 +13,7 @@
  * `comParametrosDoJob`. No banco, a mesma regra é a `vw_parametros_do_job`.
  */
 
-import type { JobAlteracaoFinanceiroComItens, ParametrosDoJobGravados } from "@/lib/types";
+import type { ParametrosDoJobGravados } from "@/lib/types";
 
 /** O embed, para o `select` de `jobs`. */
 export const SELECT_PARAMETROS_DO_JOB =
@@ -39,27 +39,6 @@ export function parametrosGravadosDe(versao: Record<string, any>): ParametrosDoJ
     percentual_veiculo: Number(versao.percentual_veiculo ?? 80),
     base_honorarios: versao.base_honorarios === "liquido" ? "liquido" : "negociado",
   };
-}
-
-/** As alterações do financeiro que mexeram nos parâmetros, mais antigas
- *  primeiro — o selo "Alterado na abertura" da linha de parâmetros. */
-export function alteracoesDosParametros(alteracoes: JobAlteracaoFinanceiroComItens[]): Array<{
-  id: string;
-  created_at: string;
-  autor_nome: string | null;
-  motivo: string;
-  parametros: { de: ParametrosDoJobGravados; para: ParametrosDoJobGravados };
-}> {
-  return alteracoes
-    .filter((a) => a.parametros !== null)
-    .map((a) => ({
-      id: a.id,
-      created_at: a.created_at,
-      autor_nome: a.autor_nome,
-      motivo: a.motivo,
-      parametros: a.parametros as { de: ParametrosDoJobGravados; para: ParametrosDoJobGravados },
-    }))
-    .sort((x, y) => x.created_at.localeCompare(y.created_at));
 }
 
 /** O embed pode vir como objeto (1:1) ou, em select mal tipado, como lista. */

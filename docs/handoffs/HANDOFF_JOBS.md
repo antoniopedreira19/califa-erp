@@ -6625,3 +6625,23 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
   Resultado op. e Rentabilidade, sem o Custo planejado e sem o "Abrir
   {mês}" (a régua abre o mês).
 - O job que não é mensal fica como era. Ver a nota de 30/10 na decisão 219.
+
+## ⚠️ Nota de 2026-11-03 — a produção altera os parâmetros do job pela errata (decisão 233)
+
+- A linha de parâmetros da 224 aparece também na Planilha Interna da
+  produção (`parametrosDoJob` deixou de ser `null` em `jobs/[jobId]/page.tsx`):
+  só leitura fora do "Editar planilha"; com ele, abre junto e vai na errata
+  (`conteudo.parametros`), pronta ou registrada.
+- Trava: a da errata — sem envio para faturamento, no mensal de nenhum mês.
+  `edicao.cambioDepoisDaTrava` diz se o câmbio segue depois da trava (no
+  financeiro, sim; na produção, não).
+- `ConteudoErrata.parametros` é obrigatório; quem remonta o conteúdo da
+  pronta precisa levá-lo (`carregar-detalhe.ts`).
+- A linha de parâmetros não tem mais selo (revisão do mesmo dia): o card de
+  Erratas mostra "Parâmetros do job" com o de → para, e o Histórico (186)
+  mostra o momento com o chip do parâmetro. `DadosDoHistorico` ganhou
+  `parametros` e `modeloPlanilha`; cada `VersaoDaPlanilha` leva os
+  `parametros` dela e a `mudancaDeParametros`. O valor da versão antiga sai
+  dos parâmetros dela.
+- PP segue livre na errata só de parâmetros (a trava da 185 é por linha).
+

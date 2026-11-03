@@ -86,6 +86,9 @@ export function resumoDaVersao(v: VersaoDaPlanilha): string {
   if (conta("movida")) partes.push(plural(conta("movida"), "item reorganizado", "itens reorganizados"));
   if (v.estrutura.length)
     partes.push(plural(v.estrutura.length, "mudança nos agrupamentos", "mudanças nos agrupamentos"));
+  // Decisão 233: honorários, impostos, taxas e câmbio.
+  if (v.mudancaDeParametros.length)
+    partes.push(plural(v.mudancaDeParametros.length, "parâmetro alterado", "parâmetros alterados"));
   return partes.join(" · ") || "Sem mudança na planilha";
 }
 
@@ -316,6 +319,12 @@ export function FaixaDaVersao({
   const delta = valorJob.antes === null ? 0 : valorJob.depois - valorJob.antes;
   const mudou = valorJob.antes !== null && centavos(delta) !== 0;
   const chips = [
+    // Decisão 233: os parâmetros do job primeiro, como no pop-up da errata.
+    ...versao.mudancaDeParametros.map((c) => ({
+      chave: `parametro-${c.rotulo}`,
+      nome: c.rotulo as string | null,
+      texto: `${c.de} → ${c.para}`,
+    })),
     ...versao.mudancas.map((m, k) => ({
       chave: `${m.acao}-${m.itemId ?? m.item}-${k}`,
       nome: m.item as string | null,

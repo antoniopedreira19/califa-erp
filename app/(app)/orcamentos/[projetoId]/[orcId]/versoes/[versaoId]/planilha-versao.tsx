@@ -16,6 +16,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { FolderTree } from "lucide-react";
 import { useHistoricoDoOrcamento } from "./historico-do-orcamento";
+import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import type {
   Categoria,
   CategoriaModeloPlanilha,
@@ -130,9 +131,21 @@ export function PlanilhaVersao(props: Props) {
   const porGrupo = new Map<string, VersaoOrcamentoItem[]>();
   for (const g of antiga.grupos) porGrupo.set(g.id, []);
   for (const it of [...antiga.itens].sort((a, b) => a.ordem - b.ordem)) porGrupo.get(it.grupo_id)?.push(it);
+  // Decisão 233: a planilha e os Totais da versão antiga fecham com os
+  // parâmetros dela, não com os de hoje.
+  const par = historico?.parametros ?? null;
+  const daVersao = par ? configDaPlanilha(props.modeloPlanilha, par) : null;
   return (
     <PlanilhaVersaoBase
       {...props}
+      {...(par && daVersao
+        ? {
+            percentualHonorarios: par.percentual_honorarios,
+            percentualImposto: par.percentual_imposto,
+            internacional: daVersao.internacional,
+            moedaEstrangeira: daVersao.moedaEstrangeira,
+          }
+        : {})}
       grupos={antiga.grupos}
       itens={antiga.itens}
       secoes={antiga.grupos.map((g) => ({ grupo: g, itens: porGrupo.get(g.id) ?? [] }))}

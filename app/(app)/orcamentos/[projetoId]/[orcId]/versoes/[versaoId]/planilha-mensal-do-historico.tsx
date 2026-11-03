@@ -9,6 +9,8 @@
 import * as React from "react";
 import { PlanilhaMensal } from "../../planilha-mensal";
 import { useHistoricoDoOrcamento } from "./historico-do-orcamento";
+import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
+import { comParametrosDoJob } from "@/lib/data/parametros-do-job";
 
 export function PlanilhaMensalDoHistorico(props: React.ComponentProps<typeof PlanilhaMensal>) {
   const historico = useHistoricoDoOrcamento();
@@ -22,9 +24,14 @@ export function PlanilhaMensalDoHistorico(props: React.ComponentProps<typeof Pla
     const comLinha = new Set(antiga.itens.map((i) => mesDoGrupo.get(i.grupo_id)));
     return props.meses.filter((m) => !m.incluido_na_errata_id || comLinha.has(m.id));
   }, [antiga, props.meses]);
+  // Decisão 233: os meses da versão antiga fecham com os parâmetros dela.
+  const par = antiga ? (historico?.parametros ?? null) : null;
+  const versao = par ? comParametrosDoJob(props.versao, par) : props.versao;
   return (
     <PlanilhaMensal
       {...props}
+      versao={versao}
+      planilha={par ? configDaPlanilha(props.planilha.modeloPlanilha, versao) : props.planilha}
       meses={meses}
       grupos={antiga ? antiga.grupos : props.grupos}
       itens={antiga ? antiga.itens : props.itens}

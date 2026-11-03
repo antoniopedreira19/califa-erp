@@ -296,6 +296,9 @@ export interface ErrataDaRevisao {
   organizacao: MudancaDeEstrutura[];
   /** A errata só reorganizou a planilha: nenhum valor mudou. */
   soOrganizacao: boolean;
+  /** Decisão 233: os parâmetros do job que a errata mudou (rótulos de →
+   *  para, como o pop-up da errata mostrou). Vazio quando não mexeu. */
+  parametros: Array<{ rotulo: string; de: string; para: string }>;
 }
 
 /**
@@ -336,6 +339,9 @@ export interface RevisaoDeErrata {
   /** Todas as erratas da revisão só reorganizaram a planilha: nenhum valor
    *  mudou. O financeiro vê isso no mural e na revisão. */
   soOrganizacao: boolean;
+  /** Decisão 233: os parâmetros do job que as erratas mudaram, do "de" da
+   *  primeira que mexeu em cada um ao "para" da última. */
+  parametros: Array<{ rotulo: string; de: string; para: string }>;
 }
 
 export interface TotaisPlanilhaJob {
@@ -747,7 +753,23 @@ function resumirRevisao(
     linhasCanceladas: soma("linhasCanceladas"),
     organizacao: erratas.flatMap((e) => e.organizacao),
     soOrganizacao: erratas.length > 0 && erratas.every((e) => e.soOrganizacao),
+    parametros: parametrosDasErratas(erratas),
   };
+}
+
+/** Decisão 233: cada parâmetro uma vez, do "de" da primeira errata que o
+ *  mudou ao "para" da última. O que voltou ao valor de antes sai. */
+function parametrosDasErratas(
+  erratas: ErrataDaRevisao[],
+): Array<{ rotulo: string; de: string; para: string }> {
+  const porRotulo = new Map<string, { rotulo: string; de: string; para: string }>();
+  for (const e of erratas) {
+    for (const c of e.parametros) {
+      const antes = porRotulo.get(c.rotulo);
+      porRotulo.set(c.rotulo, { rotulo: c.rotulo, de: antes?.de ?? c.de, para: c.para });
+    }
+  }
+  return Array.from(porRotulo.values()).filter((c) => c.de !== c.para);
 }
 
 /**
@@ -781,7 +803,7 @@ async function revisoesPendentes(
       .from("jobs_erratas")
       .select(
         "id, job_id, titulo, created_at, valor_job_antes, valor_job_depois, " +
-          "faturamento_previsto_antes, faturamento_previsto_depois, estrutura, " +
+          "faturamento_previsto_antes, faturamento_previsto_depois, estrutura, parametros, " +
           "autor:profiles!created_by(nome), itens:jobs_erratas_itens(acao)",
       )
       .eq("tenant_id", tenantId)
@@ -881,7 +903,10 @@ async function revisoesPendentes(
       // Decisão 162: errata sem linha de valor e com organização é a que
       // só reorganizou a planilha — o mural diz que nenhum valor mudou.
       organizacao: (e.estrutura ?? []) as MudancaDeEstrutura[],
-      soOrganizacao: itens.length === 0 && (e.estrutura ?? []).length > 0,
+      soOrganizacao:
+        itens.length === 0 && (e.estrutura ?? []).length > 0 && !e.parametros,
+      // Decisão 233: os rótulos que a errata congelou.
+      parametros: e.parametros?.campos ?? [],
     });
     porJob.set(e.job_id, lista);
   }

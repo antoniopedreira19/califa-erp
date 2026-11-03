@@ -19,6 +19,7 @@ import type { createClient } from "@/lib/supabase/server";
 import type {
   CategoriaModeloPlanilha,
   JobStatus,
+  ParametrosDoJobGravados,
   VersaoOrcamentoGrupo,
   VersaoOrcamentoItem,
 } from "@/lib/types";
@@ -50,6 +51,11 @@ export interface PlanilhaDoJobNaVersao {
   itens: VersaoOrcamentoItem[];
   /** Id da linha da versão → id da linha do job que a copia. */
   idDaLinhaDoJob: Record<string, string>;
+  /** Decisão 233: os parâmetros do job (honorários, impostos, taxas,
+   *  câmbio) quando uma alteração do financeiro ou uma errata os mudou —
+   *  `jobs_parametros`. `null` = valem os da versão. A tela e as exportações
+   *  passam a versão por `comParametrosDoJob` com eles. */
+  parametros: ParametrosDoJobGravados | null;
 }
 
 export async function planilhaDoJobNaVersao(
@@ -58,7 +64,7 @@ export async function planilhaDoJobNaVersao(
   jobId: string,
   versaoId: string,
 ): Promise<{ ok: true; planilha: PlanilhaDoJobNaVersao } | { ok: false; message: string }> {
-  const [gruposRes, itensRes] = await Promise.all([
+  const [gruposRes, itensRes, parametrosRes] = await Promise.all([
     supabase
       .from("jobs_grupos")
       .select("id, nome, ordem, mes_id, created_at, updated_at")
@@ -74,9 +80,20 @@ export async function planilhaDoJobNaVersao(
       .eq("linha_vermelha", false)
       .is("cancelada_em", null)
       .order("ordem", { ascending: true }),
+    supabase
+      .from("jobs_parametros")
+      .select(
+        "percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_cotacao, cambio_compra, cambio_venda, cambio_data, percentual_veiculo, base_honorarios",
+      )
+      .eq("job_id", jobId)
+      .eq("tenant_id", tenantId)
+      .maybeSingle<ParametrosDoJobGravados>(),
   ]);
-  if (gruposRes.error || itensRes.error) {
-    console.error("[versao.planilha_do_job]", gruposRes.error?.message ?? itensRes.error?.message);
+  if (gruposRes.error || itensRes.error || parametrosRes.error) {
+    console.error(
+      "[versao.planilha_do_job]",
+      gruposRes.error?.message ?? itensRes.error?.message ?? parametrosRes.error?.message,
+    );
     return { ok: false, message: "Não foi possível ler a planilha do job." };
   }
 
@@ -144,6 +161,12 @@ export async function planilhaDoJobNaVersao(
   const comLinha = new Set(itens.map((i) => i.grupo_id));
   return {
     ok: true,
-    planilha: { jobId, grupos: grupos.filter((g) => comLinha.has(g.id)), itens, idDaLinhaDoJob },
+    planilha: {
+      jobId,
+      grupos: grupos.filter((g) => comLinha.has(g.id)),
+      itens,
+      idDaLinhaDoJob,
+      parametros: parametrosRes.data ?? null,
+    },
   };
 }
