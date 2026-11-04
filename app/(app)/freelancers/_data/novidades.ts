@@ -118,7 +118,7 @@ export async function carregarNovidades(
     supabase
       .from("freelancer_solicitacoes")
       .select(
-        "id, freelancer_id, nome_freela, cargo, updated_at, nome_job, job_id, job_interno_id, solicitante:profiles!solicitante_id(nome)",
+        "id, freelancer_id, contrato_id, nome_freela, cargo, updated_at, nome_job, job_id, job_interno_id, solicitante:profiles!solicitante_id(nome)",
       )
       .eq("tenant_id", tenantId)
       .eq("status", "cadastrada")
@@ -349,6 +349,21 @@ export async function carregarNovidades(
   );
   const novosSemDup = novos.filter((n) => !freelasEmConcluidas.has(n.id));
 
+  // Renovação aprovada via solicitação cria o contrato na hora — cai em
+  // `aditivos` (freela já tinha outro contrato, count ≥ 2) E em `concluidas`
+  // (solicitação status=cadastrada). Semanticamente é uma renovação, então
+  // prefere "Aditivos". Contratação nova (count=1) não entra em aditivos,
+  // segue só em concluídas. Dedup por `contrato_id` da solicitação.
+  const contratosEmAditivos = new Set(aditivos.map((a) => a.contrato_id));
+  const contratoIdPorSolicitacao = new Map<string, string>();
+  for (const raw of concluidasBrutas) {
+    if (raw.contrato_id) contratoIdPorSolicitacao.set(raw.id, raw.contrato_id);
+  }
+  const concluidasSemDup = concluidas.filter((c) => {
+    const contratoId = contratoIdPorSolicitacao.get(c.solicitacao_id);
+    return !contratoId || !contratosEmAditivos.has(contratoId);
+  });
+
   const dismissedIds = (
     (dismissedRes.data ?? []) as Array<{ notification_id: string }>
   ).map((r) => r.notification_id);
@@ -358,7 +373,7 @@ export async function carregarNovidades(
     aditivos,
     preenchimentos,
     distratos,
-    concluidas,
+    concluidas: concluidasSemDup,
     dismissedIds,
   };
 }
