@@ -6418,6 +6418,13 @@ export interface FreelancerComStatus extends Omit<Freelancer, "responsavel_id"> 
   /** Fonte do job vinculado ao contrato ativo. 'producao' = tabela `jobs`;
    *  'interno' = tabela `freelancer_jobs_internos`; null = sem job. */
   job_origem: "producao" | "interno" | null;
+
+  /** True quando o contrato ativo é tipo='diarias' com duração < 30 dias
+   *  (ambas as datas preenchidas). Nesses casos a view ignora as checagens
+   *  de arquivo_url/minuta_url pra calcular `status_calculado` — a minuta
+   *  é dispensada. Diária sem data_termino (aberta) retorna false porque
+   *  a duração é desconhecida. False pra tipo != 'diarias'. */
+  dispensa_documentos: boolean;
 }
 
 // ----------------------------------------------------------------------------

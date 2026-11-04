@@ -321,3 +321,59 @@ export function calcularDuracaoContrato(
     return null;
   }
 }
+
+/**
+ * Contrato de diária curta (< 30 dias de duração) dispensa minuta/assinado.
+ * Status vai direto pra regular/vencendo/agendado/irregular conforme as
+ * datas, sem passar por sem_minuta/sem_assinado. Mesma regra que a view
+ * `freelancers_com_status` aplica no banco — mantidas em paralelo pra UI
+ * poder sinalizar sem roundtrip.
+ *
+ * Diária sem data_termino (aberta) retorna false: duração desconhecida.
+ */
+export function contratoDispensaMinuta(
+  tipo: string | null | undefined,
+  dataInicio: string | null | undefined,
+  dataTermino: string | null | undefined,
+): boolean {
+  if (tipo !== "diarias" || !dataInicio || !dataTermino) return false;
+  try {
+    const inicio = parseYmdDate(dataInicio);
+    const termino = parseYmdDate(dataTermino);
+    const diffDias = Math.round(
+      (termino.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24),
+    );
+    return diffDias < 30;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Para contratos do tipo `diarias`, `valor` guarda o preço de UMA diária.
+ * O total é `valor × nº de dias`, contando o dia de início E o de término
+ * (01→10 = 10 diárias), pra bater com a cláusula do DOCX.
+ * Retorna null se faltar alguma data.
+ */
+export function calcularTotalDiarias(
+  valor: number | string | null | undefined,
+  dataInicio: string | null,
+  dataTermino: string | null,
+): number | null {
+  if (valor === null || valor === undefined || !dataInicio || !dataTermino) {
+    return null;
+  }
+  const v = Number(valor);
+  if (!Number.isFinite(v)) return null;
+  try {
+    const inicio = parseYmdDate(dataInicio);
+    const termino = parseYmdDate(dataTermino);
+    if (termino < inicio) return null;
+    const dias =
+      Math.round((termino.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24)) +
+      1;
+    return v * dias;
+  } catch {
+    return null;
+  }
+}

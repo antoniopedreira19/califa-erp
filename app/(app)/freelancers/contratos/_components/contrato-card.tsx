@@ -32,6 +32,8 @@ import {
   formatCurrency,
   formatDate,
   calcularDuracaoContrato,
+  calcularTotalDiarias,
+  contratoDispensaMinuta,
   firstAndLastName,
 } from "@/lib/utils";
 import {
@@ -589,6 +591,19 @@ export function ContratoCard({
     [contrato.data_inicio, contrato.data_termino],
   );
 
+  // Diária curta (< 30 dias) dispensa minuta/assinado — mesma regra da
+  // view `freelancers_com_status`. Botões continuam disponíveis como
+  // opcional; só adiciona um aviso visual pro RH saber que não é bloqueante.
+  const dispensa = React.useMemo(
+    () =>
+      contratoDispensaMinuta(
+        contrato.tipo,
+        contrato.data_inicio,
+        contrato.data_termino,
+      ),
+    [contrato.tipo, contrato.data_inicio, contrato.data_termino],
+  );
+
   const restanteStyle = duracao
     ? duracao.status === "vencido"
       ? "text-california-red"
@@ -729,7 +744,19 @@ export function ContratoCard({
           <div className="text-right shrink-0">
             <div className="inline-flex items-center gap-1.5">
               <p className="font-bold text-foreground tabular-nums select-none">
-                {valorVisivel ? formatCurrency(contrato.valor) : "R$ ••••••"}
+                {valorVisivel ? (
+                  <>
+                    {formatCurrency(contrato.valor)}
+                    {contrato.tipo === "diarias" && (
+                      <span className="text-[11px] font-normal text-muted-foreground">
+                        {" "}
+                        /dia
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  "R$ ••••••"
+                )}
               </p>
               <button
                 type="button"
@@ -748,6 +775,20 @@ export function ContratoCard({
                 )}
               </button>
             </div>
+            {contrato.tipo === "diarias" &&
+              (() => {
+                const total = calcularTotalDiarias(
+                  contrato.valor,
+                  contrato.data_inicio,
+                  contrato.data_termino,
+                );
+                if (total === null) return null;
+                return (
+                  <p className="text-[11px] text-muted-foreground tabular-nums select-none mt-0.5">
+                    Total: {valorVisivel ? formatCurrency(total) : "R$ ••••••"}
+                  </p>
+                );
+              })()}
             <Link
               href={`/freelancers/contratos/${contrato.id}`}
               prefetch={false}
@@ -1054,6 +1095,15 @@ export function ContratoCard({
               {!minutaPath && !gerando && minutaErro && (
                 <span className="text-[10px] text-california-red font-semibold flex items-center gap-1">
                   <AlertCircle className="h-3 w-3" /> {minutaErro}
+                </span>
+              )}
+              {dispensa && (
+                <span
+                  className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1 bg-emerald-50 border border-emerald-500/20 rounded-md px-2 py-1"
+                  title="Diárias com duração inferior a 30 dias não exigem minuta nem assinado. Gerar e anexar é opcional."
+                >
+                  <CheckCircle2 className="h-3 w-3" />
+                  Minuta dispensada (diária curta)
                 </span>
               )}
               {/* GP dono: solicita distrato */}

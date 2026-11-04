@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { FileText, ArrowRight, Plus } from "lucide-react";
 import type { FreelancerContrato } from "@/lib/types";
-import { formatCurrency, cn } from "@/lib/utils";
+import { calcularTotalDiarias, formatCurrency, cn } from "@/lib/utils";
 
 interface ContratoLinha extends FreelancerContrato {
   job_codigo: string | null;
@@ -115,10 +115,26 @@ function ContratoRow({ contrato: c }: { contrato: ContratoLinha }) {
         {c.cargo || <span className="text-muted-foreground">—</span>}
       </td>
       <td className="px-3 py-2.5 text-right tabular-nums text-foreground">
-        {formatCurrency(Number(c.valor))}
-        <span className="text-[10px] text-muted-foreground">
-          {TIPO_SIGLA[c.tipo] ?? ""}
-        </span>
+        <div>
+          {formatCurrency(Number(c.valor))}
+          <span className="text-[10px] text-muted-foreground">
+            {TIPO_SIGLA[c.tipo] ?? ""}
+          </span>
+        </div>
+        {c.tipo === "diarias" &&
+          (() => {
+            const total = calcularTotalDiarias(
+              c.valor,
+              c.data_inicio,
+              c.data_termino,
+            );
+            if (total === null) return null;
+            return (
+              <div className="text-[10px] text-muted-foreground">
+                Total: {formatCurrency(total)}
+              </div>
+            );
+          })()}
       </td>
       <td className="px-3 py-2.5 text-center tabular-nums text-foreground">
         <span className="whitespace-nowrap">
