@@ -6645,3 +6645,21 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
   dos parâmetros dela.
 - PP segue livre na errata só de parâmetros (a trava da 185 é por linha).
 
+## ⚠️ Nota de 2026-11-03 (2) — o custo pago pelo sócio no realizado (decisão 236)
+
+- Nos jobs de empresa com sócio (`empresas_socio_de_custos`; hoje a
+  Ventura, com a Robotech), o painel "Destrinchar realizado" registra o
+  custo que o sócio pagou: `jobs_custos_do_socio`, sem PP, sem título, fora
+  do financeiro. Ele entra no realizado (`recalcular_realizado_do_item`
+  soma os dois) e, por isso, no Resultado Op. e na rentabilidade.
+- A quebra R$ Unit. × QT × D/M do realizado vale com UM lançamento no item,
+  PP ou custo do sócio.
+- Tela: faixa "Pago pela Robotech" e lista no painel; botão "Registrar custo
+  Robotech" ao lado do "Nova PP para este item"; drawer próprio
+  (`realizado/custo-do-socio.tsx`) com o resumo do item. A pílula da calha
+  não muda; o tooltip e as sublinhas mostram o custo do sócio.
+- Os dados chegam por contexto (`CustosDoSocioProvider`), montado em
+  `jobs/[jobId]/page.tsx` e, em leitura, em `financeiro/jobs/[jobId]/page.tsx`.
+  Fora do provedor a tela não muda.
+- Só com o job aberto. Quem gera PP lança. A errata não cancela a linha com
+  custo do sócio.

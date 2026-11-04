@@ -2338,7 +2338,7 @@ async function barrarCancelamento(
     ]),
   );
 
-  const [ppsRes, bvsRes] = await Promise.all([
+  const [ppsRes, bvsRes, socioRes] = await Promise.all([
     copiaPorRealizado.size > 0
       // A PP cancelada não impede (Tiago, 29/10/2026, nota na decisão
       // 151): desde a 151 a errata CANCELA a linha em vez de apagá-la, e a
@@ -2358,6 +2358,17 @@ async function barrarCancelamento(
       .eq("tenant_id", tenantId)
       .in("job_item_orcado_id", copiaIds)
       .neq("situacao", "cancelado"),
+    // Decisão 236: o custo pago pelo sócio é realizado como a PP — a linha
+    // cancelada sairia da conta com ele dentro.
+    copiaPorRealizado.size > 0
+      ? supabase
+          .from("jobs_custos_do_socio")
+          .select("socio, item_realizado_id")
+          .eq("job_id", jobId)
+          .eq("tenant_id", tenantId)
+          .in("item_realizado_id", Array.from(copiaPorRealizado.keys()))
+          .limit(1)
+      : Promise.resolve({ data: [] as any[], error: null }),
   ]);
 
   const pp = (ppsRes.data ?? [])[0] as
@@ -2366,6 +2377,14 @@ async function barrarCancelamento(
   if (pp) {
     const copiaId = copiaPorRealizado.get(pp.item_realizado_id) ?? "";
     return `"${nome(copiaId)}" tem o Pedido de Produção ${pp.codigo}. Uma linha com PP só pode ser cancelada com todas as PPs dela canceladas.`;
+  }
+
+  const doSocio = (socioRes.data ?? [])[0] as
+    | { socio: string; item_realizado_id: string }
+    | undefined;
+  if (doSocio) {
+    const copiaId = copiaPorRealizado.get(doSocio.item_realizado_id) ?? "";
+    return `"${nome(copiaId)}" tem custo pago pela ${doSocio.socio}. Exclua o custo no painel do item antes de cancelar a linha.`;
   }
 
   const bv = (bvsRes.data ?? [])[0] as

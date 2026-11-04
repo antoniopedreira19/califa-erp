@@ -85,7 +85,7 @@ import { formatarCnpj } from "@/lib/fiscal/cadastro";
 import { listarApresentacoesDoProjeto } from "@/lib/data/apresentacoes-do-projeto";
 import { tomadoresPadrao } from "@/lib/fiscal/nf-da-pp";
 import { cnpjPadraoDaPP } from "@/lib/fiscal/cnpj-da-pp";
-import type { AnexoDaPPNaLista, PPAEmitir } from "@/lib/types";
+import type { AnexoDaPPNaLista, CustoDoSocio, PPAEmitir } from "@/lib/types";
 import {
   comAContaDaMidia,
   fechamentoDosItens,
@@ -211,6 +211,8 @@ export async function carregarDetalheDoJob(
     veiculosRes,
     ultimoRegistroRes,
     apresentacoesDoProjeto,
+    custosDoSocioRes,
+    socioDaEmpresaRes,
   ] = await Promise.all([
     // Os agrupamentos do JOB (decisão 162): a cópia dos da versão, com o
     // que as erratas renomearam, criaram e tiraram. O removido não aparece.
@@ -506,7 +508,45 @@ export async function carregarDetalheDoJob(
       : Promise.resolve({ data: null, error: null }),
     // As apresentações do projeto, no card PROJETO da ficha (decisão 213).
     listarApresentacoesDoProjeto(supabase, session.activeTenant.id, raw.projeto_id),
+    // Decisão 236: os custos pagos pelo sócio (a Robotech, nos jobs da
+    // Ventura), que entram no realizado ao lado das PPs.
+    supabase
+      .from("jobs_custos_do_socio")
+      .select(
+        "id, job_id, item_realizado_id, socio, descricao, fornecedor_nome, valor_unitario, quantidade, dias_meses, valor, data_gasto, comprovante_path, comprovante_nome, observacao, created_at, registrado:profiles!created_by(nome)",
+      )
+      .eq("job_id", raw.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("created_at", { ascending: true }),
+    raw.empresa_id
+      ? supabase
+          .from("empresas_socio_de_custos")
+          .select("socio")
+          .eq("empresa_id", raw.empresa_id)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ]);
+
+  if (custosDoSocioRes.error) console.error("[job.custos_do_socio]", custosDoSocioRes.error.message);
+  const custosDoSocio: CustoDoSocio[] = (custosDoSocioRes.data ?? []).map((c: any) => ({
+    id: c.id,
+    job_id: c.job_id,
+    item_realizado_id: c.item_realizado_id,
+    socio: c.socio,
+    descricao: c.descricao,
+    fornecedor_nome: c.fornecedor_nome ?? null,
+    valor_unitario: Number(c.valor_unitario),
+    quantidade: Number(c.quantidade),
+    dias_meses: Number(c.dias_meses),
+    valor: Number(c.valor),
+    data_gasto: c.data_gasto,
+    comprovante_path: c.comprovante_path ?? null,
+    comprovante_nome: c.comprovante_nome ?? null,
+    observacao: c.observacao ?? null,
+    registrado_por: c.registrado?.nome ?? null,
+    created_at: c.created_at,
+  }));
+  const socioDoJob = ((socioDaEmpresaRes.data as { socio: string } | null)?.socio ?? null) as string | null;
 
   if (mesesRes.error) console.error("[job.meses]", mesesRes.error.message);
   const meses = mesesRes.data ?? [];
@@ -1738,6 +1778,10 @@ export async function carregarDetalheDoJob(
     contatosCobranca,
     ppsDoJob,
     ppsPorItemId,
+    // Decisão 236: o sócio que paga custos neste job (null fora da Ventura)
+    // e os custos que ele pagou.
+    socioDoJob,
+    custosDoSocio,
     // Decisão 153: as PPs a emitir de cada item, fora do realizado.
     aEmitirPorItemId,
     // Decisão 152: os CNPJs tomadores da NF e o de cada empresa emissora.

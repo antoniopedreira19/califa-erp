@@ -83,6 +83,7 @@ import {
   Gavel,
   Undo2,
   AlertCircle,
+  Bot,
 } from "lucide-react";
 import type { ComiteDaPP } from "@/lib/data/comite";
 import { ppCobertaPeloComite, ppPassaDoOrcadoNoComite } from "@/lib/calculos/limites-orcamento";
@@ -148,6 +149,14 @@ import {
 } from "./pp-a-emitir-ui";
 import type { TomadorDaNf } from "./anexos-da-pp";
 import { CorrigirNfDialog } from "./corrigir-nf-da-pp";
+import { FormCustoDoSocio, useCustosDoSocio, useCustosDoSocioDoItem } from "./custo-do-socio";
+import {
+  editarCustoDoSocio,
+  excluirCustoDoSocio,
+  registrarCustoDoSocio,
+  urlDoComprovanteDoSocio,
+} from "./actions-custo-do-socio";
+import type { CustoDoSocio } from "@/lib/types";
 import {
   marcarPPsConcluidasDoItem,
   reabrirItemParaNovaPP,
@@ -406,7 +415,15 @@ export function PainelPPsItem({
   }
   const pendentes = pps.filter((pp) => pp.status === "gerada");
   const enviadas = pps.filter((pp) => pp.status !== "gerada");
-  const excede = passaDoPlanejado(emPPs, totalPlanejado);
+  // Decisão 236: no job de empresa com sócio (a Robotech, nos jobs da
+  // Ventura), o custo que o sócio pagou entra no realizado ao lado das PPs.
+  const { socio, jobAberto } = useCustosDoSocio();
+  const doSocio = useCustosDoSocioDoItem(itemRealizadoId);
+  const emSocio = Math.round(doSocio.reduce((s, c) => s + c.valor, 0) * 100) / 100;
+  const lancaCustoDoSocio = socio !== null && jobAberto && onNovaPP !== null;
+  const [formSocio, setFormSocio] = React.useState<{ editando: CustoDoSocio | null } | null>(null);
+  const [excluindoSocio, setExcluindoSocio] = React.useState<CustoDoSocio | null>(null);
+  const excede = passaDoPlanejado(emPPs + emSocio, totalPlanejado);
   const emAEmitir = Math.round(aEmitir.reduce((s, a) => s + a.valor, 0) * 100) / 100;
   const travaDaAbertura = textoAguardaAbertura(statusDoJob);
   // Prazo de envio (decisão 157).
@@ -584,8 +601,72 @@ export function PainelPPsItem({
     });
   }
 
+  async function salvarCustoDoSocio(
+    dados: Parameters<typeof registrarCustoDoSocio>[1],
+  ): Promise<string | null> {
+    const editando = formSocio?.editando ?? null;
+    const res = editando
+      ? await editarCustoDoSocio(editando.id, dados)
+      : await registrarCustoDoSocio(itemRealizadoId, dados);
+    if (!res.ok) return res.message;
+    setFormSocio(null);
+    onMensagem?.(
+      editando
+        ? `Custo ${socio} atualizado.`
+        : `Custo ${socio} registrado no realizado do item. Nada foi enviado ao financeiro.`,
+    );
+    router.refresh();
+    return null;
+  }
+
+  function excluirCustoSocio() {
+    const alvo = excluindoSocio;
+    if (!alvo) return;
+    setErro(null);
+    startTransition(async () => {
+      const res = await excluirCustoDoSocio(alvo.id);
+      setExcluindoSocio(null);
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+      onMensagem?.(`Custo ${socio} excluído.`);
+      router.refresh();
+    });
+  }
+
+  function verComprovanteDoSocio(custoId: string) {
+    startTransition(async () => {
+      const res = await urlDoComprovanteDoSocio(custoId);
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+      window.open(res.url, "_blank", "noopener,noreferrer");
+    });
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    {/* Decisão 236: o custo do sócio abre num drawer próprio, como o da PP.
+        O painel sai enquanto ele está aberto e volta quando ele fecha. */}
+    {open && formSocio && socio && (
+      <FormCustoDoSocio
+        socio={socio}
+        itemNome={itemNome}
+        itemRealizadoId={itemRealizadoId}
+        moeda={moeda}
+        editando={formSocio.editando}
+        sugestao={{ valorUnitario: unitarioPlanejado, quantidade: quantidadePlanejada, diasMeses: dmPlanejado }}
+        valorOrcado={totalOrcado}
+        valorPlanejado={totalPlanejado}
+        realizadoSemEste={Math.round((emPPs + emSocio - (formSocio.editando?.valor ?? 0)) * 100) / 100}
+        linhaVermelha={linhaVermelha}
+        onCancelar={() => setFormSocio(null)}
+        onSalvar={salvarCustoDoSocio}
+      />
+    )}
+    <Dialog open={open && !formSocio} onOpenChange={onOpenChange}>
       <DrawerContent className="sm:max-w-[500px]">
         <div className="flex items-start justify-between gap-3 border-b border-border px-6 py-5">
           <div className="flex flex-col gap-1">
@@ -659,6 +740,19 @@ export function PainelPPsItem({
               conta={`${aEmitir.length} · fora do realizado`}
               corValor="text-muted-foreground"
             />
+            {socio !== null && (
+              <div className="col-span-3 flex items-center justify-between gap-3 border-t border-border px-4 py-3">
+                <span className="flex flex-col gap-1">
+                  <span className="text-[9.5px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                    Pago pela {socio}
+                  </span>
+                  <span className="font-mono text-[11px] text-muted-foreground">
+                    {doSocio.length} {doSocio.length === 1 ? "custo" : "custos"} · no realizado, fora do financeiro
+                  </span>
+                </span>
+                <span className="font-mono text-[15px] font-bold">{formatCurrency(emSocio, moeda)}</span>
+              </div>
+            )}
           </div>
 
           {/* Job aguardando abertura ou devolvido: só PP a emitir. */}
@@ -673,11 +767,13 @@ export function PainelPPsItem({
             </div>
           )}
 
-          {pps.length === 0 && aEmitir.length === 0 && (
+          {pps.length === 0 && aEmitir.length === 0 && doSocio.length === 0 && (
             <div className="rounded-xl border border-dashed border-border px-4 py-6 text-center text-xs leading-relaxed text-muted-foreground">
               {concluido
                 ? "Nenhuma PP neste item, e ele está marcado: é custo que não vai gerar PP. O planejado dele saiu da previsão de custo."
-                : "Nenhuma PP gerada para este item ainda."}
+                : socio !== null
+                  ? `Nenhuma PP nem custo ${socio} neste item ainda.`
+                  : "Nenhuma PP gerada para este item ainda."}
             </div>
           )}
 
@@ -1137,6 +1233,25 @@ export function PainelPPsItem({
             </div>
           )}
 
+          {doSocio.length > 0 && (
+            <div className="flex flex-col gap-2.5">
+              <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                Pagos pela {socio ?? doSocio[0].socio} · {doSocio.length}
+              </span>
+              {doSocio.map((c) => (
+                <CartaoCustoDoSocio
+                  key={c.id}
+                  custo={c}
+                  moeda={moeda}
+                  podeAgir={lancaCustoDoSocio}
+                  onEditar={() => setFormSocio({ editando: c })}
+                  onExcluir={() => setExcluindoSocio(c)}
+                  onComprovante={() => verComprovanteDoSocio(c.id)}
+                />
+              ))}
+            </div>
+          )}
+
         </div>
 
         {onNovaPP && (
@@ -1154,17 +1269,32 @@ export function PainelPPsItem({
                 Marcar: todas as PPs geradas
               </button>
             )}
-            <button
-              type="button"
-              onClick={pedirNovaPP}
-              disabled={pending}
-              className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-[13px] font-semibold transition-colors hover:bg-muted disabled:opacity-50"
-            >
-              <FilePlus className="h-3.5 w-3.5 text-california-red" />
-              Nova PP para este item
-            </button>
+            <div className={cn(lancaCustoDoSocio && "grid grid-cols-2 gap-2.5")}>
+              <button
+                type="button"
+                onClick={pedirNovaPP}
+                disabled={pending}
+                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-[13px] font-semibold transition-colors hover:bg-muted disabled:opacity-50"
+              >
+                <FilePlus className="h-3.5 w-3.5 text-california-red" />
+                Nova PP para este item
+              </button>
+              {lancaCustoDoSocio && (
+                <button
+                  type="button"
+                  onClick={() => setFormSocio({ editando: null })}
+                  disabled={pending}
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-[13px] font-semibold transition-colors hover:bg-muted disabled:opacity-50"
+                >
+                  <Bot className="h-3.5 w-3.5 text-california-red" />
+                  Registrar custo {socio}
+                </button>
+              )}
+            </div>
             <span className="text-center text-[11px] leading-snug text-muted-foreground">
-              {concluido
+              {lancaCustoDoSocio && !concluido
+                ? `A PP vai ao financeiro (a California paga). O custo ${socio} só entra no realizado.`
+                : concluido
                 ? "O item está completo: gerar nova PP aqui pede confirmação e reabre o item."
                 : pps.length === 0
                   ? "Item sem PP pode ser marcado: serve para custo que não vai gerar PP."
@@ -1221,6 +1351,23 @@ export function PainelPPsItem({
             </div>
           </div>
         )}
+
+        <ConfirmDialog
+          open={excluindoSocio !== null}
+          onOpenChange={(o) => !o && setExcluindoSocio(null)}
+          title={`Excluir o custo ${excluindoSocio?.socio ?? ""}?`}
+          description={
+            <>
+              {excluindoSocio?.descricao} ·{" "}
+              <strong className="text-foreground">{formatCurrency(excluindoSocio?.valor ?? 0, moeda)}</strong>. Sai do
+              realizado do item.
+            </>
+          }
+          confirmLabel="Excluir"
+          cancelLabel="Voltar"
+          variant="destructive"
+          onConfirm={excluirCustoSocio}
+        />
 
         {/* Decisão 153: a revisão antes de gerar, sempre. */}
         {/* Comitê de Aprovações (decisão 223): o pedido da PP a emitir. */}
@@ -1388,6 +1535,7 @@ export function PainelPPsItem({
         />
       </DrawerContent>
     </Dialog>
+    </>
   );
 }
 
@@ -1476,6 +1624,67 @@ function formatarFator(n: number): string {
  * As larguras das colunas são fixas de propósito: num item com muitas
  * PPs, os valores de uma ficam embaixo dos da outra, como numa tabela.
  */
+/** Decisão 236: o cartão do custo pago pelo sócio — o mesmo desenho do
+ *  cartão da PP, com o nome do sócio no lugar do código. */
+function CartaoCustoDoSocio({
+  custo,
+  moeda,
+  podeAgir,
+  onEditar,
+  onExcluir,
+  onComprovante,
+}: {
+  custo: CustoDoSocio;
+  moeda: string;
+  podeAgir: boolean;
+  onEditar: () => void;
+  onExcluir: () => void;
+  onComprovante: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 rounded-xl border border-border px-3.5 py-2.5">
+      <div className="flex min-h-[26px] items-center gap-2.5">
+        <span className="font-mono text-[11px] font-semibold text-muted-foreground">{custo.socio}</span>
+        <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold" title={custo.descricao}>
+          {custo.descricao}
+        </span>
+        <span className="flex-none text-[11px] text-muted-foreground">{isoParaBr(custo.data_gasto)}</span>
+      </div>
+      <div className="grid grid-cols-[100px_30px_34px_104px_minmax(0,1fr)_auto] items-end gap-x-2.5">
+        <ValorDoTrio rotulo="R$ Unit.">{formatCurrency(custo.valor_unitario, moeda)}</ValorDoTrio>
+        <ValorDoTrio rotulo="QT">{formatarFator(custo.quantidade)}</ValorDoTrio>
+        <ValorDoTrio rotulo="D/M">{formatarFator(custo.dias_meses)}</ValorDoTrio>
+        <ValorDoTrio rotulo="Total" forte>
+          {formatCurrency(custo.valor, moeda)}
+        </ValorDoTrio>
+        <span />
+        <span className="inline-flex items-center gap-1.5">
+          {custo.comprovante_nome && (
+            <BotaoIcone titulo={`Ver comprovante · ${custo.comprovante_nome}`} onClick={onComprovante}>
+              <Paperclip className="h-3 w-3" />
+            </BotaoIcone>
+          )}
+          {podeAgir && (
+            <>
+              <BotaoIcone titulo="Editar custo" onClick={onEditar}>
+                <Pencil className="h-3 w-3" />
+              </BotaoIcone>
+              <BotaoIcone titulo="Excluir custo" onClick={onExcluir}>
+                <Trash2 className="h-3 w-3" />
+              </BotaoIcone>
+            </>
+          )}
+        </span>
+      </div>
+      <span className="text-[11px] leading-snug text-muted-foreground">
+        {custo.fornecedor_nome ? `${custo.fornecedor_nome} · ` : ""}
+        {custo.registrado_por ? `Registrado por ${custo.registrado_por}` : "Registrado no sistema"}
+        {custo.observacao ? ` · ${custo.observacao}` : ""}
+      </span>
+    </div>
+  );
+}
+
 function CartaoPP({
   pp,
   moeda,

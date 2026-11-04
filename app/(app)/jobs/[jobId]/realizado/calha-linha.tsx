@@ -21,6 +21,7 @@
 import { FilePlus, Eye, CheckCircle2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { PedidoCompra } from "@/lib/types";
+import { useCustosDoSocio, useCustosDoSocioDoItem } from "./custo-do-socio";
 import {
   CalhaAcoes,
   type AcaoCalha,
@@ -62,7 +63,11 @@ export function CalhaLinha({
   const acoes: AcaoCalha[] = [];
   if (bv) acoes.push(bv);
 
-  const acaoPp = descreverPp(pp);
+  // Decisão 236: a pílula fica como sempre ("Gerar PP" / "PPs · N", só PPs
+  // na conta); os custos pagos pelo sócio aparecem no tooltip.
+  const { socio } = useCustosDoSocio();
+  const doSocio = useCustosDoSocioDoItem(pp?.itemRealizadoId).length;
+  const acaoPp = descreverPp(pp, socio ? { socio, quantos: doSocio } : null);
   if (acaoPp) acoes.push(acaoPp);
 
   return (
@@ -89,10 +94,17 @@ export function CalhaLinha({
  *  O chip carrega o contador de PPs geradas e ainda não enviadas ao
  *  financeiro (02/09/2026) — as pendências ficam visíveis sem abrir o
  *  painel. Zerado, o círculo não aparece. */
-function descreverPp(pp: DadosPpLinha | null): AcaoCalha | null {
+function descreverPp(
+  pp: DadosPpLinha | null,
+  doSocio: { socio: string; quantos: number } | null,
+): AcaoCalha | null {
   if (!pp) return null;
 
   const quantas = pp.pedidos.length + (pp.otimista ? 1 : 0);
+  const socioNoTitulo =
+    doSocio && doSocio.quantos > 0
+      ? ` · ${doSocio.quantos === 1 ? `1 custo ${doSocio.socio}` : `${doSocio.quantos} custos ${doSocio.socio}`}`
+      : "";
   // A PP otimista acabou de ser gerada: é pendência até o refresh trazer
   // a linha real.
   const pendentes = pp.pendentes + (pp.otimista ? 1 : 0);
@@ -105,9 +117,9 @@ function descreverPp(pp: DadosPpLinha | null): AcaoCalha | null {
 
   if (quantas > 0) {
     const base =
-      quantas === 1
+      (quantas === 1
         ? "1 Pedido de Produção neste item"
-        : `${quantas} Pedidos de Produção neste item`;
+        : `${quantas} Pedidos de Produção neste item`) + socioNoTitulo;
     const pendencia =
       pendentes > 0
         ? ` · ${pendentes} aguardando envio ao financeiro`
@@ -135,8 +147,10 @@ function descreverPp(pp: DadosPpLinha | null): AcaoCalha | null {
     rotulo: "Gerar PP",
     sigla: "PP",
     titulo: pp.concluido
-      ? "Item marcado: nenhuma PP sairá daqui. Abre o painel do item."
-      : "Gerar PP",
+      ? `Item marcado: nenhuma PP sairá daqui. Abre o painel do item.${socioNoTitulo}`
+      : doSocio
+        ? `Gerar PP ou registrar custo pago pela ${doSocio.socio}${socioNoTitulo}`
+        : "Gerar PP",
     icone: pp.concluido ? CheckCircle2 : FilePlus,
     corIcone: pp.concluido ? CONCLUIDO : undefined,
     // O rótulo continua vermelho mesmo marcado, como o design pede: a

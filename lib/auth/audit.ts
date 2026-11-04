@@ -248,6 +248,11 @@ export type AuditAction =
   // pronta para o GP enviar.
   | "pedido_compra.pronta_para_envio"
   | "pedido_compra.cancelada"
+  // Decisão 236: o custo pago pelo sócio (Robotech, nos jobs da Ventura),
+  // que entra no realizado do item sem virar PP.
+  | "custo_do_socio.registrado"
+  | "custo_do_socio.editado"
+  | "custo_do_socio.excluido"
   | "pedido_compra.prazo_financeiro_atualizado"
   | "pedido_compra.paga"
   | "pedido_compra.rejeitada"

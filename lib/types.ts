@@ -3126,6 +3126,34 @@ export interface PPAEmitir {
 }
 
 /** PP com os campos que as telas de lista mostram junto. */
+/**
+ * Decisão 236: o custo pago pelo sócio de uma joint venture (a Robotech, nos
+ * jobs da Ventura). Entra no realizado do item ao lado das PPs, mas não é
+ * PP: sem código, sem título, sem financeiro. Tabela `jobs_custos_do_socio`.
+ */
+export interface CustoDoSocio {
+  id: string;
+  job_id: string;
+  item_realizado_id: string;
+  /** O nome do sócio na hora do lançamento ("Robotech"). */
+  socio: string;
+  descricao: string;
+  /** Quem o sócio pagou, em texto livre: não precisa estar no cadastro. */
+  fornecedor_nome: string | null;
+  valor_unitario: number;
+  quantidade: number;
+  dias_meses: number;
+  valor: number;
+  /** Data do gasto (AAAA-MM-DD). */
+  data_gasto: string;
+  comprovante_path: string | null;
+  comprovante_nome: string | null;
+  observacao: string | null;
+  /** Nome de quem registrou. */
+  registrado_por: string | null;
+  created_at: string;
+}
+
 export interface PedidoCompraNaLista extends PedidoCompra {
   emitida_por_nome: string | null;
   /** Quem enviou ao financeiro. Nulo enquanto gerada (02/09/2026). */
