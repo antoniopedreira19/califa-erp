@@ -24,7 +24,11 @@ import type {
   ItemBv,
 } from "@/lib/types";
 import type { TomadorDaNf } from "./anexos-da-pp";
-import { TEXTO_LINHA_ALTERADA_EM_REVISAO, textoAguardaAbertura } from "./pp-a-emitir-ui";
+import {
+  TEXTO_LINHA_ALTERADA_EM_REVISAO,
+  TEXTO_LINHA_NA_ERRATA_PRONTA,
+  textoAguardaAbertura,
+} from "./pp-a-emitir-ui";
 import { meioPeloAnexo, nomeContraparteBRPP, nomeDoCartaoCorporativo, ppStatusLabel, situacaoDaVerba } from "@/lib/types";
 import { CalhaLinha } from "./calha-linha";
 import {
@@ -216,6 +220,9 @@ interface Props {
    *  mudou: o envio das PPs delas fica fechado até a revisão da abertura
    *  ser salva (decisões 040 e 185). As outras enviam normalmente. */
   linhasComEnvioTravado?: string[];
+  /** As linhas da errata pronta para envio (decisão 237): o envio das PPs
+   *  delas espera a errata ser enviada, editada ou descartada. */
+  linhasNaErrataPronta?: string[];
   /** "Exibir › PPs abertas em todas as linhas" (decisão 208): cada linha
    *  com PP já abre com as sublinhas das PPs. A seta ao lado do nome abre
    *  ou fecha um item só. */
@@ -763,6 +770,7 @@ export function JobItemRealizadoTable({
   podeConfirmarBv,
   preAbertura,
   linhasComEnvioTravado = [],
+  linhasNaErrataPronta = [],
   ppsNasLinhas = false,
   ppsPorItemId,
   aEmitirPorItemId,
@@ -2610,7 +2618,9 @@ export function JobItemRealizadoTable({
             "O financeiro ainda não abriu este job: por enquanto, só PPs a emitir."
           : itemAtual && linhasComEnvioTravado.includes(itemAtual.id)
             ? TEXTO_LINHA_ALTERADA_EM_REVISAO
-            : !papelEnviaPP
+            : itemAtual && linhasNaErrataPronta.includes(itemAtual.id)
+              ? TEXTO_LINHA_NA_ERRATA_PRONTA
+              : !papelEnviaPP
               ? "Só o GP envia PP ao financeiro. Confira os documentos e deixe a PP pronta para envio: o GP a envia pela aba Pedidos de Produção."
               : null;
 

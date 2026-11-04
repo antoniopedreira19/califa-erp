@@ -2,7 +2,9 @@
 
 **Data:** 2026-10-08
 **Status:** implementada e testada pela tela em 08/10/2026 (migration
-`20261008600001`).
+`20261008600001`). Completada pela
+[237](237-errata-pronta-trava-o-envio-de-pp-da-linha.md) em 04/11/2026: a
+pronta parada trava o envio de PP da linha que ela altera.
 **Quem decidiu:** Tiago, em 08/10/2026, a partir do protótipo interativo
 (https://claude.ai/artifact/FzgtNYAGhSUXcqNK4kecKC, v1). As quatro
 perguntas com recomendação seguiram a recomendação; a quinta (avisar o GP

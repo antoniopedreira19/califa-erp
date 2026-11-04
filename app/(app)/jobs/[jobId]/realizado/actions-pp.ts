@@ -43,7 +43,7 @@ import {
 } from "@/lib/types";
 import { gerarCodigoPP } from "@/lib/codigos/pedidos-compra";
 import { carregarPessoasParaVerba, type PessoaParaVerba } from "@/lib/data/pessoas-para-verba";
-import { linhasAlteradasNaRevisao } from "@/lib/data/linhas-da-revisao";
+import { linhasAlteradasNaRevisao, linhasNaErrataProntaDoJob } from "@/lib/data/linhas-da-revisao";
 import {
   valorDaPPPorUnidade,
   somaDasPPsNaoCanceladas,
@@ -1611,6 +1611,24 @@ async function barrarEnvioDePP(
         `A errata alterou "${item.item_nome}" e a abertura está em revisão no financeiro. O envio das PPs desta linha volta quando a revisão for salva — a PP fica gerada, no job.`,
       );
     }
+  }
+
+  // Decisão 237: a linha que a errata pronta altera ou cancela espera a
+  // errata. Enviada antes, a PP tranca a linha e a errata não passa mais
+  // (decisão 040 §1). Quem envia PP (administrador, GP e o produtor com a
+  // chave) lê a pronta pela RLS; sem conseguir ler, trava.
+  const naPronta = await linhasNaErrataProntaDoJob(supabase, tenantId, job.id);
+  if (naPronta === null) {
+    return negar(
+      "errata_pronta_nao_conferida",
+      "Não foi possível conferir a errata pronta deste job. Tente de novo em instantes — a PP fica gerada, no job.",
+    );
+  }
+  if (naPronta.has(item.job_item_orcado_id)) {
+    return negar(
+      "linha_na_errata_pronta",
+      `"${item.item_nome}" está na errata pronta para envio deste job. Envie a errata ao financeiro, tire esta linha dela ou descarte-a na Planilha Interna antes de enviar as PPs desta linha — a PP fica gerada, no job.`,
+    );
   }
 
   return null;

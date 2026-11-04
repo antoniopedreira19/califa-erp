@@ -182,6 +182,7 @@ export default async function JobDetailPage({
     podeEditarFornecedor,
     podeEnviarPP,
     linhasComEnvioTravado,
+    linhasNaErrataPronta,
     papelEnviaPP,
     papelCorrigeNf,
     etapasDoJob,
@@ -583,6 +584,7 @@ export default async function JobDetailPage({
             podeConfirmarBv={podeConfirmarBv && !comPedido && !emDecisao}
             jaEnviadoParaFaturamento={envioFaturamento !== null}
             linhasComEnvioTravado={linhasComEnvioTravado}
+            linhasNaErrataPronta={linhasNaErrataPronta}
             ppsPorItemId={ppsPorItemId}
             aEmitirPorItemId={aEmitirPorItemId}
             tomadoresDaNf={tomadoresDaNf}
@@ -611,6 +613,11 @@ export default async function JobDetailPage({
             // Decisão 185: a revisão da abertura trava só as linhas que a
             // errata mudou — aqui pelo realizado, que é a chave da PP.
             realizadosComEnvioTravado={linhasComEnvioTravado.flatMap((id) => {
+              const realizado = realizadosMap.get(id);
+              return realizado ? [realizado.id] : [];
+            })}
+            // Decisão 237: e as linhas da errata pronta para envio.
+            realizadosNaErrataPronta={linhasNaErrataPronta.flatMap((id) => {
               const realizado = realizadosMap.get(id);
               return realizado ? [realizado.id] : [];
             })}
