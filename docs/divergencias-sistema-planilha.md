@@ -89,6 +89,7 @@ Rentabilidade: 2.738 jobs de 2023 a 2026. As abas de 2021 e 2022 ficam de fora, 
 | DIV-050 | Jobs do 4T · Código antigo na planilha | Omissão da planilha com prova | Três jobs | A carga já liga ao código novo; corrigir a planilha |
 | DIV-051 | Jobs do 4T · Código vazio na planilha | Omissão da planilha com prova | Dois jobs | A carga já liga pelo nome; corrigir a planilha |
 | DIV-052 | Jobs do 4T · Jobs do sistema fora da planilha de 01/11 | Omissão da planilha com prova | R$ 225.508,36 | Só no sistema até a próxima versão da planilha |
+| DIV-053 | Jobs do 4T · Universal: um job da planilha virou três | Pendência de conciliação | R$ 129.800,00 a mais previstos no sistema | Aberta: versão de 04/11, ainda não carregada |
 
 ---
 
@@ -470,6 +471,7 @@ Achadas pela sessão que mapeou os jobs do 4T e conferidas em 04/11/2026, na pla
   - As 14 da linha 153 (+R$ 341.959,98) ficam de fora, como de job do sistema.
   - Se a linha 112 for o DEE-1001/26, o fluxo conta o recebimento duas vezes.
 - **Situação:** aberta. Falta o Tiago dizer qual linha é cada job. A correção é na ligação da carga, e não no fluxo.
+- **Na versão de 04/11 (ainda não carregada):** as duas linhas continuam com DEE-1001/26. A 112 passa a ter R$ 2.566.189,25 de receita; a 153 segue com R$ 3.191.394,56.
 
 ### DIV-049 · Código de job cancelado na planilha
 
@@ -502,6 +504,23 @@ Achadas pela sessão que mapeou os jobs do 4T e conferidas em 04/11/2026, na pla
   - DEE-1005/26, R$ 71.428,36, criado em 01/11.
 - **Efeito:** nenhum que conte duas vezes. Esses jobs entram no fluxo só pela previsão do próprio sistema.
 - **Situação:** entram na próxima versão da planilha ou ficam só no sistema.
+- **Na versão de 04/11 (ainda não carregada):** o UER-1003/26 aparece, na linha 31 da Res. Jobs HTLB 2026 (DIV-053).
+
+
+### DIV-053 · Universal: o job do 4T da planilha virou três
+
+Achado pela sessão que mapeou os jobs do 4T, na planilha de 04/11 (ainda não carregada), e conferido em 04/11/2026 nas duas versões e no banco.
+
+- **Na planilha:** em 01/11, a Res. Jobs HTLB 2026 tinha o job da Universal do 4T numa linha só, a 15, com R$ 200.000,00 de receita. Em 04/11, o mesmo valor está em três linhas:
+  - linha 15, com o código antigo NOV-0002/26, que é o UER-1002/26 (DIV-050): R$ 29.319,83;
+  - linha 31, UER-1003/26: R$ 150.300,00;
+  - linha 32, UER-1004/26: R$ 20.380,17.
+- **No sistema:**
+  - O UER-1002/26 segue aberto, com R$ 179.500,00 de previsão de recebimento.
+  - O UER-1003/26 está aberto, com R$ 150.300,00.
+  - O UER-1004/26 foi criado em 03/11 às 09:17 e está cancelado, com R$ 20.380,17 de valor e nenhuma previsão.
+- **Diferença:** o sistema prevê R$ 329.800,00 de recebimento nos dois jobs abertos, e a planilha, R$ 200.000,00 nos três. São R$ 129.800,00 a mais no fluxo de caixa do sistema.
+- **Situação:** aberta. Falta saber qual divisão vale e se o UER-1004/26 volta a valer.
 
 ---
 
