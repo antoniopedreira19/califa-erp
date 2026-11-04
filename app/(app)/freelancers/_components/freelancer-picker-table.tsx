@@ -218,6 +218,10 @@ export function FreelancerPickerTable({
                 const titleBloqueio = bloqueado
                   ? `Ativo com ${nomeCurto(f.responsavel_nome)} — finalize o atual primeiro`
                   : undefined;
+                // Prefere nome_completo; cai pro nome_social quando o completo
+                // está vazio (legados). Renderização em caixa alta pra manter
+                // o padrão das outras tabelas de freelancer.
+                const nomeExibir = f.nome_completo || f.nome_social;
                 return (
                   <tr
                     key={f.id}
@@ -234,11 +238,11 @@ export function FreelancerPickerTable({
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <div className="h-8 w-8 shrink-0 rounded-full bg-california-red/10 text-california-red flex items-center justify-center text-[11px] font-bold">
-                          {initials(f.nome_social)}
+                          {initials(nomeExibir)}
                         </div>
                         <div className="min-w-0 flex items-center gap-1.5">
-                          <div className="font-medium text-foreground truncate">
-                            {f.nome_social}
+                          <div className="font-medium text-foreground truncate uppercase tracking-wide">
+                            {nomeExibir}
                           </div>
                           {bloqueado && (
                             <Lock className="h-3 w-3 text-muted-foreground shrink-0" />
