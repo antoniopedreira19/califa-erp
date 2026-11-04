@@ -337,11 +337,30 @@ export async function carregarNovidades(
     atualizado_em: s.updated_at,
   }));
 
+  // Dedup: freela cadastrado via form público gera DOIS sinais — cadastro novo
+  // em `novos` e solicitação com status `cadastrada` em `concluidas`. A seção
+  // de "Solicitações concluídas" tem mais contexto (job, cargo, solicitante),
+  // então remove o duplicado de "Novos cadastros". Cadastros via `manual`
+  // (sem solicitação) seguem aparecendo só em "Novos cadastros".
+  const freelasEmConcluidas = new Set(
+    concluidas
+      .map((c) => c.freelancer_id)
+      .filter((id): id is string => !!id),
+  );
+  const novosSemDup = novos.filter((n) => !freelasEmConcluidas.has(n.id));
+
   const dismissedIds = (
     (dismissedRes.data ?? []) as Array<{ notification_id: string }>
   ).map((r) => r.notification_id);
 
-  return { novos, aditivos, preenchimentos, distratos, concluidas, dismissedIds };
+  return {
+    novos: novosSemDup,
+    aditivos,
+    preenchimentos,
+    distratos,
+    concluidas,
+    dismissedIds,
+  };
 }
 
 /** Carrega a lista de lookup pro Buscar freelancer. */
