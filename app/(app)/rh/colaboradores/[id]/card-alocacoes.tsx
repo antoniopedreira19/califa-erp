@@ -171,7 +171,7 @@ export function CardAlocacoes({
   // e usa o ModalAlterarAlocacao (multi-empresa) em vez do form legado.
   if (snapshotVigente !== undefined) {
     return (
-      <>
+      <div>
         <CardAlocacao
           snapshot={snapshotVigente ?? null}
           permitirAlterar
@@ -191,7 +191,7 @@ export function CardAlocacoes({
           regionaisPorEmpresa={regionaisPorEmpresa}
           onSucesso={() => router.refresh()}
         />
-      </>
+      </div>
     );
   }
 
