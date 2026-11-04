@@ -39,6 +39,8 @@ import {
 } from "@/app/(app)/_planilha/arrastar-linha";
 import { destinoPorTecla } from "@/lib/calculos/ordem-itens";
 import { GerarPPDrawer } from "./gerar-pp-drawer";
+import { useCustosDoSocio } from "./custo-do-socio";
+import type { CustoDoSocio } from "@/lib/types";
 import { PainelPPsItem } from "./painel-pps-item";
 import { PrestarContasDrawer } from "../pps/prestar-contas-drawer";
 import { VerPPDrawer } from "../pps/ver-pp-drawer";
@@ -795,6 +797,9 @@ export function JobItemRealizadoTable({
   rentabPlanejadaVisivel = false,
   rentabRealizadaVisivel = false,
 }: Props) {
+  // Decisão 236: os custos pagos pelo sócio (a Robotech, nos jobs da
+  // Ventura) abrem nas sublinhas da linha, depois das PPs.
+  const { custos: custosDoSocio, socio: socioDoJob } = useCustosDoSocio();
   // Na vista Total do job mensal a linha do mês fecha o topo do card.
   const colada = usePlanilhaColada();
   const editando = errata?.ativo === true;
@@ -1648,7 +1653,11 @@ export function JobItemRealizadoTable({
                     const ppsDaLinha = (ppsPorItemId.get(realizadoDoItem?.id ?? "") ?? []).filter(
                       (pp) => pp.status !== "cancelada",
                     );
-                    const ppsAbertas = ppsDaLinha.length > 0 && ppsAbertasAqui(item.id);
+                    const socioDaLinha = custosDoSocio.filter(
+                      (c) => c.item_realizado_id === realizadoDoItem?.id,
+                    );
+                    const lancamentosDaLinha = ppsDaLinha.length + socioDaLinha.length;
+                    const ppsAbertas = lancamentosDaLinha > 0 && ppsAbertasAqui(item.id);
                     // A quebra do realizado espelha o orçado só em `A`/`D`
                     // COM o job aberto. Na pré-abertura ela vem da linha
                     // de realizado, que está zerada — e zero vira
@@ -1794,13 +1803,15 @@ export function JobItemRealizadoTable({
                               {/* A seta da linha com PP (decisão 208): fica no
                                   recuo à esquerda do nome, onde a alça da
                                   errata mora — e na errata ela some. */}
-                              {!editando && ppsDaLinha.length > 0 && (
+                              {!editando && lancamentosDaLinha > 0 && (
                                 <button
                                   type="button"
                                   aria-expanded={ppsAbertas}
                                   aria-label={`${ppsAbertas ? "Fechar" : "Abrir"} as PPs de ${item.item || "o item"}`}
                                   title={`${ppsAbertas ? "Fechar" : "Abrir"} ${
-                                    ppsDaLinha.length === 1 ? "a PP" : `as ${ppsDaLinha.length} PPs`
+                                    socioDaLinha.length > 0
+                                      ? "os custos"
+                                      : ppsDaLinha.length === 1 ? "a PP" : `as ${ppsDaLinha.length} PPs`
                                   } desta linha`}
                                   // A célula seleciona no mousedown: a seta
                                   // não pode virar seleção.
@@ -2080,6 +2091,7 @@ export function JobItemRealizadoTable({
                       {ppsAbertas && (
                         <SublinhasDasPPs
                           pps={ppsDaLinha}
+                          doSocio={socioDaLinha}
                           moeda={moeda}
                           colunas={colunas}
                           // O painel das PPs é o da calha: só onde ela o
@@ -2529,7 +2541,8 @@ export function JobItemRealizadoTable({
             <span className="text-[11px] text-muted-foreground">
               O Realizado não é digitado: ele é a soma dos Pedidos de Produção
               do item, da geração ao pagamento — só a PP cancelada sai da conta.
-              Em custo <strong>A</strong> e <strong>D</strong>, que não geram
+              {socioDoJob && ` Neste job, soma também os custos pagos pela ${socioDoJob}.`}
+              {" "}Em custo <strong>A</strong> e <strong>D</strong>, que não geram
               PP, ele espelha o Orçado.
             </span>
           )}
@@ -3047,11 +3060,14 @@ export function JobItemRealizadoTable({
  */
 function SublinhasDasPPs({
   pps,
+  doSocio,
   moeda,
   colunas,
   onAbrirPainel,
 }: {
   pps: PedidoCompraNaLista[];
+  /** Decisão 236: os custos pagos pelo sócio, depois das PPs. */
+  doSocio: CustoDoSocio[];
   moeda: string;
   colunas: ColunasJobVisiveis;
   /** Nulo onde a calha não abre o painel (financeiro): só leitura. */
@@ -3064,10 +3080,34 @@ function SublinhasDasPPs({
     <span className={cn("font-mono text-[11px] italic", NUMEROS_PLANILHA.detalhe)}>{texto}</span>
   );
   const celulaDoValor = "px-3 align-middle whitespace-nowrap text-right";
+  // A PP e o custo do sócio (decisão 236) na mesma forma: o código (ou o
+  // nome do sócio), a situação, o que é e o trio.
+  const linhas = [
+    ...pps.map((pp) => ({
+      id: pp.id,
+      codigo: pp.codigo,
+      situacao: ppStatusLabel(pp.status),
+      descricao: pp.servico,
+      unitario: Number(pp.valor_unitario ?? 0),
+      quantidade: Number(pp.quantidade ?? 0),
+      diasMeses: Number(pp.dias_meses ?? 0),
+      valor: Number(pp.valor ?? 0),
+    })),
+    ...doSocio.map((c) => ({
+      id: c.id,
+      codigo: c.socio,
+      situacao: `Pago pela ${c.socio}`,
+      descricao: c.descricao,
+      unitario: c.valor_unitario,
+      quantidade: c.quantidade,
+      diasMeses: c.dias_meses,
+      valor: c.valor,
+    })),
+  ];
   return (
     <>
-      {pps.map((pp) => {
-        const rotulo = `${pp.codigo} · ${ppStatusLabel(pp.status)}${pp.servico ? ` — ${pp.servico}` : ""}`;
+      {linhas.map((pp) => {
+        const rotulo = `${pp.codigo} · ${pp.situacao}${pp.descricao ? ` — ${pp.descricao}` : ""}`;
         return (
           <tr
             key={pp.id}
@@ -3091,8 +3131,8 @@ function SublinhasDasPPs({
                 <span className="truncate">
                   <span className="font-mono text-[11px] not-italic text-foreground/70">{pp.codigo}</span>
                   {" · "}
-                  {ppStatusLabel(pp.status)}
-                  {pp.servico ? ` — ${pp.servico}` : null}
+                  {pp.situacao}
+                  {pp.descricao ? ` — ${pp.descricao}` : null}
                 </span>
               </div>
             </td>
@@ -3118,13 +3158,13 @@ function SublinhasDasPPs({
               </>
             )}
             <td className={cn(REALIZADO.celulaAbre, celulaDoValor)}>
-              {valor(numero(Number(pp.valor_unitario ?? 0), true))}
+              {valor(numero(pp.unitario, true))}
             </td>
             <td className={cn(REALIZADO.celulaMeio, celulaDoValor)}>
-              {valor(numero(Number(pp.quantidade ?? 0)))}
+              {valor(numero(pp.quantidade))}
             </td>
             <td className={cn(REALIZADO.celulaMeio, celulaDoValor)}>
-              {valor(numero(Number(pp.dias_meses ?? 0)))}
+              {valor(numero(pp.diasMeses))}
             </td>
             <td
               className={cn(
@@ -3133,7 +3173,7 @@ function SublinhasDasPPs({
                 celulaDoValor,
               )}
             >
-              {valor(formatCurrency(Number(pp.valor ?? 0), moeda))}
+              {valor(formatCurrency(pp.valor, moeda))}
             </td>
             {colunas.rentabRealizada && (
               <>

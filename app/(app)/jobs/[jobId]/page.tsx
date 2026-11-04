@@ -42,6 +42,8 @@ import { carregarEquipeDoJob } from "@/lib/data/equipe-do-projeto";
 import { BarraAcoesJob } from "./barra-acoes-job";
 import { FichaJob } from "./ficha-job";
 import { JobRealizadoSection } from "./realizado/job-realizado-section";
+import { CustosDoSocioProvider } from "./realizado/custo-do-socio";
+import { jobAceitaEnvioDePP } from "@/lib/types";
 import { JobPPsSection } from "./pps/job-pps-section";
 import { JobTabs } from "./job-tabs";
 import { ErratasCard } from "./erratas-card";
@@ -471,6 +473,15 @@ export default async function JobDetailPage({
           </div>
         }
         planilha={
+          // Decisão 236: o sócio do job (a Robotech, nos jobs da Ventura) e
+          // os custos que ele pagou, para a planilha, a calha e o painel.
+          <CustosDoSocioProvider
+            value={{
+              socio: detalhe.socioDoJob,
+              custos: detalhe.custosDoSocio,
+              jobAberto: jobAceitaEnvioDePP(job.status as JobStatus),
+            }}
+          >
           <JobRealizadoSection
             confirmarSaidaParaOrcamento={false}
             // O "Editar orçado" é do financeiro (decisão 115); aqui a
@@ -582,6 +593,7 @@ export default async function JobDetailPage({
             responsaveis={responsaveis}
             bvsPorItem={bvsPorItem}
           />
+          </CustosDoSocioProvider>
         }
         ppsCount={ppsDoJob.filter((p) => p.status !== "cancelada").length}
         pps={

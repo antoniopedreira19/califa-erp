@@ -39,6 +39,7 @@ import {
   type EdicaoDoFinanceiro,
 } from "@/app/(app)/jobs/[jobId]/realizado/job-realizado-section";
 import { SeloDaEdicao } from "./selo-da-edicao";
+import { CustosDoSocioProvider } from "@/app/(app)/jobs/[jobId]/realizado/custo-do-socio";
 import { JobChatSection } from "@/app/(app)/jobs/[jobId]/comunicacao/job-chat-section";
 import { AberturaForm } from "../../abertura-de-job/[jobId]/abertura-form";
 import { lerFaturamentoMensalPeloJob } from "@/lib/data/faturamento-mensal";
@@ -841,6 +842,11 @@ export default async function JobNoFinanceiroPage({
                 </Link>
               </div>
             )}
+            {/* Decisão 236: os custos pagos pelo sócio aparecem nas
+                sublinhas, em leitura. */}
+            <CustosDoSocioProvider
+              value={{ socio: detalhe.socioDoJob, custos: detalhe.custosDoSocio, jobAberto: false }}
+            >
             <JobRealizadoSection
               midiaSystem={midiaDoJob}
               // Tela do financeiro: só leitura, não gera nem envia PP.
@@ -945,6 +951,7 @@ export default async function JobNoFinanceiroPage({
               responsaveis={detalhe.responsaveis}
               bvsPorItem={detalhe.bvsPorItem}
             />
+            </CustosDoSocioProvider>
           </div>
         }
         fluxo={
