@@ -1231,9 +1231,11 @@ function Step5Contrato({
             onChange={(v) => {
               const novo = (v ?? "mensal") as Modo;
               setTipo(novo);
-              if (!duracaoQtd) {
-                setDuracaoUnidade(novo === "mensal" ? "meses" : "dias");
-              }
+              // Mensal e diária têm unidade fixa — força em qualquer troca
+              // pra garantir que o cálculo de término/total bate. Período
+              // preserva a escolha do usuário.
+              if (novo === "mensal") setDuracaoUnidade("meses");
+              else if (novo === "diarias") setDuracaoUnidade("dias");
             }}
             disabled={pending}
             className={COMBOBOX_COMO_SELECT}
@@ -1270,7 +1272,17 @@ function Step5Contrato({
             disabled={pending}
           />
         </Campo>
-        <Campo rotulo="Duração">
+        {/* Mensal e diária têm unidade fixa (meses/dias) — seletor só
+            aparece em "período", onde a escolha faz sentido. */}
+        <Campo
+          rotulo={
+            tipo === "mensal"
+              ? "Duração (meses)"
+              : tipo === "diarias"
+                ? "Duração (dias)"
+                : "Duração"
+          }
+        >
           <div className="flex gap-2">
             <input
               type="number"
@@ -1282,20 +1294,22 @@ function Step5Contrato({
                 setDuracaoQtd(e.target.value.replace(/\D/g, ""))
               }
               disabled={pending}
-              placeholder="Ex: 2"
+              placeholder={tipo === "diarias" ? "Ex: 10" : "Ex: 2"}
               className="flex-1 rounded-lg border border-border bg-white px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 tabular-nums focus:outline-none focus:ring-2 focus:ring-california-red/30 disabled:opacity-60"
             />
-            <div className="w-[110px]">
-              <Combobox
-                items={DURACAO_UNIDADE_OPCOES}
-                value={duracaoUnidade}
-                onChange={(v) =>
-                  setDuracaoUnidade((v ?? "meses") as DuracaoUnidade)
-                }
-                disabled={pending}
-                className={COMBOBOX_COMO_SELECT}
-              />
-            </div>
+            {tipo === "periodo" && (
+              <div className="w-[110px]">
+                <Combobox
+                  items={DURACAO_UNIDADE_OPCOES}
+                  value={duracaoUnidade}
+                  onChange={(v) =>
+                    setDuracaoUnidade((v ?? "meses") as DuracaoUnidade)
+                  }
+                  disabled={pending}
+                  className={COMBOBOX_COMO_SELECT}
+                />
+              </div>
+            )}
           </div>
           {dataTerminoCalculada && (
             <p className="mt-1 text-[11px] text-muted-foreground">

@@ -482,11 +482,11 @@ export function NovaSolicitacaoDialog({
                     onChange={(v) => {
                       const novo = (v ?? "mensal") as TipoFreelancerContrato;
                       setTipo(novo);
-                      // Alinha a unidade padrão com o tipo quando o usuário
-                      // ainda não digitou duração (evita sobrescrever escolha).
-                      if (!duracaoQtd) {
-                        setDuracaoUnidade(novo === "diarias" ? "dias" : "meses");
-                      }
+                      // Mensal e diária têm unidade fixa (meses/dias) — força
+                      // em qualquer troca pra garantir que o cálculo bate.
+                      // Período preserva a escolha do usuário.
+                      if (novo === "mensal") setDuracaoUnidade("meses");
+                      else if (novo === "diarias") setDuracaoUnidade("dias");
                     }}
                     disabled={pending}
                     className={COMBOBOX_COMO_SELECT}
@@ -535,7 +535,19 @@ export function NovaSolicitacaoDialog({
                     disabled={pending}
                   />
                 </Campo>
-                <Campo rotulo="Duração" erro={fieldErrors.data_termino}>
+                {/* Mensal e diária têm unidade fixa (meses e dias
+                    respectivamente) — seletor só aparece em "período",
+                    onde a escolha faz sentido. */}
+                <Campo
+                  rotulo={
+                    tipo === "mensal"
+                      ? "Duração (meses)"
+                      : tipo === "diarias"
+                        ? "Duração (dias)"
+                        : "Duração"
+                  }
+                  erro={fieldErrors.data_termino}
+                >
                   <div className="flex gap-2">
                     <input
                       type="number"
@@ -547,20 +559,24 @@ export function NovaSolicitacaoDialog({
                         setDuracaoQtd(e.target.value.replace(/\D/g, ""))
                       }
                       disabled={pending}
-                      placeholder="Ex: 2"
+                      placeholder={
+                        tipo === "diarias" ? "Ex: 10" : "Ex: 2"
+                      }
                       className={cn(INPUT, "flex-1 tabular-nums")}
                     />
-                    <div className="w-[110px]">
-                      <Combobox
-                        items={DURACAO_UNIDADE_OPCOES}
-                        value={duracaoUnidade}
-                        onChange={(v) =>
-                          setDuracaoUnidade((v ?? "meses") as DuracaoUnidade)
-                        }
-                        disabled={pending}
-                        className={COMBOBOX_COMO_SELECT}
-                      />
-                    </div>
+                    {tipo === "periodo" && (
+                      <div className="w-[110px]">
+                        <Combobox
+                          items={DURACAO_UNIDADE_OPCOES}
+                          value={duracaoUnidade}
+                          onChange={(v) =>
+                            setDuracaoUnidade((v ?? "meses") as DuracaoUnidade)
+                          }
+                          disabled={pending}
+                          className={COMBOBOX_COMO_SELECT}
+                        />
+                      </div>
+                    )}
                   </div>
                   {dataTerminoCalculada && (
                     <p className="mt-1 text-[11px] text-muted-foreground">
