@@ -454,19 +454,10 @@ export function NovaSolicitacaoDialog({
                 />
               </Campo>
 
-              {/* Job | Tipo | Valor [| Valor total (só se diária)]
-                  Tipo vem antes do Valor pra reduzir ambiguidade: quando
-                  diária, o rótulo do Valor vira "Valor da diária (R$)" e
-                  aparece um campo "Valor total" readonly ao lado. GPs
-                  confundiam valor unitário × valor total (diária × dias). */}
-              <div
-                className={cn(
-                  "grid gap-3",
-                  tipo === "diarias"
-                    ? "grid-cols-[2fr_1fr_1fr_1fr]"
-                    : "grid-cols-[2fr_1fr_1fr]",
-                )}
-              >
+              {/* Linha A — Job | Tipo | Valor (unitário).
+                  3 cols fixas e equilibradas. Tipo antes do Valor pro
+                  rótulo do valor fazer sentido (diária vs mensal/total). */}
+              <div className="grid grid-cols-[2fr_1fr_1fr] gap-3">
                 <Campo rotulo="Job *" erro={fieldErrors.job_id}>
                   <JobPicker
                     jobs={jobs}
@@ -494,7 +485,9 @@ export function NovaSolicitacaoDialog({
                 </Campo>
                 <Campo
                   rotulo={
-                    tipo === "diarias" ? "Valor da diária (R$) *" : "Valor (R$) *"
+                    tipo === "diarias"
+                      ? "Valor da diária (R$) *"
+                      : "Valor (R$) *"
                   }
                   erro={fieldErrors.valor}
                 >
@@ -504,28 +497,19 @@ export function NovaSolicitacaoDialog({
                     disabled={pending}
                   />
                 </Campo>
-                {tipo === "diarias" && (
-                  <Campo rotulo="Valor total (R$)">
-                    <div
-                      className={cn(
-                        INPUT,
-                        "bg-muted/30 text-foreground tabular-nums cursor-not-allowed select-none",
-                      )}
-                      aria-readonly="true"
-                      title="Calculado automaticamente: valor da diária × quantidade de dias."
-                    >
-                      {valor &&
-                      duracaoUnidade === "dias" &&
-                      Number(duracaoQtd) > 0
-                        ? formatCurrency(valor * Number(duracaoQtd))
-                        : "—"}
-                    </div>
-                  </Campo>
-                )}
               </div>
 
-              {/* Início | Duração (qtd + unidade) → Término calculado */}
-              <div className="grid grid-cols-2 gap-3">
+              {/* Linha B — Início | Duração [| Valor total].
+                  Valor total fica ao lado da Duração (não do valor da
+                  diária) porque é o dia digitado aqui que alimenta o
+                  cálculo — o usuário vê o total atualizando no mesmo
+                  movimento visual. */}
+              <div
+                className={cn(
+                  "grid gap-3",
+                  tipo === "diarias" ? "grid-cols-3" : "grid-cols-2",
+                )}
+              >
                 <Campo rotulo="Início *" erro={fieldErrors.data_inicio}>
                   <DatePicker
                     name="data_inicio"
@@ -559,9 +543,7 @@ export function NovaSolicitacaoDialog({
                         setDuracaoQtd(e.target.value.replace(/\D/g, ""))
                       }
                       disabled={pending}
-                      placeholder={
-                        tipo === "diarias" ? "Ex: 10" : "Ex: 2"
-                      }
+                      placeholder={tipo === "diarias" ? "Ex: 10" : "Ex: 2"}
                       className={cn(INPUT, "flex-1 tabular-nums")}
                     />
                     {tipo === "periodo" && (
@@ -587,6 +569,24 @@ export function NovaSolicitacaoDialog({
                     </p>
                   )}
                 </Campo>
+                {tipo === "diarias" && (
+                  <Campo rotulo="Valor total (R$)">
+                    <div
+                      className={cn(
+                        INPUT,
+                        "bg-muted/30 font-semibold text-foreground tabular-nums cursor-not-allowed select-none",
+                      )}
+                      aria-readonly="true"
+                      title="Calculado automaticamente: valor da diária × quantidade de dias."
+                    >
+                      {valor &&
+                      duracaoUnidade === "dias" &&
+                      Number(duracaoQtd) > 0
+                        ? formatCurrency(valor * Number(duracaoQtd))
+                        : "—"}
+                    </div>
+                  </Campo>
+                )}
               </div>
 
               {/* Observações */}
