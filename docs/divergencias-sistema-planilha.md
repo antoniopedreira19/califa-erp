@@ -84,6 +84,11 @@ Rentabilidade: 2.738 jobs de 2023 a 2026. As abas de 2021 e 2022 ficam de fora, 
 | DIV-045 | Extrato · Linhas da planilha de 27/10 a 01/11 sem linha no banco | Pendência de conciliação | −R$ 66.923,42 no saldo | Aberta: o extrato até 03/11 não as tem |
 | DIV-046 | Regional · CCH, custo operacional da Agency no 3T | Omissão da planilha com prova | R$ 7.000,01 | O sistema segue a DRE |
 | DIV-047 | Contas a pagar · PP-00040, 2ª parcela | Pendência de conciliação | R$ 7.250,00 | Aberta: paga no banco, aberta no sistema |
+| DIV-048 | Jobs do 4T · DEE-1001/26 em duas linhas da Res. Jobs CMH 2026 | Omissão da planilha com prova | R$ 5.136.840,56 e R$ 3.191.394,56 de receita | Aberta: qual linha é cada job; pode contar duas vezes no fluxo |
+| DIV-049 | Jobs do 4T · Código de job cancelado na planilha | Omissão da planilha com prova | R$ 230.000,00 e R$ 309.011,95 | A carga já liga ao job ativo; corrigir a planilha |
+| DIV-050 | Jobs do 4T · Código antigo na planilha | Omissão da planilha com prova | Três jobs | A carga já liga ao código novo; corrigir a planilha |
+| DIV-051 | Jobs do 4T · Código vazio na planilha | Omissão da planilha com prova | Dois jobs | A carga já liga pelo nome; corrigir a planilha |
+| DIV-052 | Jobs do 4T · Jobs do sistema fora da planilha de 01/11 | Omissão da planilha com prova | R$ 225.508,36 | Só no sistema até a próxima versão da planilha |
 
 ---
 
@@ -450,6 +455,53 @@ Apuradas na conciliação de outubro, em 02/11/2026.
 - **Por quê:** a planilha não cita o código do job, então a linha de 08/10 entrou na cauda e ficou ligada à saída do banco. A baixa da PP não aconteceu.
 - **Risco:** a parcela aparece como a pagar e pode ser paga de novo.
 - **Situação:** aberta. Se o Tiago confirmar o pagamento, a linha sai da cauda para o só DRE e a parcela é baixada pela saída de 08/10.
+
+### DIV-048 · DEE-1001/26 em duas linhas da Res. Jobs CMH 2026
+
+Achadas pela sessão que mapeou os jobs do 4T e conferidas em 04/11/2026, na planilha de 01/11 e no banco.
+
+- **Prova:** a coluna de código (34ª) da Res. Jobs CMH 2026 traz DEE-1001/26 em duas linhas:
+  - a 112, com R$ 5.136.840,56 de receita;
+  - a 153, com R$ 3.191.394,56.
+  No sistema, o DEE-1001/26 tem R$ 3.191.394,56 de previsão de recebimento, igual à linha 153.
+- **Na carga:** a linha 153 está ligada ao DEE-1002/26, que no sistema vale R$ 251.530,26. A linha 112 não está ligada a job nenhum.
+- **Efeito no fluxo de caixa (desde 03/11, decisão 232):**
+  - As 8 previsões da linha 112 (saldo de +R$ 2.859.154,80) entram como previsão da planilha.
+  - As 14 da linha 153 (+R$ 341.959,98) ficam de fora, como de job do sistema.
+  - Se a linha 112 for o DEE-1001/26, o fluxo conta o recebimento duas vezes.
+- **Situação:** aberta. Falta o Tiago dizer qual linha é cada job. A correção é na ligação da carga, e não no fluxo.
+
+### DIV-049 · Código de job cancelado na planilha
+
+- **Prova:** na Res. Jobs 2026, a coluna de código (36ª) aponta para jobs cancelados no sistema, e o job ativo tem outro número.
+  - Linha 502: AMB-1030/26, cancelado. O ativo é o AMB-1036/26, de R$ 230.000,00.
+  - Linha 633: SOF-1001/26, cancelado. O ativo é o SOF-1002/26, de R$ 309.011,95.
+- **Na carga:** as duas linhas já estão ligadas ao job ativo. Nada muda no sistema.
+- **Situação:** corrigir o código na planilha.
+
+### DIV-050 · Código antigo na planilha
+
+- **Prova:** a coluna de código traz o código de antes, e o sistema usa outro.
+  - Res. Jobs 2026, linha 597: AMB-0009/26, hoje AMB-1015/26.
+  - Res. Jobs 2026, linha 598: GOC-0001/26, hoje GOC-1002/26.
+  - Res. Jobs HTLB 2026, linha 15: NOV-0002/26, hoje UER-1002/26. O mesmo código antigo também aparece nas linhas 6, 9 e 14 da aba.
+- **Na carga:** as três linhas já estão ligadas ao código novo. Nada muda no sistema.
+- **Situação:** corrigir o código na planilha.
+
+### DIV-051 · Código vazio na planilha
+
+- **Prova:** na Res. Jobs 2026, a coluna de código está vazia em dois jobs que existem no sistema: AMB-1046/26 (linha 526) e WAR-1001/26 (linha 574).
+- **Na carga:** as duas linhas já estão ligadas a esses jobs. Nada muda no sistema.
+- **Situação:** preencher o código na planilha.
+
+### DIV-052 · Jobs do 4T do sistema fora da planilha de 01/11
+
+- **Prova:** três jobs do 4T criados no sistema até 01/11 não estão em nenhuma aba Res. Jobs da planilha de 01/11, nem pelo código:
+  - UER-1003/26, R$ 150.300,00, criado em 30/10;
+  - MER-1003/26, R$ 3.780,00, criado em 30/10;
+  - DEE-1005/26, R$ 71.428,36, criado em 01/11.
+- **Efeito:** nenhum que conte duas vezes. Esses jobs entram no fluxo só pela previsão do próprio sistema.
+- **Situação:** entram na próxima versão da planilha ou ficam só no sistema.
 
 ---
 
