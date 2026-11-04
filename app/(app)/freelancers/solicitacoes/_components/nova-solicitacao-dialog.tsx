@@ -22,7 +22,7 @@ import { MaskedInput } from "@/components/ui/masked-input";
 import { MoneyInput } from "@/components/ui/money-input";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
-import { cn, onlyDigits, isValidCpf } from "@/lib/utils";
+import { cn, formatCurrency, onlyDigits, isValidCpf } from "@/lib/utils";
 import type {
   FreelancerCargo,
   TipoFreelancerContrato,
@@ -454,20 +454,24 @@ export function NovaSolicitacaoDialog({
                 />
               </Campo>
 
-              {/* Job | Valor | Tipo */}
-              <div className="grid grid-cols-[2fr_1fr_1fr] gap-3">
+              {/* Job | Tipo | Valor [| Valor total (só se diária)]
+                  Tipo vem antes do Valor pra reduzir ambiguidade: quando
+                  diária, o rótulo do Valor vira "Valor da diária (R$)" e
+                  aparece um campo "Valor total" readonly ao lado. GPs
+                  confundiam valor unitário × valor total (diária × dias). */}
+              <div
+                className={cn(
+                  "grid gap-3",
+                  tipo === "diarias"
+                    ? "grid-cols-[2fr_1fr_1fr_1fr]"
+                    : "grid-cols-[2fr_1fr_1fr]",
+                )}
+              >
                 <Campo rotulo="Job *" erro={fieldErrors.job_id}>
                   <JobPicker
                     jobs={jobs}
                     value={jobId}
                     onChange={setJobId}
-                    disabled={pending}
-                  />
-                </Campo>
-                <Campo rotulo="Valor (R$) *" erro={fieldErrors.valor}>
-                  <MoneyInput
-                    value={valor}
-                    onValueChange={setValor}
                     disabled={pending}
                   />
                 </Campo>
@@ -488,6 +492,36 @@ export function NovaSolicitacaoDialog({
                     className={COMBOBOX_COMO_SELECT}
                   />
                 </Campo>
+                <Campo
+                  rotulo={
+                    tipo === "diarias" ? "Valor da diária (R$) *" : "Valor (R$) *"
+                  }
+                  erro={fieldErrors.valor}
+                >
+                  <MoneyInput
+                    value={valor}
+                    onValueChange={setValor}
+                    disabled={pending}
+                  />
+                </Campo>
+                {tipo === "diarias" && (
+                  <Campo rotulo="Valor total (R$)">
+                    <div
+                      className={cn(
+                        INPUT,
+                        "bg-muted/30 text-foreground tabular-nums cursor-not-allowed select-none",
+                      )}
+                      aria-readonly="true"
+                      title="Calculado automaticamente: valor da diária × quantidade de dias."
+                    >
+                      {valor &&
+                      duracaoUnidade === "dias" &&
+                      Number(duracaoQtd) > 0
+                        ? formatCurrency(valor * Number(duracaoQtd))
+                        : "—"}
+                    </div>
+                  </Campo>
+                )}
               </div>
 
               {/* Início | Duração (qtd + unidade) → Término calculado */}

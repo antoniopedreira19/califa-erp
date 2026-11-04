@@ -14,7 +14,7 @@ import {
   RadioGroup,
   RadioGroupItem,
 } from "@/components/ui/radio-group";
-import { cn } from "@/lib/utils";
+import { calcularTotalDiarias, cn, formatCurrency } from "@/lib/utils";
 import type {
   FreelancerContrato,
   TipoFreelancerContrato,
@@ -253,8 +253,19 @@ export function ContratoForm({
           </RadioGroup>
         </Campo>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <Campo rotulo="Valor *" erro={fieldErrors.valor}>
+        {/* Quando diária, intercala "Valor total" (readonly, derivado de
+            valor × dias) entre o valor unitário e a cidade. Evita o engano
+            comum de lançar o total no campo do valor. */}
+        <div
+          className={cn(
+            "grid grid-cols-1 gap-4",
+            tipo === "diarias" ? "sm:grid-cols-3" : "sm:grid-cols-2",
+          )}
+        >
+          <Campo
+            rotulo={tipo === "diarias" ? "Valor da diária *" : "Valor *"}
+            erro={fieldErrors.valor}
+          >
             <MoneyInput
               value={valor}
               onValueChange={(v) => {
@@ -264,6 +275,24 @@ export function ContratoForm({
               disabled={pending}
             />
           </Campo>
+          {tipo === "diarias" && (
+            <Campo rotulo="Valor total">
+              <div
+                className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-foreground tabular-nums cursor-not-allowed select-none"
+                aria-readonly="true"
+                title="Calculado automaticamente: valor da diária × quantidade de dias (incluindo início e término)."
+              >
+                {(() => {
+                  const total = calcularTotalDiarias(
+                    valor,
+                    dataInicio || null,
+                    dataTermino || null,
+                  );
+                  return total === null ? "—" : formatCurrency(total);
+                })()}
+              </div>
+            </Campo>
+          )}
           <Campo rotulo="Cidade do trabalho" erro={fieldErrors.cidade}>
             <Input
               value={cidade}

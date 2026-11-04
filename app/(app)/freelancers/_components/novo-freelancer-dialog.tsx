@@ -39,7 +39,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/select";
-import { cn, isValidCpf, onlyDigits } from "@/lib/utils";
+import { cn, formatCurrency, isValidCpf, onlyDigits } from "@/lib/utils";
 import { PIX_TIPOS, problemaDaChavePix } from "@/lib/pix";
 import {
   CIDADES,
@@ -1214,14 +1214,16 @@ function Step5Contrato({
         />
       </Campo>
 
-      <div className="grid grid-cols-[1fr_1fr] gap-3">
-        <Campo rotulo="Valor *">
-          <MoneyInput
-            value={valor}
-            onValueChange={setValor}
-            disabled={pending}
-          />
-        </Campo>
+      {/* Tipo vem antes do Valor pra reduzir ambiguidade: quando diária,
+          o rótulo do Valor vira "Valor da diária" e aparece um campo
+          "Valor total" readonly ao lado. GPs confundiam valor unitário
+          × valor total (diária × dias). */}
+      <div
+        className={cn(
+          "grid gap-3",
+          tipo === "diarias" ? "grid-cols-3" : "grid-cols-[1fr_1fr]",
+        )}
+      >
         <Campo rotulo="Tipo *">
           <Combobox
             items={TIPO_OPCOES}
@@ -1237,6 +1239,26 @@ function Step5Contrato({
             className={COMBOBOX_COMO_SELECT}
           />
         </Campo>
+        <Campo rotulo={tipo === "diarias" ? "Valor da diária *" : "Valor *"}>
+          <MoneyInput
+            value={valor}
+            onValueChange={setValor}
+            disabled={pending}
+          />
+        </Campo>
+        {tipo === "diarias" && (
+          <Campo rotulo="Valor total">
+            <div
+              className="w-full rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm text-foreground tabular-nums cursor-not-allowed select-none"
+              aria-readonly="true"
+              title="Calculado automaticamente: valor da diária × quantidade de dias."
+            >
+              {valor && duracaoUnidade === "dias" && Number(duracaoQtd) > 0
+                ? formatCurrency(valor * Number(duracaoQtd))
+                : "—"}
+            </div>
+          </Campo>
+        )}
       </div>
 
       <div className="grid grid-cols-2 gap-3">
