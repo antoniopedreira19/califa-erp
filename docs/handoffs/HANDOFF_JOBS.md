@@ -6663,3 +6663,17 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
   Fora do provedor a tela não muda.
 - Só com o job aberto. Quem gera PP lança. A errata não cancela a linha com
   custo do sócio.
+
+## ⚠️ Nota de 2026-11-04 — a errata pronta trava o envio de PP da linha (decisão 237)
+
+- Com errata pronta parada no job, a PP da linha que ela altera ou cancela
+  não vai ao financeiro. Gerar, editar e cancelar seguem livres; as outras
+  linhas enviam normalmente. Antes, a PP podia sair no meio e a pronta
+  deixava de passar pela trava da 040 §1 (caso do TNT-1001/26).
+- Servidor: `barrarEnvioDePP` lê a pronta (`linhasNaErrataProntaDoJob`) e
+  recusa com o nome do item; sem conseguir ler, trava. Auditoria
+  `acao_negada`, motivo `linha_na_errata_pronta`.
+- Tela: `linhasNaErrataPronta` sai do `carregar-detalhe.ts` para o painel do
+  item (faixa âmbar e botão desabilitado) e para a aba de PPs (dica do
+  botão), com o texto `TEXTO_LINHA_NA_ERRATA_PRONTA`.
+- Testado no TES-1035/26 (PP-00825, cancelada; pronta descartada).

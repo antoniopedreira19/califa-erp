@@ -317,6 +317,9 @@ interface Props {
    *  As outras enviam normalmente; gerar, editar e cancelar seguem
    *  liberados em todas. */
   linhasComEnvioTravado?: string[];
+  /** As linhas da errata pronta para envio (decisão 237): a PP delas
+   *  espera a errata ser enviada, editada ou descartada. */
+  linhasNaErrataPronta?: string[];
   /** Todas as PPs ativas de cada item realizado (PPs parciais). */
   ppsPorItemId: Map<string, PedidoCompraNaLista[]>;
   /** Decisão 153: as PPs a emitir de cada item, fora do realizado. */
@@ -595,6 +598,7 @@ export function JobRealizadoSection({ comHistorico, ...props }: Props) {
       bvsPorItem={SEM_BVS}
       savePorItem={SEM_SAVES}
       linhasComEnvioTravado={SEM_LINHAS}
+      linhasNaErrataPronta={SEM_LINHAS}
       destacarItens={destacar ? [...mudancaPorLinha.keys()] : SEM_LINHAS}
       // A versão antiga não é a que a revisão confere.
       linhasDaRevisao={SEM_LINHAS}
@@ -650,6 +654,7 @@ function PlanilhaDoJob({
   podeConfirmarBv,
   jaEnviadoParaFaturamento = false,
   linhasComEnvioTravado = [],
+  linhasNaErrataPronta = [],
   ppsPorItemId,
   aEmitirPorItemId,
   tomadoresDaNf,
@@ -1804,6 +1809,7 @@ function PlanilhaDoJob({
           podeConfirmarBv={podeConfirmarBv}
           preAbertura={preAbertura}
           linhasComEnvioTravado={linhasComEnvioTravado}
+          linhasNaErrataPronta={linhasNaErrataPronta}
           ppsPorItemId={ppsPorItemId}
           aEmitirPorItemId={aEmitirPorItemId}
           statusDoJob={job.status}

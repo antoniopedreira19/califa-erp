@@ -87,6 +87,12 @@ export function textoAguardaAbertura(status: string): string | null {
 export const TEXTO_LINHA_ALTERADA_EM_REVISAO =
   "A errata alterou esta linha e a abertura está em revisão no financeiro: o envio das PPs dela volta quando a revisão for salva.";
 
+/** A linha está na errata pronta para envio (decisão 159) que ninguém
+ *  enviou ainda (decisão 237): a PP dela espera a errata, senão a errata
+ *  deixa de passar pela trava da linha com PP no financeiro (decisão 040). */
+export const TEXTO_LINHA_NA_ERRATA_PRONTA =
+  "Esta linha está na errata pronta para envio. Envie a errata ao financeiro, tire esta linha dela ou descarte-a antes de enviar as PPs desta linha.";
+
 export function FaixaAguardaAbertura({ texto }: { texto: string }) {
   return (
     <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2.5">

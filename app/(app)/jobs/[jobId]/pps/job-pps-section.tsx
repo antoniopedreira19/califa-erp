@@ -52,6 +52,7 @@ import {
   EnvioDialog,
   RevisaoDialog,
   TEXTO_LINHA_ALTERADA_EM_REVISAO,
+  TEXTO_LINHA_NA_ERRATA_PRONTA,
   TextoDoReemitir,
   TOAST_DO_REEMITIR,
   textoAguardaAbertura,
@@ -122,6 +123,9 @@ interface Props {
    *  uma errata ainda não revisada mudou; as outras enviam normalmente. */
   statusDoJob: JobStatus;
   realizadosComEnvioTravado: string[];
+  /** Os `item_realizado_id` das linhas da errata pronta para envio
+   *  (decisão 237): o envio delas espera a errata. */
+  realizadosNaErrataPronta: string[];
   /** O que o pop-up de envio precisa — o mesmo que o painel do item recebe
    *  (decisões 152 e 156). */
   tomadoresDaNf: TomadorDaNf[];
@@ -311,6 +315,7 @@ export function JobPPsSection({
   podePrestarContas,
   statusDoJob,
   realizadosComEnvioTravado,
+  realizadosNaErrataPronta,
   tomadoresDaNf,
   tomadorPorEmpresa,
   empresas,
@@ -654,6 +659,9 @@ export function JobPPsSection({
     if (envioBloqueadoPor) return envioBloqueadoPor;
     if (realizadosComEnvioTravado.includes(pp.item_realizado_id)) {
       return TEXTO_LINHA_ALTERADA_EM_REVISAO;
+    }
+    if (realizadosNaErrataPronta.includes(pp.item_realizado_id)) {
+      return TEXTO_LINHA_NA_ERRATA_PRONTA;
     }
     const perdido = prazoDeEnvioPerdido(
       { prazoPagamento: pp.prazo_pagamento, geradaEm: pp.created_at },

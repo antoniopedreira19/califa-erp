@@ -26,6 +26,7 @@ import { saldosDeSaveDoCliente, saveDoJob } from "@/lib/data/saves";
 import {
   inicioDaRevisao,
   linhasAlteradasDesde,
+  linhasDaErrataPronta,
   ultimoRegistroDaAbertura,
 } from "@/lib/data/linhas-da-revisao";
 import { blocosDoItem, somarBlocosDosItens } from "@/lib/calculos/bv-planilha";
@@ -1678,6 +1679,12 @@ export async function carregarDetalheDoJob(
               ),
             ),
           ];
+  // Decisão 237: as linhas da errata pronta para envio. A PP delas espera a
+  // errata ser enviada, editada ou descartada. Sem conseguir ler a pronta,
+  // trava todas — a action confere de novo.
+  const linhasNaErrataPronta: string[] = errataProntaRes.error
+    ? itens.map((it) => it.id)
+    : [...linhasDaErrataPronta(errataPronta?.conteudo ?? null)];
   // SAVE — o crédito entre jobs. As duas leituras vão juntas: uma em
   // série apareceria no TTFB da tela mais pesada do job.
   const clienteIdDoJob: string = raw.cliente_id ?? "";
@@ -1847,6 +1854,7 @@ export async function carregarDetalheDoJob(
     podeEditarFornecedor,
     podeEnviarPP,
     linhasComEnvioTravado,
+    linhasNaErrataPronta,
     // O PAPEL que envia PP (decisão 136), sem olhar o estado do job: é o
     // que separa o produtor (gera, não envia, cancela só a não enviada) do
     // GP. `podeEnviarPP` acima soma a isso a abertura do job.
