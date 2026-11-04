@@ -38,6 +38,6 @@ A planilha tem 4 abas, DP e CF da California e da Go Crazy. A aba DP é a folha,
 
 ## O que fica para depois
 
-- **Data de fim:** duas linhas de R$ 75.000,00 (uma na California, outra na CCH) aparecem na planilha em novembro e dezembro, mas não em janeiro. A recorrência prevê para frente sem fim até alguém pôr a `data_fim`.
+- ~~**Data de fim:**~~ resolvido em 03/11 (Tiago: "Sim, fim em dezembro"). As duas linhas de R$ 75.000,00 (uma na California, outra na CCH), que a planilha não prevê em janeiro, terminam em 31/12/2026. O valor foi gravado pelo MCP, porque o navegador estava logado com outro papel por outra sessão. A auditoria `conta_recorrente.editada` registra `origem: mcp`. No fluxo, ficam o título de novembro e a previsão de dezembro, e nada depois.
 - **Fornecedores:** cadastrar os 70 que faltam e ligá-los às recorrências, para pagar por remessa.
 - **Valor variável:** contas de consumo (energia, água) mudam todo mês. A recorrência repete o valor de novembro, e o título de cada mês é corrigido na tela quando a conta chega.
