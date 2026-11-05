@@ -351,7 +351,6 @@ export default async function FreelancersListaPage({
 
       <ListaClient
         freelancers={freelancers}
-        podeEditar={podeCriarFreelancer}
         filtrosDropdowns={
           <FiltrosDropdowns
             responsaveisDisponiveis={responsaveisDisponiveis}

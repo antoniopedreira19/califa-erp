@@ -13,58 +13,13 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-import type {
-  Freelancer,
-  TipoFreelancerContrato,
-  AcaoPrevistaFreelancer,
-} from "@/lib/types";
+import type { Freelancer, TipoFreelancerContrato } from "@/lib/types";
 import { cn, formatCurrency, initials, formatDate } from "@/lib/utils";
 
 const TIPO_LABEL: Record<TipoFreelancerContrato, string> = {
   mensal: "Mensal",
   periodo: "Período",
   diarias: "Diárias",
-};
-
-const ACAO_META: Record<
-  AcaoPrevistaFreelancer,
-  { label: string; dot: string; text: string; bg: string; border: string }
-> = {
-  contratar: {
-    label: "Ação: Contratar",
-    dot: "bg-sky-400",
-    text: "text-sky-100",
-    bg: "bg-sky-500/15",
-    border: "border-sky-500/40",
-  },
-  renovar: {
-    label: "Ação: Renovar",
-    dot: "bg-emerald-400",
-    text: "text-emerald-100",
-    bg: "bg-emerald-500/15",
-    border: "border-emerald-500/40",
-  },
-  manter: {
-    label: "Ação: Manter",
-    dot: "bg-violet-400",
-    text: "text-violet-100",
-    bg: "bg-violet-500/15",
-    border: "border-violet-500/40",
-  },
-  substituir: {
-    label: "Ação: Substituir",
-    dot: "bg-amber-400",
-    text: "text-amber-100",
-    bg: "bg-amber-500/15",
-    border: "border-amber-500/40",
-  },
-  encerrar: {
-    label: "Ação: Encerrar",
-    dot: "bg-california-red",
-    text: "text-rose-100",
-    bg: "bg-california-red/15",
-    border: "border-california-red/40",
-  },
 };
 
 export interface HeroContratoAtual {
@@ -98,9 +53,6 @@ export function HeroFreelancer({
 }: Props) {
   const [valorVisivel, setValorVisivel] = React.useState(false);
   const avatarIniciais = initials(f.nome_social);
-  const acaoMeta = f.acao_prevista
-    ? ACAO_META[f.acao_prevista as AcaoPrevistaFreelancer]
-    : null;
 
   const trabalhando = contratoAtual?.status_real === true;
   const valorNum =
@@ -149,21 +101,6 @@ export function HeroFreelancer({
                     )}
                   />
                   {trabalhando ? "Trabalhando" : "Encerrado"}
-                </span>
-              )}
-              {acaoMeta && (
-                <span
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap",
-                    acaoMeta.bg,
-                    acaoMeta.border,
-                    acaoMeta.text,
-                  )}
-                >
-                  <span
-                    className={cn("h-1.5 w-1.5 rounded-full", acaoMeta.dot)}
-                  />
-                  {acaoMeta.label}
                 </span>
               )}
               {f.origem === "migracao" && (

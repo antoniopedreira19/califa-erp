@@ -21,18 +21,14 @@ import {
   initials,
 } from "@/lib/utils";
 import type {
-  AcaoPrevistaFreelancer,
   FreelancerComStatus,
   StatusCalculado,
   TipoFreelancerContrato,
 } from "@/lib/types";
-import { AcaoPrevistaBadge } from "./acao-prevista-badge";
 import { StatusBadge } from "../../_components/status-badge";
-import { ToggleAcaoPrevista } from "./toggle-acao-prevista";
 
 interface Props {
   freelancers: FreelancerComStatus[];
-  podeEditar: boolean;
   /** Dropdowns de filtro (responsável/job/cargo). Renderizados no mesmo bloco da busca. */
   filtrosDropdowns?: React.ReactNode;
   /** Chips de filtros ativos (status, ação, trabalho, card). */
@@ -55,7 +51,6 @@ const TIPO_LABEL: Record<TipoFreelancerContrato, string> = {
 
 export function ListaClient({
   freelancers,
-  podeEditar,
   filtrosDropdowns,
   chipsFiltros,
 }: Props) {
@@ -126,7 +121,6 @@ export function ListaClient({
       ) : (
         <TabelaFreelancers
           filtrados={filtrados}
-          podeEditar={podeEditar}
           valoresVisiveis={valoresVisiveis}
           setValoresVisiveis={setValoresVisiveis}
         />
@@ -137,12 +131,10 @@ export function ListaClient({
 
 function TabelaFreelancers({
   filtrados,
-  podeEditar,
   valoresVisiveis,
   setValoresVisiveis,
 }: {
   filtrados: FreelancerComStatus[];
-  podeEditar: boolean;
   valoresVisiveis: boolean;
   setValoresVisiveis: React.Dispatch<React.SetStateAction<boolean>>;
 }) {
@@ -177,7 +169,6 @@ function TabelaFreelancers({
               <Th align="center">Contrato</Th>
               <Th align="center">Status</Th>
               <Th align="center">Tempo</Th>
-              <Th align="center">Ação</Th>
             </tr>
           </thead>
           <tbody>
@@ -185,7 +176,6 @@ function TabelaFreelancers({
               <FreelancerRow
                 key={f.id}
                 f={f}
-                podeEditar={podeEditar}
                 valoresVisiveis={valoresVisiveis}
               />
             ))}
@@ -198,11 +188,9 @@ function TabelaFreelancers({
 
 function FreelancerRow({
   f,
-  podeEditar,
   valoresVisiveis,
 }: {
   f: FreelancerComStatus;
-  podeEditar: boolean;
   valoresVisiveis: boolean;
 }) {
   const router = useRouter();
@@ -332,21 +320,6 @@ function FreelancerRow({
           </span>
         ) : (
           <span className="text-muted-foreground/50">—</span>
-        )}
-      </td>
-      <td
-        className="px-3 py-2.5 text-center"
-        onClick={(e) => podeEditar && e.stopPropagation()}
-      >
-        {podeEditar ? (
-          <ToggleAcaoPrevista
-            freelancerId={f.id}
-            valorAtual={f.acao_prevista as AcaoPrevistaFreelancer | null}
-          />
-        ) : (
-          <AcaoPrevistaBadge
-            acao={f.acao_prevista as AcaoPrevistaFreelancer | null}
-          />
         )}
       </td>
     </tr>
