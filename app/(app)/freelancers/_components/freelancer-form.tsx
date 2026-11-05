@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MaskedInput } from "@/components/ui/masked-input";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   Select,
   SelectTrigger,
@@ -226,13 +227,17 @@ export function FreelancerForm({ modo, freelancer }: Props) {
         </div>
 
         <Campo rotulo="Data de nascimento" erro={fieldErrors.data_nascimento}>
-          <Input
-            type="date"
+          <DatePicker
             name="data_nascimento"
-            value={state.data_nascimento}
-            onChange={(e) => set("data_nascimento", e.target.value)}
+            defaultValue={state.data_nascimento}
+            onDateChange={(d) =>
+              set("data_nascimento", d ? d.toISOString().slice(0, 10) : "")
+            }
             disabled={pending}
-            className="max-w-[200px]"
+            className="max-w-[240px]"
+            comSeletorAnoMes
+            fromYear={1930}
+            toYear={new Date().getFullYear()}
           />
         </Campo>
       </Secao>

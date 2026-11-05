@@ -260,6 +260,9 @@ export function FormClient({ token, cpfPreenchido }: Props) {
                 set("data_nascimento", d ? d.toISOString().slice(0, 10) : "")
               }
               className="max-w-[240px]"
+              comSeletorAnoMes
+              fromYear={1930}
+              toYear={new Date().getFullYear()}
             />
           </Campo>
         </Secao>
