@@ -87,6 +87,9 @@ export interface LinhaDoBanco {
   conciliadaComo: ConciliadaComo | null;
   /** As linhas que se desfazem juntas. */
   grupo: string | null;
+  /** A importação de onde a linha veio: o extrato recém-chegado abre as
+   *  divisões que têm linhas dele (decisão 239). */
+  importacaoId: string | null;
   /** As baixas que mudaram para a data do banco. */
   datasTrocadas: Array<{ id: string; de: string }>;
   /** A correção da baixa, quando a linha se conciliou corrigindo. */
@@ -299,9 +302,27 @@ const assinado = (l: LancamentoCru) => (l.natureza === "entrada" ? Number(l.valo
 
 export async function carregarBancoDaConciliacao(
   supabase: Supabase,
-  args: { tenantId: string; contaId: string; dataDe: string; dataAte: string },
+  args: { tenantId: string; contaId: string; dataDe: string; dataAte: string; periodoDoExtrato?: boolean },
 ): Promise<DadosDaAbaBanco> {
-  const { tenantId, contaId, dataDe, dataAte } = args;
+  const { tenantId, contaId } = args;
+  let { dataDe, dataAte } = args;
+  // Na Conciliação automática (decisão 239), as resolvidas são as do
+  // período do último extrato, e não as do filtro De/Até: é o que dá sentido
+  // ao "N de M conciliados" e aos Conciliados.
+  if (args.periodoDoExtrato) {
+    const { data: ult } = await supabase
+      .from("extrato_importacoes")
+      .select("periodo_inicio, periodo_fim")
+      .eq("tenant_id", tenantId)
+      .eq("conta_bancaria_id", contaId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle<{ periodo_inicio: string | null; periodo_fim: string | null }>();
+    if (ult?.periodo_inicio && ult.periodo_fim) {
+      dataDe = ult.periodo_inicio;
+      dataAte = ult.periodo_fim;
+    }
+  }
 
   // ---- Rodada 1: a conta, as importações, as linhas, as remessas e as regras ----
   const [contaRes, importacoesRes, linhasCruas, itensRes, regrasRes, regionaisRes] = await Promise.all([
@@ -625,6 +646,7 @@ export async function carregarBancoDaConciliacao(
     ligados: ligadosPorLinha.get(l.id) ?? [],
     conciliadaComo: l.conciliada_como,
     grupo: l.grupo,
+    importacaoId: l.importacao_id,
     datasTrocadas: l.desfazer?.datas ?? [],
     correcao: correcaoDaLinha.get(l.id) ?? null,
     regraId: l.desfazer?.regra_id ?? null,

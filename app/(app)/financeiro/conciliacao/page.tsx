@@ -146,6 +146,8 @@ export default async function ConciliacaoPage({
       contaId,
       dataDe,
       dataAte,
+      // Na Automática, as resolvidas do período do último extrato (decisão 239).
+      periodoDoExtrato: aba === "banco",
     }),
     // O fechamento da conciliação (decisão 205): a faixa das três abas, o
     // cadeado do Extrato e, na Conciliação automática, as condições do botão

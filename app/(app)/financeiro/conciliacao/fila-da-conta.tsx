@@ -67,6 +67,8 @@ export interface PropsDaFila {
   importar: React.ReactNode;
   /** Fechar a conciliação / Reabrir o período. */
   fechamento: React.ReactNode;
+  /** Até que dia a conciliação está fechada (decisão 205); nulo, aberta. */
+  fechadaAte: string | null;
   pending: boolean;
   resolvendoSozinho: boolean;
   avisos: {
@@ -909,6 +911,12 @@ export function FaixaDoTopo(p: PropsDaFila) {
         <span className="text-xs font-semibold">
           <span className="font-mono">{resolvidos}</span> de <span className="font-mono">{resultados.length}</span> conciliados
         </span>
+        {/* O progresso é o do último extrato, e não o do filtro De/Até (decisão 239). */}
+        {u?.inicio && u.fim && (
+          <span className="text-[11px] text-muted-foreground">
+            no extrato de {dataBR(u.inicio).slice(0, 5)} a {dataBR(u.fim)}
+          </span>
+        )}
         <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
           <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
         </div>
