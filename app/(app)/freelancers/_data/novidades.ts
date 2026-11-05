@@ -117,6 +117,12 @@ export async function carregarNovidades(
     //    Sem embed de job/job_interno — lookup separado em concluidasJobsRes
     //    abaixo (evita o bug de schema cache stale do PostgREST com embed
     //    polimórfico, 29/10/2026).
+    //
+    //    Limit 300: essa lista alimenta o dedup de "Novos cadastros" (freela
+    //    com solicitação concluída some de Novos). Se a solicitação do freela
+    //    cair fora do top-N por ordem de updated_at (ex.: após um backfill
+    //    em massa que empatou timestamps), o dedup falha e o freela
+    //    reaparece em Novos. Mantém folga alta pra evitar isso.
     supabase
       .from("freelancer_solicitacoes")
       .select(
@@ -126,7 +132,7 @@ export async function carregarNovidades(
       .in("status", ["cadastrada", "finalizada"])
       .gte("updated_at", CUTOFF_NOVIDADES)
       .order("updated_at", { ascending: false })
-      .limit(50),
+      .limit(300),
 
     // Pool global de dismissed
     supabase
