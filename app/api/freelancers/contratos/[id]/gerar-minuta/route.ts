@@ -118,32 +118,35 @@ export async function POST(
     metadata: { path },
   });
 
-  // Se este contrato nasceu de uma solicitação de renovação aprovada, a
-  // geração da minuta é o checkpoint em que a solicitação transiciona de
-  // `aprovada` → `cadastrada`. Semanticamente: "aprovada = em processo",
-  // "cadastrada = documento oficial emitido". Filtra por aprovada pra não
-  // sobrescrever caminho concorrente (ex: form público).
+  // Se este contrato nasceu de uma solicitação, a geração da minuta é o
+  // checkpoint em que ela vai pra `finalizada`. Caminhos possíveis:
+  //   - Renovação: solicitação ficou `aprovada` depois que o RH aprovou
+  //     (contrato criado pela action de aprovar).
+  //   - Contratação: solicitação ficou `cadastrada` depois que o freela
+  //     preencheu o form público (RPC criou o contrato).
+  // Em ambos os casos, gerar a minuta sobe pra `finalizada`.
   const { data: solVinculada } = await supabase
     .from("freelancer_solicitacoes")
-    .select("id")
+    .select("id, status")
     .eq("tenant_id", session.activeTenant.id)
     .eq("contrato_id", contrato.id)
-    .eq("status", "aprovada")
+    .in("status", ["aprovada", "cadastrada"])
     .maybeSingle();
   if (solVinculada) {
+    const statusAnterior = (solVinculada as { status: string }).status;
     const { error: solErr } = await supabase
       .from("freelancer_solicitacoes")
-      .update({ status: "cadastrada" })
+      .update({ status: "finalizada" })
       .eq("id", (solVinculada as { id: string }).id)
       .eq("tenant_id", session.activeTenant.id)
-      .eq("status", "aprovada");
+      .in("status", ["aprovada", "cadastrada"]);
     if (!solErr) {
       await logAuditEvent({
-        acao: "freelancer_solicitacao.cadastrada_via_minuta",
+        acao: "freelancer_solicitacao.finalizada_via_minuta",
         tenantId: session.activeTenant.id,
         entidadeTipo: "freelancer_solicitacao",
         entidadeId: (solVinculada as { id: string }).id,
-        metadata: { contrato_id: contrato.id },
+        metadata: { contrato_id: contrato.id, status_anterior: statusAnterior },
       });
     } else {
       console.error(

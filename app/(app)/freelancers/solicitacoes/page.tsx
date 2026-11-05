@@ -18,6 +18,7 @@ const STATUS_VALIDOS = new Set([
   "aprovada",
   "rejeitada",
   "cadastrada",
+  "finalizada",
   "cancelada",
 ]);
 
@@ -263,6 +264,7 @@ export default async function SolicitacoesPage({
     pendente: 0,
     aprovada: 0,
     cadastrada: 0,
+    finalizada: 0,
     rejeitada: 0,
     cancelada: 0,
   };

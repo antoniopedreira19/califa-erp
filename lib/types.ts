@@ -6278,6 +6278,7 @@ export type FreelancerSolicitacaoStatus =
   | "aprovada"
   | "rejeitada"
   | "cadastrada"
+  | "finalizada"
   | "cancelada";
 
 export interface FreelancerSolicitacao {

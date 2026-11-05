@@ -110,18 +110,20 @@ export async function carregarNovidades(
       .order("distrato_solicitado_em", { ascending: false })
       .limit(50),
 
-    // 5. Solicitações concluídas (status=cadastrada, falta PDF)
-    // nome_job é fallback pros registros migrados do RH antigo (sem FK).
-    // Sem embed de job/job_interno — lookup separado em concluidasJobsRes
-    // abaixo (evita o bug de schema cache stale do PostgREST com embed
-    // polimórfico, 29/10/2026).
+    // 5. Solicitações concluídas = cadastrada (falta gerar minuta) ou
+    //    finalizada (minuta gerada / dispensa). Juntos no mesmo card porque
+    //    ambos representam "freela já no sistema, última ponta pendente".
+    //    nome_job é fallback pros registros migrados do RH antigo (sem FK).
+    //    Sem embed de job/job_interno — lookup separado em concluidasJobsRes
+    //    abaixo (evita o bug de schema cache stale do PostgREST com embed
+    //    polimórfico, 29/10/2026).
     supabase
       .from("freelancer_solicitacoes")
       .select(
         "id, freelancer_id, contrato_id, nome_freela, cargo, updated_at, nome_job, job_id, job_interno_id, solicitante:profiles!solicitante_id(nome)",
       )
       .eq("tenant_id", tenantId)
-      .eq("status", "cadastrada")
+      .in("status", ["cadastrada", "finalizada"])
       .gte("updated_at", CUTOFF_NOVIDADES)
       .order("updated_at", { ascending: false })
       .limit(50),

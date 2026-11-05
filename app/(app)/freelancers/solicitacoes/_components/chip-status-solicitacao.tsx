@@ -21,6 +21,11 @@ const VARIANTES: Record<
     wrap: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
     dot: "bg-emerald-500",
   },
+  finalizada: {
+    label: "Finalizada",
+    wrap: "bg-violet-50 text-violet-700 ring-violet-600/20",
+    dot: "bg-violet-500",
+  },
   rejeitada: {
     label: "Rejeitada",
     wrap: "bg-california-red/10 text-california-red ring-california-red/25",
@@ -65,6 +70,7 @@ export const STATUS_SOLICITACAO: Array<{
   { value: "pendente", label: "Pendente" },
   { value: "aprovada", label: "Aprovada" },
   { value: "cadastrada", label: "Cadastrada" },
+  { value: "finalizada", label: "Finalizada" },
   { value: "rejeitada", label: "Rejeitada" },
   { value: "cancelada", label: "Cancelada" },
 ];

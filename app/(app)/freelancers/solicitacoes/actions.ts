@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { contratoDispensaMinuta } from "@/lib/utils";
 import {
   criarSolicitacaoSchema,
   rejeitarSolicitacaoSchema,
@@ -139,8 +140,8 @@ export async function aprovarSolicitacao(
   });
 
   // Renovação: cria contrato na hora + aponta de volta pra solicitação.
-  // O status da solicitação segue `aprovada` (vira `cadastrada` só quando
-  // a minuta é gerada — ver endpoint gerar-minuta).
+  // Status fica `aprovada` aguardando a minuta (vira `finalizada` quando o
+  // RH gerar ou direto quando for diária curta < 15d — dispensa).
   if (solicitacao.freelancer_id) {
     // Migração automática de responsável: se quem solicitou não é o dono
     // atual do cadastro, troca o dono pra ela antes de criar o contrato.
@@ -164,6 +165,29 @@ export async function aprovarSolicitacao(
         "[solicitacao.aprovar.criar_contrato]",
         contratoRes.message,
       );
+    } else if (
+      contratoDispensaMinuta(
+        solicitacao.tipo,
+        solicitacao.data_inicio,
+        solicitacao.data_termino,
+      )
+    ) {
+      // Diária curta: pula `aprovada` → `finalizada` direto, sem precisar
+      // que o RH gere minuta.
+      await supabase
+        .from("freelancer_solicitacoes")
+        .update({ status: "finalizada" })
+        .eq("id", id)
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("status", "aprovada");
+
+      await logAuditEvent({
+        acao: "freelancer_solicitacao.finalizada_por_dispensa",
+        tenantId: session.activeTenant.id,
+        entidadeTipo: "freelancer_solicitacao",
+        entidadeId: id,
+        metadata: { contrato_id: contratoRes.data?.contrato_id ?? null },
+      });
     }
   }
 

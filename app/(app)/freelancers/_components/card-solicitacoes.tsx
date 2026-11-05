@@ -20,6 +20,7 @@ const STATUS_ICON: Record<
   pendente: { icon: Clock, color: "text-amber-500" },
   aprovada: { icon: CheckCircle2, color: "text-sky-500" },
   cadastrada: { icon: CheckCircle2, color: "text-emerald-500" },
+  finalizada: { icon: CheckCircle2, color: "text-violet-500" },
   rejeitada: { icon: XCircle, color: "text-california-red" },
   cancelada: { icon: Ban, color: "text-muted-foreground" },
 };

@@ -71,8 +71,9 @@ const PRIORIDADE_STATUS: Record<FreelancerSolicitacaoStatus, number> = {
   pendente: 0,
   aprovada: 1,
   cadastrada: 2,
-  rejeitada: 3,
-  cancelada: 4,
+  finalizada: 3,
+  rejeitada: 4,
+  cancelada: 5,
 };
 
 const TIPO_META: Record<
@@ -398,6 +399,7 @@ export function SolicitacoesTabela({
     { key: "pendente", label: "Pendentes", valor: contagens.pendente ?? 0, cor: "text-amber-700", dot: "bg-amber-500" },
     { key: "aprovada", label: "Aprovadas", valor: contagens.aprovada ?? 0, cor: "text-sky-700", dot: "bg-sky-500" },
     { key: "cadastrada", label: "Cadastradas", valor: contagens.cadastrada ?? 0, cor: "text-emerald-700", dot: "bg-emerald-500" },
+    { key: "finalizada", label: "Finalizadas", valor: contagens.finalizada ?? 0, cor: "text-violet-700", dot: "bg-violet-500" },
     { key: "rejeitada", label: "Rejeitadas", valor: contagens.rejeitada ?? 0, cor: "text-california-red", dot: "bg-california-red" },
     { key: "cancelada", label: "Canceladas", valor: contagens.cancelada ?? 0, cor: "text-muted-foreground", dot: "bg-zinc-400" },
   ];

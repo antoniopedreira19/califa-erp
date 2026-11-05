@@ -479,7 +479,14 @@ export type AuditAction =
   | "freelancer_solicitacao.cancelada"
   // Renovação em que a geração da minuta oficializa o cadastro: solicitação
   // sai de `aprovada` → `cadastrada` quando o DOCX é gerado (03/11/2026).
+  // Mantido no enum pra histórico; fluxo novo (04/11/2026) usa
+  // `finalizada_via_minuta` em vez disso.
   | "freelancer_solicitacao.cadastrada_via_minuta"
+  // Fluxo revisado 04/11/2026: solicitação vai pra `finalizada` quando o
+  // RH gera a minuta (tanto renovação quanto contratação) OU direto na
+  // aprovação pra diária curta < 15d (dispensa de minuta).
+  | "freelancer_solicitacao.finalizada_via_minuta"
+  | "freelancer_solicitacao.finalizada_por_dispensa"
   // Módulo Freelancers — cadastramento via link público (Task 022).
   | "freelancer.cadastrado_via_solicitacao"
   // Módulo Freelancers — distrato (Task 025).
