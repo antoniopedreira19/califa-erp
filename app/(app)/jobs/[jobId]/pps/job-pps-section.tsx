@@ -51,8 +51,6 @@ import {
 import {
   EnvioDialog,
   RevisaoDialog,
-  TEXTO_LINHA_ALTERADA_EM_REVISAO,
-  TEXTO_LINHA_NA_ERRATA_PRONTA,
   TextoDoReemitir,
   TOAST_DO_REEMITIR,
   textoAguardaAbertura,
@@ -116,16 +114,10 @@ interface Props {
    *  164 e 171): administrador, GP, produtor ou freela do job, e o
    *  responsável da verba de produção anterior à 171. */
   podePrestarContas: string[];
-  /** O status do job e as linhas travadas pela revisão da abertura
-   *  (decisões 040 e 185): as portas do envio que não são do papel, nas
-   *  mesmas frases do painel do item. O PAPEL vem de `papelEnviaPP`.
-   *  `realizadosComEnvioTravado` são os `item_realizado_id` das linhas que
-   *  uma errata ainda não revisada mudou; as outras enviam normalmente. */
+  /** O status do job: a porta do envio que não é do papel, na mesma frase
+   *  do painel do item. O PAPEL vem de `papelEnviaPP`. A errata não trava
+   *  mais o envio (decisão 238). */
   statusDoJob: JobStatus;
-  realizadosComEnvioTravado: string[];
-  /** Os `item_realizado_id` das linhas da errata pronta para envio
-   *  (decisão 237): o envio delas espera a errata. */
-  realizadosNaErrataPronta: string[];
   /** O que o pop-up de envio precisa — o mesmo que o painel do item recebe
    *  (decisões 152 e 156). */
   tomadoresDaNf: TomadorDaNf[];
@@ -314,8 +306,6 @@ export function JobPPsSection({
   papelEnviaPP,
   podePrestarContas,
   statusDoJob,
-  realizadosComEnvioTravado,
-  realizadosNaErrataPronta,
   tomadoresDaNf,
   tomadorPorEmpresa,
   empresas,
@@ -651,18 +641,12 @@ export function JobPPsSection({
 
   /**
    * Por que ESTA PP não pode ser enviada agora, na ordem do painel do item:
-   * o job (pré-abertura), a linha alterada por errata em revisão (decisão
-   * 185) e o prazo de envio do vencimento (decisão 157). O papel nem chega
+   * o job (pré-abertura) e o prazo de envio do vencimento (decisão 157).
+   * A errata não trava mais (decisão 238). O papel nem chega
    * aqui: o botão só existe para quem envia. Nulo: o botão vale.
    */
   function travaDoEnvio(pp: PedidoCompraNaLista): string | null {
     if (envioBloqueadoPor) return envioBloqueadoPor;
-    if (realizadosComEnvioTravado.includes(pp.item_realizado_id)) {
-      return TEXTO_LINHA_ALTERADA_EM_REVISAO;
-    }
-    if (realizadosNaErrataPronta.includes(pp.item_realizado_id)) {
-      return TEXTO_LINHA_NA_ERRATA_PRONTA;
-    }
     const perdido = prazoDeEnvioPerdido(
       { prazoPagamento: pp.prazo_pagamento, geradaEm: pp.created_at },
       hoje,

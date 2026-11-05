@@ -253,6 +253,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 235 | [Os custos fixos como recorrências no Contas a Pagar, e a previsão da planilha sai do fluxo pelo item](235-custos-fixos-como-recorrencias.md) | 2026-11-03 |
 | 236 | [O custo pago pelo sócio no realizado do job (Ventura e Robotech)](236-custo-pago-pelo-socio-no-realizado.md) | 2026-11-03 |
 | 237 | [A errata pronta para envio trava o envio de PP da linha que ela altera](237-errata-pronta-trava-o-envio-de-pp-da-linha.md) | 2026-11-04 |
+| 238 | [A errata não trava mais a PP, e a PP não trava mais a errata: só o Comitê](238-errata-e-pp-sem-trava-mutua-so-o-comite.md) | 2026-11-05 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -265,4 +266,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 238**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 239**. (091 e 092 existem na pasta e ainda não estão nesta tabela.)

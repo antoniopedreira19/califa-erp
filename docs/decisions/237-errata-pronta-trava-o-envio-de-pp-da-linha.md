@@ -12,6 +12,11 @@ com PP no financeiro não entra em errata) e
 trava só a linha alterada).
 **Migration:** nenhuma. A trava é de código, como a da 185.
 
+> ⚠️ **Revista pela [238](238-errata-e-pp-sem-trava-mutua-so-o-comite.md)
+> (05/11/2026):** a errata não trava mais o envio de PP, e a linha com PP
+> entra em errata — só não baixa o orçado abaixo das PPs com a regra de PP
+> do Comitê ligada.
+
 ## O caso
 
 No TNT-1001/26, a produção deixou pronta em 29/10 uma errata que zerava o

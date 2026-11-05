@@ -4,8 +4,10 @@
  *
  * A errata em job aberto devolve o job ao mural do financeiro
  * (`jobs.abertura_em_revisao`). Até a 185 isso fechava o envio de TODA PP
- * do job (decisão 040); agora fecha só o da linha que alguma errata ainda
- * não revisada mudou. As outras linhas enviam normalmente.
+ * do job (decisão 040); a 185 fechou só o da linha que alguma errata ainda
+ * não revisada mudou; desde a 238 (05/11/2026) a errata não trava mais o
+ * envio de PP nenhuma. As linhas continuam servindo ao destaque da revisão
+ * na tela do financeiro.
  *
  * "Ainda não revisada" é a mesma janela do mural (`revisoesPendentes`, em
  * `financeiro/abertura-de-job/dados.ts`): a errata registrada depois do
@@ -72,62 +74,9 @@ export function ultimoRegistroDaAbertura(
 }
 
 /**
- * As linhas que a errata pronta para envio (decisão 159) altera ou cancela
- * (decisão 237, 04/11/2026).
- *
- * Enquanto a pronta espera um GP, a PP dessas linhas não vai ao
- * financeiro: se fosse, a linha passaria a ter PP no financeiro e a errata
- * não poderia mais ser confirmada (decisão 040 §1). O caso que mostrou a
- * brecha: TNT-1001/26, pronta de 29/10 zerando uma linha e PP enviada na
- * mesma linha em 31/10 — a GP só soube ao confirmar.
- *
- * A linha nova da pronta ainda não existe no job, e a organização da
- * planilha (decisão 162) e os parâmetros do job (decisão 233) não mexem em
- * linha: nada disso trava.
- */
-export function linhasDaErrataPronta(
-  conteudo: {
-    alteracoes?: ReadonlyArray<{ job_item_orcado_id: string }> | null;
-    cancelamentos?: ReadonlyArray<string> | null;
-  } | null,
-): Set<string> {
-  const linhas = new Set<string>();
-  for (const a of conteudo?.alteracoes ?? []) {
-    if (a?.job_item_orcado_id) linhas.add(a.job_item_orcado_id);
-  }
-  for (const id of conteudo?.cancelamentos ?? []) {
-    if (typeof id === "string" && id) linhas.add(id);
-  }
-  return linhas;
-}
-
-/**
- * Para a action do envio: as linhas da errata pronta do job. `null` quando
- * a leitura falha — quem chama trava o envio, como na revisão.
- */
-export async function linhasNaErrataProntaDoJob(
-  supabase: SupabaseClient,
-  tenantId: string,
-  jobId: string,
-): Promise<Set<string> | null> {
-  const { data, error } = await supabase
-    .from("jobs_erratas_prontas")
-    .select("conteudo")
-    .eq("job_id", jobId)
-    .eq("tenant_id", tenantId)
-    .eq("situacao", "pronta")
-    .maybeSingle<{ conteudo: Parameters<typeof linhasDaErrataPronta>[0] }>();
-  if (error) {
-    console.error("[errata_pronta.linhas]", error.message);
-    return null;
-  }
-  return linhasDaErrataPronta(data?.conteudo ?? null);
-}
-
-/**
- * Para a action do envio: lê as erratas e o último registro e devolve as
- * linhas travadas. Fora de revisão, nenhuma. `null` quando a leitura
- * falha: quem chama trava o envio, que é o passo que compromete dinheiro.
+ * Lê as erratas e o último registro e devolve as linhas que a revisão
+ * ainda não conferiu — o destaque da tela do financeiro. Fora de revisão,
+ * nenhuma. `null` quando a leitura falha.
  */
 export async function linhasAlteradasNaRevisao(
   supabase: SupabaseClient,

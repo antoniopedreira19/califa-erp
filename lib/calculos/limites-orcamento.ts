@@ -161,3 +161,25 @@ export function bloqueioGeracaoPPPeloComite(args: {
   if (ppCobertaPeloComite(args.valorAprovado, args.valor)) return null;
   return "Esta PP precisa da aprovação do Comitê de Aprovações: o realizado acumulado do item ultrapassa o orçado. Salve a PP a emitir e solicite a aprovação.";
 }
+
+/**
+ * A errata deixa o orçado da linha abaixo do que já está em PPs, com a
+ * regra de PP do Comitê ligada? (Decisão 238, 05/11/2026.)
+ *
+ * Desde a 238 a errata altera linha com PP — a trava da 040 §1 saiu —, mas
+ * respeita o Comitê: com "Realizado acima do orçado" ligada, ela não pode
+ * baixar o orçado para menos do que as PPs da linha. Abaixo delas, só o
+ * financeiro altera, na tela do job no Financeiro. Mesma régua da PP
+ * (`ppPassaDoOrcadoNoComite`): linha vermelha e tolerância contam igual.
+ *
+ * Só a errata que BAIXA o orçado pega. A linha que já estava acima do
+ * orçado (PP aprovada pelo Comitê) pode subir o orçado sem barrar: a
+ * errata não piora o que o Comitê já decidiu.
+ */
+export function orcadoDaErrataAbaixoDasPPs(
+  regras: RegrasDoComite,
+  linha: { emPPs: number; orcadoDe: number; orcadoPara: number; linhaVermelha: boolean },
+): boolean {
+  if (linha.orcadoPara >= linha.orcadoDe - 0.005) return false;
+  return ppPassaDoOrcadoNoComite(regras, linha.emPPs, linha.orcadoPara, linha.linhaVermelha);
+}

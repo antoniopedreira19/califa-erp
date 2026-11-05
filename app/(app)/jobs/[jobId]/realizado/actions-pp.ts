@@ -43,7 +43,6 @@ import {
 } from "@/lib/types";
 import { gerarCodigoPP } from "@/lib/codigos/pedidos-compra";
 import { carregarPessoasParaVerba, type PessoaParaVerba } from "@/lib/data/pessoas-para-verba";
-import { linhasAlteradasNaRevisao, linhasNaErrataProntaDoJob } from "@/lib/data/linhas-da-revisao";
 import {
   valorDaPPPorUnidade,
   somaDasPPsNaoCanceladas,
@@ -1539,38 +1538,32 @@ async function renderizarDocumentoDaPP(args: {
 }
 
 /**
- * A porta única do ENVIO de PP ao financeiro. Duas travas, um lugar só.
+ * A porta única do ENVIO de PP ao financeiro.
  *
- * 1. **O job ainda não foi aberto** (`aguardando_abertura` ou
- *    `rejeitado_financeiro`). Novo em 08/09/2026, decisão 056: gerar PP
- *    passou a valer na pré-abertura, então a trava que era do gate de
- *    gerar precisou nascer aqui — senão soltar a geração soltaria junto
- *    o envio, que é o que compromete dinheiro.
- * 2. **A errata mudou a linha da PP** e a revisão da abertura ainda não
- *    foi salva (decisão 040, 02/09/2026, revista pela 185 em 16/10/2026).
- *    Até a 185 a revisão fechava o envio de TODAS as PPs do job; agora
- *    fecha só o da linha que uma errata ainda não revisada mudou
- *    (`linhasAlteradasNaRevisao`). As outras linhas enviam normalmente.
+ * **O job ainda não foi aberto** (`aguardando_abertura` ou
+ * `rejeitado_financeiro`). Novo em 08/09/2026, decisão 056: gerar PP passou
+ * a valer na pré-abertura, então a trava que era do gate de gerar precisou
+ * nascer aqui — senão soltar a geração soltaria junto o envio, que é o que
+ * compromete dinheiro. Gerar, editar e cancelar continuam liberados.
  *
- * Nos dois casos gerar, editar e cancelar continuam liberados — é o
- * ENVIO que fecha. O faturamento segue fechado pelo job inteiro em
- * revisão: a errata muda o valor do job.
- *
- * ⚠️ Era `barrarEnvioEmRevisao`, com só a segunda trava (decisão 040 §4).
+ * ⚠️ **Decisão 238 (05/11/2026): a errata não trava mais a PP.** Saíram as
+ * duas travas de errata que moravam aqui — a linha alterada por errata com
+ * a abertura em revisão no financeiro (decisões 040 §4 e 185) e a linha da
+ * errata pronta para envio (decisão 237). Pedido do Tiago: "Agora que temos
+ * o comitê de aprovação, [...] bastam as travas do comitê". O limite do
+ * valor da PP é a regra do Comitê, conferida na geração e na edição
+ * (`pp_confere_orcado_na_geracao`). O faturamento segue fechado pelo job
+ * inteiro em revisão: a errata muda o valor do job.
  */
 async function barrarEnvioDePP(
-  supabase: ReturnType<typeof createClient>,
   tenantId: string,
   ppId: string,
   job: {
     id: string;
     status: string;
-    abertura_em_revisao: boolean;
-    data_abertura_financeiro: string | null;
   },
-  item: { job_item_orcado_id: string; item_nome: string },
 ): Promise<Err | null> {
-  const negar = async (motivo: string, message: string): Promise<Err> => {
+  if (!jobAceitaEnvioDePP(job.status as JobStatus)) {
     await logAuditEvent({
       acao: "acao_negada",
       tenantId,
@@ -1578,59 +1571,19 @@ async function barrarEnvioDePP(
       entidadeId: ppId,
       metadata: {
         acao_tentada: "pedido_compra.enviada_financeiro",
-        motivo,
+        motivo: "job_ainda_nao_aberto",
         job_id: job.id,
         status_atual: job.status,
       },
     });
-    return { ok: false, message };
-  };
-
-  if (!jobAceitaEnvioDePP(job.status as JobStatus)) {
-    return negar(
-      "job_ainda_nao_aberto",
-      job.status === "rejeitado_financeiro"
-        ? "O financeiro devolveu este job e ele ainda não foi aberto. A PP fica gerada, no job — o envio ao financeiro volta com a abertura."
-        : "O financeiro ainda não abriu este job. A PP fica gerada, no job — o envio ao financeiro volta com a abertura.",
-    );
+    return {
+      ok: false,
+      message:
+        job.status === "rejeitado_financeiro"
+          ? "O financeiro devolveu este job e ele ainda não foi aberto. A PP fica gerada, no job — o envio ao financeiro volta com a abertura."
+          : "O financeiro ainda não abriu este job. A PP fica gerada, no job — o envio ao financeiro volta com a abertura.",
+    };
   }
-
-  if (job.abertura_em_revisao) {
-    const linhas = await linhasAlteradasNaRevisao(supabase, tenantId, job);
-    // Sem conseguir ler as erratas, trava como antes da 185: o envio é o
-    // passo que compromete dinheiro.
-    if (linhas === null) {
-      return negar(
-        "abertura_em_revisao",
-        "A abertura deste job está em revisão no financeiro e não foi possível conferir as linhas da errata. Tente de novo em instantes — a PP fica gerada, no job.",
-      );
-    }
-    if (linhas.has(item.job_item_orcado_id)) {
-      return negar(
-        "linha_alterada_em_revisao",
-        `A errata alterou "${item.item_nome}" e a abertura está em revisão no financeiro. O envio das PPs desta linha volta quando a revisão for salva — a PP fica gerada, no job.`,
-      );
-    }
-  }
-
-  // Decisão 237: a linha que a errata pronta altera ou cancela espera a
-  // errata. Enviada antes, a PP tranca a linha e a errata não passa mais
-  // (decisão 040 §1). Quem envia PP (administrador, GP e o produtor com a
-  // chave) lê a pronta pela RLS; sem conseguir ler, trava.
-  const naPronta = await linhasNaErrataProntaDoJob(supabase, tenantId, job.id);
-  if (naPronta === null) {
-    return negar(
-      "errata_pronta_nao_conferida",
-      "Não foi possível conferir a errata pronta deste job. Tente de novo em instantes — a PP fica gerada, no job.",
-    );
-  }
-  if (naPronta.has(item.job_item_orcado_id)) {
-    return negar(
-      "linha_na_errata_pronta",
-      `"${item.item_nome}" está na errata pronta para envio deste job. Envie a errata ao financeiro, tire esta linha dela ou descarte-a na Planilha Interna antes de enviar as PPs desta linha — a PP fica gerada, no job.`,
-    );
-  }
-
   return null;
 }
 
@@ -3343,13 +3296,7 @@ export async function enviarPedidoCompraAoFinanceiro(
   const barradoNoEnvio = await barrarEnvioPeloPapel(gate.session, ppRow.id, gate.job);
   if (barradoNoEnvio) return barradoNoEnvio;
   const { item, job } = gate;
-  const bloqueioEnvio = await barrarEnvioDePP(
-    supabase,
-    session.activeTenant.id,
-    pp_id,
-    job,
-    item,
-  );
+  const bloqueioEnvio = await barrarEnvioDePP(session.activeTenant.id, pp_id, job);
   if (bloqueioEnvio) return bloqueioEnvio;
 
   // Prazo de envio (decisão 157): o financeiro recebe a PP até 15 dias

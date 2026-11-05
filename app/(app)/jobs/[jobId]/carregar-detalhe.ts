@@ -23,12 +23,6 @@ import {
 } from "@/lib/calculos/versao-totais";
 import { itemPrecisaDeConclusao } from "@/lib/calculos/pps-item";
 import { saldosDeSaveDoCliente, saveDoJob } from "@/lib/data/saves";
-import {
-  inicioDaRevisao,
-  linhasAlteradasDesde,
-  linhasDaErrataPronta,
-  ultimoRegistroDaAbertura,
-} from "@/lib/data/linhas-da-revisao";
 import { blocosDoItem, somarBlocosDosItens } from "@/lib/calculos/bv-planilha";
 import {
   jobAceitaRealizado,
@@ -210,7 +204,6 @@ export async function carregarDetalheDoJob(
     errataProntaRes,
     meiosDaVersaoRes,
     veiculosRes,
-    ultimoRegistroRes,
     apresentacoesDoProjeto,
     custosDoSocioRes,
     socioDaEmpresaRes,
@@ -502,11 +495,6 @@ export async function carregarDetalheDoJob(
           .not("fornecedor_id", "is", null)
           .returns<{ fornecedor_id: string; veiculo: { id: string; nome: string } | null }[]>()
       : Promise.resolve({ data: [], error: null }),
-    // Decisão 185: em revisão, o último registro da abertura abre a janela
-    // das erratas que travam o envio de PP da linha que mudaram.
-    raw.abertura_em_revisao === true
-      ? ultimoRegistroDaAbertura(supabase, session.activeTenant.id, raw.id)
-      : Promise.resolve({ data: null, error: null }),
     // As apresentações do projeto, no card PROJETO da ficha (decisão 213).
     listarApresentacoesDoProjeto(supabase, session.activeTenant.id, raw.projeto_id),
     // Decisão 236: os custos pagos pelo sócio (a Robotech, nos jobs da
@@ -1654,37 +1642,10 @@ export async function carregarDetalheDoJob(
   // Quem envia PP deste job: o papel (decisão 136) ou o Produtor
   // Responsável com a chave do GP (decisão 174).
   const enviaPP = enviaPPNoJob(session.activeRole, session.profile.id, job);
-  // A revisão da abertura não entra mais aqui (decisão 185): ela trava só
-  // as linhas de `linhasComEnvioTravado`, e o painel do item e a aba PPs
-  // conferem linha a linha.
+  // A errata não trava mais o envio de PP (decisão 238, 05/11/2026): saíram
+  // a linha alterada com a abertura em revisão (185) e a linha da errata
+  // pronta (237). Fica a abertura do job.
   const podeEnviarPP = enviaPP && jobAceitaEnvioDePP(job.status);
-  // As linhas (`jobs_itens_orcado.id`) que uma errata ainda não revisada
-  // mudou: a PP delas não vai ao financeiro até a revisão ser salva. As
-  // outras linhas enviam normalmente. Sem o último registro da abertura,
-  // trava todas, como antes da 185 — a action confere de novo.
-  if (ultimoRegistroRes.error) {
-    console.error("[job.revisao.registro]", ultimoRegistroRes.error.message);
-  }
-  const linhasComEnvioTravado: string[] =
-    job.abertura_em_revisao !== true
-      ? []
-      : ultimoRegistroRes.error
-        ? itens.map((it) => it.id)
-        : [
-            ...linhasAlteradasDesde(
-              erratas,
-              inicioDaRevisao(
-                raw.data_abertura_financeiro ?? null,
-                ultimoRegistroRes.data?.registrado_em ?? null,
-              ),
-            ),
-          ];
-  // Decisão 237: as linhas da errata pronta para envio. A PP delas espera a
-  // errata ser enviada, editada ou descartada. Sem conseguir ler a pronta,
-  // trava todas — a action confere de novo.
-  const linhasNaErrataPronta: string[] = errataProntaRes.error
-    ? itens.map((it) => it.id)
-    : [...linhasDaErrataPronta(errataPronta?.conteudo ?? null)];
   // SAVE — o crédito entre jobs. As duas leituras vão juntas: uma em
   // série apareceria no TTFB da tela mais pesada do job.
   const clienteIdDoJob: string = raw.cliente_id ?? "";
@@ -1853,8 +1814,6 @@ export async function carregarDetalheDoJob(
     podeCadastrarFornecedor,
     podeEditarFornecedor,
     podeEnviarPP,
-    linhasComEnvioTravado,
-    linhasNaErrataPronta,
     // O PAPEL que envia PP (decisão 136), sem olhar o estado do job: é o
     // que separa o produtor (gera, não envia, cancela só a não enviada) do
     // GP. `podeEnviarPP` acima soma a isso a abertura do job.
