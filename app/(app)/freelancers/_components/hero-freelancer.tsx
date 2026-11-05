@@ -78,11 +78,6 @@ export function HeroFreelancer({
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-balance text-white">
               {f.nome_completo || f.nome_social}
             </h1>
-            {f.nome_completo &&
-              f.nome_social &&
-              f.nome_completo !== f.nome_social && (
-                <p className="text-sm text-white/60 mt-0.5">{f.nome_social}</p>
-              )}
 
             <div className="mt-3 flex items-center gap-2 flex-wrap">
               {contratoAtual && (

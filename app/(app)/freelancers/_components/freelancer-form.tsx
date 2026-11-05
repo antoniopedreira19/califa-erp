@@ -54,7 +54,6 @@ export function FreelancerForm({ modo, freelancer }: Props) {
   // Estado controlado — simples record string→string pra ter 1 ponto só
   // de leitura/escrita e submissão via FormData.
   const [state, setState] = React.useState<Record<string, string>>(() => ({
-    nome_social: freelancer?.nome_social ?? "",
     nome_completo: freelancer?.nome_completo ?? "",
     cpf: freelancer?.cpf ?? "",
     rg: freelancer?.rg ?? "",
@@ -190,18 +189,7 @@ export function FreelancerForm({ modo, freelancer }: Props) {
       )}
 
       {/* ============== Identificação ============== */}
-      <Secao titulo="Identificação" descricao="Dados pessoais básicos. Nome social e nome completo são obrigatórios.">
-        <Campo rotulo="Nome social *" erro={fieldErrors.nome_social}>
-          <Input
-            name="nome_social"
-            value={state.nome_social}
-            onChange={(e) => set("nome_social", e.target.value)}
-            placeholder="Como esta pessoa é conhecida"
-            required
-            disabled={pending}
-          />
-        </Campo>
-
+      <Secao titulo="Identificação" descricao="Dados pessoais básicos. Nome completo é obrigatório.">
         <Campo rotulo="Nome completo *" erro={fieldErrors.nome_completo}>
           <Input
             name="nome_completo"

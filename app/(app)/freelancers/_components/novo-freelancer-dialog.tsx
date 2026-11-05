@@ -126,7 +126,6 @@ export function NovoFreelancerDialog({
   const [responsavelId, setResponsavelId] = React.useState<string | null>(null);
   const [nome, setNome] = React.useState("");
   const [sobrenome, setSobrenome] = React.useState("");
-  const [nomeSocial, setNomeSocial] = React.useState("");
   const [dataNascimento, setDataNascimento] = React.useState("");
   const [rg, setRg] = React.useState("");
   const [cpf, setCpf] = React.useState("");
@@ -185,7 +184,6 @@ export function NovoFreelancerDialog({
     setResponsavelId(null);
     setNome("");
     setSobrenome("");
-    setNomeSocial("");
     setDataNascimento("");
     setRg("");
     setCpf("");
@@ -233,7 +231,6 @@ export function NovoFreelancerDialog({
     if (n === 1) {
       if (!responsavelId) return "Selecione o responsável";
       if (!nome.trim() || !sobrenome.trim()) return "Preencha nome e sobrenome";
-      if (!nomeSocial.trim()) return "Nome social é obrigatório";
       if (cpf && !isValidCpf(onlyDigits(cpf))) return "CPF inválido";
     }
     if (n === 2) {
@@ -291,7 +288,6 @@ export function NovoFreelancerDialog({
     const nomeCompleto = `${nome.trim()} ${sobrenome.trim()}`.trim();
     const fd = new FormData();
     // Freelancer
-    fd.set("nome_social", nomeSocial);
     fd.set("nome_completo", nomeCompleto);
     fd.set("cpf", onlyDigits(cpf));
     fd.set("rg", rg);
@@ -398,8 +394,6 @@ export function NovoFreelancerDialog({
                 setNome={setNome}
                 sobrenome={sobrenome}
                 setSobrenome={setSobrenome}
-                nomeSocial={nomeSocial}
-                setNomeSocial={setNomeSocial}
                 dataNascimento={dataNascimento}
                 setDataNascimento={setDataNascimento}
                 rg={rg}
@@ -642,8 +636,6 @@ function Step1Identificacao({
   setNome,
   sobrenome,
   setSobrenome,
-  nomeSocial,
-  setNomeSocial,
   dataNascimento,
   setDataNascimento,
   rg,
@@ -684,15 +676,6 @@ function Step1Identificacao({
           />
         </Campo>
       </div>
-
-      <Campo rotulo="Nome social / apelido *">
-        <Input
-          value={nomeSocial}
-          onChange={(e) => setNomeSocial(e.target.value)}
-          placeholder="Como esta pessoa é conhecida"
-          disabled={pending}
-        />
-      </Campo>
 
       <div className="grid grid-cols-2 gap-3">
         <Campo rotulo="Data de nascimento">

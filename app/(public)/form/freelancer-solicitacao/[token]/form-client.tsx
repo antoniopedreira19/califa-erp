@@ -16,7 +16,6 @@ import {
 
 interface Props {
   token: string;
-  nomePreenchido: string;
   cpfPreenchido: string | null;
 }
 
@@ -31,7 +30,7 @@ const SECOES = [
   { id: "pagamento", rotulo: "Pagamento" },
 ] as const;
 
-export function FormClient({ token, nomePreenchido, cpfPreenchido }: Props) {
+export function FormClient({ token, cpfPreenchido }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [erroGeral, setErroGeral] = React.useState<string | null>(null);
@@ -39,7 +38,6 @@ export function FormClient({ token, nomePreenchido, cpfPreenchido }: Props) {
   const [ativa, setAtiva] = React.useState<string>(SECOES[0].id);
 
   const [state, setState] = React.useState<Record<string, string>>(() => ({
-    nome_social: nomePreenchido,
     nome_completo: "",
     cpf: cpfPreenchido ?? "",
     rg: "",
@@ -221,16 +219,8 @@ export function FormClient({ token, nomePreenchido, cpfPreenchido }: Props) {
           id="voce"
           numero={1}
           titulo="Você"
-          descricao="Como a gente te chama e os dados pessoais pro contrato."
+          descricao="Seus dados pessoais pro contrato."
         >
-          <Campo rotulo="Nome como você é conhecido" obrigatorio erro={fieldErrors.nome_social}>
-            <Input
-              value={state.nome_social}
-              onChange={(e) => set("nome_social", e.target.value)}
-              required
-              className={inputCls(!!fieldErrors.nome_social)}
-            />
-          </Campo>
           <Campo
             rotulo="Nome completo oficial"
             dica="Como aparece no RG / documento de identidade."
@@ -534,7 +524,6 @@ function inputCls(temErro: boolean): string {
 /** Mapeia um nome de campo pra id da seção, pra scrollar até o erro. */
 function detectarSecaoDoErro(campo: string): string | null {
   const porCampo: Record<string, string> = {
-    nome_social: "voce",
     nome_completo: "voce",
     cpf: "voce",
     rg: "voce",

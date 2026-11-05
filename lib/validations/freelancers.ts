@@ -58,11 +58,15 @@ const digitosOpcionalEntre = (min: number, max: number) =>
 export const freelancerSchema = z
   .object({
     // Identificação
+    // Nome social: hoje o form não coleta mais — derivado de nome_completo no
+    // transform abaixo. Mantido no schema pra aceitar payloads legados (API
+    // pública antiga, scripts de migração) que ainda mandam o campo.
     nome_social: z
       .string()
       .trim()
-      .min(2, { message: "Nome social deve ter ao menos 2 caracteres" })
-      .max(120, { message: "Nome social muito longo" }),
+      .max(120, { message: "Nome social muito longo" })
+      .optional()
+      .or(z.literal("")),
     nome_completo: z
       .string()
       .trim()
@@ -163,6 +167,14 @@ export const freelancerSchema = z
       .optional()
       .or(z.literal("").transform(() => null)),
   })
+  // Deriva nome_social = nome_completo quando o form não envia. Mantém
+  // retrocompatibilidade com callers que ainda mandam o campo preenchido.
+  .transform((v) => ({
+    ...v,
+    nome_social: v.nome_social && v.nome_social.trim().length >= 2
+      ? v.nome_social.trim()
+      : v.nome_completo,
+  }))
   .superRefine((v, ctx) => {
     // CNPJ + razão social são par
     const temCnpj = !!v.cnpj;

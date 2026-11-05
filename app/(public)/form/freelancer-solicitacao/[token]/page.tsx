@@ -178,7 +178,6 @@ export default async function FormPublicoPage({
 
       <FormClient
         token={sol.token}
-        nomePreenchido={sol.nome_freela}
         cpfPreenchido={sol.cpf_freela}
       />
     </div>
