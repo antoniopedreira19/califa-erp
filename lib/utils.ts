@@ -323,13 +323,16 @@ export function calcularDuracaoContrato(
 }
 
 /**
- * Contrato de diária curta (< 30 dias de duração) dispensa minuta/assinado.
+ * Contrato de diária curta (< 15 dias de duração) dispensa minuta/assinado.
  * Status vai direto pra regular/vencendo/agendado/irregular conforme as
  * datas, sem passar por sem_minuta/sem_assinado. Mesma regra que a view
  * `freelancers_com_status` aplica no banco — mantidas em paralelo pra UI
  * poder sinalizar sem roundtrip.
  *
  * Diária sem data_termino (aberta) retorna false: duração desconhecida.
+ *
+ * Histórico: limiar era 30 dias até 04/11/2026; apertado pra 15 por
+ * decisão de negócio (contratos de 15+ dias passam a exigir minuta).
  */
 export function contratoDispensaMinuta(
   tipo: string | null | undefined,
@@ -343,7 +346,7 @@ export function contratoDispensaMinuta(
     const diffDias = Math.round(
       (termino.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24),
     );
-    return diffDias < 30;
+    return diffDias < 15;
   } catch {
     return false;
   }

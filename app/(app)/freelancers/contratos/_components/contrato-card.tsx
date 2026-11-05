@@ -1100,7 +1100,7 @@ export function ContratoCard({
               {dispensa && (
                 <span
                   className="text-[10px] text-emerald-700 font-semibold flex items-center gap-1 bg-emerald-50 border border-emerald-500/20 rounded-md px-2 py-1"
-                  title="Diárias com duração inferior a 30 dias não exigem minuta nem assinado. Gerar e anexar é opcional."
+                  title="Diárias com duração inferior a 15 dias não exigem minuta nem assinado. Gerar e anexar é opcional."
                 >
                   <CheckCircle2 className="h-3 w-3" />
                   Minuta dispensada (diária curta)
