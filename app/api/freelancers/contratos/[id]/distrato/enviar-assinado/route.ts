@@ -83,18 +83,35 @@ export async function POST(
     );
   }
 
-  // Salva o path do assinado e chama a RPC pra aplicar a antecipação
-  const { error: updErr } = await supabase
+  // Salva o path do assinado e chama a RPC pra aplicar a antecipação.
+  // `select("id")` pra pegar 0 linhas (RLS/not-found) — sem isso, o PDF ia
+  // pro bucket sem o UPDATE acontecer e a RPC falhava silenciosamente depois.
+  const { data: atualizados, error: updErr } = await supabase
     .from("freelancer_contratos")
     .update({
       distrato_arquivo_url: path,
       updated_by: session.profile.id,
     })
     .eq("id", params.id)
-    .eq("tenant_id", session.activeTenant.id);
+    .eq("tenant_id", session.activeTenant.id)
+    .select("id");
 
   if (updErr) {
     return NextResponse.json({ error: updErr.message }, { status: 500 });
+  }
+
+  if (!atualizados || atualizados.length === 0) {
+    console.error(
+      "[distrato.enviar-assinado] 0 linhas afetadas — RLS bloqueou ou contrato não existe",
+      { contrato_id: params.id, user_id: session.profile.id },
+    );
+    return NextResponse.json(
+      {
+        error:
+          "Não foi possível salvar o distrato assinado. Verifique se você tem permissão nesse contrato.",
+      },
+      { status: 403 },
+    );
   }
 
   const { error: rpcErr } = await supabase.rpc("aplicar_distrato_de_contrato", {

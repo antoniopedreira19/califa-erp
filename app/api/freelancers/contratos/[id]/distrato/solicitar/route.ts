@@ -34,7 +34,12 @@ export async function POST(
   }
 
   const supabase = createClient();
-  const { error } = await supabase
+  // Pede `select("id")` de volta pra conseguir diferenciar "atualizou 0 linhas"
+  // (RLS bloqueou OU contrato não existe) de "atualizou com sucesso". Sem isso,
+  // supabase devolve error=null também pra 0 linhas afetadas — o audit era
+  // gravado como sucesso enquanto o banco permanecia intacto, enganando o
+  // usuário com toast verde (incidente Adriano/Márcia, 05/11/2026).
+  const { data: atualizados, error } = await supabase
     .from("freelancer_contratos")
     .update({
       distrato_data_proposta: parsed.data.data_proposta,
@@ -47,11 +52,26 @@ export async function POST(
       updated_by: session.profile.id,
     })
     .eq("id", params.id)
-    .eq("tenant_id", session.activeTenant.id);
+    .eq("tenant_id", session.activeTenant.id)
+    .select("id");
 
   if (error) {
     console.error("[distrato.solicitar]", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  if (!atualizados || atualizados.length === 0) {
+    console.error(
+      "[distrato.solicitar] 0 linhas afetadas — RLS bloqueou ou contrato não existe",
+      { contrato_id: params.id, user_id: session.profile.id },
+    );
+    return NextResponse.json(
+      {
+        error:
+          "Não foi possível solicitar o distrato. Verifique se você tem permissão nesse contrato.",
+      },
+      { status: 403 },
+    );
   }
 
   await logAuditEvent({

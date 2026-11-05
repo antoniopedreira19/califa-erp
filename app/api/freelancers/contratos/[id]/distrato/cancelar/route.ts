@@ -38,7 +38,10 @@ export async function POST(
   if (minutaPath) paths.push(minutaPath);
   if (assinadoPath) paths.push(assinadoPath);
 
-  const { error } = await supabase
+  // `select("id")` pra diferenciar 0 linhas (RLS/not-found) de sucesso real.
+  // Mesmo padrão do solicitar/route — sem isso, API devolvia 200 pra tentativas
+  // bloqueadas por RLS e o audit de cancelado era gravado em vão.
+  const { data: atualizados, error } = await supabase
     .from("freelancer_contratos")
     .update({
       distrato_data_proposta: null,
@@ -50,11 +53,26 @@ export async function POST(
       updated_by: session.profile.id,
     })
     .eq("id", params.id)
-    .eq("tenant_id", session.activeTenant.id);
+    .eq("tenant_id", session.activeTenant.id)
+    .select("id");
 
   if (error) {
     console.error("[distrato.cancelar]", error.message);
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  if (!atualizados || atualizados.length === 0) {
+    console.error(
+      "[distrato.cancelar] 0 linhas afetadas — RLS bloqueou ou contrato não existe",
+      { contrato_id: params.id, user_id: session.profile.id },
+    );
+    return NextResponse.json(
+      {
+        error:
+          "Não foi possível cancelar o distrato. Verifique se você tem permissão nesse contrato.",
+      },
+      { status: 403 },
+    );
   }
 
   // Best-effort: apaga arquivos do bucket
