@@ -539,6 +539,53 @@ export async function aprovarSolicitacoesEmLote(
   const aprovadas = data?.length ?? 0;
   const falharam = ids.length - aprovadas;
 
+  // Pros ids que viraram 'aprovada', aplicar mesma lógica da aprovação
+  // individual: renovação (freelancer_id setado) cria contrato na hora e,
+  // se for diária curta (<15d), pula pra 'finalizada' por dispensa.
+  //
+  // Sem isso, aprovar lote deixava solicitações de renovação em 'aprovada'
+  // com contrato_id NULL — contrato nunca era criado (caso João Henrique,
+  // 05/11/2026).
+  const idsAprovados = (data ?? []).map((r: { id: string }) => r.id);
+  if (idsAprovados.length > 0) {
+    const { data: aprovadasData } = await supabase
+      .from("freelancer_solicitacoes")
+      .select("*")
+      .in("id", idsAprovados)
+      .eq("tenant_id", session.activeTenant.id);
+    for (const sol of (aprovadasData ?? []) as any[]) {
+      if (!sol.freelancer_id) continue; // Contratação nova — aguarda freela
+      await migrarResponsavelSeNecessario(supabase, session, sol);
+      const contratoRes = await criarContratoDeRenovacao(supabase, session, sol);
+      if (!contratoRes.ok) {
+        console.error(
+          "[solicitacao.aprovar_lote.criar_contrato]",
+          sol.id,
+          contratoRes.message,
+        );
+        continue;
+      }
+      if (
+        contratoDispensaMinuta(sol.tipo, sol.data_inicio, sol.data_termino)
+      ) {
+        await supabase
+          .from("freelancer_solicitacoes")
+          .update({ status: "finalizada" })
+          .eq("id", sol.id)
+          .eq("tenant_id", session.activeTenant.id)
+          .eq("status", "aprovada");
+
+        await logAuditEvent({
+          acao: "freelancer_solicitacao.finalizada_por_dispensa",
+          tenantId: session.activeTenant.id,
+          entidadeTipo: "freelancer_solicitacao",
+          entidadeId: sol.id,
+          metadata: { contrato_id: contratoRes.data?.contrato_id ?? null },
+        });
+      }
+    }
+  }
+
   await logAuditEvent({
     acao: "freelancer_solicitacao.aprovada_em_lote",
     tenantId: session.activeTenant.id,
@@ -548,6 +595,7 @@ export async function aprovarSolicitacoesEmLote(
   });
 
   revalidatePath("/freelancers/solicitacoes");
+  revalidatePath("/freelancers");
   return { ok: true, data: { aprovadas, falharam } };
 }
 
