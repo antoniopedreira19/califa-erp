@@ -230,8 +230,6 @@ export default async function FreelancersDashboardPage() {
             {isAprovador && novidadesData && (
               <NovidadesPill
                 tenantId={session.activeTenant.id}
-                novos={novidadesData.novos}
-                preenchimentos={novidadesData.preenchimentos}
                 distratos={novidadesData.distratos}
                 contratacoes={novidadesData.contratacoes}
                 renovacoes={novidadesData.renovacoes}

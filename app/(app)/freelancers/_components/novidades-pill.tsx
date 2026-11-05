@@ -8,7 +8,6 @@ import {
   ChevronDown,
   ArrowRight,
   Check,
-  FilePlus,
   FileCheck,
   HandCoins,
 } from "lucide-react";
@@ -21,29 +20,9 @@ import { createClient } from "@/lib/supabase/client";
  * entre todos os users do tenant via tabela `notificacoes_dismissed` + Realtime.
  *
  * Chaves de dismiss (prefixadas pelo módulo):
- *   freelas:novo:<freelancer_id>
- *   freelas:aditivo:<contrato_id>
- *   freelas:preenchimento:<contrato_id>
  *   freelas:distrato-solicitado:<contrato_id>
  *   freelas:solicitacao-concluida:<solicitacao_id>
  */
-
-export interface NovoCadastroItem {
-  id: string;
-  nome_social: string;
-  created_at: string;
-  origem: "manual" | "form_publico";
-}
-
-export interface PreenchimentoItem {
-  contrato_id: string;
-  freelancer_id: string;
-  freelancer_nome: string;
-  nome_job: string;
-  cargo: string | null;
-  alterado_em: string;
-  alterado_por_nome: string | null;
-}
 
 export interface DistratoSolicitadoItem {
   contrato_id: string;
@@ -71,8 +50,6 @@ export interface SolicitacaoConcluidaItem {
 
 interface Props {
   tenantId: string;
-  novos: NovoCadastroItem[];
-  preenchimentos: PreenchimentoItem[];
   distratos: DistratoSolicitadoItem[];
   contratacoes: SolicitacaoConcluidaItem[];
   renovacoes: SolicitacaoConcluidaItem[];
@@ -92,8 +69,6 @@ function diasAtras(iso: string): string {
 
 export function NovidadesPill({
   tenantId,
-  novos,
-  preenchimentos,
   distratos,
   contratacoes,
   renovacoes,
@@ -192,10 +167,6 @@ export function NovidadesPill({
     };
   }, [aberto]);
 
-  const novosVisiveis = novos.filter((n) => !vistos.has(`freelas:novo:${n.id}`));
-  const preenchimentosVisiveis = preenchimentos.filter(
-    (p) => !vistos.has(`freelas:preenchimento:${p.contrato_id}`),
-  );
   const distratosVisiveis = distratos.filter(
     (s) => !vistos.has(`freelas:distrato-solicitado:${s.contrato_id}`),
   );
@@ -207,8 +178,6 @@ export function NovidadesPill({
   );
 
   const total =
-    novosVisiveis.length +
-    preenchimentosVisiveis.length +
     distratosVisiveis.length +
     contratacoesVisiveis.length +
     renovacoesVisiveis.length;
@@ -270,87 +239,9 @@ export function NovidadesPill({
                     Nenhuma novidade
                   </p>
                   <p className="text-[10px] text-muted-foreground mt-1">
-                    Novos cadastros, aditivos, distratos e contratos que
-                    precisam de atenção vão aparecer aqui.
+                    Distratos e contratos que precisam de atenção vão aparecer
+                    aqui.
                   </p>
-                </div>
-              )}
-              {preenchimentosVisiveis.length > 0 && (
-                <Secao
-                  titulo="Contratos preenchidos"
-                  descricao="Freelas que estavam aguardando ganharam contrato"
-                  cor="emerald"
-                  icon={FileCheck}
-                >
-                  {preenchimentosVisiveis.map((p) => (
-                    <Linha
-                      key={p.contrato_id}
-                      href={`/freelancers/${p.freelancer_id}`}
-                      corDestaque="text-emerald-700"
-                      corHoverCheck="hover:bg-emerald-50 hover:text-emerald-700"
-                      nomePrincipal={p.freelancer_nome}
-                      destaque={p.nome_job}
-                      cargo={p.cargo}
-                      quando={p.alterado_em}
-                      por={p.alterado_por_nome}
-                      onFechar={() => setAberto(false)}
-                      onDismiss={() =>
-                        marcarVisto(`freelas:preenchimento:${p.contrato_id}`)
-                      }
-                    />
-                  ))}
-                </Secao>
-              )}
-
-              {novosVisiveis.length > 0 && (
-                <div>
-                  <Cabecalho cor="muted" titulo="Novos cadastros">
-                    {novosVisiveis.length}{" "}
-                    {novosVisiveis.length === 1 ? "freelancer" : "freelancers"}{" "}
-                    pendente{novosVisiveis.length === 1 ? "" : "s"}
-                  </Cabecalho>
-                  <ul>
-                    {novosVisiveis.map((n) => (
-                      <li
-                        key={n.id}
-                        className="flex items-stretch hover:bg-muted/40 transition-colors group"
-                      >
-                        <Link
-                          href={`/freelancers/${n.id}`}
-                          prefetch={false}
-                          onClick={() => setAberto(false)}
-                          className="flex items-center justify-between gap-3 flex-1 min-w-0 pl-4 pr-2 py-2.5"
-                        >
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold text-foreground truncate">
-                              {n.nome_social}
-                            </p>
-                            <p className="text-[10px] text-muted-foreground mt-0.5 flex items-center gap-1.5">
-                              <span>{diasAtras(n.created_at)}</span>
-                              <span className="text-muted-foreground/40">·</span>
-                              <span
-                                className={cn(
-                                  "font-semibold",
-                                  n.origem === "form_publico"
-                                    ? "text-california-red"
-                                    : "text-muted-foreground",
-                                )}
-                              >
-                                {n.origem === "form_publico"
-                                  ? "formulário"
-                                  : "manual"}
-                              </span>
-                            </p>
-                          </div>
-                          <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/60 group-hover:text-california-red shrink-0" />
-                        </Link>
-                        <BotaoCheck
-                          onClick={() => marcarVisto(`freelas:novo:${n.id}`)}
-                          aria={`Marcar ${n.nome_social} como visto`}
-                        />
-                      </li>
-                    ))}
-                  </ul>
                 </div>
               )}
 

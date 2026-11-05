@@ -9,24 +9,20 @@
  *   - Contratos com origem_sistema='ag_california_rh' nunca aparecem (idem).
  *
  * As categorias:
- *   1. novos: freelas criados após cutoff (manual ou form_publico)
- *   2. preenchimentos: stubs que ganharam nome_job (via histórico)
- *   3. distratos: GP pediu distrato, RH ainda não gerou minuta
- *   4. contratacoes: freela preencheu form público (primeiro contrato)
- *   5. renovacoes: solicitação de renovação virou contrato (freela já existia)
+ *   1. distratos: GP pediu distrato, RH ainda não gerou minuta
+ *   2. contratacoes: freela preencheu form público (primeiro contrato)
+ *   3. renovacoes: solicitação de renovação virou contrato (freela já existia)
  *
  * Contratações e renovações saem da MESMA query (freelancer_solicitacoes com
  * contrato_id já criado); a distinção vem da contagem de contratos do freela.
- * A antiga seção "Aditivos" (que puxava de freelancer_contratos) foi removida:
- * renovação = solicitação a freela existente, logo solicitações são a fonte
- * única da verdade.
+ * Seções removidas por não agregarem valor: "Aditivos" (redundante com
+ * renovações da solicitação), "Novos cadastros" (todo freela nasce de
+ * solicitação) e "Preenchimentos" (base sem legados pendentes de job).
  */
 
 import { contratoDispensaMinuta } from "@/lib/utils";
 import type { createClient } from "@/lib/supabase/server";
 import type {
-  NovoCadastroItem,
-  PreenchimentoItem,
   DistratoSolicitadoItem,
   SolicitacaoConcluidaItem,
 } from "../_components/novidades-pill";
@@ -34,8 +30,6 @@ import type {
 export const CUTOFF_NOVIDADES = "2026-10-20T00:00:00.000Z";
 
 export interface DadosNovidades {
-  novos: NovoCadastroItem[];
-  preenchimentos: PreenchimentoItem[];
   distratos: DistratoSolicitadoItem[];
   contratacoes: SolicitacaoConcluidaItem[];
   renovacoes: SolicitacaoConcluidaItem[];
@@ -46,38 +40,8 @@ export async function carregarNovidades(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
 ): Promise<DadosNovidades> {
-  const [
-    novosRes,
-    preenchimentosRaw,
-    distratosRaw,
-    concluidasRaw,
-    dismissedRes,
-  ] = await Promise.all([
-    // 1. Novos cadastros
-    supabase
-      .from("freelancers")
-      .select("id, nome_social, nome_completo, created_at, origem")
-      .eq("tenant_id", tenantId)
-      .in("origem", ["manual", "form_publico"])
-      .gte("created_at", CUTOFF_NOVIDADES)
-      .order("created_at", { ascending: false })
-      .limit(50),
-
-    // 2. Preenchimentos: histórico de mudanças onde nome_job foi preenchido
-    supabase
-      .from("freelancer_contrato_historico")
-      .select(
-        "contrato_id, valor_novo, alterado_em, alterado_por, freelancer_contratos!inner(freelancer_id, nome_job, cargo, freelancers!inner(nome_social, nome_completo))",
-      )
-      .eq("tenant_id", tenantId)
-      .eq("campo", "nome_job")
-      .is("valor_anterior", null)
-      .not("valor_novo", "is", null)
-      .gte("alterado_em", CUTOFF_NOVIDADES)
-      .order("alterado_em", { ascending: false })
-      .limit(50),
-
-    // 4. Distratos solicitados pendentes
+  const [distratosRaw, concluidasRaw, dismissedRes] = await Promise.all([
+    // 1. Distratos solicitados pendentes
     supabase
       .from("freelancer_contratos")
       .select(
@@ -130,52 +94,6 @@ export async function carregarNovidades(
       .select("notification_id")
       .eq("tenant_id", tenantId),
   ]);
-
-  const novos: NovoCadastroItem[] = (novosRes.data ?? []).map((f: any) => ({
-    id: f.id,
-    // Prefere nome_completo; cai pro nome_social quando o completo está vazio.
-    nome_social: f.nome_completo || f.nome_social,
-    created_at: f.created_at,
-    origem: f.origem,
-  }));
-
-  // Pra Preenchimentos: buscar nome do profile alterador separado
-  const preenchRaw = (preenchimentosRaw.data ?? []) as any[];
-  const alteradoPorIds = Array.from(
-    new Set(preenchRaw.map((p) => p.alterado_por).filter(Boolean)),
-  );
-  const profilesMap = new Map<string, string>();
-  if (alteradoPorIds.length > 0) {
-    const { data: profs } = await supabase
-      .from("profiles")
-      .select("id, nome")
-      .in("id", alteradoPorIds);
-    for (const p of (profs ?? []) as Array<{ id: string; nome: string }>) {
-      profilesMap.set(p.id, p.nome);
-    }
-  }
-  const preenchimentos: PreenchimentoItem[] = preenchRaw
-    .map((p) => {
-      const contrato = Array.isArray(p.freelancer_contratos)
-        ? p.freelancer_contratos[0]
-        : p.freelancer_contratos;
-      if (!contrato || !p.valor_novo) return null;
-      const freela = Array.isArray(contrato.freelancers)
-        ? contrato.freelancers[0]
-        : contrato.freelancers;
-      return {
-        contrato_id: p.contrato_id,
-        freelancer_id: contrato.freelancer_id,
-        freelancer_nome: freela?.nome_completo ?? freela?.nome_social ?? "—",
-        nome_job: p.valor_novo,
-        cargo: contrato.cargo,
-        alterado_em: p.alterado_em,
-        alterado_por_nome: p.alterado_por
-          ? (profilesMap.get(p.alterado_por) ?? null)
-          : null,
-      };
-    })
-    .filter((p): p is PreenchimentoItem => p !== null);
 
   // Pra Distratos: nome do solicitante
   const distratosRawData = (distratosRaw.data ?? []) as any[];
@@ -325,17 +243,6 @@ export async function carregarNovidades(
     };
   });
 
-  // Dedup: freela cadastrado via form público gera DOIS sinais — cadastro novo
-  // em `novos` e solicitação em `concluidas`. "Concluídas" tem mais contexto
-  // (job, cargo, solicitante), então remove o duplicado de "Novos cadastros".
-  // Cadastros via `manual` (sem solicitação) seguem aparecendo só em
-  // "Novos cadastros".
-  const freelasEmConcluidas = new Set(
-    concluidas
-      .map((c) => c.freelancer_id)
-      .filter((id): id is string => !!id),
-  );
-  const novosSemDup = novos.filter((n) => !freelasEmConcluidas.has(n.id));
 
   // Separa em contratações (freela novo, count=1) vs renovações (count≥2).
   // Regra: um freela tem contratação se é o primeiro contrato dele; renovação
@@ -359,8 +266,6 @@ export async function carregarNovidades(
   ).map((r) => r.notification_id);
 
   return {
-    novos: novosSemDup,
-    preenchimentos,
     distratos,
     contratacoes,
     renovacoes,
