@@ -95,6 +95,8 @@ export function FilaDividida(p: PropsDaFila) {
   // com linhas pendentes dele, uma vez (decisão 239).
   const [extratoNovo, setExtratoNovo] = React.useState<{ arquivo: string; tipos: Tipo[] } | null>(null);
   React.useEffect(() => {
+    // A tela não remonta ao trocar de conta: a faixa da conta anterior sai.
+    setExtratoNovo(null);
     const abertas = new Set<Tipo>(JSON.parse(ler(chaveAbertas(conta)) ?? "[]") as Tipo[]);
     if (ultima && ler(chaveVisto(conta)) !== ultima.id) {
       const tipos = ORDEM.filter((t) => t !== "conciliado" && itens.some((i) => i.tipo === t && pedeAcao(i) && importacoesDoItem(i).includes(ultima.id)));
