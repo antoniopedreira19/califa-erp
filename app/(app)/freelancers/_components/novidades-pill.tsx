@@ -35,20 +35,6 @@ export interface NovoCadastroItem {
   origem: "manual" | "form_publico";
 }
 
-/**
- * Item do card "Aditivos" — contrato em freela existente, sem PDF.
- * Inclui renovações aprovadas (que agora criam contrato na hora), já que o
- * contrato recém-criado também nasce sem PDF e cai aqui naturalmente.
- */
-export interface AditivoItem {
-  contrato_id: string;
-  freelancer_id: string;
-  freelancer_nome: string;
-  nome_job: string;
-  cargo: string | null;
-  created_at: string;
-}
-
 export interface PreenchimentoItem {
   contrato_id: string;
   freelancer_id: string;
@@ -78,15 +64,18 @@ export interface SolicitacaoConcluidaItem {
   cargo: string | null;
   solicitante_nome: string | null;
   atualizado_em: string;
+  status: "aprovada" | "cadastrada" | "finalizada";
+  tipo_contrato: "mensal" | "periodo" | "diarias" | null;
+  dispensa_minuta: boolean;
 }
 
 interface Props {
   tenantId: string;
   novos: NovoCadastroItem[];
-  aditivos: AditivoItem[];
   preenchimentos: PreenchimentoItem[];
   distratos: DistratoSolicitadoItem[];
-  concluidas: SolicitacaoConcluidaItem[];
+  contratacoes: SolicitacaoConcluidaItem[];
+  renovacoes: SolicitacaoConcluidaItem[];
   dismissedIds: string[];
 }
 
@@ -104,10 +93,10 @@ function diasAtras(iso: string): string {
 export function NovidadesPill({
   tenantId,
   novos,
-  aditivos,
   preenchimentos,
   distratos,
-  concluidas,
+  contratacoes,
+  renovacoes,
   dismissedIds,
 }: Props) {
   const [aberto, setAberto] = React.useState(false);
@@ -204,25 +193,25 @@ export function NovidadesPill({
   }, [aberto]);
 
   const novosVisiveis = novos.filter((n) => !vistos.has(`freelas:novo:${n.id}`));
-  const aditivosVisiveis = aditivos.filter(
-    (a) => !vistos.has(`freelas:aditivo:${a.contrato_id}`),
-  );
   const preenchimentosVisiveis = preenchimentos.filter(
     (p) => !vistos.has(`freelas:preenchimento:${p.contrato_id}`),
   );
   const distratosVisiveis = distratos.filter(
     (s) => !vistos.has(`freelas:distrato-solicitado:${s.contrato_id}`),
   );
-  const concluidasVisiveis = concluidas.filter(
+  const contratacoesVisiveis = contratacoes.filter(
+    (s) => !vistos.has(`freelas:solicitacao-concluida:${s.solicitacao_id}`),
+  );
+  const renovacoesVisiveis = renovacoes.filter(
     (s) => !vistos.has(`freelas:solicitacao-concluida:${s.solicitacao_id}`),
   );
 
   const total =
     novosVisiveis.length +
-    aditivosVisiveis.length +
     preenchimentosVisiveis.length +
     distratosVisiveis.length +
-    concluidasVisiveis.length;
+    contratacoesVisiveis.length +
+    renovacoesVisiveis.length;
 
   const semNovidades = total === 0;
 
@@ -269,7 +258,7 @@ export function NovidadesPill({
           <div
             ref={popRef}
             style={{ top: pos.top, left: pos.left }}
-            className="fixed z-50 w-[320px] rounded-xl border border-border bg-white shadow-elevated overflow-hidden"
+            className="fixed z-50 w-[420px] rounded-xl border border-border bg-white shadow-elevated overflow-hidden"
           >
             <div className="max-h-[420px] overflow-y-auto divide-y divide-border">
               {semNovidades && (
@@ -365,37 +354,6 @@ export function NovidadesPill({
                 </div>
               )}
 
-              {aditivosVisiveis.length > 0 && (
-                <Secao
-                  titulo="Aditivos"
-                  descricao="Novos contratos em freelas existentes · gerar minuta e anexar PDF"
-                  cor="sky"
-                  icon={FilePlus}
-                >
-                  {aditivosVisiveis.map((a) => (
-                    <Linha
-                      key={a.contrato_id}
-                      // Perfil do freela com a aba Contratos ativa — RH vê
-                      // o card do contrato novo com os botões "Gerar minuta"
-                      // e "Anexar assinado" direto nele, mantendo também o
-                      // contexto dos outros contratos daquele freela.
-                      href={`/freelancers/${a.freelancer_id}?aba=contratos`}
-                      corDestaque="text-sky-700"
-                      corHoverCheck="hover:bg-sky-50 hover:text-sky-700"
-                      nomePrincipal={a.freelancer_nome}
-                      destaque={a.nome_job}
-                      cargo={a.cargo}
-                      quando={a.created_at}
-                      por={null}
-                      onFechar={() => setAberto(false)}
-                      onDismiss={() =>
-                        marcarVisto(`freelas:aditivo:${a.contrato_id}`)
-                      }
-                    />
-                  ))}
-                </Secao>
-              )}
-
               {distratosVisiveis.length > 0 && (
                 <Secao
                   titulo="Solicitações de distrato"
@@ -432,26 +390,45 @@ export function NovidadesPill({
                 </Secao>
               )}
 
-              {concluidasVisiveis.length > 0 && (
+              {contratacoesVisiveis.length > 0 && (
                 <Secao
-                  titulo="Solicitações concluídas"
-                  descricao="Contrato criado · falta anexar PDF"
+                  titulo="Novas contratações"
+                  descricao="Freela preencheu o formulário"
                   cor="sky"
                   icon={FileCheck}
                 >
-                  {concluidasVisiveis.map((s) => (
-                    <Linha
+                  {contratacoesVisiveis.map((s) => (
+                    <LinhaSolicitacao
                       key={s.solicitacao_id}
-                      href={
-                        s.freelancer_id ? `/freelancers/${s.freelancer_id}` : null
-                      }
+                      sol={s}
                       corDestaque="text-sky-700"
                       corHoverCheck="hover:bg-sky-50 hover:text-sky-700"
-                      nomePrincipal={s.freelancer_nome}
-                      destaque={s.nome_job}
-                      cargo={s.cargo}
-                      quando={s.atualizado_em}
-                      por={s.solicitante_nome}
+                      chipTipoCor="bg-sky-100 text-sky-800"
+                      onFechar={() => setAberto(false)}
+                      onDismiss={() =>
+                        marcarVisto(
+                          `freelas:solicitacao-concluida:${s.solicitacao_id}`,
+                        )
+                      }
+                    />
+                  ))}
+                </Secao>
+              )}
+
+              {renovacoesVisiveis.length > 0 && (
+                <Secao
+                  titulo="Renovações aprovadas"
+                  descricao="Freela que já existia · novo contrato criado"
+                  cor="violet"
+                  icon={FileCheck}
+                >
+                  {renovacoesVisiveis.map((s) => (
+                    <LinhaSolicitacao
+                      key={s.solicitacao_id}
+                      sol={s}
+                      corDestaque="text-violet-700"
+                      corHoverCheck="hover:bg-violet-50 hover:text-violet-700"
+                      chipTipoCor="bg-violet-100 text-violet-800"
                       onFechar={() => setAberto(false)}
                       onDismiss={() =>
                         marcarVisto(
@@ -515,7 +492,7 @@ function Secao({
 }: {
   titulo: string;
   descricao: string;
-  cor: "emerald" | "sky" | "amber";
+  cor: "emerald" | "sky" | "amber" | "violet";
   icon: React.ElementType;
   children: React.ReactNode;
 }) {
@@ -523,11 +500,13 @@ function Secao({
     emerald: "bg-emerald-50/60",
     sky: "bg-sky-50/60",
     amber: "bg-amber-50/60",
+    violet: "bg-violet-50/60",
   }[cor];
   const text = {
     emerald: "text-emerald-700",
     sky: "text-sky-700",
     amber: "text-amber-700",
+    violet: "text-violet-700",
   }[cor];
   return (
     <div>
@@ -626,6 +605,123 @@ function Linha({
         </div>
       )}
       <BotaoCheck onClick={onDismiss} aria={`Marcar ${nomePrincipal} como visto`} corHover={corHoverCheck} />
+    </li>
+  );
+}
+
+const TIPO_CONTRATO_LABEL = {
+  mensal: "Mensal",
+  diarias: "Diária",
+  periodo: "Período",
+} as const;
+
+/** Linha específica das seções "Novas contratações" e "Renovações aprovadas".
+ *  Mostra o nome + job + chip de tipo + destaque pra dispensa + label de ação
+ *  pendente (gerar minuta / nada). */
+function LinhaSolicitacao({
+  sol,
+  corDestaque,
+  corHoverCheck,
+  chipTipoCor,
+  onFechar,
+  onDismiss,
+}: {
+  sol: SolicitacaoConcluidaItem;
+  corDestaque: string;
+  corHoverCheck: string;
+  chipTipoCor: string;
+  onFechar: () => void;
+  onDismiss: () => void;
+}) {
+  const href = sol.freelancer_id ? `/freelancers/${sol.freelancer_id}` : null;
+  const tipoLabel = sol.tipo_contrato
+    ? TIPO_CONTRATO_LABEL[sol.tipo_contrato]
+    : null;
+  // Gera minuta:
+  //   - Renovação em 'aprovada' = contrato criado, aguarda minuta
+  //   - Contratação em 'cadastrada' = freela preencheu, aguarda minuta
+  // Em 'finalizada' a minuta já foi gerada (ou é dispensa).
+  const precisaGerarMinuta =
+    sol.status === "aprovada" || sol.status === "cadastrada";
+  const conteudo = (
+    <div className="min-w-0">
+      <div className="flex items-center gap-1.5 flex-wrap">
+        <p className="text-xs font-semibold text-foreground truncate">
+          {sol.freelancer_nome}
+        </p>
+        {tipoLabel && (
+          <span
+            className={cn(
+              "text-[9px] font-bold uppercase tracking-wider rounded px-1.5 py-0.5 shrink-0",
+              chipTipoCor,
+            )}
+          >
+            {tipoLabel}
+          </span>
+        )}
+      </div>
+      <p
+        className={cn("text-[10px] font-semibold mt-0.5 truncate", corDestaque)}
+      >
+        {sol.nome_job}
+        {sol.cargo && (
+          <>
+            <span className="text-muted-foreground/40 font-normal">
+              {" · "}
+            </span>
+            <span className="text-muted-foreground font-normal">
+              {sol.cargo}
+            </span>
+          </>
+        )}
+      </p>
+      <p className="text-[10px] text-muted-foreground/80 mt-0.5">
+        {diasAtras(sol.atualizado_em)}
+        {sol.solicitante_nome && (
+          <>
+            <span className="text-muted-foreground/40 mx-1">·</span>
+            por <span className="font-semibold">{sol.solicitante_nome}</span>
+          </>
+        )}
+      </p>
+      {sol.dispensa_minuta ? (
+        <p className="text-[10px] font-semibold text-emerald-700 mt-1">
+          ✓ Diária curta · dispensa minuta
+        </p>
+      ) : precisaGerarMinuta ? (
+        <p className="text-[10px] font-semibold text-amber-700 mt-1">
+          → Gerar minuta
+        </p>
+      ) : (
+        <p className="text-[10px] text-muted-foreground/70 mt-1">
+          Minuta pronta · nada a fazer
+        </p>
+      )}
+    </div>
+  );
+
+  return (
+    <li className="flex items-stretch hover:bg-muted/40 transition-colors group">
+      {href ? (
+        <Link
+          href={href}
+          prefetch={false}
+          onClick={onFechar}
+          className="flex items-center justify-between gap-3 flex-1 min-w-0 pl-4 pr-2 py-2.5"
+        >
+          {conteudo}
+          <ArrowRight className="h-3.5 w-3.5 text-muted-foreground/60 group-hover:text-california-red shrink-0" />
+        </Link>
+      ) : (
+        <div className="flex items-center justify-between gap-3 flex-1 min-w-0 pl-4 pr-2 py-2.5">
+          {conteudo}
+        </div>
+      )}
+      <BotaoCheck
+        onClick={onDismiss}
+        aria={`Marcar ${sol.freelancer_nome} como visto`}
+        corHover={corHoverCheck}
+      />
     </li>
   );
 }

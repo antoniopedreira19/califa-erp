@@ -231,10 +231,10 @@ export default async function FreelancersDashboardPage() {
               <NovidadesPill
                 tenantId={session.activeTenant.id}
                 novos={novidadesData.novos}
-                aditivos={novidadesData.aditivos}
                 preenchimentos={novidadesData.preenchimentos}
                 distratos={novidadesData.distratos}
-                concluidas={novidadesData.concluidas}
+                contratacoes={novidadesData.contratacoes}
+                renovacoes={novidadesData.renovacoes}
                 dismissedIds={novidadesData.dismissedIds}
               />
             )}
