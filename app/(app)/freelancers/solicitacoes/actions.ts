@@ -40,6 +40,36 @@ export async function criarSolicitacao(
 
   const origem = parsed.data.job_origem;
   const supabase = createClient();
+
+  // Regra de negócio: um freela não pode ter 2 vínculos ativos ao mesmo
+  // tempo. Bloqueia se o freela tiver qualquer solicitação em andamento
+  // (pendente/aprovada/cadastrada) ou contrato ativo. Só aplica quando o
+  // form identificou o freela (freelancer_id setado — pelo CPF casando
+  // com cadastro existente). Freela realmente novo não tem como colidir.
+  let freelancerIdResolvido = parsed.data.freelancer_id ?? null;
+  if (!freelancerIdResolvido && parsed.data.cpf_freela) {
+    const { data: freelaByCpf } = await supabase
+      .from("freelancers")
+      .select("id")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("cpf", parsed.data.cpf_freela)
+      .maybeSingle();
+    freelancerIdResolvido =
+      (freelaByCpf as { id: string } | null)?.id ?? null;
+  }
+  if (freelancerIdResolvido) {
+    const bloqueio = await verificarFreelaDisponivel(
+      supabase,
+      session.activeTenant.id,
+      freelancerIdResolvido,
+      parsed.data.data_inicio ?? null,
+      parsed.data.data_termino ?? null,
+    );
+    if (!bloqueio.ok) {
+      return { ok: false, message: bloqueio.message };
+    }
+  }
+
   const { data, error } = await supabase
     .from("freelancer_solicitacoes")
     .insert({
@@ -80,6 +110,103 @@ export async function criarSolicitacao(
 
   revalidatePath("/freelancers/solicitacoes");
   return { ok: true, data: { id: data.id } };
+}
+
+/**
+ * Verifica se o freela está disponível pra uma nova solicitação no período
+ * pedido. Bloqueia se houver qualquer sobreposição de período com:
+ *   - Contrato existente não encerrado (status_real = true)
+ *   - Solicitação em andamento não-rejeitada/cancelada (pendente/aprovada/
+ *     cadastrada/finalizada — inclui finalizada pra pegar contratações que
+ *     já viraram contrato mas também bloqueiam novos pedidos sobrepostos)
+ *
+ * Período "aberto" (sem data_termino) conta como "até +∞" pra sobreposição.
+ * Se o novo pedido não tem período definido, bloqueia sempre que houver
+ * solicitação/contrato não-encerrado.
+ *
+ * Regra de negócio: um freela não pode acumular 2 vínculos em datas que se
+ * sobreponham. Diferentes jobs não são exceção.
+ */
+async function verificarFreelaDisponivel(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  freelancerId: string,
+  dataInicioNova: string | null,
+  dataTerminoNova: string | null,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  // Convenções pra sobreposição:
+  //   - Período aberto em qualquer lado vira ±∞
+  //   - Overlap = max(inicios) <= min(terminos)
+  const INFINITO_PASSADO = "0001-01-01";
+  const INFINITO_FUTURO = "9999-12-31";
+  const novoInicio = dataInicioNova ?? INFINITO_PASSADO;
+  const novoFim = dataTerminoNova ?? INFINITO_FUTURO;
+
+  // 1. Contratos do freela com status_real = true (não encerrados)
+  const { data: contratos } = await supabase
+    .from("freelancer_contratos")
+    .select("id, nome_job, data_inicio, data_termino")
+    .eq("tenant_id", tenantId)
+    .eq("freelancer_id", freelancerId)
+    .eq("status_real", true);
+  for (const c of (contratos ?? []) as Array<{
+    nome_job: string | null;
+    data_inicio: string | null;
+    data_termino: string | null;
+  }>) {
+    const cInicio = c.data_inicio ?? INFINITO_PASSADO;
+    const cFim = c.data_termino ?? INFINITO_FUTURO;
+    if (novoInicio <= cFim && cInicio <= novoFim) {
+      const periodo =
+        c.data_inicio && c.data_termino
+          ? ` (${formatBr(c.data_inicio)} → ${formatBr(c.data_termino)})`
+          : c.data_inicio
+            ? ` (desde ${formatBr(c.data_inicio)})`
+            : "";
+      return {
+        ok: false,
+        message: `Este freela tem contrato em "${c.nome_job ?? "—"}"${periodo} que se sobrepõe ao período pedido. Finalize/encerre antes de criar nova solicitação.`,
+      };
+    }
+  }
+
+  // 2. Solicitações do freela em andamento ou já convertidas em contrato
+  const { data: sols } = await supabase
+    .from("freelancer_solicitacoes")
+    .select("id, status, nome_job, data_inicio, data_termino, contrato_id")
+    .eq("tenant_id", tenantId)
+    .eq("freelancer_id", freelancerId)
+    .in("status", ["pendente", "aprovada", "cadastrada", "finalizada"]);
+  for (const s of (sols ?? []) as Array<{
+    status: string;
+    nome_job: string | null;
+    data_inicio: string | null;
+    data_termino: string | null;
+    contrato_id: string | null;
+  }>) {
+    // Solicitação finalizada cujo contrato já foi encerrado (deleta/distrato)
+    // não deve bloquear — o passo 1 já pegaria se estivesse ativo.
+    if (s.status === "finalizada" && !s.contrato_id) continue;
+    const sInicio = s.data_inicio ?? INFINITO_PASSADO;
+    const sFim = s.data_termino ?? INFINITO_FUTURO;
+    if (novoInicio <= sFim && sInicio <= novoFim) {
+      const periodo =
+        s.data_inicio && s.data_termino
+          ? ` (${formatBr(s.data_inicio)} → ${formatBr(s.data_termino)})`
+          : "";
+      return {
+        ok: false,
+        message: `Este freela já tem solicitação em "${s.nome_job ?? "—"}"${periodo}, status ${s.status}. O período pedido se sobrepõe. Finalize/cancele antes de criar outra.`,
+      };
+    }
+  }
+
+  return { ok: true };
+}
+
+function formatBr(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${d}/${m}/${y}`;
 }
 
 export async function aprovarSolicitacao(
