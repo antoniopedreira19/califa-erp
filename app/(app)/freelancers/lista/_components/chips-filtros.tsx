@@ -8,13 +8,11 @@ import {
   STATUS_FILTRAVEIS,
   STATUS_LABEL,
 } from "../../_components/status-badge";
-import { ACOES_PREVISTAS } from "./acao-prevista-badge";
 
 /**
- * Três grupos de chips de filtro:
+ * Dois grupos de chips de filtro:
  * - Status do trabalho (status_real): Trabalhando / Inativo → ?trabalho=
  * - Status do contrato (status_calculado): Todos + 8 estados → ?status=
- * - Decisões futuras (acao_prevista): 5 ações + Sem decisão → ?acao=
  */
 
 const TRABALHO_CHIPS: Array<{
@@ -51,15 +49,6 @@ const STATUS_VARIANT: Record<string, Variant> = {
   limbo: "neutral",
 };
 
-const ACAO_VARIANT: Record<string, Variant> = {
-  contratar: "default",
-  renovar: "success",
-  manter: "violet",
-  substituir: "warning",
-  encerrar: "danger",
-  sem_decisao: "muted",
-};
-
 export function ChipsFiltros() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -68,12 +57,6 @@ export function ChipsFiltros() {
 
   const statusAtivos = React.useMemo(() => {
     const raw = searchParams.get("status");
-    if (!raw) return new Set<string>();
-    return new Set(raw.split(",").filter(Boolean));
-  }, [searchParams]);
-
-  const acoesAtivas = React.useMemo(() => {
-    const raw = searchParams.get("acao");
     if (!raw) return new Set<string>();
     return new Set(raw.split(",").filter(Boolean));
   }, [searchParams]);
@@ -102,22 +85,11 @@ export function ChipsFiltros() {
     });
   }
 
-  function toggleAcao(v: string) {
-    const nova = new Set(acoesAtivas);
-    if (nova.has(v)) nova.delete(v);
-    else nova.add(v);
-    alterar((p) => {
-      if (nova.size > 0) p.set("acao", Array.from(nova).join(","));
-      else p.delete("acao");
-    });
-  }
-
   // Chaves de filtro que o Limpar remove. "card" tb entra porque virou URL
   // ao clicar nos 4 cards de analise no topo.
   const CHAVES_FILTRO = [
     "trabalho",
     "status",
-    "acao",
     "card",
     "responsavel",
     "job",
@@ -186,18 +158,6 @@ export function ChipsFiltros() {
         ))}
       </FilterGroup>
 
-      <FilterGroup label="Decisões futuras">
-        {ACOES_PREVISTAS.map((a) => (
-          <Chip
-            key={a.value}
-            active={acoesAtivas.has(a.value)}
-            onClick={() => toggleAcao(a.value)}
-            variant={ACAO_VARIANT[a.value] ?? "default"}
-          >
-            {a.label}
-          </Chip>
-        ))}
-      </FilterGroup>
     </div>
   );
 }

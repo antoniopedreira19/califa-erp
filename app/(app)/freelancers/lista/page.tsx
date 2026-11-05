@@ -16,15 +16,6 @@ import { jobsProPickerDeFreelancer } from "@/lib/data/jobs-pro-picker-de-freelan
 
 export const dynamic = "force-dynamic";
 
-const ACOES_VALIDAS = new Set([
-  "contratar",
-  "renovar",
-  "manter",
-  "substituir",
-  "encerrar",
-  "sem_decisao",
-]);
-
 const STATUS_VALIDOS = new Set([
   "regular",
   "vencendo",
@@ -49,7 +40,6 @@ export default async function FreelancersListaPage({
 }: {
   searchParams: {
     q?: string;
-    acao?: string;
     status?: string;
     card?: string;
     inicio_apos?: string;
@@ -86,25 +76,6 @@ export default async function FreelancersListaPage({
   // Busca por nome/CPF é 100% client-side em `ListaClient` — sem round-trip
   // no servidor nem param na URL. Só os filtros que vêm dos dropdowns/chips
   // continuam sendo passados via query string (persistem link compartilhável).
-
-  // Filtro por ação prevista
-  const acoesFiltro = (searchParams.acao ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s) => ACOES_VALIDAS.has(s));
-
-  if (acoesFiltro.length > 0) {
-    const temSemDecisao = acoesFiltro.includes("sem_decisao");
-    const acoesConcretas = acoesFiltro.filter((a) => a !== "sem_decisao");
-    if (temSemDecisao && acoesConcretas.length > 0) {
-      const inList = acoesConcretas.join(",");
-      query = query.or(`acao_prevista.is.null,acao_prevista.in.(${inList})`);
-    } else if (temSemDecisao) {
-      query = query.is("acao_prevista", null);
-    } else {
-      query = query.in("acao_prevista", acoesConcretas);
-    }
-  }
 
   // Filtro por status_calculado via chips
   const statusFiltro = (searchParams.status ?? "")
