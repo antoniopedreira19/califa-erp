@@ -397,7 +397,7 @@ export function SolicitacoesTabela({
     { key: "total", label: "Total", valor: totalContagem, cor: "text-foreground", dot: "bg-muted-foreground/40" },
     { key: "pendente", label: "Pendentes", valor: contagens.pendente ?? 0, cor: "text-amber-700", dot: "bg-amber-500" },
     { key: "aprovada", label: "Aprovadas", valor: contagens.aprovada ?? 0, cor: "text-sky-700", dot: "bg-sky-500" },
-    { key: "cadastrada", label: "Concluídas", valor: contagens.cadastrada ?? 0, cor: "text-emerald-700", dot: "bg-emerald-500" },
+    { key: "cadastrada", label: "Cadastradas", valor: contagens.cadastrada ?? 0, cor: "text-emerald-700", dot: "bg-emerald-500" },
     { key: "rejeitada", label: "Rejeitadas", valor: contagens.rejeitada ?? 0, cor: "text-california-red", dot: "bg-california-red" },
     { key: "cancelada", label: "Canceladas", valor: contagens.cancelada ?? 0, cor: "text-muted-foreground", dot: "bg-zinc-400" },
   ];
