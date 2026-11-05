@@ -51,7 +51,7 @@ export default async function SolicitacoesPage({
   let query = supabase
     .from("freelancer_solicitacoes")
     .select(
-      "*, solicitante:profiles!solicitante_id(nome, email)",
+      "*, solicitante:profiles!solicitante_id(nome, email), aprovador:profiles!aprovado_por(nome)",
     )
     .eq("tenant_id", tenantId);
 
@@ -240,6 +240,7 @@ export default async function SolicitacoesPage({
       nome_freela_display: nomeCompleto ?? s.nome_freela,
       solicitante_nome: s.solicitante?.nome ?? null,
       solicitante_email: s.solicitante?.email ?? null,
+      aprovador_nome: s.aprovador?.nome ?? null,
       job_codigo: jobProducao?.codigo ?? null,
       job_nome:
         jobProducao?.nome ?? jobInterno?.nome ?? s.nome_job ?? null,

@@ -34,6 +34,7 @@ interface SolicitacaoLinha extends FreelancerSolicitacao {
   nome_freela_display: string;
   solicitante_nome: string | null;
   solicitante_email: string | null;
+  aprovador_nome: string | null;
   job_codigo: string | null;
   job_nome: string | null;
   tipo_solicitacao: TipoSolicitacao;
@@ -396,7 +397,7 @@ export function SolicitacoesTabela({
     { key: "total", label: "Total", valor: totalContagem, cor: "text-foreground", dot: "bg-muted-foreground/40" },
     { key: "pendente", label: "Pendentes", valor: contagens.pendente ?? 0, cor: "text-amber-700", dot: "bg-amber-500" },
     { key: "aprovada", label: "Aprovadas", valor: contagens.aprovada ?? 0, cor: "text-sky-700", dot: "bg-sky-500" },
-    { key: "cadastrada", label: "Cadastradas", valor: contagens.cadastrada ?? 0, cor: "text-emerald-700", dot: "bg-emerald-500" },
+    { key: "cadastrada", label: "Concluídas", valor: contagens.cadastrada ?? 0, cor: "text-emerald-700", dot: "bg-emerald-500" },
     { key: "rejeitada", label: "Rejeitadas", valor: contagens.rejeitada ?? 0, cor: "text-california-red", dot: "bg-california-red" },
     { key: "cancelada", label: "Canceladas", valor: contagens.cancelada ?? 0, cor: "text-muted-foreground", dot: "bg-zinc-400" },
   ];
@@ -846,7 +847,15 @@ function SolicitacaoRow({
         })}
       </td>
       <td className="px-3 py-2.5 text-center">
-        <ChipStatusSolicitacao status={statusAtivo} />
+        <div className="inline-flex flex-col items-center gap-0.5">
+          <ChipStatusSolicitacao status={statusAtivo} />
+          {s.aprovador_nome &&
+            (statusAtivo === "aprovada" || statusAtivo === "cadastrada") && (
+              <span className="text-[10px] text-muted-foreground tabular-nums whitespace-nowrap">
+                por {nomeCurto(s.aprovador_nome)}
+              </span>
+            )}
+        </div>
       </td>
     </tr>
   );

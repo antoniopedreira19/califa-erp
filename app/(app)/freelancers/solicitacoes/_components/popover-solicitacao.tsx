@@ -42,6 +42,7 @@ interface SolicitacaoLinha extends FreelancerSolicitacao {
   nome_freela_display?: string;
   solicitante_nome: string | null;
   solicitante_email: string | null;
+  aprovador_nome?: string | null;
   job_codigo: string | null;
   job_nome: string | null;
 }
