@@ -119,7 +119,7 @@ export default async function SolicitacoesPage({
     supabase.rpc("get_freelancer_solicitacao_mensagens_nao_lidas"),
     supabase
       .from("freelancer_solicitacoes")
-      .select("status")
+      .select("status, created_at")
       .eq("tenant_id", tenantId),
     // Lista única de solicitantes (pra filtro). Admin vê todos, GP só a si
     // mesmo (via RLS). Query separada do join principal pra evitar explosão
@@ -259,7 +259,11 @@ export default async function SolicitacoesPage({
     naoLidasMap[linha.solicitacao_id] = Number(linha.nao_lidas);
   }
 
-  // Contagens globais por status
+  // Contagens globais por status + sinais de urgência pros cards principais:
+  //   - maisAntigaPendenteISO: data da pendente mais antiga (quanto tempo o
+  //     RH tá devendo a aprovação).
+  //   - aprovadasMaisDeSeteDias: quantas estão aprovadas mas o freela ainda
+  //     não cadastrou há mais de uma semana — sinal de cobrança ao freela.
   const contagens: Record<string, number> = {
     pendente: 0,
     aprovada: 0,
@@ -268,10 +272,31 @@ export default async function SolicitacoesPage({
     rejeitada: 0,
     cancelada: 0,
   };
-  for (const r of (contagensRes.data ?? []) as Array<{ status: string }>) {
+  let maisAntigaPendenteISO: string | null = null;
+  const seteDiasAtrasMs = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  let aprovadasMaisDeSeteDias = 0;
+  for (const r of (contagensRes.data ?? []) as Array<{
+    status: string;
+    created_at: string;
+  }>) {
     if (r.status in contagens) contagens[r.status] += 1;
+    if (r.status === "pendente") {
+      if (!maisAntigaPendenteISO || r.created_at < maisAntigaPendenteISO) {
+        maisAntigaPendenteISO = r.created_at;
+      }
+    }
+    if (
+      r.status === "aprovada" &&
+      new Date(r.created_at).getTime() < seteDiasAtrasMs
+    ) {
+      aprovadasMaisDeSeteDias += 1;
+    }
   }
   const totalContagem = Object.values(contagens).reduce((a, b) => a + b, 0);
+  const indicadoresAcao = {
+    maisAntigaPendenteISO,
+    aprovadasMaisDeSeteDias,
+  };
 
   // Lista única de solicitantes (pra popular o filtro)
   const solicitantesMap = new Map<string, string>();
@@ -318,6 +343,7 @@ export default async function SolicitacoesPage({
         solicitacoes={solicitacoes}
         contagens={contagens}
         totalContagem={totalContagem}
+        indicadoresAcao={indicadoresAcao}
         solicitantesDisponiveis={solicitantesDisponiveis}
         cargosDisponiveis={cargosDisponiveis}
         jobsDisponiveis={jobsDisponiveis}

@@ -13,6 +13,9 @@ import {
   ArrowUpDown,
   Check,
   Loader2,
+  AlertCircle,
+  UserPlus,
+  FileSignature,
 } from "lucide-react";
 import { cn, formatCurrency, formatCpf, nomeCurto } from "@/lib/utils";
 import type {
@@ -44,6 +47,12 @@ interface Props {
   solicitacoes: SolicitacaoLinha[];
   contagens: Record<string, number>;
   totalContagem: number;
+  /** Sinais pros cards de ação do topo — calculados no server pra evitar
+   *  round-trip de todas as linhas. */
+  indicadoresAcao: {
+    maisAntigaPendenteISO: string | null;
+    aprovadasMaisDeSeteDias: number;
+  };
   solicitantesDisponiveis: Array<{ id: string; nome: string }>;
   cargosDisponiveis: string[];
   jobsDisponiveis: Array<{ id: string; label: string }>;
@@ -63,6 +72,22 @@ function norm(s: string | null | undefined): string {
     .toLowerCase()
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "");
+}
+
+/** "há 2 dias" / "há 5 h" / "agora". Usa pt-BR na legenda dos cards. */
+function haQuantoTempo(iso: string): string {
+  const agora = Date.now();
+  const alvo = new Date(iso).getTime();
+  const diffMs = agora - alvo;
+  if (diffMs < 60 * 60 * 1000) return "agora";
+  const horas = Math.floor(diffMs / (60 * 60 * 1000));
+  if (horas < 24) return `há ${horas} h`;
+  const dias = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+  if (dias === 1) return "há 1 dia";
+  if (dias < 30) return `há ${dias} dias`;
+  const meses = Math.floor(dias / 30);
+  if (meses === 1) return "há 1 mês";
+  return `há ${meses} meses`;
 }
 
 // Prioridade dos status pra ordem padrão. Pendente primeiro — é o que exige
@@ -97,6 +122,7 @@ export function SolicitacoesTabela({
   solicitacoes,
   contagens,
   totalContagem,
+  indicadoresAcao,
   solicitantesDisponiveis,
   cargosDisponiveis,
   jobsDisponiveis,
@@ -200,6 +226,19 @@ export function SolicitacoesTabela({
     alterarQueryString((p) => {
       if (nova.size > 0) p.set("status", Array.from(nova).join(","));
       else p.delete("status");
+    });
+  }
+
+  /**
+   * Usado pelos cards de ação do topo: cada card representa uma intenção
+   * ("ver só pendentes"), então substitui o conjunto de status em vez de
+   * togglar. Clicar no card já ativo limpa.
+   */
+  function aplicarStatusExclusivo(v: FreelancerSolicitacaoStatus) {
+    alterarQueryString((p) => {
+      const jaSoEsse = statusAtivos.size === 1 && statusAtivos.has(v);
+      if (jaSoEsse) p.delete("status");
+      else p.set("status", v);
     });
   }
 
@@ -387,45 +426,194 @@ export function SolicitacoesTabela({
     }
   }
 
-  // KPI cards
-  const cards: Array<{
-    key: string;
+  // Cards principais: as 3 situações onde o RH tem AÇÃO. Clique filtra a lista
+  // pra aquele status (exclusivo). Legenda contextual transforma o número em
+  // urgência ("há X dias", "N há +7d").
+  const cardsAcao: Array<{
+    key: FreelancerSolicitacaoStatus;
+    titulo: string;
+    valor: number;
+    legenda: string | null;
+    icone: React.ComponentType<{ className?: string }>;
+    acento: string;
+    acentoBg: string;
+    numeroCor: string;
+  }> = [
+    {
+      key: "pendente",
+      titulo: "Pra você aprovar",
+      valor: contagens.pendente ?? 0,
+      legenda: indicadoresAcao.maisAntigaPendenteISO
+        ? `mais antiga ${haQuantoTempo(indicadoresAcao.maisAntigaPendenteISO)}`
+        : null,
+      icone: AlertCircle,
+      acento: "text-amber-700",
+      acentoBg: "bg-amber-50 border-amber-200",
+      numeroCor: "text-amber-700",
+    },
+    {
+      key: "aprovada",
+      titulo: "Aguardando o freela",
+      valor: contagens.aprovada ?? 0,
+      legenda:
+        indicadoresAcao.aprovadasMaisDeSeteDias > 0
+          ? `${indicadoresAcao.aprovadasMaisDeSeteDias} há + de 7 dias`
+          : null,
+      icone: UserPlus,
+      acento: "text-sky-700",
+      acentoBg: "bg-sky-50 border-sky-200",
+      numeroCor: "text-sky-700",
+    },
+    {
+      key: "cadastrada",
+      titulo: "Minuta pronta pra gerar",
+      valor: contagens.cadastrada ?? 0,
+      legenda: null,
+      icone: FileSignature,
+      acento: "text-emerald-700",
+      acentoBg: "bg-emerald-50 border-emerald-200",
+      numeroCor: "text-emerald-700",
+    },
+  ];
+
+  // Linha fina de pills — histórico, sem destaque mas clicável.
+  const pillsHistorico: Array<{
+    key: FreelancerSolicitacaoStatus | "total";
     label: string;
     valor: number;
-    cor: string;
     dot: string;
   }> = [
-    { key: "total", label: "Total", valor: totalContagem, cor: "text-foreground", dot: "bg-muted-foreground/40" },
-    { key: "pendente", label: "Pendentes", valor: contagens.pendente ?? 0, cor: "text-amber-700", dot: "bg-amber-500" },
-    { key: "aprovada", label: "Aprovadas", valor: contagens.aprovada ?? 0, cor: "text-sky-700", dot: "bg-sky-500" },
-    { key: "cadastrada", label: "Cadastradas", valor: contagens.cadastrada ?? 0, cor: "text-emerald-700", dot: "bg-emerald-500" },
-    { key: "finalizada", label: "Finalizadas", valor: contagens.finalizada ?? 0, cor: "text-violet-700", dot: "bg-violet-500" },
-    { key: "rejeitada", label: "Rejeitadas", valor: contagens.rejeitada ?? 0, cor: "text-california-red", dot: "bg-california-red" },
-    { key: "cancelada", label: "Canceladas", valor: contagens.cancelada ?? 0, cor: "text-muted-foreground", dot: "bg-zinc-400" },
+    {
+      key: "finalizada",
+      label: "Finalizadas",
+      valor: contagens.finalizada ?? 0,
+      dot: "bg-violet-500",
+    },
+    {
+      key: "rejeitada",
+      label: "Rejeitadas",
+      valor: contagens.rejeitada ?? 0,
+      dot: "bg-california-red",
+    },
+    {
+      key: "cancelada",
+      label: "Canceladas",
+      valor: contagens.cancelada ?? 0,
+      dot: "bg-zinc-400",
+    },
+    { key: "total", label: "Total", valor: totalContagem, dot: "bg-muted-foreground/40" },
   ];
 
   return (
     <div className="space-y-5">
-      {/* KPI cards */}
+      {/* Cards principais: o que precisa de atenção. Clique = filtro. */}
       <section>
         <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground mb-3">
-          Análise rápida
+          Precisa de atenção
         </p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          {cards.map((c) => (
-            <div
-              key={c.key}
-              className="rounded-2xl border border-border bg-white p-4"
-            >
-              <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
-                <span className={cn("h-1.5 w-1.5 rounded-full", c.dot)} />
-                {c.label}
-              </div>
-              <p className={cn("mt-1 text-3xl font-bold tabular-nums", c.cor)}>
-                {c.valor}
-              </p>
-            </div>
-          ))}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {cardsAcao.map((c) => {
+            const Icone = c.icone;
+            const ativo = statusAtivos.size === 1 && statusAtivos.has(c.key);
+            return (
+              <button
+                key={c.key}
+                type="button"
+                onClick={() => aplicarStatusExclusivo(c.key)}
+                className={cn(
+                  "group text-left rounded-2xl border bg-white p-4 transition-all shadow-soft",
+                  "hover:border-foreground/20 hover:shadow-md",
+                  ativo
+                    ? "ring-2 ring-california-red/40 border-california-red/40"
+                    : "border-border",
+                )}
+                aria-pressed={ativo}
+                title={ativo ? "Clique pra limpar o filtro" : `Filtrar por ${c.titulo.toLowerCase()}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">
+                      {c.titulo}
+                    </p>
+                    <p
+                      className={cn(
+                        "mt-1 text-4xl font-bold tabular-nums",
+                        c.numeroCor,
+                      )}
+                    >
+                      {c.valor}
+                    </p>
+                    <p
+                      className={cn(
+                        "mt-1 text-[11px] font-medium",
+                        c.legenda ? c.acento : "text-muted-foreground/50",
+                      )}
+                    >
+                      {c.legenda ?? (c.valor === 0 ? "nada agora" : "em dia")}
+                    </p>
+                  </div>
+                  <div
+                    className={cn(
+                      "flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border",
+                      c.acentoBg,
+                    )}
+                  >
+                    <Icone className={cn("h-4 w-4", c.acento)} />
+                  </div>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Linha fina: histórico — compacto, clicável */}
+        <div className="mt-3 flex flex-wrap items-center gap-2 text-[11px]">
+          {pillsHistorico.map((p, i) => {
+            const ativo =
+              p.key !== "total" &&
+              statusAtivos.size === 1 &&
+              statusAtivos.has(p.key);
+            const clicavel = p.key !== "total";
+            return (
+              <React.Fragment key={p.key}>
+                {i > 0 && (
+                  <span className="text-muted-foreground/30" aria-hidden>
+                    ·
+                  </span>
+                )}
+                {clicavel ? (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      aplicarStatusExclusivo(
+                        p.key as FreelancerSolicitacaoStatus,
+                      )
+                    }
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium transition-colors",
+                      ativo
+                        ? "bg-california-red/10 text-california-red"
+                        : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
+                    )}
+                  >
+                    <span className={cn("h-1.5 w-1.5 rounded-full", p.dot)} />
+                    {p.label}{" "}
+                    <span className="tabular-nums font-semibold">
+                      {p.valor}
+                    </span>
+                  </button>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 font-medium text-muted-foreground">
+                    <span className={cn("h-1.5 w-1.5 rounded-full", p.dot)} />
+                    {p.label}{" "}
+                    <span className="tabular-nums font-semibold">
+                      {p.valor}
+                    </span>
+                  </span>
+                )}
+              </React.Fragment>
+            );
+          })}
         </div>
       </section>
 
