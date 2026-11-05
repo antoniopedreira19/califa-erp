@@ -181,8 +181,6 @@ export default async function JobDetailPage({
     podeCadastrarFornecedor,
     podeEditarFornecedor,
     podeEnviarPP,
-    linhasComEnvioTravado,
-    linhasNaErrataPronta,
     papelEnviaPP,
     papelCorrigeNf,
     etapasDoJob,
@@ -583,8 +581,6 @@ export default async function JobDetailPage({
             midiaSystem={detalhe.midiaSystem}
             podeConfirmarBv={podeConfirmarBv && !comPedido && !emDecisao}
             jaEnviadoParaFaturamento={envioFaturamento !== null}
-            linhasComEnvioTravado={linhasComEnvioTravado}
-            linhasNaErrataPronta={linhasNaErrataPronta}
             ppsPorItemId={ppsPorItemId}
             aEmitirPorItemId={aEmitirPorItemId}
             tomadoresDaNf={tomadoresDaNf}
@@ -610,17 +606,6 @@ export default async function JobDetailPage({
             // Decisão 160: o envio, o formulário e a PP ao lado dos
             // documentos também pela aba — com o que o painel do item usa.
             statusDoJob={job.status}
-            // Decisão 185: a revisão da abertura trava só as linhas que a
-            // errata mudou — aqui pelo realizado, que é a chave da PP.
-            realizadosComEnvioTravado={linhasComEnvioTravado.flatMap((id) => {
-              const realizado = realizadosMap.get(id);
-              return realizado ? [realizado.id] : [];
-            })}
-            // Decisão 237: e as linhas da errata pronta para envio.
-            realizadosNaErrataPronta={linhasNaErrataPronta.flatMap((id) => {
-              const realizado = realizadosMap.get(id);
-              return realizado ? [realizado.id] : [];
-            })}
             tomadoresDaNf={tomadoresDaNf}
             tomadorPorEmpresa={tomadorPorEmpresa}
             empresas={empresas}

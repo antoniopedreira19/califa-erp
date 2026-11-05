@@ -1,6 +1,7 @@
 /**
- * Decisão 185: a errata em revisão trava o envio de PP só na linha que ela
- * mudou, e só enquanto a revisão não foi registrada.
+ * Decisão 185: as linhas que a errata em revisão mudou, enquanto a revisão
+ * não foi registrada. Desde a 238 elas não travam o envio de PP; servem ao
+ * destaque da revisão no financeiro.
  *
  * Rodar: `npm run test:linhas-da-revisao`.
  */
@@ -9,7 +10,6 @@ import assert from "node:assert/strict";
 import {
   inicioDaRevisao,
   linhasAlteradasDesde,
-  linhasDaErrataPronta,
 } from "./linhas-da-revisao";
 
 const abertura = "2026-10-01T12:00:00+00:00";
@@ -54,21 +54,4 @@ test("errata no mesmo instante do registro já foi revisada", () => {
     inicioDaRevisao(abertura, revisao),
   );
   assert.equal(linhas.size, 0);
-});
-
-// Decisão 237: a errata pronta para envio trava o envio de PP das linhas
-// que altera ou cancela; a linha nova e a organização da planilha não.
-test("a pronta trava as linhas alteradas e as canceladas", () => {
-  const linhas = linhasDaErrataPronta({
-    alteracoes: [{ job_item_orcado_id: "a" }, { job_item_orcado_id: "b" }],
-    cancelamentos: ["c"],
-  });
-  assert.deepEqual([...linhas].sort(), ["a", "b", "c"]);
-});
-
-test("sem pronta, ou pronta só com linha nova, nada trava", () => {
-  assert.equal(linhasDaErrataPronta(null).size, 0);
-  assert.equal(linhasDaErrataPronta({ alteracoes: [], cancelamentos: [] }).size, 0);
-  // A pronta antiga pode vir sem `cancelamentos`.
-  assert.equal(linhasDaErrataPronta({ alteracoes: null, cancelamentos: null }).size, 0);
 });

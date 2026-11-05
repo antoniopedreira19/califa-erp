@@ -312,14 +312,6 @@ interface Props {
    *  (decisão 028, nota de 27/08/2026). O servidor já recusava — sem
    *  isto a tela deixava montar a errata inteira antes de reprovar. */
   jaEnviadoParaFaturamento?: boolean;
-  /** As linhas que uma errata ainda não revisada mudou (decisão 185): a PP
-   *  delas não sai para o financeiro até a revisão da abertura ser salva.
-   *  As outras enviam normalmente; gerar, editar e cancelar seguem
-   *  liberados em todas. */
-  linhasComEnvioTravado?: string[];
-  /** As linhas da errata pronta para envio (decisão 237): a PP delas
-   *  espera a errata ser enviada, editada ou descartada. */
-  linhasNaErrataPronta?: string[];
   /** Todas as PPs ativas de cada item realizado (PPs parciais). */
   ppsPorItemId: Map<string, PedidoCompraNaLista[]>;
   /** Decisão 153: as PPs a emitir de cada item, fora do realizado. */
@@ -597,8 +589,6 @@ export function JobRealizadoSection({ comHistorico, ...props }: Props) {
       aEmitirPorItemId={SEM_A_EMITIR}
       bvsPorItem={SEM_BVS}
       savePorItem={SEM_SAVES}
-      linhasComEnvioTravado={SEM_LINHAS}
-      linhasNaErrataPronta={SEM_LINHAS}
       destacarItens={destacar ? [...mudancaPorLinha.keys()] : SEM_LINHAS}
       // A versão antiga não é a que a revisão confere.
       linhasDaRevisao={SEM_LINHAS}
@@ -653,8 +643,6 @@ function PlanilhaDoJob({
   podeEditarFornecedor = false,
   podeConfirmarBv,
   jaEnviadoParaFaturamento = false,
-  linhasComEnvioTravado = [],
-  linhasNaErrataPronta = [],
   ppsPorItemId,
   aEmitirPorItemId,
   tomadoresDaNf,
@@ -1808,8 +1796,6 @@ function PlanilhaDoJob({
           podeEditarFornecedor={podeEditarFornecedor}
           podeConfirmarBv={podeConfirmarBv}
           preAbertura={preAbertura}
-          linhasComEnvioTravado={linhasComEnvioTravado}
-          linhasNaErrataPronta={linhasNaErrataPronta}
           ppsPorItemId={ppsPorItemId}
           aEmitirPorItemId={aEmitirPorItemId}
           statusDoJob={job.status}

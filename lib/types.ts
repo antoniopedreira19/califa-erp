@@ -1819,9 +1819,9 @@ export function jobAceitaGerarPP(status: JobStatus): boolean {
  * vira título a pagar. Um job que o financeiro ainda não abriu — ou que
  * ele devolveu — pode não acontecer.
  *
- * A marca `jobs.abertura_em_revisao` fecha a mesma porta sem mexer no
- * status (decisão 040); as duas travas moram juntas em `barrarEnvioDePP`
- * (`realizado/actions-pp.ts`).
+ * A trava mora em `barrarEnvioDePP` (`realizado/actions-pp.ts`). A marca
+ * `jobs.abertura_em_revisao` fechava a mesma porta (decisões 040 e 185) até
+ * a 238 (05/11/2026): a errata não trava mais o envio de PP.
  */
 export function jobAceitaEnvioDePP(status: JobStatus): boolean {
   return status === "aberto" || status === "em_producao";

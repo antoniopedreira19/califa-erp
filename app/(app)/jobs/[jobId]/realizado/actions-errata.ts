@@ -6,6 +6,10 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
+import { formatCurrency } from "@/lib/utils";
+import { carregarRegrasDoComite } from "@/lib/data/comite";
+import { orcadoDaErrataAbaixoDasPPs } from "@/lib/calculos/limites-orcamento";
+import { motivoDaTrocaRecusada, travaDoTipo } from "@/lib/calculos/alteracao-financeiro";
 import {
   MENSAGEM_JA_ENVIADO,
   jobJaEnviadoParaFaturamento,
@@ -73,67 +77,100 @@ interface AlvoTroca {
 }
 
 /**
- * Barra QUALQUER alteração em linha que já tem PP no financeiro.
+ * A errata em linha com PP respeita o Comitê de Aprovações (decisão 238,
+ * 05/11/2026).
  *
- * Regra do Tiago (02/09/2026, decisão 040): a errata não mexe em linha
- * onde uma PP já foi emitida — nem valor, nem QT, nem D/M, nem tipo. O
- * que já pesa no realizado não se reescreve por cima. "Emitida" aqui é a
- * PP que CHEGOU ao financeiro: em avaliação, rejeitada, aprovada ou paga.
- * A gerada (rascunho no job) e a cancelada não travam.
+ * Até a 238 a errata não mexia em linha com PP no financeiro — nem valor,
+ * nem QT, nem D/M, nem tipo (decisão 040 §1). O Tiago tirou a trava: "devem
+ * respeitar as travas do comitê. Se uma errata for feita em uma linha com
+ * PP [...] e transforme o orçado desse item a um valor menor do que o da
+ * PP (trava ativa no comitê), não deverá ser possível fazer a errata. E o
+ * financeiro será o único capaz de editar o valor".
  *
- * Substitui a regra anterior, que só travava a troca de TIPO e deixava
- * valor, QT e D/M livres com PP ativa (handoff de Jobs, §20).
+ * - **Orçado:** com a regra "Realizado acima do orçado" ligada, a errata
+ *   não baixa o orçado para menos do que a linha já tem em PPs (PP fora de
+ *   cancelada, menos a devolução aprovada da verba — a conta de
+ *   `pp_confere_orcado_na_geracao`). Subir, ou baixar até as PPs, passa.
+ * - **Tipo:** a linha com PP ou PP a emitir só troca entre os tipos que
+ *   geram PP — a régua do "Editar planilha" do financeiro (revisão da 115).
+ *   O BV segue em `barrarTrocaDeTipo`.
  *
- * Por item, não pela errata inteira: quem está corrigindo dez linhas não
- * perde o trabalho por causa de uma — a mensagem nomeia o item. A tela já
- * nasce travada nessas linhas (`linhaTravadaPorPP`, na tabela), então
- * chegar aqui é payload montado à mão ou tela desatualizada.
+ * As leituras são do banco (definer): a RLS de `pedidos_compra` filtra por
+ * empresa, e a trava não pode depender do que o usuário enxerga. Por item,
+ * com o nome na mensagem: quem corrige dez linhas não perde o trabalho por
+ * causa de uma.
+ *
+ * Valores em R$, como a PP e o orçado do job (o internacional também).
  *
  * Retorna a mensagem de bloqueio, ou null quando a errata pode seguir.
  */
-async function barrarLinhaComPPNoFinanceiro(
-  jobId: string,
+async function barrarErrataEmLinhaComPP(
   tenantId: string,
-  alvos: AlvoTroca[],
+  alteradas: ReadonlyArray<
+    Pick<Mudanca, "copiaId" | "itemNome" | "totalDe" | "totalPara" | "linhaVermelha" | "tipoDe" | "tipoPara">
+  >,
 ): Promise<string | null> {
   const supabase = createClient();
-  const copiaIds = alvos.map((a) => a.copiaId).filter(Boolean);
-  if (copiaIds.length === 0) return null;
+  const baixas = alteradas.filter((m) => m.copiaId && m.totalPara < m.totalDe - 0.005);
+  const trocas = alteradas.filter((m) => m.copiaId && m.tipoPara !== m.tipoDe);
 
-  const nomePorCopiaId = new Map(alvos.map((a) => [a.copiaId, a.itemNome]));
+  if (baixas.length > 0) {
+    const regras = await carregarRegrasDoComite(supabase, tenantId);
+    if (regras.ppLigado) {
+      const { data, error } = await supabase.rpc("realizado_em_pps_das_linhas_do_job", {
+        p_ids: baixas.map((m) => m.copiaId as string),
+      });
+      if (error) {
+        console.error("[errata.pps_da_linha]", error.message);
+        return "Não foi possível conferir as PPs das linhas. Tente de novo.";
+      }
+      const emPPsPorLinha = new Map(
+        ((data ?? []) as Array<{ job_item_orcado_id: string; em_pps: number | string }>).map(
+          (r) => [r.job_item_orcado_id, Number(r.em_pps ?? 0)],
+        ),
+      );
+      for (const m of baixas) {
+        const emPPs = emPPsPorLinha.get(m.copiaId as string) ?? 0;
+        if (
+          orcadoDaErrataAbaixoDasPPs(regras, {
+            emPPs,
+            orcadoDe: m.totalDe,
+            orcadoPara: m.totalPara,
+            linhaVermelha: m.linhaVermelha,
+          })
+        ) {
+          return `"${m.itemNome}" já tem ${formatCurrency(emPPs)} em Pedidos de Produção, e a errata deixaria o orçado em ${formatCurrency(m.totalPara)}. Pela regra do Comitê de Aprovações, o orçado não fica abaixo das PPs: só o financeiro altera esse valor, na tela do job no Financeiro.`;
+        }
+      }
+    }
+  }
 
-  // Realizado é a ponte entre a linha da planilha e a PP.
-  const { data: realizados } = await supabase
-    .from("jobs_itens_realizado")
-    .select("id, job_item_orcado_id")
-    .eq("job_id", jobId)
-    .eq("tenant_id", tenantId)
-    .in("job_item_orcado_id", copiaIds);
+  if (trocas.length > 0) {
+    const { data, error } = await supabase.rpc("travas_do_tipo_nas_linhas_do_job", {
+      p_ids: trocas.map((m) => m.copiaId as string),
+    });
+    if (error) {
+      console.error("[errata.travas_do_tipo]", error.message);
+      return "Não foi possível conferir as PPs das linhas. Tente de novo.";
+    }
+    const porLinha = new Map(
+      (
+        (data ?? []) as Array<{ job_item_orcado_id: string; tem_pp: boolean; tem_pp_a_emitir: boolean }>
+      ).map((r) => [r.job_item_orcado_id, r]),
+    );
+    for (const m of trocas) {
+      const r = porLinha.get(m.copiaId as string);
+      if (!r) continue;
+      const recusa = motivoDaTrocaRecusada(
+        travaDoTipo(m.tipoDe, { pp: r.tem_pp, ppAEmitir: r.tem_pp_a_emitir, bv: false }),
+        m.tipoPara,
+        m.itemNome,
+      );
+      if (recusa) return recusa;
+    }
+  }
 
-  const copiaPorRealizado = new Map(
-    (realizados ?? []).map((r: any) => [
-      r.id as string,
-      r.job_item_orcado_id as string,
-    ]),
-  );
-  if (copiaPorRealizado.size === 0) return null;
-
-  const { data: pps } = await supabase
-    .from("pedidos_compra")
-    .select("item_realizado_id, codigo, status")
-    .eq("job_id", jobId)
-    .eq("tenant_id", tenantId)
-    .not("status", "in", "(cancelada,gerada)")
-    .in("item_realizado_id", Array.from(copiaPorRealizado.keys()));
-
-  const pp = (pps ?? [])[0] as
-    | { item_realizado_id: string; codigo: string; status: string }
-    | undefined;
-  if (!pp) return null;
-
-  const copiaId = copiaPorRealizado.get(pp.item_realizado_id) ?? "";
-  const nome = nomePorCopiaId.get(copiaId) ?? "o item";
-  return `"${nome}" já tem o Pedido de Produção ${pp.codigo} no financeiro. Linha com PP emitida não entra em errata — corrija o que falta em outra linha, ou cancele a PP antes.`;
+  return null;
 }
 
 /**
@@ -149,8 +186,8 @@ async function barrarLinhaComPPNoFinanceiro(
  * errata já não abre. A trava existe para o "quase".
  *
  * Só o `AR`: em B, C, F e FI não há amarração entre PPs e orçado, e a
- * errata segue como a decisão 040 deixou. A trava de PP no financeiro,
- * essa sim, continua valendo para todos.
+ * errata segue como as outras linhas com PP: pela regra do Comitê
+ * (`barrarErrataEmLinhaComPP`, decisão 238).
  */
 async function barrarARConcluido(
   jobId: string,
@@ -186,8 +223,9 @@ async function barrarARConcluido(
  * recebido.
  *
  * Até 02/09/2026 esta função também barrava a troca de tipo em item com
- * PP ativa. Esse ramo saiu: `barrarLinhaComPPNoFinanceiro` trava a linha
- * inteira, o que inclui o tipo. Fica só o BV, que não tem outra porta.
+ * PP ativa. Esse ramo saiu: a PP mora em `barrarErrataEmLinhaComPP`, que
+ * desde a decisão 238 deixa o tipo trocar entre os que geram PP. Fica só o
+ * BV, que não tem outra porta.
  *
  * Por item, não pela errata inteira (decisão do time): quem está
  * corrigindo dez linhas não perde o trabalho por causa de uma.
@@ -1741,18 +1779,14 @@ async function montarErrata(
     if (bloqueioSave) return { ok: false, message: bloqueioSave };
   }
 
-  // ---- Trava de linha com PP no financeiro (decisão 040) ----
-  // Qualquer correção — valor, QT, D/M ou tipo — em linha que já tem PP
-  // emitida é recusada. O realizado dela já existe, e reescrever o orçado
-  // por cima seria mudar a régua depois da medida.
+  // ---- Linha com PP: a regra do Comitê (decisão 238) ----
+  // A errata altera a linha com PP, mas não deixa o orçado abaixo das PPs
+  // com a regra ligada, e o tipo só troca entre os que geram PP. Era a
+  // trava da 040 §1, que recusava qualquer correção na linha.
   if (alteradas.length > 0) {
-    const bloqueio = await barrarLinhaComPPNoFinanceiro(
-      jobId,
+    const bloqueio = await barrarErrataEmLinhaComPP(
       session.activeTenant.id,
-      alteradas.map((m) => ({
-        copiaId: m.copiaId ?? "",
-        itemNome: m.itemNome,
-      })),
+      alteradas,
     );
     if (bloqueio) return { ok: false, message: bloqueio };
 
@@ -1771,8 +1805,8 @@ async function montarErrata(
   // ---- Trava de troca de tipo: BV já confirmado ----
   // É a troca de tipo que faz BV e PP trocarem de lugar na calha, e ela
   // não pode passar por cima de dinheiro que já foi ao financeiro (o BV
-  // confirmado). A PP ativa deixou de ser caso daqui: a trava acima cobre
-  // a linha inteira.
+  // confirmado). A PP não é caso daqui: a trava acima deixa o tipo da linha
+  // com PP trocar só entre os que geram PP (decisão 238).
   const trocasDeTipo = mudancas.filter(
     (m) => m.acao === "alterada" && m.tipoDe !== m.tipoPara,
   );

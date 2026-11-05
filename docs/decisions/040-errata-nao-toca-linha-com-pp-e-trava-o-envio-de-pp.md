@@ -6,6 +6,11 @@
 o mural de abertura do financeiro. Decisões do Tiago em 02/09/2026.
 Completa a 030 e depende da 039 (PP gerada).
 
+> ⚠️ **Revista pela [238](238-errata-e-pp-sem-trava-mutua-so-o-comite.md)
+> (05/11/2026):** a errata não trava mais o envio de PP, e a linha com PP
+> entra em errata — só não baixa o orçado abaixo das PPs com a regra de PP
+> do Comitê ligada.
+
 ## A mudança em duas frases
 
 1. **Linha que já tem PP no financeiro não entra em errata** — nem valor,

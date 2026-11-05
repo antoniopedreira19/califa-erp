@@ -13,6 +13,11 @@ errata) não muda.
 **Migration:** nenhuma. O banco não trava o envio por revisão; as duas
 travas eram e continuam sendo de código.
 
+> ⚠️ **Revista pela [238](238-errata-e-pp-sem-trava-mutua-so-o-comite.md)
+> (05/11/2026):** a errata não trava mais o envio de PP, e a linha com PP
+> entra em errata — só não baixa o orçado abaixo das PPs com a regra de PP
+> do Comitê ligada.
+
 ## O pedido
 
 > "O certo seria apenas travar o envio de PPs ao financeiro em itens que

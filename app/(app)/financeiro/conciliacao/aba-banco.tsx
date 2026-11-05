@@ -774,6 +774,7 @@ export function AbaBanco({
             ocupado={pending || resolvendoSozinho}
           />
         }
+        fechadaAte={fechamento.ativo?.ate ?? null}
         pending={pending}
         resolvendoSozinho={resolvendoSozinho}
         avisos={{ erroImportacao, falhaDoMotor, recusado, descartarRecusado: () => setRecusado(null) }}
@@ -1257,11 +1258,7 @@ function ZonaDeArquivo({
       <div className="min-w-[240px] flex-1">
         <p className="text-sm font-semibold">{compacta ? "Importar outro extrato" : "Arraste aqui o extrato do banco em OFX"}</p>
         <p className="text-xs text-muted-foreground">
-          O arquivo que o internet banking do Santander, Itaú ou qualquer banco exporta. O sistema guarda só as linhas do
-          extrato, sem repetir as que já vieram. O que é certo se resolve sozinho, com Desfazer: a baixa feita à mão que
-          bate, o título de valor exato, a remessa, a regra do histórico, a linha do histórico da planilha (a competência até
-          o 3T fora do sistema) e a previsão da planilha, quando é a única daquele valor por perto; o resto espera você.
-          {!compacta && ` A conta vem do próprio arquivo: ele só é aceito se for da ${contaNome}, a conta aberta no topo.`}
+          Exportado do internet banking, só da {contaNome}. Linhas repetidas não entram, e o que é certo se resolve sozinho.
         </p>
       </div>
       <input

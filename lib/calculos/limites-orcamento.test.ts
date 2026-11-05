@@ -6,6 +6,7 @@ import {
   aprovaDiretoSemComite,
   bloqueioGeracaoPPPeloComite,
   motivosDaVersaoNoComite,
+  orcadoDaErrataAbaixoDasPPs,
   ppPassaDoOrcadoNoComite,
   rentabilidadeAbaixoDoMinimo,
   versaoCobertaPeloComite,
@@ -135,4 +136,28 @@ test("decisão 225: a exceção no fechamento leva a versão ao Comitê enquanto
   assert.deepEqual(motivosDaVersaoNoComite(R, { ...base, excecaoNoFechamento: false }, false), []);
   // Regra desligada nas Configurações.
   assert.deepEqual(motivosDaVersaoNoComite(com({ excecaoLigada: false }), { ...base, excecaoNoFechamento: true }, false), []);
+});
+
+test("decisão 238: a errata não baixa o orçado para menos que as PPs com a regra ligada", () => {
+  const linha = (orcadoPara: number, emPPs = 1000, orcadoDe = 2000) => ({
+    emPPs,
+    orcadoDe,
+    orcadoPara,
+    linhaVermelha: false,
+  });
+  // Baixa até as PPs: passa. Abaixo delas: barra.
+  assert.equal(orcadoDaErrataAbaixoDasPPs(R, linha(1000)), false);
+  assert.equal(orcadoDaErrataAbaixoDasPPs(R, linha(999.99)), true);
+  // Regra desligada nas Configurações: passa.
+  assert.equal(orcadoDaErrataAbaixoDasPPs(com({ ppLigado: false }), linha(500)), false);
+  // A linha já acima do orçado (PP aprovada pelo Comitê) pode subir o orçado.
+  assert.equal(orcadoDaErrataAbaixoDasPPs(R, linha(1500, 3000, 1000)), false);
+  // Mas não descer mais.
+  assert.equal(orcadoDaErrataAbaixoDasPPs(R, linha(900, 3000, 1000)), true);
+  // Sem PP, a errata é livre.
+  assert.equal(orcadoDaErrataAbaixoDasPPs(R, linha(0, 0)), false);
+  // Tolerância: o excesso pequeno passa, como na PP.
+  const tol = com({ toleranciaLigada: true, toleranciaValor: 100, toleranciaPct: 10 });
+  assert.equal(orcadoDaErrataAbaixoDasPPs(tol, linha(950)), false);
+  assert.equal(orcadoDaErrataAbaixoDasPPs(tol, linha(800)), true);
 });

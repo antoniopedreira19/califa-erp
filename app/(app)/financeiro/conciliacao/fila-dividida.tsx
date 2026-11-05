@@ -9,7 +9,7 @@
  */
 
 import * as React from "react";
-import { AlertTriangle, CheckCheck, ChevronDown, Link2, Wand2 } from "lucide-react";
+import { AlertTriangle, CheckCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown, Link2, Wand2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { BotaoDaSecao, COR_DO_PONTO, comCentro } from "./banco-tabela";
@@ -45,15 +45,69 @@ const TITULO: Record<Tipo, string> = {
   conciliado: "Conciliados",
 };
 
-/** Nascem recolhidas as divisões que não pedem ação. */
-const RECOLHIDAS: Tipo[] = ["manual", "conciliado"];
+const dia = (iso: string | null) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : "—");
+const somaDia = (iso: string, n: number) => {
+  const d = new Date(iso + "T12:00:00Z");
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+};
+const diaSeguinte = (iso: string) => somaDia(iso, 1);
+const diaAnterior = (iso: string) => somaDia(iso, -1);
+/** O que a pessoa deixou aberto, por conta (só neste navegador). */
+const chaveAbertas = (conta: string) => `conciliacao.divisoes-abertas.${conta}`;
+/** A última importação que este navegador já mostrou, por conta. */
+const chaveVisto = (conta: string) => `conciliacao.extrato-visto.${conta}`;
+const ler = (k: string): string | null => {
+  try {
+    return localStorage.getItem(k);
+  } catch {
+    return null;
+  }
+};
+const gravar = (k: string, v: string) => {
+  try {
+    localStorage.setItem(k, v);
+  } catch {
+    /* sem armazenamento: só não lembra */
+  }
+};
+/** O item que ainda pede ação (a baixa à mão já conciliada, não). */
+const pedeAcao = (i: Item) => (i.k === "linha" ? !i.r.resolvido : true);
+/** A importação de onde veio cada item (as baixas sem linha não têm). */
+function importacoesDoItem(i: Item): Array<string | null> {
+  if (i.k === "linha") return [i.r.mov.linha.importacaoId];
+  if (i.k === "grupo") return i.g.linhas.map((r) => (r as { mov: { linha: { importacaoId: string | null } } }).mov.linha.importacaoId);
+  if (i.k === "conjunto") return i.rs.map((r) => r.mov.linha.importacaoId);
+  return [];
+}
 
 export function FilaDividida(p: PropsDaFila) {
   const { secoes, conciliacao, acoes, conciliarVarios, pending } = p;
   const itens = React.useMemo(() => itensDaConta({ secoes, conciliacao }), [secoes, conciliacao]);
   const [aberto, setAberto] = React.useState<string | null>(null);
   const [marcados, setMarcados] = React.useState<Set<string>>(new Set());
-  const [recolhidas, setRecolhidas] = React.useState<Set<Tipo>>(new Set(RECOLHIDAS));
+  // As divisões nascem fechadas; depois de montar, voltam abertas as que a
+  // pessoa deixou abertas nesta conta (decisão 239). Só no navegador dela.
+  const conta = p.banco.conta.id;
+  const ultima = p.banco.ultima;
+  const [recolhidas, setRecolhidas] = React.useState<Set<Tipo>>(new Set(ORDEM));
+  // O extrato que este navegador ainda não tinha mostrado abre as divisões
+  // com linhas pendentes dele, uma vez (decisão 239).
+  const [extratoNovo, setExtratoNovo] = React.useState<{ arquivo: string; tipos: Tipo[] } | null>(null);
+  React.useEffect(() => {
+    // A tela não remonta ao trocar de conta: a faixa da conta anterior sai.
+    setExtratoNovo(null);
+    const abertas = new Set<Tipo>(JSON.parse(ler(chaveAbertas(conta)) ?? "[]") as Tipo[]);
+    if (ultima && ler(chaveVisto(conta)) !== ultima.id) {
+      const tipos = ORDEM.filter((t) => t !== "conciliado" && itens.some((i) => i.tipo === t && pedeAcao(i) && importacoesDoItem(i).includes(ultima.id)));
+      tipos.forEach((t) => abertas.add(t));
+      if (tipos.length) setExtratoNovo({ arquivo: ultima.arquivo, tipos });
+      gravar(chaveVisto(conta), ultima.id);
+    }
+    setRecolhidas(new Set(ORDEM.filter((t) => !abertas.has(t))));
+    // Só ao abrir a conta (ou chegar extrato novo).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conta, ultima?.id]);
 
   const doTipo = (t: Tipo) => itens.filter((i) => i.tipo === t);
   const linhasDe = (is: Item[]) => is.reduce((s, i) => s + (i.k === "grupo" ? i.g.linhas.length : 1), 0);
@@ -61,7 +115,6 @@ export function FilaDividida(p: PropsDaFila) {
   const selecionavel = (i: Item): i is Extract<Item, { k: "linha" }> => i.k === "linha" && !i.r.resolvido && (i.tipo === "pronto" || i.tipo === "manual");
   const selecionaveis = itens.filter(selecionavel);
   const selecionados = selecionaveis.filter((i) => marcados.has(i.id));
-  const todosMarcados = selecionaveis.length > 0 && selecionaveis.every((i) => marcados.has(i.id));
   const alternar = (id: string) =>
     setMarcados((m) => {
       const x = new Set(m);
@@ -74,8 +127,17 @@ export function FilaDividida(p: PropsDaFila) {
       const x = new Set(r);
       if (x.has(t)) x.delete(t);
       else x.add(t);
+      gravar(chaveAbertas(conta), JSON.stringify(ORDEM.filter((o) => !x.has(o))));
       return x;
     });
+  // Nada pendente: a faixa de tudo conciliado (decisão 239).
+  const pendentes = itens.filter(pedeAcao).length;
+  // Fechada até o fim do extrato (o dia em andamento não fecha).
+  const fechadaNoExtrato = !!p.fechadaAte && !!ultima?.fim && p.fechadaAte >= diaAnterior(ultima.fim);
+  // O dia em que o arquivo foi gerado ainda não estava completo: o próximo
+  // extrato começa nele (a linha repetida não entra de novo).
+  const inicioDoProximo = ultima?.fim ? (ultima.geradoDia === ultima.fim ? ultima.fim : diaSeguinte(ultima.fim)) : null;
+  const saldoBate = ultima?.saldoBanco != null && p.banco.saldoSistemaNoFim != null && Math.round((ultima.saldoBanco - p.banco.saldoSistemaNoFim) * 100) === 0;
 
   // O botão de todas de cada divisão.
   const manuais = secoes.manual.filter((r) => !r.resolvido);
@@ -109,9 +171,48 @@ export function FilaDividida(p: PropsDaFila) {
 
   return (
     <>
-      <LinhaDoArquivo banco={p.banco} importar={p.importar} />
+      {/* Com tudo conciliado, o importar fica na faixa verde. */}
+      <LinhaDoArquivo banco={p.banco} importar={ultima && pendentes === 0 ? null : p.importar} />
       <LinhaDeAvisos {...p} />
       <FaixaDoTopo {...p} />
+
+      {extratoNovo && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm text-sky-900">
+          <span>
+            <strong>{extratoNovo.arquivo}</strong> acabou de chegar: abrimos as {extratoNovo.tipos.length === 1 ? "divisão" : `${extratoNovo.tipos.length} divisões`} com linhas dele.
+          </span>
+          <button type="button" onClick={() => setExtratoNovo(null)} className="ml-auto text-xs font-semibold underline">
+            Ok
+          </button>
+        </div>
+      )}
+
+      {ultima && pendentes === 0 && (
+        <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+          <div className="flex flex-wrap items-center gap-3">
+            <CheckCheck className="h-5 w-5 text-emerald-700" />
+            <span>
+              <strong>Tudo conciliado</strong> no extrato de {dia(ultima.inicio)} a {dia(ultima.fim)}
+              {saldoBate ? " · o saldo do banco bate com o do sistema ✓" : " · o saldo ainda não bate: confira o Extrato"}
+            </span>
+          </div>
+          <div className="flex flex-wrap items-center gap-3 border-t border-emerald-200 pt-3">
+            <span className="flex-1">
+              {fechadaNoExtrato ? (
+                <>
+                  Conciliação <strong>fechada até {dia(p.fechadaAte)}</strong>. Próximo passo: importe o extrato a partir de{" "}
+                </>
+              ) : (
+                <>
+                  Próximo passo: <strong>feche a conciliação</strong> (botão ao lado dos saldos) e importe o extrato a partir de{" "}
+                </>
+              )}
+              <strong>{dia(inicioDoProximo)}</strong>.
+            </span>
+            {p.importar}
+          </div>
+        </div>
+      )}
 
       {selecionados.length > 0 && (
         <div className="flex justify-end">
@@ -134,15 +235,28 @@ export function FilaDividida(p: PropsDaFila) {
           <Colunas />
           <thead className="border-b border-border bg-muted/40 text-xs uppercase text-muted-foreground">
             <tr>
-              <th className="px-3 py-2 text-left">
-                <Checkbox
-                  aria-label="Selecionar os prontos e as baixas à mão"
-                  title="Selecionar os prontos e as baixas à mão"
-                  checked={todosMarcados}
-                  disabled={selecionaveis.length === 0}
-                  onCheckedChange={(v) => setMarcados(v ? new Set(selecionaveis.map((i) => i.id)) : new Set())}
-                  className="rounded"
-                />
+              <th className="px-1 py-2 text-left">
+                {/* Expandir ou recolher todas as divisões (decisão 239), no
+                    lugar do "marcar todas": cada divisão já tem o botão de todas. */}
+                {(() => {
+                  const algumaAberta = ORDEM.some((t) => doTipo(t).length > 0 && !recolhidas.has(t));
+                  const rotulo = algumaAberta ? "Recolher todas as divisões" : "Expandir todas as divisões";
+                  return (
+                    <button
+                      type="button"
+                      title={rotulo}
+                      aria-label={rotulo}
+                      onClick={() => {
+                        const x = new Set<Tipo>(algumaAberta ? ORDEM : []);
+                        gravar(chaveAbertas(conta), JSON.stringify(ORDEM.filter((o) => !x.has(o))));
+                        setRecolhidas(x);
+                      }}
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      {algumaAberta ? <ChevronsDownUp className="h-4 w-4" /> : <ChevronsUpDown className="h-4 w-4" />}
+                    </button>
+                  );
+                })()}
               </th>
               <th className="px-3 py-2 text-left">Data</th>
               <th className="px-3 py-2 text-left">Histórico do banco</th>

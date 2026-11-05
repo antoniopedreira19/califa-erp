@@ -8877,3 +8877,12 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Gravado pela ação da tela**, com auditoria, a partir de um pacote local. O repositório não tem nenhuma linha da relação, porque as descrições têm nomes.
 - **Pendente:** a data de fim de duas linhas de R$ 75.000,00 que a planilha não prevê em janeiro, e o cadastro dos 70 fornecedores.
 - **Migration:** `20261103800001` (aditiva).
+
+## ⚠️ Nota de 2026-11-05 — a Conciliação automática: divisões fechadas, extrato novo, tudo conciliado e o período do extrato (decisão 239)
+
+- **Divisões:** nascem fechadas; a tela lembra, por conta e no navegador, as que a pessoa abriu. O extrato que o navegador ainda não mostrou abre, uma vez, as divisões com linhas pendentes dele (faixa "acabou de chegar").
+- **Cabeçalho:** o "marcar todas" saiu; no lugar, expandir / recolher todas.
+- **Tudo conciliado:** faixa verde com o próximo passo (fechar e importar a partir de …) e o botão de importar; "Fechada até …" quando já fechou.
+- **Período:** na Automática, os Conciliados e o "N de M conciliados" são do período do último extrato, não do De/Até.
+- **Importar:** o texto da área ficou numa linha.
+- **Conferido:** na Conta Teste (fechadas, lembrar a aberta, expandir/recolher, "no extrato de 30/10 a 30/10/2026"); a faixa verde e o extrato novo, no protótipo. Sem migration.

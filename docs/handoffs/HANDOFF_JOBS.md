@@ -6677,3 +6677,20 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
   item (faixa âmbar e botão desabilitado) e para a aba de PPs (dica do
   botão), com o texto `TEXTO_LINHA_NA_ERRATA_PRONTA`.
 - Testado no TES-1035/26 (PP-00825, cancelada; pronta descartada).
+
+## ⚠️ Nota de 2026-11-05 — errata e PP sem trava mútua, só o Comitê (decisão 238)
+
+- Saíram as travas do envio de PP pela errata: a linha alterada com a
+  abertura em revisão (040 §4/185) e a linha da errata pronta (237).
+  `barrarEnvioDePP` ficou só com o job não aberto.
+- Saiu a 040 §1: a errata corrige linha com PP. Com a regra "Realizado
+  acima do orçado" do Comitê ligada, não baixa o orçado abaixo do que a
+  linha tem em PPs (`barrarErrataEmLinhaComPP`, função
+  `realizado_em_pps_das_linhas_do_job`); abaixo disso, só o "Editar
+  planilha" do financeiro. O tipo da linha com PP troca só entre AR, B, C,
+  F e FI, como no financeiro. Cancelar linha com PP segue recusado.
+- Tela: sem `linhasComEnvioTravado`, `linhasNaErrataPronta` nem
+  `travadasPorPP`.
+- Testado no TES-1003/26 (errata recusada e registrada; PP-00830 enviada
+  com a revisão aberta e cancelada).
+

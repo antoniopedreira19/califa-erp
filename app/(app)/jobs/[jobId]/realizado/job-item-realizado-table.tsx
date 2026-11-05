@@ -25,8 +25,6 @@ import type {
 } from "@/lib/types";
 import type { TomadorDaNf } from "./anexos-da-pp";
 import {
-  TEXTO_LINHA_ALTERADA_EM_REVISAO,
-  TEXTO_LINHA_NA_ERRATA_PRONTA,
   textoAguardaAbertura,
 } from "./pp-a-emitir-ui";
 import { meioPeloAnexo, nomeContraparteBRPP, nomeDoCartaoCorporativo, ppStatusLabel, situacaoDaVerba } from "@/lib/types";
@@ -52,7 +50,6 @@ import {
   somaDasPPsNaoCanceladas,
   contarPendentes,
 } from "@/lib/calculos/pps-item";
-import { ppChegouAoFinanceiro } from "@/lib/types";
 import {
   lancamentosDaLinha,
   motivoDoTipoSoComPP,
@@ -216,13 +213,6 @@ interface Props {
    *  `rejeitado_financeiro`). Distingue-se do job ENCERRADO, que também
    *  tem `podeAcoes` falso mas conserva os BVs lançados para consulta. */
   preAbertura: boolean;
-  /** As linhas (`jobs_itens_orcado.id`) que uma errata ainda não revisada
-   *  mudou: o envio das PPs delas fica fechado até a revisão da abertura
-   *  ser salva (decisões 040 e 185). As outras enviam normalmente. */
-  linhasComEnvioTravado?: string[];
-  /** As linhas da errata pronta para envio (decisão 237): o envio das PPs
-   *  delas espera a errata ser enviada, editada ou descartada. */
-  linhasNaErrataPronta?: string[];
   /** "Exibir › PPs abertas em todas as linhas" (decisão 208): cada linha
    *  com PP já abre com as sublinhas das PPs. A seta ao lado do nome abre
    *  ou fecha um item só. */
@@ -346,13 +336,9 @@ const ALTURA_LINHA = "h-[34px]";
 /** A sublinha da PP (decisão 208) é mais baixa que a do item. */
 const ALTURA_SUBLINHA_PP = "h-[28px]";
 
-/** Por que a linha não entra na errata — o mesmo texto do servidor
- *  (`barrarLinhaComPPNoFinanceiro`), para a tela não prometer o que a
- *  action recusa. */
-const MOTIVO_TRAVA_PP =
-  "Linha com Pedido de Produção já no financeiro não entra em errata. Corrija o que falta em outra linha, ou cancele a PP antes.";
-
-/** Linha com PP só gerada ainda entra na errata (decisão 040), mas não pode
+/** Linha com PP entra na errata (decisão 238, 05/11/2026: saiu a trava da
+ *  040 §1, e o orçado não fica abaixo das PPs com a regra do Comitê
+ *  ligada — `barrarErrataEmLinhaComPP`, no servidor), mas não pode
  *  ser cancelada enquanto tiver PP que não foi cancelada:
  *  `barrarCancelamento`, no servidor, recusa. Com todas as PPs canceladas a
  *  linha se cancela (Tiago, 29/10/2026) — e `ppsPorItemId` já deixa a
@@ -769,8 +755,6 @@ export function JobItemRealizadoTable({
   podeEditarFornecedor = false,
   podeConfirmarBv,
   preAbertura,
-  linhasComEnvioTravado = [],
-  linhasNaErrataPronta = [],
   ppsNasLinhas = false,
   ppsPorItemId,
   aEmitirPorItemId,
@@ -1058,31 +1042,16 @@ export function JobItemRealizadoTable({
     visao === "liquido" ? " · líquido (− BV)" : ""
   }`;
 
-  /** Linhas que a errata NÃO pode tocar: as que já têm PP no financeiro
-   *  (decisão 040). O mesmo recorte de `barrarLinhaComPPNoFinanceiro`,
-   *  no servidor — a tela nasce travada para o usuário não montar a
-   *  errata inteira e só então tomar o erro. A gerada não trava: ela
-   *  ainda é rascunho do job. */
-  const travadasPorPP = React.useMemo(() => {
-    const travadas = new Set<string>();
-    for (const it of todosOsItens) {
-      const realizadoId = realizadosMap.get(it.id)?.id;
-      if (!realizadoId) continue;
-      const pps = ppsPorItemId.get(realizadoId) ?? [];
-      if (pps.some((pp) => ppChegouAoFinanceiro(pp.status))) travadas.add(it.id);
-    }
-    // A edição do financeiro passa por cima desta trava (decisão 115, P2).
-    return modoDaEdicao === "financeiro" ? new Set<string>() : travadas;
-  }, [todosOsItens, realizadosMap, ppsPorItemId, modoDaEdicao]);
-
-  /** Na edição do financeiro, até onde o tipo de custo abre (Tiago,
-   *  08/10/2026 e 28/10/2026): livre sem nada lançado, só entre os tipos com
-   *  PP na linha com PP ou PP a emitir, fechado com BV. Pelo mesmo recorte
-   *  que o servidor confere (`travas_do_tipo_nas_linhas_do_job`). Só entram
-   *  no mapa as linhas que não são livres. */
+  /** Até onde o tipo de custo abre (Tiago, 08/10/2026 e 28/10/2026): livre
+   *  sem nada lançado, só entre os tipos com PP na linha com PP ou PP a
+   *  emitir, fechado com BV. Pelo mesmo recorte que o servidor confere
+   *  (`travas_do_tipo_nas_linhas_do_job`). Desde a decisão 238 vale também
+   *  na errata, que passou a abrir a linha com PP — ali o BV segue com a
+   *  trava própria (`barrarTrocaDeTipo`) e fica fora da conta. Só entram no
+   *  mapa as linhas que não são livres. */
   const travaDoTipoPorLinha = React.useMemo(() => {
     const mapa = new Map<string, Exclude<TravaDoTipo, { tipo: "livre" }>>();
-    if (modoDaEdicao !== "financeiro") return mapa;
+    const financeiro = modoDaEdicao === "financeiro";
     for (const it of todosOsItens) {
       const realizadoId = realizadosMap.get(it.id)?.id;
       const trava = travaDoTipo(
@@ -1090,7 +1059,7 @@ export function JobItemRealizadoTable({
         lancamentosDaLinha({
           pps: realizadoId ? (ppsPorItemId.get(realizadoId) ?? []) : [],
           aEmitir: realizadoId ? (aEmitirPorItemId.get(realizadoId)?.length ?? 0) : 0,
-          bvs: bvsPorItem[it.id] ?? [],
+          bvs: financeiro ? (bvsPorItem[it.id] ?? []) : [],
         }),
       );
       if (trava.tipo !== "livre") mapa.set(it.id, trava);
@@ -1167,23 +1136,19 @@ export function JobItemRealizadoTable({
       if (
         !item ||
         item.cancelada_em ||
-        travadasPorPP.has(rowId) ||
         travadasPorSave.has(rowId)
       ) {
         return null;
       }
       if (coluna === "item") return errata.ehNova(rowId) ? "texto" : null;
       // No Interno o tipo é sempre F · Interno (decisão 105). Na edição do
-      // financeiro, nunca na vermelha, que é da errata, nem na linha com BV;
-      // na com PP, a lista só traz os tipos com PP (revisão da decisão 115,
-      // 08/10/2026 e 28/10/2026).
+      // financeiro, nunca na vermelha, que é da errata, nem na linha com BV.
+      // Na com PP, a lista só traz os tipos com PP (revisão da decisão 115,
+      // 08/10/2026 e 28/10/2026) — na errata também, desde a 238.
       if (coluna === "tipo_custo") {
         if (errata.interno) return null;
-        if (modoDaEdicao === "financeiro") {
-          return item.linha_vermelha || travaDoTipoPorLinha.get(rowId)?.tipo === "travado"
-            ? null
-            : "lista";
-        }
+        if (travaDoTipoPorLinha.get(rowId)?.tipo === "travado") return null;
+        if (modoDaEdicao === "financeiro" && item.linha_vermelha) return null;
         return "lista";
       }
       if (
@@ -1208,7 +1173,6 @@ export function JobItemRealizadoTable({
       editando,
       errata,
       itemPorId,
-      travadasPorPP,
       travadasPorSave,
       modoDaEdicao,
       travaDoTipoPorLinha,
@@ -1676,15 +1640,13 @@ export function JobItemRealizadoTable({
                       ? categoriasMap.get(item.categoria_id)
                       : null;
                     // Cancelada fala primeiro (decisão 151): a linha já saiu
-                    // da conta do orçado. Depois, PP no financeiro — a trava
-                    // mais antiga e a que o servidor confere antes.
+                    // da conta do orçado. Depois, o save. A PP não trava mais
+                    // a linha na errata (decisão 238).
                     const motivoDaTrava = item.cancelada_em
                       ? MOTIVO_CANCELADA
-                      : travadasPorPP.has(item.id)
-                        ? MOTIVO_TRAVA_PP
-                        : (travadasPorSave.get(item.id) ?? null);
+                      : (travadasPorSave.get(item.id) ?? null);
                     const travada = motivoDaTrava !== null;
-                    // Até onde o TIPO abre na edição do financeiro (só lá).
+                    // Até onde o TIPO abre, na errata e na edição do financeiro.
                     const travaDoTipoDaLinha = travaDoTipoPorLinha.get(item.id);
                     const abertaAqui = (campo: string) =>
                       aberta?.rowId === item.id && aberta.campo === campo;
@@ -1922,11 +1884,11 @@ export function JobItemRealizadoTable({
                             nav={nav("tipo_custo")}
                             moldura={moldura("tipo_custo")}
                             className={classeNeutra}
-                            // Na edição do financeiro, por que o tipo desta
-                            // linha não abre, ou abre só entre os tipos com
-                            // PP (revisão da decisão 115).
+                            // Por que o tipo desta linha não abre, ou abre só
+                            // entre os tipos com PP (revisão da decisão 115;
+                            // na errata desde a 238).
                             title={
-                              editando && modoDaEdicao === "financeiro"
+                              editando
                                 ? (motivoDaTrava ??
                                   (travaDoTipoDaLinha?.tipo === "travado"
                                     ? motivoDoTipoTravado(travaDoTipoDaLinha.lancamento)
@@ -2382,19 +2344,15 @@ export function JobItemRealizadoTable({
                       savePorItem?.[item.id],
                     );
                     const travadaPorSave = motivoSave !== null;
-                    // PP no financeiro trava a linha inteira (decisão
-                    // 040) — remover inclusive. O servidor já recusava
-                    // qualquer PP no histórico (`barrarRemocao`); a
-                    // tela passa a dizer isso antes do clique.
-                    const travadaPorPP = travadasPorPP.has(item.id);
-                    // A PP só gerada também impede cancelar (28/10/2026).
+                    // Linha com PP, de qualquer situação fora de cancelada,
+                    // não se cancela (`barrarCancelamento`, no servidor;
+                    // 28/10/2026). A trava da linha inteira (decisão 040
+                    // §1) saiu com a 238: a PP não impede mais corrigir.
                     const comPPGerada =
                       (ppsPorItemId.get(realizadosMap.get(item.id)?.id ?? "") ?? []).length > 0;
-                    const motivoDaTrava = travadaPorPP
-                      ? MOTIVO_TRAVA_PP
-                      : comPPGerada
-                        ? MOTIVO_CANCELAR_COM_PP
-                        : motivoSave;
+                    const motivoDaTrava = comPPGerada
+                      ? MOTIVO_CANCELAR_COM_PP
+                      : motivoSave;
                     const nova = errata.ehNova(item.id);
                     const cancelada = errata.estaCancelada(item.id);
                     return (
@@ -2415,9 +2373,9 @@ export function JobItemRealizadoTable({
                                 ? errata.reativar(item.id)
                                 : errata.remover(item.id)
                             }
-                            disabled={travadaPorSave || travadaPorPP || comPPGerada}
+                            disabled={travadaPorSave || comPPGerada}
                             title={
-                              travadaPorSave || travadaPorPP || comPPGerada
+                              travadaPorSave || comPPGerada
                                 ? (motivoDaTrava ?? undefined)
                                 : undefined
                             }
@@ -2609,20 +2567,15 @@ export function JobItemRealizadoTable({
             )
           : null;
 
-        // As portas do ENVIO num texto só, para o painel do item. A
-        // pré-abertura vem primeiro: num job ainda não aberto a marca de
-        // revisão nem existe, e é o motivo que o usuário precisa ler
-        // (decisão 153: ali só PP a emitir).
+        // As portas do ENVIO num texto só, para o painel do item: a
+        // pré-abertura (decisão 153: ali só PP a emitir) e o papel. A errata
+        // não trava mais o envio (decisão 238).
         const envioBloqueadoPor = preAbertura
           ? textoAguardaAbertura(statusDoJob) ??
             "O financeiro ainda não abriu este job: por enquanto, só PPs a emitir."
-          : itemAtual && linhasComEnvioTravado.includes(itemAtual.id)
-            ? TEXTO_LINHA_ALTERADA_EM_REVISAO
-            : itemAtual && linhasNaErrataPronta.includes(itemAtual.id)
-              ? TEXTO_LINHA_NA_ERRATA_PRONTA
-              : !papelEnviaPP
-              ? "Só o GP envia PP ao financeiro. Confira os documentos e deixe a PP pronta para envio: o GP a envia pela aba Pedidos de Produção."
-              : null;
+          : !papelEnviaPP
+            ? "Só o GP envia PP ao financeiro. Confira os documentos e deixe a PP pronta para envio: o GP a envia pela aba Pedidos de Produção."
+            : null;
 
         return (
           <>
