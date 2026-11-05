@@ -56,6 +56,12 @@ interface Props {
   freelancerNome?: string;
   /** Mapa UUID → nome pra resolver quem solicitou o distrato. */
   gpNomesPorId?: Record<string, string>;
+  /**
+   * UUID de quem aprovou a solicitação que originou este contrato. Nulo pra
+   * contratos legados (origem_sistema='ag_california_rh') — eles não têm
+   * solicitação no ERP.
+   */
+  aprovadorId?: string | null;
 }
 
 export function ContratoCard({
@@ -66,6 +72,7 @@ export function ContratoCard({
   canManage,
   freelancerNome,
   gpNomesPorId,
+  aprovadorId,
 }: Props) {
   const router = useRouter();
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -702,6 +709,18 @@ export function ContratoCard({
                     </span>
                   </>
                 )}
+              {aprovadorId && gpNomesPorId?.[aprovadorId] && (
+                <>
+                  <span className="h-1 w-1 rounded-full bg-border" />
+                  <span
+                    className="inline-flex items-center gap-1"
+                    title="Quem aprovou a solicitação deste contrato"
+                  >
+                    <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                    Aprovado por {gpNomesPorId[aprovadorId]}
+                  </span>
+                </>
+              )}
             </div>
 
             {/* Contador de duração + tempo restante */}

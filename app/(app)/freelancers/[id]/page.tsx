@@ -9,6 +9,7 @@ import {
   FileText,
   Plus,
   User,
+  Contact,
   ArrowLeftRight,
 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
@@ -32,7 +33,7 @@ import {
   type ResponsavelOption,
 } from "../_components/transferir-responsavel-dialog";
 import type { JobItem } from "../_components/job-picker";
-import { formatCnpj, formatCep, formatTelefone, initials } from "@/lib/utils";
+import { formatCnpj, formatCep, formatCpf, formatDate, formatTelefone, initials } from "@/lib/utils";
 import { PIX_TIPOS } from "@/lib/pix";
 import { jobsProPickerDeFreelancer } from "@/lib/data/jobs-pro-picker-de-freelancer";
 
@@ -197,12 +198,38 @@ export default async function FreelancerPerfilPage({
     historicoPorContrato.set(h.contrato_id, arr);
   }
 
+  // Quem aprovou cada contrato — vem da solicitação que originou o contrato.
+  // Contratos legados (origem_sistema='ag_california_rh') não têm solicitação
+  // no ERP, então ficam sem aprovador — nada a mostrar nesses casos.
+  const aprovadorPorContratoId: Record<string, string> = {};
+  if (contratos.length > 0) {
+    const { data: solicRows } = await supabase
+      .from("freelancer_solicitacoes")
+      .select("contrato_id, aprovado_por")
+      .in(
+        "contrato_id",
+        contratos.map((c) => c.id),
+      )
+      .not("aprovado_por", "is", null);
+    for (const row of (solicRows ?? []) as Array<{
+      contrato_id: string | null;
+      aprovado_por: string | null;
+    }>) {
+      if (row.contrato_id && row.aprovado_por) {
+        aprovadorPorContratoId[row.contrato_id] = row.aprovado_por;
+      }
+    }
+  }
+
   // Resolve nomes dos profiles pra mostrar quem solicitou distrato + o dono
-  // da pessoa (freelancer.responsavel_id).
+  // da pessoa (freelancer.responsavel_id) + quem aprovou cada contrato.
   const profileIds = new Set<string>();
   for (const c of contratos) {
     if (c.responsavel_id) profileIds.add(c.responsavel_id);
     if (c.distrato_solicitado_por) profileIds.add(c.distrato_solicitado_por);
+  }
+  for (const uid of Object.values(aprovadorPorContratoId)) {
+    profileIds.add(uid);
   }
   if (freelancer.responsavel_id) profileIds.add(freelancer.responsavel_id);
   let gpNomesPorId: Record<string, string> = {};
@@ -391,6 +418,7 @@ export default async function FreelancerPerfilPage({
               canManage={canManage}
               freelancerNome={freelancer.nome_social}
               gpNomesPorId={gpNomesPorId}
+              aprovadorId={aprovadorPorContratoId[c.id] ?? null}
             />
           );
         })}
@@ -409,6 +437,9 @@ export default async function FreelancerPerfilPage({
     freelancer.bairro
   );
   const temEndereco = temEnderecoEstruturado || !!freelancer.endereco_legado;
+  const temPessoaFisica = !!(
+    freelancer.cpf || freelancer.rg || freelancer.data_nascimento
+  );
   const temPj = !!(freelancer.cnpj && freelancer.razao_social);
   const temPagamento = !!(
     freelancer.tipo_pagamento ||
@@ -472,11 +503,82 @@ export default async function FreelancerPerfilPage({
   const dadosPessoais = (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
       {podeTransferirResp && blocoResponsavel}
+      {/* Linha 1: Contato | Pagamento */}
       {temContato && (
         <BlocoInfo icon={Mail} titulo="Contato">
           {freelancer.email && <Linha rotulo="Email" valor={freelancer.email} />}
           {freelancer.celular && (
             <Linha rotulo="Celular" valor={formatTelefone(freelancer.celular)} />
+          )}
+        </BlocoInfo>
+      )}
+
+      {temPagamento && (
+        <BlocoInfo icon={CreditCard} titulo="Pagamento">
+          {freelancer.tipo_pagamento && (
+            <Linha
+              rotulo="Tipo"
+              valor={
+                freelancer.tipo_pagamento === "pix" ? "PIX" : "Conta bancária"
+              }
+            />
+          )}
+          {freelancer.banco && <Linha rotulo="Banco" valor={freelancer.banco} />}
+          {freelancer.agencia && (
+            <Linha rotulo="Agência" valor={freelancer.agencia} />
+          )}
+          {freelancer.conta && <Linha rotulo="Conta" valor={freelancer.conta} />}
+          {/* Decisão 212 */}
+          {freelancer.tipo_conta && (
+            <Linha rotulo="Tipo de conta" valor={TIPO_CONTA_ROTULO[freelancer.tipo_conta]} />
+          )}
+          {freelancer.pix_tipo && (
+            <Linha
+              rotulo="Tipo da chave"
+              valor={PIX_TIPOS.find((t) => t.valor === freelancer.pix_tipo)?.rotulo ?? freelancer.pix_tipo}
+            />
+          )}
+          {freelancer.pix_chave && (
+            <Linha rotulo="Chave PIX" valor={freelancer.pix_chave} />
+          )}
+        </BlocoInfo>
+      )}
+
+      {/* Linha 2: Pessoa Física | Pessoa Jurídica */}
+      {temPessoaFisica && (
+        <BlocoInfo icon={Contact} titulo="Pessoa física">
+          {freelancer.cpf && <Linha rotulo="CPF" valor={formatCpf(freelancer.cpf)} />}
+          {freelancer.rg && <Linha rotulo="RG" valor={freelancer.rg} />}
+          {freelancer.data_nascimento && (
+            <Linha rotulo="Nascimento" valor={formatDate(freelancer.data_nascimento)} />
+          )}
+        </BlocoInfo>
+      )}
+
+      {temPj && (
+        <BlocoInfo icon={Building2} titulo="Pessoa jurídica">
+          <Linha rotulo="CNPJ" valor={formatCnpj(freelancer.cnpj!)} />
+          <Linha rotulo="Razão social" valor={freelancer.razao_social} />
+        </BlocoInfo>
+      )}
+
+      {/* Linha 3: Diversidade | Endereço */}
+      {temDiversidade && (
+        <BlocoInfo icon={Heart} titulo="Diversidade e saúde">
+          {freelancer.cor_raca && (
+            <Linha rotulo="Cor/raça" valor={freelancer.cor_raca} />
+          )}
+          {freelancer.identidade_genero && (
+            <Linha rotulo="Gênero" valor={freelancer.identidade_genero} />
+          )}
+          {freelancer.deficiencia && (
+            <Linha rotulo="Deficiência" valor={freelancer.deficiencia} />
+          )}
+          {freelancer.saude_obs && (
+            <Linha rotulo="Observações" valor={freelancer.saude_obs} />
+          )}
+          {freelancer.contato_emergencia && (
+            <Linha rotulo="Emergência" valor={freelancer.contato_emergencia} />
           )}
         </BlocoInfo>
       )}
@@ -519,66 +621,9 @@ export default async function FreelancerPerfilPage({
         </BlocoInfo>
       )}
 
-      {temPj && (
-        <BlocoInfo icon={Building2} titulo="Pessoa jurídica">
-          <Linha rotulo="CNPJ" valor={formatCnpj(freelancer.cnpj!)} />
-          <Linha rotulo="Razão social" valor={freelancer.razao_social} />
-        </BlocoInfo>
-      )}
-
-      {temPagamento && (
-        <BlocoInfo icon={CreditCard} titulo="Pagamento">
-          {freelancer.tipo_pagamento && (
-            <Linha
-              rotulo="Tipo"
-              valor={
-                freelancer.tipo_pagamento === "pix" ? "PIX" : "Conta bancária"
-              }
-            />
-          )}
-          {freelancer.banco && <Linha rotulo="Banco" valor={freelancer.banco} />}
-          {freelancer.agencia && (
-            <Linha rotulo="Agência" valor={freelancer.agencia} />
-          )}
-          {freelancer.conta && <Linha rotulo="Conta" valor={freelancer.conta} />}
-          {/* Decisão 212 */}
-          {freelancer.tipo_conta && (
-            <Linha rotulo="Tipo de conta" valor={TIPO_CONTA_ROTULO[freelancer.tipo_conta]} />
-          )}
-          {freelancer.pix_tipo && (
-            <Linha
-              rotulo="Tipo da chave"
-              valor={PIX_TIPOS.find((t) => t.valor === freelancer.pix_tipo)?.rotulo ?? freelancer.pix_tipo}
-            />
-          )}
-          {freelancer.pix_chave && (
-            <Linha rotulo="Chave PIX" valor={freelancer.pix_chave} />
-          )}
-        </BlocoInfo>
-      )}
-
-      {temDiversidade && (
-        <BlocoInfo icon={Heart} titulo="Diversidade e saúde" className="md:col-span-2">
-          {freelancer.cor_raca && (
-            <Linha rotulo="Cor/raça" valor={freelancer.cor_raca} />
-          )}
-          {freelancer.identidade_genero && (
-            <Linha rotulo="Gênero" valor={freelancer.identidade_genero} />
-          )}
-          {freelancer.deficiencia && (
-            <Linha rotulo="Deficiência" valor={freelancer.deficiencia} />
-          )}
-          {freelancer.saude_obs && (
-            <Linha rotulo="Observações" valor={freelancer.saude_obs} />
-          )}
-          {freelancer.contato_emergencia && (
-            <Linha rotulo="Emergência" valor={freelancer.contato_emergencia} />
-          )}
-        </BlocoInfo>
-      )}
-
       {!temContato &&
         !temEndereco &&
+        !temPessoaFisica &&
         !temPj &&
         !temPagamento &&
         !temDiversidade && (
