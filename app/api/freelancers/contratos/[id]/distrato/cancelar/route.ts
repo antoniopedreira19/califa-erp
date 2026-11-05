@@ -24,59 +24,26 @@ export async function POST(
 
   const supabase = createClient();
 
-  // Buscar paths pra deletar do bucket
-  const { data: c } = await supabase
-    .from("freelancer_contratos")
-    .select("distrato_minuta_url, distrato_arquivo_url")
-    .eq("id", params.id)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle();
-
-  const paths: string[] = [];
-  const minutaPath = (c as any)?.distrato_minuta_url;
-  const assinadoPath = (c as any)?.distrato_arquivo_url;
-  if (minutaPath) paths.push(minutaPath);
-  if (assinadoPath) paths.push(assinadoPath);
-
-  // `select("id")` pra diferenciar 0 linhas (RLS/not-found) de sucesso real.
-  // Mesmo padrão do solicitar/route — sem isso, API devolvia 200 pra tentativas
-  // bloqueadas por RLS e o audit de cancelado era gravado em vão.
-  const { data: atualizados, error } = await supabase
-    .from("freelancer_contratos")
-    .update({
-      distrato_data_proposta: null,
-      distrato_motivo: null,
-      distrato_solicitado_por: null,
-      distrato_solicitado_em: null,
-      distrato_minuta_url: null,
-      distrato_arquivo_url: null,
-      updated_by: session.profile.id,
-    })
-    .eq("id", params.id)
-    .eq("tenant_id", session.activeTenant.id)
-    .select("id");
+  // Chama RPC SECURITY DEFINER (mesmo motivo que em /solicitar). A RPC
+  // valida permissão (admin/rh/fin, OU responsável do contrato, OU quem
+  // solicitou o distrato) e devolve os paths dos arquivos pra API apagar
+  // do bucket. Ver migration 20261105100001.
+  const { data: paths, error } = await supabase.rpc(
+    "cancelar_distrato_contrato",
+    { p_contrato_id: params.id },
+  );
 
   if (error) {
     console.error("[distrato.cancelar]", error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  if (!atualizados || atualizados.length === 0) {
-    console.error(
-      "[distrato.cancelar] 0 linhas afetadas — RLS bloqueou ou contrato não existe",
-      { contrato_id: params.id, user_id: session.profile.id },
-    );
+    const codigoDeNegocio = /^P000[1-3]$/.test(error.code ?? "");
     return NextResponse.json(
-      {
-        error:
-          "Não foi possível cancelar o distrato. Verifique se você tem permissão nesse contrato.",
-      },
-      { status: 403 },
+      { error: error.message },
+      { status: codigoDeNegocio ? 403 : 500 },
     );
   }
 
   // Best-effort: apaga arquivos do bucket
-  if (paths.length > 0) {
+  if (Array.isArray(paths) && paths.length > 0) {
     await supabase.storage.from("freelancer-arquivos").remove(paths);
   }
 

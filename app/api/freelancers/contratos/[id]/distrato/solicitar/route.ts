@@ -34,43 +34,24 @@ export async function POST(
   }
 
   const supabase = createClient();
-  // Pede `select("id")` de volta pra conseguir diferenciar "atualizou 0 linhas"
-  // (RLS bloqueou OU contrato não existe) de "atualizou com sucesso". Sem isso,
-  // supabase devolve error=null também pra 0 linhas afetadas — o audit era
-  // gravado como sucesso enquanto o banco permanecia intacto, enganando o
-  // usuário com toast verde (incidente Adriano/Márcia, 05/11/2026).
-  const { data: atualizados, error } = await supabase
-    .from("freelancer_contratos")
-    .update({
-      distrato_data_proposta: parsed.data.data_proposta,
-      distrato_motivo: parsed.data.motivo,
-      distrato_solicitado_por: session.profile.id,
-      distrato_solicitado_em: new Date().toISOString(),
-      // Zera minuta/assinado anteriores em caso de nova solicitação
-      distrato_minuta_url: null,
-      distrato_arquivo_url: null,
-      updated_by: session.profile.id,
-    })
-    .eq("id", params.id)
-    .eq("tenant_id", session.activeTenant.id)
-    .select("id");
+  // Chama RPC SECURITY DEFINER em vez de UPDATE direto: a policy RLS de
+  // freelancer_contratos só libera UPDATE pra admin/rh/financeiro. GP
+  // (responsável do contrato) precisa passar pela RPC pra o UPDATE rolar.
+  // A RPC valida: admin/rh/fin OU responsavel_id = auth.uid().
+  // Ver incidente Adriano/Márcia (05/11/2026) e migration 20261105100001.
+  const { error } = await supabase.rpc("solicitar_distrato_contrato", {
+    p_contrato_id: params.id,
+    p_data_proposta: parsed.data.data_proposta,
+    p_motivo: parsed.data.motivo,
+  });
 
   if (error) {
     console.error("[distrato.solicitar]", error.message);
-    return NextResponse.json({ error: error.message }, { status: 500 });
-  }
-
-  if (!atualizados || atualizados.length === 0) {
-    console.error(
-      "[distrato.solicitar] 0 linhas afetadas — RLS bloqueou ou contrato não existe",
-      { contrato_id: params.id, user_id: session.profile.id },
-    );
+    // Erros de permissão/validação vêm como P0001..P0005 da RPC.
+    const codigoDeNegocio = /^P000[1-5]$/.test(error.code ?? "");
     return NextResponse.json(
-      {
-        error:
-          "Não foi possível solicitar o distrato. Verifique se você tem permissão nesse contrato.",
-      },
-      { status: 403 },
+      { error: error.message },
+      { status: codigoDeNegocio ? 403 : 500 },
     );
   }
 
