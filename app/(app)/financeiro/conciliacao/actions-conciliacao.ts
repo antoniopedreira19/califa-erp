@@ -293,7 +293,7 @@ export async function conciliarPelosDocumentos(
   return chamar(
     "conciliar_linha_pelos_documentos",
     { p_linha_id: linhaId, p_documentos: documentos, p_como: como, p_grupo: grupo, p_sozinha: sozinha },
-    "A baixa foi feita, mas não foi possível ligar a linha do banco: ela aparece como baixa feita à mão na próxima leitura.",
+    "A baixa foi feita, mas não foi possível ligar a linha do banco: ela aparece como já baixada no sistema na próxima leitura.",
   );
 }
 

@@ -1,7 +1,7 @@
 # 239 — Conciliação automática: divisões fechadas e lembradas, o extrato novo aberto, tudo conciliado e o período do extrato
 
 **Data:** 2026-11-05
-**Status:** aceita e implementada em 05/11/2026; pontos 1 e 2 revistos em 06/11/2026 (as divisões abrem sempre fechadas, sem lembrar o que foi aberto).
+**Status:** aceita e implementada em 05/11/2026; pontos 1 e 2 revistos em 06/11/2026 (as divisões abrem sempre fechadas, sem lembrar o que foi aberto); as divisões e as colunas revistas pela [243](243-conciliacao-automatica-fila-por-acao.md) no mesmo dia.
 **Quem decidiu:** Tiago, em 05/11/2026, revisando no protótipo do módulo financeiro os pontos 0 a 6 ("Pronto! Aprovado. Pode implementar.").
 **Revê:** a [234](234-revisao-do-financeiro-pelo-prototipo.md), D6 (a fila dividida nascia com tudo aberto, menos "Baixas à mão que bateram" e "Conciliados") e a seleção de todas pelo cabeçalho.
 

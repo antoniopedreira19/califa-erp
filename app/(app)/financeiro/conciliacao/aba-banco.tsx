@@ -362,7 +362,7 @@ export function AbaBanco({
     const doc = documentoDaLinha(b.l);
     fecharBaixa();
     if (!doc) {
-      setAviso({ tom: "erro", texto: "Baixa feita, mas a linha do banco ficou sem conciliar: ela aparece como baixa feita à mão na próxima leitura." });
+      setAviso({ tom: "erro", texto: "Baixa feita, mas a linha do banco ficou sem conciliar: ela aparece como já baixada no sistema na próxima leitura." });
       router.refresh();
       return;
     }
@@ -437,7 +437,7 @@ export function AbaBanco({
       if (!l) return;
       executar(async () => {
         const res = await conciliarLinha(r.mov.id, l.ids);
-        return res.ok ? { ok: true, mensagem: "Conciliado: a baixa feita à mão ficou ligada à linha do banco, com a data dele." } : res;
+        return res.ok ? { ok: true, mensagem: "Conciliado: a baixa já lançada no sistema ficou ligada à linha do banco, com a data dele." } : res;
       });
     },
     baixarEConciliar: (r) => {
@@ -531,6 +531,10 @@ export function AbaBanco({
     },
   };
 
+  // Uma linha de cada vez, cada uma pela ação dela: é o "Conciliar os N" de
+  // Prontos para conciliar (decisão 243), que junta título exato, soma do
+  // fornecedor, baixa já lançada, remessa, tarifa pela regra, planilha e o
+  // PIX que voltou (pela linha da devolução, que concilia as duas).
   const conciliarVarios = (rs: ResultadoDaLinha[]) =>
     emSerie(
       rs,
@@ -539,7 +543,17 @@ export function AbaBanco({
           const l = conciliacao.lancamentos.get(r.lancamento.id);
           return l ? conciliarLinha(r.mov.id, l.ids) : null;
         }
-        const ts = r.estado === "combinacao" ? r.titulos ?? [] : r.titulo ? [r.titulo] : [];
+        if (r.estado === "regra") return r.regra?.id ? lancarPelaRegra([{ linhaId: r.mov.id, regraId: r.regra.id as string }]) : null;
+        if (r.estado === "historico") return r.historicos?.length ? conciliarPeloHistorico(r.mov.id, r.historicos.map((h) => h.id)) : null;
+        if (r.estado === "par") {
+          if (!r.par) return null;
+          const l = r.titulo ? linhaDe(r.titulo) : undefined;
+          const referencia = r.titulo ? `${r.titulo.ref} · ${r.titulo.contraparte}` : null;
+          const fornecedorId = l?.lado === "pagar" ? l.t.parte_id : null;
+          const [saida, volta] = r.mov.valor < 0 ? [r, r.par] : [r.par, r];
+          return registrarSaiuEVoltou(saida.mov.id, volta.mov.id, referencia, fornecedorId);
+        }
+        const ts = r.estado === "soma" ? r.lote?.titulos ?? [] : r.estado === "combinacao" ? r.titulos ?? [] : r.titulo ? [r.titulo] : [];
         const itens = itensDe(ts);
         return itens ? baixarNaLinha({ linhaId: r.mov.id, itens }) : null;
       },

@@ -101,13 +101,13 @@ export type Tipo =
 
 export const TIPOS: Record<Tipo, { rotulo: string; cor: Cor; texto: string; dica: string }> = {
   divergencia: {
-    rotulo: "Divergência",
+    rotulo: "Valor diferente",
     cor: "red",
     texto: "text-california-red",
     dica: "O sistema já tem a baixa, com outro valor. Corrija para o valor do banco; se era outro pagamento, procure o título certo.",
   },
   manual: {
-    rotulo: "Baixa à mão",
+    rotulo: "Já baixado",
     cor: "sky",
     texto: "text-sky-700",
     dica: "A baixa já estava no sistema e o banco mostra o mesmo valor até 3 dias depois. Conciliar só liga as duas, com a data do banco. Na importação se conciliam sozinhas e ficam à vista.",
@@ -137,13 +137,13 @@ export const TIPOS: Record<Tipo, { rotulo: string; cor: Cor; texto: string; dica
     dica: "O banco devolveu o pagamento no mesmo dia. As duas linhas entram no extrato e o título continua a pagar.",
   },
   regra: {
-    rotulo: "Regra",
+    rotulo: "Tarifa do banco",
     cor: "violet",
     texto: "text-violet-700",
     dica: "Tarifas e outros débitos do próprio banco, que nunca têm título. A regra do histórico diz o centro de custo.",
   },
   historico: {
-    rotulo: "Histórico",
+    rotulo: "Planilha",
     cor: "violet",
     texto: "text-violet-700",
     dica: "Competência até o 3T que fica fora do sistema (decisão 211) ou previsão da planilha. Conciliar liga a linha do banco à da planilha, sem lançamento no sistema.",
@@ -173,10 +173,10 @@ export const TIPOS: Record<Tipo, { rotulo: string; cor: Cor; texto: string; dica
     dica: "Nada no sistema tem esse valor. Lance como avulso (a linha já vem preenchida) ou procure um título.",
   },
   soSistema: {
-    rotulo: "Só no sistema",
+    rotulo: "Sem linha no banco",
     cor: "red",
     texto: "text-california-red",
-    dica: "Baixa feita à mão num dia que o extrato cobre por inteiro, sem linha no banco: paga em outra conta, com a data errada ou não paga. Corrija ou cancele; até lá, a conciliação não fecha.",
+    dica: "Baixa já lançada no sistema num dia que o extrato cobre por inteiro, sem linha no banco: paga em outra conta, com a data errada ou não paga. Corrija ou cancele; até lá, a conciliação não fecha.",
   },
   conciliado: {
     rotulo: "Conciliado",
@@ -355,7 +355,7 @@ export function resumoDoSistema(r: ResultadoDaLinha, contexto: ContextoDasCelula
       return `${jobs[0] ?? "Planilha"}${jobs.length > 1 ? ` e mais ${jobs.length - 1}` : ""} · planilha`;
     }
     case "ja_lancado":
-      return r.lancamento?.descricao ?? "Baixa feita à mão";
+      return r.lancamento?.descricao ?? "Já baixado no sistema";
     case "divergencia": {
       const d = r.diferencaBaixa ?? 0;
       return `${r.lancamento?.descricao ?? "Baixa"} · ${moeda(Math.abs(d))} ${d > 0 ? "a mais" : "a menos"}`;
@@ -647,37 +647,6 @@ export function MenuMais({ itens: todos, acoes, extra }: { itens: AcaoDescrita[]
 // O grupo de linhas iguais: a escolha de cada linha
 // ---------------------------------------------------------------------------
 
-export function useEscolhaDoGrupo(g: GrupoDeIguais<MovimentoDaLinha>) {
-  const linhas = React.useMemo(() => [...g.linhas].sort((a, b) => a.mov.ordem - b.mov.ordem), [g.linhas]) as ResultadoDaLinha[];
-  const [escolha, setEscolha] = React.useState<Record<string, string>>(() =>
-    Object.fromEntries(linhas.map((r) => [r.mov.id, (r.titulo as TituloDoMotor).id])),
-  );
-  const porId = new Map(g.titulos.map((t) => [t.id, t]));
-  const escolhidos = linhas.map((r) => porId.get(escolha[r.mov.id]) as TituloDoMotor);
-  const sobram = g.titulos.filter((t) => !Object.values(escolha).includes(t.id));
-  const semCentro = escolhidos.filter((t) => !comCentro(t));
-  const trocar = (linhaId: string, id: string) =>
-    setEscolha((e) => {
-      const outra = Object.keys(e).find((k) => k !== linhaId && e[k] === id);
-      return outra ? { ...e, [linhaId]: id, [outra]: e[linhaId] } : { ...e, [linhaId]: id };
-    });
-  /** As trocas possíveis de uma linha, para o menu ⋯. */
-  const trocasDe = (r: ResultadoDaLinha): AcaoDescrita[] =>
-    g.titulos
-      .filter((x) => x.id !== escolha[r.mov.id])
-      .map((x) => {
-        const deOutra = Object.entries(escolha).some(([k, id]) => k !== r.mov.id && id === x.id);
-        return {
-          rotulo: `Trocar por ${x.ref} · ${x.contraparte}${deOutra ? " (da outra linha)" : ""}`,
-          icone: ArrowLeftRight,
-          onClick: () => trocar(r.mov.id, x.id),
-        };
-      });
-  const valor = moeda(Math.abs(linhas[0].mov.valor));
-  const resumo = `${linhas.length} ${linhas.length === 1 ? "linha" : "linhas iguais"} de ${valor} · ${g.titulos.length} títulos`;
-  return { linhas, escolha, porId, escolhidos, sobram, semCentro, trocar, trocasDe, resumo };
-}
-
 export function acoesDaLinhaDoGrupo(r: ResultadoDaLinha, t: TituloDoMotor, acoes: AcoesDoBanco, trocas: AcaoDescrita[]): AcoesDescritas {
   return {
     principal: comCentro(t)
@@ -817,7 +786,7 @@ export function LinhaDeAvisos(p: PropsDaFila) {
       {dia && (
         <ChipDeAviso
           tom="ambar"
-          dica={`O arquivo foi gerado às ${dia.hora} desse dia. As linhas de hoje podem ser conciliadas, mas o dia só entra no fechamento com um extrato gerado depois dele. A baixa feita à mão hoje que ainda não está no banco não é divergência.`}
+          dica={`O arquivo foi gerado às ${dia.hora} desse dia. As linhas de hoje podem ser conciliadas, mas o dia só entra no fechamento com um extrato gerado depois dele. A baixa já lançada hoje que ainda não está no banco não é divergência.`}
         >
           <Info className="h-3.5 w-3.5" />
           {dataBR(dia.dia).slice(0, 5)} em andamento

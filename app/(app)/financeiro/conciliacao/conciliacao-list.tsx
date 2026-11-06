@@ -5,6 +5,7 @@ import { AlertTriangle, CheckCheck, ChevronDown, CreditCard, ExternalLink, Info,
 import type { LancamentoLinha } from "@/lib/calculos/saldo-conta";
 import type { DetalheDoImposto } from "@/lib/data/imposto-extrato";
 import { Dica } from "@/components/ui/dica";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { BotaoDetalhes } from "@/components/financeiro/detalhes-do-titulo/botao-detalhes";
 import { CentrosDaFatura, LinhasDosItens } from "@/components/financeiro/planilha-de-titulos/planilha";
 import { colunasDoExtratoNaGrade } from "@/components/financeiro/planilha-de-titulos/colunas";
@@ -404,15 +405,26 @@ export function ConciliacaoList({
               Histórico
             </span>
           ) : jobParaColuna.tipo === "link" ? (
-            <Link
-              href={`/financeiro/jobs/${jobParaColuna.id}`}
-              prefetch={false}
-              className="block truncate text-california-red hover:underline"
-            >
-              {jobParaColuna.codigo}
-            </Link>
+            // Decisão 243: o nome do financeiro ao passar o mouse.
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Link
+                  href={`/financeiro/jobs/${jobParaColuna.id}`}
+                  prefetch={false}
+                  className="block truncate text-california-red hover:underline"
+                >
+                  {jobParaColuna.codigo}
+                </Link>
+              </TooltipTrigger>
+              {jobParaColuna.nome && <TooltipContent className="font-sans">{jobParaColuna.nome}</TooltipContent>}
+            </Tooltip>
           ) : jobParaColuna.tipo === "multi" ? (
-            <span className="font-sans italic text-muted-foreground/70">Múltiplos</span>
+            <Dica
+              conteudo={[...new Map(l.origens.flatMap((o) => (o.job_id && o.codigo ? [[o.job_id, `${o.codigo} · ${o.nome ?? ""}`] as const] : []))).values()].join("; ")}
+              className="font-sans italic text-muted-foreground/70 underline decoration-dotted underline-offset-2"
+            >
+              Múltiplos
+            </Dica>
           ) : itens.length > 0 && jobsDosItens(itens).length > 0 ? (
             <Dica conteudo={jobsDosItens(itens).join(" · ")} className="font-sans underline decoration-dotted underline-offset-2">
               {jobsDosItens(itens).length} {jobsDosItens(itens).length === 1 ? "job" : "jobs"}
@@ -1116,19 +1128,23 @@ function formatDate(iso: string): string {
 export function derivarJobParaColuna(
   linha: LancamentoLinha,
 ):
-  | { tipo: "link"; id: string; codigo: string }
+  | { tipo: "link"; id: string; codigo: string; nome: string | null }
   | { tipo: "multi" }
   | { tipo: "nao_vinculado" } {
   if (linha.job_id && linha.job_codigo) {
-    return { tipo: "link", id: linha.job_id, codigo: linha.job_codigo };
+    return { tipo: "link", id: linha.job_id, codigo: linha.job_codigo, nome: (linha as { job_nome?: string | null }).job_nome ?? null };
   }
   const jobsUnicos = new Map<string, string>();
+  const nomes = new Map<string, string | null>();
   for (const o of linha.origens) {
-    if (o.job_id && o.codigo) jobsUnicos.set(o.job_id, o.codigo);
+    if (o.job_id && o.codigo) {
+      jobsUnicos.set(o.job_id, o.codigo);
+      nomes.set(o.job_id, o.nome);
+    }
   }
   const arr = Array.from(jobsUnicos.entries());
   if (arr.length === 1) {
-    return { tipo: "link", id: arr[0][0], codigo: arr[0][1] };
+    return { tipo: "link", id: arr[0][0], codigo: arr[0][1], nome: nomes.get(arr[0][0]) ?? null };
   }
   if (arr.length > 1) return { tipo: "multi" };
   return { tipo: "nao_vinculado" };

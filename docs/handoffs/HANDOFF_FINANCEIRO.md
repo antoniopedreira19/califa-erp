@@ -8907,3 +8907,13 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Conferido (06/11) no TES-1035/26:** entrou (B → FI, planejado 8.000 → 10.000, faturamento 13.918,23 → 0, previsões de recebimento e de impostos apagadas, custo 10.000) e saiu (FI → B, faturamento 13.918,23 de volta, recebimento e impostos em 2 parcelas), tudo conferido no banco. Como combinado, o planejado do teste ficou em 10.000, não volta a 8.000. Os bloqueios dos 20 jobs TES foram conferidos no banco; o pop-up de bloqueio não foi visto na tela (o navegador travou por falta de memória).
 - **Fora:** Always On → Ativação fica como já está no sistema (decisão do Tiago).
 - **Migrations:** `20261105800001` e `20261106800001` (conserto: a soma dos motivos quebrava com `text[] || 'texto'`), aditivas.
+
+## ⚠️ Nota de 2026-11-06 — a fila da Conciliação automática pelo que se faz (decisão 243)
+
+- **Divisões:** 5 no lugar das 14 — Corrigir, Prontos para conciliar, Conferir, Lançar avulso · Não há no sistema, Conciliados. O motivo de cada linha vai na Situação ("Título exato", "Juros e multa", "Retenção na fonte"…). "Baixa à mão" virou "Já baixado".
+- **Colunas:** Data | Descrição no banco | Valor | Situação | No sistema · Descrição | Fornecedor | Job | Tipo | TRI | Reg | Ação, com os filtros por coluna (decisão 165) e o corte entre Situação e No sistema. Tipo pelas siglas da planilha (REC, CO, CF…, MÚTUO INT, o nome da outra conta na transferência, ESTORNO); TRI como no Extrato.
+- **Sem expandir:** o porquê, o centro de custo, o texto inteiro, o dono do CNPJ e as partes do agrupamento ficam nas dicas. Saíram as caixas de seleção; "Conciliar os N" de Prontos concilia tudo da divisão, em série.
+- **Linhas iguais:** o sistema não escolhe mais o título; cada linha tem o seletor, e as colunas se preenchem ao escolher.
+- **Job:** o código, e o nome do financeiro na dica, também em Títulos (as quatro planilhas) e no Extrato; a planilha usava o nome da produção nas PPs e nas notas.
+- **Defeito corrigido junto:** a consulta das baixas ligadas mandava todos os ids num `.in()` só e falhava ("Bad Request") na California Santander, com ~1.400 conciliadas; agora vai em lotes de 150.
+- **Conferido:** na Conta Teste e na California Santander (1.622 linhas, 1.347 das 1.405 conciliadas com Tipo; as 58 sem são saiu e voltou, fora da DRE), Contas a Pagar e Contas a Receber abrindo, o seletor das linhas iguais preenchendo as colunas (sem conciliar), a dica do job com o nome do financeiro em Títulos e no Extrato. Sem migration.

@@ -29,6 +29,8 @@ import type { createClient } from "@/lib/supabase/server";
 import type { ConciliadaComo, ExtratoLinhaComSituacao, ResolucaoSozinha } from "@/lib/types";
 import type { LancamentoDoMotor, RegraDoMotor } from "@/lib/conciliacao/motor";
 import type { HistoricoDoMotor } from "@/lib/conciliacao/historico";
+import { montarLinhasDeLancamentos, SELECT_LANCAMENTO_LINHA } from "@/lib/data/lancamento-linha";
+import { juntarRateio } from "@/lib/financeiro/planilha-de-titulos";
 import type { ContextoDoMutuoNaConta, ParteDoMutuo } from "@/lib/financeiro/mutuo";
 import { contextoDoMutuoNaConta } from "../mutuos/dados";
 import { somaDias } from "@/lib/conciliacao/motor";
@@ -96,7 +98,16 @@ export interface LinhaDoBanco {
   /** A transferência que a regra criou (a aplicação e o resgate, decisão 211, A5). */
   transferenciaId: string | null;
   /** A cauda do histórico ligada (na conciliada `como 'historico'`, A6). */
-  historicos: Array<{ id: string; valor: number; job: string | null; descricao: string | null }>;
+  historicos: Array<{
+    id: string;
+    valor: number;
+    job: string | null;
+    descricao: string | null;
+    /** Para as colunas da fila (decisão 243). */
+    fornecedor?: string | null;
+    regional?: string | null;
+    grupo?: string | null;
+  }>;
 }
 
 /** O que a tela cancela para tirar uma baixa sem linha no banco: o tipo e o
@@ -183,6 +194,95 @@ export interface DadosDaAbaBanco {
   previsoesDesde: string | null;
   /** As regionais ativas, para a regional da regra. */
   regionais: Array<{ id: string; nome: string; empresaId: string }>;
+  /** Decisão 243: de quem é cada CNPJ ou CPF que aparece no texto do
+   *  banco, pelo cadastro (só os que aparecem; chave = só os dígitos). */
+  quemPorDocumento: Record<string, { nome: string; papel: string }>;
+  /** Decisão 243: de cada baixa da fila (as sem linha e as ligadas), o
+   *  fornecedor, o job e a regional como o Extrato mostra — a mesma leitura
+   *  (`montarLinhasDeLancamentos`), então as duas abas nunca divergem. */
+  extratoPorLancamento: Record<string, { fornecedor: string | null; job: { codigo: string; nome: string } | null; jobs: number; reg: string | null; tipo: string | null; tri: string | null }>;
+}
+
+/** `.in()` com muitos ids estoura o tamanho do endereço da consulta: com
+ *  ~1.400 linhas conciliadas na California Santander, o PostgREST devolvia
+ *  "Bad Request" (06/11/2026). Em lotes, todos ao mesmo tempo. */
+const LOTE_DO_IN = 150;
+export function emLotes(ids: string[]): string[][] {
+  const lotes: string[][] = [];
+  for (let i = 0; i < ids.length; i += LOTE_DO_IN) lotes.push(ids.slice(i, i + LOTE_DO_IN));
+  return lotes;
+}
+
+async function comoNoExtrato(supabase: Supabase, tenantId: string, ids: string[]): Promise<DadosDaAbaBanco["extratoPorLancamento"]> {
+  const out: DadosDaAbaBanco["extratoPorLancamento"] = {};
+  if (!ids.length) return out;
+  // A mesma leitura do Extrato, lote a lote (ela também faz `.in()` por id).
+  const linhas = (
+    await Promise.all(
+      emLotes(ids).map(async (lote) => {
+        const { data, error } = await supabase.from("lancamentos_financeiros").select(SELECT_LANCAMENTO_LINHA).eq("tenant_id", tenantId).in("id", lote);
+        if (error) {
+          console.error("[conciliacao.banco.extrato]", error.message);
+          return [];
+        }
+        return montarLinhasDeLancamentos(supabase as never, tenantId, data ?? []);
+      }),
+    )
+  ).flat();
+  for (const l of linhas) {
+    const partes = juntarRateio(
+      l.regional_nome ? [{ regional: l.regional_nome, percentual: 100 }] : l.rateio.map((r) => ({ regional: r.regional_nome, percentual: r.percentual })),
+    );
+    const jobs = new Map<string, string | null>();
+    if (l.job_codigo) jobs.set(l.job_codigo, (l as { job_nome?: string | null }).job_nome ?? null);
+    else for (const o of l.origens) if (o.codigo) jobs.set(o.codigo, o.nome);
+    const [primeiro] = jobs.entries();
+    out[l.id] = {
+      fornecedor: l.fornecedor_nome && l.fornecedor_nome !== "—" ? l.fornecedor_nome : null,
+      job: jobs.size === 1 && primeiro ? { codigo: primeiro[0], nome: primeiro[1] ?? primeiro[0] } : null,
+      jobs: jobs.size,
+      reg: partes.length === 0 ? null : partes.length === 1 ? partes[0].regional : "TD",
+      tipo: (l as { eh_mutuo?: boolean }).eh_mutuo
+        ? "MÚTUO INT"
+        : (l as { eh_estorno?: boolean }).eh_estorno
+          ? "ESTORNO"
+          : (l as { outra_conta?: string | null }).outra_conta
+            ? String((l as { outra_conta?: string | null }).outra_conta).toUpperCase()
+            : l.tipo_codigo || null,
+      tri: l.tri_do_tipo ?? null,
+    };
+  }
+  return out;
+}
+
+/** Os CNPJs (14 dígitos) e CPFs (11) soltos no texto do banco. */
+export function documentosDoTexto(texto: string): string[] {
+  return [...texto.matchAll(/(?<!\d)(\d{14}|\d{11})(?!\d)/g)].map((m) => m[1]);
+}
+const comMascara = (d: string) =>
+  d.length === 14
+    ? `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`
+    : `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+const digitos = (s: string | null | undefined) => (s ?? "").replace(/\D/g, "");
+
+/** Fornecedores, clientes e empresas do grupo com esses documentos. O
+ *  cadastro guarda só os dígitos; a máscara vai junto por garantia. */
+async function quemDosDocumentos(supabase: Supabase, tenantId: string, docs: string[]): Promise<DadosDaAbaBanco["quemPorDocumento"]> {
+  const out: DadosDaAbaBanco["quemPorDocumento"] = {};
+  if (!docs.length) return out;
+  const chaves = [...docs, ...docs.map(comMascara)];
+  const [f, c, e] = await Promise.all([
+    supabase.from("fornecedores").select("cpf_cnpj, razao_social, nome").eq("tenant_id", tenantId).in("cpf_cnpj", chaves),
+    supabase.from("clientes").select("cnpj, razao_social, nome_fantasia").eq("tenant_id", tenantId).in("cnpj", chaves),
+    supabase.from("empresas").select("cnpj, razao_social, nome_fantasia").eq("tenant_id", tenantId).in("cnpj", chaves),
+  ]);
+  for (const x of (f.data ?? []) as Array<{ cpf_cnpj: string; razao_social: string | null; nome: string | null }>)
+    out[digitos(x.cpf_cnpj)] = { nome: x.razao_social ?? x.nome ?? "—", papel: "Fornecedor" };
+  for (const x of (c.data ?? []) as Array<{ cnpj: string; razao_social: string | null; nome_fantasia: string | null }>)
+    out[digitos(x.cnpj)] ??= { nome: x.razao_social ?? x.nome_fantasia ?? "—", papel: "Cliente" };
+  for (const x of (e.data ?? []) as Array<{ cnpj: string; razao_social: string | null; nome_fantasia: string | null }>)
+    out[digitos(x.cnpj)] = { nome: x.razao_social ?? x.nome_fantasia ?? "—", papel: "Empresa do grupo" };
+  return out;
 }
 
 // ---------------------------------------------------------------------------
@@ -291,6 +391,9 @@ type CaudaCrua = {
   job_nome: string | null;
   descricao: string | null;
   fornecedor: string | null;
+  regional_nome: string | null;
+  regional_todas: boolean | null;
+  grupo: string | null;
   extrato_linha_id: string | null;
   carga: { tipo: string; planilha_versao: string | null } | null;
 };
@@ -528,7 +631,8 @@ export async function carregarBancoDaConciliacao(
   const janela = dias.length ? { de: somaDias(dias[0], -3), ate: somaDias(dias[dias.length - 1], 3) } : null;
 
   const corrigidas = conciliadas.filter((l) => l.conciliada_como === "correcao").map((l) => l.id);
-  const [semLinhaCrus, ligadosRes, saldoNoFim, correcoesRes, caudaCrua] = await Promise.all([
+  const docsDoTexto = [...new Set(linhasCruas.flatMap((l) => documentosDoTexto(l.historico ?? "")))];
+  const [semLinhaCrus, ligadosRes, saldoNoFim, correcoesRes, caudaCrua, quemPorDocumento] = await Promise.all([
     janela
       ? todasAsPaginas<LancamentoCru>(
           (de, ate) =>
@@ -548,17 +652,12 @@ export async function carregarBancoDaConciliacao(
           "sem_linha",
         )
       : Promise.resolve([] as LancamentoCru[]),
-    conciliadas.length
-      ? supabase
-          .from("lancamentos_financeiros")
-          .select(SELECT_LANCAMENTO)
-          .eq("tenant_id", tenantId)
-          .in(
-            "extrato_linha_id",
-            conciliadas.map((l) => l.id),
-          )
-          .returns<LancamentoCru[]>()
-      : Promise.resolve({ data: [] as LancamentoCru[], error: null }),
+    // Em lotes: a conta com muitas conciliadas estourava o `.in()`.
+    Promise.all(
+      emLotes(conciliadas.map((l) => l.id)).map((lote) =>
+        supabase.from("lancamentos_financeiros").select(SELECT_LANCAMENTO).eq("tenant_id", tenantId).in("extrato_linha_id", lote).returns<LancamentoCru[]>(),
+      ),
+    ).then((rs) => ({ data: rs.flatMap((r) => r.data ?? []), error: rs.find((r) => r.error)?.error ?? null })),
     ultima?.fim
       ? calcularSaldoAnterior(supabase, { tenantId, contaId, dataDe: somaDias(ultima.fim, 1) }).then((s) => s.saldoAnterior)
       : Promise.resolve(null),
@@ -576,7 +675,7 @@ export async function carregarBancoDaConciliacao(
           (de, ate) =>
             supabase
               .from("historico_movimentos")
-              .select("id, data, valor, job_nome, descricao, fornecedor, extrato_linha_id, carga:historico_cargas!inner(tipo, situacao, planilha_versao)")
+              .select("id, data, valor, job_nome, descricao, fornecedor, regional_nome, regional_todas, grupo, extrato_linha_id, carga:historico_cargas!inner(tipo, situacao, planilha_versao)")
               .eq("tenant_id", tenantId)
               .eq("conta_bancaria_id", contaId)
               .in("carga.tipo", ["cauda", "previsao"])
@@ -589,6 +688,7 @@ export async function carregarBancoDaConciliacao(
           "cauda",
         )
       : Promise.resolve([] as CaudaCrua[]),
+    quemDosDocumentos(supabase, tenantId, docsDoTexto),
   ]);
   if (ligadosRes.error) console.error("[conciliacao.banco.ligados]", ligadosRes.error.message);
   if (correcoesRes.error) console.error("[conciliacao.banco.correcoes]", correcoesRes.error.message);
@@ -615,7 +715,17 @@ export async function carregarBancoDaConciliacao(
   const previsoes: HistoricoDoMotor[] = [];
   let previsoesDesde: string | null = null;
   for (const h of caudaCrua) {
-    const item = { id: h.id, data: h.data, valor: Number(h.valor), job: h.job_nome, descricao: h.descricao, fornecedor: h.fornecedor };
+    const item = {
+      id: h.id,
+      data: h.data,
+      valor: Number(h.valor),
+      job: h.job_nome,
+      descricao: h.descricao,
+      fornecedor: h.fornecedor,
+      // Decisão 243: a regional da planilha ("TD" quando é de todas).
+      regional: h.regional_todas ? "TD" : h.regional_nome,
+      grupo: h.grupo,
+    };
     if (h.extrato_linha_id) {
       caudaPorLinha.set(h.extrato_linha_id, [...(caudaPorLinha.get(h.extrato_linha_id) ?? []), item]);
     } else if (h.carga?.tipo === "previsao") {
@@ -650,6 +760,17 @@ export async function carregarBancoDaConciliacao(
     historicos: caudaPorLinha.get(l.id) ?? [],
   }));
 
+  // O mútuo e as baixas como o Extrato as mostra (decisão 243): juntos.
+  const [mutuo, extratoPorLancamento] = await Promise.all([
+    contextoDoMutuoNaConta(
+      supabase,
+      tenantId,
+      contaId,
+      linhas.filter((l) => !l.conciliada && !l.ignorada),
+    ),
+    comoNoExtrato(supabase, tenantId, [...lancamentos.map((l) => l.id), ...linhas.flatMap((l) => l.ligados.map((x) => x.id))]),
+  ]);
+
   return {
     conta,
     ultima,
@@ -659,12 +780,8 @@ export async function carregarBancoDaConciliacao(
     remessas,
     regras,
     remessasBaixadas,
-    mutuo: await contextoDoMutuoNaConta(
-      supabase,
-      tenantId,
-      contaId,
-      linhas.filter((l) => !l.conciliada && !l.ignorada),
-    ),
+    mutuo,
+    extratoPorLancamento,
     saldoSistemaNoFim: saldoNoFim === null ? null : r2(saldoNoFim),
     historico,
     previsoes,
@@ -674,6 +791,7 @@ export async function carregarBancoDaConciliacao(
       nome: r.nome,
       empresaId: r.empresa_id,
     })),
+    quemPorDocumento,
   };
 }
 

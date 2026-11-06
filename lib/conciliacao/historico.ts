@@ -36,6 +36,10 @@ export interface HistoricoDoMotor {
   descricao: string | null;
   /** O fornecedor ou o cliente da planilha: a soma só junta linhas do mesmo. */
   fornecedor: string | null;
+  /** A regional da planilha ("TD" é todas) e o grupo da DRE (a sigla do
+   *  Tipo: CO, CF…), para as colunas da fila (decisão 243). */
+  regional?: string | null;
+  grupo?: string | null;
 }
 
 /** O imposto retido na fonte pelo cliente (IR, CSLL, PIS, COFINS, ISS): a

@@ -142,7 +142,7 @@ test("o texto da linha resolvida", () => {
       ligados: [{ id: "l", descricao: "PP-00162 · Frete", valor: -100, origem: "pp_baixa" }],
     }),
   );
-  assert.equal(manual?.texto, "Baixa feita à mão: “PP-00162 · Frete” · data de 17/10 para 19/10, a do banco");
+  assert.equal(manual?.texto, "Já baixado no sistema: “PP-00162 · Frete” · data de 17/10 para 19/10, a do banco");
   assert.equal(manual?.ligados, true);
   const comJuros = resolucaoDaLinha(
     linhaDoBanco("a", {

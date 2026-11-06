@@ -654,9 +654,11 @@ function LinhaDaTabela<L extends LinhaDaPlanilha>({
       </td>
       <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
         {l.job ? (
-          <TextoCortado className="block truncate text-california-red" texto={l.job.nome ? `${l.job.codigo} · ${l.job.nome}` : l.job.codigo}>
+          // Decisão 243: o nome do job (o do financeiro) sempre
+          // ao passar o mouse, não só quando o código está cortado.
+          <Dica conteudo={(l.job.nome.startsWith(l.job.codigo + " ") ? l.job.nome.slice(l.job.codigo.length + 1) : l.job.nome) || null} className="block truncate text-california-red">
             {l.job.codigo}
-          </TextoCortado>
+          </Dica>
         ) : l.jobsDaFatura.length > 0 ? (
           <Dica conteudo={l.jobsDaFatura.join(" · ")} className="font-sans underline decoration-dotted underline-offset-2">
             {l.jobsDaFatura.length} {l.jobsDaFatura.length === 1 ? "job" : "jobs"}

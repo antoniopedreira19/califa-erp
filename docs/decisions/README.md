@@ -257,6 +257,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 239 | [Conciliação automática: divisões fechadas e lembradas, o extrato novo aberto, tudo conciliado e o período do extrato](239-conciliacao-automatica-divisoes-e-periodo-do-extrato.md) | 2026-11-05 |
 | 241 | [O arquivo da PP com o fornecedor no nome, o baixar na linha e a PP aberta ao lado do painel do item](241-baixar-e-ver-a-pp.md) | 2026-11-06 |
 | 242 | [As PPs a emitir no Comitê na aba PPs, os filtros com número e o fim dos cartões](242-pps-no-comite-e-filtros-da-aba-pps.md) | 2026-11-06 |
+| 243 | [Conciliação automática: a fila pelo que se faz, as colunas do sistema e as linhas iguais escolhidas pelo financeiro](243-conciliacao-automatica-fila-por-acao.md) | 2026-11-06 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -269,4 +270,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 243**. (A 240 está em uso por outra frente, ainda sem arquivo neste índice.) (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 244**. (A 240 está em uso por outra frente, ainda sem arquivo neste índice.) (091 e 092 existem na pasta e ainda não estão nesta tabela.)

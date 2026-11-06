@@ -229,7 +229,7 @@ export function resolucaoDaLinha(
   let texto: string;
   switch (l.conciliadaComo) {
     case "ligacao":
-      texto = `Baixa feita à mão: ${aspas(primeira)}${troca ? ` · data de ${diaMes(troca.de)} para ${diaMes(l.data)}, a do banco` : ""}`;
+      texto = `Já baixado no sistema: ${aspas(primeira)}${troca ? ` · data de ${diaMes(troca.de)} para ${diaMes(l.data)}, a do banco` : ""}`;
       break;
     case "correcao":
       texto = l.correcao
@@ -544,7 +544,7 @@ export function textoDosSozinhos(resultados: ResultadoDaLinha[]): { quantas: num
   const regra = conta("regra");
   const historico = conta("historico");
   const partes = [
-    manual && `${manual === 1 ? "1 baixa feita à mão que bateu" : `${manual} baixas feitas à mão que bateram`} com o banco`,
+    manual && `${manual === 1 ? "1 baixa já lançada no sistema que bateu" : `${manual} baixas já lançadas no sistema que bateram`} com o banco`,
     titulo &&
       `${titulo === 1 ? "1 título baixado e conciliado" : `${titulo} títulos baixados e conciliados`} (valor exato, pago na data e pela forma previstas, ou o CNPJ do cliente no histórico; com linhas iguais, quando são tantas quanto os títulos desse valor)`,
     remessa && (remessa === 1 ? "a remessa, que soma centavo a centavo" : `${remessa} remessas, que somam centavo a centavo`),

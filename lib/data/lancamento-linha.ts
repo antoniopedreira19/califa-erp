@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { DocumentoTipo } from "@/lib/types";
-import { DOCUMENTO_TIPOS_FISCAIS, documentoTipoLabel } from "@/lib/types";
+import { DOCUMENTO_TIPOS_FISCAIS, documentoTipoLabel, nomeDoJobNoFinanceiro } from "@/lib/types";
 import type { LancamentoLinha, OrigemDaTransacao } from "@/lib/calculos/saldo-conta";
 import { folhaDaBaixa } from "@/lib/financeiro/folha-no-extrato";
 import { ehCentroDasNotas, REGIONAL_DAS_NOTAS } from "@/lib/financeiro/notas-de-socio";
@@ -26,14 +26,14 @@ export const SELECT_LANCAMENTO_LINHA = `id, data_movimento, descricao, natureza,
          conta_avulsa_id, pedido_compra_parcela_id, desembolso_parcela_id,
          juros_de_lancamento_id,
          fornecedores(nome, razao_social),
-         jobs(id, codigo, regional:regionais(nome)),
+         jobs(id, codigo, nome, nome_financeiro, regional:regionais(nome)),
          empresas(nome_fantasia, razao_social),
          plano_contas_tipos(codigo, nome),
          plano_contas_subtipos(codigo, nome),
          transferencia:transferencias_contas(
            codigo, tipo, trimestre,
-           conta_origem:contas_bancarias!conta_origem_id(empresa_contabil:empresas_contabeis(nome_fantasia)),
-           conta_destino:contas_bancarias!conta_destino_id(empresa_contabil:empresas_contabeis(nome_fantasia))
+           conta_origem:contas_bancarias!conta_origem_id(nome, empresa_contabil:empresas_contabeis(nome_fantasia)),
+           conta_destino:contas_bancarias!conta_destino_id(nome, empresa_contabil:empresas_contabeis(nome_fantasia))
          ),
          iof_do_mutuo:mutuos_iof(trimestre),
          forma_pagamento,
@@ -216,8 +216,17 @@ export async function montarLinhasDeLancamentos(
         : r.iof_do_mutuo?.trimestre
           ? `T${r.iof_do_mutuo.trimestre}`
           : null,
+      // Decisão 243: o Tipo como a planilha escreve nas linhas fora da
+      // DRE — a transferência leva o nome da outra conta, o mútuo é MÚTUO INT.
+      outra_conta: r.transferencia
+        ? ((r.natureza === "saida" ? r.transferencia.conta_destino : r.transferencia.conta_origem) as { nome?: string } | null)?.nome ?? null
+        : null,
+      eh_mutuo: r.transferencia?.tipo === "mutuo" || /^mutuo/.test(r.origem ?? ""),
+      eh_estorno: /estorno/.test(r.origem ?? ""),
       job_id: r.jobs?.id ?? null,
       job_codigo: r.jobs?.codigo ?? null,
+      // Decisão 243: o nome que o financeiro deu, para a dica do código.
+      job_nome: r.jobs ? nomeDoJobNoFinanceiro(r.jobs as unknown as { nome: string; nome_financeiro?: string | null }) : null,
       // Mesma regra da `vw_fluxo_caixa` (decisão 069, 10/09/2026): a
       // regional do JOB manda sempre; o rateio só decide onde não há
       // job. Com mais de uma regional isto fica nulo — a coluna diz
@@ -341,7 +350,7 @@ export async function montarLinhasDeLancamentos(
     const { data: jobsDasOrigens } = jobIds.length
       ? await supabase
           .from("jobs")
-          .select("id, codigo, nome, regional:regionais(nome)")
+          .select("id, codigo, nome, nome_financeiro, regional:regionais(nome)")
           .eq("tenant_id", tenantId)
           .in("id", jobIds)
       : { data: [] as unknown[] };
@@ -368,7 +377,7 @@ export async function montarLinhasDeLancamentos(
         tipo: o.tipo,
         job_id: alvo?.id ?? null,
         codigo: alvo?.codigo ?? null,
-        nome: alvo?.nome ?? null,
+        nome: alvo ? nomeDoJobNoFinanceiro(alvo as { nome: string; nome_financeiro?: string | null }) : null,
         valor: Number(o.valor ?? 0),
       });
       origensPorLancamento.set(o.lancamento_id, lista);

@@ -1,49 +1,75 @@
 "use client";
 
 /**
- * A Conciliação automática como uma fila dividida (decisão 234): uma tabela
- * só, com as mesmas colunas Data | Histórico | Valor | Situação | No sistema |
- * Ação, o detalhe ao clicar e a seleção; dividida por tipo, na ordem do motor,
- * cada divisão com a contagem, o ⓘ, o botão de todas e recolhível. As colunas
- * alinham entre as divisões porque é a mesma tabela.
+ * A Conciliação automática como uma fila dividida (decisão 234), agrupada
+ * pelo que a pessoa faz (decisão 243): Corrigir, Prontos para conciliar,
+ * Conferir, Lançar avulso e Conciliados. Uma tabela só, com as mesmas colunas
+ * em todas as divisões (Data | Descrição no banco | Valor | Situação | No
+ * sistema · Descrição | Fornecedor | Job | Tipo | TRI | Reg | Ação), o motivo
+ * de cada linha na Situação, os filtros por coluna (decisão 165) e nenhuma
+ * linha que expande: o detalhe fica nas dicas.
  */
 
 import * as React from "react";
-import { AlertTriangle, CheckCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown, Link2, Wand2 } from "lucide-react";
+import { AlertTriangle, CheckCheck, ChevronDown, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { Checkbox } from "@/components/ui/checkbox";
-import { BotaoDaSecao, COR_DO_PONTO, comCentro } from "./banco-tabela";
+import { formatBRL } from "@/lib/format";
 import {
-  FaixaDoTopo,
-  InfoDica,
-  itensDaConta,
-  LinhaDeAvisos,
-  LinhaDoArquivo,
-  ORDEM,
-  TIPOS,
-  type Item,
-  type PropsDaFila,
-  type Tipo,
-} from "./fila-da-conta";
-import { Colunas, GrupoNaFila, LinhaDaFila, LinhaDoAgrupamento, LinhaSemBanco } from "./fila-linhas";
+  BarraDosFiltrosDeColuna,
+  celulaData,
+  celulaTexto,
+  celulaValor,
+  useFiltrosDeColuna,
+  type ColunaFiltravel,
+} from "@/components/ui/filtro-de-coluna";
+import { BotaoDaSecao, comCentro } from "./banco-tabela";
+import { FaixaDoTopo, InfoDica, itensDaConta, LinhaDeAvisos, LinhaDoArquivo, type Item, type PropsDaFila } from "./fila-da-conta";
+import { celulasDoItem, Colunas, GrupoNaFila, LARGURA_DA_FILA, LinhaDaFila, LinhaDoAgrupamento, LinhaSemBanco } from "./fila-linhas";
 
-/** Os títulos das divisões. */
-const TITULO: Record<Tipo, string> = {
-  divergencia: "A baixa à mão não bate com o banco",
-  manual: "Baixas à mão que bateram",
-  pronto: "Prontos",
-  conferir: "Conferir antes",
-  varios: "Uma linha, vários títulos",
-  par: "Saiu e voltou",
-  regra: "Pelas regras do histórico",
-  historico: "Do histórico da planilha",
-  fora: "Empresa de fora",
-  mutuo: "Mútuo entre empresas",
-  dividido: "Agrupar lançamentos",
-  sem: "Sem correspondência",
-  soSistema: "Baixa no sistema, sem linha no banco",
-  conciliado: "Conciliados",
+/** As divisões: pelo que a pessoa faz (decisão 243). */
+type Div = "corrigir" | "pronto" | "conferir" | "lancar" | "conciliado";
+const DIVS: Div[] = ["corrigir", "pronto", "conferir", "lancar", "conciliado"];
+const DIV: Record<Div, { titulo: string; dica: string; ponto: string }> = {
+  corrigir: {
+    titulo: "Corrigir",
+    dica: "A baixa do sistema não bate com o banco: está com outro valor, ou não tem linha num dia que o extrato cobre. Até corrigir, a conciliação não fecha.",
+    ponto: "bg-california-red",
+  },
+  pronto: {
+    titulo: "Prontos para conciliar",
+    dica: "Um clique resolve, sem decisão: título com valor, forma e data batendo, remessa, tarifa com regra, PIX que voltou no mesmo dia, linha da planilha e a baixa já lançada no sistema que ainda não se ligou. O motivo de cada uma está na Situação.",
+    ponto: "bg-emerald-500",
+  },
+  conferir: {
+    titulo: "Conferir",
+    dica: "O sistema achou o que é, mas falta uma decisão sua. O motivo está na Situação: juros, retenção, centro de custo, qual título entre linhas iguais, vários títulos, mútuo, empresa de fora ou agrupamento.",
+    ponto: "bg-amber-500",
+  },
+  lancar: {
+    titulo: "Lançar avulso · Não há no sistema",
+    dica: "Nada no sistema com esse valor. Lance como avulso (a linha já vem preenchida) ou procure um título com a lupa.",
+    ponto: "bg-violet-500",
+  },
+  conciliado: {
+    titulo: "Conciliados",
+    dica: "Ligado a um lançamento do Extrato. Dá para desfazer até fechar a conciliação. As baixas já lançadas no sistema ficam aqui, marcadas.",
+    ponto: "bg-neutral-400",
+  },
 };
+
+/** Em qual divisão cada item entra: os tipos do motor, pelo que se faz. */
+function divisaoDe(i: Item): Div {
+  const t = i.tipo;
+  if (t === "divergencia" || t === "soSistema") return "corrigir";
+  if (t === "manual") return i.k === "linha" && i.r.resolvido ? "conciliado" : "pronto";
+  if (t === "conciliado") return "conciliado";
+  if (t === "sem") return "lancar";
+  if (t === "pronto" || t === "par" || t === "regra") return "pronto";
+  if (t === "historico") return i.k === "linha" && i.r.confianca === "alta" ? "pronto" : "conferir";
+  // A remessa se concilia num clique; a soma incerta pede conferência.
+  if (t === "varios") return i.k === "linha" && i.r.estado === "soma" ? "pronto" : "conferir";
+  return "conferir"; // conferir, linhas iguais, empresa de fora, mútuo, agrupar
+}
 
 const dia = (iso: string | null) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : "—");
 const somaDia = (iso: string, n: number) => {
@@ -63,42 +89,49 @@ const esquecerOGuardado = (conta: string) => {
     /* sem armazenamento: nada a apagar */
   }
 };
-/** O item que ainda pede ação (a baixa à mão já conciliada, não). */
+/** O item que ainda pede ação (a baixa já conciliada, não). */
 const pedeAcao = (i: Item) => (i.k === "linha" ? !i.r.resolvido : true);
 
 export function FilaDividida(p: PropsDaFila) {
-  const { secoes, conciliacao, acoes, conciliarVarios, pending } = p;
+  const { conciliacao, secoes, conciliarVarios, pending } = p;
   const itens = React.useMemo(() => itensDaConta({ secoes, conciliacao }), [secoes, conciliacao]);
-  const [aberto, setAberto] = React.useState<string | null>(null);
-  const [marcados, setMarcados] = React.useState<Set<string>>(new Set());
-  // As divisões abrem sempre fechadas: ao abrir a aba, ao voltar, ao trocar
-  // de conta e ao chegar um extrato novo (revisão de 06/11/2026 da 239,
-  // pontos 1 e 2). O título e a contagem de cada divisão já dizem o que há
-  // para fazer; a tela não lembra o que foi aberto.
   const conta = p.banco.conta.id;
   const ultima = p.banco.ultima;
-  const [recolhidas, setRecolhidas] = React.useState<Set<Tipo>>(new Set(ORDEM));
+  // As divisões abrem sempre fechadas: ao abrir a aba, ao voltar, ao trocar
+  // de conta e ao chegar um extrato novo (revisão de 06/11/2026 da 239). O
+  // título e a contagem de cada divisão já dizem o que há para fazer.
+  const [recolhidas, setRecolhidas] = React.useState<Set<Div>>(new Set(DIVS));
   const ultimaId = ultima?.id ?? null;
   React.useEffect(() => {
     esquecerOGuardado(conta);
     // A tela não remonta ao trocar de conta ou ao importar.
-    setRecolhidas(new Set(ORDEM));
+    setRecolhidas(new Set(DIVS));
   }, [conta, ultimaId]);
 
-  const doTipo = (t: Tipo) => itens.filter((i) => i.tipo === t);
+  // Os filtros por coluna (decisão 165), como no Extrato: o que passa neles
+  // fica nas divisões; guardados na aba do navegador, por conta.
+  const contexto = p.contexto;
+  const banco = p.banco;
+  const COLUNAS = React.useMemo<ColunaFiltravel<Item>[]>(() => {
+    const c = (i: Item) => celulasDoItem(i, { contexto, banco });
+    return [
+      { chave: "data", rotulo: "Data", tipo: "data", celula: (i) => celulaData(c(i).data) },
+      { chave: "banco", rotulo: "Descrição no banco", tipo: "texto", celula: (i) => celulaTexto(c(i).banco) },
+      { chave: "valor", rotulo: "Valor", tipo: "valor", faixa: true, alinhar: "right", celula: (i) => celulaValor(c(i).valor, formatBRL) },
+      { chave: "situacao", rotulo: "Situação", tipo: "texto", celula: (i) => celulaTexto(c(i).situacao) },
+      { chave: "sistema", rotulo: "No sistema · Descrição", tipo: "texto", celula: (i) => celulaTexto(c(i).sistema) },
+      { chave: "quem", rotulo: "Fornecedor", tipo: "texto", celula: (i) => celulaTexto(c(i).quem) },
+      { chave: "job", rotulo: "Job", tipo: "texto", celula: (i) => celulaTexto(c(i).job) },
+      { chave: "tipo", rotulo: "Tipo", tipo: "texto", celula: (i) => celulaTexto(c(i).tipo) },
+      { chave: "tri", rotulo: "TRI", tipo: "texto", alinhar: "center", celula: (i) => celulaTexto(c(i).tri) },
+      { chave: "reg", rotulo: "Reg", tipo: "texto", celula: (i) => celulaTexto(c(i).reg) },
+    ];
+  }, [contexto, banco]);
+  const filtro = useFiltrosDeColuna(itens, COLUNAS, { guardarEm: "conciliacao-automatica", contexto: conta });
+  const doTipo = (t: Div) => filtro.visiveis.filter((i) => divisaoDe(i) === t);
   const linhasDe = (is: Item[]) => is.reduce((s, i) => s + (i.k === "grupo" ? i.g.linhas.length : 1), 0);
 
-  const selecionavel = (i: Item): i is Extract<Item, { k: "linha" }> => i.k === "linha" && !i.r.resolvido && (i.tipo === "pronto" || i.tipo === "manual");
-  const selecionaveis = itens.filter(selecionavel);
-  const selecionados = selecionaveis.filter((i) => marcados.has(i.id));
-  const alternar = (id: string) =>
-    setMarcados((m) => {
-      const x = new Set(m);
-      if (x.has(id)) x.delete(id);
-      else x.add(id);
-      return x;
-    });
-  const alternarDivisao = (t: Tipo) =>
+  const alternarDivisao = (t: Div) =>
     setRecolhidas((r) => {
       const x = new Set(r);
       if (x.has(t)) x.delete(t);
@@ -115,34 +148,30 @@ export function FilaDividida(p: PropsDaFila) {
   const saldoBate = ultima?.saldoBanco != null && p.banco.saldoSistemaNoFim != null && Math.round((ultima.saldoBanco - p.banco.saldoSistemaNoFim) * 100) === 0;
 
   // O botão de todas de cada divisão.
-  const manuais = secoes.manual.filter((r) => !r.resolvido);
   const sugestoes = secoes.conferir.filter((r) => r.estado === "sugestao" && comCentro(r.titulo));
-  const botaoDe = (t: Tipo): React.ReactNode =>
-    t === "pronto" && secoes.alta.length > 1 ? (
-      <BotaoDaSecao verde disabled={pending} onClick={() => conciliarVarios(secoes.alta)}>
+  // Prontos: todos de uma vez, cada um pela ação da própria linha, em série
+  // (`conciliarVarios`). O PIX que voltou vai pela linha da devolução, que
+  // concilia as duas; a contagem é de linhas do banco.
+  const prontos = doTipo("pronto").filter((i): i is Extract<Item, { k: "linha" }> => i.k === "linha" && !i.r.resolvido);
+  const nProntos = prontos.length;
+  const botaoDe = (t: Div): React.ReactNode =>
+    t === "pronto" && nProntos > 1 ? (
+      <BotaoDaSecao
+        verde
+        disabled={pending}
+        onClick={() => conciliarVarios(prontos.map((i) => i.r).filter((r) => !(r.estado === "par" && r.mov.valor < 0)))}
+      >
         <CheckCheck className="h-3.5 w-3.5" />
-        Conciliar os {secoes.alta.length}
-      </BotaoDaSecao>
-    ) : t === "manual" && manuais.length > 1 ? (
-      <BotaoDaSecao verde disabled={pending} onClick={() => conciliarVarios(manuais)}>
-        <Link2 className="h-3.5 w-3.5" />
-        Conciliar as {manuais.length}
+        Conciliar os {nProntos}
       </BotaoDaSecao>
     ) : t === "conferir" && sugestoes.length > 1 ? (
       <BotaoDaSecao disabled={pending} onClick={() => conciliarVarios(sugestoes)}>
         Aceitar as {sugestoes.length} sugestões
       </BotaoDaSecao>
-    ) : t === "regra" && secoes.regra.length > 1 ? (
-      <BotaoDaSecao disabled={pending} onClick={() => acoes.lancarRegra(secoes.regra)}>
-        <Wand2 className="h-3.5 w-3.5" />
-        Conciliar as {secoes.regra.length}
-      </BotaoDaSecao>
-    ) : t === "historico" && secoes.historico.length > 1 ? (
-      <BotaoDaSecao disabled={pending} onClick={() => acoes.conciliarHistorico(secoes.historico)}>
-        <Link2 className="h-3.5 w-3.5" />
-        Conciliar as {secoes.historico.length}
-      </BotaoDaSecao>
     ) : null;
+
+  const algumaAberta = DIVS.some((t) => doTipo(t).length > 0 && !recolhidas.has(t));
+  const rotuloDoBotao = algumaAberta ? "Recolher todas as divisões" : "Expandir todas as divisões";
 
   return (
     <>
@@ -178,82 +207,67 @@ export function FilaDividida(p: PropsDaFila) {
         </div>
       )}
 
-      {selecionados.length > 0 && (
-        <div className="flex justify-end">
-          <BotaoDaSecao
-            verde
-            disabled={pending}
-            onClick={() => {
-              conciliarVarios(selecionados.map((i) => i.r));
-              setMarcados(new Set());
-            }}
-          >
-            <CheckCheck className="h-3.5 w-3.5" />
-            Conciliar selecionados ({selecionados.length})
-          </BotaoDaSecao>
-        </div>
+      {filtro.ativo && (
+        <BarraDosFiltrosDeColuna visiveis={filtro.visiveis.length} total={filtro.total} singular="item" plural="itens" onLimpar={filtro.limpar} />
       )}
 
+      {/* O corte entre o banco (com a situação) e o sistema (decisão 243). */}
+      <style>{`.fila-corte tr > :nth-child(5) { border-left: 2px solid hsl(var(--border)); }`}</style>
       <div className="overflow-x-auto rounded-xl border border-border bg-card">
-        <table className="w-full min-w-[1150px] table-fixed text-sm">
+        <table style={{ minWidth: LARGURA_DA_FILA }} className="fila-corte w-full table-fixed text-sm">
           <Colunas />
           <thead className="border-b border-border bg-muted/40 text-xs uppercase text-muted-foreground">
             <tr>
-              <th className="px-1 py-2 text-left">
-                {/* Expandir ou recolher todas as divisões (decisão 239), no
-                    lugar do "marcar todas": cada divisão já tem o botão de todas. */}
-                {(() => {
-                  const algumaAberta = ORDEM.some((t) => doTipo(t).length > 0 && !recolhidas.has(t));
-                  const rotulo = algumaAberta ? "Recolher todas as divisões" : "Expandir todas as divisões";
-                  return (
-                    <button
-                      type="button"
-                      title={rotulo}
-                      aria-label={rotulo}
-                      onClick={() => {
-                        setRecolhidas(new Set<Tipo>(algumaAberta ? ORDEM : []));
-                      }}
-                      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-                    >
-                      {algumaAberta ? <ChevronsDownUp className="h-4 w-4" /> : <ChevronsUpDown className="h-4 w-4" />}
-                    </button>
-                  );
-                })()}
+              <th className="px-3 py-1 text-left">
+                {/* O expandir / recolher todas as divisões fica no cabeçalho
+                    de Data, depois do título (decisão 239, ponto 6). */}
+                <span className="inline-flex items-center gap-1">
+                  {filtro.titulo("data", "tracking-normal")}
+                  <button
+                    type="button"
+                    title={rotuloDoBotao}
+                    aria-label={rotuloDoBotao}
+                    onClick={() => setRecolhidas(new Set<Div>(algumaAberta ? DIVS : []))}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                  >
+                    {algumaAberta ? <ChevronsDownUp className="h-4 w-4" /> : <ChevronsUpDown className="h-4 w-4" />}
+                  </button>
+                </span>
               </th>
-              <th className="px-3 py-2 text-left">Data</th>
-              <th className="px-3 py-2 text-left">Histórico do banco</th>
-              <th className="px-3 py-2 text-right">Valor</th>
-              <th className="px-3 py-2 text-left">Situação</th>
-              <th className="px-3 py-2 text-left">No sistema</th>
+              <th className="px-3 py-2 text-left">{filtro.titulo("banco", "tracking-normal")}</th>
+              <th className="px-3 py-2 text-right">{filtro.titulo("valor", "tracking-normal")}</th>
+              <th className="px-3 py-2 text-left">{filtro.titulo("situacao", "tracking-normal")}</th>
+              <th className="px-3 py-2 text-left">{filtro.titulo("sistema", "tracking-normal")}</th>
+              <th className="px-3 py-2 text-left">{filtro.titulo("quem", "tracking-normal")}</th>
+              <th className="px-3 py-2 text-left">{filtro.titulo("job", "tracking-normal")}</th>
+              <th className="px-3 py-2 text-left">{filtro.titulo("tipo", "tracking-normal")}</th>
+              <th className="px-3 py-2 text-left">{filtro.titulo("tri", "tracking-normal")}</th>
+              <th className="px-3 py-2 text-left">{filtro.titulo("reg", "tracking-normal")}</th>
               <th className="px-3 py-2 text-left">Ação</th>
             </tr>
           </thead>
-          {ORDEM.map((t) => {
+          {DIVS.map((t) => {
             const is = doTipo(t);
             if (!is.length) return null;
-            const fechada = recolhidas.has(t);
-            const alerta = t === "soSistema" || t === "divergencia";
+            // Filtrando, as divisões com resultado abrem: o que passou no
+            // filtro fica à vista.
+            const fechada = recolhidas.has(t) && !filtro.filtrando;
             return (
               <tbody key={t}>
                 <tr className="border-b border-border bg-muted/60">
-                  <td colSpan={7} className="px-3 py-2">
+                  <td colSpan={11} className="px-3 py-2">
                     <span className="flex items-center gap-2.5">
-                      <button
-                        type="button"
-                        onClick={() => alternarDivisao(t)}
-                        aria-expanded={!fechada}
-                        className="flex items-center gap-2.5 text-left"
-                      >
+                      <button type="button" onClick={() => alternarDivisao(t)} aria-expanded={!fechada} className="flex items-center gap-2.5 text-left">
                         <ChevronDown className={cn("h-4 w-4 text-muted-foreground transition-transform", fechada && "-rotate-90")} />
-                        {alerta ? (
+                        {t === "corrigir" ? (
                           <AlertTriangle className="h-3.5 w-3.5 text-california-red" />
                         ) : (
-                          <span className={cn("h-2 w-2 rounded-full", COR_DO_PONTO[TIPOS[t].cor])} />
+                          <span className={cn("h-2 w-2 rounded-full", DIV[t].ponto)} />
                         )}
-                        <span className="text-[13px] font-semibold text-foreground">{TITULO[t]}</span>
+                        <span className="text-[13px] font-semibold text-foreground">{DIV[t].titulo}</span>
                         <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold tabular-nums">{linhasDe(is)}</span>
                       </button>
-                      <InfoDica texto={TIPOS[t].dica} />
+                      <InfoDica texto={DIV[t].dica} />
                       <span className="flex-1" />
                       {botaoDe(t)}
                     </span>
@@ -262,25 +276,16 @@ export function FilaDividida(p: PropsDaFila) {
                 {!fechada &&
                   is
                     .slice()
-                    .sort((a, b) => a.data.localeCompare(b.data))
+                    .sort((a, b) => (filtro.ordenacao ? 0 : a.data.localeCompare(b.data)))
                     .map((i) =>
                       i.k === "grupo" ? (
                         <GrupoNaFila key={i.id} item={i} p={p} />
                       ) : i.k === "conjunto" ? (
-                        <LinhaDoAgrupamento key={i.id} item={i} p={p} aberta={aberto === i.id} onAbrir={() => setAberto(aberto === i.id ? null : i.id)} />
+                        <LinhaDoAgrupamento key={i.id} item={i} p={p} />
                       ) : i.k === "semLinha" ? (
-                        <LinhaSemBanco key={i.id} item={i} p={p} aberta={aberto === i.id} onAbrir={() => setAberto(aberto === i.id ? null : i.id)} />
+                        <LinhaSemBanco key={i.id} item={i} p={p} />
                       ) : (
-                        <LinhaDaFila
-                          key={i.id}
-                          item={i}
-                          p={p}
-                          aberta={aberto === i.id}
-                          onAbrir={() => setAberto(aberto === i.id ? null : i.id)}
-                          selecionavel={selecionavel(i)}
-                          marcada={marcados.has(i.id)}
-                          onMarcar={() => alternar(i.id)}
-                        />
+                        <LinhaDaFila key={i.id} item={i} p={p} />
                       ),
                     )}
               </tbody>

@@ -19,7 +19,7 @@ import {
   totalBaixado,
 } from "@/lib/data/baixas-do-documento";
 import type { createClient } from "@/lib/supabase/server";
-import type { ContaBancaria, TituloReceberStatus } from "@/lib/types";
+import { nomeDoJobNoFinanceiro, type ContaBancaria, type TituloReceberStatus } from "@/lib/types";
 import type { TituloRow } from "./titulos-list";
 import { formatarCnpj } from "@/lib/fiscal/cadastro";
 
@@ -83,7 +83,7 @@ export function consultarJobsDasNotas(
 ) {
   return supabase
     .from("jobs")
-    .select("id, codigo, nome")
+    .select("id, codigo, nome, nome_financeiro")
     .eq("tenant_id", tenantId)
     .order("created_at", { ascending: false })
     .limit(500);
@@ -201,7 +201,8 @@ export function montarTitulosAReceber(e: {
 }): TituloRow[] {
   const nomeCliente = new Map(e.clientes.map((c) => [c.id, c.nome]));
   const nomeFornecedor = new Map(e.fornecedores.map((f) => [f.id, f.nome]));
-  const jobPorId = new Map(e.jobs.map((j) => [j.id, j]));
+  // Decisão 243: o nome que o financeiro deu ao job.
+  const jobPorId = new Map(e.jobs.map((j) => [j.id, { ...j, nome: nomeDoJobNoFinanceiro(j as { nome: string; nome_financeiro?: string | null }) }]));
 
   // --- Aba Títulos a Receber ----------------------------------------------
 

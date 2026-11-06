@@ -12,7 +12,7 @@
  * continuam nas listas, que são de quem os desenha.
  */
 
-import { nomeDeQuemRecebeAVerba, nomeDoCartaoCorporativo, situacaoDaVerba, tipoDaVerba } from "@/lib/types";
+import { nomeDeQuemRecebeAVerba, nomeDoCartaoCorporativo, nomeDoJobNoFinanceiro, situacaoDaVerba, tipoDaVerba } from "@/lib/types";
 import type {
   DocumentoTipo,
   FormaPagamento,
@@ -96,7 +96,7 @@ export const SELECT_PP_DO_FINANCEIRO = `
         enviada_por_profile:profiles!enviada_financeiro_por(nome),
         urgente_por_profile:profiles!urgente_por(nome),
         job:jobs(
-          id, codigo, nome, regional_id,
+          id, codigo, nome, nome_financeiro, regional_id,
           responsavel:profiles!responsavel_id(nome),
           cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), projeto:projetos(codigo, nome)
         ),
@@ -163,7 +163,7 @@ export const SELECT_DEVOLUCAO_DE_VERBA = `
           plano_conta_tipo_id, plano_conta_subtipo_id,
           verba_producao, tipo_verba, verba_titular_nome,
           responsavel:profiles!responsavel_verba_id(nome),
-          job:jobs(id, codigo, nome)
+          job:jobs(id, codigo, nome, nome_financeiro)
         )
 `;
 
@@ -379,7 +379,8 @@ export function mapearPPsDoFinanceiro(
     estabelecimento_id: r.estabelecimento_id ?? null,
     job_id: r.job?.id ?? "",
     job_codigo: r.job?.codigo ?? "",
-    job_nome: r.job?.nome ?? "",
+    // Decisão 243: o nome que o financeiro deu ao job.
+    job_nome: r.job ? nomeDoJobNoFinanceiro(r.job as { nome: string; nome_financeiro?: string | null }) : "",
     regional_id: r.job?.regional_id ?? null,
     // Decisão 136: o GP responsável do job vai como referência nos pop-ups
     // de aprovação — quem age é quem enviou, e qualquer GP envia.
@@ -969,7 +970,7 @@ export function montarTitulosAPagar(e: {
         ? `Verba — ${nomeDeQuemRecebeAVerba(dev.pp)}`
         : "",
       job_codigo: dev.pp?.job?.codigo ?? "—",
-      job_nome: dev.pp?.job?.nome ?? "",
+      job_nome: dev.pp?.job ? nomeDoJobNoFinanceiro(dev.pp.job as { nome: string; nome_financeiro?: string | null }) : "",
       data_pagamento: dev.data_pagamento,
       venc_original: dev.data_pagamento_primeira,
       data_pagamento_primeira: dev.data_pagamento_primeira,
