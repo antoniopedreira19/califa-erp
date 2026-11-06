@@ -43,6 +43,12 @@ import {
 } from "./aprovacao-save";
 import type { SaveAprovacaoMomento, SaveAprovacaoTipo } from "@/lib/types";
 import type { EspelhosDoJob } from "@/lib/data/espelhos-do-job";
+import { sentidoDaTroca, type SentidoDaTroca } from "@/lib/calculos/troca-do-interno";
+import {
+  previaDaTrocaDoInterno,
+  type PreviaDaTrocaDoInterno,
+} from "@/lib/data/troca-do-interno";
+import type { FaturamentoDoMes } from "@/lib/calculos/faturamento-por-mes";
 
 export type ActionResult =
   | {
@@ -60,19 +66,20 @@ export type ActionResult =
  * conferência um id de CATEGORIA passaria pela FK — as duas listas moram
  * na mesma tabela (decisão 037).
  *
- * E não cruza a fronteira do Interno (decisão 105, resposta 3-a do Tiago):
- * o serviço Interno decide a planilha do job — só custo F · Interno, com o
- * planejado igual ao orçado —, e essa planilha nasceu no orçamento. O
- * financeiro troca Ativação por Fee à vontade, mas não põe nem tira um job
- * do Interno. O gatilho `job_servico_e_categoria_seguem_a_planilha` recusa
- * o mesmo no banco.
+ * A fronteira do Interno (decisão 105, resposta 3-a; revista pela 240): o
+ * serviço Interno decide a planilha do job — só custo F · Interno, com o
+ * planejado igual ao orçado. Na ABERTURA o job continua do lado do
+ * orçamento. No "Editar registro" (`permitirTroca`) o financeiro pode pôr
+ * o job no Interno ou tirar dele, e a troca leva o orçamento junto: a
+ * função devolve o sentido, e quem grava é `trocar_job_de_lado_do_interno`.
  */
 async function conferirServico(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
   servicoId: string,
   orcamentoId: string,
-): Promise<string | null> {
+  permitirTroca = false,
+): Promise<{ erro: string } | { sentido: SentidoDaTroca | null }> {
   const [{ data: servico }, { data: orc }] = await Promise.all([
     supabase
       .from("categorias_dominio")
@@ -95,18 +102,21 @@ async function conferirServico(
   ]);
 
   if (!servico || servico.escopo !== "projeto") {
-    return "Serviço de job inválido.";
+    return { erro: "Serviço de job inválido." };
   }
   if (!servico.ativo) {
-    return "Este serviço foi inativado. Escolha outro.";
+    return { erro: "Este serviço foi inativado. Escolha outro." };
   }
   const orcamentoInterno = orc?.servico?.investimento_interno === true;
-  if (servico.investimento_interno !== orcamentoInterno) {
-    return orcamentoInterno
-      ? "O orçamento deste job é do serviço Interno, que decide a planilha (só custo F · Interno, planejado igual ao orçado). O serviço do job não pode sair dele."
-      : "O serviço Interno decide a planilha do job (só custo F · Interno, planejado igual ao orçado) e só vale para job cujo orçamento já é Interno.";
+  const sentido = sentidoDaTroca(orcamentoInterno, servico.investimento_interno === true);
+  if (sentido && !permitirTroca) {
+    return {
+      erro: orcamentoInterno
+        ? "O orçamento deste job é do serviço Interno, que decide a planilha (só custo F · Interno, planejado igual ao orçado). Para tirar o job do Interno, abra o job e troque o serviço pelo Editar registro."
+        : "O serviço Interno decide a planilha do job (só custo F · Interno, planejado igual ao orçado). Para pôr o job no Interno, abra o job e troque o serviço pelo Editar registro.",
+    };
   }
-  return null;
+  return { sentido };
 }
 
 /**
@@ -295,13 +305,13 @@ async function conferirRecebimentoPorMes(
   linhas: PrevisaoRecebimentoLinhaInput[],
   /** Pedidos de save que contam como aprovados: o que a revisão aprova. */
   contarPedidos: string[],
+  /** Os meses de depois da troca do Interno (decisão 240), no lugar dos
+   *  lidos do banco, que ainda são os de antes. */
+  mesesDaTroca: { mensal: boolean; meses: FaturamentoDoMes[] | null } | null = null,
 ): Promise<{ erro: string } | { mensal: boolean; linhas: LinhaDeRecebimento[] }> {
-  const leitura = await lerFaturamentoMensalPeloJob(
-    supabase,
-    tenantId,
-    jobId,
-    contarPedidos,
-  );
+  const leitura =
+    mesesDaTroca ??
+    (await lerFaturamentoMensalPeloJob(supabase, tenantId, jobId, contarPedidos));
   if (!leitura) {
     return { erro: "Não foi possível ler o modelo de planilha do job." };
   }
@@ -480,13 +490,13 @@ export async function abrirJobNoFinanceiro(
   );
   if (categoriaErro) return { ok: false, message: categoriaErro };
 
-  const servicoErro = await conferirServico(
+  const servicoConferido = await conferirServico(
     supabase,
     session.activeTenant.id,
     parsed.data.servico_id,
     job.orcamento_id,
   );
-  if (servicoErro) return { ok: false, message: servicoErro };
+  if ("erro" in servicoConferido) return { ok: false, message: servicoConferido.erro };
 
   // Marca, empresa e regional do job (decisão 214).
   const marcaEmpresaRegional = await conferirMarcaEmpresaRegional(
@@ -1718,13 +1728,42 @@ export async function editarRegistroDaAbertura(
   );
   if (categoriaErro) return { ok: false, message: categoriaErro };
 
-  const servicoErro = await conferirServico(
+  const servicoConferido = await conferirServico(
     supabase,
     session.activeTenant.id,
     parsed.data.servico_id,
     job.orcamento_id,
+    true,
   );
-  if (servicoErro) return { ok: false, message: servicoErro };
+  if ("erro" in servicoConferido) return { ok: false, message: servicoConferido.erro };
+
+  // Decisão 240: o job entra no Interno ou sai dele. Os números de depois
+  // da troca são calculados agora, sem gravar: as previsões são
+  // conferidas contra eles, e só com tudo conferido a RPC troca.
+  let troca: PreviaDaTrocaDoInterno | null = null;
+  if (servicoConferido.sentido) {
+    if (aprovacao || alteracaoDoFinanceiroId) {
+      return {
+        ok: false,
+        message:
+          "A troca para dentro ou para fora do Interno é feita numa edição do registro à parte. Termine esta revisão e troque o serviço depois.",
+      };
+    }
+    const lida = await previaDaTrocaDoInterno(
+      supabase,
+      session.activeTenant.id,
+      jobId,
+      servicoConferido.sentido,
+    );
+    if (!lida.ok) return { ok: false, message: lida.message };
+    if (lida.previa.bloqueios.length > 0) {
+      return {
+        ok: false,
+        message: `Este job não pode passar para o serviço Interno. ${lida.previa.bloqueios.join(" ")}`,
+      };
+    }
+    troca = lida.previa;
+  }
 
   // Marca, empresa e regional do job (decisão 214).
   const marcaEmpresaRegional = await conferirMarcaEmpresaRegional(
@@ -1763,19 +1802,25 @@ export async function editarRegistroDaAbertura(
     aprovacao?.id ?? null,
   );
   if (!custoLido.ok) return { ok: false, message: custoLido.message };
-  const custoPrevisto = emCentavos(custoLido.custo);
+  // Na troca do Interno (decisão 240), os três números são os de depois da
+  // troca — os que a RPC grava logo abaixo.
+  const custoPrevisto = emCentavos(troca ? troca.depois.custoPrevisto : custoLido.custo);
   // Na aprovação de um pedido `job_aberto` o faturamento previsto que vale
   // é o de DEPOIS da aprovação — é ele que a RPC grava logo abaixo.
   const faturamentoPrevisto = emCentavos(
-    aprovacao?.totais
-      ? aprovacao.totais.faturamento_previsto
-      : Number(job.faturamento_previsto ?? 0),
+    troca
+      ? troca.totais.faturamento_previsto
+      : aprovacao?.totais
+        ? aprovacao.totais.faturamento_previsto
+        : Number(job.faturamento_previsto ?? 0),
   );
-  const valorJobDaFoto = aprovacao?.totais
-    ? aprovacao.totais.valor_total
-    : job.valor_total === null
-      ? null
-      : Number(job.valor_total);
+  const valorJobDaFoto = troca
+    ? troca.totais.valor_total
+    : aprovacao?.totais
+      ? aprovacao.totais.valor_total
+      : job.valor_total === null
+        ? null
+        : Number(job.valor_total);
 
   const [consumo, curvaAtualRes, recebAtualRes, rateioAtualRes, impAtualRes] = await Promise.all([
     consumoDasPrevisoes(supabase, session.activeTenant.id, jobId),
@@ -1881,6 +1926,9 @@ export async function editarRegistroDaAbertura(
     jobId,
     parsed.data.recebimento,
     aprovarSaveId ? [aprovarSaveId] : [],
+    troca
+      ? { mensal: troca.depois.faturamentoPorMes !== null, meses: troca.depois.faturamentoPorMes }
+      : null,
   );
   if ("erro" in recebimentoConferido) {
     return { ok: false, message: recebimentoConferido.erro };
@@ -1909,12 +1957,14 @@ export async function editarRegistroDaAbertura(
   // ---------- Impostos previstos: relidos do banco (decisão 100) ----------
   // Na aprovação de save, o imposto já conta o pedido que ela aprova — a
   // mesma conta "como o financeiro vê" do faturamento (decisão 099).
-  const imposto = await impostoDoJob(
-    supabase,
-    session.activeTenant.id,
-    jobId,
-    aprovarSaveId ? [aprovarSaveId] : [],
-  );
+  const imposto = troca
+    ? { impostoPrevisto: troca.depois.impostoPrevisto }
+    : await impostoDoJob(
+        supabase,
+        session.activeTenant.id,
+        jobId,
+        aprovarSaveId ? [aprovarSaveId] : [],
+      );
   if (!imposto) {
     return {
       ok: false,
@@ -1992,6 +2042,23 @@ export async function editarRegistroDaAbertura(
       },
     });
   }
+  // Decisão 240: a troca do Interno, com tudo conferido. Uma transação só:
+  // o orçamento, as versões, as linhas do job e os espelhos. Se ela
+  // recusar, nada deste registro foi gravado ainda.
+  if (troca) {
+    const { error: trocaErr } = await supabase.rpc("trocar_job_de_lado_do_interno", {
+      p_job_id: jobId,
+      p_servico_id: parsed.data.servico_id,
+      p_totais: troca.totais,
+    });
+    if (trocaErr) {
+      console.error("[abertura-job.troca-interno.rpc]", trocaErr.message);
+      if (projetoNovo?.ok) {
+        await desfazerProjetoNovo(supabase, session.activeTenant.id, projetoNovo.id);
+      }
+      return { ok: false, message: trocaErr.message };
+    }
+  }
   // A partir daqui, se algo falhar com a aprovação feita, a mensagem diz.
   // Duas frases, e não um "mas" atrás do outro: o que deu certo vem
   // junto ("o save foi aprovado E o registro foi salvo"), e o "mas" fica
@@ -2053,7 +2120,9 @@ export async function editarRegistroDaAbertura(
       ok: false,
       message: aprovacao
         ? `${aprovado}, mas a revisão da abertura não foi registrada. Registre a revisão de novo na aba Abertura do Job.`
-        : updateErro
+        : troca
+          ? "O serviço do job foi trocado, mas o registro não foi salvo. Confira as previsões e salve de novo."
+          : updateErro
           ? "Não foi possível salvar as alterações."
           : "O job não está mais aberto — alguém pode tê-lo encerrado enquanto você editava.",
     };
@@ -2208,6 +2277,7 @@ export async function editarRegistroDaAbertura(
       erratas_ids: erratasDaRevisao,
       aprovou_save: aprovacao?.id ?? null,
       alteracao_do_financeiro_id: alteracaoDoFinanceiroId,
+      troca_do_interno: troca?.sentido ?? null,
       de: {
         nome_financeiro: job.nome_financeiro,
         projeto_financeiro_id: job.projeto_financeiro_id,
@@ -2291,4 +2361,50 @@ export async function editarRegistroDaAbertura(
   if (aprovacao) revalidatePath("/jobs");
 
   return { ok: true, id: jobId, revisao: eraRevisao };
+}
+
+/**
+ * A prévia da troca do Interno para o pop-up do "Editar registro"
+ * (decisão 240): o que impede a troca e os números do job depois dela.
+ * `previa: null` quando o serviço escolhido fica do mesmo lado do Interno
+ * que o orçamento — aí não há pop-up. Nada é gravado.
+ */
+export async function carregarTrocaDoInterno(
+  jobId: string,
+  servicoId: string,
+): Promise<
+  { ok: true; previa: PreviaDaTrocaDoInterno | null } | { ok: false; message: string }
+> {
+  const session = await requireSession();
+  if (session.activeRole !== "administrador" && session.activeRole !== "financeiro") {
+    return { ok: false, message: "Só administrador ou financeiro pode editar o registro." };
+  }
+  const supabase = createClient();
+  const { data: job } = await supabase
+    .from("jobs")
+    .select("id, status, orcamento_id")
+    .eq("id", jobId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ id: string; status: JobStatus; orcamento_id: string }>();
+  if (!job) return { ok: false, message: "Job não encontrado." };
+  if (!jobEstaAberto(job.status)) {
+    return { ok: false, message: "Só job aberto tem o serviço trocado pelo registro." };
+  }
+  const conferido = await conferirServico(
+    supabase,
+    session.activeTenant.id,
+    servicoId,
+    job.orcamento_id,
+    true,
+  );
+  if ("erro" in conferido) return { ok: false, message: conferido.erro };
+  if (!conferido.sentido) return { ok: true, previa: null };
+  const lida = await previaDaTrocaDoInterno(
+    supabase,
+    session.activeTenant.id,
+    jobId,
+    conferido.sentido,
+  );
+  if (!lida.ok) return { ok: false, message: lida.message };
+  return { ok: true, previa: lida.previa };
 }

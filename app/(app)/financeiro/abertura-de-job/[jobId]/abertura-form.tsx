@@ -72,6 +72,8 @@ import {
   type FotoDaAbertura,
 } from "@/lib/types";
 import type { ServicoOption } from "@/lib/data/servicos";
+import type { PreviaDaTrocaDoInterno } from "@/lib/data/troca-do-interno";
+import { useTrocaDoInterno } from "./troca-do-interno";
 import type { JobNaFila, RevisaoDeErrata } from "../dados";
 import {
   dataDeRecebimentoDoMes,
@@ -543,24 +545,43 @@ export function AberturaForm({
     modo === "leitura" || modo === "revisao" ? (revisaoPelaPlanilha?.rascunho ?? null) : null;
   const pelaPlanilha = rascunhoDaPlanilha !== null;
   const numerosDaPlanilha = rascunhoDaPlanilha?.numeros ?? null;
-  const faturamentoPrevisto = numerosDaPlanilha
-    ? numerosDaPlanilha.faturamentoPrevisto
-    : faturamentoPrevistoDoServidor;
-  const impostoPrevisto = numerosDaPlanilha
-    ? numerosDaPlanilha.impostoPrevisto
-    : impostoPrevistoDoServidor;
-  const custoPrevisto = numerosDaPlanilha
-    ? emCentavos(custoPrevistoDoServidor + numerosDaPlanilha.deltaCustoPrevisto)
-    : custoPrevistoDoServidor;
-  const faturamentoPorMes =
-    numerosDaPlanilha?.faturamentoPorMes ?? faturamentoPorMesDoServidor;
-  const rentabilidade = numerosDaPlanilha
+  // A troca do Interno escolhida no "Editar registro" e ainda não salva
+  // (decisão 240): o formulário passa a fechar com os números de depois
+  // dela, como no rascunho da planilha.
+  const [previaInterno, setPreviaInterno] = React.useState<PreviaDaTrocaDoInterno | null>(null);
+  const depoisDaTroca = previaInterno?.depois ?? null;
+  const faturamentoPrevisto = depoisDaTroca
+    ? depoisDaTroca.faturamentoPrevisto
+    : numerosDaPlanilha
+      ? numerosDaPlanilha.faturamentoPrevisto
+      : faturamentoPrevistoDoServidor;
+  const impostoPrevisto = depoisDaTroca
+    ? depoisDaTroca.impostoPrevisto
+    : numerosDaPlanilha
+      ? numerosDaPlanilha.impostoPrevisto
+      : impostoPrevistoDoServidor;
+  const custoPrevisto = depoisDaTroca
+    ? depoisDaTroca.custoPrevisto
+    : numerosDaPlanilha
+      ? emCentavos(custoPrevistoDoServidor + numerosDaPlanilha.deltaCustoPrevisto)
+      : custoPrevistoDoServidor;
+  const faturamentoPorMes = depoisDaTroca
+    ? depoisDaTroca.faturamentoPorMes
+    : (numerosDaPlanilha?.faturamentoPorMes ?? faturamentoPorMesDoServidor);
+  const rentabilidade = depoisDaTroca
     ? {
-        valorJob: numerosDaPlanilha.valorJob,
-        deducoes: numerosDaPlanilha.deducoesDoResultado,
-        custoPlanejado: rentabilidadeDoServidor.custoPlanejado,
+        valorJob: depoisDaTroca.valorJob,
+        deducoes: depoisDaTroca.deducoes,
+        custoPlanejado: depoisDaTroca.custoPlanejado,
       }
-    : rentabilidadeDoServidor;
+    : numerosDaPlanilha
+      ? {
+          valorJob: numerosDaPlanilha.valorJob,
+          deducoes: numerosDaPlanilha.deducoesDoResultado,
+          custoPlanejado: rentabilidadeDoServidor.custoPlanejado,
+        }
+      : rentabilidadeDoServidor;
+  const valorTotalDoJob = depoisDaTroca ? depoisDaTroca.valorJob : job.valor_total;
 
   const ehRevisao = modo === "revisao" || pelaPlanilha;
   const travado = modo === "leitura" && !editando && !pelaPlanilha;
@@ -663,6 +684,18 @@ export function AberturaForm({
       ? job.servico_id
       : "",
   );
+  // Decisão 240: no "Editar registro" livre, o serviço pode pôr o job no
+  // Interno ou tirar dele — com o pop-up que mostra o que muda.
+  const trocaInterno = useTrocaDoInterno({
+    jobId: job.id,
+    servicos,
+    orcamentoEhInterno: job.servico_orcamento_interno,
+    servicoId,
+    setServicoId,
+    previa: previaInterno,
+    setPrevia: setPreviaInterno,
+    habilitada: modo === "leitura" && editando && !pelaPlanilha && !aprovacaoSave,
+  });
   // Marca, empresa e regional do job (decisão 214): chegam com as do job —
   // a marca do projeto, a empresa do projeto e a regional do orçamento — e
   // o financeiro confere e pode trocar. Valem para o job inteiro.
@@ -893,6 +926,8 @@ export function AberturaForm({
     chave: chaveDoServidor,
     faturamento: faturamentoPrevisto,
     imposto: impostoPrevisto,
+    custo: custoPrevisto,
+    troca: previaInterno?.sentido ?? null,
   });
   React.useEffect(() => {
     const antes = doServidorAnterior.current;
@@ -901,7 +936,15 @@ export function AberturaForm({
       chave: chaveDoServidor,
       faturamento: faturamentoPrevisto,
       imposto: impostoPrevisto,
+      custo: custoPrevisto,
+      troca: previaInterno?.sentido ?? null,
     };
+    // A troca do Interno (decisão 240) move também a curva de desembolso:
+    // na entrada o desembolso passa a seguir o orçado. Fora da troca, a
+    // curva continua parada (regra da 115).
+    if (!travado && antes.troca !== (previaInterno?.sentido ?? null) && antes.custo !== custoPrevisto) {
+      setCurva((atual) => (atual.length ? acompanharTotal(atual, custoPrevisto - antes.custo) : atual));
+    }
     if (travado) {
       setCurva(paraForm(curvaInicial));
       setRecebimento(
@@ -924,12 +967,17 @@ export function AberturaForm({
       setRecebimento((atual) =>
         recebimentoMensalParaForm(
           faturamentoPorMes,
-          atual.map((l) => ({
-            id: l.id,
-            data: l.data,
-            valor: parseMoeda(l.valorTexto),
-            mes: l.mes,
-          })),
+          [
+            ...atual.map((l) => ({
+              id: l.id,
+              data: l.data,
+              valor: parseMoeda(l.valorTexto),
+              mes: l.mes,
+            })),
+            // Mês que não está na tela (a troca do Interno tirou o
+            // recebimento e agora ele volta) chega com a data gravada.
+            ...recebimentoInicial.filter((g) => !atual.some((l) => l.mes === g.mes)),
+          ],
         ),
       );
     } else if (antes.faturamento !== faturamentoPrevisto) {
@@ -950,6 +998,8 @@ export function AberturaForm({
     }
   }, [
     chaveDoServidor,
+    previaInterno,
+    custoPrevisto,
     travado,
     pelaPlanilha,
     faturamentoPrevisto,
@@ -1647,6 +1697,7 @@ export function AberturaForm({
       }
 
       setEditando(false);
+      setPreviaInterno(null);
       router.refresh();
     });
   }
@@ -1722,6 +1773,7 @@ export function AberturaForm({
   /** Desfaz a edição voltando tudo ao que veio do servidor. */
   function cancelarEdicao() {
     setErro(null);
+    setPreviaInterno(null);
     setNome(nomeDoJobNoFinanceiro(job));
     setProjetoId(job.projeto_financeiro_id ?? "");
     setNomeProjetoNovo(null);
@@ -2237,7 +2289,7 @@ export function AberturaForm({
                 </label>
                 <Select
                   value={servicoId}
-                  onValueChange={setServicoId}
+                  onValueChange={trocaInterno.aoEscolher}
                   disabled={travado}
                 >
                   <SelectTrigger
@@ -2257,14 +2309,21 @@ export function AberturaForm({
                     ))}
                   </SelectContent>
                 </Select>
-                <span className="text-[11px] text-muted-foreground">
+                {trocaInterno.aviso}
+                {trocaInterno.dialogo}
+                <span
+                  className={cn(
+                    "text-[11px] text-muted-foreground",
+                    trocaInterno.aviso && "hidden",
+                  )}
+                >
                   {servicoOk ? (
                     <>
                       Vem do orçamento{" "}
                       <span className="font-medium text-foreground/80">
                         {job.orcamento_nome ?? "—"}
                       </span>
-                      . Pode ser trocado aqui sem alterar o orçamento.
+                      . Pode ser trocado aqui sem alterar o orçamento, menos para dentro ou para fora do Interno, que troca nos dois.
                     </>
                   ) : (
                     "Obrigatório. Vem do orçamento — troque aqui sem alterar o orçamento."
@@ -2776,7 +2835,7 @@ export function AberturaForm({
                     Valor total do job
                   </p>
                   <p className="mt-1.5 whitespace-nowrap font-mono text-base font-bold">
-                    {formatCurrency(job.valor_total)}
+                    {formatCurrency(valorTotalDoJob)}
                   </p>
                   <p className="mt-1 text-[11px] text-muted-foreground">
                     Fechamento do orçamento aprovado
@@ -2963,7 +3022,13 @@ export function AberturaForm({
                                 Nenhum faturamento previsto pela California
                               </p>
                               <p className="mt-1 text-xs leading-relaxed text-amber-800/80">
-                                {saveConsumido > 0.005 ? (
+                                {servicos.find((x) => x.id === servicoId)?.investimento_interno ? (
+                                  <>
+                                    Este job é Interno: investimento da própria
+                                    California, sem nota a emitir. O job abre
+                                    sem previsão de recebimento.
+                                  </>
+                                ) : saveConsumido > 0.005 ? (
                                   <>
                                     Este job é pago com saldo em save de outro
                                     job — o cliente já pagou por ele numa nota
@@ -3705,7 +3770,7 @@ export function AberturaForm({
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-[12.5px] font-semibold">Valor total</span>
               <span className="font-mono text-[15px] font-bold">
-                {formatCurrency(job.valor_total)}
+                {formatCurrency(valorTotalDoJob)}
               </span>
             </div>
             {/* O save do job, abaixo do valor total, como no envio da
@@ -4181,7 +4246,7 @@ export function AberturaForm({
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-[13px] font-semibold">Valor total</span>
               <span className="font-mono text-[15px] font-bold">
-                {formatCurrency(job.valor_total)}
+                {formatCurrency(valorTotalDoJob)}
               </span>
             </div>
           </div>

@@ -60,7 +60,7 @@ import {
   competenciasGravadas,
   previsoesGravadas,
 } from "../../abertura-de-job/consumo";
-import { servicosDoLado, servicosDoOrcamentoQuery } from "@/lib/data/servicos";
+import { servicosDoOrcamentoQuery } from "@/lib/data/servicos";
 import { trimestreDe } from "../../abertura-de-job/curva";
 import { formatDataAsHoraBr, formatDataHoraBr } from "../../abertura-de-job/formatos";
 import { SITUACAO_META } from "../../abertura-de-job/situacao-faturamento";
@@ -630,7 +630,10 @@ export default async function JobNoFinanceiroPage({
                 c.modelo_planilha === jobNaFila.modelo_planilha_orcamento ||
                 c.id === jobNaFila.categoria_id,
             )}
-            servicos={servicosDoLado(servicosRes.data ?? [], jobNaFila)}
+            // Decisão 240: todos os serviços. No "Editar registro" o
+            // financeiro pode pôr o job no Interno ou tirar dele, com o
+            // pop-up que mostra o que muda (era `servicosDoLado`).
+            servicos={servicosRes.data ?? []}
             projetos={projetos}
             // O job aberto já tem projeto: a sugestão é só da fila.
             sugestaoDeProjeto={null}

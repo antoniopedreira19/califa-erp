@@ -8897,3 +8897,13 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 
 - A Conciliação automática não lembra mais as divisões abertas: ao abrir a aba, ao sair e voltar, ao trocar de conta e ao chegar extrato, todas aparecem fechadas. As chaves `conciliacao.divisoes-abertas.<conta>` e `conciliacao.extrato-visto.<conta>` que ficaram nos navegadores são apagadas na primeira visita.
 - Pedido do Tiago (06/11): "ao sair e voltar os agrupamentos devem ocultar suas linhas novamente". Sem migration.
+
+## ⚠️ Nota de 2026-11-06 — o job entra e sai do Interno pelo "Editar registro" (decisão 240)
+
+- **O que mudou:** no "Editar registro" do job aberto, o campo Serviço passou a listar o Interno, e o serviço de um job Interno pode voltar para os outros. A troca pede confirmação num pop-up ("Hoje → Ao salvar": tipo de custo só com as siglas, planejado e faturamento). Na fila de abertura nada mudou.
+- **Entrar:** todas as linhas viram FI, o planejado passa a ser o orçado, o BV em negociação é cancelado, o faturamento e os impostos vão a zero, e o desembolso segue o orçado. **Sair:** FI vira B, o planejado fica, e o recebimento e os impostos voltam a pedir datas.
+- **O orçamento vai junto** (exceção à 055, só para o Interno): a RPC `trocar_job_de_lado_do_interno` troca o serviço do orçamento (todas as versões), converte as linhas do job e grava os espelhos, numa transação, logo antes de o registro ser regravado. Na auditoria ficam `job.servico_interno_trocado` e `troca_do_interno` no `job.registro_abertura_editado`.
+- **Bloqueiam a entrada** (`bloqueios_do_job_para_o_interno`): linha em save, pedido de save aguardando, BV confirmado ou recebido, envio para faturamento, nota emitida, recebimento registrado. A e D não bloqueiam.
+- **Conferido (06/11) no TES-1035/26:** entrou (B → FI, planejado 8.000 → 10.000, faturamento 13.918,23 → 0, previsões de recebimento e de impostos apagadas, custo 10.000) e saiu (FI → B, faturamento 13.918,23 de volta, recebimento e impostos em 2 parcelas), tudo conferido no banco. Como combinado, o planejado do teste ficou em 10.000, não volta a 8.000. Os bloqueios dos 20 jobs TES foram conferidos no banco; o pop-up de bloqueio não foi visto na tela (o navegador travou por falta de memória).
+- **Fora:** Always On → Ativação (regra da 128, decidida) fica para uma entrega própria.
+- **Migrations:** `20261105800001` e `20261106800001` (conserto: a soma dos motivos quebrava com `text[] || 'texto'`), aditivas.
