@@ -120,7 +120,6 @@ const linhaDoBanco = (id: string, extra: Partial<LinhaDoBanco> = {}): LinhaDoBan
   ligados: [],
   conciliadaComo: null,
   grupo: null,
-  importacaoId: null,
   datasTrocadas: [],
   correcao: null,
   regraId: null,

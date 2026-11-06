@@ -73,13 +73,6 @@ const gravar = (k: string, v: string) => {
 };
 /** O item que ainda pede ação (a baixa à mão já conciliada, não). */
 const pedeAcao = (i: Item) => (i.k === "linha" ? !i.r.resolvido : true);
-/** A importação de onde veio cada item (as baixas sem linha não têm). */
-function importacoesDoItem(i: Item): Array<string | null> {
-  if (i.k === "linha") return [i.r.mov.linha.importacaoId];
-  if (i.k === "grupo") return i.g.linhas.map((r) => (r as { mov: { linha: { importacaoId: string | null } } }).mov.linha.importacaoId);
-  if (i.k === "conjunto") return i.rs.map((r) => r.mov.linha.importacaoId);
-  return [];
-}
 
 export function FilaDividida(p: PropsDaFila) {
   const { secoes, conciliacao, acoes, conciliarVarios, pending } = p;
@@ -88,26 +81,22 @@ export function FilaDividida(p: PropsDaFila) {
   const [marcados, setMarcados] = React.useState<Set<string>>(new Set());
   // As divisões nascem fechadas; depois de montar, voltam abertas as que a
   // pessoa deixou abertas nesta conta (decisão 239). Só no navegador dela.
+  // O extrato que este navegador ainda não tinha mostrado chega com todas
+  // fechadas (revisão de 06/11/2026 da 239, ponto 2): o título e a contagem
+  // de cada divisão já dizem o que há para fazer.
   const conta = p.banco.conta.id;
   const ultima = p.banco.ultima;
   const [recolhidas, setRecolhidas] = React.useState<Set<Tipo>>(new Set(ORDEM));
-  // O extrato que este navegador ainda não tinha mostrado abre as divisões
-  // com linhas pendentes dele, uma vez (decisão 239).
-  const [extratoNovo, setExtratoNovo] = React.useState<{ arquivo: string; tipos: Tipo[] } | null>(null);
+  const ultimaId = ultima?.id ?? null;
   React.useEffect(() => {
-    // A tela não remonta ao trocar de conta: a faixa da conta anterior sai.
-    setExtratoNovo(null);
-    const abertas = new Set<Tipo>(JSON.parse(ler(chaveAbertas(conta)) ?? "[]") as Tipo[]);
-    if (ultima && ler(chaveVisto(conta)) !== ultima.id) {
-      const tipos = ORDEM.filter((t) => t !== "conciliado" && itens.some((i) => i.tipo === t && pedeAcao(i) && importacoesDoItem(i).includes(ultima.id)));
-      tipos.forEach((t) => abertas.add(t));
-      if (tipos.length) setExtratoNovo({ arquivo: ultima.arquivo, tipos });
-      gravar(chaveVisto(conta), ultima.id);
+    let abertas = new Set<Tipo>(JSON.parse(ler(chaveAbertas(conta)) ?? "[]") as Tipo[]);
+    if (ultimaId && ler(chaveVisto(conta)) !== ultimaId) {
+      abertas = new Set();
+      gravar(chaveAbertas(conta), "[]");
+      gravar(chaveVisto(conta), ultimaId);
     }
     setRecolhidas(new Set(ORDEM.filter((t) => !abertas.has(t))));
-    // Só ao abrir a conta (ou chegar extrato novo).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [conta, ultima?.id]);
+  }, [conta, ultimaId]);
 
   const doTipo = (t: Tipo) => itens.filter((i) => i.tipo === t);
   const linhasDe = (is: Item[]) => is.reduce((s, i) => s + (i.k === "grupo" ? i.g.linhas.length : 1), 0);
@@ -175,17 +164,6 @@ export function FilaDividida(p: PropsDaFila) {
       <LinhaDoArquivo banco={p.banco} importar={ultima && pendentes === 0 ? null : p.importar} />
       <LinhaDeAvisos {...p} />
       <FaixaDoTopo {...p} />
-
-      {extratoNovo && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2.5 text-sm text-sky-900">
-          <span>
-            <strong>{extratoNovo.arquivo}</strong> acabou de chegar: abrimos as {extratoNovo.tipos.length === 1 ? "divisão" : `${extratoNovo.tipos.length} divisões`} com linhas dele.
-          </span>
-          <button type="button" onClick={() => setExtratoNovo(null)} className="ml-auto text-xs font-semibold underline">
-            Ok
-          </button>
-        </div>
-      )}
 
       {ultima && pendentes === 0 && (
         <div className="space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">

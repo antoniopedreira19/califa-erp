@@ -87,9 +87,6 @@ export interface LinhaDoBanco {
   conciliadaComo: ConciliadaComo | null;
   /** As linhas que se desfazem juntas. */
   grupo: string | null;
-  /** A importação de onde a linha veio: o extrato recém-chegado abre as
-   *  divisões que têm linhas dele (decisão 239). */
-  importacaoId: string | null;
   /** As baixas que mudaram para a data do banco. */
   datasTrocadas: Array<{ id: string; de: string }>;
   /** A correção da baixa, quando a linha se conciliou corrigindo. */
@@ -646,7 +643,6 @@ export async function carregarBancoDaConciliacao(
     ligados: ligadosPorLinha.get(l.id) ?? [],
     conciliadaComo: l.conciliada_como,
     grupo: l.grupo,
-    importacaoId: l.importacao_id,
     datasTrocadas: l.desfazer?.datas ?? [],
     correcao: correcaoDaLinha.get(l.id) ?? null,
     regraId: l.desfazer?.regra_id ?? null,

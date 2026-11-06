@@ -8880,9 +8880,15 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 
 ## ⚠️ Nota de 2026-11-05 — a Conciliação automática: divisões fechadas, extrato novo, tudo conciliado e o período do extrato (decisão 239)
 
-- **Divisões:** nascem fechadas; a tela lembra, por conta e no navegador, as que a pessoa abriu. O extrato que o navegador ainda não mostrou abre, uma vez, as divisões com linhas pendentes dele (faixa "acabou de chegar").
+- **Divisões:** nascem fechadas; a tela lembra, por conta e no navegador, as que a pessoa abriu. O extrato que o navegador ainda não mostrou chega com todas fechadas (revisto em 06/11; ver a nota abaixo).
 - **Cabeçalho:** o "marcar todas" saiu; no lugar, expandir / recolher todas.
 - **Tudo conciliado:** faixa verde com o próximo passo (fechar e importar a partir de …) e o botão de importar; "Fechada até …" quando já fechou.
 - **Período:** na Automática, os Conciliados e o "N de M conciliados" são do período do último extrato, não do De/Até.
 - **Importar:** o texto da área ficou numa linha.
 - **Conferido:** na Conta Teste (fechadas, lembrar a aberta, expandir/recolher, "no extrato de 30/10 a 30/10/2026"); a faixa verde e o extrato novo, no protótipo. Sem migration.
+
+## ⚠️ Nota de 2026-11-06 — o extrato novo chega com as divisões fechadas (revê a 239, ponto 2)
+
+- O extrato que o navegador ainda não tinha mostrado não abre mais as divisões com linhas dele, e a faixa azul "acabou de chegar" saiu. Ao chegar, ele fecha todas e esquece as que estavam abertas; nas visitas seguintes, a tela volta a lembrar o que a pessoa abriu.
+- Pedido do Tiago (06/11), revendo o fluxo no protótipo: o título e a contagem de cada divisão já dizem o que há para fazer.
+- Saiu `LinhaDoBanco.importacaoId`, que só servia a isso. Sem migration.
