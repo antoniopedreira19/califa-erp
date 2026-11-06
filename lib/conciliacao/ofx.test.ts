@@ -80,6 +80,21 @@ test("OFX em XML 2.x, sem DTSERVER e sem fuso", () => {
   assert.equal(ofx.saldoEm, "2026-10-02");
 });
 
+test("linha depois do DTEND: o fim do período vai até a última linha", () => {
+  const sgml = `<OFX><BANKMSGSRSV1><STMTTRNRS><STMTRS><CURDEF>BRL
+<BANKACCTFROM><BANKID>033<ACCTID>0001130000013</BANKACCTFROM>
+<BANKTRANLIST><DTSTART>20261001000000[-3:GMT]<DTEND>20261031000000[-3:GMT]
+<STMTTRN><TRNTYPE>DEBIT<DTPOSTED>20261030000000[-3:GMT]<TRNAMT>-10,00<FITID>1<MEMO>TARIFA</STMTTRN>
+<STMTTRN><TRNTYPE>CREDIT<DTPOSTED>20261103000000[-3:GMT]<TRNAMT>25000,00<FITID>2<MEMO>PIX RECEBIDO</STMTTRN>
+</BANKTRANLIST><LEDGERBAL><BALAMT>24990,00<DTASOF>20261103121703[-3:GMT]</LEDGERBAL></STMTRS></STMTTRNRS></BANKMSGSRSV1></OFX>`;
+  const ofx = lerOfx(sgml);
+  assert.equal(ofx.inicio, "2026-10-01");
+  assert.equal(ofx.fim, "2026-11-03");
+  assert.equal(ofx.saldoEm, "2026-11-03");
+  // Sem linha depois do DTEND, o fim é o do arquivo.
+  assert.equal(lerOfx(sgml.replace("20261103000000", "20261031000000")).fim, "2026-10-31");
+});
+
 test("o histórico normalizado: sem acento, maiúsculas, espaços juntados", () => {
   assert.equal(normalizar("  Pagamento  de título "), "PAGAMENTO DE TITULO");
 });

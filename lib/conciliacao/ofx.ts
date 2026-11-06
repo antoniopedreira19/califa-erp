@@ -117,13 +117,19 @@ export function lerOfx(texto: string): ExtratoDoOfx {
   const ledger = corpo.match(/<LEDGERBAL>([\s\S]*?)(<\/LEDGERBAL>|<AVAILBAL>|<\/STMTRS>)/i);
   const dtServer = tag(corpo, "DTSERVER");
   const hora = dtServer?.match(/^\d{8}(\d{2})(\d{2})/);
+  // O fim é o DTEND, ou a última linha quando ela passa dele: o Santander
+  // manda o extrato pedido até 31/10 e gerado em 03/11 com as linhas de 03/11,
+  // e o saldo é o de 03/11. Com o DTEND, a tela comparava o saldo do banco de
+  // 03/11 com o do sistema de 31/10.
+  const fimDoArquivo = dataOfx(tag(corpo, "DTEND"));
+  const ultimaLinha = movimentos.reduce<string | null>((max, m) => (m.data && (!max || m.data > max) ? m.data : max), null);
   return {
     banco: tag(corpo, "ORG") || tag(corpo, "BANKID") || "",
     bancoId: tag(corpo, "BANKID") || "",
     conta: tag(corpo, "ACCTID") || "",
     moeda: tag(corpo, "CURDEF") || "",
     inicio: dataOfx(tag(corpo, "DTSTART")),
-    fim: dataOfx(tag(corpo, "DTEND")),
+    fim: fimDoArquivo && ultimaLinha && ultimaLinha > fimDoArquivo ? ultimaLinha : fimDoArquivo,
     geradoEm: dataOfx(dtServer),
     geradoHora: hora ? `${hora[1]}:${hora[2]}` : null,
     geradoInstante: instanteOfx(dtServer),

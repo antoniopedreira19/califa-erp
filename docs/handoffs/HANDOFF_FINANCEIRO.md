@@ -8928,4 +8928,11 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 
 - **Recomeço** (migration `20261106900001`, destrutiva, confirmada pelo Tiago): California Santander, BB California, Santander GoCrazy e Santander Hitlab, com as aplicações delas (ContaMax e Rende Fácil), começam em 03/11/2026 com o saldo do banco no fim de 02/11. As correntes ficam em R$ 0,00; as aplicações, com o saldo de 30/09 mais os movimentos de outubro dos extratos. Cada troca está na auditoria `conta_bancaria.atualizada`. As outras contas não mudaram.
 - **A fila do financeiro começa no início da conta:** `banco-dados.ts` tira a linha pendente de antes de `saldo_inicial_data`, e `_condicoes_do_fechamento` (migration `20261106900002`) conta as pendentes e as baixas sem linha só do início em diante.
+- **Os extratos de 03/11 entraram pela tela:**
+  - California Santander: 43 linhas novas, as aplicações de 26 a 30/10 e as 38 de 03/11;
+  - BB California: 8 novas;
+  - Santander GoCrazy: 10 novas;
+  - Santander Hitlab: nenhuma.
+  No BB, 2 das novas repetem, com outro texto, linhas já importadas antes do início (−R$ 36.755,00 em 23/10 e R$ 300.000,00 em 26/10). Ficam fora da fila e do saldo.
+- **O fim do período do OFX vai até a última linha** (`lib/conciliacao/ofx.ts`, com teste): o Santander mandou o extrato "de 01/10 a 31/10" com as linhas e o saldo de 03/11. O quadro comparava o saldo do banco de 03/11 com o do sistema de 31/10 e mostrava R$ 876.460,67 de diferença. Reimportado, o extrato vai de 01/10 a 03/11, e a diferença é a das 38 linhas a conciliar.
 - **Falta:** o rendimento de outubro das aplicações (vem com o extrato delas) e o extrato das contas sem extrato no sistema.
