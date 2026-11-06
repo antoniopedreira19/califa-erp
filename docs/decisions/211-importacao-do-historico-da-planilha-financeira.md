@@ -1647,6 +1647,24 @@ depois vamos preenchendo as lacunas por aqui". O Tiago traz os extratos atualiza
   saldo. Cada conta guarda um número de controle: o histórico somado até o corte menos o
   saldo do banco no corte. Ele chega a zero quando não houver mais lacuna.
 
+**Aplicado em 06/11/2026** (migrations `20261106900001` e `20261106900002`), com a tabela confirmada pelo Tiago ("Sim, aplicar"):
+
+- **Os extratos de 03/11:** California Santander, BB California, Santander GoCrazy e Santander Hitlab, no formato com as aplicações e os resgates automáticos. Os dois arquivos da California Santander eram o mesmo extrato. Em cada conta, a soma das linhas desde 01/10 dá o saldo final do banco: cada corrente começou outubro em R$ 0,00, como no sistema.
+- **O recomeço em 03/11, com o saldo do banco no fim de 02/11:**
+
+| Conta | Saldo de 01/10 | Saldo de 03/11 | Lacuna (banco − sistema em 02/11) |
+|---|---|---|---|
+| California Santander + ContaMax | R$ 0,00 + R$ 14.648,13 | R$ 0,00 + R$ 414.229,23 | R$ 669.701,16 |
+| BB California + Rende Fácil | R$ 0,00 + R$ 132.975,94 | R$ 0,00 + R$ 595.978,67 | R$ 1.690.482,00 |
+| Santander GoCrazy + ContaMax | R$ 0,00 + R$ 68.516,98 | R$ 0,00 + R$ 103.561,12 | R$ 153.364,22 |
+| Santander Hitlab + ContaMax | R$ 0,00 + R$ 32.827,98 | R$ 0,00 + R$ 5.621,50 | −R$ 464,72 |
+
+  As quatro correntes fecham 02/11 em R$ 0,00 porque o banco aplica o que sobra. As aplicações levam o saldo de 30/09 mais as aplicações e os resgates de outubro dos extratos. A planilha de 04/11 bate com esse cálculo até os centavos na California Santander, na GoCrazy e na Hitlab; no BB, ela fica R$ 1,66 mi abaixo do banco, diferença que já vinha de antes de 30/09.
+- **A lacuna** soma R$ 2.513.082,66. É o que o histórico até 02/11 ainda precisa explicar, e não pesa mais no saldo.
+- **Falta o rendimento de outubro das aplicações:** só aparece no extrato da ContaMax e do Rende Fácil, e entra como receita financeira quando chegar.
+- **As contas sem extrato não mudaram:** XP California, XP GoCrazy, Paypal, BB GoCrazy, Bradesco, BB Americas e Fundo Fixo (−R$ 3,66 mi no sistema em 02/11). A planilha não serve de base para elas; na XP GoCrazy, por exemplo, ela não tem o resgate de R$ 500.174,86 de 30/10.
+- **A fila do financeiro começa no início da conta** (Tiago: "Sim, a fila começa em 03/11"). A aba Banco deixa de pedir conciliação da linha pendente de antes do início, e as condições do fechamento só contam do início em diante. As 248 linhas de outubro que estavam pendentes ficam no histórico, para as lacunas.
+
 ## O que fica para depois
 - A4: o imposto teórico e o benefício da Copa que a planilha digita (linhas
   85 e 91 da Res. Jobs 2026; R$ 1.520.000,00 de benefício): o histórico segue a

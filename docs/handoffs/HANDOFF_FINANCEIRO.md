@@ -8923,3 +8923,9 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - A Conciliação automática não concilia mais nada sem clique: a baixa já lançada que bate, a linha da planilha, a tarifa pela regra, o título certo e a remessa ficam em **Prontos para conciliar**, e o "Conciliar os N" resolve a divisão inteira, em série.
 - Saiu o aviso "N resolvidas sozinhas · Desfazer". As linhas que já se resolveram sozinhas antes continuam marcadas "Conciliado sozinho", com o Desfazer de cada linha.
 - Até hoje, 304 das 1.820 linhas importadas tinham se resolvido sozinhas (201 da planilha, 54 tarifas, 49 baixas já lançadas). Sem migration; a RPC `marcar_linhas_avaliadas` fica sem uso.
+
+## ⚠️ Nota de 2026-11-06 — as contas com extrato recomeçam em 03/11 (decisão 211)
+
+- **Recomeço** (migration `20261106900001`, destrutiva, confirmada pelo Tiago): California Santander, BB California, Santander GoCrazy e Santander Hitlab, com as aplicações delas (ContaMax e Rende Fácil), começam em 03/11/2026 com o saldo do banco no fim de 02/11. As correntes ficam em R$ 0,00; as aplicações, com o saldo de 30/09 mais os movimentos de outubro dos extratos. Cada troca está na auditoria `conta_bancaria.atualizada`. As outras contas não mudaram.
+- **A fila do financeiro começa no início da conta:** `banco-dados.ts` tira a linha pendente de antes de `saldo_inicial_data`, e `_condicoes_do_fechamento` (migration `20261106900002`) conta as pendentes e as baixas sem linha só do início em diante.
+- **Falta:** o rendimento de outubro das aplicações (vem com o extrato delas) e o extrato das contas sem extrato no sistema.

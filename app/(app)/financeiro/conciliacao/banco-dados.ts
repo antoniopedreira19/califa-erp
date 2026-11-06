@@ -3,7 +3,7 @@
  * decisões 198 e 199): o extrato importado do banco e o que o motor de
  * correspondência precisa do lado do sistema.
  *
- * - **as linhas do banco**: as pendentes de qualquer data (sem lançamento
+ * - **as linhas do banco**: as pendentes desde o início da conta (sem lançamento
  *   ligado e não ignoradas) e as resolvidas do período aberto, pela view
  *   `vw_extrato_linhas` (o `conciliada` calculado);
  * - **a última importação** (o cabeçalho, o saldo do banco e o dia em
@@ -425,7 +425,7 @@ export async function carregarBancoDaConciliacao(
   }
 
   // ---- Rodada 1: a conta, as importações, as linhas, as remessas e as regras ----
-  const [contaRes, importacoesRes, linhasCruas, itensRes, regrasRes, regionaisRes] = await Promise.all([
+  const [contaRes, importacoesRes, linhasLidas, itensRes, regrasRes, regionaisRes] = await Promise.all([
     supabase
       .from("contas_bancarias")
       .select(
@@ -442,7 +442,8 @@ export async function carregarBancoDaConciliacao(
       .eq("tenant_id", tenantId)
       .eq("conta_bancaria_id", contaId)
       .order("created_at", { ascending: true }),
-    // As pendentes de qualquer data e as resolvidas do período aberto.
+    // As pendentes de qualquer data e as resolvidas do período aberto; as
+    // pendentes de antes do início da conta saem logo depois da leitura.
     todasAsPaginas<ExtratoLinhaComSituacao>(
       (de, ate) =>
         supabase
@@ -498,6 +499,12 @@ export async function carregarBancoDaConciliacao(
     saldo_inicial_data: string;
     empresa: { empresa_gerencial_id: string | null } | null;
   } | null;
+  // O que vem antes do início da conta é histórico (decisão 211, o recomeço
+  // de 03/11/2026): a linha pendente de antes dele sai da fila e se resolve
+  // com as lacunas do histórico. As resolvidas do período continuam.
+  const linhasCruas = c?.saldo_inicial_data
+    ? linhasLidas.filter((l) => l.conciliada || l.ignorada_em || l.data >= c.saldo_inicial_data)
+    : linhasLidas;
   const conta: DadosDaAbaBanco["conta"] = {
     id: contaId,
     nome: c?.nome ?? "Conta",
