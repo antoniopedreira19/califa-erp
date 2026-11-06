@@ -19,12 +19,10 @@ import {
   type LinhaDoBanco,
 } from "./banco-dados";
 import {
-  automacaoDaLeitura,
   conciliarConta,
   lotesDoMotor,
   resolucaoDaLinha,
   secoesDoBanco,
-  textoDosSozinhos,
   titulosDoMotor,
 } from "./motor-da-conta";
 import type { Linha } from "./linhas-da-aba";
@@ -250,48 +248,6 @@ test("a baixa feita à mão sem linha, num dia coberto, aparece em 'sem linha no
   assert.deepEqual(naoApareceu.map((l) => l.id), ["x"]);
 });
 
-test("a automação: o certo se resolve sozinho uma vez; a soma, o sem centro e o desfeito ficam", () => {
-  const linhas = [
-    titulo("pagar|avulso|a", 700),
-    titulo("pagar|avulso|b", 300, { centro: { tipo: "definir_na_baixa" } }),
-    titulo("pagar|avulso|c", 1000),
-    titulo("pagar|avulso|d", 2000),
-    titulo("pagar|avulso|e", 800),
-  ];
-  const banco = {
-    linhas: [
-      linhaDoBanco("1", { valor: -700 }),
-      linhaDoBanco("2", { valor: -300, ordem: 1 }),
-      linhaDoBanco("3", { valor: -3000, ordem: 2 }),
-      linhaDoBanco("4", { valor: -450, ordem: 3, avaliada: true }),
-      linhaDoBanco("5", { valor: -800, ordem: 4, semAuto: true }),
-      linhaDoBanco("6", { valor: -700, ordem: 5, avaliada: true, conciliada: true, conciliadaComo: "baixa", resolvidaSozinha: "titulo" }),
-    ],
-    lancamentos: agruparComoNoBanco([lanc("y", { valor: 450 })]),
-    remessasBaixadas: [],
-    remessas: [{ id: "r1", nome: "remessa nº 12", descricao: "Remessa Santander nº 12", itens: [
-      { origemTipo: "avulsa", origemId: "c", valor: 1000 },
-      { origemTipo: "avulsa", origemId: "d", valor: 2000 },
-    ] }],
-    regras: [],
-    periodos: [],
-  };
-  const { resultados } = conciliarConta(banco, linhas, "conta", {}, "2026-10-21");
-  const a = automacaoDaLeitura(resultados);
-  // A baixa feita à mão liga mesmo na linha já avaliada.
-  assert.deepEqual(a.manuais.map((r) => r.mov.id), ["4"]);
-  // Todas as pendentes ainda não avaliadas, a desfeita também (ela não se
-  // resolve, mas a avaliação fica gravada).
-  assert.deepEqual(a.aAvaliar, ["1", "2", "3", "5"]);
-  assert.deepEqual(a.titulos.map((r) => r.mov.id), ["1"]);
-  assert.deepEqual(a.remessas.map((r) => r.mov.id), ["3"]);
-  assert.deepEqual(a.regras, []);
-
-  const faixa = textoDosSozinhos(resultados);
-  assert.equal(faixa?.quantas, 1);
-  assert.match(faixa?.partes[0] ?? "", /^1 título baixado e conciliado \(valor exato/);
-});
-
 test("a remessa linha a linha: cada pagamento casa o seu título, e o total só com a linha do total (decisão 202)", () => {
   const linhas = [titulo("pagar|avulso|c", 1000), titulo("pagar|avulso|d", 2000)];
   const remessas = [{ id: "r1", nome: "remessa nº 12", descricao: "Remessa Santander nº 12", itens: [
@@ -389,10 +345,11 @@ test("a cauda do histórico (A6): do mesmo dia antes do título, até 5 dias e p
   );
   const secoes = secoesDoBanco(resultados);
   assert.equal(secoes.historico.length, 3);
-  assert.equal(automacaoDaLeitura(resultados).historicos.length, 3);
+  // As três têm confiança alta: vão para Prontos para conciliar (decisão 243).
+  assert.equal(resultados.filter((r) => r.estado === "historico" && r.confianca === "alta").length, 3);
 });
 
-test("as previsões da planilha (decisão 232): depois da cauda, até 10 dias antes e sem limite de atraso; só a única se resolve sozinha", () => {
+test("as previsões da planilha (decisão 232): depois da cauda, até 10 dias antes e sem limite de atraso; só a única vai para Prontos", () => {
   const base = { lancamentos: [], remessasBaixadas: [], remessas: [], regras: [], periodos: [] };
   const historico = [{ id: "h1", data: "2026-10-21", valor: -500, job: "Job Exemplo 3T", descricao: null, fornecedor: "Fornecedor 001 Exemplo" }];
   const previsoes = [
@@ -433,8 +390,9 @@ test("as previsões da planilha (decisão 232): depois da cauda, até 10 dias an
     ],
   );
   assert.match(resultados[4].motivo ?? "", /65 dias de atraso/);
+  // Só as de confiança alta vão para Prontos; a outra pede conferência.
   assert.deepEqual(
-    automacaoDaLeitura(resultados).historicos.map((r) => r.mov.id),
+    resultados.filter((r) => r.estado === "historico" && r.confianca === "alta").map((r) => r.mov.id),
     ["1", "2", "5"],
   );
 });

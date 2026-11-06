@@ -37,7 +37,6 @@ import type { GrupoDeIguais, TituloDoMotor } from "@/lib/conciliacao/motor";
 import { BotaoLancar } from "./mutuo-na-linha";
 import type { DadosDaAbaBanco, LancamentoSemLinha } from "./banco-dados";
 import {
-  textoDosSozinhos,
   type ConciliacaoDaConta,
   type MovimentoDaLinha,
   type ResultadoDaLinha,
@@ -70,7 +69,6 @@ export interface PropsDaFila {
   /** Até que dia a conciliação está fechada (decisão 205); nulo, aberta. */
   fechadaAte: string | null;
   pending: boolean;
-  resolvendoSozinho: boolean;
   avisos: {
     erroImportacao: string | null;
     falhaDoMotor: boolean;
@@ -110,7 +108,7 @@ export const TIPOS: Record<Tipo, { rotulo: string; cor: Cor; texto: string; dica
     rotulo: "Já baixado",
     cor: "sky",
     texto: "text-sky-700",
-    dica: "A baixa já estava no sistema e o banco mostra o mesmo valor até 3 dias depois. Conciliar só liga as duas, com a data do banco. Na importação se conciliam sozinhas e ficam à vista.",
+    dica: "A baixa já estava no sistema e o banco mostra o mesmo valor até 3 dias depois. Conciliar só liga as duas, com a data do banco.",
   },
   pronto: {
     rotulo: "Pronto",
@@ -721,12 +719,10 @@ function ChipDeAviso({ tom, children, dica }: { tom: "verde" | "ambar" | "vermel
 export function LinhaDeAvisos(p: PropsDaFila) {
   const { banco, conciliacao, acoes, avisos } = p;
   const u = banco.ultima;
-  const sozinhos = textoDosSozinhos(conciliacao.resultados);
-  const linhasSozinhas = conciliacao.resultados.filter((r) => r.resolvido?.sozinho);
   const dia = u && u.fim && u.geradoDia === u.fim ? { dia: u.fim, hora: u.geradoHora } : null;
   const repetidos = u ? u.movimentos - u.novos : 0;
   const nadaNovo = u && repetidos > 0 && u.novos === 0;
-  const temAlgum = sozinhos || dia || nadaNovo || !banco.conta.temNumero || avisos.erroImportacao || avisos.falhaDoMotor || avisos.recusado;
+  const temAlgum = dia || nadaNovo || !banco.conta.temNumero || avisos.erroImportacao || avisos.falhaDoMotor || avisos.recusado;
   if (!temAlgum) return null;
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -776,13 +772,6 @@ export function LinhaDeAvisos(p: PropsDaFila) {
           </Link>
         </ChipDeAviso>
       )}
-      {sozinhos && (
-        <ChipDeAviso tom="verde" dica={<>{sozinhos.partes.join("; ")}. Tudo com Desfazer.</>}>
-          <CheckCheck className="h-3.5 w-3.5" />
-          {sozinhos.quantas === 1 ? "1 resolvida sozinha" : `${sozinhos.quantas} resolvidas sozinhas`}
-          <DesfazerSozinhas linhas={linhasSozinhas} acoes={acoes} />
-        </ChipDeAviso>
-      )}
       {dia && (
         <ChipDeAviso
           tom="ambar"
@@ -805,44 +794,6 @@ export function LinhaDeAvisos(p: PropsDaFila) {
   );
 }
 
-/** O "Desfazer" das resolvidas sozinhas: a lista, cada uma com o seu. */
-function DesfazerSozinhas({ linhas, acoes }: { linhas: ResultadoDaLinha[]; acoes: AcoesDoBanco }) {
-  const [aberto, setAberto] = React.useState(false);
-  if (!linhas.length) return null;
-  return (
-    <Popover open={aberto} onOpenChange={setAberto}>
-      <PopoverTrigger asChild>
-        <button type="button" className="inline-flex items-center gap-1 underline decoration-dotted underline-offset-2">
-          <Undo2 className="h-3 w-3" />
-          Desfazer
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-[420px] p-1.5">
-        {linhas.map((r) => (
-          <div key={r.mov.id} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs hover:bg-muted/50">
-            <span className="w-11 shrink-0 font-mono text-muted-foreground">{dataBR(r.mov.data).slice(0, 5)}</span>
-            <span className="min-w-0 flex-1 truncate" title={r.resolvido?.texto}>
-              {r.resolvido?.texto}
-            </span>
-            <span className={cn("shrink-0 font-mono", r.mov.valor < 0 ? "text-california-red" : "text-emerald-700")}>{moeda(Math.abs(r.mov.valor))}</span>
-            <button
-              type="button"
-              disabled={acoes.ocupado}
-              onClick={() => {
-                setAberto(false);
-                acoes.desfazer(r);
-              }}
-              className="inline-flex h-6 shrink-0 items-center gap-1 rounded-md border border-border bg-white px-2 font-semibold hover:bg-muted"
-            >
-              <Undo2 className="h-3 w-3" />
-              Desfazer
-            </button>
-          </div>
-        ))}
-      </PopoverContent>
-    </Popover>
-  );
-}
 
 function Bloco({ rotulo, valor, cor, dica }: { rotulo: string; valor: string; cor?: string; dica: string }) {
   return (
@@ -891,11 +842,7 @@ export function FaixaDoTopo(p: PropsDaFila) {
         </div>
       </div>
       <div className="ml-auto flex flex-wrap items-center gap-2">
-        {p.resolvendoSozinho ? (
-          <span className="text-xs font-semibold text-emerald-700">Resolvendo sozinho…</span>
-        ) : (
-          p.pending && <span className="text-xs font-semibold text-muted-foreground">Trabalhando…</span>
-        )}
+        {p.pending && <span className="text-xs font-semibold text-muted-foreground">Trabalhando…</span>}
         {p.fechamento}
       </div>
     </div>

@@ -37,7 +37,7 @@ const DIV: Record<Div, { titulo: string; dica: string; ponto: string }> = {
   },
   pronto: {
     titulo: "Prontos para conciliar",
-    dica: "Um clique resolve, sem decisão: título com valor, forma e data batendo, remessa, tarifa com regra, PIX que voltou no mesmo dia, linha da planilha e a baixa já lançada no sistema que ainda não se ligou. O motivo de cada uma está na Situação.",
+    dica: "Nada se concilia sozinho: o que é certo espera aqui, e um clique resolve. Título com valor, forma e data batendo, remessa, tarifa com regra, PIX que voltou no mesmo dia, linha da planilha e a baixa já lançada no sistema. O motivo de cada uma está na Situação.",
     ponto: "bg-emerald-500",
   },
   conferir: {

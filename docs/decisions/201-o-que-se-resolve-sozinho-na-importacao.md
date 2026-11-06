@@ -1,7 +1,7 @@
 # 201 — O que se resolve sozinho na importação do extrato
 
 **Data:** 2026-10-21
-**Status:** aceita e implementada em 21/10/2026 (task 029, fase 3, entrega 3C).
+**Status:** aceita e implementada em 21/10/2026 (task 029, fase 3, entrega 3C); **revista pela [244](244-nada-se-concilia-sozinho.md) em 06/11/2026: nada se concilia mais sozinho**, o que é certo fica em Prontos para conciliar.
 **Quem decidiu:** Tiago, no protótipo "Conciliação com o banco", versão
 **Alternativa** (`docs/handoffs/2026-10-21-conciliacao-com-o-banco/`, seção
 4.7 da especificação: o modo "Baixa sozinho o que é certo"; protótipo, o

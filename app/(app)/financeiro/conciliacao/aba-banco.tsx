@@ -12,10 +12,9 @@
  * - O motor (decisão 199) roda aqui, sobre as linhas pendentes, os títulos
  *   em aberto da aba Títulos, as baixas da conta ainda sem linha, as
  *   remessas e as regras do histórico (`motor-da-conta.ts`).
- * - A automação da importação (decisão 201): o que é certo se resolve
- *   sozinho, com as mesmas actions dos botões — a baixa feita à mão que bate
- *   (a qualquer momento) e, nas linhas que a reserva devolve (cada uma é
- *   avaliada uma vez só), o título certo, a remessa e a regra do histórico.
+ * - Nada se concilia sozinho (decisão 244, revê a 201): o que é certo fica
+ *   em Prontos para conciliar, e o "Conciliar os N" da divisão concilia tudo
+ *   de uma vez, linha por linha, pelas mesmas actions dos botões.
  * - As ações (decisão 200): "Baixar e conciliar" vai pela baixa em lote de
  *   sempre, com a data e a conta da linha e a forma pelo histórico;
  *   "Conferir" e a lupa abrem a baixa REAL de cada lado (a mesma da aba
@@ -60,7 +59,6 @@ import type { DadosDaAbaBanco, LancamentoSemLinha } from "./banco-dados";
 import { alvoDaBaixaAPagar, alvoDaBaixaAReceber } from "./alvos-da-baixa";
 import { montarLinhas, prepararContexto, type Linha } from "./linhas-da-aba";
 import {
-  automacaoDaLeitura,
   conciliarConta,
   documentoDaLinha,
   itemDoLote,
@@ -85,7 +83,6 @@ import {
   importarExtrato,
   lancarPelaRegra,
   ligarItensALinha,
-  marcarLinhasAvaliadas,
   registrarSaiuEVoltou,
   type ResultadoDaImportacao,
 } from "./actions-conciliacao";
@@ -167,8 +164,6 @@ export function AbaBanco({
   const [recusado, setRecusado] = React.useState<{ arquivo: string; r: Exclude<ResultadoDaImportacao, { ok: true }> } | null>(null);
   const [erroImportacao, setErroImportacao] = React.useState<string | null>(null);
   const [aviso, setAviso] = React.useState<Aviso | null>(null);
-  // A automação da importação trabalhando (os botões esperam).
-  const [resolvendoSozinho, setResolvendoSozinho] = React.useState(false);
   // Os diálogos.
   const [baixando, setBaixando] = React.useState<Baixando | null>(null);
   const [erroDoDialogo, setErroDoDialogo] = React.useState<string | null>(null);
@@ -431,7 +426,7 @@ export function AbaBanco({
   // ---- As ações ----
 
   const acoes: AcoesDoBanco = {
-    ocupado: pending || resolvendoSozinho,
+    ocupado: pending,
     ligar: (r) => {
       const l = r.lancamento ? conciliacao.lancamentos.get(r.lancamento.id) : undefined;
       if (!l) return;
@@ -560,79 +555,9 @@ export function AbaBanco({
       (n) => (n === 1 ? "1 linha do banco conciliada" : `${n} linhas do banco conciliadas`),
     );
 
-  // ---- A automação da importação (decisão 201) ----
-
-  // O que é certo se resolve sozinho, com as mesmas actions dos botões. A
-  // reserva (`marcarLinhasAvaliadas`) grava a avaliação única e devolve as
-  // linhas que ainda não tinham passado por ela: só essas se baixam sozinhas
-  // (duas abas abertas não baixam a mesma linha duas vezes). Cada linha é
-  // tentada uma vez por tela aberta; a que falhar fica na seção dela.
-  const tentadas = React.useRef(new Set<string>());
-  const automacao = React.useMemo(
-    () => (falhaDoMotor ? null : automacaoDaLeitura(conciliacao.resultados)),
-    [conciliacao, falhaDoMotor],
-  );
-  React.useEffect(() => {
-    if (!automacao || resolvendoSozinho) return;
-    const manuais = automacao.manuais.filter((r) => !tentadas.current.has(r.mov.id));
-    const aAvaliar = automacao.aAvaliar.filter((id) => !tentadas.current.has(id));
-    if (!manuais.length && !aAvaliar.length) return;
-    for (const r of manuais) tentadas.current.add(r.mov.id);
-    for (const id of aAvaliar) tentadas.current.add(id);
-    setResolvendoSozinho(true);
-    void (async () => {
-      const falhas: string[] = [];
-      const anotar = (res: Resultado) => {
-        if (!res.ok) falhas.push(res.message);
-      };
-      try {
-        for (const r of manuais) {
-          const l = r.lancamento ? conciliacao.lancamentos.get(r.lancamento.id) : undefined;
-          if (l) anotar(await conciliarLinha(r.mov.id, l.ids, "manual"));
-        }
-        if (aAvaliar.length) {
-          const reserva = await marcarLinhasAvaliadas(aAvaliar);
-          if (!reserva.ok) falhas.push(reserva.message);
-          const minhas = new Set(reserva.ok ? reserva.ids : []);
-          for (const r of automacao.titulos) {
-            const itens = minhas.has(r.mov.id) && r.titulo ? itensDe([r.titulo]) : null;
-            if (itens) anotar(await baixarNaLinha({ linhaId: r.mov.id, itens, sozinha: "titulo" }));
-          }
-          for (const r of automacao.remessas) {
-            const itens = minhas.has(r.mov.id) ? itensDe(r.lote?.titulos ?? []) : null;
-            if (itens) anotar(await baixarNaLinha({ linhaId: r.mov.id, itens, sozinha: "remessa" }));
-          }
-          const regras = automacao.regras.flatMap((r) =>
-            minhas.has(r.mov.id) && r.regra?.id ? [{ linhaId: r.mov.id, regraId: r.regra.id as string }] : [],
-          );
-          if (regras.length) anotar(await lancarPelaRegra(regras, true));
-          for (const r of automacao.historicos) {
-            if (minhas.has(r.mov.id) && r.historicos?.length) {
-              anotar(await conciliarPeloHistorico(r.mov.id, r.historicos.map((h) => h.id), "historico"));
-            }
-          }
-        }
-      } catch {
-        falhas.push("Não foi possível concluir agora.");
-      } finally {
-        setResolvendoSozinho(false);
-        if (falhas.length) {
-          setAviso({
-            tom: "erro",
-            texto: `${
-              falhas.length === 1
-                ? "Uma linha do banco não se resolveu sozinha e ficou para conferir"
-                : `${falhas.length} linhas do banco não se resolveram sozinhas e ficaram para conferir`
-            }: ${falhas[0]}`,
-          });
-        }
-        router.refresh();
-      }
-    })();
-    // Roda a cada leitura nova do servidor (o `automacao` muda com ela); o
-    // resto é lido do mesmo render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [automacao]);
+  // ---- Nada se concilia sozinho (decisão 244, revê a 201) ----
+  // O que é certo fica em Prontos para conciliar, e quem concilia é alguém:
+  // a linha, ou o "Conciliar os N" da divisão (`conciliarVarios`, em série).
 
   // ---- Importar ----
 
@@ -785,12 +710,11 @@ export function AbaBanco({
             contaNome={banco.conta.nome}
             bancoNome={banco.conta.banco}
             fechamento={fechamento}
-            ocupado={pending || resolvendoSozinho}
+            ocupado={pending}
           />
         }
         fechadaAte={fechamento.ativo?.ate ?? null}
         pending={pending}
-        resolvendoSozinho={resolvendoSozinho}
         avisos={{ erroImportacao, falhaDoMotor, recusado, descartarRecusado: () => setRecusado(null) }}
       />
 
@@ -1272,7 +1196,7 @@ function ZonaDeArquivo({
       <div className="min-w-[240px] flex-1">
         <p className="text-sm font-semibold">{compacta ? "Importar outro extrato" : "Arraste aqui o extrato do banco em OFX"}</p>
         <p className="text-xs text-muted-foreground">
-          Exportado do internet banking, só da {contaNome}. Linhas repetidas não entram, e o que é certo se resolve sozinho.
+          Exportado do internet banking, só da {contaNome}. Linhas repetidas não entram; o que é certo vai para Prontos para conciliar.
         </p>
       </div>
       <input

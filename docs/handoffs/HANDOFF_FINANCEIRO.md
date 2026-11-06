@@ -8917,3 +8917,9 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Job:** o código, e o nome do financeiro na dica, também em Títulos (as quatro planilhas) e no Extrato; a planilha usava o nome da produção nas PPs e nas notas.
 - **Defeito corrigido junto:** a consulta das baixas ligadas mandava todos os ids num `.in()` só e falhava ("Bad Request") na California Santander, com ~1.400 conciliadas; agora vai em lotes de 150.
 - **Conferido:** na Conta Teste e na California Santander (1.622 linhas, 1.347 das 1.405 conciliadas com Tipo; as 58 sem são saiu e voltou, fora da DRE), Contas a Pagar e Contas a Receber abrindo, o seletor das linhas iguais preenchendo as colunas (sem conciliar), a dica do job com o nome do financeiro em Títulos e no Extrato. Sem migration.
+
+## ⚠️ Nota de 2026-11-06 — nada se concilia sozinho (decisão 244, revê a 201)
+
+- A Conciliação automática não concilia mais nada sem clique: a baixa já lançada que bate, a linha da planilha, a tarifa pela regra, o título certo e a remessa ficam em **Prontos para conciliar**, e o "Conciliar os N" resolve a divisão inteira, em série.
+- Saiu o aviso "N resolvidas sozinhas · Desfazer". As linhas que já se resolveram sozinhas antes continuam marcadas "Conciliado sozinho", com o Desfazer de cada linha.
+- Até hoje, 304 das 1.820 linhas importadas tinham se resolvido sozinhas (201 da planilha, 54 tarifas, 49 baixas já lançadas). Sem migration; a RPC `marcar_linhas_avaliadas` fica sem uso.
