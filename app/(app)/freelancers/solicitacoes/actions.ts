@@ -4,7 +4,6 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
-import { contratoDispensaMinuta } from "@/lib/utils";
 import {
   criarSolicitacaoSchema,
   rejeitarSolicitacaoSchema,
@@ -266,54 +265,29 @@ export async function aprovarSolicitacao(
     entidadeId: id,
   });
 
-  // Renovação: cria contrato na hora + aponta de volta pra solicitação.
-  // Status fica `aprovada` aguardando a minuta (vira `finalizada` quando o
-  // RH gerar ou direto quando for diária curta < 15d — dispensa).
+  // Renovação: chama RPC SECURITY DEFINER que cria contrato (resolvendo
+  // nome do job sem passar pela RLS de empresa/regional), migra responsável
+  // se necessário, e já sobe pra 'finalizada' quando for diária curta.
+  // Antes era tudo inline em TS — mas isso dependia da RLS do usuário que
+  // aprova, e caiu silenciosamente quando Erica aprovou jobs sem permissão
+  // de SELECT em jobs (incidente Bruna/Raquel, 06/11/2026).
   if (solicitacao.freelancer_id) {
-    // Migração automática de responsável: se quem solicitou não é o dono
-    // atual do cadastro, troca o dono pra ela antes de criar o contrato.
-    // Assim o contrato já nasce com o responsável certo (criarContratoDeRenovacao
-    // puxa de freelancers.responsavel_id).
-    await migrarResponsavelSeNecessario(
-      supabase,
-      session,
-      solicitacao,
+    const { data: rpcData, error: rpcErr } = await supabase.rpc(
+      "criar_contrato_de_renovacao",
+      { p_solicitacao_id: id },
     );
-
-    const contratoRes = await criarContratoDeRenovacao(
-      supabase,
-      session,
-      solicitacao,
-    );
-    if (!contratoRes.ok) {
-      // Loga o erro mas não desfaz a aprovação — o RH consegue criar o
-      // contrato manualmente pelo perfil do freela se der problema.
+    if (rpcErr) {
       console.error(
-        "[solicitacao.aprovar.criar_contrato]",
-        contratoRes.message,
+        "[solicitacao.aprovar.criar_contrato_rpc]",
+        rpcErr.message,
       );
-    } else if (
-      contratoDispensaMinuta(
-        solicitacao.tipo,
-        solicitacao.data_inicio,
-        solicitacao.data_termino,
-      )
-    ) {
-      // Diária curta: pula `aprovada` → `finalizada` direto, sem precisar
-      // que o RH gere minuta.
-      await supabase
-        .from("freelancer_solicitacoes")
-        .update({ status: "finalizada" })
-        .eq("id", id)
-        .eq("tenant_id", session.activeTenant.id)
-        .eq("status", "aprovada");
-
+    } else if (Array.isArray(rpcData) && rpcData[0]?.finalizada) {
       await logAuditEvent({
         acao: "freelancer_solicitacao.finalizada_por_dispensa",
         tenantId: session.activeTenant.id,
         entidadeTipo: "freelancer_solicitacao",
         entidadeId: id,
-        metadata: { contrato_id: contratoRes.data?.contrato_id ?? null },
+        metadata: { contrato_id: rpcData[0]?.contrato_id ?? null },
       });
     }
   }
@@ -321,181 +295,6 @@ export async function aprovarSolicitacao(
   revalidatePath("/freelancers/solicitacoes");
   revalidatePath("/freelancers");
   return { ok: true };
-}
-
-/**
- * Transferência automática de responsável na aprovação (decisão 03/11/2026):
- * quando o solicitante não é o dono atual do cadastro, o cadastro migra pra
- * ele antes do contrato ser criado. Objetivo: "quem pede novo contrato pra um
- * freela parado assume a pessoa — sem precisar de 'Transferir responsável'
- * manual antes". Idempotente: se já é o mesmo responsável, não faz nada.
- */
-async function migrarResponsavelSeNecessario(
-  supabase: ReturnType<typeof createClient>,
-  session: Awaited<ReturnType<typeof requireSession>>,
-  solicitacao: {
-    id: string;
-    freelancer_id: string;
-    solicitante_id: string | null;
-  },
-): Promise<void> {
-  if (!solicitacao.solicitante_id) return;
-
-  const { data: freela } = await supabase
-    .from("freelancers")
-    .select("id, responsavel_id")
-    .eq("id", solicitacao.freelancer_id)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle();
-
-  if (!freela) return;
-  const responsavelAtual = (freela as { responsavel_id: string | null })
-    .responsavel_id;
-  if (responsavelAtual === solicitacao.solicitante_id) return;
-
-  const { error } = await supabase
-    .from("freelancers")
-    .update({
-      responsavel_id: solicitacao.solicitante_id,
-      updated_by: session.profile.id,
-    })
-    .eq("id", solicitacao.freelancer_id)
-    .eq("tenant_id", session.activeTenant.id);
-
-  if (error) {
-    // Não aborta a aprovação — se falhar aqui, o contrato ainda vai ser
-    // criado com o responsavel antigo e o RH pode transferir manualmente.
-    console.error(
-      "[solicitacao.aprovar.migrar_responsavel]",
-      error.message,
-    );
-    return;
-  }
-
-  await logAuditEvent({
-    acao: "freelancer.responsavel_transferido",
-    tenantId: session.activeTenant.id,
-    entidadeTipo: "freelancer",
-    entidadeId: solicitacao.freelancer_id,
-    metadata: {
-      de: responsavelAtual,
-      para: solicitacao.solicitante_id,
-      origem: "aprovacao_solicitacao",
-      solicitacao_id: solicitacao.id,
-    },
-  });
-}
-
-/**
- * Cria o contrato na aprovação de uma renovação. Semântica importante:
- *   - Solicitação com `job_id` (ou `job_interno_id`): contrato nasce
- *     vinculado + origem_sistema = 'califa_erp'.
- *   - Solicitação só com `nome_job` em texto (migrada do RH antigo):
- *     contrato nasce legado + origem_sistema = 'ag_california_rh'. O
- *     CHECK `freelancer_contratos_job_obrigatorio_em_novos` permite
- *     contrato legado sem job.
- *   - `responsavel_id` do contrato: puxa do dono estável do freela
- *     (`freelancers.responsavel_id`) com fallback pro solicitante. Quando
- *     o solicitante ≠ responsável, migrarResponsavelSeNecessario já ajustou
- *     o cadastro antes desta função rodar.
- *
- * Atualiza a solicitação com `contrato_id` pra fechar o vínculo.
- */
-async function criarContratoDeRenovacao(
-  supabase: ReturnType<typeof createClient>,
-  session: Awaited<ReturnType<typeof requireSession>>,
-  solicitacao: any,
-): Promise<ActionResult<{ contrato_id: string }>> {
-  const { data: freela } = await supabase
-    .from("freelancers")
-    .select("id, responsavel_id")
-    .eq("id", solicitacao.freelancer_id)
-    .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle();
-
-  const responsavelId =
-    (freela as { responsavel_id: string | null } | null)?.responsavel_id ??
-    solicitacao.solicitante_id ??
-    null;
-
-  const temJobVinculado =
-    !!solicitacao.job_id || !!solicitacao.job_interno_id;
-  const origemSistema = temJobVinculado ? "califa_erp" : "ag_california_rh";
-
-  // Resolve o nome do job pra gravar como snapshot no contrato. Quando tem
-  // job_id ou job_interno_id, busca o nome oficial — o campo nome_job da
-  // solicitação só é preenchido em legados (texto solto, sem FK). Fallback
-  // "Importado (sem job vinculado)" só entra pra legado realmente sem job.
-  let nomeJobResolvido: string | null = null;
-  if (solicitacao.job_id) {
-    const { data: jobProd } = await supabase
-      .from("jobs")
-      .select("nome")
-      .eq("id", solicitacao.job_id)
-      .maybeSingle();
-    nomeJobResolvido = (jobProd as { nome: string } | null)?.nome ?? null;
-  } else if (solicitacao.job_interno_id) {
-    const { data: jobInt } = await supabase
-      .from("freelancer_jobs_internos")
-      .select("nome")
-      .eq("id", solicitacao.job_interno_id)
-      .maybeSingle();
-    nomeJobResolvido = (jobInt as { nome: string } | null)?.nome ?? null;
-  }
-
-  const { data: contrato, error: insertErr } = await supabase
-    .from("freelancer_contratos")
-    .insert({
-      tenant_id: session.activeTenant.id,
-      freelancer_id: solicitacao.freelancer_id,
-      job_id: solicitacao.job_id,
-      job_interno_id: solicitacao.job_interno_id,
-      responsavel_id: responsavelId,
-      nome_job:
-        nomeJobResolvido ??
-        solicitacao.nome_job ??
-        "Importado (sem job vinculado)",
-      cargo: solicitacao.cargo,
-      tipo: solicitacao.tipo,
-      valor: solicitacao.valor,
-      data_inicio: solicitacao.data_inicio,
-      data_termino: solicitacao.data_termino,
-      cidade: solicitacao.cidade,
-      observacoes: solicitacao.observacoes,
-      origem_sistema: origemSistema,
-      created_by: session.profile.id,
-      updated_by: session.profile.id,
-    })
-    .select("id")
-    .single();
-
-  if (insertErr || !contrato) {
-    return {
-      ok: false,
-      message: insertErr?.message ?? "Falha ao criar contrato",
-    };
-  }
-
-  await supabase
-    .from("freelancer_solicitacoes")
-    .update({ contrato_id: contrato.id })
-    .eq("id", solicitacao.id)
-    .eq("tenant_id", session.activeTenant.id);
-
-  await logAuditEvent({
-    acao: "freelancer_contrato.criado",
-    tenantId: session.activeTenant.id,
-    entidadeTipo: "freelancer_contrato",
-    entidadeId: contrato.id,
-    metadata: {
-      freelancer_id: solicitacao.freelancer_id,
-      solicitacao_id: solicitacao.id,
-      origem: "aprovacao_renovacao",
-      origem_sistema: origemSistema,
-    },
-  });
-
-  return { ok: true, data: { contrato_id: contrato.id } };
 }
 
 /**
@@ -539,48 +338,41 @@ export async function aprovarSolicitacoesEmLote(
   const aprovadas = data?.length ?? 0;
   const falharam = ids.length - aprovadas;
 
-  // Pros ids que viraram 'aprovada', aplicar mesma lógica da aprovação
-  // individual: renovação (freelancer_id setado) cria contrato na hora e,
-  // se for diária curta (<15d), pula pra 'finalizada' por dispensa.
-  //
-  // Sem isso, aprovar lote deixava solicitações de renovação em 'aprovada'
-  // com contrato_id NULL — contrato nunca era criado (caso João Henrique,
-  // 05/11/2026).
+  // Pros ids que viraram 'aprovada', chama a RPC pra cada renovação. A RPC
+  // valida se tem freelancer_id (contratação pula), resolve nome do job
+  // sem passar pela RLS de empresa/regional, cria contrato e sobe pra
+  // 'finalizada' se for diária curta. Ver migration 20261106100001.
   const idsAprovados = (data ?? []).map((r: { id: string }) => r.id);
   if (idsAprovados.length > 0) {
     const { data: aprovadasData } = await supabase
       .from("freelancer_solicitacoes")
-      .select("*")
+      .select("id, freelancer_id")
       .in("id", idsAprovados)
       .eq("tenant_id", session.activeTenant.id);
-    for (const sol of (aprovadasData ?? []) as any[]) {
+    for (const sol of (aprovadasData ?? []) as Array<{
+      id: string;
+      freelancer_id: string | null;
+    }>) {
       if (!sol.freelancer_id) continue; // Contratação nova — aguarda freela
-      await migrarResponsavelSeNecessario(supabase, session, sol);
-      const contratoRes = await criarContratoDeRenovacao(supabase, session, sol);
-      if (!contratoRes.ok) {
+      const { data: rpcData, error: rpcErr } = await supabase.rpc(
+        "criar_contrato_de_renovacao",
+        { p_solicitacao_id: sol.id },
+      );
+      if (rpcErr) {
         console.error(
-          "[solicitacao.aprovar_lote.criar_contrato]",
+          "[solicitacao.aprovar_lote.criar_contrato_rpc]",
           sol.id,
-          contratoRes.message,
+          rpcErr.message,
         );
         continue;
       }
-      if (
-        contratoDispensaMinuta(sol.tipo, sol.data_inicio, sol.data_termino)
-      ) {
-        await supabase
-          .from("freelancer_solicitacoes")
-          .update({ status: "finalizada" })
-          .eq("id", sol.id)
-          .eq("tenant_id", session.activeTenant.id)
-          .eq("status", "aprovada");
-
+      if (Array.isArray(rpcData) && rpcData[0]?.finalizada) {
         await logAuditEvent({
           acao: "freelancer_solicitacao.finalizada_por_dispensa",
           tenantId: session.activeTenant.id,
           entidadeTipo: "freelancer_solicitacao",
           entidadeId: sol.id,
-          metadata: { contrato_id: contratoRes.data?.contrato_id ?? null },
+          metadata: { contrato_id: rpcData[0]?.contrato_id ?? null },
         });
       }
     }
