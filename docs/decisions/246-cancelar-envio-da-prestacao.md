@@ -9,8 +9,10 @@ formas juntas**, porque uma não interfere na outra.
 **Revê:** a [189](189-prestacao-de-contas-da-verba-documento-a-documento.md)
 num ponto: a prestação em avaliação não "só volta se o financeiro
 reprovar". O resto da 189 continua.
-**Migration:** `20261106950001_cancelar_envio_da_prestacao.sql`, aplicada
-pelo MCP em 06/11/2026, e `20261106950002_comentario_da_decisao_246.sql`.
+**Migrations:** `20261106950001_cancelar_envio_da_prestacao.sql`,
+`20261106950002_comentario_da_decisao_246.sql` e
+`20261106950003_trava_de_papel_da_prestacao.sql`, aplicadas pelo MCP em
+06/11/2026.
 **Número:** nasceu como 245; antes do push, a 245 já estava no `main`
 (prazo de envio das PPs de 20/11) e esta virou 246. Os comentários
 dentro das funções já aplicadas dizem 245 e ficaram como estão no banco.
@@ -98,13 +100,25 @@ R$ 20,00):
 - A PP-00951 ficou com a prestação **reprovada** (fora da fila do
   financeiro).
 
-## Ponto aberto (já existia antes da 246)
+## A trava de papel da prestação (corrigida em 06/11/2026)
 
-Em `_verba_para_prestar`, `v_pp.responsavel_verba_id = v_uid` dá NULL na
-verba sem responsável (todas depois da 171), e `if not (... or NULL ...)`
-não recusa: **qualquer papel do tenant** passa pelas funções da produção
-(salvar, remover, enviar e agora cancelar). Na transação de teste, o
-"Financeiro Teste" cancelou. A tela só mostra os botões para quem presta
-contas, e a auditoria até 06/11 só tem administrador, GP e produtor nesse
-caminho. A correção é um `coalesce(..., false)`; fica para o Tiago decidir,
-porque muda funções que já existiam.
+O defeito já existia antes da 246 e apareceu no teste dela. Em
+`_verba_para_prestar` (189), `v_pp.responsavel_verba_id = v_uid` dava NULL na
+verba sem responsável (todas desde a 171), e `if not (... or NULL ...)` não
+recusava: **qualquer papel ativo do tenant** passava pelas quatro funções da
+produção (salvar, remover, enviar e cancelar). Na transação de teste, o
+"Financeiro Teste" cancelou um envio. A tela só mostrava os botões para quem
+presta contas, e a auditoria até 06/11 só tinha administrador, GP e produtor
+nesse caminho.
+
+Corrigido com o Tiago ("Sim, corrija") na migration
+`20261106950003_trava_de_papel_da_prestacao.sql`: um
+`coalesce(..., false)`; o resto da função ficou igual. Conferido numa
+transação desfeita: financeiro e freela de fora do projeto são recusados
+(também ao remover documento); produtor, GP, administrador e o freela
+ligado ao projeto passam.
+
+Fica como está: as funções auxiliares da prestação (`_verba_para_prestar`,
+`_faltas_…`, `_conferir_…`, `_campos_…`) têm execução para `authenticated`
+no banco, apesar do `revoke` da 189. Com a trava certa, chamar
+`_verba_para_prestar` direto só devolve a PP a quem já presta contas dela.

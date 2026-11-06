@@ -6755,6 +6755,8 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - Na aba PPs, a linha da verba com a prestação enviada ganhou o ícone
   "Ver prestação".
 - Banco: `cancelar_envio_prestacao_verba` e o evento
-  `prestacao_envio_cancelado` (migration 20261106950001). Ponto aberto: a
-  trava de papel de `_verba_para_prestar` deixa passar qualquer papel na
-  verba sem responsável (ver a decisão).
+  `prestacao_envio_cancelado` (migration 20261106950001).
+- Corrigida a trava de papel de `_verba_para_prestar` (migration
+  20261106950003): na verba sem responsável, qualquer papel do tenant
+  passava em salvar, remover, enviar e cancelar a prestação; agora só
+  administrador, GP, produtor, o freela do projeto e o responsável da verba.
