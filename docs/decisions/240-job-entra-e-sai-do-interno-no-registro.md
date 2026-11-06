@@ -72,12 +72,9 @@ tinha como virar Interno, e o contrário também não.
 
 ## 4. Fora daqui
 
-- **Always On → Ativação** (pedido no mesmo protótipo): o Tiago decidiu que
-  vale a regra do orçamento (decisão 128: os meses se juntam numa planilha
-  só, nada é apagado), que o financeiro escolhe a categoria nacional, e que
-  um mês com PP, nota ou save segue como o sistema já trata. Tirar um job
-  aberto da planilha mensal ainda não existe (a categoria do job só troca
-  dentro do mesmo modelo de planilha) e fica para uma entrega própria.
+- **Always On → Ativação** (levantado no mesmo protótipo): o Tiago decidiu
+  manter como já está no sistema. Nada muda nesta decisão nem fica
+  pendente.
 - O texto "Todo o valor deste job é pago diretamente pelo cliente ao
   fornecedor", que aparecia no job Interno sem faturamento, passou a dizer
   que o job é Interno.
