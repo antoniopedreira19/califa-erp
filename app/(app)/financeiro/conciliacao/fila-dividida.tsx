@@ -53,22 +53,14 @@ const somaDia = (iso: string, n: number) => {
 };
 const diaSeguinte = (iso: string) => somaDia(iso, 1);
 const diaAnterior = (iso: string) => somaDia(iso, -1);
-/** O que a pessoa deixou aberto, por conta (só neste navegador). */
-const chaveAbertas = (conta: string) => `conciliacao.divisoes-abertas.${conta}`;
-/** A última importação que este navegador já mostrou, por conta. */
-const chaveVisto = (conta: string) => `conciliacao.extrato-visto.${conta}`;
-const ler = (k: string): string | null => {
+/** O que a 239 guardava no navegador, por conta, até 06/11/2026: sai na
+ *  primeira visita, para não ficar lixo. */
+const esquecerOGuardado = (conta: string) => {
   try {
-    return localStorage.getItem(k);
+    localStorage.removeItem(`conciliacao.divisoes-abertas.${conta}`);
+    localStorage.removeItem(`conciliacao.extrato-visto.${conta}`);
   } catch {
-    return null;
-  }
-};
-const gravar = (k: string, v: string) => {
-  try {
-    localStorage.setItem(k, v);
-  } catch {
-    /* sem armazenamento: só não lembra */
+    /* sem armazenamento: nada a apagar */
   }
 };
 /** O item que ainda pede ação (a baixa à mão já conciliada, não). */
@@ -79,23 +71,18 @@ export function FilaDividida(p: PropsDaFila) {
   const itens = React.useMemo(() => itensDaConta({ secoes, conciliacao }), [secoes, conciliacao]);
   const [aberto, setAberto] = React.useState<string | null>(null);
   const [marcados, setMarcados] = React.useState<Set<string>>(new Set());
-  // As divisões nascem fechadas; depois de montar, voltam abertas as que a
-  // pessoa deixou abertas nesta conta (decisão 239). Só no navegador dela.
-  // O extrato que este navegador ainda não tinha mostrado chega com todas
-  // fechadas (revisão de 06/11/2026 da 239, ponto 2): o título e a contagem
-  // de cada divisão já dizem o que há para fazer.
+  // As divisões abrem sempre fechadas: ao abrir a aba, ao voltar, ao trocar
+  // de conta e ao chegar um extrato novo (revisão de 06/11/2026 da 239,
+  // pontos 1 e 2). O título e a contagem de cada divisão já dizem o que há
+  // para fazer; a tela não lembra o que foi aberto.
   const conta = p.banco.conta.id;
   const ultima = p.banco.ultima;
   const [recolhidas, setRecolhidas] = React.useState<Set<Tipo>>(new Set(ORDEM));
   const ultimaId = ultima?.id ?? null;
   React.useEffect(() => {
-    let abertas = new Set<Tipo>(JSON.parse(ler(chaveAbertas(conta)) ?? "[]") as Tipo[]);
-    if (ultimaId && ler(chaveVisto(conta)) !== ultimaId) {
-      abertas = new Set();
-      gravar(chaveAbertas(conta), "[]");
-      gravar(chaveVisto(conta), ultimaId);
-    }
-    setRecolhidas(new Set(ORDEM.filter((t) => !abertas.has(t))));
+    esquecerOGuardado(conta);
+    // A tela não remonta ao trocar de conta ou ao importar.
+    setRecolhidas(new Set(ORDEM));
   }, [conta, ultimaId]);
 
   const doTipo = (t: Tipo) => itens.filter((i) => i.tipo === t);
@@ -116,7 +103,6 @@ export function FilaDividida(p: PropsDaFila) {
       const x = new Set(r);
       if (x.has(t)) x.delete(t);
       else x.add(t);
-      gravar(chaveAbertas(conta), JSON.stringify(ORDEM.filter((o) => !x.has(o))));
       return x;
     });
   // Nada pendente: a faixa de tudo conciliado (decisão 239).
@@ -225,9 +211,7 @@ export function FilaDividida(p: PropsDaFila) {
                       title={rotulo}
                       aria-label={rotulo}
                       onClick={() => {
-                        const x = new Set<Tipo>(algumaAberta ? ORDEM : []);
-                        gravar(chaveAbertas(conta), JSON.stringify(ORDEM.filter((o) => !x.has(o))));
-                        setRecolhidas(x);
+                        setRecolhidas(new Set<Tipo>(algumaAberta ? ORDEM : []));
                       }}
                       className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
                     >

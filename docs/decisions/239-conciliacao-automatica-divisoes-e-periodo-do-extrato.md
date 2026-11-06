@@ -1,7 +1,7 @@
 # 239 — Conciliação automática: divisões fechadas e lembradas, o extrato novo aberto, tudo conciliado e o período do extrato
 
 **Data:** 2026-11-05
-**Status:** aceita e implementada em 05/11/2026; ponto 2 revisto em 06/11/2026 (o extrato novo chega com as divisões fechadas).
+**Status:** aceita e implementada em 05/11/2026; pontos 1 e 2 revistos em 06/11/2026 (as divisões abrem sempre fechadas, sem lembrar o que foi aberto).
 **Quem decidiu:** Tiago, em 05/11/2026, revisando no protótipo do módulo financeiro os pontos 0 a 6 ("Pronto! Aprovado. Pode implementar.").
 **Revê:** a [234](234-revisao-do-financeiro-pelo-prototipo.md), D6 (a fila dividida nascia com tudo aberto, menos "Baixas à mão que bateram" e "Conciliados") e a seleção de todas pelo cabeçalho.
 
@@ -14,8 +14,8 @@ Com um extrato grande (no Santander, 47 linhas em "Conferir antes" e 162 em "Sem
 | # | Tema | Decisão |
 |---|---|---|
 | 0 | Importar | O texto da área de importar ficou numa linha: "Exportado do internet banking, só da <conta>. Linhas repetidas não entram, e o que é certo se resolve sozinho." |
-| 1 | Divisões | Nascem todas fechadas. A tela lembra, por conta e só no navegador de quem usa, as que a pessoa deixou abertas |
-| 2 | Extrato novo | **Revisto em 06/11/2026:** o extrato que o navegador ainda não tinha mostrado chega com todas as divisões fechadas, e as que estavam abertas são esquecidas; nas visitas seguintes, vale o ponto 1. Antes, ele abria uma vez as divisões com linhas pendentes dele, com a faixa "<arquivo> acabou de chegar" |
+| 1 | Divisões | Nascem todas fechadas. **Revisto em 06/11/2026:** abrem sempre fechadas, ao abrir a aba, ao sair e voltar e ao trocar de conta; a tela não lembra mais o que foi aberto. Antes, ela lembrava, por conta e no navegador, as que a pessoa deixou abertas |
+| 2 | Extrato novo | **Revisto em 06/11/2026:** o extrato que acabou de chegar também encontra todas as divisões fechadas. Antes, ele abria uma vez as divisões com linhas pendentes dele, com a faixa "<arquivo> acabou de chegar" |
 | 3 | Sair e voltar | Sem mudança: a fila vem do banco (as pendentes de todas as importações), não do arquivo |
 | 4 | Tudo conciliado | Faixa verde "Tudo conciliado no extrato de … a …", se o saldo bate, e o próximo passo: fechar a conciliação e importar o extrato a partir do dia seguinte (do próprio dia, se o arquivo foi gerado nele, porque o dia ainda não estava completo). O botão de importar vai para a faixa. Com a conciliação já fechada até o fim do extrato, a faixa diz "Fechada até …". A tabela continua com Conciliados, fechada. A tela não volta à da primeira importação: ainda há fechamento, Desfazer e a data de onde começa o próximo arquivo |
 | 5 | Período | Na Conciliação automática, as resolvidas (Conciliados e o "N de M") são as do período do último extrato, e não as do filtro De/Até, que continua valendo para o Extrato. Embaixo da barra: "no extrato de … a …" |
@@ -23,7 +23,7 @@ Com um extrato grande (no Santander, 47 linhas em "Conferir antes" e 162 em "Sem
 
 ## Como fica no código
 
-- `fila-dividida.tsx`: o estado das divisões (`conciliacao.divisoes-abertas.<conta>` e `conciliacao.extrato-visto.<conta>` no `localStorage`, lidos depois de montar; o extrato ainda não visto zera as abertas), a faixa de tudo conciliado e o botão do cabeçalho.
+- `fila-dividida.tsx`: o estado das divisões (todas fechadas ao montar, ao trocar de conta e ao chegar extrato; sem `localStorage`, e as chaves que a 239 gravava são apagadas na primeira visita), a faixa de tudo conciliado e o botão do cabeçalho.
 - `banco-dados.ts`: `periodoDoExtrato` troca o De/Até das resolvidas pelo período da importação mais recente (uma consulta pequena antes das outras, só na aba).
 - `page.tsx` liga o `periodoDoExtrato` na aba Conciliação automática; `aba-banco.tsx` passa `fechadaAte` e o texto curto da área de importar.
 - Sem migration: `vw_extrato_linhas` já tem `importacao_id`.
@@ -31,6 +31,8 @@ Com um extrato grande (no Santander, 47 linhas em "Conferir antes" e 162 em "Sem
 ## Revisão de 06/11/2026 (ponto 2)
 
 Tiago, revendo a fila no protótipo: "ao importar o ofx, todos os agrupamentos virem fechados. Acho que ficará melhor". O título e a contagem de cada divisão já dizem o que há para fazer; abrir as do arquivo novo deixava a página longa logo na chegada. A faixa "acabou de chegar" e `LinhaDoBanco.importacaoId`, que só serviam a isso, saíram.
+
+Depois, no mesmo dia, sobre o ponto 1: "ao sair e voltar os agrupamentos devem ocultar suas linhas novamente". A lembrança saiu: com as divisões fechadas sempre, quem abre a aba vê a mesma tela, e uma divisão aberta sem motivo aparente (o que aconteceu no protótipo) não se repete.
 
 ## Ponto em aberto
 
