@@ -66,6 +66,7 @@ import { baixarArquivo } from "@/components/documentos/painel-documento";
 import type { PPRow } from "@/app/(app)/financeiro/contas-a-pagar/pedidos-compra-list";
 import type { EstabelecimentoDaNota } from "@/app/(app)/financeiro/contas-a-pagar/pp-dossie";
 import { carregarPPParaVisualizar } from "../pps/actions-visualizar";
+import { cancelarEnvioPrestacaoVerba } from "../pps/actions-prestacao";
 
 /** Decisão 241: o olho abre a PP ao lado deste painel, na tela da PP em
  *  leitura. Só carrega quando alguém clica no olho. */
@@ -128,6 +129,7 @@ import {
   type MeioPeloAnexo,
 } from "@/lib/types";
 import {
+  producaoCancelaEnvioDaPrestacao,
   producaoEditaPrestacao,
   rotuloDoBotaoDaPrestacao,
   somaComprovadaEmCentavos,
@@ -1288,7 +1290,7 @@ export function PainelPPsItem({
                               )}
                             </span>
                           ) : verbaComPrestacao(pp) ? (
-                            <PrestacaoNoCartao pp={pp} onAbrir={onPrestarContas} />
+                            <PrestacaoNoCartao pp={pp} onAbrir={onPrestarContas} onMensagem={onMensagem} />
                           ) : null}
                         </span>
                       ) : null
@@ -1826,14 +1828,19 @@ function verbaComPrestacao(pp: PPDoItem): boolean {
  * A prestação no cartão da verba (decisão 189): a barra do comprovado, uma
  * linha com onde ela está e o botão que abre a gaveta — a mesma da aba de
  * PPs. Antes daqui, o cartão só dizia "Preste contas na aba de PPs".
+ * Decisão 246: com a prestação em avaliação, o ícone de cancelar o envio.
  */
 function PrestacaoNoCartao({
   pp,
   onAbrir,
+  onMensagem,
 }: {
   pp: PPDoItem;
   onAbrir: ((pp: PPDoItem) => void) | null;
+  onMensagem?: (mensagem: string) => void;
 }) {
+  const router = useRouter();
+  const [cancelando, startCancelar] = React.useTransition();
   const pr = pp.prestacao;
   const docs = pr?.documentos ?? [];
   const n = docs.length;
@@ -1884,6 +1891,30 @@ function PrestacaoNoCartao({
                 ? "Foi sem NF · anexe a nota do fornecedor."
                 : `${qtd} salvo${n === 1 ? "" : "s"}, a enviar.`;
   const verBotao = onAbrir !== null && !age && pr !== null && pr.status !== "rascunho";
+  // Decisão 246: "Cancelar envio" no cartão, como o do Comitê — o ícone com
+  // a dica, um clique, sem pop-up (volta a enviar com o mesmo botão de
+  // sempre). Para quem presta contas desta verba, e só enquanto o
+  // financeiro não decidiu.
+  const cancelaEnvio =
+    onAbrir !== null &&
+    pp.podePrestarContas &&
+    pp.situacaoMidia === null &&
+    producaoCancelaEnvioDaPrestacao({
+      verba_producao: pp.verbaProducao,
+      tipo_verba: pp.reembolsoTipo ? "reembolso" : null,
+      prestacao: pr,
+    });
+  function cancelarEnvio() {
+    startCancelar(async () => {
+      const res = await cancelarEnvioPrestacaoVerba({ pp_id: pp.id });
+      if (!res.ok) {
+        onMensagem?.(res.message);
+        return;
+      }
+      onMensagem?.(`Envio da prestação de ${res.codigo} cancelado. Ela voltou para você.`);
+      router.refresh();
+    });
+  }
   return (
     <span className="flex flex-col gap-2">
       {n > 0 && (
@@ -1904,6 +1935,11 @@ function PrestacaoNoCartao({
           </span>
         </span>
         <span className="flex-1" />
+        {cancelaEnvio && (
+          <BotaoIcone titulo="Cancelar envio da prestação" onClick={cancelarEnvio} disabled={cancelando}>
+            <Undo2 className="h-3 w-3" />
+          </BotaoIcone>
+        )}
         {(age || verBotao) && onAbrir && (
           <button
             type="button"

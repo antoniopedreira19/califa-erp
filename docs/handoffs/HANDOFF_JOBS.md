@@ -6741,3 +6741,20 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
   aplicada no fim do `dataLimiteDeEnvio`, por onde passam todas as travas
   da tela e do servidor. Só estende, nunca encurta. Sem migration.
 - Provisório: o próximo passo é o financeiro registrar exceções pela tela.
+
+## ⚠️ Nota de 2026-11-06 (3) — a produção cancela o envio da prestação (decisão 246)
+
+- Com a prestação da verba em avaliação, quem presta contas cancela o
+  envio de dois jeitos (as duas opções do protótipo, aprovadas juntas): o
+  ícone ↶ "Cancelar envio da prestação" no cartão da verba (painel do item)
+  e na trilha da aba PPs; e o "Cancelar envio" no rodapé da gaveta aberta
+  pelo "Ver prestação", que vira edição na hora.
+- Volta a rascunho no primeiro envio e a "reprovada" (com o motivo) no
+  reenvio, com os mesmos documentos; a enviada com "Não houve gasto" volta
+  a "Prestar contas". Histórico: "Envio da prestação cancelado".
+- Na aba PPs, a linha da verba com a prestação enviada ganhou o ícone
+  "Ver prestação".
+- Banco: `cancelar_envio_prestacao_verba` e o evento
+  `prestacao_envio_cancelado` (migration 20261106950001). Ponto aberto: a
+  trava de papel de `_verba_para_prestar` deixa passar qualquer papel na
+  verba sem responsável (ver a decisão).

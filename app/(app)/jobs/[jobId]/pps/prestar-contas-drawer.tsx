@@ -21,6 +21,10 @@
  *   volta inteira.
  *
  * A leitura do documento por IA fica para depois (com a da decisão 178).
+ *
+ * Decisão 246: com a prestação em avaliação, o rodapé tem "Cancelar envio"
+ * no lugar do "Enviar". Ela volta para a produção com os mesmos documentos
+ * e a gaveta vira edição na hora, sem fechar.
  */
 
 import * as React from "react";
@@ -34,6 +38,7 @@ import {
   Loader2,
   Lock,
   Trash2,
+  Undo2,
   Upload,
   X,
 } from "lucide-react";
@@ -62,6 +67,7 @@ import {
   camposDoDocumento,
   faltasDoDocumento,
   formatarCpfCnpj,
+  producaoCancelaEnvioDaPrestacao,
   producaoEditaPrestacao,
   rotuloDoDocumento,
   somaComprovadaEmCentavos,
@@ -79,6 +85,7 @@ import {
 } from "@/components/financeiro/prestacao-da-verba";
 import type { TomadorDaNf } from "../realizado/anexos-da-pp";
 import {
+  cancelarEnvioPrestacaoVerba,
   enviarPrestacaoVerba,
   linkDocumentoPrestacao,
   prefixoUploadPrestacao,
@@ -159,6 +166,10 @@ export function PrestarContasDrawer({
   const router = useRouter();
   const supabase = React.useMemo(() => createClient(), []);
   const [pending, startTransition] = React.useTransition();
+  /** Decisão 246: a transição do "Cancelar envio" é outra. A ação revalida a
+   *  página do job, e a transição fica pendente até ela se refazer — com a
+   *  mesma do envio, a gaveta já reaberta mostraria "Enviando…". */
+  const [cancelando, startCancelar] = React.useTransition();
   const [prefixo, setPrefixo] = React.useState<string | null>(null);
   const [docs, setDocs] = React.useState<DocLocal[]>([]);
   const [erro, setErro] = React.useState<string | null>(null);
@@ -177,8 +188,14 @@ export function PrestarContasDrawer({
   const ppIdRef = React.useRef<string | null>(null);
   if (pp) ppIdRef.current = pp.id;
 
+  /** Decisão 246: o envio cancelado aqui dentro. A PP do pai é uma foto de
+   *  quando a gaveta abriu; esta é a mesma PP com a prestação de volta, até
+   *  a gaveta fechar (aí a página se atualiza). */
+  const [reaberta, setReaberta] = React.useState<PedidoCompraNaLista | null>(null);
+  const ppVivo = reaberta && pp && reaberta.id === pp.id ? reaberta : pp;
   // Decisão 216: a PP que foi sem NF presta contas da nota na mesma gaveta.
-  const editavel = !!pp && podeEditar && (producaoEditaPrestacao(pp) || producaoEditaNfDaAuditoria(pp));
+  const editavel =
+    !!ppVivo && podeEditar && (producaoEditaPrestacao(ppVivo) || producaoEditaNfDaAuditoria(ppVivo));
 
   const atualizar = React.useCallback((chave: string, mudanca: Partial<DocLocal>) => {
     setDocs((prev) => prev.map((d) => (d.chave === chave ? { ...d, ...mudanca } : d)));
@@ -225,6 +242,7 @@ export function PrestarContasDrawer({
   // no objeto, para um refresh do pai não zerar o que a pessoa digitou.
   React.useEffect(() => {
     if (!open || !pp) return;
+    setReaberta(null);
     setErro(null);
     setTentouEnviar(false);
     setPrefixo(null);
@@ -278,8 +296,8 @@ export function PrestarContasDrawer({
     })();
   }, [open, router, salvarAgora]);
 
-  if (!open || !pp) return null;
-  const ppAtual = pp;
+  if (!open || !pp || !ppVivo) return null;
+  const ppAtual = ppVivo;
   const prestacao = ppAtual.prestacao;
   const reprovada = prestacao?.status === "reprovada";
   // Decisão 216: a PP que foi sem NF na auditoria da Mídia System presta
@@ -512,6 +530,35 @@ export function PrestarContasDrawer({
             : `Prestação de ${res.codigo} enviada ao financeiro.`,
       );
       onOpenChange(false);
+    });
+  }
+
+  /** Decisão 246: "Cancelar envio" no rodapé, no lugar do "Enviar". */
+  const cancelaEnvio = podeEditar && !editavel && !ehMidia && producaoCancelaEnvioDaPrestacao(ppAtual);
+  function cancelarEnvio() {
+    setErro(null);
+    startCancelar(async () => {
+      const res = await cancelarEnvioPrestacaoVerba({ pp_id: ppAtual.id });
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+      mudouRef.current = true;
+      setReaberta({
+        ...ppAtual,
+        prestacao:
+          res.volta === "sem_prestacao" || !ppAtual.prestacao ? null : { ...ppAtual.prestacao, status: res.volta },
+      });
+      // A reprovada que tinha voltado "sem gasto" continua sem gasto, como
+      // quando a gaveta abre nela.
+      if (res.volta === "reprovada" && docs.length === 0) setSemGasto(true);
+      onSuccess(`Envio da prestação de ${res.codigo} cancelado. Ela voltou para você.`);
+      // O prefixo do upload vem fora da transição: dentro dela, o botão de
+      // envio ficaria em "Enviando…" enquanto ele chega.
+      void prefixoUploadPrestacao(ppAtual.id).then((pre) => {
+        if (pre.ok) setPrefixo(pre.prefixo);
+        else setErro(pre.message);
+      });
     });
   }
 
@@ -754,6 +801,17 @@ export function PrestarContasDrawer({
             >
               Fechar
             </button>
+            {cancelaEnvio && (
+              <button
+                type="button"
+                onClick={cancelarEnvio}
+                disabled={cancelando}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-border bg-white px-4 py-2 text-[13px] font-semibold hover:border-california-red/40 hover:text-california-red disabled:opacity-50"
+              >
+                <Undo2 className="h-3.5 w-3.5" />
+                {cancelando ? "Cancelando…" : "Cancelar envio"}
+              </button>
+            )}
             {editavel && (
               <button
                 type="button"

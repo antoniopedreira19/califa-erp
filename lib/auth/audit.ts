@@ -363,6 +363,8 @@ export type AuditAction =
   | "verba_producao.prestacao_documento_anexado"
   | "verba_producao.prestacao_documento_removido"
   | "verba_producao.prestacao_documento_corrigido"
+  // Decisão 246: a produção cancela o envio da prestação em avaliação.
+  | "verba_producao.prestacao_envio_cancelado"
   | "pp_verba_devolucao.baixada"
   | "pp_verba_devolucao.baixa_estornada"
   | "empresa_contabil.criada"

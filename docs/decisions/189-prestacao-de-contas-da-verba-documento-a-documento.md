@@ -2,6 +2,9 @@
 
 **Data:** 2026-10-19
 **Status:** aceita e implementada em 19/10/2026.
+Revista pela [246](246-cancelar-envio-da-prestacao.md) em 06/11/2026: a
+produção cancela o envio da prestação em avaliação (antes, ela só voltava
+se o financeiro reprovasse).
 **Quem decidiu:** Tiago, em 17 a 19/10/2026, sobre o protótipo interativo
 "Prestação de Contas da Verba" (oito versões, com os componentes reais), que
 ele aprovou na **versão A ("Junta e envia no fim")** com o drawer de

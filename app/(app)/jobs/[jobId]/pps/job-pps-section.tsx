@@ -89,6 +89,7 @@ import {
   type ColunaFiltravel,
 } from "@/components/ui/filtro-de-coluna";
 import { PrestarContasDrawer } from "./prestar-contas-drawer";
+import { cancelarEnvioPrestacaoVerba } from "./actions-prestacao";
 import { MarcaMidiaNaPP } from "../../_midia-system/midia-system";
 import {
   envioDispensaNf,
@@ -97,6 +98,7 @@ import {
   type MidiaSystemDoJob,
 } from "@/lib/calculos/midia-system";
 import {
+  producaoCancelaEnvioDaPrestacao,
   producaoEditaPrestacao,
   rotuloDoBotaoDaPrestacao,
 } from "@/lib/calculos/prestacao-da-verba";
@@ -845,6 +847,21 @@ export function JobPPsSection({
 
   const larguraTrilha = podePrestarContas.length > 0 ? LARGURA_TRILHA_PRESTACAO : LARGURA_TRILHA_ICONES;
 
+  /** Decisão 246: o envio da prestação se cancela pela trilha, como o do
+   *  Comitê — um clique, e a verba volta a "Continuar prestação". */
+  function cancelarEnvioDaPrestacao(pp: PedidoCompraNaLista) {
+    setErro(null);
+    startTransition(async () => {
+      const res = await cancelarEnvioPrestacaoVerba({ pp_id: pp.id });
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+      setToast(`Envio da prestação de ${res.codigo} cancelado. Ela voltou para você.`);
+      router.refresh();
+    });
+  }
+
   /** Decisão 242: o "Cancelar envio" do painel do item, também pela aba. */
   function handleCancelarEnvio(c: PPNoComite) {
     startTransition(async () => {
@@ -1476,6 +1493,47 @@ export function JobPPsSection({
                   {rotuloDoBotaoDaPrestacao(pp)}
                 </button>
               ));
+            // Decisão 246: a prestação que está com o financeiro. A trilha
+            // mostra o "Ver prestação" (a gaveta, que também cancela o envio
+            // no rodapé) e o ícone de cancelar o envio, como o do Comitê.
+            // A PP que foi sem NF na Mídia System fica como está.
+            const prestacaoEnviada =
+              podePrestarContas.includes(pp.id) &&
+              situacaoMidiaDaPP(pp, midiaSystem) === null &&
+              producaoCancelaEnvioDaPrestacao(pp);
+            const prestacaoEnviadaEl = prestacaoEnviada && (
+              <>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => setPpPrestando(pp)}
+                      aria-label={`Ver prestação · ${pp.codigo}`}
+                      className="inline-flex flex-none items-center justify-center rounded-[9px] border border-border bg-white text-muted-foreground transition-colors hover:bg-muted"
+                      style={{ width: ICONE, height: ICONE }}
+                    >
+                      <Receipt className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>Ver prestação · {pp.codigo}</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      type="button"
+                      onClick={() => cancelarEnvioDaPrestacao(pp)}
+                      disabled={pending}
+                      aria-label={`Cancelar envio da prestação · ${pp.codigo}`}
+                      className="inline-flex flex-none items-center justify-center rounded-[9px] border border-border bg-white text-muted-foreground transition-colors hover:bg-muted disabled:opacity-50"
+                      style={{ width: ICONE, height: ICONE }}
+                    >
+                      <Undo2 className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent>Cancelar envio da prestação · {pp.codigo}</TooltipContent>
+                </Tooltip>
+              </>
+            );
             // A rejeitada volta como PP a emitir (decisão 153): é envio ao
             // financeiro, então segue `podeEnviar`, como o reenvio.
             const refazerEl = podeEnviar && pp.status === "rejeitada" && (
@@ -1528,6 +1586,7 @@ export function JobPPsSection({
                 {enviarEl}
                 {formularioEl}
                 {prestarEl}
+                {prestacaoEnviadaEl}
                 {refazerEl}
                 {cancelarEl}
               </div>

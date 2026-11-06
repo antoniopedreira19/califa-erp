@@ -62,6 +62,8 @@ const ROTULO: Record<PPEventoTipo, string> = {
   prestacao_reenviada: "Prestação de contas reenviada",
   prestacao_reprovada: "Prestação de contas reprovada",
   prestacao_aprovada: "Prestação de contas aprovada",
+  // Decisão 246: a produção cancelou o envio, com a prestação em avaliação.
+  prestacao_envio_cancelado: "Envio da prestação cancelado",
   nf_corrigida: "NF corrigida",
   // Decisão 173: a PP gerada editada no job, antes do envio.
   editada: "Editada",

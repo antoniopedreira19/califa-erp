@@ -2249,6 +2249,8 @@ export type PPEventoTipo =
   | "prestacao_reenviada"
   | "prestacao_reprovada"
   | "prestacao_aprovada"
+  // Decisão 246 (06/11/2026): a produção cancelou o envio da prestação.
+  | "prestacao_envio_cancelado"
   // Revisão da decisão 152 (07/10/2026): a NF corrigida com a PP em
   // avaliação, sem aprovar. O `motivo` diz o que mudou.
   | "nf_corrigida"
