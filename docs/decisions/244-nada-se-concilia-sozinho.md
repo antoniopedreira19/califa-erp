@@ -23,4 +23,5 @@ O critério de certeza era o mesmo de "Prontos para conciliar"; a diferença era
 - `aba-banco.tsx`: saiu o efeito da automação (a reserva `marcarLinhasAvaliadas` e as baixas sozinhas) e o estado "Resolvendo sozinho…".
 - `motor-da-conta.ts`: saíram `automacaoDaLeitura` e `textoDosSozinhos`; o teste da automação saiu, e os da planilha passaram a conferir a confiança alta (o que vai para Prontos).
 - `fila-da-conta.tsx`: saíram o aviso das resolvidas sozinhas e o desfazer em lote.
+- Conserto junto (06/11): o aviso do "Conciliar os N" contava ações, não linhas. O PIX que saiu e voltou concilia as duas linhas numa ação só, e "Conciliar os 29" terminava em "27 linhas do banco conciliadas". Agora o `emSerie` conta 2 para o par.
 - Sem migration. A RPC `marcar_linhas_avaliadas` e a coluna `avaliada_em` ficam no banco, sem uso pela tela (apagar é mudança destrutiva e não é necessária).

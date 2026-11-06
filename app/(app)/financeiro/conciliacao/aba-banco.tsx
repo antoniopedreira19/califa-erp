@@ -306,7 +306,9 @@ export function AbaBanco({
           router.refresh();
           return;
         }
-        feitas++;
+        // O PIX que voltou concilia as duas linhas numa ação só: a conta é de
+        // linhas do banco, a mesma do "Conciliar os N".
+        feitas += r.estado === "par" && r.par ? 2 : 1;
       }
       setAviso({
         tom: feitas ? "ok" : "erro",
