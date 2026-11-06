@@ -10,8 +10,10 @@
  *
  * As categorias:
  *   1. distratos: GP pediu distrato, RH ainda não gerou minuta
- *   2. contratacoes: freela preencheu form público (primeiro contrato)
- *   3. renovacoes: solicitação de renovação virou contrato (freela já existia)
+ *   2. distratos_aguardando_assinatura: minuta de distrato gerada, falta
+ *      anexar PDF assinado pra aplicar a antecipação
+ *   3. contratacoes: freela preencheu form público (primeiro contrato)
+ *   4. renovacoes: solicitação de renovação virou contrato (freela já existia)
  *
  * Contratações e renovações saem da MESMA query (freelancer_solicitacoes com
  * contrato_id já criado); a distinção vem da contagem de contratos do freela.
@@ -31,6 +33,7 @@ export const CUTOFF_NOVIDADES = "2026-10-20T00:00:00.000Z";
 
 export interface DadosNovidades {
   distratos: DistratoSolicitadoItem[];
+  distratos_aguardando_assinatura: DistratoSolicitadoItem[];
   contratacoes: SolicitacaoConcluidaItem[];
   renovacoes: SolicitacaoConcluidaItem[];
   dismissedIds: string[];
@@ -40,8 +43,13 @@ export async function carregarNovidades(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
 ): Promise<DadosNovidades> {
-  const [distratosRaw, concluidasRaw, dismissedRes] = await Promise.all([
-    // 1. Distratos solicitados pendentes
+  const [
+    distratosRaw,
+    distratosAguardandoRaw,
+    concluidasRaw,
+    dismissedRes,
+  ] = await Promise.all([
+    // 1. Distratos solicitados pendentes (falta gerar minuta)
     supabase
       .from("freelancer_contratos")
       .select(
@@ -50,6 +58,23 @@ export async function carregarNovidades(
       .eq("tenant_id", tenantId)
       .not("distrato_solicitado_em", "is", null)
       .is("distrato_minuta_url", null)
+      .is("distrato_arquivo_url", null)
+      .gte("distrato_solicitado_em", CUTOFF_NOVIDADES)
+      .order("distrato_solicitado_em", { ascending: false })
+      .limit(50),
+
+    // 2. Distratos com minuta gerada, aguardando PDF assinado do freela.
+    //    A antecipação só é APLICADA quando o PDF é anexado — enquanto isso,
+    //    o contrato segue com data_termino original. Sem essa seção, o fluxo
+    //    ficava invisível entre "gerar minuta" e "anexar PDF" (ex.: RH que
+    //    gera a minuta e esquece de cobrar o assinado).
+    supabase
+      .from("freelancer_contratos")
+      .select(
+        "id, freelancer_id, nome_job, cargo, distrato_solicitado_em, distrato_solicitado_por, distrato_data_proposta, freelancers!inner(nome_social, nome_completo)",
+      )
+      .eq("tenant_id", tenantId)
+      .not("distrato_minuta_url", "is", null)
       .is("distrato_arquivo_url", null)
       .gte("distrato_solicitado_em", CUTOFF_NOVIDADES)
       .order("distrato_solicitado_em", { ascending: false })
@@ -95,11 +120,14 @@ export async function carregarNovidades(
       .eq("tenant_id", tenantId),
   ]);
 
-  // Pra Distratos: nome do solicitante
+  // Pra Distratos (duas seções): nome do solicitante
   const distratosRawData = (distratosRaw.data ?? []) as any[];
+  const distratosAguardandoData = (distratosAguardandoRaw.data ?? []) as any[];
   const solicitadoPorIds = Array.from(
     new Set(
-      distratosRawData.map((d) => d.distrato_solicitado_por).filter(Boolean),
+      [...distratosRawData, ...distratosAguardandoData]
+        .map((d) => d.distrato_solicitado_por)
+        .filter(Boolean),
     ),
   );
   const distratosProfiles = new Map<string, string>();
@@ -112,25 +140,28 @@ export async function carregarNovidades(
       distratosProfiles.set(p.id, p.nome);
     }
   }
+  const mapearDistrato = (d: any): DistratoSolicitadoItem => {
+    const freela = Array.isArray(d.freelancers)
+      ? d.freelancers[0]
+      : d.freelancers;
+    return {
+      contrato_id: d.id,
+      freelancer_id: d.freelancer_id,
+      freelancer_nome: freela?.nome_completo ?? freela?.nome_social ?? "—",
+      nome_job: d.nome_job,
+      cargo: d.cargo,
+      solicitado_em: d.distrato_solicitado_em,
+      solicitado_por_nome: d.distrato_solicitado_por
+        ? (distratosProfiles.get(d.distrato_solicitado_por) ?? null)
+        : null,
+      data_proposta: d.distrato_data_proposta,
+    };
+  };
   const distratos: DistratoSolicitadoItem[] = distratosRawData
     .filter((d) => d.nome_job)
-    .map((d) => {
-      const freela = Array.isArray(d.freelancers)
-        ? d.freelancers[0]
-        : d.freelancers;
-      return {
-        contrato_id: d.id,
-        freelancer_id: d.freelancer_id,
-        freelancer_nome: freela?.nome_completo ?? freela?.nome_social ?? "—",
-        nome_job: d.nome_job,
-        cargo: d.cargo,
-        solicitado_em: d.distrato_solicitado_em,
-        solicitado_por_nome: d.distrato_solicitado_por
-          ? (distratosProfiles.get(d.distrato_solicitado_por) ?? null)
-          : null,
-        data_proposta: d.distrato_data_proposta,
-      };
-    });
+    .map(mapearDistrato);
+  const distratosAguardandoAssinatura: DistratoSolicitadoItem[] =
+    distratosAguardandoData.filter((d) => d.nome_job).map(mapearDistrato);
 
   // Lookup dos nomes de job pras concluídas (produção + internos).
   const concluidasBrutas = (concluidasRaw.data ?? []) as any[];
@@ -267,6 +298,7 @@ export async function carregarNovidades(
 
   return {
     distratos,
+    distratos_aguardando_assinatura: distratosAguardandoAssinatura,
     contratacoes,
     renovacoes,
     dismissedIds,

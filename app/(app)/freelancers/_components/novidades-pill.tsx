@@ -21,6 +21,7 @@ import { createClient } from "@/lib/supabase/client";
  *
  * Chaves de dismiss (prefixadas pelo módulo):
  *   freelas:distrato-solicitado:<contrato_id>
+ *   freelas:distrato-aguardando-assinatura:<contrato_id>
  *   freelas:solicitacao-concluida:<solicitacao_id>
  */
 
@@ -51,6 +52,7 @@ export interface SolicitacaoConcluidaItem {
 interface Props {
   tenantId: string;
   distratos: DistratoSolicitadoItem[];
+  distratosAguardandoAssinatura: DistratoSolicitadoItem[];
   contratacoes: SolicitacaoConcluidaItem[];
   renovacoes: SolicitacaoConcluidaItem[];
   dismissedIds: string[];
@@ -70,6 +72,7 @@ function diasAtras(iso: string): string {
 export function NovidadesPill({
   tenantId,
   distratos,
+  distratosAguardandoAssinatura,
   contratacoes,
   renovacoes,
   dismissedIds,
@@ -170,6 +173,9 @@ export function NovidadesPill({
   const distratosVisiveis = distratos.filter(
     (s) => !vistos.has(`freelas:distrato-solicitado:${s.contrato_id}`),
   );
+  const distratosAguardandoVisiveis = distratosAguardandoAssinatura.filter(
+    (s) => !vistos.has(`freelas:distrato-aguardando-assinatura:${s.contrato_id}`),
+  );
   const contratacoesVisiveis = contratacoes.filter(
     (s) => !vistos.has(`freelas:solicitacao-concluida:${s.solicitacao_id}`),
   );
@@ -179,6 +185,7 @@ export function NovidadesPill({
 
   const total =
     distratosVisiveis.length +
+    distratosAguardandoVisiveis.length +
     contratacoesVisiveis.length +
     renovacoesVisiveis.length;
 
@@ -274,6 +281,42 @@ export function NovidadesPill({
                       onDismiss={() =>
                         marcarVisto(
                           `freelas:distrato-solicitado:${s.contrato_id}`,
+                        )
+                      }
+                    />
+                  ))}
+                </Secao>
+              )}
+
+              {distratosAguardandoVisiveis.length > 0 && (
+                <Secao
+                  titulo="Distratos aguardando assinatura"
+                  descricao="Minuta pronta · falta anexar PDF assinado do freela"
+                  cor="amber"
+                  icon={FileCheck}
+                >
+                  {distratosAguardandoVisiveis.map((s) => (
+                    <Linha
+                      key={s.contrato_id}
+                      href={`/freelancers/${s.freelancer_id}`}
+                      corDestaque="text-amber-700"
+                      corHoverCheck="hover:bg-amber-50 hover:text-amber-700"
+                      nomePrincipal={s.freelancer_nome}
+                      destaque={s.nome_job}
+                      cargo={s.cargo}
+                      quando={s.solicitado_em}
+                      por={s.solicitado_por_nome}
+                      extra={
+                        s.data_proposta
+                          ? `Proposta: encerrar em ${new Date(
+                              s.data_proposta + "T00:00:00",
+                            ).toLocaleDateString("pt-BR")}`
+                          : null
+                      }
+                      onFechar={() => setAberto(false)}
+                      onDismiss={() =>
+                        marcarVisto(
+                          `freelas:distrato-aguardando-assinatura:${s.contrato_id}`,
                         )
                       }
                     />

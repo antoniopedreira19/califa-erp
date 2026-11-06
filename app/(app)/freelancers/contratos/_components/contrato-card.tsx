@@ -880,8 +880,41 @@ export function ContratoCard({
           </div>
         )}
 
-        {/* Banner: antecipação aplicada (minuta ou assinado existe) */}
-        {(distratoMinutaPath || distratoPath) && (
+        {/* Banner: minuta de distrato gerada, aguardando PDF assinado.
+            NÃO confundir com antecipação aplicada — a data_termino ainda é
+            a original. A aplicação de fato só rola quando o PDF é anexado
+            (RPC aplicar_distrato_de_contrato move data_termino pra proposta). */}
+        {distratoMinutaPath && !distratoPath && (
+          <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-50/60 px-3 py-2.5 flex items-start gap-2">
+            <FileMinus className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-amber-800">
+                Minuta de distrato gerada · aguardando PDF assinado
+              </p>
+              <p className="text-[11px] text-amber-900/90 mt-0.5">
+                {dataPropostaLocal ? (
+                  <>
+                    Proposta: encerrar em{" "}
+                    <span className="font-semibold">
+                      {formatDate(dataPropostaLocal)}
+                    </span>
+                  </>
+                ) : (
+                  "Proposta de novo término pendente de assinatura"
+                )}
+              </p>
+              {motivoLocal && (
+                <p className="text-[11px] text-amber-900/80 mt-0.5 italic">
+                  &ldquo;{motivoLocal}&rdquo;
+                </p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Banner: antecipação efetivamente aplicada (PDF assinado anexado,
+            RPC aplicou a nova data_termino). */}
+        {distratoPath && (
           <div className="mt-3 rounded-lg border border-rose-500/30 bg-rose-50/60 px-3 py-2.5 flex items-start gap-2">
             <FileMinus className="h-4 w-4 text-rose-700 shrink-0 mt-0.5" />
             <div className="flex-1 min-w-0">
@@ -889,14 +922,21 @@ export function ContratoCard({
                 Antecipação aplicada
               </p>
               <p className="text-[11px] text-rose-900/90 mt-0.5">
-                {contrato.data_termino && (
+                {contrato.data_termino_original && contrato.data_termino ? (
+                  <>
+                    Era {formatDate(contrato.data_termino_original)} → agora{" "}
+                    <span className="font-semibold">
+                      {formatDate(contrato.data_termino)}
+                    </span>
+                  </>
+                ) : contrato.data_termino ? (
                   <>
                     Novo término:{" "}
                     <span className="font-semibold">
                       {formatDate(contrato.data_termino)}
                     </span>
                   </>
-                )}
+                ) : null}
               </p>
               {motivoLocal && (
                 <p className="text-[11px] text-rose-900/80 mt-0.5 italic">
