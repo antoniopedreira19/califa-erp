@@ -2621,6 +2621,8 @@ export function GerarPPDrawer({
             open={ladoALado !== null}
             onOpenChange={(o) => !o && setLadoALado(null)}
             codigo={ppGeradaEditando?.codigo ?? "PP a emitir"}
+            // A prévia não se baixa (decisão 178): o nome só vale de rótulo.
+            nomeDoArquivoDoPdf={`${ppGeradaEditando?.codigo ?? "PP a emitir"}.pdf`}
             selo={editando || editandoGerada ? "Em edição" : "Nova"}
             descricao={
               ppGeradaEditando

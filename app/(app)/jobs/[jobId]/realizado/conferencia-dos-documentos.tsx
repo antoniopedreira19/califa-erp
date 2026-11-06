@@ -59,6 +59,7 @@ export function ConferenciaDosDocumentos({
   open,
   onOpenChange,
   codigo,
+  nomeDoArquivoDoPdf,
   selo,
   descricao,
   ppIdDoPdf,
@@ -87,6 +88,8 @@ export function ConferenciaDosDocumentos({
   onOpenChange: (aberto: boolean) => void;
   /** O código da PP, ou "PP a emitir" antes de gerar. */
   codigo: string;
+  /** Decisão 241: o nome ao baixar o PDF da PP ("PP-00613 - FORNECEDOR.pdf"). */
+  nomeDoArquivoDoPdf: string;
   selo: string;
   descricao: string;
   /** A PP cujo PDF vai à esquerda (null = ainda sem PDF gravado). */
@@ -336,10 +339,10 @@ export function ConferenciaDosDocumentos({
               <PainelDocumento
                 icone={<FileText className="h-4 w-4 text-california-red" />}
                 titulo="Pedido de Produção"
-                legenda={`${codigo}.pdf`}
+                legenda={nomeDoArquivoDoPdf}
                 oculto={expandido === "doc"}
                 url={urlPdf}
-                nomeArquivo={`${codigo}.pdf`}
+                nomeArquivo={nomeDoArquivoDoPdf}
                 expandido={expandido === "pp"}
                 onExpandir={() => setExpandido((e) => (e === "pp" ? null : "pp"))}
                 onErro={setErroLocal}

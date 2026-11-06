@@ -1,5 +1,6 @@
 "use client";
 
+import { nomeDoArquivoDaPP, quemVaiNoNomeDoArquivo } from "@/lib/nome-do-arquivo-da-pp";
 import type { ComiteDaPP, PedidoEmDecisao } from "@/lib/data/comite";
 import { BarraDeDecisaoDoComite } from "@/app/(app)/comite/_componentes/barra-de-decisao";
 import { linhasDoMotivoDaPP } from "@/app/(app)/comite/_componentes/motivo-do-caso";
@@ -2604,6 +2605,13 @@ export function JobItemRealizadoTable({
                   cartao_plataforma: pp.cartao_plataforma,
                   responsavel: pp.responsavel,
                 }) || nomeDoFornecedor(fornecedores, pp.fornecedor_id ?? ""),
+                nomeDoArquivo: nomeDoArquivoDaPP(
+                  pp.codigo,
+                  quemVaiNoNomeDoArquivo({
+                    ...pp,
+                    fornecedor_nome: pp.fornecedor_id ? nomeDoFornecedor(fornecedores, pp.fornecedor_id) : null,
+                  }),
+                ),
                 valorUnitario: Number(pp.valor_unitario ?? 0),
                 quantidade: Number(pp.quantidade ?? 0),
                 diasMeses: Number(pp.dias_meses ?? 0),

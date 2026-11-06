@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import {
   Search,
   Eye,
+  Download,
   Pencil,
   X,
   Clock,
@@ -47,7 +48,10 @@ import {
   cancelarERefazerPP,
   cancelarPedidoCompra,
   gerarPPDaPPAEmitir,
+  signedUrlPdf,
 } from "../realizado/actions-pp";
+import { baixarArquivo } from "@/components/documentos/painel-documento";
+import { nomeDoArquivoDaPP, quemVaiNoNomeDoArquivo } from "@/lib/nome-do-arquivo-da-pp";
 import {
   EnvioDialog,
   RevisaoDialog,
@@ -296,6 +300,14 @@ function nomeDoFornecedorDaPP(
 ): string | null {
   if (pp.cartao_corporativo) return nomeDoCartaoCorporativo(pp.cartao_plataforma);
   return pp.fornecedor_id ? (fornecedoresPorId[pp.fornecedor_id] ?? null) : null;
+}
+
+/** Decisão 241: o arquivo sai com o número e quem a PP paga. */
+function nomeDoArquivoDaLinha(pp: PedidoCompraNaLista, fornecedoresPorId: Record<string, string>): string {
+  return nomeDoArquivoDaPP(
+    pp.codigo,
+    quemVaiNoNomeDoArquivo({ ...pp, fornecedor_nome: nomeDoFornecedorDaPP(pp, fornecedoresPorId) }),
+  );
 }
 
 export function JobPPsSection({
@@ -639,6 +651,23 @@ export function JobPPsSection({
     });
   }
 
+  /** Decisão 241: baixar a PP direto da linha, com o número e o fornecedor
+   *  no nome do arquivo. O PDF é um só para todas as parcelas (112). */
+  function handleBaixar(pp: PedidoCompraNaLista) {
+    startTransition(async () => {
+      const res = await signedUrlPdf(pp.id);
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+      try {
+        await baixarArquivo(res.url, nomeDoArquivoDaLinha(pp, fornecedoresPorId));
+      } catch {
+        setErro("Não foi possível baixar o arquivo. Tente de novo.");
+      }
+    });
+  }
+
   /**
    * Por que ESTA PP não pode ser enviada agora, na ordem do painel do item:
    * o job (pré-abertura) e o prazo de envio do vencimento (decisão 157).
@@ -829,7 +858,7 @@ export function JobPPsSection({
                 <col className="w-[134px]" />
                 <col className="w-[144px]" />
                 <col className="w-[136px]" />
-                <col className="w-[46px]" />
+                <col className="w-[82px]" />
               </colgroup>
               <thead>
                 <tr className="border-b border-border bg-muted/50 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
@@ -1046,7 +1075,9 @@ export function JobPPsSection({
                         olho cabe inteiro na coluna a partir de ~1050 px de
                         tabela. */}
                     <td className="py-2.5 pl-0 pr-3.5 align-middle">
-                      {/* Ver PDF é de CADA parcela (Tela 2.3): cada uma
+                      {/* Decisão 241: o baixar mora ao lado do olho — os dois são do
+                          documento —, e a coluna passou de 46 para 82 px.
+                          Ver PDF é de CADA parcela (Tela 2.3): cada uma
                           tem seu documento. O "Cancelar e refazer" morava
                           aqui e, com 138 px numa coluna de 45 a 61, cobria
                           o selo "Rejeitado"; foi para a trilha (17/10/2026). */}
@@ -1065,6 +1096,22 @@ export function JobPPsSection({
                           </TooltipTrigger>
                           <TooltipContent>
                             Visualizar {pp.codigo} e documentos
+                          </TooltipContent>
+                        </Tooltip>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <button
+                              type="button"
+                              onClick={() => handleBaixar(pp)}
+                              disabled={pending}
+                              aria-label={`Baixar ${pp.codigo}`}
+                              className="inline-flex items-center justify-center rounded-lg border border-border bg-white p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-50"
+                            >
+                              <Download className="h-3.5 w-3.5" />
+                            </button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            Baixar {nomeDoArquivoDaLinha(pp, fornecedoresPorId)}
                           </TooltipContent>
                         </Tooltip>
                       </div>

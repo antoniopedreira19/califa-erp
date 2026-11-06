@@ -46,6 +46,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckCircle,
+  Download,
   FileText,
   Paperclip,
   X,
@@ -61,8 +62,10 @@ import { Badge } from "@/components/ui/badge";
 import {
   PainelDocumento,
   VazioDoPainel as Vazio,
+  baixarArquivo,
   enderecoParaVisualizar,
 } from "@/components/documentos/painel-documento";
+import { nomeDoArquivoDaPP } from "@/lib/nome-do-arquivo-da-pp";
 import { cn, formatCurrency } from "@/lib/utils";
 import { ppStatusLabel, situacaoDaVerba, verbaDeResponsavel, type PPStatus } from "@/lib/types";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
@@ -112,6 +115,14 @@ interface PropsDoFinanceiro {
 interface PropsDaLeitura {
   somenteLeitura: true;
   estabelecimentos: EstabelecimentoDaNota[];
+  /**
+   * Decisão 241: aberta pelo olho do painel do item, a PP ocupa o espaço
+   * livre à esquerda dele (esta é a largura do painel), sem os dados — o
+   * painel ao lado já mostra a PP. O painel continua funcionando: o olho de
+   * outra PP troca o documento aqui. Sem painel (aba PPs, Ver PP), tela
+   * cheia.
+   */
+  aoLadoDoPainel?: number;
 }
 
 export function PPTela(
@@ -124,6 +135,7 @@ export function PPTela(
   const { pp, open, onOpenChange } = props;
   /** Null na leitura da produção: sem aprovação, rejeição nem reprovação. */
   const financeiro = props.somenteLeitura ? null : props;
+  const aoLadoDoPainel = props.somenteLeitura ? (props.aoLadoDoPainel ?? null) : null;
   const estabelecimentos = props.somenteLeitura
     ? props.estabelecimentos
     : props.fiscal.cadastro.estabelecimentos;
@@ -132,7 +144,9 @@ export function PPTela(
   const [urlAnexo, setUrlAnexo] = React.useState<string | null>(null);
   const [anexoAtivo, setAnexoAtivo] = React.useState(0);
   const [expandido, setExpandido] = React.useState<Expandido>(null);
-  const [dossieAberto, setDossieAberto] = React.useState(true);
+  // Decisão 241: na leitura da produção a tela é do documento — os dados
+  // abrem recolhidos, a um clique na calha.
+  const [dossieAberto, setDossieAberto] = React.useState(!props.somenteLeitura);
   const [aba, setAba] = React.useState<AbaDossie>("dados");
   const [erro, setErro] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<string | null>(null);
@@ -264,6 +278,23 @@ export function PPTela(
   }, [open, anexoId, ehPrestacao]);
 
   if (!pp) return null;
+
+  // Decisão 241: o arquivo sai com o número e quem a PP paga — o fornecedor,
+  // a plataforma do cartão (já no `fornecedor_nome`) ou quem recebe a verba.
+  const nomePdf = nomeDoArquivoDaPP(pp.codigo, pp.verba_producao ? pp.responsavel_nome : pp.fornecedor_nome);
+  // Decisão 241: na leitura, o painel do anexo só aparece quando há
+  // documento; sem ele, a PP fica com o espaço inteiro.
+  const soAPP = !financeiro && listaDocumentos.length === 0;
+  // Ao lado do painel do item, sem a coluna dos dados.
+  const comDossie = aoLadoDoPainel === null;
+  async function baixarPP() {
+    if (!urlPdf) return;
+    try {
+      await baixarArquivo(urlPdf, nomePdf);
+    } catch {
+      setErro("Não foi possível baixar o arquivo. Tente de novo.");
+    }
+  }
 
   const emAvaliacao = pp.status === "em_avaliacao";
   const aprovada = pp.status === "aprovada";
@@ -418,9 +449,13 @@ export function PPTela(
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      {/* Ao lado do painel, não modal: o painel continua clicável. O Esc
+          fecha só esta camada; clique fora não fecha (FullscreenContent). */}
+      <Dialog open={open} onOpenChange={onOpenChange} modal={aoLadoDoPainel === null}>
         <FullscreenContent
           className="bg-[#181818]/[0.82] p-5"
+          // `width: auto`: o `w-full` da camada venceria o `right`.
+          style={aoLadoDoPainel !== null ? { right: aoLadoDoPainel, width: "auto" } : undefined}
           aria-describedby="pp-tela-descricao"
         >
           <div className="flex flex-none flex-wrap items-center gap-3 pb-3">
@@ -443,13 +478,34 @@ export function PPTela(
             )}
             <DialogDescription asChild>
               <span id="pp-tela-descricao" className="text-xs text-white/60">
-                Pedido, documento anexo e dados — lado a lado
+                {aoLadoDoPainel !== null
+                  ? `${pp.fornecedor_nome} · ${formatCurrency(pp.valor, "BRL")}`
+                  : soAPP
+                    ? "Pedido de Produção · sem NF anexada"
+                    : "Pedido, documento anexo e dados — lado a lado"}
               </span>
             </DialogDescription>
+            {/* Decisão 241: o baixar da produção, à vista no topo. O do
+                financeiro continua no cabeçalho do PDF. */}
+            {!financeiro && (
+              <button
+                type="button"
+                onClick={baixarPP}
+                disabled={!urlPdf}
+                title={`Salvar como “${nomePdf}”`}
+                className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white px-3 py-1.5 text-xs font-semibold text-[#282828] transition-colors hover:bg-white/90 disabled:opacity-50"
+              >
+                <Download className="h-3 w-3" />
+                Baixar PP
+              </button>
+            )}
             <button
               type="button"
               onClick={() => onOpenChange(false)}
-              className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/20"
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/20",
+                financeiro && "ml-auto",
+              )}
             >
               <X className="h-3 w-3" />
               Fechar
@@ -472,20 +528,26 @@ export function PPTela(
           <div
             className={cn(
               "grid min-h-0 flex-1 gap-3",
-              expandido
+              expandido || (soAPP && !comDossie)
                 ? "grid-cols-1"
-                : dossieAberto
-                  ? "grid-cols-1 lg:grid-cols-[1fr_1fr_310px]"
-                  : "grid-cols-1 lg:grid-cols-[1fr_1fr_34px]",
+                : !comDossie
+                  ? "grid-cols-1 lg:grid-cols-[1fr_1fr]"
+                  : soAPP
+                    ? dossieAberto
+                      ? "grid-cols-1 lg:grid-cols-[1fr_310px]"
+                      : "grid-cols-1 lg:grid-cols-[1fr_34px]"
+                    : dossieAberto
+                      ? "grid-cols-1 lg:grid-cols-[1fr_1fr_310px]"
+                      : "grid-cols-1 lg:grid-cols-[1fr_1fr_34px]",
             )}
           >
             <PainelDocumento
               icone={<FileText className="h-4 w-4 text-california-red" />}
               titulo="Pedido de Produção"
-              legenda={`${pp.codigo}.pdf`}
+              legenda={nomePdf}
               oculto={expandido === "anexo"}
               url={urlPdf}
-              nomeArquivo={`${pp.codigo}.pdf`}
+              nomeArquivo={nomePdf}
               expandido={expandido === "pp"}
               onExpandir={() =>
                 setExpandido((a) => (a === "pp" ? null : "pp"))
@@ -510,7 +572,7 @@ export function PPTela(
                 anexo?.arquivo_nome_original ??
                 (ehPrestacao ? "Sem gasto" : "Nenhum anexo enviado")
               }
-              oculto={expandido === "pp"}
+              oculto={expandido === "pp" || soAPP}
               url={urlAnexo}
               nomeArquivo={anexo?.arquivo_nome_original ?? ""}
               expandido={expandido === "anexo"}
@@ -586,6 +648,7 @@ export function PPTela(
             {/* O dossiê some junto quando um documento é expandido: ali a
                 tela inteira é do documento. */}
             {!expandido &&
+              comDossie &&
               (dossieAberto ? (
                 <div className="relative hidden min-h-0 lg:flex lg:flex-col">
                   <button

@@ -7,6 +7,7 @@
  * protótipo aprovado pelo Tiago ("Etapa antes da PP", v17).
  */
 
+import { nomeDoArquivoDaPP } from "@/lib/nome-do-arquivo-da-pp";
 import * as React from "react";
 import { resumoDoPagamentoDoTitular, textoDoPagamentoPeloCadastro } from "./pagamento-do-titular-field";
 import { AlertTriangle, ClipboardCheck, Columns2, Lock, Pencil, Send, X } from "lucide-react";
@@ -847,6 +848,7 @@ export function EnvioDialog({
             open={ladoALado !== null}
             onOpenChange={(o) => !o && setLadoALado(null)}
             codigo={pp.codigo}
+            nomeDoArquivoDoPdf={nomeDoArquivoDaPP(pp.codigo, nomeDoFornecedor)}
             selo="Gerada"
             descricao="Pedido, documentos e dados — lado a lado"
             ppIdDoPdf={pp.id}

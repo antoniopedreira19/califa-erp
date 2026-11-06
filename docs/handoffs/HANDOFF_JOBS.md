@@ -6694,3 +6694,18 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - Testado no TES-1003/26 (errata recusada e registrada; PP-00830 enviada
   com a revisão aberta e cancelada).
 
+## ⚠️ Nota de 2026-11-06 — baixar e ver a PP (decisão 241)
+
+- O PDF da PP sai como `PP-00613 - FORNECEDOR TESTE LTDA.pdf` (número e
+  quem a PP paga: fornecedor, plataforma do cartão ou titular da verba) em
+  todo lugar que baixa a PP: aba PPs, painel do item, tela da PP (produção
+  e financeiro), conferência do envio e ⓘ dos títulos. Helper em
+  `lib/nome-do-arquivo-da-pp.ts`.
+- Botão de baixar ao lado do olho, na linha da aba PPs (coluna de 82 px) e
+  no cartão da PP do painel do item (painel de 540 px, era 500).
+- O olho do painel do item não abre mais aba nova: a PP abre ao lado do
+  painel (`PPTela` com `aoLadoDoPainel`, não modal), com a NF lado a lado
+  se houver e "Baixar PP" no topo; o painel segue funcionando.
+- Na aba PPs e no "Visualizar" do Ver PP, a tela cheia esconde o anexo
+  vazio, abre os dados recolhidos e ganha "Baixar PP" no topo.
+

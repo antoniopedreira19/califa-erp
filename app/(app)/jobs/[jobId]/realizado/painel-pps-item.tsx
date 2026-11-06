@@ -61,12 +61,29 @@ import {
   type SituacaoMidia,
 } from "@/lib/calculos/midia-system";
 import { useRouter } from "next/navigation";
+import dynamic from "next/dynamic";
+import { baixarArquivo } from "@/components/documentos/painel-documento";
+import type { PPRow } from "@/app/(app)/financeiro/contas-a-pagar/pedidos-compra-list";
+import type { EstabelecimentoDaNota } from "@/app/(app)/financeiro/contas-a-pagar/pp-dossie";
+import { carregarPPParaVisualizar } from "../pps/actions-visualizar";
+
+/** Decisão 241: o olho abre a PP ao lado deste painel, na tela da PP em
+ *  leitura. Só carrega quando alguém clica no olho. */
+const PPTela = dynamic(
+  () => import("@/app/(app)/financeiro/contas-a-pagar/pp-tela").then((m) => m.PPTela),
+  { ssr: false },
+);
+
+/** A largura do painel (`sm:max-w-[540px]` do DrawerContent). A PP
+ *  aberta pelo olho ocupa o resto da janela. */
+const LARGURA_DO_PAINEL = 540;
 import {
   X,
   FilePlus,
   FileText,
   Info,
   Eye,
+  Download,
   ClipboardList,
   Send,
   Pencil,
@@ -167,6 +184,9 @@ export interface PPDoItem {
   codigo: string;
   status: PPStatus;
   fornecedorNome: string;
+  /** Decisão 241: o nome do arquivo ao baixar ("PP-00613 - FORNECEDOR.pdf").
+   *  Obrigatório: opcional, o `.map` que monta a linha o descartaria. */
+  nomeDoArquivo: string;
   /** O trio da PP, nas mesmas colunas do item na planilha:
    *  valor = valorUnitario × quantidade × diasMeses. Obrigatórios: campo
    *  opcional num tipo de linha montado por `.map` some em silêncio. */
@@ -363,6 +383,11 @@ export function PainelPPsItem({
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [erro, setErro] = React.useState<string | null>(null);
+  const [visualizando, setVisualizando] = React.useState<{
+    pp: PPRow;
+    estabelecimentos: EstabelecimentoDaNota[];
+  } | null>(null);
+  const [visorAberto, setVisorAberto] = React.useState(false);
   const [cancelando, setCancelando] = React.useState<PPDoItem | null>(null);
   /** Aviso de "gerar nova PP num item completo" (decisão 052). */
   const [avisandoNovaPP, setAvisandoNovaPP] = React.useState(false);
@@ -558,14 +583,34 @@ export function PainelPPsItem({
     });
   }
 
+  /** Decisão 241: o olho abre a PP aqui, ao lado do painel — antes abria o
+   *  PDF numa aba nova. Com o visor aberto, o olho de outra PP troca o
+   *  documento. */
   function verPdf(ppId: string) {
     startTransition(async () => {
-      const res = await signedUrlPdf(ppId);
+      const res = await carregarPPParaVisualizar(ppId);
       if (!res.ok) {
         setErro(res.message);
         return;
       }
-      window.open(res.url, "_blank", "noopener,noreferrer");
+      setVisualizando({ pp: res.pp, estabelecimentos: res.estabelecimentos });
+      setVisorAberto(true);
+    });
+  }
+
+  /** Decisão 241: baixa a PP com o número e o fornecedor no nome. */
+  function baixarPdf(pp: PPDoItem) {
+    startTransition(async () => {
+      const res = await signedUrlPdf(pp.id);
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+      try {
+        await baixarArquivo(res.url, pp.nomeDoArquivo);
+      } catch {
+        setErro("Não foi possível baixar o arquivo. Tente de novo.");
+      }
     });
   }
 
@@ -667,7 +712,9 @@ export function PainelPPsItem({
       />
     )}
     <Dialog open={open && !formSocio} onOpenChange={onOpenChange}>
-      <DrawerContent className="sm:max-w-[500px]">
+      {/* Decisão 241: 540 px (era 500) para o baixar caber no cartão da PP —
+          com 4 botões, o cartão já passava 16 px da borda. */}
+      <DrawerContent className="sm:max-w-[540px]">
         <div className="flex items-start justify-between gap-3 border-b border-border px-6 py-5">
           <div className="flex flex-col gap-1">
             <h2 className="text-[17px] font-bold tracking-tight">
@@ -837,6 +884,8 @@ export function PainelPPsItem({
                     // reembolso; a revisão mostra só o titular.
                     fornecedorNome:
                       a.tipo_verba === "reembolso" ? `Reembolso — ${contraparte(a)}` : contraparte(a),
+                    // A PP a emitir ainda não tem PDF para baixar.
+                    nomeDoArquivo: "",
                     valorUnitario: a.dados.valor_unitario,
                     quantidade: a.dados.quantidade,
                     diasMeses: a.dados.dias_meses,
@@ -1043,11 +1092,19 @@ export function PainelPPsItem({
                           </BotaoIcone>
                         )}
                         <BotaoIcone
-                          titulo="Ver PDF"
+                          titulo={`Visualizar ${pp.codigo}`}
                           onClick={() => verPdf(pp.id)}
                           disabled={pending}
                         >
                           <Eye className="h-3 w-3" />
+                        </BotaoIcone>
+                        <BotaoIcone
+                          titulo={`Baixar ${pp.nomeDoArquivo}`}
+                          rotulo={`Baixar ${pp.codigo}`}
+                          onClick={() => baixarPdf(pp)}
+                          disabled={pending}
+                        >
+                          <Download className="h-3 w-3" />
                         </BotaoIcone>
                         {podeAgir && (
                           <BotaoIcone
@@ -1150,11 +1207,19 @@ export function PainelPPsItem({
                           <ClipboardList className="h-3 w-3" />
                         </BotaoIcone>
                         <BotaoIcone
-                          titulo="Ver PDF"
+                          titulo={`Visualizar ${pp.codigo}`}
                           onClick={() => verPdf(pp.id)}
                           disabled={pending}
                         >
                           <Eye className="h-3 w-3" />
+                        </BotaoIcone>
+                        <BotaoIcone
+                          titulo={`Baixar ${pp.nomeDoArquivo}`}
+                          rotulo={`Baixar ${pp.codigo}`}
+                          onClick={() => baixarPdf(pp)}
+                          disabled={pending}
+                        >
+                          <Download className="h-3 w-3" />
                         </BotaoIcone>
                         {/* Revisão da decisão 152: a NF enviada errada se
                             corrige sem o financeiro aprovar, enquanto a PP
@@ -1533,6 +1598,18 @@ export function PainelPPsItem({
           pending={pending}
           onConfirm={cancelar}
         />
+        {/* Decisão 241: por dentro do drawer, para o Radix empilhar as duas
+            camadas — o Esc fecha a PP e deixa o painel. */}
+        {visualizando && (
+          <PPTela
+            somenteLeitura
+            pp={visualizando.pp}
+            estabelecimentos={visualizando.estabelecimentos}
+            open={visorAberto}
+            onOpenChange={setVisorAberto}
+            aoLadoDoPainel={LARGURA_DO_PAINEL}
+          />
+        )}
       </DrawerContent>
     </Dialog>
     </>
@@ -1650,7 +1727,7 @@ function CartaoCustoDoSocio({
         </span>
         <span className="flex-none text-[11px] text-muted-foreground">{isoParaBr(custo.data_gasto)}</span>
       </div>
-      <div className="grid grid-cols-[100px_30px_34px_104px_minmax(0,1fr)_auto] items-end gap-x-2.5">
+      <div className="grid grid-cols-[100px_30px_34px_104px_minmax(0,1fr)_auto] items-end gap-x-2">
         <ValorDoTrio rotulo="R$ Unit.">{formatCurrency(custo.valor_unitario, moeda)}</ValorDoTrio>
         <ValorDoTrio rotulo="QT">{formatarFator(custo.quantidade)}</ValorDoTrio>
         <ValorDoTrio rotulo="D/M">{formatarFator(custo.dias_meses)}</ValorDoTrio>
@@ -1714,7 +1791,7 @@ function CartaoPP({
         </span>
         {direita}
       </div>
-      <div className="grid grid-cols-[100px_30px_34px_104px_minmax(0,1fr)_auto] items-end gap-x-2.5">
+      <div className="grid grid-cols-[100px_30px_34px_104px_minmax(0,1fr)_auto] items-end gap-x-2">
         <ValorDoTrio rotulo="R$ Unit.">
           {formatCurrency(pp.valorUnitario, moeda)}
         </ValorDoTrio>
@@ -1724,7 +1801,7 @@ function CartaoPP({
           {formatCurrency(pp.valor, moeda)}
         </ValorDoTrio>
         <span />
-        <span className="inline-flex items-center gap-1.5">{botoes}</span>
+        <span className="inline-flex items-center gap-1">{botoes}</span>
       </div>
       {aviso}
     </div>

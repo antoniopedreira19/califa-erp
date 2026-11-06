@@ -12,6 +12,7 @@
  * financeiro, como as telas que mostram o ⓘ.
  */
 
+import { nomeDoArquivoDaPP, quemVaiNoNomeDoArquivo } from "@/lib/nome-do-arquivo-da-pp";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { formatBRL } from "@/lib/format";
@@ -128,6 +129,9 @@ async function daPP(supabase: Supabase, tenantId: string, id: string): Promise<R
        fatura:faturas_cartao!fatura_cartao_id(codigo),
        pp:pedidos_compra!pedido_compra_id(
          codigo, created_at, enviada_financeiro_em, aprovada_em, pdf_path,
+         verba_producao, tipo_verba, verba_titular_nome, cartao_corporativo, cartao_plataforma,
+         fornecedor:fornecedores(nome, razao_social),
+         responsavel:profiles!responsavel_verba_id(nome),
          forma_pagamento, fornecedor_pix_tipo, fornecedor_pix_chave,
          fornecedor_banco_nome, fornecedor_agencia, fornecedor_conta, fornecedor_conta_dv,
          pagamento_fora_do_cadastro_meio,
@@ -187,7 +191,7 @@ async function daPP(supabase: Supabase, tenantId: string, id: string): Promise<R
             path: pp.pdf_path,
             grupo: "origem" as const,
             tipo: "Pedido de Produção",
-            arquivo: `${pp.codigo}.pdf`,
+            arquivo: nomeDoArquivoDaPP(pp.codigo, quemVaiNoNomeDoArquivo({ ...pp, fornecedor_nome: pp.fornecedor?.razao_social ?? pp.fornecedor?.nome ?? null })),
             mimetype: "application/pdf",
           },
         ]
@@ -308,7 +312,10 @@ async function daVerba(supabase: Supabase, tenantId: string, id: string): Promis
     .from("pp_verba_devolucoes")
     .select(
       `id, valor,
-       pp:pedidos_compra!pedido_compra_id(codigo, valor, pago_em, pdf_path),
+       pp:pedidos_compra!pedido_compra_id(
+         codigo, valor, pago_em, pdf_path, verba_producao, tipo_verba, verba_titular_nome,
+         responsavel:profiles!responsavel_verba_id(nome)
+       ),
        prestacao:pp_verba_prestacoes!prestacao_id(
          valor_gasto, aprovada_em,
          anexos:pp_verba_prestacoes_anexos!prestacao_id(arquivo_path, arquivo_nome_original, arquivo_mimetype, documento_tipo, documento_numero)
@@ -337,7 +344,7 @@ async function daVerba(supabase: Supabase, tenantId: string, id: string): Promis
             path: dev.pp.pdf_path,
             grupo: "origem" as const,
             tipo: "Pedido de Produção da verba",
-            arquivo: `${dev.pp.codigo}.pdf`,
+            arquivo: nomeDoArquivoDaPP(dev.pp.codigo, quemVaiNoNomeDoArquivo({ ...dev.pp, fornecedor_nome: null })),
             mimetype: "application/pdf",
           },
         ]
