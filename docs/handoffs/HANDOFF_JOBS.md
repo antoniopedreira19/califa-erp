@@ -6729,3 +6729,15 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - Dados: `page.tsx` monta `noComite` com `aEmitirPorItemId` e
   `comiteDaPP.pedidos`. Sem migration.
 
+
+## ⚠️ Nota de 2026-11-06 (2) — o prazo de envio do 20/11 prorrogado até 06/11 (decisão 245)
+
+- Exceção única à 157, aberta pelo Tiago em 06/11: a janela de 20/11/2026
+  aceita envio até 06/11 (pela regra, era 05/11). Em 06/11 o calendário do
+  formulário volta a acender o 20/11, e as PPs geradas com esse vencimento
+  voltam a ter o "Enviar ao financeiro". A partir de 07/11 a regra volta, e
+  a primeira janela é 08/12.
+- Código: `PRAZOS_DE_ENVIO_PRORROGADOS` em `lib/calculos/janelas-pagamento.ts`,
+  aplicada no fim do `dataLimiteDeEnvio`, por onde passam todas as travas
+  da tela e do servidor. Só estende, nunca encurta. Sem migration.
+- Provisório: o próximo passo é o financeiro registrar exceções pela tela.

@@ -36,7 +36,7 @@ test("as linhas do calendário do financeiro (dia útil)", () => {
     ["2026-10-08", "2026-09-23"],
     ["2026-10-20", "2026-10-05"],
     ["2026-11-09", "2026-10-23"], // 08/11 domingo; 24/10 sábado → sexta 23/10
-    ["2026-11-20", "2026-11-05"],
+    ["2026-11-20", "2026-11-06"], // pela regra, 05/11; prorrogado para 06/11 (decisão 245)
     ["2026-12-08", "2026-11-23"],
     ["2026-12-21", "2026-12-04"], // 20/12 domingo; 05/12 sábado → sexta 04/12
   ];
@@ -80,6 +80,20 @@ test("em 07/10/2026 a primeira janela possível é a de 08/11 (paga 09/11)", () 
 test("no dia seguinte ao limite de 08/11, a primeira é a de 20/11", () => {
   assert.equal(primeiraJanelaComEnvioAberto("2026-10-24"), "2026-11-20");
   assert.equal(primeiraJanelaComEnvioAberto("2026-10-23"), "2026-11-09");
+});
+
+test("prazo prorrogado à mão: 20/11/2026 aceita envio até 06/11 (decisão 245)", () => {
+  assert.equal(dataLimiteDeEnvio("2026-11-20", FERIADOS), "2026-11-06");
+  assert.equal(vencimentoAceitaEnvio("2026-11-20", "2026-11-06", FERIADOS), true);
+  assert.equal(vencimentoAceitaEnvio("2026-11-20", "2026-11-07", FERIADOS), false);
+  // Em 06/11 o calendário volta a acender o 20/11; no dia seguinte, a primeira é 08/12.
+  assert.equal(primeiraJanelaComEnvioAberto("2026-11-06", FERIADOS), "2026-11-20");
+  assert.equal(primeiraJanelaComEnvioAberto("2026-11-07", FERIADOS), "2026-12-08");
+  // Na PP urgente ou de verba, a quarta 11/11 (limite 06/11) continua vindo antes.
+  assert.equal(primeiraDataPossivelDoPrazo("2026-11-06", FERIADOS, true), "2026-11-11");
+  // As outras janelas não mudam.
+  assert.equal(dataLimiteDeEnvio("2026-11-09"), "2026-10-23");
+  assert.equal(dataLimiteDeEnvio("2026-12-08"), "2026-11-23");
 });
 
 test("virada de ano", () => {
