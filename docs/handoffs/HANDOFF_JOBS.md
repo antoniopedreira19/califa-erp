@@ -6709,3 +6709,23 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - Na aba PPs e no "Visualizar" do Ver PP, a tela cheia esconde o anexo
   vazio, abre os dados recolhidos e ganha "Baixar PP" no topo.
 
+## ⚠️ Nota de 2026-11-06 — PPs a emitir no Comitê na aba PPs e os filtros com número (decisão 242)
+
+- A aba PPs mostra as PPs a emitir que foram ao Comitê, em cima da tabela:
+  selo "PP a emitir", status "Em avaliação no Comitê", "Devolvida pelo
+  Comitê" ou "Aprovada pelo Comitê" (dica com quem enviou, quando, motivo
+  e resposta). Ações na trilha, as mesmas do cartão do painel do item:
+  cancelar envio; editar, solicitar de novo e excluir; editar, gerar e
+  excluir. Sem olho nem baixar: ainda não há documento.
+- Saíram os quatro cartões do topo; o total vira o pé da tabela e
+  acompanha os filtros.
+- Filtros num controle só, na ordem do caminho da PP (Todas │ Comitê ›
+  Gerada › Em avaliação › Pago │ Prestar contas · Rejeitado · Cancelada),
+  todos com o número; ← → trocam. "Pronta para envio" deixou de ser filtro
+  (a marca na linha ficou vermelha); "Aguardando prestação" virou "Prestar
+  contas".
+- O cartão do painel do item diz "Em avaliação no Comitê" no lugar de
+  "Aguardando aprovação".
+- Dados: `page.tsx` monta `noComite` com `aEmitirPorItemId` e
+  `comiteDaPP.pedidos`. Sem migration.
+

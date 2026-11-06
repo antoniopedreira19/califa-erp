@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { carregarComiteDaPP, carregarPedidoEmDecisao } from "@/lib/data/comite";
+import { ppCobertaPeloComite } from "@/lib/calculos/limites-orcamento";
+import type { PPNoComite } from "./pps/job-pps-section";
 import { EnvioAoComite, ModoEmbutido } from "@/app/(app)/comite/_componentes/barra-de-decisao";
 import { FaixaDoProjeto } from "@/components/faixa-do-projeto";
 import { itensDeJobs } from "@/lib/faixa-do-projeto";
@@ -190,6 +192,32 @@ export default async function JobDetailPage({
     errataPronta,
   } = detalhe;
 
+  // Decisão 242: as PPs a emitir que foram ao Comitê entram na aba PPs, com
+  // o último pedido de cada uma (os cancelados já ficam de fora). A que foi
+  // aprovada e virou PP sai daqui: ela já é uma linha gerada.
+  const itemDoRealizado = new Map(
+    itens.flatMap((it) => {
+      const realizado = realizadosMap.get(it.id);
+      return realizado ? [[realizado.id, it] as const] : [];
+    }),
+  );
+  const nomeDoGrupo = new Map(grupos.map((g) => [g.id, g.nome]));
+  const ppsNoComite: PPNoComite[] = [...aEmitirPorItemId.values()].flat().flatMap((a) => {
+    const pedido = comiteDaPP.pedidos[a.id];
+    if (!pedido) return [];
+    const it = itemDoRealizado.get(a.item_realizado_id);
+    return [
+      {
+        aEmitir: a,
+        pedido,
+        itemNome: it?.item ?? "—",
+        grupoNome: it?.grupo_id ? (nomeDoGrupo.get(it.grupo_id) ?? null) : null,
+        acimaDoAprovado:
+          pedido.status === "aprovado" &&
+          !ppCobertaPeloComite(comiteDaPP.valorAprovado[a.id] ?? null, a.valor),
+      },
+    ];
+  });
 
   // Sem "Voltar para aprovações" desde a decisão 099 (22/09/2026): a
   // produção não tem link para o financeiro — os módulos são isolados.
@@ -602,6 +630,7 @@ export default async function JobDetailPage({
             podeEnviar={podeEnviarPP && !comPedido && !emDecisao}
             papelEnviaPP={papelEnviaPP && !comPedido && !emDecisao}
             podePrestarContas={ppsQuePossoPrestarContas}
+            noComite={ppsNoComite}
             midiaSystem={detalhe.midiaSystem}
             // Decisão 160: o envio, o formulário e a PP ao lado dos
             // documentos também pela aba — com o que o painel do item usa.

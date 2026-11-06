@@ -922,7 +922,8 @@ export function PainelPPsItem({
                     c.aguardando ? (
                       <span className="inline-flex flex-none items-center gap-1 whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10.5px] font-bold uppercase tracking-wide text-amber-800">
                         <Gavel className="h-3 w-3" />
-                        Aguardando aprovação
+                        {/* Decisão 242: o mesmo nome da aba PPs. */}
+                        Em avaliação no Comitê
                       </span>
                     ) : podeAgir && c.vai && travaDaAbertura === null ? (
                       botaoComite

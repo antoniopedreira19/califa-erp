@@ -1,6 +1,8 @@
 "use client";
 
-import type { ComiteDaPP } from "@/lib/data/comite";
+import type { ComiteDaPP, PedidoDoComite } from "@/lib/data/comite";
+import { cancelarEnvioAoComite } from "@/app/(app)/comite/actions";
+import { SolicitarAprovacaoDialog, linhasDoMotivoDaPP } from "@/app/(app)/comite/_componentes/motivo-do-caso";
 import * as React from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
@@ -18,6 +20,11 @@ import {
   ClipboardList,
   ClipboardCheck,
   XCircle,
+  Gavel,
+  Undo2,
+  FilePlus,
+  Trash2,
+  ChevronRight,
 } from "lucide-react";
 import {
   DescritivoPopover,
@@ -48,6 +55,8 @@ import {
   cancelarERefazerPP,
   cancelarPedidoCompra,
   gerarPPDaPPAEmitir,
+  excluirPPAEmitir,
+  solicitarAprovacaoDaPP,
   signedUrlPdf,
 } from "../realizado/actions-pp";
 import { baixarArquivo } from "@/components/documentos/painel-documento";
@@ -55,6 +64,7 @@ import { nomeDoArquivoDaPP, quemVaiNoNomeDoArquivo } from "@/lib/nome-do-arquivo
 import {
   EnvioDialog,
   RevisaoDialog,
+  SeloPPAEmitir,
   TextoDoReemitir,
   TOAST_DO_REEMITIR,
   textoAguardaAbertura,
@@ -91,7 +101,7 @@ import {
   rotuloDoBotaoDaPrestacao,
 } from "@/lib/calculos/prestacao-da-verba";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
-import { formatDiaBr } from "@/lib/formatar-data-hora";
+import { formatDataAsHoraBr, formatDiaBr } from "@/lib/formatar-data-hora";
 
 /** A tela lado a lado do Contas a Pagar, em leitura — a mesma do
  *  "Visualizar" do "Ver PP". Só carrega quando alguém clica no olho. */
@@ -137,6 +147,21 @@ interface Props {
    *  da liberação, a que foi sem nota presta contas dela. `null` = o job
    *  não é Mídia System. */
   midiaSystem: MidiaSystemDoJob | null;
+  /** Decisão 242: as PPs a emitir que foram ao Comitê — o último
+   *  pedido de cada uma, menos os cancelados. Aparecem na aba até virarem
+   *  PP (aprovadas e geradas) ou até o envio ser cancelado. */
+  noComite: PPNoComite[];
+}
+
+/** A PP a emitir diante do Comitê, como a aba PPs a mostra. */
+export interface PPNoComite {
+  aEmitir: PPAEmitir;
+  pedido: PedidoDoComite;
+  itemNome: string;
+  grupoNome: string | null;
+  /** Aprovada, mas editada depois para mais que o valor aprovado: volta a
+   *  precisar do Comitê (como o cartão do painel do item avisa). */
+  acimaDoAprovado: boolean;
 }
 
 /** O que o formulário da PP precisa e a aba não tinha (decisão 173). */
@@ -165,7 +190,7 @@ export interface EdicaoDaPPNaAba {
 
 /** "aguardando_prestacao" junta verba sem prestação e prestação reprovada:
  *  nos dois casos a próxima ação é da produção (decisão 081, 4a). */
-type Filtro = "todas" | PPStatus | "aguardando_prestacao" | "pronta_para_envio";
+type Filtro = "todas" | PPStatus | "aguardando_prestacao" | "comite";
 
 /**
  * As colunas que filtram e ordenam pelo título, como no Excel (pedido do
@@ -192,11 +217,14 @@ interface LinhaPP {
 
 const CHIPS: Array<{ key: Filtro; label: string }> = [
   { key: "todas", label: "Todas" },
+  { key: "comite", label: "Comitê" },
+  // Decisão 242: "Pronta para envio" é uma Gerada — sai dos filtros e
+  // fica só a marca na linha, embaixo do selo.
   { key: "gerada", label: "Gerada" },
-  { key: "pronta_para_envio", label: "Pronta para envio" },
   { key: "em_avaliacao", label: "Em avaliação" },
   { key: "pago", label: "Pago" },
-  { key: "aguardando_prestacao", label: "Aguardando prestação" },
+  // Decisão 242: o nome da ação que a produção faz.
+  { key: "aguardando_prestacao", label: "Prestar contas" },
   { key: "rejeitada", label: "Rejeitado" },
   { key: "cancelada", label: "Cancelada" },
 ];
@@ -302,6 +330,129 @@ function nomeDoFornecedorDaPP(
   return pp.fornecedor_id ? (fornecedoresPorId[pp.fornecedor_id] ?? null) : null;
 }
 
+/** A linha da tabela de uma PP a emitir no Comitê: o formato da PP, com o
+ *  que a PP a emitir tem (sem código, sem pagamento). */
+function linhaDaPPNoComite(c: PPNoComite): PedidoCompraNaLista {
+  const a = c.aEmitir;
+  const parcelas = a.dados.parcelas ?? [];
+  return {
+    id: `comite-${a.id}`,
+    codigo: "PP a emitir",
+    item_realizado_id: a.item_realizado_id,
+    job_id: a.job_id,
+    fornecedor_id: a.fornecedor_id,
+    empresa_id: a.empresa_id,
+    estabelecimento_id: a.dados.estabelecimento_id ?? null,
+    servico: a.servico,
+    especificacoes: a.dados.especificacoes ?? null,
+    valor: a.valor,
+    valor_unitario: a.dados.valor_unitario,
+    quantidade: a.dados.quantidade,
+    dias_meses: a.dados.dias_meses,
+    prazo_pagamento: parcelas[0]?.data_vencimento ?? a.dados.prazo_pagamento,
+    status: "gerada",
+    verba_producao: a.verba_producao,
+    tipo_verba: a.tipo_verba,
+    verba_titular_tipo: a.verba_titular_tipo,
+    verba_titular_nome: a.verba_titular_nome,
+    cartao_corporativo: a.cartao_corporativo,
+    cartao_plataforma: a.cartao_plataforma,
+    pago_em: null,
+    prazo_pagamento_financeiro: null,
+    pronta_para_envio_em: null,
+    created_at: a.created_at,
+    updated_at: a.updated_at,
+    emitida_por_nome: a.criada_por_nome,
+    item_nome: c.itemNome,
+    grupo_nome: c.grupoNome,
+    parcelas: parcelas.map((p, i) => ({
+      id: `comite-${a.id}-${i + 1}`,
+      numero: i + 1,
+      valor: p.valor,
+      percentual: 0,
+      data_vencimento: p.data_vencimento,
+      data_pagamento: null,
+      pago_em: null,
+    })),
+    anexos: [],
+    prestacao: null,
+    devolucao: null,
+    eventos: [],
+  } as unknown as PedidoCompraNaLista;
+}
+
+const ROTULO_DO_COMITE: Record<PedidoDoComite["status"], string> = {
+  pendente: "Em avaliação no Comitê",
+  devolvido: "Devolvida pelo Comitê",
+  aprovado: "Aprovada pelo Comitê",
+  cancelado: "Envio cancelado",
+};
+
+const COR_DO_COMITE: Record<PedidoDoComite["status"], string> = {
+  pendente: "border-[#fde68a] bg-[#fffbeb] text-[#92400e]",
+  devolvido: "border-red-200 bg-red-50 text-red-700",
+  aprovado: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  cancelado: "border-border bg-muted text-muted-foreground",
+};
+
+/** O selo da coluna Status para a PP a emitir no Comitê, no desenho do
+ *  PPStatusChip; a dica diz quem enviou, quando, o motivo e a resposta. */
+function SeloDoComite({
+  pedido,
+  acimaDoAprovado,
+  className,
+}: {
+  pedido: PedidoDoComite;
+  acimaDoAprovado: boolean;
+  className?: string;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="flex flex-col items-start gap-1">
+          <span
+            tabIndex={0}
+            className={cn(
+              "inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+              COR_DO_COMITE[pedido.status],
+              className,
+            )}
+          >
+            {ROTULO_DO_COMITE[pedido.status]}
+          </span>
+          <span
+            className={cn(
+              "text-[10.5px]",
+              acimaDoAprovado ? "font-semibold text-california-red" : "text-muted-foreground",
+            )}
+          >
+            {pedido.status === "pendente"
+              ? `desde ${formatDiaBr(pedido.enviadoEm)}`
+              : acimaDoAprovado
+                ? "acima do aprovado"
+                : pedido.status === "aprovado"
+                  ? "pronta para gerar"
+                  : "corrigir e reenviar"}
+          </span>
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-[320px] space-y-1 text-left">
+        <p>
+          Enviada por {pedido.enviadoPor} em {formatDataAsHoraBr(pedido.enviadoEm)}.
+        </p>
+        <p className="text-muted-foreground">Motivo: “{pedido.motivo}”</p>
+        {pedido.decididoPor && (
+          <p>
+            {pedido.status === "devolvido" ? "Devolvida" : "Aprovada"} por {pedido.decididoPor} em{" "}
+            {formatDataAsHoraBr(pedido.decididoEm)}
+            {pedido.comentario ? `: “${pedido.comentario}”` : "."}
+          </p>
+        )}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 /** Decisão 241: o arquivo sai com o número e quem a PP paga. */
 function nomeDoArquivoDaLinha(pp: PedidoCompraNaLista, fornecedoresPorId: Record<string, string>): string {
   return nomeDoArquivoDaPP(
@@ -324,8 +475,20 @@ export function JobPPsSection({
   planejadoPorItem,
   edicaoDaPP,
   midiaSystem,
+  noComite,
 }: Props) {
   const router = useRouter();
+  /** Decisão 242: as linhas das PPs a emitir no Comitê, pelo id da linha. */
+  const comiteDaLinha = React.useMemo(
+    () => new Map(noComite.map((c) => [`comite-${c.aEmitir.id}`, c])),
+    [noComite],
+  );
+  const ppsDoComite = React.useMemo(() => noComite.map(linhaDaPPNoComite), [noComite]);
+  // As PPs a emitir do Comitê vêm em cima: são as que pedem resposta.
+  const linhasDaTabela = React.useMemo(
+    () => [...ppsDoComite, ...pps],
+    [pps, ppsDoComite],
+  );
   const [pending, startTransition] = React.useTransition();
   const [filtro, setFiltro] = React.useState<Filtro>("todas");
   const [busca, setBusca] = React.useState("");
@@ -421,34 +584,24 @@ export function JobPPsSection({
     return () => clearTimeout(t);
   }, [toast]);
 
-  // Decisão 216: a PP que foi sem NF entra no "Aguardando prestação" junto
-  // da verba, quando a próxima ação é da produção.
-  const aguardandoPrestacao = React.useMemo(
-    () =>
-      pps.filter(
-        (pp) =>
-          verbaAguardaProducao(situacaoDaVerba(pp)) ||
-          midiaAguardaProducao(situacaoMidiaDaPP(pp, midiaSystem)),
-      ).length,
-    [pps, midiaSystem],
-  );
-  const prontas = React.useMemo(() => pps.filter(prontaParaEnvio).length, [pps]);
+  /** Se a PP entra no filtro — a mesma conta da lista e do número ao lado
+   *  do nome do filtro (decisão 242). */
+  function passaNoFiltro(pp: PedidoCompraNaLista, f: Filtro): boolean {
+    const doComite = comiteDaLinha.has(pp.id);
+    if (f === "todas") return true;
+    if (f === "comite") return doComite;
+    if (doComite) return false;
+    const aguardaProducao =
+      verbaAguardaProducao(situacaoDaVerba(pp)) || midiaAguardaProducao(situacaoMidiaDaPP(pp, midiaSystem));
+    if (f === "aguardando_prestacao") return aguardaProducao;
+    return pp.status === f;
+  }
+  const quantas = (f: Filtro) => linhasDaTabela.filter((pp) => passaNoFiltro(pp, f)).length;
 
   const visiveis = React.useMemo(() => {
     const termo = busca.trim().toLowerCase();
-    return pps.filter((pp) => {
-      if (filtro === "aguardando_prestacao") {
-        if (
-          !verbaAguardaProducao(situacaoDaVerba(pp)) &&
-          !midiaAguardaProducao(situacaoMidiaDaPP(pp, midiaSystem))
-        ) {
-          return false;
-        }
-      } else if (filtro === "pronta_para_envio") {
-        if (!prontaParaEnvio(pp)) return false;
-      } else if (filtro !== "todas" && pp.status !== filtro) {
-        return false;
-      }
+    return linhasDaTabela.filter((pp) => {
+      if (!passaNoFiltro(pp, filtro)) return false;
       if (!termo) return true;
       const fornecedor = nomeDoFornecedorDaPP(pp, fornecedoresPorId) ?? "";
       // O item e o bloco entraram na busca em 09/09/2026, junto da coluna
@@ -463,7 +616,7 @@ export function JobPPsSection({
       );
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pps, filtro, busca, fornecedoresPorId, midiaSystem]);
+  }, [linhasDaTabela, filtro, busca, fornecedoresPorId, midiaSystem, comiteDaLinha]);
 
   /**
    * Uma linha por PARCELA (decisão do Tiago, 17/08/2026): cada parcela é
@@ -542,13 +695,18 @@ export function JobPPsSection({
           return { valor: String(Math.round(v * 100)), rotulo: formatCurrency(v, "BRL"), ordem: v };
         }
         case "status": {
+          const doComite = comiteDaLinha.get(pp.id);
+          if (doComite) {
+            const rotulo = ROTULO_DO_COMITE[doComite.pedido.status];
+            return { valor: rotulo, rotulo, ordem: rotulo };
+          }
           const situacao = situacaoDaVerba(pp);
           const rotulo = situacao ? situacaoVerbaLabel(situacao) : ppStatusLabel(pp.status);
           return { valor: rotulo, rotulo, ordem: rotulo };
         }
       }
     },
-    [fornecedoresPorId],
+    [fornecedoresPorId, comiteDaLinha],
   );
 
   /** As colunas do funil, pela mesma conta das células. Desde a decisão
@@ -622,17 +780,6 @@ export function JobPPsSection({
     return () => observer.disconnect();
   }, [linhasVisiveis]);
 
-  // Cards de resumo ignoram canceladas: PP cancelada não é PP gerada, é
-  // uma que deixou de existir pro job.
-  const ativas = pps.filter((p) => p.status !== "cancelada");
-  const resumo = {
-    geradas: ativas.length,
-    aguardandoEnvio: ativas.filter((p) => p.status === "gerada").length,
-    emAvaliacao: ativas.filter((p) => p.status === "em_avaliacao").length,
-    pagas: ativas.filter((p) => p.status === "pago").length,
-    total: ativas.reduce((s, p) => s + Number(p.valor ?? 0), 0),
-  };
-
   /**
    * O olho (08/10/2026): a PP ao lado dos documentos anexados, na tela do
    * Contas a Pagar em leitura — a mesma do "Visualizar" do "Ver PP". Antes
@@ -698,6 +845,77 @@ export function JobPPsSection({
 
   const larguraTrilha = podePrestarContas.length > 0 ? LARGURA_TRILHA_PRESTACAO : LARGURA_TRILHA_ICONES;
 
+  /** Decisão 242: o "Cancelar envio" do painel do item, também pela aba. */
+  function handleCancelarEnvio(c: PPNoComite) {
+    startTransition(async () => {
+      const res = await cancelarEnvioAoComite(c.pedido.id);
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+      setToast(`Envio ao Comitê cancelado. A PP a emitir continua no painel do item “${c.itemNome}”.`);
+      router.refresh();
+    });
+  }
+  /** Decisão 242: as ações do cartão da PP a emitir (painel do item), também
+   *  pela aba — solicitar de novo a devolvida e excluir. */
+  const [pedindoComite, setPedindoComite] = React.useState<PPNoComite | null>(null);
+  const [excluindoAEmitir, setExcluindoAEmitir] = React.useState<PPNoComite | null>(null);
+  async function solicitarComite(motivo: string): Promise<string | null> {
+    if (!pedindoComite) return null;
+    const res = await solicitarAprovacaoDaPP(pedindoComite.aEmitir.id, motivo);
+    if (!res.ok) return res.message;
+    setPedindoComite(null);
+    setToast("Aprovação da PP solicitada ao Comitê.");
+    router.refresh();
+    return null;
+  }
+  function excluirAEmitir() {
+    const alvo = excluindoAEmitir;
+    if (!alvo) return;
+    startTransition(async () => {
+      const res = await excluirPPAEmitir(alvo.aEmitir.id);
+      setExcluindoAEmitir(null);
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+      setToast("PP a emitir excluída.");
+      router.refresh();
+    });
+  }
+  const acoesDoComite = {
+    trava: textoAguardaAbertura(statusDoJob),
+    pending,
+    onCancelarEnvio: handleCancelarEnvio,
+    onEditar: (c: PPNoComite) => {
+      setPpEditando(null);
+      setAEmitirEditando(c.aEmitir);
+    },
+    onGerar: (c: PPNoComite) => {
+      setErroDaRevisao(null);
+      setRevisando(c.aEmitir);
+    },
+    onSolicitar: (c: PPNoComite) => setPedindoComite(c),
+    onExcluir: (c: PPNoComite) => setExcluindoAEmitir(c),
+  };
+
+  // Decisão 242: o total do que o filtro mostra: as PPs vivas; com o filtro do
+  // Comitê, as PPs a emitir dele.
+  const totalDaSelecao = (() => {
+    const soComite = filtro === "comite";
+    const ids = new Set<string>();
+    let valor = 0;
+    for (const l of linhasVisiveis) {
+      const doComite = comiteDaLinha.has(l.pp.id);
+      if (doComite !== soComite) continue;
+      if (l.pp.status === "cancelada") continue;
+      ids.add(l.pp.id);
+      valor += l.parcela ? Number(l.parcela.valor) : Number(l.pp.valor);
+    }
+    return { quantas: ids.size, valor, soComite };
+  })();
+
   function handleCancelarConfirm() {
     if (!ppCancelando) return;
     const codigo = ppCancelando.codigo;
@@ -713,7 +931,7 @@ export function JobPPsSection({
     });
   }
 
-  if (pps.length === 0) {
+  if (pps.length === 0 && noComite.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-border bg-muted/20 p-12 text-center">
         <p className="text-sm text-muted-foreground">
@@ -735,64 +953,16 @@ export function JobPPsSection({
       className="space-y-3.5"
       style={{ paddingRight: 10 + larguraTrilha - AVANCO_NA_MARGEM }}
     >
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <CardResumo
-          rotulo="PPs geradas"
-          valor={String(resumo.geradas)}
-          // Quantas ainda não foram enviadas ao financeiro (02/09/2026).
-          // O envio, a edição e o cancelamento da PP gerada moram no
-          // painel do item, na Planilha Interna.
-          detalhe={
-            resumo.aguardandoEnvio > 0 ? (
-              <>
-                {resumo.aguardandoEnvio} aguardando envio
-                {prontas > 0 && (
-                  <span className="text-amber-800">
-                    {" "}
-                    · {prontas} {prontas === 1 ? "pronta" : "prontas"}
-                  </span>
-                )}
-              </>
-            ) : undefined
-          }
-        />
-        <CardResumo
-          rotulo="Em avaliação"
-          valor={String(resumo.emAvaliacao)}
-          cor="text-[#92400e]"
-        />
-        <CardResumo
-          rotulo="Pagas"
-          valor={String(resumo.pagas)}
-          cor="text-emerald-700"
-        />
-        <CardResumo
-          rotulo="Total em PPs"
-          valor={formatCurrency(resumo.total, "BRL")}
-          mono
-        />
-      </div>
-
       <div className="flex flex-wrap items-center gap-2">
-        {CHIPS.map((c) => (
-          <button
-            key={c.key}
-            type="button"
-            onClick={() => setFiltro(c.key)}
-            className={cn(
-              "rounded-full border px-3.5 py-1.5 text-[11.5px] font-semibold transition-colors",
-              filtro === c.key
-                ? "border-california-red bg-california-red text-white"
-                : "border-border bg-white text-muted-foreground hover:text-foreground",
-            )}
-          >
-            {c.label}
-            {c.key === "aguardando_prestacao" && aguardandoPrestacao > 0
-              ? ` · ${aguardandoPrestacao}`
-              : ""}
-            {c.key === "pronta_para_envio" && prontas > 0 ? ` · ${prontas}` : ""}
-          </button>
-        ))}
+        <BarraDeFiltros
+          itens={CHIPS.map((c) => ({
+            ...c,
+            n: quantas(c.key),
+            alerta: c.key === "comite" && noComite.some((x) => x.pedido.status === "pendente"),
+          }))}
+          filtro={filtro}
+          onFiltro={setFiltro}
+        />
         {/* A busca geral fica, e cada coluna ganhou a sua (08/10/2026). */}
         <div className="relative ml-auto">
           <Search className="pointer-events-none absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
@@ -891,6 +1061,7 @@ export function JobPPsSection({
                     ? Number(parcela.valor)
                     : Number(pp.valor);
                   const situacao = situacaoDaVerba(pp);
+                  const doComite = comiteDaLinha.get(pp.id) ?? null;
                   return (
                   <tr
                     key={parcela?.id ?? pp.id}
@@ -903,9 +1074,9 @@ export function JobPPsSection({
                         empurrava a coluna e comia o espaço da origem. */}
                     <td
                       className="px-3.5 py-2.5 align-middle font-mono text-[11.5px] leading-tight"
-                      title={`Emitida em ${formatDiaBr(pp.created_at)}${pp.emitida_por_nome ? ` por ${pp.emitida_por_nome}` : ""}`}
+                      title={`${doComite ? "Criada" : "Emitida"} em ${formatDiaBr(pp.created_at)}${pp.emitida_por_nome ? ` por ${pp.emitida_por_nome}` : ""}`}
                     >
-                      {pp.codigo}
+                      {doComite ? <SeloPPAEmitir refaz={null} /> : pp.codigo}
                       {total > 1 && (
                         <span className="block text-[10.5px] text-muted-foreground">
                           {indice + 1}/{total}
@@ -975,7 +1146,7 @@ export function JobPPsSection({
                               <DescritivoRodapeNota
                                 icone={<Clock className="h-3 w-3 flex-none" />}
                               >
-                                Emitida em {formatDiaBr(pp.created_at)}
+                                {doComite ? "Criada" : "Emitida"} em {formatDiaBr(pp.created_at)}
                                 {pp.emitida_por_nome
                                   ? ` por ${pp.emitida_por_nome}`
                                   : ""}
@@ -1049,7 +1220,9 @@ export function JobPPsSection({
                           passar por baixo do olho (16/10/2026): os da verba
                           medem até 170 px, e a coluna tem de 106 a 118 úteis a
                           1440 px. Numa linha só ele segue igual à pílula. */}
-                      {situacao ? (
+                      {doComite ? (
+                        <SeloDoComite pedido={doComite.pedido} acimaDoAprovado={doComite.acimaDoAprovado} className={SELO_QUE_QUEBRA} />
+                      ) : situacao ? (
                         <SituacaoVerbaChip situacao={situacao} className={SELO_QUE_QUEBRA} duasLinhas />
                       ) : (
                         <div className="flex flex-col items-start gap-1">
@@ -1062,7 +1235,9 @@ export function JobPPsSection({
                           {prontaParaEnvio(pp) && (
                             <span
                                         title={`Pronta para envio${pp.pronta_para_envio_por_nome ? ` · ${pp.pronta_para_envio_por_nome}` : ""}`}
-                              className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-amber-800"
+                              // Decisão 242: o vermelho do avião de enviar;
+                              // o âmbar agora é do Comitê.
+                              className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-california-red"
                             >
                               <ClipboardCheck className="h-3 w-3 flex-none" />
                               Pronta para envio
@@ -1082,6 +1257,11 @@ export function JobPPsSection({
                           aqui e, com 138 px numa coluna de 45 a 61, cobria
                           o selo "Rejeitado"; foi para a trilha (17/10/2026). */}
                       <div className="flex items-center justify-end gap-1.5">
+                        {/* Decisão 242: a PP a emitir não tem documento
+                            ainda — o olho e o baixar ficam de fora, e as
+                            ações dela vão para a trilha. */}
+                        {doComite ? null : (
+                        <>
                         <Tooltip>
                           <TooltipTrigger asChild>
                             <button
@@ -1114,12 +1294,32 @@ export function JobPPsSection({
                             Baixar {nomeDoArquivoDaLinha(pp, fornecedoresPorId)}
                           </TooltipContent>
                         </Tooltip>
+                        </>
+                        )}
                       </div>
                     </td>
                   </tr>
                   );
                 })}
               </tbody>
+              {/* Decisão 242: o "Total em PPs" do cartão vira o rodapé da tabela
+                  e acompanha os filtros (o do chip e os dos títulos). */}
+              {linhasVisiveis.length > 0 && (
+                <tfoot>
+                  <tr className="border-t border-border bg-muted/40">
+                    <td colSpan={6} className="px-3.5 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Total · {totalDaSelecao.quantas}{" "}
+                      {totalDaSelecao.soComite
+                        ? totalDaSelecao.quantas === 1 ? "PP a emitir" : "PPs a emitir"
+                        : totalDaSelecao.quantas === 1 ? "PP" : "PPs"}
+                    </td>
+                    <td className="whitespace-nowrap px-3.5 py-2.5 text-right font-mono text-[12.5px] font-bold">
+                      {formatCurrency(totalDaSelecao.valor, "BRL")}
+                    </td>
+                    <td colSpan={2} />
+                  </tr>
+                </tfoot>
+              )}
             </table>
           </div>
         </div>
@@ -1141,6 +1341,18 @@ export function JobPPsSection({
             // saído ou ido para baixo. Verba paga nunca é cancelável, então
             // prestar e cancelar não disputam a mesma coluna.
             if (!pos || linhasVisiveis.findIndex((l) => l.pp.id === pp.id) !== i) return null;
+            const doComite = comiteDaLinha.get(pp.id);
+            if (doComite) {
+              return (
+                <div
+                  key={parcela?.id ?? pp.id}
+                  className="absolute inset-x-0 flex items-center"
+                  style={{ top: pos.top, height: pos.height, gap: VAO }}
+                >
+                  {editable && <AcoesDoComite c={doComite} {...acoesDoComite} />}
+                </div>
+              );
+            }
             // Decisão 189: a prestação abre desde o envio da PP ao
             // financeiro (os documentos ficam salvos), não só com a verba
             // paga; e volta a abrir quando o financeiro reprova.
@@ -1610,6 +1822,48 @@ export function JobPPsSection({
         }}
       />
 
+      {/* Decisão 242: o pedido ao Comitê e a exclusão da PP a emitir, os
+          mesmos pop-ups do painel do item. */}
+      <SolicitarAprovacaoDialog
+        aberto={pedindoComite !== null}
+        titulo="Solicitar a aprovação da PP?"
+        descricao="O realizado do item com esta PP passa do orçado. Aprovada pelo Comitê, ela fica liberada para gerar."
+        linhas={(() => {
+          if (!pedindoComite) return [];
+          const it = edicaoDaPP?.itens[pedindoComite.aEmitir.item_realizado_id];
+          return linhasDoMotivoDaPP({
+            item: pedindoComite.itemNome,
+            linhaVermelha: it?.linhaVermelha ?? false,
+            orcado: it?.orcado ?? 0,
+            realizadoComAPP: Math.round(((it?.realizado ?? 0) + Number(pedindoComite.aEmitir.valor)) * 100) / 100,
+          });
+        })()}
+        motivoInicial={pedindoComite?.pedido.status === "devolvido" ? pedindoComite.pedido.motivo : ""}
+        placeholder="Ex.: o cliente pediu um painel a mais no palco na reunião de ontem."
+        onFechar={() => setPedindoComite(null)}
+        onEnviar={solicitarComite}
+      />
+      <ConfirmDialog
+        open={excluindoAEmitir !== null}
+        onOpenChange={(o) => !o && setExcluindoAEmitir(null)}
+        title="Excluir a PP a emitir?"
+        description={
+          <>
+            {excluindoAEmitir
+              ? ((excluindoAEmitir.aEmitir.fornecedor_id ? fornecedoresPorId[excluindoAEmitir.aEmitir.fornecedor_id] : null) ?? "—")
+              : ""}{" "}
+            ·{" "}
+            <strong className="text-foreground">{formatCurrency(Number(excluindoAEmitir?.aEmitir.valor ?? 0), "BRL")}</strong>. Some do
+            item; nada foi gerado nem enviado.
+          </>
+        }
+        confirmLabel="Excluir"
+        cancelLabel="Voltar"
+        variant="destructive"
+        pending={pending}
+        onConfirm={excluirAEmitir}
+      />
+
       {toast && (
         <div
           role="status"
@@ -1629,35 +1883,234 @@ export function JobPPsSection({
   );
 }
 
-function CardResumo({
+/** Decisão 242: as ações da PP a emitir no Comitê, as mesmas do cartão no
+ *  painel do item, na ordem dele (o lápis antes):
+ *  - em avaliação: só cancelar o envio (não se edita nem se exclui);
+ *  - devolvida: editar, solicitar a aprovação de novo e excluir;
+ *  - aprovada: editar, gerar a PP e excluir. */
+interface AcoesDoComiteProps {
+  /** O job ainda não aceita gerar nem pedir ao Comitê (pré-abertura). */
+  trava: string | null;
+  pending: boolean;
+  onCancelarEnvio: (c: PPNoComite) => void;
+  onEditar: (c: PPNoComite) => void;
+  onGerar: (c: PPNoComite) => void;
+  onSolicitar: (c: PPNoComite) => void;
+  onExcluir: (c: PPNoComite) => void;
+}
+
+function BotaoDoComite({
   rotulo,
-  valor,
-  cor,
-  mono,
-  detalhe,
+  onClick,
+  pending,
+  trava = null,
+  className,
+  children,
 }: {
   rotulo: string;
-  valor: string;
-  cor?: string;
-  mono?: boolean;
-  /** Linha curta embaixo do número, em vermelho — é pendência. */
-  detalhe?: React.ReactNode;
+  onClick: () => void;
+  pending: boolean;
+  /** Fechado, com o motivo na dica (o span segura o tooltip). */
+  trava?: string | null;
+  className: string;
+  children: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-1 rounded-2xl border border-border bg-card px-4 py-3.5 shadow-soft">
-      <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">
-        {rotulo}
-      </span>
-      <strong
-        className={cn("text-[22px] font-bold", mono && "font-mono text-lg", cor)}
-      >
-        {valor}
-      </strong>
-      {detalhe && (
-        <span className="text-[11px] font-semibold text-california-red">
-          {detalhe}
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span tabIndex={trava ? 0 : -1} className={cn("inline-flex flex-none rounded-[9px]", trava && "cursor-not-allowed")}>
+          <button
+            type="button"
+            onClick={onClick}
+            disabled={pending || trava !== null}
+            aria-label={rotulo}
+            className={cn(
+              "inline-flex flex-none items-center justify-center rounded-[9px] border transition-colors disabled:opacity-50",
+              trava ? "pointer-events-none border-border bg-muted text-muted-foreground/70" : className,
+            )}
+            style={{ width: ICONE, height: ICONE }}
+          >
+            {children}
+          </button>
         </span>
-      )}
-    </div>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-[300px]">{trava ?? rotulo}</TooltipContent>
+    </Tooltip>
   );
+}
+
+function AcoesDoComite({ c, trava, pending, onCancelarEnvio, onEditar, onGerar, onSolicitar, onExcluir }: { c: PPNoComite } & AcoesDoComiteProps) {
+  const st = c.pedido.status;
+  // A devolvida e a aprovada que ficou mais cara pedem o Comitê de novo.
+  const reenviar = st === "devolvido" || c.acimaDoAprovado;
+  const neutro = "border-border bg-white text-muted-foreground hover:bg-muted";
+  if (st === "pendente") {
+    return (
+      <BotaoDoComite rotulo={`Cancelar envio ao Comitê · ${c.itemNome}`} onClick={() => onCancelarEnvio(c)} pending={pending} className={neutro}>
+        <Undo2 className="h-3.5 w-3.5" />
+      </BotaoDoComite>
+    );
+  }
+  return (
+    <>
+      <BotaoDoComite rotulo={`Editar a PP a emitir · ${c.itemNome}`} onClick={() => onEditar(c)} pending={pending} className={neutro}>
+        <Pencil className="h-3.5 w-3.5" />
+      </BotaoDoComite>
+      {reenviar ? (
+        <BotaoDoComite
+          rotulo={`Solicitar aprovação de novo · ${c.itemNome}`}
+          onClick={() => onSolicitar(c)}
+          pending={pending}
+          trava={trava}
+          className="border-california-red bg-california-red text-white hover:bg-california-red-hover"
+        >
+          <Gavel className="h-3.5 w-3.5" />
+        </BotaoDoComite>
+      ) : (
+        <BotaoDoComite
+          rotulo={`Gerar PP · ${c.itemNome}`}
+          onClick={() => onGerar(c)}
+          pending={pending}
+          trava={trava}
+          className="border-foreground bg-foreground text-white hover:opacity-90"
+        >
+          <FilePlus className="h-3.5 w-3.5" />
+        </BotaoDoComite>
+      )}
+      <BotaoDoComite
+        rotulo={`Excluir a PP a emitir · ${c.itemNome}`}
+        onClick={() => onExcluir(c)}
+        pending={pending}
+        className="border-border bg-white text-california-red hover:border-california-red/30 hover:bg-california-red/[0.06]"
+      >
+        <Trash2 className="h-3.5 w-3.5" />
+      </BotaoDoComite>
+    </>
+  );
+}
+
+
+
+
+
+/* ---- A barra de filtros (decisão 242) ----
+ * Os filtros na ordem do caminho da PP — Comitê, Gerada, Em avaliação,
+ * Pago — e depois os desvios: Prestar contas, Rejeitado, Cancelada.
+ * Todo filtro com o número de PPs (a Pronta para envio é uma Gerada). */
+const FLUXO: Filtro[] = ["comite", "gerada", "em_avaliacao", "pago"];
+const DESVIOS: Filtro[] = ["aguardando_prestacao", "rejeitada", "cancelada"];
+
+interface ItemDoFiltro {
+  key: Filtro;
+  label: string;
+  n: number;
+  alerta: boolean;
+}
+
+function NumeroDoFiltro({ n, ativo, alerta, claro }: { n: number; ativo: boolean; alerta: boolean; claro?: boolean }) {
+  return (
+    <span
+      className={cn(
+        "min-w-[18px] rounded-full px-1.5 text-center text-[10.5px] font-bold leading-[16px] tabular-nums",
+        ativo && claro
+          ? "bg-white/25 text-white"
+          : ativo
+            ? "bg-california-red/10 text-california-red"
+            : n === 0
+              ? "bg-muted text-muted-foreground/60"
+              : alerta
+                ? "bg-[#fef3c7] text-[#92400e]"
+                : "bg-muted text-foreground",
+      )}
+    >
+      {n}
+    </span>
+  );
+}
+
+/** Setas ← → andam entre os filtros (o foco segue o filtro escolhido). */
+function useSetas(chaves: Filtro[], filtro: Filtro, onFiltro: (f: Filtro) => void) {
+  const refs = React.useRef(new Map<Filtro, HTMLButtonElement | null>());
+  const onKeyDown = (ev: React.KeyboardEvent) => {
+    if (ev.key !== "ArrowRight" && ev.key !== "ArrowLeft" && ev.key !== "Home" && ev.key !== "End") return;
+    ev.preventDefault();
+    const i = Math.max(0, chaves.indexOf(filtro));
+    const j =
+      ev.key === "Home" ? 0 : ev.key === "End" ? chaves.length - 1 : (i + (ev.key === "ArrowRight" ? 1 : -1) + chaves.length) % chaves.length;
+    onFiltro(chaves[j]);
+    refs.current.get(chaves[j])?.focus();
+  };
+  return { refs, onKeyDown };
+}
+
+function BarraDeFiltros({
+  itens,
+  filtro,
+  onFiltro,
+}: {
+  itens: ItemDoFiltro[];
+  filtro: Filtro;
+  onFiltro: (f: Filtro) => void;
+}) {
+  const porChave = new Map(itens.map((i) => [i.key, i]));
+  const ordem = itens.map((i) => i.key);
+  const { refs, onKeyDown } = useSetas(ordem, filtro, onFiltro);
+  const botao = (i: ItemDoFiltro, cls: (ativo: boolean) => string, claro: boolean) => {
+    const ativo = filtro === i.key;
+    return (
+      <button
+        key={i.key}
+        ref={(el) => {
+          refs.current.set(i.key, el);
+        }}
+        type="button"
+        role="tab"
+        aria-selected={ativo}
+        tabIndex={ativo ? 0 : -1}
+        onClick={() => onFiltro(i.key)}
+        className={cls(ativo)}
+      >
+        {i.key === "comite" && <Gavel className="h-3 w-3" />}
+        {i.label}
+        <NumeroDoFiltro n={i.n} ativo={ativo} alerta={i.alerta} claro={claro} />
+      </button>
+    );
+  };
+
+  // 1 · Etapas em sequência: um controle só (o desenho do Bruto/Líquido da
+  // planilha), na ordem do caminho da PP, com os desvios depois do traço.
+  {
+    const seg = (ativo: boolean) =>
+      cn(
+        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-[11.5px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-california-red/40",
+        ativo ? "bg-california-red text-white shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+      );
+    const todas = porChave.get("todas");
+    return (
+      <div
+        role="tablist"
+        aria-label="Filtrar PPs pela situação"
+        onKeyDown={onKeyDown}
+        className="inline-flex flex-wrap items-center gap-0.5 rounded-xl border border-border bg-white p-1 shadow-soft"
+      >
+        {todas && botao(todas, seg, true)}
+        <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+        {FLUXO.flatMap((k, idx) => {
+          const i = porChave.get(k);
+          if (!i) return [];
+          // A seta só entre duas etapas à vista (no quadro C não há o Comitê).
+          const seta = FLUXO.slice(0, idx).some((x) => porChave.has(x)) ? (
+            <ChevronRight key={`seta-${k}`} className="h-3 w-3 flex-none text-muted-foreground/50" aria-hidden />
+          ) : null;
+          return [seta, botao(i, seg, true)].filter(Boolean);
+        })}
+        <span className="mx-1 h-5 w-px bg-border" aria-hidden />
+        {DESVIOS.flatMap((k) => {
+          const i = porChave.get(k);
+          return i ? [botao(i, seg, true)] : [];
+        })}
+      </div>
+    );
+  }
+
 }
