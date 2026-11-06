@@ -668,11 +668,6 @@ export function ContratoCard({
                     </span>
                   );
                 })()}
-              {contrato.origem_sistema === "ag_california_rh" && (
-                <span className="rounded-full bg-zinc-100 text-zinc-500 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5">
-                  Legado
-                </span>
-              )}
             </div>
             {contrato.cargo && (
               <p className="text-xs text-muted-foreground mt-0.5">

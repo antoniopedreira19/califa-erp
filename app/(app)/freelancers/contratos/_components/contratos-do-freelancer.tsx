@@ -105,11 +105,6 @@ function ContratoRow({ contrato: c }: { contrato: ContratoLinha }) {
           ) : null}
           <span>{c.nome_job}</span>
         </Link>
-        {c.origem_sistema === "ag_california_rh" && (
-          <span className="ml-2 inline-flex items-center rounded-full bg-zinc-100 text-zinc-500 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider">
-            Legado
-          </span>
-        )}
       </td>
       <td className="px-3 py-2.5 text-foreground">
         {c.cargo || <span className="text-muted-foreground">—</span>}
