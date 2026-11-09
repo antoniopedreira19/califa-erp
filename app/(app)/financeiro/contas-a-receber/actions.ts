@@ -213,6 +213,16 @@ const emitirSchema = z.object({
   // PO na avulsa (sem job), uma por job (e mês) na nota de job. O arquivo do
   // envio vai por referência; o anexado no Faturar subiu por `uploadPoPdf`.
   pos: z.array(poSchema).max(50).default([]),
+  // Decisão 247: a nota de save avulso. O valor vira crédito do cliente
+  // (o principal: NF sem imposto e sem honorários), consumido nos jobs dele.
+  save_avulso: z
+    .object({
+      nome: z.string().trim().min(1, "Dê um nome ao save avulso.").max(120, "Máximo 120 caracteres."),
+      percentual_honorarios: z.number().min(0, "Informe os honorários do save avulso.").max(999),
+      percentual_imposto: z.number().min(0, "Escolha o imposto do save avulso.").max(99.99),
+    })
+    .nullable()
+    .default(null),
 });
 
 /** Hoje no fuso da casa (o servidor roda em UTC): o mesmo dia da aba Apuração. */
@@ -269,9 +279,18 @@ export async function emitirFaturamento(
   if (d.job_referencia_id && d.origem_tipo !== "avulso") {
     return { ok: false, message: "Só a nota avulsa leva job de referência." };
   }
-  // A nota sem job não tem de onde tirar regional: o rateio vem com ela,
-  // como na despesa sem job (082). A RPC confere de novo, com a empresa.
-  if (d.origem_tipo === "avulso") {
+  // Decisão 247: o save avulso é uma avulsa sem job e sem rateio — a
+  // regional é a do job que consumir o crédito.
+  if (d.save_avulso) {
+    if (d.origem_tipo !== "avulso" || d.job_referencia_id) {
+      return { ok: false, message: "O save avulso é uma nota avulsa, sem job de referência." };
+    }
+    if (d.rateio.length > 0) {
+      return { ok: false, message: "O save avulso não leva rateio de regional: fica na regional do job que consumir." };
+    }
+  } else if (d.origem_tipo === "avulso") {
+    // A nota sem job não tem de onde tirar regional: o rateio vem com ela,
+    // como na despesa sem job (082). A RPC confere de novo, com a empresa.
     const rateio = rateioSchema.safeParse(d.rateio);
     if (!rateio.success) {
       return {
@@ -370,33 +389,40 @@ export async function emitirFaturamento(
   }
   const cnaeTexto = codigoDoCnae(cnaeDaLista);
 
-  const { data: fatId, error } = await supabase.rpc("emitir_faturamento", {
-    payload: {
-      tenant_id: session.activeTenant.id,
-      empresa_id: d.empresa_id,
-      origem_tipo: d.origem_tipo,
-      // NF agrupada não tem origem única — a verdade vai nos itens.
-      origem_id: d.itens.length > 1 ? null : d.origem_id,
-      cliente_id: d.cliente_id,
-      fornecedor_id: d.fornecedor_id,
-      numero_nf: d.numero_nf,
-      serie: "1",
-      data_emissao: d.data_emissao,
-      valor_total: d.valor_total,
-      descricao: d.descricao,
-      cnae: cnaeTexto,
-      anexo_nf_path: d.anexo_nf_path,
-      plano_conta_tipo_id: d.plano_conta_tipo_id,
-      plano_conta_subtipo_id: d.plano_conta_subtipo_id,
-      emitido_por: session.profile.id,
-      itens: d.itens,
-      parcelas: d.parcelas,
-      rateio: d.origem_tipo === "avulso" ? d.rateio : [],
-      cnpj_tomador: d.origem_tipo === "bv" || d.tomador_exterior ? null : cnpjTomador,
-      tomador_exterior: d.origem_tipo !== "bv" && d.tomador_exterior,
-      job_referencia_id: d.origem_tipo === "avulso" ? d.job_referencia_id : null,
-    },
-  });
+  const payload = {
+    tenant_id: session.activeTenant.id,
+    empresa_id: d.empresa_id,
+    origem_tipo: d.origem_tipo,
+    // NF agrupada não tem origem única — a verdade vai nos itens.
+    origem_id: d.itens.length > 1 ? null : d.origem_id,
+    cliente_id: d.cliente_id,
+    fornecedor_id: d.fornecedor_id,
+    numero_nf: d.numero_nf,
+    serie: "1",
+    data_emissao: d.data_emissao,
+    valor_total: d.valor_total,
+    descricao: d.descricao,
+    cnae: cnaeTexto,
+    anexo_nf_path: d.anexo_nf_path,
+    plano_conta_tipo_id: d.plano_conta_tipo_id,
+    plano_conta_subtipo_id: d.plano_conta_subtipo_id,
+    emitido_por: session.profile.id,
+    itens: d.itens,
+    parcelas: d.parcelas,
+    rateio: d.origem_tipo === "avulso" ? d.rateio : [],
+    cnpj_tomador: d.origem_tipo === "bv" || d.tomador_exterior ? null : cnpjTomador,
+    tomador_exterior: d.origem_tipo !== "bv" && d.tomador_exterior,
+    job_referencia_id: d.origem_tipo === "avulso" ? d.job_referencia_id : null,
+  };
+  // O save avulso nasce com a nota, numa transação só (decisão 247).
+  const { data: fatId, error } = d.save_avulso
+    ? await supabase.rpc("emitir_faturamento_save_avulso", {
+        payload,
+        p_nome: d.save_avulso.nome,
+        p_percentual_honorarios: d.save_avulso.percentual_honorarios,
+        p_percentual_imposto: d.save_avulso.percentual_imposto,
+      })
+    : await supabase.rpc("emitir_faturamento", { payload });
 
   if (error) return { ok: false, message: `Falha ao emitir: ${error.message}` };
 
@@ -467,6 +493,7 @@ export async function emitirFaturamento(
         ...(erroFiscal ? { erro_fiscal: erroFiscal.message } : {}),
         qtd_pos: pos.length,
         qtd_anexos_po: pos.reduce((s, p) => s + p.anexos.length, 0),
+        ...(d.save_avulso ? { save_avulso: d.save_avulso } : {}),
         ...(erroPo ? { erro_po: erroPo } : {}),
       },
     }),

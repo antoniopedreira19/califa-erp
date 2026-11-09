@@ -256,6 +256,9 @@ function passosDaPP(pp: PedidoCompraNaLista): Passo[] {
         return { ...base, titulo: "Prestação de contas reenviada", detalhe: e.por_nome, estado: "feito" };
       case "prestacao_reprovada":
         return { ...base, titulo: "Prestação reprovada pelo financeiro", motivo: e.motivo, estado: "negado" };
+      case "prestacao_envio_cancelado":
+        // Decisão 246: a produção cancelou o envio, antes de o financeiro decidir.
+        return { ...base, titulo: "Envio da prestação cancelado", detalhe: e.por_nome, estado: "feito" };
       case "editada":
         // Decisão 173: a PP gerada editada no job, antes do envio.
         return { ...base, titulo: "Editada", detalhe: e.por_nome, estado: "feito" };

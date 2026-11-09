@@ -47,6 +47,7 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import { ALIQUOTAS_IMPOSTO, ALIQUOTA_IMPOSTO_PADRAO } from "@/lib/impostos";
 import {
   Dialog,
   DialogHeader,
@@ -162,6 +163,9 @@ interface Props {
   jobs: JobDoFaturar[];
   /** Decisão 184: os CNPJs de cada cliente, para o CNPJ do tomador. */
   cnpjsPorCliente: Record<string, CnpjsDoCliente>;
+  /** Decisão 247: os honorários padrão de cada cliente, de onde nascem os
+   *  honorários do save avulso. */
+  honorariosPorCliente: Record<string, number>;
 }
 
 export function FaturarDrawer(props: Props) {
@@ -195,6 +199,13 @@ function recebidosDasLinhas(
 
 function centavos(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/** O crédito do save avulso (decisão 247): o principal da nota, a mesma
+ *  conta do saldo de save de um job — NF × (1 − imposto) ÷ (1 + honorários).
+ *  O banco grava o mesmo número (`saves_avulsos.credito`). */
+function creditoDoSaveAvulso(valorNf: number, honorarios: number, imposto: number): number {
+  return Math.round(((valorNf * (1 - imposto / 100)) / (1 + honorarios / 100)) * 100) / 100;
 }
 
 function formatMoney(n: number): string {
@@ -453,6 +464,7 @@ function FormularioDeFaturar({
   fiscal,
   jobs,
   cnpjsPorCliente,
+  honorariosPorCliente,
 }: Props & { state: Exclude<DrawerState, { modo: "leitura" }> }) {
   const router = useRouter();
   const cad = fiscal.cadastro;
@@ -480,7 +492,10 @@ function FormularioDeFaturar({
   const nomeDoCliente = (id: string | null) => clientes.find((c) => c.id === id)?.nome ?? "—";
 
   // ---- Avulsa: cliente e job ------------------------------------------------
-  const [vinculo, setVinculo] = React.useState<"job" | "sem_job">("job");
+  // Decisão 247: "Save avulso" é a avulsa sem job cujo valor vira crédito
+  // do cliente, consumido depois nos jobs dele.
+  const [vinculo, setVinculo] = React.useState<"job" | "save" | "sem_job">("job");
+  const ehSave = avulso && vinculo === "save";
   const [jobRefId, setJobRefId] = React.useState("");
   const jobRef = avulso && vinculo === "job" ? (jobPorId.get(jobRefId) ?? null) : null;
   const [clienteSemJob, setClienteSemJob] = React.useState("");
@@ -488,6 +503,16 @@ function FormularioDeFaturar({
   const [numeroPo, setNumeroPo] = React.useState("");
   const [poArquivos, setPoArquivos] = React.useState<ArquivoDaPo[]>([]);
   const [empresaSemJob, setEmpresaSemJob] = React.useState("");
+  // O save avulso (decisão 247): o nome que o financeiro dá, e os honorários
+  // e o imposto que separam o crédito (o principal) do valor da nota.
+  const [nomeSave, setNomeSave] = React.useState("");
+  const [honSave, setHonSave] = React.useState("");
+  const [impSave, setImpSave] = React.useState(String(ALIQUOTA_IMPOSTO_PADRAO));
+  React.useEffect(() => {
+    if (clienteSemJob) setHonSave(String(honorariosPorCliente[clienteSemJob] ?? 0).replace(".", ","));
+  }, [clienteSemJob]); // eslint-disable-line react-hooks/exhaustive-deps
+  const pctSave = Number(honSave.replace(",", ".").trim());
+  const honSaveOk = honSave.trim() !== "" && Number.isFinite(pctSave) && pctSave >= 0 && pctSave < 1000;
   // Rateio de regional da avulsa "Sem job" (decisão 086). Nasce com uma
   // linha em branco, como a despesa sem job: não há de onde sugerir.
   const [rateio, setRateio] = React.useState<RateioLinhaInput[]>([{ regional_id: "", percentual: 100 }]);
@@ -542,7 +567,15 @@ function FormularioDeFaturar({
   const [avValor, setAvValor] = React.useState(0);
   const [avTipoId, setAvTipoId] = React.useState("");
   const [avSubtipoId, setAvSubtipoId] = React.useState("");
-  const subtiposDoTipo = avTipoId ? subtipos.filter((s) => s.tipo_id === avTipoId && s.ativo) : [];
+  // O save avulso sai sempre em 01 · Receita · Save (decisão 247), e o
+  // subtipo Save é só dele: não aparece na escolha das outras avulsas.
+  const tipoReceita = tipos.find((t) => t.codigo === "01") ?? null;
+  const subtipoSave = tipoReceita ? (subtipos.find((s) => s.tipo_id === tipoReceita.id && s.nome === "Save") ?? null) : null;
+  const subtiposDoTipo = avTipoId
+    ? subtipos.filter((s) => s.tipo_id === avTipoId && s.ativo && s.id !== subtipoSave?.id)
+    : [];
+  // O crédito do cliente: o principal da nota (como o saldo de save de um job).
+  const creditoSave = creditoDoSaveAvulso(avValor, honSaveOk ? pctSave : 0, Number(impSave) || 0);
 
   // ---- Jobs nesta NF ----------------------------------------------------------
   // Decisão 123: as linhas são PARCELAS (vencimentos); a nota do envio junta
@@ -871,6 +904,15 @@ function FormularioDeFaturar({
   const somaRateio = rateio.reduce((s, l) => s + l.percentual, 0);
   const pendencias: Array<{ rotulo: string; ok: boolean }> = [
     ...(avulso && vinculo === "job" ? [{ rotulo: "Job de referência", ok: Boolean(jobRef) }] : []),
+    ...(ehSave
+      ? [
+          { rotulo: "Cliente", ok: Boolean(clienteSemJob) },
+          { rotulo: "Empresa (gerencial)", ok: Boolean(empresaSemJob) },
+          { rotulo: "Nome do save", ok: Boolean(nomeSave.trim()) },
+          { rotulo: "Honorários", ok: honSaveOk },
+          { rotulo: "Imposto", ok: Boolean(impSave) },
+        ]
+      : []),
     ...(avulso && vinculo === "sem_job"
       ? [
           { rotulo: "Cliente", ok: Boolean(clienteSemJob) },
@@ -883,7 +925,7 @@ function FormularioDeFaturar({
       : []),
     ...(!ehBv ? [{ rotulo: "CNPJ do tomador", ok: exterior || isValidCnpj(cnpjTomador) }] : []),
     ...(avulso ? [{ rotulo: "Valor da NF", ok: avValor > 0 }] : []),
-    ...(avulso ? [{ rotulo: "Centro de custo", ok: Boolean(avTipoId && avSubtipoId) }] : []),
+    ...(avulso && !ehSave ? [{ rotulo: "Centro de custo", ok: Boolean(avTipoId && avSubtipoId) }] : []),
     { rotulo: "CNPJ emissor", ok: Boolean(estabEscolhido) },
     { rotulo: "Nº NF", ok: Boolean(numeroNf.trim()) },
     { rotulo: "Emissão", ok: Boolean(dataEmissao) },
@@ -923,6 +965,10 @@ function FormularioDeFaturar({
       );
       return;
     }
+    if (ehSave && (!tipoReceita || !subtipoSave)) {
+      setErro("O subtipo Save do 01 · Receita não está no plano de contas. Avise o administrador do sistema.");
+      return;
+    }
     if (!estabEscolhido || !cnaeEscolhido || !anexoPath) return;
 
     const itens = avulso
@@ -959,7 +1005,7 @@ function FormularioDeFaturar({
         });
 
     // A avulsa referente a um job fica 100% na regional dele (decisão 184).
-    const rateioDaNota = !avulso
+    const rateioDaNota = !avulso || ehSave
       ? []
       : jobRef
         ? [{ regional_id: jobRef.regional_id as string, percentual: 100 }]
@@ -982,8 +1028,8 @@ function FormularioDeFaturar({
         estabelecimento_id: estabEscolhido.id,
         fiscal_cnae_id: cnaeEscolhido.id,
         anexo_nf_path: anexoPath,
-        plano_conta_tipo_id: avulso ? avTipoId : null,
-        plano_conta_subtipo_id: avulso ? avSubtipoId : null,
+        plano_conta_tipo_id: avulso ? (ehSave ? (tipoReceita?.id ?? null) : avTipoId) : null,
+        plano_conta_subtipo_id: avulso ? (ehSave ? (subtipoSave?.id ?? null) : avSubtipoId) : null,
         rateio: rateioDaNota,
         itens,
         // A parcela 1 é o recebido antes da NF, quando houver.
@@ -993,6 +1039,9 @@ function FormularioDeFaturar({
         cnpj_tomador: ehBv || exterior ? null : cnpjTomador,
         tomador_exterior: !ehBv && exterior,
         job_referencia_id: jobRef?.id ?? null,
+        save_avulso: ehSave
+          ? { nome: nomeSave.trim(), percentual_honorarios: pctSave, percentual_imposto: Number(impSave) }
+          : null,
         pos: (avulso
           ? [{ job_id: null, mes: null, numero: numeroPo, arquivos: poArquivos }]
           : jobsDaPo.map((j) => ({ job_id: j.jobId, mes: j.mes, ...(poDosJobs[j.chave] ?? { numero: "", arquivos: [] }) }))
@@ -1017,7 +1066,9 @@ function FormularioDeFaturar({
 
       const parciais = itensAtivos.filter((l) => (valores[l.envio_parcela_id ?? l.origem_id] ?? 0) < l.saldo - 0.01);
       const detalhe = avulso
-        ? ` · avulso para ${clienteNome}${jobRef ? ` · ${jobRef.codigo}` : ""}`
+        ? ehSave
+          ? ` · save avulso “${nomeSave.trim()}” de ${clienteNome}, crédito de ${formatMoney(creditoSave)}`
+          : ` · avulso para ${clienteNome}${jobRef ? ` · ${jobRef.codigo}` : ""}`
         : jobsAtivos > 1
           ? ` cobrindo ${jobsAtivos} jobs de ${primeira?.contraparte_nome}`
           : ` · ${primeira?.codigo ?? ""}`;
@@ -1056,7 +1107,9 @@ function FormularioDeFaturar({
     : loteDaNota
       ? "A nota que a produção montou no envio em lote, com a parte de cada job; o valor por job pode ser total ou parcial."
       : "Uma única nota fiscal; o valor por job pode ser total ou parcial.";
-  const rodape = avulso
+  const rodape = ehSave
+    ? "Ao faturar, as parcelas desta NF entram em Títulos a Receber e o crédito vira save avulso do cliente, para consumir nos jobs dele."
+    : avulso
     ? `Ao faturar, as parcelas desta NF entram em Títulos a Receber como faturamento avulso${
         jobRef ? `, sem consumir o saldo do ${jobRef.codigo}` : ", sem consumir saldo de nenhum job"
       }.`
@@ -1154,10 +1207,11 @@ function FormularioDeFaturar({
   const blocoClienteEJob = avulso ? (
     <div className="space-y-3.5">
       <div className="flex flex-wrap items-center gap-3">
-        <Segmentado<"job" | "sem_job">
+        <Segmentado<"job" | "save" | "sem_job">
           valor={vinculo}
           opcoes={[
             ["job", "Referente a um job"],
+            ["save", "Save avulso"],
             ["sem_job", "Sem job"],
           ]}
           onChange={(v) => {
@@ -1166,7 +1220,11 @@ function FormularioDeFaturar({
           }}
         />
         <span className="text-[11.5px] text-muted-foreground">
-          {vinculo === "job" ? "Cliente, empresa e regional vêm do job." : "Receita que não é de job."}
+          {vinculo === "job"
+            ? "Cliente, empresa e regional vêm do job."
+            : vinculo === "save"
+              ? "Vira crédito do cliente, consumido nos jobs dele."
+              : "Receita que não é de job."}
         </span>
       </div>
 
@@ -1230,7 +1288,34 @@ function FormularioDeFaturar({
               </Select>
             </Campo>
           </div>
-          {empresaSemJob ? (
+          {vinculo === "save" ? (
+            <>
+              <Campo
+                rotulo="Nome do save"
+                obrigatorio
+                htmlFor="av-nome-save"
+                ajuda="Como o save aparece no Contas a Receber e na planilha dos jobs que consumirem."
+              >
+                <Input
+                  id="av-nome-save"
+                  value={nomeSave}
+                  onChange={(e) => setNomeSave(e.target.value)}
+                  placeholder="Ex.: Verba PDV 2027"
+                  maxLength={120}
+                  disabled={pending}
+                />
+              </Campo>
+              {clienteSemJob && (
+                <FaixaDoJob
+                  itens={[
+                    { rotulo: "Save de", valor: nomeDoCliente(clienteSemJob) },
+                    { rotulo: "Valor do crédito", valor: avValor > 0 ? formatMoney(creditoSave) : "O principal da NF" },
+                    { rotulo: "Regional", valor: "A do job que consumir" },
+                  ]}
+                />
+              )}
+            </>
+          ) : empresaSemJob ? (
             <RateioRegionalEditor linhas={rateio} onChange={setRateio} regionais={regionaisDaEmpresa} disabled={pending} />
           ) : (
             <div className="space-y-1.5">
@@ -1245,7 +1330,7 @@ function FormularioDeFaturar({
         </>
       )}
 
-      {(jobRef || (vinculo === "sem_job" && clienteSemJob)) && (
+      {(jobRef || (vinculo !== "job" && clienteSemJob)) && (
         <CamposDaPo numero={numeroPo} onNumero={setNumeroPo} arquivos={poArquivos} onArquivos={setPoArquivos} disabled={pending} />
       )}
 
@@ -1426,18 +1511,83 @@ function FormularioDeFaturar({
     </div>
   );
 
-  const blocoValor = avulso ? (
+  const campoValorDaNf = (
+    <Campo rotulo="Valor total da NF" obrigatorio htmlFor="av-valor">
+      <MoneyInput
+        id="av-valor"
+        value={avValor}
+        onValueChange={(v) => {
+          setAvValor(v);
+          setErro(null);
+        }}
+      />
+    </Campo>
+  );
+
+  // Save avulso (decisão 247): valor da NF | honorários e imposto; abaixo, o
+  // crédito do cliente ao lado do centro de custo e do subtipo, travados.
+  const blocoValor = !avulso ? null : ehSave ? (
+    <div className="space-y-3.5">
+      <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)] gap-3.5">
+        {campoValorDaNf}
+        <div className="grid grid-cols-2 gap-2">
+          <Campo rotulo="Honorários (%)" obrigatorio htmlFor="av-hon-save">
+            <div className="relative">
+              <Input
+                id="av-hon-save"
+                inputMode="decimal"
+                value={honSave}
+                onChange={(e) => setHonSave(e.target.value)}
+                className={cn("pr-8", honSave.trim() !== "" && !honSaveOk && "border-california-red")}
+                disabled={pending}
+              />
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground">
+                %
+              </span>
+            </div>
+          </Campo>
+          <Campo rotulo="Imposto (%)" obrigatorio>
+            <Select value={impSave} onValueChange={setImpSave} disabled={pending}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
+              <SelectContent>
+                {ALIQUOTAS_IMPOSTO.map((a) => (
+                  <SelectItem key={a} value={String(a)}>
+                    {String(a).replace(".", ",")}%
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Campo>
+        </div>
+      </div>
+      <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)] items-start gap-3.5">
+        <Campo rotulo="Crédito do cliente" ajuda="A NF sem imposto e sem honorários.">
+          <div className="flex h-11 items-center rounded-lg border border-border bg-muted/50 px-3 font-mono text-[13px] font-semibold text-foreground">
+            {avValor > 0 ? formatMoney(creditoSave) : "—"}
+          </div>
+        </Campo>
+        <div className="grid grid-cols-2 gap-2">
+          {(
+            [
+              ["Centro de custo", tipoReceita ? `${tipoReceita.codigo} · ${tipoReceita.nome}` : "01 · Receita"],
+              ["Subtipo", subtipoSave?.nome ?? "Save"],
+            ] as const
+          ).map(([rotulo, texto]) => (
+            <Campo key={rotulo} rotulo={rotulo} obrigatorio>
+              <div className="flex h-11 items-center justify-between rounded-lg border border-border bg-muted/50 px-3 text-[13px] text-foreground">
+                {texto}
+                <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+              </div>
+            </Campo>
+          ))}
+        </div>
+      </div>
+    </div>
+  ) : (
     <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)] gap-3.5">
-      <Campo rotulo="Valor total da NF" obrigatorio htmlFor="av-valor">
-        <MoneyInput
-          id="av-valor"
-          value={avValor}
-          onValueChange={(v) => {
-            setAvValor(v);
-            setErro(null);
-          }}
-        />
-      </Campo>
+      {campoValorDaNf}
       <Campo rotulo="Centro de custo" obrigatorio>
         <div className="grid grid-cols-2 gap-2">
           <Combobox
@@ -1464,7 +1614,7 @@ function FormularioDeFaturar({
         </div>
       </Campo>
     </div>
-  ) : null;
+  );
 
   const blocoNota = (
     <div className="space-y-3.5">

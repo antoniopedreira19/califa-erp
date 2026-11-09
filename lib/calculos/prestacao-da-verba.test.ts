@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import {
   faltasDoDocumento,
   formatarCpfCnpj,
+  producaoCancelaEnvioDaPrestacao,
   producaoEditaPrestacao,
   rotuloDoBotaoDaPrestacao,
   somaComprovadaEmCentavos,
@@ -126,4 +127,22 @@ test("CPF e CNPJ formatados; o resto como veio", () => {
   assert.equal(formatarCpfCnpj("11222333000181"), "11.222.333/0001-81");
   assert.equal(formatarCpfCnpj("11144477735"), "111.444.777-35");
   assert.equal(formatarCpfCnpj("123"), "123");
+});
+
+test("o envio se cancela só com a prestação da verba em avaliação (decisão 246)", () => {
+  const verba = { verba_producao: true, tipo_verba: "producao" };
+  assert.equal(producaoCancelaEnvioDaPrestacao({ ...verba, prestacao: { status: "em_avaliacao" } }), true);
+  assert.equal(producaoCancelaEnvioDaPrestacao({ ...verba, prestacao: null }), false);
+  assert.equal(producaoCancelaEnvioDaPrestacao({ ...verba, prestacao: { status: "rascunho" } }), false);
+  assert.equal(producaoCancelaEnvioDaPrestacao({ ...verba, prestacao: { status: "reprovada" } }), false);
+  assert.equal(producaoCancelaEnvioDaPrestacao({ ...verba, prestacao: { status: "aprovada" } }), false);
+  assert.equal(
+    producaoCancelaEnvioDaPrestacao({ ...verba, tipo_verba: "reembolso", prestacao: { status: "em_avaliacao" } }),
+    false,
+  );
+  // A PP que foi sem NF na Mídia System (decisão 216) não é verba.
+  assert.equal(
+    producaoCancelaEnvioDaPrestacao({ verba_producao: false, prestacao: { status: "em_avaliacao" } }),
+    false,
+  );
 });

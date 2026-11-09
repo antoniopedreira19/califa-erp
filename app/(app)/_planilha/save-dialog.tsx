@@ -33,6 +33,12 @@
  *  Tudo isso mora atrás de `contexto`. No ORÇAMENTO nada disso aparece —
  *  lá o save não passa por aprovação, e a tela não muda, exceto o texto
  *  do estado vazio da aba de consumo.
+ *
+ *  SAVE AVULSO (decisão 247, 09/11/2026). O save faturado sem job pelo
+ *  financeiro entra na lista de saldos ao lado dos jobs, numa seção
+ *  própria, com o nome dele no lugar do código. A aba passou de "Consumir
+ *  save de outro job" a "Consumir save", e o botão de "Selecionar job" a
+ *  "Selecionar saldo".
  */
 
 import * as React from "react";
@@ -169,6 +175,16 @@ type Props = PropsComuns &
     | { contexto: "job"; job: SaveNoJob }
   );
 
+/** A etiqueta do save avulso (decisão 247) ao lado do nome, na lista de
+ *  saldos e na origem da linha. */
+function ChipSaveAvulso() {
+  return (
+    <span className="rounded-full border border-[#5f5d57]/30 bg-[#5f5d57]/10 px-2 py-[1px] text-[10.5px] font-semibold text-[#3f3d39]">
+      Save avulso
+    </span>
+  );
+}
+
 interface OrigemNaTela {
   jobOrigemId: string;
   valor: number;
@@ -242,7 +258,10 @@ function porQuem(nome: string | null): string {
 
 /** "do JOB-0390", "do JOB-0390 e do JOB-0401". */
 function doJobs(pontas: PontaDeSave[]): string {
-  const codigos = [...new Set(pontas.map((p) => p.codigo))].map((c) => `do ${c}`);
+  // O save avulso (decisão 247) vai pelo nome, entre aspas.
+  const codigos = [
+    ...new Set(pontas.map((p) => (p.avulso ? `do save “${p.codigo}”` : `do ${p.codigo}`))),
+  ];
   if (codigos.length === 0) return "do job de origem";
   if (codigos.length === 1) return codigos[0];
   return `${codigos.slice(0, -1).join(", ")} e ${codigos[codigos.length - 1]}`;
@@ -574,14 +593,14 @@ export function SaveDialog(props: Props) {
     !noJob || !acoesJob || estado.emSave || sitGera === "recusado"
       ? null
       : sitConsumo === "aguardando"
-        ? "Esta linha tem um consumo de save aguardando o financeiro e por isso não vira save. Para marcá-la como save, cancele o pedido antes, na aba “Consumir save de outro job”."
+        ? "Esta linha tem um consumo de save aguardando o financeiro e por isso não vira save. Para marcá-la como save, cancele o pedido antes, na aba “Consumir save”."
         : sitConsumo === "recusado"
-          ? "O financeiro recusou o consumo desta linha. Para marcá-la como save, retire antes o consumo recusado, na aba “Consumir save de outro job”."
+          ? "O financeiro recusou o consumo desta linha. Para marcá-la como save, retire antes o consumo recusado, na aba “Consumir save”."
           : consumoNaLinha
             ? `Esta linha é paga com saldo de save de outro job e por isso não vira save. ${
                 porta
                   ? textoDaPorta(porta, true)
-                  : "Para marcá-la como save, desfaça o consumo antes, na aba “Consumir save de outro job”."
+                  : "Para marcá-la como save, desfaça o consumo antes, na aba “Consumir save”."
               }`
             : acoesJob.gerarTravadoPor;
   const podeAplicarGerar =
@@ -702,7 +721,9 @@ export function SaveDialog(props: Props) {
           {estado.emSave
             ? "Gera crédito"
             : estado.origens.length > 0
-              ? `Paga por ${estado.origens.length} job${estado.origens.length > 1 ? "s" : ""}`
+              ? estado.origens.some((o) => o.avulso)
+                ? `Paga por ${estado.origens.length} ${estado.origens.length > 1 ? "saldos" : "saldo"}`
+                : `Paga por ${estado.origens.length} job${estado.origens.length > 1 ? "s" : ""}`
               : "Sem save definido"}
         </Pastilha>
       </div>
@@ -957,7 +978,7 @@ export function SaveDialog(props: Props) {
               >
                 {m === "gerar"
                   ? "Gerar save nesta linha"
-                  : "Consumir save de outro job"}
+                  : "Consumir save"}
               </button>
             ))}
           </div>
@@ -1630,7 +1651,8 @@ function ModoConsumir({
         {situacao}
         <p className="py-6 text-center text-sm text-muted-foreground">
           Este cliente ainda não tem saldo de save aprovado. O crédito nasce
-          quando o financeiro aprova um save de outro job dele.
+          quando o financeiro aprova um save de outro job dele ou fatura um
+          save avulso.
         </p>
       </div>
     );
@@ -1647,6 +1669,7 @@ function ModoConsumir({
         {origens.map((o, i) => {
           const s = saldoDe(o.jobOrigemId);
           const conhecida = pontasConhecidas.find((p) => p.jobId === o.jobOrigemId);
+          const avulso = s?.avulso ?? conhecida?.avulso ?? false;
           const livre = livreDe(o.jobOrigemId);
           const sobraDoJob = livre - o.valor;
           return (
@@ -1655,9 +1678,10 @@ function ModoConsumir({
               className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3.5 rounded-xl border border-[#d7d5cf] bg-muted/20 px-3 py-2.5"
             >
               <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                <span className="font-mono text-xs font-bold">
+                <span className={cn("text-xs font-bold", !avulso && "font-mono")}>
                   {s?.codigo ?? conhecida?.codigo ?? "—"}
                 </span>
+                {avulso && <ChipSaveAvulso />}
                 {/* Sem a lista de saldos o nome não vem: fica só o código. */}
                 {s?.nome && <span className="text-[13px]">{s.nome}</span>}
                 {mostraLivre && (
@@ -1720,8 +1744,8 @@ function ModoConsumir({
           >
             {origens.length > 0 && <Plus className="h-3 w-3" />}
             {origens.length === 0
-              ? "Selecionar job"
-              : "Selecionar outro job"}
+              ? "Selecionar saldo"
+              : "Selecionar outro saldo"}
           </button>
         )}
 
@@ -1731,9 +1755,19 @@ function ModoConsumir({
               Saldos disponíveis deste cliente
             </p>
             <div className="flex flex-col">
-              {naoEscolhidos.map((s) => (
+              {/* Os jobs primeiro; os saves avulsos (decisão 247) numa seção
+                  própria, embaixo. */}
+              {[
+                ...naoEscolhidos.filter((s) => !s.avulso),
+                ...naoEscolhidos.filter((s) => s.avulso),
+              ].map((s, i, todos) => (
+                <React.Fragment key={s.jobId}>
+                {s.avulso && (i === 0 || !todos[i - 1].avulso) && (
+                  <p className="mt-1.5 border-t border-dashed border-[#d7d5cf] px-1 pb-1 pt-2 text-[10px] font-bold uppercase tracking-[0.08em] text-muted-foreground">
+                    Save avulso · faturado sem job
+                  </p>
+                )}
                 <button
-                  key={s.jobId}
                   type="button"
                   onClick={() => {
                     // Entra já com o que falta para cobrir a linha, limitado
@@ -1752,7 +1786,7 @@ function ModoConsumir({
                   className="flex items-center justify-between gap-3 rounded-lg px-2 py-1.5 text-left hover:bg-muted"
                 >
                   <span className="flex items-baseline gap-2">
-                    <span className="font-mono text-xs font-bold">
+                    <span className={cn("text-xs font-bold", !s.avulso && "font-mono")}>
                       {s.codigo}
                     </span>
                     <span className="text-[13px]">{s.nome}</span>
@@ -1761,6 +1795,7 @@ function ModoConsumir({
                     {formatCurrency(s.disponivel, moeda)}
                   </span>
                 </button>
+                </React.Fragment>
               ))}
             </div>
           </div>

@@ -188,8 +188,10 @@ export function AprovarSaveDialog({
                     <strong className="font-mono text-foreground">
                       {save.jobCodigo}
                     </strong>{" "}
-                    com saldo de save de outro job. Confira a linha na planilha
-                    interna antes de aprovar.
+                    {save.origens.some((o) => o.avulso)
+                      ? "com saldo de save avulso"
+                      : "com saldo de save de outro job"}
+                    . Confira a linha na planilha interna antes de aprovar.
                   </>
                 )}
               </DialogDescription>

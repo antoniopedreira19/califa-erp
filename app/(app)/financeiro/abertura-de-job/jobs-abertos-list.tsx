@@ -11,10 +11,14 @@ import {
   List,
   Loader2,
   Search,
+  SlidersHorizontal,
 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import { formatCurrency, cn } from "@/lib/utils";
 import { jobStatusBadgeClasses, jobStatusExibido, jobStatusLabel } from "@/lib/types";
 import type { JobAberto } from "./dados-abertos";
+import { BotaoRecolherTodos } from "@/app/(app)/_planilha/recolher-grupos";
 import { RENTAB_VALOR } from "@/app/(app)/_planilha/blocos";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { compararCodigosDeJob } from "@/lib/codigos/jobs";
@@ -103,6 +107,9 @@ const COLUNAS: ColunaFiltravel<JobAberto>[] = [
     tipo: "texto",
     celula: (j) => ({ ...celulaTexto(j.nome), busca: `${j.nome} ${j.nome_producao} ${j.codigo}` }),
   },
+  { chave: "servico", rotulo: "Serviço", tipo: "texto", celula: (j) => celulaTexto(j.servico_nome) },
+  { chave: "categoria", rotulo: "Categoria", tipo: "texto", celula: (j) => celulaTexto(j.categoria_nome) },
+  { chave: "produto", rotulo: "Marca", tipo: "texto", celula: (j) => celulaTexto(j.produto) },
   {
     chave: "projeto",
     rotulo: "Projeto",
@@ -113,7 +120,11 @@ const COLUNAS: ColunaFiltravel<JobAberto>[] = [
   },
   { chave: "cliente", rotulo: "Cliente", tipo: "texto", celula: (j) => celulaTexto(j.cliente_nome) },
   { chave: "gp", rotulo: "GP responsável", tipo: "texto", celula: (j) => celulaTexto(j.responsavel_nome) },
+  { chave: "produtor", rotulo: "Produtor responsável", tipo: "texto", celula: (j) => celulaTexto(j.produtor_nome) },
   { chave: "abertura", rotulo: "Abertura", tipo: "data", celula: (j) => celulaData(j.data_abertura_financeiro) },
+  { chave: "evento", rotulo: "Data do evento", tipo: "data", celula: (j) => celulaData(j.data_evento) },
+  { chave: "periodo", rotulo: "Período", tipo: "data", celula: (j) => celulaData(j.data_inicio_prevista) },
+  { chave: "competencia", rotulo: "Competência", tipo: "texto", celula: (j) => celulaTexto(textoDaCompetencia(j)) },
   {
     chave: "valor",
     rotulo: "Valor do Job",
@@ -132,6 +143,12 @@ const COLUNAS: ColunaFiltravel<JobAberto>[] = [
     alinhar: "right",
     celula: (j) => celulaValor(j.valor_faturamento ?? 0, (n) => formatCurrency(n)),
   },
+  { chave: "desembolsos", rotulo: "Desembolsos", tipo: "valor", faixa: true, alinhar: "right", celula: (j) => celulaValor(j.custos, (n) => formatCurrency(n)) },
+  { chave: "impostos", rotulo: "Impostos", tipo: "valor", faixa: true, alinhar: "right", celula: (j) => celulaValor(j.impostos, (n) => formatCurrency(n)) },
+  { chave: "custo", rotulo: "Custo", tipo: "valor", faixa: true, alinhar: "right", celula: (j) => celulaValor(j.custo, (n) => formatCurrency(n)) },
+  { chave: "aliquota", rotulo: "Alíquota", tipo: "valor", faixa: true, alinhar: "right", celula: (j) => celulaValor(j.aliquota, (n) => `${textoDoPercentual(n)}`) },
+  { chave: "prazo_recebimento", rotulo: "Prazo de recebimento", tipo: "valor", faixa: true, alinhar: "right", celula: (j) => celulaValor(j.prazo_recebimento, (n) => `${n} dias`) },
+  { chave: "prazo_pagamento", rotulo: "Prazo de pagamento", tipo: "valor", faixa: true, alinhar: "right", celula: (j) => celulaValor(j.prazo_pagamento, (n) => `${n} dias`) },
   {
     chave: "rentabilidade",
     rotulo: "Rentabilidade",
@@ -140,10 +157,247 @@ const COLUNAS: ColunaFiltravel<JobAberto>[] = [
     alinhar: "right",
     celula: (j) => celulaValor(j.rentabilidade, (n) => formatCurrency(n)),
   },
+  { chave: "recebido", rotulo: "Valor recebido", tipo: "valor", faixa: true, alinhar: "right", celula: (j) => celulaValor(j.valor_recebido, (n) => formatCurrency(n)) },
+  { chave: "recebimento", rotulo: "Data de recebimento", tipo: "data", celula: (j) => celulaData(j.recebimento_data) },
+  { chave: "nf", rotulo: "Nº da NF", tipo: "texto", celula: (j) => celulaTexto(j.numero_nf) },
+  { chave: "data_faturamento", rotulo: "Data de faturamento", tipo: "data", celula: (j) => celulaData(j.data_faturamento) },
   // Empresa e Regional depois da Rentabilidade (decisão 234).
   { chave: "empresa", rotulo: "Empresa", tipo: "texto", celula: (j) => celulaTexto(j.empresa_nome) },
   { chave: "regional", rotulo: "Regional", tipo: "texto", celula: (j) => celulaTexto(j.regional_nome) },
+  {
+    chave: "status",
+    rotulo: "Status",
+    tipo: "texto",
+    celula: (j) => celulaTexto(jobStatusLabel(jobStatusExibido(j.status, null))),
+  },
 ];
+
+/** "1T 2026": a competência do job, como no filtro Ano. */
+function textoDaCompetencia(j: JobAberto): string | null {
+  if (!j.competencia_ano) return null;
+  return j.competencia_trimestre ? `${j.competencia_trimestre}T ${j.competencia_ano}` : String(j.competencia_ano);
+}
+
+/** "18/10 a 08/11": o período previsto do job. */
+function textoDoPeriodo(j: JobAberto): string {
+  const d = (iso: string | null) => (iso ? formatDiaBr(iso).slice(0, 5) : null);
+  const a = d(j.data_inicio_prevista);
+  const b = d(j.data_fim_prevista);
+  if (!a && !b) return "—";
+  return a && b ? `${a} a ${b}` : (a ?? b ?? "—");
+}
+
+/**
+ * As colunas que o "Exibir" liga e desliga (decisão 248), na ordem da
+ * tabela. Código e Nome (ou Job) ficam sempre. `padrao`: nasce ligada.
+ * `soPorJob`: só existe na visão "Por job" (em "Por projeto" a faixa já diz
+ * o projeto).
+ */
+interface ColunaDaLista {
+  chave: string;
+  rotulo: string;
+  grupo: "Job" | "Pessoas" | "Datas" | "Valores" | "Prazos" | "Faturamento";
+  padrao: boolean;
+  soPorJob?: boolean;
+  direita?: boolean;
+  celula: (j: JobAberto) => React.ReactNode;
+}
+
+const texto = (v: string | null | undefined) => <span className="text-muted-foreground">{v || "—"}</span>;
+const valor = (v: number | null | undefined, forte = false) => (
+  <span className={cn("whitespace-nowrap tabular-nums", forte && "font-semibold")}>{v === null || v === undefined ? "—" : formatCurrency(v)}</span>
+);
+const dia = (iso: string | null) => <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">{formatDiaBr(iso)}</span>;
+
+const COLUNAS_DA_LISTA: ColunaDaLista[] = [
+  { chave: "servico", rotulo: "Serviço", grupo: "Job", padrao: true, celula: (j) => <span className="whitespace-nowrap text-muted-foreground">{j.servico_nome ?? "—"}</span> },
+  { chave: "categoria", rotulo: "Categoria", grupo: "Job", padrao: true, celula: (j) => texto(j.categoria_nome) },
+  { chave: "projeto", rotulo: "Projeto", grupo: "Job", padrao: true, soPorJob: true, celula: (j) => <CelulaProjeto j={j} /> },
+  { chave: "cliente", rotulo: "Cliente", grupo: "Job", padrao: true, celula: (j) => texto(j.cliente_nome) },
+  { chave: "produto", rotulo: "Marca", grupo: "Job", padrao: false, celula: (j) => texto(j.produto) },
+  { chave: "gp", rotulo: "GP responsável", grupo: "Pessoas", padrao: true, celula: (j) => texto(j.responsavel_nome) },
+  { chave: "produtor", rotulo: "Produtor responsável", grupo: "Pessoas", padrao: true, celula: (j) => texto(j.produtor_nome) },
+  { chave: "abertura", rotulo: "Abertura", grupo: "Datas", padrao: true, celula: (j) => dia(j.data_abertura_financeiro) },
+  { chave: "evento", rotulo: "Data do evento", grupo: "Datas", padrao: false, celula: (j) => dia(j.data_evento) },
+  { chave: "periodo", rotulo: "Período", grupo: "Datas", padrao: false, celula: (j) => <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">{textoDoPeriodo(j)}</span> },
+  { chave: "competencia", rotulo: "Competência", grupo: "Datas", padrao: false, celula: (j) => <span className="whitespace-nowrap text-muted-foreground">{textoDaCompetencia(j) ?? "—"}</span> },
+  { chave: "valor", rotulo: "Valor do Job", grupo: "Valores", padrao: true, direita: true, celula: (j) => valor(j.valor_total, true) },
+  { chave: "faturamento", rotulo: "Faturamento", grupo: "Valores", padrao: true, direita: true, celula: (j) => <CelulaFaturamento j={j} /> },
+  {
+    chave: "desembolsos",
+    rotulo: "Desembolsos",
+    grupo: "Valores",
+    padrao: true,
+    direita: true,
+    celula: (j) => (
+      <span className="flex flex-col items-end gap-px">
+        {valor(j.custos)}
+        <span className="whitespace-nowrap text-[11px] text-muted-foreground">
+          {j.custos_do_previsto ? "previsto na abertura" : j.custos_realizado > 0 ? `pago ${formatCurrency(j.custos_realizado)}` : "nada pago"}
+        </span>
+      </span>
+    ),
+  },
+  {
+    chave: "custo",
+    rotulo: "Custo",
+    grupo: "Valores",
+    padrao: false,
+    direita: true,
+    celula: (j) => <ValorComRealizado valor={j.custo} realizado={j.custo_realizado} />,
+  },
+  {
+    chave: "impostos",
+    rotulo: "Impostos",
+    grupo: "Valores",
+    padrao: true,
+    direita: true,
+    celula: (j) => <ValorComRealizado valor={j.impostos} realizado={j.impostos_realizado} />,
+  },
+  {
+    chave: "aliquota",
+    rotulo: "Alíquota",
+    grupo: "Valores",
+    padrao: true,
+    direita: true,
+    celula: (j) => <span className="whitespace-nowrap tabular-nums text-muted-foreground">{j.aliquota === null ? "—" : textoDoPercentual(j.aliquota)}</span>,
+  },
+  { chave: "rentabilidade", rotulo: "Rentabilidade", grupo: "Valores", padrao: true, celula: (j) => <CelulaRentabilidade j={j} /> },
+  { chave: "recebido", rotulo: "Valor recebido", grupo: "Faturamento", padrao: false, direita: true, celula: (j) => valor(j.valor_recebido) },
+  {
+    chave: "recebimento",
+    rotulo: "Data de recebimento",
+    grupo: "Faturamento",
+    padrao: false,
+    celula: (j) =>
+      j.recebimento_data ? (
+        <span className="flex flex-col gap-px">
+          {dia(j.recebimento_data)}
+          <span className="text-[11px] text-muted-foreground">{j.recebimento_previsto ? "previsto" : "recebido"}</span>
+        </span>
+      ) : (
+        texto(null)
+      ),
+  },
+  { chave: "prazo_recebimento", rotulo: "Prazo de recebimento", grupo: "Prazos", padrao: false, direita: true, celula: (j) => <Dias n={j.prazo_recebimento} nota="abertura → recebimento" /> },
+  { chave: "prazo_pagamento", rotulo: "Prazo de pagamento", grupo: "Prazos", padrao: false, direita: true, celula: (j) => <Dias n={j.prazo_pagamento} nota="abertura → pagamento" /> },
+  { chave: "nf", rotulo: "Nº da NF", grupo: "Faturamento", padrao: false, celula: (j) => <span className="whitespace-nowrap font-mono text-xs text-muted-foreground">{j.numero_nf ?? "—"}</span> },
+  {
+    chave: "data_faturamento",
+    rotulo: "Data de faturamento",
+    grupo: "Faturamento",
+    padrao: false,
+    // Sem nota emitida, fica vazia. Com mais de uma, a da primeira.
+    celula: (j) =>
+      j.data_faturamento ? (
+        <span className="flex flex-col gap-px">
+          {dia(j.data_faturamento)}
+          {j.notas_emitidas > 1 && <span className="text-[11px] text-muted-foreground">1ª de {j.notas_emitidas} notas</span>}
+        </span>
+      ) : null,
+  },
+  { chave: "empresa", rotulo: "Empresa", grupo: "Job", padrao: true, celula: (j) => texto(j.empresa_nome) },
+  { chave: "regional", rotulo: "Regional", grupo: "Job", padrao: true, celula: (j) => texto(j.regional_nome) },
+  { chave: "status", rotulo: "Status", grupo: "Job", padrao: true, celula: (j) => <CelulaStatus j={j} /> },
+];
+
+const COLUNAS_PADRAO = COLUNAS_DA_LISTA.filter((c) => c.padrao).map((c) => c.chave);
+
+const GRUPOS_DO_EXIBIR: ColunaDaLista["grupo"][] = ["Job", "Pessoas", "Datas", "Valores", "Prazos", "Faturamento"];
+
+/** O valor como o fluxo de caixa conta (o planejado até o realizado
+ *  acontecer), com quanto já aconteceu embaixo. */
+function ValorComRealizado({ valor: v, realizado }: { valor: number | null; realizado: number }) {
+  return (
+    <span className="flex flex-col items-end gap-px">
+      {valor(v)}
+      <span className="whitespace-nowrap text-[11px] text-muted-foreground">
+        {v === null ? "" : realizado > 0 ? `realizado ${formatCurrency(realizado)}` : "planejado"}
+      </span>
+    </span>
+  );
+}
+
+function Dias({ n, nota }: { n: number | null; nota: string }) {
+  return (
+    <span className="flex flex-col items-end gap-px">
+      <span className="whitespace-nowrap font-mono text-[13px] font-semibold">{n === null ? "—" : `${n} dias`}</span>
+      <span className="whitespace-nowrap text-[11px] text-muted-foreground">{nota}</span>
+    </span>
+  );
+}
+
+/** O projeto do job na visão "Por job": leva à visão agregada do projeto do
+ *  financeiro (decisão do Tiago, 24/08/2026). Sem ele, o nome fica texto. */
+function CelulaProjeto({ j }: { j: JobAberto }) {
+  return j.projeto_financeiro_id ? (
+    <Link
+      href={`/financeiro/projetos/${j.projeto_financeiro_id}`}
+      prefetch={false}
+      onClick={(e) => e.stopPropagation()}
+      className="text-[12px] font-semibold text-california-red hover:text-california-red/80"
+    >
+      {j.projeto_financeiro_nome ?? "—"}
+    </Link>
+  ) : (
+    <span className="text-[12px] text-muted-foreground">{j.projeto_nome ?? "—"}</span>
+  );
+}
+
+/** O "Exibir": as colunas da lista, por grupo. */
+function SeletorDeColunas({ exibir, onMudar }: { exibir: Set<string>; onMudar: (s: Set<string>) => void }) {
+  const ligadas = COLUNAS_DA_LISTA.filter((c) => exibir.has(c.chave)).length;
+  const alternar = (chave: string) => {
+    const x = new Set(exibir);
+    if (x.has(chave)) x.delete(chave);
+    else x.add(chave);
+    onMudar(x);
+  };
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-white px-3 py-1.5 text-xs font-semibold text-muted-foreground transition-colors hover:border-california-red/40 hover:text-california-red"
+        >
+          <SlidersHorizontal className="h-3.5 w-3.5" />
+          Exibir
+          <span className="tabular-nums text-muted-foreground/70">{ligadas}</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-[720px] p-3">
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-xs font-semibold">Colunas da lista</p>
+          <span className="flex items-center gap-3 text-[11.5px] font-semibold">
+            <button type="button" className="text-muted-foreground hover:text-california-red" onClick={() => onMudar(new Set(COLUNAS_DA_LISTA.map((c) => c.chave)))}>
+              Todas
+            </button>
+            <button type="button" className="text-muted-foreground hover:text-california-red" onClick={() => onMudar(new Set(COLUNAS_PADRAO))}>
+              Padrão
+            </button>
+          </span>
+        </div>
+        <div className="grid grid-cols-3 gap-x-4 gap-y-3">
+          {GRUPOS_DO_EXIBIR.map((g) => (
+            <div key={g} className="space-y-1">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{g}</p>
+              {COLUNAS_DA_LISTA.filter((c) => c.grupo === g).map((c) => (
+                <label key={c.chave} className="flex cursor-pointer items-center gap-2 rounded-md px-1 py-1 text-[12.5px] hover:bg-muted/60">
+                  <Checkbox checked={exibir.has(c.chave)} onCheckedChange={() => alternar(c.chave)} className="rounded" />
+                  <span className="flex-1 whitespace-nowrap">{c.rotulo}</span>
+                  {c.soPorJob && <span className="shrink-0 text-[10px] text-muted-foreground">por job</span>}
+                </label>
+              ))}
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 border-t border-border pt-2 text-[11px] text-muted-foreground">
+          Código e nome ficam sempre. Com muitas colunas, a tabela rola para o lado.
+        </p>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 interface GrupoProjeto {
   /** Id do projeto DO FINANCEIRO (ou do de produção, no fallback). */
@@ -235,31 +489,12 @@ function CelulaRentabilidade({ j }: { j: JobAberto }) {
   );
 }
 
-/** Nome do job com o selo de status, quando ele não é `aberto`. */
+/** Nome do job; o status mora na coluna Status (decisão 248). */
 function NomeDoJob({ j }: { j: JobAberto }) {
-  // O pedido de cancelamento no ar também ganha selo (decisão 169): o job
-  // está parado, esperando a decisão na fila.
-  const status = jobStatusExibido(j.status, null, j.cancelamento_pendente);
   return (
     <div className="flex flex-col gap-0.5">
       <span className="flex flex-wrap items-center gap-2">
         <span className="font-medium">{j.nome}</span>
-        {/* Só quando o status NÃO é `aberto`: com a aba listando
-            encerrados, sem esta marca não dá para distinguir um do
-            outro. Um badge em toda linha seria ruído — a maioria é
-            aberta. */}
-        {status !== "aberto" && (
-          <span
-            className={cn(
-              "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.05em]",
-              // Mesma cor do selo em todo o sistema (decisão 087): encerrado
-              // violeta — a cor que esta marca já tinha — e finalizado verde.
-              jobStatusBadgeClasses(status),
-            )}
-          >
-            {jobStatusLabel(status)}
-          </span>
-        )}
       </span>
       {j.nome_producao !== j.nome && (
         <span className="text-[11px] text-muted-foreground">
@@ -267,6 +502,23 @@ function NomeDoJob({ j }: { j: JobAberto }) {
         </span>
       )}
     </div>
+  );
+}
+
+/** O status do job na coluna Status, com o selo de sempre (decisão 087). O
+ *  pedido de cancelamento no ar não muda o status: enquanto o cancelamento
+ *  não é efetivado, o job continua aberto (decisão 248). */
+function CelulaStatus({ j }: { j: JobAberto }) {
+  const status = jobStatusExibido(j.status, null);
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.05em]",
+        jobStatusBadgeClasses(status),
+      )}
+    >
+      {jobStatusLabel(status)}
+    </span>
   );
 }
 
@@ -312,6 +564,33 @@ export function JobsAbertosList({
   // Grupos nascem abertos: guardamos os FECHADOS para não precisar semear
   // o state com os ids dos projetos no mount. Mesmo padrão de /jobs.
   const [fechados, setFechados] = React.useState<Set<string>>(new Set());
+  // As colunas ligadas no "Exibir" (decisão 248), guardadas por tela neste
+  // navegador, como os filtros de coluna. Sem nada guardado, as do padrão.
+  const [exibir, setExibirEstado] = React.useState<Set<string>>(() => new Set(COLUNAS_PADRAO));
+  const chaveDoExibir = `${daTela.guardarEm}:exibir`;
+  React.useEffect(() => {
+    try {
+      const salvo = window.localStorage.getItem(chaveDoExibir);
+      if (!salvo) return;
+      const conhecidas = new Set(COLUNAS_DA_LISTA.map((c) => c.chave));
+      setExibirEstado(new Set((JSON.parse(salvo) as string[]).filter((k) => conhecidas.has(k))));
+    } catch {
+      // Sem acesso ao armazenamento do navegador: fica o padrão.
+    }
+  }, [chaveDoExibir]);
+  const setExibir = (x: Set<string>) => {
+    setExibirEstado(x);
+    try {
+      window.localStorage.setItem(chaveDoExibir, JSON.stringify([...x]));
+    } catch {
+      // Sem acesso: a escolha vale até recarregar.
+    }
+  };
+  const colunasPorProjeto = COLUNAS_DA_LISTA.filter((c) => exibir.has(c.chave) && !c.soPorJob);
+  const colunasPorJob = COLUNAS_DA_LISTA.filter((c) => exibir.has(c.chave));
+  // Até 10 colunas cabe na largura de antes; cada uma a mais alarga a tabela,
+  // e o quadro rola para o lado.
+  const largura = (n: number, base: number) => base + Math.max(0, n - 10) * 130;
 
   const filtros = [
     {
@@ -714,8 +993,24 @@ export function JobsAbertosList({
           </strong>
         </span>
 
-        <div className="ml-auto flex items-center gap-2.5">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">
+        <div className="flex basis-full items-center gap-2.5">
+          {/* Só em "Por projeto", no canto esquerdo da linha: recolhe ou
+              expande todas as faixas de uma vez (o mesmo botão das
+              planilhas). Com filtro, as faixas ficam abertas de qualquer
+              jeito, então o botão some. */}
+          {modo === "projeto" && grupos.length > 0 && !filtroAtivo && (
+            <span>
+              <BotaoRecolherTodos
+                algumAberto={grupos.some((g) => g.aberto)}
+                onAlternarTodos={() =>
+                  setFechados(grupos.some((g) => g.aberto) ? new Set(grupos.map((g) => g.projetoId)) : new Set())
+                }
+              />
+            </span>
+          )}
+          <span className="flex-1" />
+          <SeletorDeColunas exibir={exibir} onMudar={setExibir} />
+          <span className="ml-2 text-[10px] font-semibold uppercase tracking-[0.09em] text-muted-foreground">
             Organizar por
           </span>
           <div
@@ -756,20 +1051,17 @@ export function JobsAbertosList({
 
       {modo === "projeto" ? (
         <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-soft">
-          <table className="w-full min-w-[1320px] border-collapse text-sm">
+          <table style={{ minWidth: largura(colunasPorProjeto.length, 1320) }} className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/60 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
                 <th className="w-8 px-2 py-3" aria-label="Expandir" />
                 <th className="px-4 py-3 font-semibold">{colunas.titulo("codigo")}</th>
                 <th className="px-4 py-3 font-semibold">{colunas.titulo("nome")}</th>
-                <th className="px-4 py-3 font-semibold">{colunas.titulo("cliente")}</th>
-                <th className="px-4 py-3 font-semibold">{colunas.titulo("gp")}</th>
-                <th className="px-4 py-3 font-semibold">{colunas.titulo("abertura")}</th>
-                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("valor")}</th>
-                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("faturamento")}</th>
-                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("rentabilidade")}</th>
-                <th className="px-4 py-3 font-semibold">{colunas.titulo("empresa")}</th>
-                <th className="px-4 py-3 font-semibold">{colunas.titulo("regional")}</th>
+                {colunasPorProjeto.map((c) => (
+                  <th key={c.chave} className={cn("px-4 py-3 font-semibold", c.direita && "text-right")}>
+                    {colunas.titulo(c.chave)}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -791,7 +1083,7 @@ export function JobsAbertosList({
                       g.aberto ? "bg-muted/90" : "bg-muted/40",
                     )}
                   >
-                    <td colSpan={11} className="p-0">
+                    <td colSpan={3 + colunasPorProjeto.length} className="p-0">
                       <div className="grid grid-cols-[32px_1fr_auto_auto_auto_auto_auto] items-center gap-4 py-[11px] pl-2 pr-4">
                         <div className="flex items-center justify-center">
                           <span
@@ -882,29 +1174,14 @@ export function JobsAbertosList({
                         <td className="whitespace-nowrap px-4 py-3 font-mono text-xs font-semibold text-[#b3323c]">
                           {j.codigo}
                         </td>
-                        <td className="px-4 py-3">
+                        <td className="min-w-[240px] px-4 py-3">
                           <NomeDoJob j={j} />
                         </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {j.cliente_nome ?? "—"}
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">
-                          {j.responsavel_nome ?? "—"}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                          {formatDiaBr(j.data_abertura_financeiro)}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums">
-                          {formatCurrency(j.valor_total)}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-right">
-                          <CelulaFaturamento j={j} />
-                        </td>
-                        <td className="px-4 py-3">
-                          <CelulaRentabilidade j={j} />
-                        </td>
-                        <td className="px-4 py-3 text-muted-foreground">{j.empresa_nome ?? "—"}</td>
-                        <td className="px-4 py-3 text-muted-foreground">{j.regional_nome ?? "—"}</td>
+                        {colunasPorProjeto.map((c) => (
+                          <td key={c.chave} className={cn("px-4 py-3", c.direita && "text-right")}>
+                            {c.celula(j)}
+                          </td>
+                        ))}
                       </tr>
                     ))}
                 </React.Fragment>
@@ -916,19 +1193,15 @@ export function JobsAbertosList({
         </div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-soft">
-          <table className="w-full min-w-[1180px] border-collapse text-sm">
+          <table style={{ minWidth: largura(colunasPorJob.length, 1180) }} className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/60 text-left text-[11px] font-semibold uppercase tracking-[0.07em] text-muted-foreground">
                 <th className="px-4 py-3 font-semibold">{colunas.titulo("nome", undefined, "Job")}</th>
-                <th className="px-4 py-3 font-semibold">{colunas.titulo("projeto")}</th>
-                <th className="px-4 py-3 font-semibold">{colunas.titulo("cliente")}</th>
-                <th className="px-4 py-3 font-semibold">{colunas.titulo("gp")}</th>
-                <th className="px-4 py-3 font-semibold">{colunas.titulo("abertura")}</th>
-                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("valor")}</th>
-                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("faturamento")}</th>
-                <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("rentabilidade")}</th>
-                <th className="px-4 py-3 font-semibold">{colunas.titulo("empresa")}</th>
-                <th className="px-4 py-3 font-semibold">{colunas.titulo("regional")}</th>
+                {colunasPorJob.map((c) => (
+                  <th key={c.chave} className={cn("px-4 py-3 font-semibold", c.direita && "text-right")}>
+                    {colunas.titulo(c.chave)}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -946,7 +1219,7 @@ export function JobsAbertosList({
                   }}
                   className="cursor-pointer border-b border-b-[#f4f2f2] transition-colors hover:bg-muted/70 focus-visible:bg-muted/70 focus-visible:outline-none"
                 >
-                  <td className="px-4 py-3">
+                  <td className="min-w-[240px] px-4 py-3">
                     <div className="flex min-w-0 flex-col gap-0.5">
                       <NomeDoJob j={j} />
                       <span className="whitespace-nowrap font-mono text-[11.5px] font-semibold text-[#b3323c]">
@@ -954,49 +1227,11 @@ export function JobsAbertosList({
                       </span>
                     </div>
                   </td>
-                  {/* Sem a faixa do projeto, é o nome que leva à visão
-                      agregada (decisão do Tiago, 24/08/2026; era o código,
-                      que saiu das telas em 27/10/2026). Job sem projeto do
-                      financeiro não tem essa tela — aí o nome fica como
-                      texto. */}
-                  <td className="px-4 py-3">
-                    <div className="flex min-w-0 flex-col gap-0.5">
-                      {j.projeto_financeiro_id ? (
-                        <Link
-                          href={`/financeiro/projetos/${j.projeto_financeiro_id}`}
-                          prefetch={false}
-                          onClick={(e) => e.stopPropagation()}
-                          className="text-[12px] font-semibold text-california-red hover:text-california-red/80"
-                        >
-                          {j.projeto_financeiro_nome ?? "—"}
-                        </Link>
-                      ) : (
-                        <span className="text-[12px] text-muted-foreground">
-                          {j.projeto_nome ?? "—"}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {j.cliente_nome ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">
-                    {j.responsavel_nome ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">
-                    {formatDiaBr(j.data_abertura_financeiro)}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right font-semibold tabular-nums">
-                    {formatCurrency(j.valor_total)}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right">
-                    <CelulaFaturamento j={j} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <CelulaRentabilidade j={j} />
-                  </td>
-                  <td className="px-4 py-3 text-muted-foreground">{j.empresa_nome ?? "—"}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{j.regional_nome ?? "—"}</td>
+                  {colunasPorJob.map((c) => (
+                    <td key={c.chave} className={cn("px-4 py-3", c.direita && "text-right")}>
+                      {c.celula(j)}
+                    </td>
+                  ))}
                 </tr>
               ))}
             </tbody>

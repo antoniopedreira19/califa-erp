@@ -244,6 +244,51 @@ export async function enviarPrestacaoVerba(input: {
   return { ok: true, reenvio, codigo: pp.codigo };
 }
 
+/** Para onde a prestação voltou quando o envio foi cancelado. */
+export type VoltaDaPrestacao = "rascunho" | "reprovada" | "sem_prestacao";
+
+/**
+ * Decisão 246: a produção cancela o envio da prestação, enquanto o
+ * financeiro não decidiu. Ela volta com os mesmos documentos — a rascunho
+ * no primeiro envio, a "reprovada" (com o motivo) no reenvio; a que foi com
+ * "não houve gasto" volta vazia. Quem pode, e a trava contra a aprovação ao
+ * mesmo tempo, ficam no banco (`cancelar_envio_prestacao_verba`).
+ */
+export async function cancelarEnvioPrestacaoVerba(input: {
+  pp_id: string;
+}): Promise<{ ok: true; codigo: string; volta: VoltaDaPrestacao } | Err> {
+  const parsed = z.object({ pp_id: z.string().uuid() }).safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Dados inválidos." };
+  const { pp_id } = parsed.data;
+  const session = await requireSession();
+  const supabase = createClient();
+
+  const { data: pp } = await supabase
+    .from("pedidos_compra")
+    .select("id, codigo, job_id")
+    .eq("id", pp_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+  if (!pp) return { ok: false, message: "PP não encontrada." };
+
+  const { data: volta, error } = await supabase.rpc("cancelar_envio_prestacao_verba", {
+    p_pp_id: pp_id,
+  });
+  if (error) return { ok: false, message: error.message };
+
+  await logAuditEvent({
+    acao: "verba_producao.prestacao_envio_cancelado",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "pedido_compra",
+    entidadeId: pp_id,
+    metadata: { pp_codigo: pp.codigo, volta },
+  });
+
+  revalidatePath(`/jobs/${pp.job_id}`);
+  revalidatePath("/financeiro/contas-a-pagar");
+  return { ok: true, codigo: pp.codigo, volta: volta as VoltaDaPrestacao };
+}
+
 /** Abre um documento da prestação (link assinado de 1 h). */
 export async function linkDocumentoPrestacao(
   documento_id: string,

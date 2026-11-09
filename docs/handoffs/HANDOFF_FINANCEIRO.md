@@ -8936,3 +8936,21 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   No BB, 2 das novas repetem, com outro texto, linhas já importadas antes do início (−R$ 36.755,00 em 23/10 e R$ 300.000,00 em 26/10). Ficam fora da fila e do saldo.
 - **O fim do período do OFX vai até a última linha** (`lib/conciliacao/ofx.ts`, com teste): o Santander mandou o extrato "de 01/10 a 31/10" com as linhas e o saldo de 03/11. O quadro comparava o saldo do banco de 03/11 com o do sistema de 31/10 e mostrava R$ 876.460,67 de diferença. Reimportado, o extrato vai de 01/10 a 03/11, e a diferença é a das 38 linhas a conciliar.
 - **Falta:** o rendimento de outubro das aplicações (vem com o extrato delas) e o extrato das contas sem extrato no sistema.
+
+
+## ⚠️ Nota de 2026-11-09 — save avulso: o save faturado sem job (decisão 247)
+
+- **Faturar → "Save avulso"** (entre "Referente a um job" e "Sem job"): cliente, empresa, **Nome do save**, valor da NF, **Honorários (%)** (do cadastro do cliente) e **Imposto (%)**; o **crédito do cliente** é o principal da nota, NF × (1 − imposto) ÷ (1 + honorários). Centro de custo 01 · Receita e subtipo **Save** (novo), travados. Sem rateio de regional: a regional é a do job que consumir.
+- A nota sai como avulsa e o save avulso nasce junto, numa transação só (`emitir_faturamento_save_avulso`). A NF com o save já consumido não se cancela.
+- **Aba nova "Créditos de save"**: lista por cliente com o save avulso e os saves de jobs (Crédito, Consumido, Reservado, Saldo); o ícone de cada origem abre os jobs que consumiram, pelo nome do financeiro.
+- **Na abertura** (faixa Saves e bloco "Saves deste job"), o consumo de save avulso aparece como "do save “Nome”", e o saldo do cliente soma os saves avulsos.
+- **Receita migrada:** a parte da NF do save avulso que um job consome (consumo ÷ crédito × NF) entra no faturamento do job na `vw_job_rentabilidade` e divide o título no `vw_fluxo_caixa` (migration `20261109940003`), como no save de job. Aprovação da versão, abertura e errata de save conferidas pela tela no TES-1038/26.
+- **Conferido:** NF TESTE-247 emitida pela tela (Empresa Teste, cliente Teste): crédito R$ 8.621,79, 01 · Receita · Save, sem rateio. Migrations `20261109940001` e `20261109940002`.
+
+## ⚠️ Nota de 2026-11-09 — o "Exibir" do Resultado de Job e o prazo de pagamento (decisão 248)
+
+- **Resultado de Job e Visualizar Jobs:** colunas Serviço e Status (sem "Cancelamento solicitado"), "Recolher todos" em "Por projeto" e o "Exibir", que liga e desliga 27 colunas por grupo, guardado por tela no navegador.
+- **Custo e Impostos:** o planejado até o realizado ser assegurado, quando ele troca (custo linha a linha, pelas PPs concluídas; impostos pelo faturamento do job). A Rentabilidade continua no planejado.
+- **Fluxo de Caixa do Job:** o 4º prazo, Pagamento (abertura → data média dos pagamentos), e os saldos e prazos numa faixa só.
+- **Títulos de duas linhas:** nas colunas de valor, as duas linhas começam no mesmo ponto, em todas as listas com filtro por coluna.
+- **Banco:** `vw_fluxo_caixa_job_datas` (migration `20261109950001`, aditiva), uma linha por job; a lista não lê as linhas cruas do fluxo.

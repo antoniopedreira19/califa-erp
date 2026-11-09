@@ -247,6 +247,9 @@ export async function carregarPrazosDosJobs(
 
   return ((jobsRes.data ?? []) as any[]).map((j) => ({
     jobId: j.id as string,
+    // A abertura vai junto: é a ponta de partida do prazo de pagamento, que
+    // a tela mede sobre as linhas do fluxo (decisão 248).
+    abertura: (j.data_abertura_financeiro as string | null) ?? null,
     ...calcularPrazosDoJob({
       abertura: j.data_abertura_financeiro ?? null,
       // Job sem faturamento previsto (decisão 105) não tem prazo de

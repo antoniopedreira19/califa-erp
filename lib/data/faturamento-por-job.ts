@@ -48,6 +48,10 @@ export interface FaturamentoDoJob {
   valor_recebido: number;
   /** Vencimento em aberto mais antigo. É o que data a inadimplência. */
   vencimento_em_aberto: string | null;
+  /** A emissão da primeira nota do job (coluna Data de faturamento,
+   *  decisão 248) e quantas notas emitidas ele tem. */
+  data_primeira_nota: string | null;
+  notas_emitidas: number;
 }
 
 /**
@@ -360,6 +364,12 @@ export async function faturamentoPorJob(
       data_envio: envio?.em ?? null,
       valor_recebido: consolidado.valor_recebido,
       vencimento_em_aberto: consolidado.vencimento_em_aberto,
+      data_primeira_nota:
+        notas
+          .map((n) => n.data_emissao)
+          .filter((d): d is string => !!d)
+          .sort()[0] ?? null,
+      notas_emitidas: notas.length,
     });
   }
 
@@ -374,4 +384,6 @@ export const FATURAMENTO_VAZIO: FaturamentoDoJob = {
   data_envio: null,
   valor_recebido: 0,
   vencimento_em_aberto: null,
+  data_primeira_nota: null,
+  notas_emitidas: 0,
 };

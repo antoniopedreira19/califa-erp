@@ -338,7 +338,8 @@ interface Props {
    *  envio mostrava só o save gerado, e o job pago por save chegava com
    *  "Faturamento previsto R$ 0,00" sem explicação. */
   totalConsumidoEmSave: number;
-  origensDoConsumo: string[];
+  /** O código do job, ou o nome do save avulso (decisão 247). */
+  origensDoConsumo: { codigo: string; avulso: boolean }[];
   moeda: string;
 
   herdados: HerdadosJob;
@@ -1056,9 +1057,11 @@ export function EnviarJobModal({
                 <span className="flex flex-col">
                   <span className="text-sm font-semibold">Consumo de save</span>
                   <span className="text-xs text-muted-foreground">
-                    Pago com o saldo de save do{" "}
-                    {origensDoConsumo.join(", ") || "job de origem"}. O
-                    financeiro aprova junto com a abertura do job.
+                    Pago com o saldo{" "}
+                    {origensDoConsumo
+                      .map((o) => (o.avulso ? `do save “${o.codigo}”` : `de save do ${o.codigo}`))
+                      .join(", ") || "de save do job de origem"}
+                    . O financeiro aprova junto com a abertura do job.
                   </span>
                 </span>
                 <span

@@ -74,7 +74,8 @@ export function ConfirmarEnvioModal({
    *  envio mostrava só o save gerado, e o job pago por save chegava com
    *  "Faturamento previsto R$ 0,00" sem explicação. */
   totalConsumidoEmSave: number;
-  origensDoConsumo: string[];
+  /** O código do job, ou o nome do save avulso (decisão 247). */
+  origensDoConsumo: { codigo: string; avulso: boolean }[];
   moeda: string;
   /** Contatos de cobrança digitados no formulário — dado digitado tem de
    *  ser conferível antes de gravar. */
@@ -180,7 +181,9 @@ export function ConfirmarEnvioModal({
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-[13px] font-semibold">
                 Consumo de save
-                {origensDoConsumo.length > 0 ? ` · ${origensDoConsumo.join(", ")}` : ""}
+                {origensDoConsumo.length > 0
+                  ? ` · ${origensDoConsumo.map((o) => (o.avulso ? `save “${o.codigo}”` : o.codigo)).join(", ")}`
+                  : ""}
               </span>
               <span
                 className={cn(

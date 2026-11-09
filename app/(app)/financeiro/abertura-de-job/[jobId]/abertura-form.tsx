@@ -3030,8 +3030,8 @@ export function AberturaForm({
                                   </>
                                 ) : saveConsumido > 0.005 ? (
                                   <>
-                                    Este job é pago com saldo em save de outro
-                                    job — o cliente já pagou por ele numa nota
+                                    Este job é pago com saldo em save — o
+                                    cliente já pagou por ele numa nota
                                     anterior. Não há nota a emitir aqui, e o
                                     job abre sem previsão de recebimento.
                                   </>
@@ -4496,7 +4496,14 @@ function resumirSaves(linhas: LinhaDeSaveDaAbertura[]) {
   const consome = linhas.filter((l) => l.tipo === "consome");
   const porOrigem = new Map<
     string,
-    { jobId: string; codigo: string; nome: string; valor: number; linhas: number }
+    {
+      jobId: string;
+      codigo: string;
+      nome: string;
+      valor: number;
+      linhas: number;
+      avulso: boolean;
+    }
   >();
   for (const l of consome) {
     for (const o of l.origens) {
@@ -4506,6 +4513,7 @@ function resumirSaves(linhas: LinhaDeSaveDaAbertura[]) {
         nome: o.nome,
         valor: 0,
         linhas: 0,
+        avulso: o.avulso,
       };
       atual.valor = emCentavos(atual.valor + o.valor);
       atual.linhas += 1;
@@ -4758,11 +4766,12 @@ const valorMono = (v: number) => (
 const umOuVarios = (n: number, um: string, varios: string) =>
   n === 1 ? `1 ${um}` : `${n} ${varios}`;
 
-/** "do saldo do TES-1009/26", ou "do saldo de 2 jobs". */
-const doSaldo = (porOrigem: { codigo: string }[]) =>
+/** "do saldo do TES-1009/26", ou "do saldo de 2 jobs" (de 2 saves, quando
+ *  entra um save avulso, decisão 247). */
+const doSaldo = (porOrigem: { codigo: string; avulso: boolean }[]) =>
   porOrigem.length === 1
     ? `do saldo do ${porOrigem[0].codigo}`
-    : `do saldo de ${porOrigem.length} jobs`;
+    : `do saldo de ${porOrigem.length} ${porOrigem.some((o) => o.avulso) ? "saves" : "jobs"}`;
 
 /** As origens de uma linha que consome: "do TES-1009/26"; de mais de um
  *  job, uma por linha, com quanto vem de cada uma. */
@@ -5155,7 +5164,8 @@ function AtalhosDasOrigens({ saves }: { saves: SavesDaAbertura }) {
     nome: string;
   } | null>(null);
   const [aberto, setAberto] = React.useState(false);
-  const origens = resumirSaves(saves.linhas).consome.porOrigem;
+  // O save avulso (decisão 247) não tem planilha de origem.
+  const origens = resumirSaves(saves.linhas).consome.porOrigem.filter((o) => !o.avulso);
   if (origens.length === 0) return null;
   return (
     <>

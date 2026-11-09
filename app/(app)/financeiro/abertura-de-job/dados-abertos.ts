@@ -11,6 +11,8 @@ import { servicoPorOrcamento } from "@/lib/data/servicos";
 import { jobsComCancelamentoPendente } from "@/lib/data/cancelamentos";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { rentabilidadeDosJobs } from "@/lib/data/rentabilidade-dos-jobs";
+import { carregarPrazosDosJobs } from "@/app/(app)/financeiro/jobs/[jobId]/fluxo-do-job";
+import { diasEntre } from "@/lib/calculos/prazos-do-job";
 
 export type { SituacaoFaturamento };
 
@@ -155,7 +157,38 @@ export interface JobAberto {
    */
   rentabilidade: number | null;
   rentabilidade_pct: number | null;
+  /**
+   * As colunas do "Exibir" (decisão 248). Produtor responsável do job.
+   */
+  produtor_nome: string | null;
+  /**
+   * Impostos e custo como o fluxo de caixa conta: o planejado até o
+   * realizado ser assegurado, quando ele troca. Impostos: o previsto até o
+   * job ser faturado; faturado, os das notas. Custo: linha a linha, a linha
+   * com as PPs concluídas vale o realizado (`rentabilidadeDosJobs`).
+   * `*_realizado`: quanto disso já aconteceu. Nulos sem a conta da
+   * Rentabilidade.
+   */
+  impostos: number | null;
+  impostos_realizado: number;
+  custo: number | null;
+  custo_realizado: number;
+  /** Alíquota de imposto do job (`vw_parametros_do_job`), em %. */
+  aliquota: number | null;
+  /** A emissão da primeira nota do job e quantas notas ele tem. */
+  data_faturamento: string | null;
+  notas_emitidas: number;
+  /** A próxima data prevista de recebimento ou, com tudo recebido, a do
+   *  último recebimento (`vw_fluxo_caixa_job_datas`). */
+  recebimento_data: string | null;
+  recebimento_previsto: boolean;
+  /** Prazo de recebimento do job (abertura → recebimento, decisão 075) e
+   *  prazo de pagamento (abertura → data média dos pagamentos), em dias. */
+  prazo_recebimento: number | null;
+  prazo_pagamento: number | null;
 }
+
+const centavos = (n: number) => Math.round(n * 100) / 100;
 
 const SELECT_JOB_ABERTO =
   "id, codigo, nome, nome_financeiro, status, valor_total, faturamento_previsto, " +
@@ -181,6 +214,7 @@ const SELECT_JOB_ABERTO =
   "regional:regionais(nome), " +
   "empresa:empresas(nome_fantasia, razao_social), " +
   "responsavel:profiles!responsavel_id(nome), " +
+  "produtor:profiles!produtor_id(nome), " +
   "cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), projeto:projetos(nome, created_at)";
 
 /**
@@ -232,6 +266,9 @@ export async function listarJobsDoFinanceiro(
     rateiosRes,
     comPedidoDeCancelamento,
     rentabilidades,
+    datasRes,
+    impostosRes,
+    parametrosRes,
   ] = await Promise.all([
       supabase
         .from("jobs")
@@ -260,9 +297,42 @@ export async function listarJobsDoFinanceiro(
       jobsComCancelamentoPendente(supabase, tenantId),
       // A Rentabilidade de cada job, a mesma da página do job (decisão 207).
       rentabilidadeDosJobs(supabase, tenantId, STATUS_NA_LISTA),
+      // As colunas do "Exibir" (decisão 248): uma linha por job em cada uma,
+      // somada no banco — nada das linhas cruas do fluxo.
+      supabase
+        .from("vw_fluxo_caixa_job_datas")
+        .select("job_id, pagamento_data_media, recebimento_proximo, recebimento_ultimo")
+        .eq("tenant_id", tenantId),
+      supabase
+        .from("vw_job_rentabilidade")
+        .select("job_id, imposto_realizado")
+        .eq("tenant_id", tenantId),
+      supabase
+        .from("vw_parametros_do_job")
+        .select("job_id, percentual_imposto")
+        .eq("tenant_id", tenantId),
     ]);
 
   const { data, error } = jobsRes;
+  for (const [nome, res] of [
+    ["datas", datasRes],
+    ["impostos", impostosRes],
+    ["parametros", parametrosRes],
+  ] as const) {
+    if (res.error) console.error(`[jobs-do-financeiro.${nome}]`, res.error.message);
+  }
+  const datasPor = new Map(
+    ((datasRes.data ?? []) as Array<{ job_id: string; pagamento_data_media: string | null; recebimento_proximo: string | null; recebimento_ultimo: string | null }>).map((d) => [d.job_id, d]),
+  );
+  const impostoRealizadoPor = new Map(
+    ((impostosRes.data ?? []) as Array<{ job_id: string; imposto_realizado: number | null }>).map((r) => [r.job_id, Number(r.imposto_realizado ?? 0)]),
+  );
+  const aliquotaPor = new Map(
+    ((parametrosRes.data ?? []) as Array<{ job_id: string; percentual_imposto: number | null }>).map((r) => [
+      r.job_id,
+      r.percentual_imposto === null ? null : Number(r.percentual_imposto),
+    ]),
+  );
 
   if (error) {
     console.error("[jobs-do-financeiro.listar]", error.message);
@@ -286,7 +356,7 @@ export async function listarJobsDoFinanceiro(
     anosDoRateio.set(c.job_id, anos);
   }
 
-  return ((data ?? []) as any[]).map((j) => {
+  const lista: JobAberto[] = ((data ?? []) as any[]).map((j) => {
     const fat = esteira.get(j.id) ?? FATURAMENTO_VAZIO;
     const cx = caixa.get(j.id) ?? CAIXA_VAZIO;
 
@@ -296,6 +366,10 @@ export async function listarJobsDoFinanceiro(
     const semRecebimento = cx.recebimentos <= 0;
     const semCusto = cx.custos <= 0;
     const rent = rentabilidades.get(j.id) ?? null;
+    const datas = datasPor.get(j.id);
+    const impostoRealizado = impostoRealizadoPor.get(j.id) ?? 0;
+    // Faturado o job, os impostos são os das notas (decisão 248).
+    const faturado = fat.situacao === "faturado" || fat.situacao === "liquidado" || fat.situacao === "inadimplente";
 
     return {
       id: j.id,
@@ -351,6 +425,26 @@ export async function listarJobsDoFinanceiro(
       custos_do_previsto: semCusto,
       rentabilidade: rent ? rent.valor : null,
       rentabilidade_pct: rent ? rent.percentual : null,
+      produtor_nome: j.produtor?.nome ?? null,
+      impostos: rent ? centavos(faturado ? impostoRealizado : Math.max(rent.deducoes, impostoRealizado)) : null,
+      impostos_realizado: impostoRealizado,
+      custo: rent ? rent.custoProjetado : null,
+      custo_realizado: rent ? rent.custoRealizado : 0,
+      aliquota: aliquotaPor.get(j.id) ?? null,
+      data_faturamento: fat.data_primeira_nota,
+      notas_emitidas: fat.notas_emitidas,
+      recebimento_data: datas?.recebimento_proximo ?? datas?.recebimento_ultimo ?? null,
+      recebimento_previsto: !!datas?.recebimento_proximo,
+      // Preenchido abaixo, com os prazos dos jobs da lista.
+      prazo_recebimento: null,
+      prazo_pagamento: diasEntre(j.data_abertura_financeiro ?? null, datas?.pagamento_data_media ?? null),
     };
   });
+
+  // O prazo de recebimento do job, a mesma conta da aba Fluxo de Caixa do
+  // Job (decisão 075). Depende dos ids da lista, então vem depois.
+  const prazos = await carregarPrazosDosJobs(tenantId, lista.map((j) => j.id));
+  const prazoPor = new Map(prazos.map((p) => [p.jobId, p.total]));
+  for (const j of lista) j.prazo_recebimento = prazoPor.get(j.id) ?? null;
+  return lista;
 }

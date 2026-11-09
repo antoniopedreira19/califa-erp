@@ -152,6 +152,22 @@ export function producaoEditaPrestacao(pp: {
   return !pp.prestacao || pp.prestacao.status === "rascunho" || pp.prestacao.status === "reprovada";
 }
 
+/**
+ * Decisão 246: a produção cancela o envio da prestação enquanto o financeiro
+ * não decidiu (em avaliação). Só na verba de produção — a PP que foi sem NF
+ * na Mídia System (decisão 216) e o reembolso (187) ficam de fora. O papel
+ * (quem presta contas desta verba) é de quem chama; o banco confere tudo
+ * de novo em `cancelar_envio_prestacao_verba`.
+ */
+export function producaoCancelaEnvioDaPrestacao(pp: {
+  verba_producao: boolean;
+  tipo_verba?: string | null;
+  prestacao: Pick<PrestacaoDaVerba, "status"> | null;
+}): boolean {
+  if (!pp.verba_producao || pp.tipo_verba === "reembolso") return false;
+  return pp.prestacao?.status === "em_avaliacao";
+}
+
 /** O texto do botão da verba na trilha da aba PPs e no cartão do painel. */
 export function rotuloDoBotaoDaPrestacao(pp: {
   prestacao: Pick<PrestacaoDaVerba, "status" | "documentos"> | null;

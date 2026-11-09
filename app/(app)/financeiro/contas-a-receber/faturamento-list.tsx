@@ -511,6 +511,8 @@ interface Props {
    *  cada cliente — o Faturar tira deles o que não se escolhe mais. */
   jobs: JobDoFaturar[];
   cnpjsPorCliente: Record<string, CnpjsDoCliente>;
+  /** Decisão 247: honorários padrão de cada cliente (o save avulso). */
+  honorariosPorCliente: Record<string, number>;
 }
 
 /** A chave do recebimento antes da NF desta parcela: a nota ou o BV. */
@@ -535,6 +537,7 @@ export function FaturamentoList({
   fiscal,
   jobs,
   cnpjsPorCliente,
+  honorariosPorCliente,
 }: Props) {
   const router = useRouter();
   const [drawer, setDrawer] = React.useState<DrawerState | null>(null);
@@ -1656,6 +1659,7 @@ export function FaturamentoList({
           fiscal={fiscal}
           jobs={jobs}
           cnpjsPorCliente={cnpjsPorCliente}
+          honorariosPorCliente={honorariosPorCliente}
         />
       )}
 

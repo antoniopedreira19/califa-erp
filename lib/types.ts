@@ -502,6 +502,10 @@ export interface VersaoOrcamento {
    *  linha consome o próprio orçado desse job, e o valor que passaria do
    *  saldo não grava. Exclui `save_por_padrao`. Nulo = sem esse modo. */
   save_consumo_job_id: string | null;
+  /** Orçamento que consome um SAVE AVULSO inteiro (decisão 247), como o
+   *  `save_consumo_job_id` faz com o saldo de um job. Exclui os outros dois
+   *  modos. Nulo = sem esse modo. */
+  save_consumo_avulso_id: string | null;
   /** Só Mídia Off (decisão 147): a parte do negociado que fica com o
    *  veículo, em %. 80 nas planilhas de referência. Nos outros modelos fica
    *  no padrão e ninguém lê. */
@@ -2249,6 +2253,8 @@ export type PPEventoTipo =
   | "prestacao_reenviada"
   | "prestacao_reprovada"
   | "prestacao_aprovada"
+  // Decisão 246 (06/11/2026): a produção cancelou o envio da prestação.
+  | "prestacao_envio_cancelado"
   // Revisão da decisão 152 (07/10/2026): a NF corrigida com a PP em
   // avaliação, sem aprovar. O `motivo` diz o que mudou.
   | "nf_corrigida"
@@ -2411,10 +2417,38 @@ export type SaveAprovacaoMomento =
   | "legado_migracao"
   | "reenvio";
 
-/** Uma origem de consumo, como o banco guarda nos pedidos. */
+/** Uma origem de consumo, como o banco guarda nos pedidos: o job que gerou
+ *  o save OU o save avulso (decisão 247) — sempre uma das duas chaves. */
 export interface OrigemDeSave {
-  job_origem_id: string;
+  job_origem_id?: string;
+  save_avulso_id?: string;
   valor: number;
+}
+
+/** Linha de `vw_saves_avulsos` (decisão 247): o save avulso, faturado sem
+ *  job pelo financeiro, e o saldo dele. `credito` é o principal da nota:
+ *  `valor_nf × (1 − imposto) ÷ (1 + honorários)`. */
+export interface SaveAvulso {
+  id: string;
+  tenant_id: string;
+  cliente_id: string;
+  empresa_id: string | null;
+  faturamento_id: string;
+  nome: string;
+  numero_nf: string | null;
+  data_emissao: string | null;
+  valor_nf: number;
+  percentual_honorarios: number;
+  percentual_imposto: number;
+  credito: number;
+  /** Consumo aprovado (linha do job com pedido aprovado). */
+  consumido: number;
+  /** Consumo de rascunho: avisa, não segura saldo (decisão 028). */
+  reservado: number;
+  /** Segurado por versão aprovada, linha do job e pedidos aguardando. */
+  reservado_aprovacao: number;
+  disponivel: number;
+  created_at: string;
 }
 
 /** Linha de `saves_aprovacoes`. O cliente só lê: tudo nasce e muda pelas

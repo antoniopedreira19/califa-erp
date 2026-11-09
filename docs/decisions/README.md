@@ -259,6 +259,10 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 242 | [As PPs a emitir no Comitê na aba PPs, os filtros com número e o fim dos cartões](242-pps-no-comite-e-filtros-da-aba-pps.md) | 2026-11-06 |
 | 243 | [Conciliação automática: a fila pelo que se faz, as colunas do sistema e as linhas iguais escolhidas pelo financeiro](243-conciliacao-automatica-fila-por-acao.md) | 2026-11-06 |
 | 244 | [Nada se concilia sozinho: o que é certo fica em Prontos para conciliar](244-nada-se-concilia-sozinho.md) | 2026-11-06 |
+| 245 | [O prazo de envio das PPs que vencem em 20/11/2026 vai até 06/11 (exceção à 157)](245-prazo-de-envio-do-20-11-prorrogado.md) | 2026-11-06 |
+| 246 | [A produção cancela o envio da prestação de contas da verba](246-cancelar-envio-da-prestacao.md) | 2026-11-06 |
+| 247 | [Save avulso: o save faturado sem job, crédito do cliente](247-save-avulso.md) | 2026-11-09 |
+| 248 | [O "Exibir" do Resultado de Job, o prazo de pagamento e os saldos e prazos numa faixa](248-exibir-no-resultado-de-job.md) | 2026-11-09 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -271,4 +275,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 245**. (A 240 está em uso por outra frente, ainda sem arquivo neste índice.) (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 249**. (A 240 está em uso por outra frente, ainda sem arquivo neste índice.) (091 e 092 existem na pasta e ainda não estão nesta tabela.)

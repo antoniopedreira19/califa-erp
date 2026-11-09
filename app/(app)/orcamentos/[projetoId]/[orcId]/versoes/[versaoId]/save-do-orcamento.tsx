@@ -162,6 +162,13 @@ function saldoDoModo(r: ResumoDoSave): SaldoDeSave | null {
     : null;
 }
 
+/** "do TES-1003/26", ou "do save “Verba PDV 2027”" quando o saldo do modo é
+ *  um save avulso (decisão 247). */
+function doSaldo(r: ResumoDoSave): string {
+  const s = saldoDoModo(r);
+  return s?.avulso ? `do save “${s.codigo}”` : `do ${r.codigoDoModo ?? "job"}`;
+}
+
 function brl(r: ResumoDoSave, v: number) {
   return formatCurrency(v, r.moeda);
 }
@@ -217,7 +224,7 @@ function textoDoRetirar(r: ResumoDoSave): string {
     return `As ${r.qtdLinhas} linhas deixam de gerar save e voltam ao valor do job, com o planejado que tinham antes. O orçamento deixa de ser um orçamento de save.`;
   }
   if (r.modo.tipo === "consome") {
-    return `As ${r.qtdLinhas} linhas deixam de consumir o saldo do ${r.codigoDoModo ?? "job"}: os ${brl(r, r.totalOrcado)} voltam ao saldo do job, e o orçamento volta a ser faturado inteiro.`;
+    return `As ${r.qtdLinhas} linhas deixam de consumir o saldo ${doSaldo(r)}: os ${brl(r, r.totalOrcado)} voltam ao saldo do job, e o orçamento volta a ser faturado inteiro.`;
   }
   const gera = r.linhasQueGeram.length;
   const consome = r.linhasQueConsomem.length;
@@ -404,14 +411,12 @@ export function MenuSaveDoOrcamento({
               )}
               {item(
                 <ArrowDownLeft className="h-3 w-3" />,
-                r.modo.tipo === "consome"
-                  ? "Trocar o job do saldo…"
-                  : "Consumir o saldo de um job…",
+                r.modo.tipo === "consome" ? "Trocar o saldo…" : "Consumir um saldo do cliente…",
                 r.modo.tipo === "consome"
                   ? saldo
                     ? `Hoje: ${saldo.codigo}, restam ${brl(r, saldo.disponivel - r.totalOrcado)}.`
                     : `Hoje: ${r.codigoDoModo ?? "—"}.`
-                  : "Todas as linhas passam a ser pagas pelo saldo de um job do cliente.",
+                  : "Todas as linhas passam a ser pagas por um saldo do cliente: de um job ou um save avulso.",
                 pedirConsumo,
                 r.modo.tipo === "consome",
               )}
@@ -495,7 +500,7 @@ export function FaixaSaveDoOrcamento({ resumo }: { resumo: ResumoDoSave }) {
           </span>
           <p className="text-[11.5px] leading-relaxed text-muted-foreground">
             <strong className="text-foreground">
-              Consumindo o saldo do {r.codigoDoModo ?? "job"}
+              Consumindo o saldo {doSaldo(r)}
               {saldo ? ` · ${saldo.nome}` : ""}.
             </strong>{" "}
             As {r.qtdLinhas} linhas são pagas por esse saldo. O valor que passar do
@@ -503,7 +508,7 @@ export function FaixaSaveDoOrcamento({ resumo }: { resumo: ResumoDoSave }) {
           </p>
         </div>
         <Numero
-          rotulo={`Saldo do ${r.codigoDoModo ?? "job"}`}
+          rotulo={`Saldo ${doSaldo(r)}`}
           valor={saldo ? brl(r, saldo.disponivel) : "—"}
         />
         <Numero rotulo="Este orçamento usa" valor={brl(r, r.totalOrcado)} />
@@ -570,7 +575,7 @@ export function AvisoSaveDaLinha({
           <DialogDescription>
             {r.modo.tipo === "gera"
               ? "Este orçamento inteiro gera save: o save não se mexe linha a linha."
-              : `Este orçamento inteiro consome o saldo do ${r.codigoDoModo ?? "job"}: cada linha consome o próprio orçado.`}{" "}
+              : `Este orçamento inteiro consome o saldo ${doSaldo(r)}: cada linha consome o próprio orçado.`}{" "}
             Para mudar uma linha só, retire antes o save do orçamento, no menu Save.
           </DialogDescription>
         </DialogHeader>
@@ -756,7 +761,7 @@ function DialogoEscolherJob({
       setErro(
         <>
           O orçamento soma <strong className="font-mono">{brl(r, r.totalOrcado)}</strong> e o
-          saldo disponível do {saldo.codigo} é de{" "}
+          saldo disponível {saldo.avulso ? `do save “${saldo.codigo}”` : `do ${saldo.codigo}`} é de{" "}
           <strong className="font-mono">{brl(r, saldo.disponivel)}</strong>: faltam{" "}
           <strong className="font-mono">{brl(r, r.totalOrcado - saldo.disponivel)}</strong>. Nada
           foi gravado.
@@ -779,10 +784,10 @@ function DialogoEscolherJob({
       <DialogContent className="max-w-xl">
         <DialogHeader>
           <DialogTitle>
-            {r.modo.tipo === "consome" ? "Trocar o job do saldo" : "Consumir o saldo de um job"}
+            {r.modo.tipo === "consome" ? "Trocar o saldo" : "Consumir um saldo do cliente"}
           </DialogTitle>
           <DialogDescription>
-            O orçamento inteiro passa a ser pago pelo saldo do job escolhido: as {r.qtdLinhas}{" "}
+            O orçamento inteiro passa a ser pago pelo saldo escolhido: as {r.qtdLinhas}{" "}
             linhas consomem o próprio orçado. O orçamento soma{" "}
             <strong className="font-mono text-foreground">{brl(r, r.totalOrcado)}</strong>.
           </DialogDescription>
@@ -824,7 +829,12 @@ function DialogoEscolherJob({
                       {ativo && <span className="h-2 w-2 rounded-full bg-[#5f5d57]" />}
                     </span>
                     <span className="flex min-w-0 flex-wrap items-baseline gap-x-2">
-                      <span className="font-mono text-xs font-bold">{saldo.codigo}</span>
+                      <span className={cn("text-xs font-bold", !saldo.avulso && "font-mono")}>{saldo.codigo}</span>
+                      {saldo.avulso && (
+                        <span className="rounded-full border border-[#5f5d57]/30 bg-[#5f5d57]/10 px-2 py-[1px] text-[10.5px] font-semibold text-[#3f3d39]">
+                          Save avulso
+                        </span>
+                      )}
                       <span className="truncate text-[13px]">{saldo.nome}</span>
                       {falta > 0.004 && (
                         <span className="text-[11.5px] text-muted-foreground">
@@ -877,7 +887,7 @@ function DialogoBloqueio({
   const d = dialogo;
   let texto = "";
   if (d?.acao === "gera" && r.modo.tipo === "consome") {
-    texto = `Este orçamento inteiro consome o saldo do ${r.codigoDoModo ?? "job"}. Para transformá-lo em orçamento de save, retire antes todos os saves.`;
+    texto = `Este orçamento inteiro consome o saldo ${doSaldo(r)}. Para transformá-lo em orçamento de save, retire antes todos os saves.`;
   } else if (d?.acao === "consome" && r.modo.tipo === "gera") {
     texto = "Este orçamento inteiro gera save. Para consumir o saldo de um job, retire antes todos os saves.";
   } else if (d) {

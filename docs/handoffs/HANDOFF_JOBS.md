@@ -6729,3 +6729,39 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - Dados: `page.tsx` monta `noComite` com `aEmitirPorItemId` e
   `comiteDaPP.pedidos`. Sem migration.
 
+
+## ⚠️ Nota de 2026-11-06 (2) — o prazo de envio do 20/11 prorrogado até 06/11 (decisão 245)
+
+- Exceção única à 157, aberta pelo Tiago em 06/11: a janela de 20/11/2026
+  aceita envio até 06/11 (pela regra, era 05/11). Em 06/11 o calendário do
+  formulário volta a acender o 20/11, e as PPs geradas com esse vencimento
+  voltam a ter o "Enviar ao financeiro". A partir de 07/11 a regra volta, e
+  a primeira janela é 08/12.
+- Código: `PRAZOS_DE_ENVIO_PRORROGADOS` em `lib/calculos/janelas-pagamento.ts`,
+  aplicada no fim do `dataLimiteDeEnvio`, por onde passam todas as travas
+  da tela e do servidor. Só estende, nunca encurta. Sem migration.
+- Provisório: o próximo passo é o financeiro registrar exceções pela tela.
+
+## ⚠️ Nota de 2026-11-06 (3) — a produção cancela o envio da prestação (decisão 246)
+
+- Com a prestação da verba em avaliação, quem presta contas cancela o
+  envio de dois jeitos (as duas opções do protótipo, aprovadas juntas): o
+  ícone ↶ "Cancelar envio da prestação" no cartão da verba (painel do item)
+  e na trilha da aba PPs; e o "Cancelar envio" no rodapé da gaveta aberta
+  pelo "Ver prestação", que vira edição na hora.
+- Volta a rascunho no primeiro envio e a "reprovada" (com o motivo) no
+  reenvio, com os mesmos documentos; a enviada com "Não houve gasto" volta
+  a "Prestar contas". Histórico: "Envio da prestação cancelado".
+- Na aba PPs, a linha da verba com a prestação enviada ganhou o ícone
+  "Ver prestação".
+- Banco: `cancelar_envio_prestacao_verba` e o evento
+  `prestacao_envio_cancelado` (migration 20261106950001).
+- Corrigida a trava de papel de `_verba_para_prestar` (migration
+  20261106950003): na verba sem responsável, qualquer papel do tenant
+  passava em salvar, remover, enviar e cancelar a prestação; agora só
+  administrador, GP, produtor, o freela do projeto e o responsável da verba.
+
+
+## ⚠️ Nota de 2026-11-09 — errata de save com o save avulso (decisão 247)
+
+- A errata de save do job aberto e a gravação direta no job devolvido aceitam o save avulso como origem do consumo (`origensParaOBanco` separa job e save avulso pelo id). A conferência do cliente vale para os dois.

@@ -1933,7 +1933,8 @@ function VersaoSelecionada({
           versaoId={versao.id}
           clienteNome={clienteNome}
           savePorPadrao={versao.save_por_padrao === true}
-          saveConsumoJobId={versao.save_consumo_job_id ?? null}
+          // O saldo que a versão inteira consome: de um job ou de um save avulso (247).
+          saveConsumoJobId={versao.save_consumo_job_id ?? versao.save_consumo_avulso_id ?? null}
           savePorItem={savePorItem}
           saldosDeSave={saldosDeSave}
           nomeDoGrupo={Object.fromEntries(grupos.map((g) => [g.id, g.nome]))}
@@ -2036,11 +2037,12 @@ function VersaoSelecionada({
         // o que a abertura vai aprovar.
         totalConsumidoEmSave={midiaOff ? 0 : totais.save.totalSaveUsado}
         origensDoConsumo={[
-          ...new Set(
+          ...new Map(
             Object.values(savePorItem)
               .filter((s) => s.saveConsumido > 0)
-              .flatMap((s) => s.origens.map((o) => o.codigo)),
-          ),
+              .flatMap((s) => s.origens)
+              .map((o) => [o.jobId, { codigo: o.codigo, avulso: o.avulso }] as const),
+          ).values(),
         ]}
         valorJob={valorDoJob}
         fechamentoDaCopia={fechamentoDaCopia}

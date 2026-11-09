@@ -188,8 +188,22 @@ export function dataLimiteDeEnvio(
   const uteis = conjuntoDeFeriados(feriados);
   let limite = nominal - DIAS_DE_ANTECEDENCIA_DO_ENVIO * DIA_MS;
   while (!ehDiaUtil(limite, uteis)) limite -= DIA_MS;
-  return utcParaIso(limite);
+  const calculado = utcParaIso(limite);
+  const prorrogado = PRAZOS_DE_ENVIO_PRORROGADOS[vencimentoIso.slice(0, 10)];
+  return prorrogado && prorrogado > calculado ? prorrogado : calculado;
 }
+
+/**
+ * Prazos de envio prorrogados à mão, um a um (decisão 245): janela →
+ * nova data-limite. Só estende o prazo, nunca encurta. É provisório, até
+ * o financeiro ter uma tela para registrar as exceções.
+ *
+ * - 20/11/2026: o limite pela regra era 05/11; a produção foi avisada de
+ *   que o último dia era 06/11, e o Tiago abriu a exceção nesse dia.
+ */
+const PRAZOS_DE_ENVIO_PRORROGADOS: Readonly<Record<string, string>> = {
+  "2026-11-20": "2026-11-06",
+};
 
 /** Hoje ainda dá para enviar uma PP com este vencimento? */
 export function vencimentoAceitaEnvio(

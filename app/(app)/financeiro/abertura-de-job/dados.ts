@@ -21,7 +21,7 @@ import {
   contatosDeCobrancaPorJob,
   type ContatoCobranca,
 } from "@/lib/data/contatos-cobranca";
-import { grupoDoPedido } from "@/lib/data/saves";
+import { detalheDoSaveAvulso, grupoDoPedido, idDaOrigem, rotulosDasOrigens } from "@/lib/data/saves";
 import { SELECT_PARAMETROS_DO_JOB, comParametrosDoJob } from "@/lib/data/parametros-do-job";
 
 /**
@@ -246,6 +246,8 @@ export interface SaveNaFila {
     /** `vw_saves_por_job.disponivel` da origem: o que ainda cabe consumir
      *  dela. A reserva deste pedido já saiu daqui. */
     disponivel: number;
+    /** A origem é um save avulso (decisão 247), não um job. */
+    avulso: boolean;
   }[];
   enviadoEm: string;
   enviadoPorNome: string | null;
@@ -967,28 +969,26 @@ export async function savesDaConferencia(
   if (consumidoras.length > 0) {
     const { data: consumos, error: consumosErr } = await supabase
       .from("saves_consumos")
-      .select("job_item_orcado_id, job_origem_id, valor")
+      .select("job_item_orcado_id, job_origem_id, save_avulso_id, valor")
       .eq("tenant_id", tenantId)
       .in("job_item_orcado_id", consumidoras);
     if (consumosErr) {
       console.error("[abertura-job.saves-conferencia.consumos]", consumosErr.message);
     }
+    // A origem é o job que gerou o save ou o save avulso (decisão 247).
+    const origensLidas: OrigemDeSave[] = [];
     for (const c of (consumos ?? []) as any[]) {
+      const origem = (c.save_avulso_id ?? c.job_origem_id) as string;
+      origensLidas.push({ job_origem_id: c.job_origem_id ?? undefined, save_avulso_id: c.save_avulso_id ?? undefined, valor: 0 });
       const lista = origensPorLinha.get(c.job_item_orcado_id) ?? [];
-      const ja = lista.find((o) => o.jobId === c.job_origem_id);
+      const ja = lista.find((o) => o.jobId === origem);
       if (ja) ja.valor += Number(c.valor ?? 0);
-      else lista.push({ jobId: c.job_origem_id, valor: Number(c.valor ?? 0) });
+      else lista.push({ jobId: origem, valor: Number(c.valor ?? 0) });
       origensPorLinha.set(c.job_item_orcado_id, lista);
     }
-    const idsOrigem = [
-      ...new Set([...origensPorLinha.values()].flat().map((o) => o.jobId)),
-    ];
-    if (idsOrigem.length > 0) {
-      const { data: jobsOrigem } = await supabase
-        .from("jobs")
-        .select("id, codigo")
-        .in("id", idsOrigem);
-      for (const j of (jobsOrigem ?? []) as any[]) codigos.set(j.id, j.codigo);
+    if (origensLidas.length > 0) {
+      const rotulos = await rotulosDasOrigens(supabase, origensLidas);
+      for (const [id, r] of rotulos) codigos.set(id, r.avulso ? `save “${r.codigo}”` : r.codigo);
     }
   }
 
@@ -1088,12 +1088,13 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
   if (pedidos.length === 0) return [];
 
   const idsJobs = [...new Set(pedidos.map((p) => p.job_id as string))];
+  const todasAsOrigens = pedidos.flatMap((p) => (p.origens ?? []) as OrigemDeSave[]);
   const idsOrigem = [
-    ...new Set(
-      pedidos.flatMap((p) =>
-        ((p.origens ?? []) as OrigemDeSave[]).map((o) => o.job_origem_id),
-      ),
-    ),
+    ...new Set(todasAsOrigens.map((o) => o.job_origem_id).filter((v): v is string => Boolean(v))),
+  ];
+  // Decisão 247: o consumo de um save avulso.
+  const idsAvulsos = [
+    ...new Set(todasAsOrigens.map((o) => o.save_avulso_id).filter((v): v is string => Boolean(v))),
   ];
   const idsPessoas = [
     ...new Set(pedidos.map((p) => p.enviado_por as string | null).filter(Boolean)),
@@ -1104,7 +1105,7 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
     ),
   ] as string[];
 
-  const [jobsRes, origensRes, pessoasRes, linhasRes] = await Promise.all([
+  const [jobsRes, origensRes, pessoasRes, linhasRes, avulsosRes] = await Promise.all([
     supabase
       .from("jobs")
       .select(
@@ -1137,12 +1138,16 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
           .eq("tenant_id", tenantId)
           .in("id", idsLinhas)
       : Promise.resolve({ data: [] as any[], error: null }),
+    idsAvulsos.length
+      ? supabase.from("vw_saves_avulsos").select("id, nome, numero_nf, data_emissao, disponivel").in("id", idsAvulsos)
+      : Promise.resolve({ data: [] as any[], error: null }),
   ]);
   for (const [rotulo, r] of [
     ["jobs", jobsRes],
     ["origens", origensRes],
     ["pessoas", pessoasRes],
     ["linhas", linhasRes],
+    ["avulsos", avulsosRes],
   ] as const) {
     if (r.error) console.error(`[abertura-job.saves-fila.${rotulo}]`, r.error.message);
   }
@@ -1156,6 +1161,9 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
       { codigo: j.codigo ?? "—", nome: j.nome ?? "" },
     ]),
   );
+  for (const a of (avulsosRes.data ?? []) as any[]) {
+    origens.set(a.id, { codigo: `save “${a.nome ?? ""}”`, nome: detalheDoSaveAvulso(a.numero_nf, a.data_emissao) });
+  }
   const pessoas = new Map<string, string | null>(
     ((pessoasRes.data ?? []) as any[]).map((p) => [p.id, p.nome ?? null]),
   );
@@ -1211,6 +1219,22 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
       }
     }
   }
+  // O saldo de cada save avulso que um pedido consome (decisão 247), e o
+  // dos saves avulsos do cliente, que entram no "saldo do cliente".
+  for (const a of (avulsosRes.data ?? []) as any[]) {
+    disponivelPorJob.set(a.id, Number(a.disponivel ?? 0));
+  }
+  if (clientesDosPedidos.length > 0) {
+    const { data: avulsosDoCliente, error: avulsosErr } = await supabase
+      .from("vw_saves_avulsos")
+      .select("cliente_id, disponivel")
+      .eq("tenant_id", tenantId)
+      .in("cliente_id", clientesDosPedidos);
+    if (avulsosErr) console.error("[abertura-job.saves-fila.avulsos_cliente]", avulsosErr.message);
+    for (const a of (avulsosDoCliente ?? []) as any[]) {
+      disponivelPorCliente.set(a.cliente_id, (disponivelPorCliente.get(a.cliente_id) ?? 0) + Number(a.disponivel ?? 0));
+    }
+  }
 
   const saida: SaveNaFila[] = [];
   for (const p of pedidos) {
@@ -1257,11 +1281,12 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
         : 0,
       origens: ((p.origens ?? []) as OrigemDeSave[])
         .map((o) => ({
-          jobId: o.job_origem_id,
-          codigo: origens.get(o.job_origem_id)?.codigo ?? "—",
-          nome: origens.get(o.job_origem_id)?.nome ?? "",
+          jobId: idDaOrigem(o),
+          codigo: origens.get(idDaOrigem(o))?.codigo ?? "—",
+          nome: origens.get(idDaOrigem(o))?.nome ?? "",
           valor: Number(o.valor ?? 0),
-          disponivel: disponivelPorJob.get(o.job_origem_id) ?? 0,
+          disponivel: disponivelPorJob.get(idDaOrigem(o)) ?? 0,
+          avulso: !!o.save_avulso_id,
         }))
         .sort((a, b) => b.valor - a.valor),
       enviadoEm: p.enviado_em,

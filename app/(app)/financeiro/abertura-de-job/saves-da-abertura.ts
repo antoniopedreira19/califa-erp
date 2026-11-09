@@ -24,7 +24,8 @@ export interface LinhaDeSaveDaAbertura {
   /** Gera: o crédito (orçado da linha). Consome: o consumido. */
   valor: number;
   /** Consome: de qual job vem o saldo, maior primeiro. Gera: []. */
-  origens: { jobId: string; codigo: string; nome: string; valor: number }[];
+  /** `avulso`: a origem é um save avulso (decisão 247), sem planilha. */
+  origens: { jobId: string; codigo: string; nome: string; valor: number; avulso: boolean }[];
   /** Gera: o que a nota cobra por causa da linha. Consome: null. */
   faturamentoDaLinha: number | null;
   /** O pedido de save da linha (momento `abertura` ou `reenvio`). Nulo
@@ -92,7 +93,7 @@ export async function carregarSavesDaAbertura(
       .from("jobs")
       .select(
         "id, cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), " +
-          "versao:versoes_orcamento!versao_orcamento_aprovada_id(percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, save_por_padrao, save_consumo_job_id), " +
+          "versao:versoes_orcamento!versao_orcamento_aprovada_id(percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, save_por_padrao, save_consumo_job_id, save_consumo_avulso_id), " +
           "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), " +
           // Os parâmetros do job, quando o financeiro os alterou (decisão 224).
           SELECT_PARAMETROS_DO_JOB,
@@ -154,13 +155,15 @@ export async function carregarSavesDaAbertura(
     ...new Set(linhasDoJob.flatMap((l) => l.origens.map((o) => o.jobId))),
   ];
   const consumoJobId = (versao?.save_consumo_job_id as string | null) ?? null;
+  // Decisão 247: o orçamento inteiro pode consumir um save avulso.
+  const consumoAvulsoId = (versao?.save_consumo_avulso_id as string | null) ?? null;
   const aprovadores = [
     ...new Set(pedidos.map((p) => p.decidido_por as string | null).filter(Boolean)),
   ] as string[];
 
   const temGera = linhasDoJob.some((l) => l.tipo === "gera");
 
-  const [saldosRes, origensRes, pessoasRes, consumosRes] = await Promise.all([
+  const [saldosRes, origensRes, pessoasRes, consumosRes, avulsosRes] = await Promise.all([
     // O próprio job entra sempre: é a linha dele que traz o consumido, o
     // reservado e o livre do crédito (a view só tem linha para job com
     // crédito aprovado).
@@ -203,7 +206,17 @@ export async function carregarSavesDaAbertura(
           // falha ("invalid input syntax for type json").
           .contains("origens", JSON.stringify([{ job_origem_id: jobId }]))
       : Promise.resolve({ data: [], error: null }),
+    // Os saves avulsos do cliente (decisão 247): o saldo de cada um que este
+    // job consome, e a parte deles no saldo do cliente.
+    clienteId
+      ? supabase
+          .from("vw_saves_avulsos")
+          .select("id, nome, disponivel")
+          .eq("tenant_id", tenantId)
+          .eq("cliente_id", clienteId)
+      : Promise.resolve({ data: [], error: null }),
   ]);
+  if (avulsosRes.error) console.error("[abertura-job.saves.avulsos]", avulsosRes.error.message);
   if (saldosRes.error) console.error("[abertura-job.saves.saldos]", saldosRes.error.message);
   if (origensRes.error) console.error("[abertura-job.saves.origens]", origensRes.error.message);
   if (consumosRes.error) console.error("[abertura-job.saves.consumidores]", consumosRes.error.message);
@@ -230,6 +243,14 @@ export async function carregarSavesDaAbertura(
       saldoDoClienteAntes += v;
     }
   }
+  const idsAvulsos = new Set<string>();
+  for (const a of (avulsosRes.data ?? []) as any[]) {
+    idsAvulsos.add(a.id);
+    const v = Number(a.disponivel ?? 0);
+    disponivelPorJob.set(a.id, v);
+    nomes.set(a.id, { codigo: `save “${a.nome}”`, nome: "Save avulso" });
+    saldoDoClienteAntes += v;
+  }
 
   const linhas: LinhaDeSaveDaAbertura[] = linhasDoJob.map((l) => {
     const tipoCusto = tipos.get(l.id) ?? null;
@@ -245,6 +266,7 @@ export async function carregarSavesDaAbertura(
         codigo: o.codigo,
         nome: nomes.get(o.jobId)?.nome ?? "",
         valor: o.valor,
+        avulso: idsAvulsos.has(o.jobId),
       })),
       faturamentoDaLinha:
         l.tipo === "gera" ? faturamentoDaLinhaEmSave(l.valor, tipoCusto, versao, modelo) : null,
@@ -268,6 +290,8 @@ export async function carregarSavesDaAbertura(
   // em save.
   const modoInteiro: SavesDaAbertura["modoInteiro"] = consumoJobId
     ? { tipo: "consome", codigo: nomes.get(consumoJobId)?.codigo ?? "—" }
+    : consumoAvulsoId
+      ? { tipo: "consome", codigo: nomes.get(consumoAvulsoId)?.codigo ?? "save avulso" }
     : versao?.save_por_padrao === true && vivas > 0 && vivasEmSave === vivas
       ? { tipo: "gera" }
       : null;
