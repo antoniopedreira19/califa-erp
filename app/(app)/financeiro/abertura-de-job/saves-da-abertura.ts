@@ -24,7 +24,8 @@ export interface LinhaDeSaveDaAbertura {
   /** Gera: o crédito (orçado da linha). Consome: o consumido. */
   valor: number;
   /** Consome: de qual job vem o saldo, maior primeiro. Gera: []. */
-  origens: { jobId: string; codigo: string; nome: string; valor: number }[];
+  /** `avulso`: a origem é um save avulso (decisão 247), sem planilha. */
+  origens: { jobId: string; codigo: string; nome: string; valor: number; avulso: boolean }[];
   /** Gera: o que a nota cobra por causa da linha. Consome: null. */
   faturamentoDaLinha: number | null;
   /** O pedido de save da linha (momento `abertura` ou `reenvio`). Nulo
@@ -242,7 +243,9 @@ export async function carregarSavesDaAbertura(
       saldoDoClienteAntes += v;
     }
   }
+  const idsAvulsos = new Set<string>();
   for (const a of (avulsosRes.data ?? []) as any[]) {
+    idsAvulsos.add(a.id);
     const v = Number(a.disponivel ?? 0);
     disponivelPorJob.set(a.id, v);
     nomes.set(a.id, { codigo: `save “${a.nome}”`, nome: "Save avulso" });
@@ -263,6 +266,7 @@ export async function carregarSavesDaAbertura(
         codigo: o.codigo,
         nome: nomes.get(o.jobId)?.nome ?? "",
         valor: o.valor,
+        avulso: idsAvulsos.has(o.jobId),
       })),
       faturamentoDaLinha:
         l.tipo === "gera" ? faturamentoDaLinhaEmSave(l.valor, tipoCusto, versao, modelo) : null,

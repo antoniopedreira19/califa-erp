@@ -2037,11 +2037,12 @@ function VersaoSelecionada({
         // o que a abertura vai aprovar.
         totalConsumidoEmSave={midiaOff ? 0 : totais.save.totalSaveUsado}
         origensDoConsumo={[
-          ...new Set(
+          ...new Map(
             Object.values(savePorItem)
               .filter((s) => s.saveConsumido > 0)
-              .flatMap((s) => s.origens.map((o) => o.codigo)),
-          ),
+              .flatMap((s) => s.origens)
+              .map((o) => [o.jobId, { codigo: o.codigo, avulso: o.avulso }] as const),
+          ).values(),
         ]}
         valorJob={valorDoJob}
         fechamentoDaCopia={fechamentoDaCopia}

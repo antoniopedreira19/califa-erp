@@ -246,6 +246,8 @@ export interface SaveNaFila {
     /** `vw_saves_por_job.disponivel` da origem: o que ainda cabe consumir
      *  dela. A reserva deste pedido já saiu daqui. */
     disponivel: number;
+    /** A origem é um save avulso (decisão 247), não um job. */
+    avulso: boolean;
   }[];
   enviadoEm: string;
   enviadoPorNome: string | null;
@@ -1284,6 +1286,7 @@ export async function listarSavesNaFila(tenantId: string): Promise<SaveNaFila[]>
           nome: origens.get(idDaOrigem(o))?.nome ?? "",
           valor: Number(o.valor ?? 0),
           disponivel: disponivelPorJob.get(idDaOrigem(o)) ?? 0,
+          avulso: !!o.save_avulso_id,
         }))
         .sort((a, b) => b.valor - a.valor),
       enviadoEm: p.enviado_em,

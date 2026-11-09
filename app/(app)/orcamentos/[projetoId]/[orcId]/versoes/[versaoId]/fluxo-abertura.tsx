@@ -151,7 +151,8 @@ interface Props {
    *  de quais (códigos). Zerado, some do formulário e da confirmação
    *  (decisão 155). */
   totalConsumidoEmSave: number;
-  origensDoConsumo: string[];
+  /** O código do job, ou o nome do save avulso (decisão 247). */
+  origensDoConsumo: { codigo: string; avulso: boolean }[];
   /** Compromisso total do cliente — é o que vai para `jobs.valor_total`. */
   valorJob: number;
   /** Job devolvido ou aguardando abertura: o fechamento da cópia do job,

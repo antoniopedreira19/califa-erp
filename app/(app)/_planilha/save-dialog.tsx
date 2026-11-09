@@ -258,7 +258,10 @@ function porQuem(nome: string | null): string {
 
 /** "do JOB-0390", "do JOB-0390 e do JOB-0401". */
 function doJobs(pontas: PontaDeSave[]): string {
-  const codigos = [...new Set(pontas.map((p) => p.codigo))].map((c) => `do ${c}`);
+  // O save avulso (decisão 247) vai pelo nome, entre aspas.
+  const codigos = [
+    ...new Set(pontas.map((p) => (p.avulso ? `do save “${p.codigo}”` : `do ${p.codigo}`))),
+  ];
   if (codigos.length === 0) return "do job de origem";
   if (codigos.length === 1) return codigos[0];
   return `${codigos.slice(0, -1).join(", ")} e ${codigos[codigos.length - 1]}`;
@@ -718,7 +721,9 @@ export function SaveDialog(props: Props) {
           {estado.emSave
             ? "Gera crédito"
             : estado.origens.length > 0
-              ? `Paga por ${estado.origens.length} job${estado.origens.length > 1 ? "s" : ""}`
+              ? estado.origens.some((o) => o.avulso)
+                ? `Paga por ${estado.origens.length} ${estado.origens.length > 1 ? "saldos" : "saldo"}`
+                : `Paga por ${estado.origens.length} job${estado.origens.length > 1 ? "s" : ""}`
               : "Sem save definido"}
         </Pastilha>
       </div>

@@ -8944,5 +8944,5 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - A nota sai como avulsa e o save avulso nasce junto, numa transação só (`emitir_faturamento_save_avulso`). A NF com o save já consumido não se cancela.
 - **Aba nova "Créditos de save"**: lista por cliente com o save avulso e os saves de jobs (Crédito, Consumido, Reservado, Saldo); o ícone de cada origem abre os jobs que consumiram, pelo nome do financeiro.
 - **Na abertura** (faixa Saves e bloco "Saves deste job"), o consumo de save avulso aparece como "do save “Nome”", e o saldo do cliente soma os saves avulsos.
-- **Fica de fora:** a receita do save avulso não migra para o job que consome na rentabilidade e no fluxo de caixa (pede decisão).
+- **Receita migrada:** a parte da NF do save avulso que um job consome (consumo ÷ crédito × NF) entra no faturamento do job na `vw_job_rentabilidade` e divide o título no `vw_fluxo_caixa` (migration `20261109940003`), como no save de job. Aprovação da versão, abertura e errata de save conferidas pela tela no TES-1038/26.
 - **Conferido:** NF TESTE-247 emitida pela tela (Empresa Teste, cliente Teste): crédito R$ 8.621,79, 01 · Receita · Save, sem rateio. Migrations `20261109940001` e `20261109940002`.

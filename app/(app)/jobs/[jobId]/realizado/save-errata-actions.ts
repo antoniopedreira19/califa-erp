@@ -120,8 +120,12 @@ function errataDe(
 /** Os títulos da errata de save, os mesmos desde 26/08/2026. */
 const tituloGera = (item: string) => `Save: "${item}" vira crédito`;
 const tituloDeixaDeGerar = (item: string) => `Save: "${item}" deixa de ser crédito`;
-const tituloConsome = (item: string) =>
-  `Save: "${item}" passa a ser paga por saldo de outro job`;
+/** Com um save avulso entre as origens (decisão 247), o saldo não é "de
+ *  outro job". */
+const tituloConsome = (item: string, comSaveAvulso: boolean) =>
+  comSaveAvulso
+    ? `Save: "${item}" passa a ser paga por saldo de save avulso`
+    : `Save: "${item}" passa a ser paga por saldo de outro job`;
 const tituloDeixaDeConsumir = (item: string) => `Save: "${item}" deixa de consumir saldo`;
 
 /** O save só muda com o job aberto (decisão 099): gerar até o envio para
@@ -494,7 +498,9 @@ export async function registrarErrataDeSave(
 
   const tipo: SaveAprovacaoTipo = mudanca.tipo === "marcar" ? "gera" : "consome";
   const errata = errataDe(
-    tipo === "gera" ? tituloGera(alvo.item) : tituloConsome(alvo.item),
+    tipo === "gera"
+      ? tituloGera(alvo.item)
+      : tituloConsome(alvo.item, origens.some((o) => !!o.save_avulso_id)),
     antes,
     depois,
   );
