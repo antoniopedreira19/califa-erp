@@ -6760,3 +6760,8 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
   20261106950003): na verba sem responsável, qualquer papel do tenant
   passava em salvar, remover, enviar e cancelar a prestação; agora só
   administrador, GP, produtor, o freela do projeto e o responsável da verba.
+
+
+## ⚠️ Nota de 2026-11-09 — errata de save com o save avulso (decisão 247)
+
+- A errata de save do job aberto e a gravação direta no job devolvido aceitam o save avulso como origem do consumo (`origensParaOBanco` separa job e save avulso pelo id). A conferência do cliente vale para os dois.

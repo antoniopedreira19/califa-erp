@@ -770,7 +770,7 @@ export async function sobrescreverVersaoComPlanilha(
 
   const { data: versao } = await supabase
     .from("versoes_orcamento")
-    .select("id, status, orcamento_id, save_consumo_job_id")
+    .select("id, status, orcamento_id, save_consumo_job_id, save_consumo_avulso_id")
     .eq("id", versaoId)
     .eq("tenant_id", tenantId)
     .maybeSingle<{
@@ -778,6 +778,7 @@ export async function sobrescreverVersaoComPlanilha(
       status: string;
       orcamento_id: string;
       save_consumo_job_id: string | null;
+      save_consumo_avulso_id: string | null;
     }>();
 
   if (!versao) return { ok: false, message: "Versão não encontrada." };
@@ -884,7 +885,8 @@ export async function sobrescreverVersaoComPlanilha(
   // linha gravada consome o próprio orçado, e o gatilho do banco recusa a
   // que passaria do saldo. A troca apaga antes de gravar, então a conta
   // vem ANTES — senão a versão ficaria vazia no meio do caminho.
-  if (versao.save_consumo_job_id) {
+  // O mesmo vale para o orçamento que consome um save avulso (decisão 247).
+  if (versao.save_consumo_job_id || versao.save_consumo_avulso_id) {
     const totalNovo = linhas
       .flat()
       .reduce(
@@ -895,23 +897,37 @@ export async function sobrescreverVersaoComPlanilha(
             Number(it.dias_meses_orcado ?? 1),
         0,
       );
-    const [{ data: disponivel }, { data: jobOrigem }] = await Promise.all([
-      supabase.rpc("save_disponivel_para_rascunho", {
-        p_job_id: versao.save_consumo_job_id,
-      }),
-      supabase
-        .from("jobs")
-        .select("codigo")
-        .eq("id", versao.save_consumo_job_id)
-        .maybeSingle<{ codigo: string }>(),
+    const [{ data: disponivel }, { data: jobOrigem }, { data: avulsoOrigem }] = await Promise.all([
+      versao.save_consumo_job_id
+        ? supabase.rpc("save_disponivel_para_rascunho", { p_job_id: versao.save_consumo_job_id })
+        : supabase.rpc("save_avulso_disponivel_para_rascunho", {
+            p_save_avulso_id: versao.save_consumo_avulso_id,
+          }),
+      versao.save_consumo_job_id
+        ? supabase
+            .from("jobs")
+            .select("codigo")
+            .eq("id", versao.save_consumo_job_id)
+            .maybeSingle<{ codigo: string }>()
+        : Promise.resolve({ data: null }),
+      versao.save_consumo_avulso_id
+        ? supabase
+            .from("saves_avulsos")
+            .select("nome")
+            .eq("id", versao.save_consumo_avulso_id)
+            .maybeSingle<{ nome: string }>()
+        : Promise.resolve({ data: null }),
     ]);
     const saldo = Number(disponivel ?? 0);
+    const doSaldo = avulsoOrigem
+      ? `do save “${avulsoOrigem.nome}”`
+      : `do ${jobOrigem?.codigo ?? "job"}`;
     if (totalNovo > saldo + 0.005) {
       const brl = (v: number) =>
         v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
       return {
         ok: false,
-        message: `Este orçamento inteiro consome o saldo do ${jobOrigem?.codigo ?? "job"}: a planilha soma ${brl(totalNovo)}, e o saldo disponível é de ${brl(saldo)}. Nada foi apagado. Retire antes o save do orçamento, ou importe uma planilha que caiba no saldo.`,
+        message: `Este orçamento inteiro consome o saldo ${doSaldo}: a planilha soma ${brl(totalNovo)}, e o saldo disponível é de ${brl(saldo)}. Nada foi apagado. Retire antes o save do orçamento, ou importe uma planilha que caiba no saldo.`,
       };
     }
   }

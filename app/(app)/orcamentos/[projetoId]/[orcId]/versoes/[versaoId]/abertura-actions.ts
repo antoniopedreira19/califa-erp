@@ -34,6 +34,7 @@ import {
 } from "@/lib/calculos/midia-off";
 import { formatCurrency } from "@/lib/utils";
 import { cancelarAprovacaoVersao } from "../actions";
+import { recusaDoConsumoDeSaveAvulso } from "@/lib/data/saves";
 import { cancelarPedidoCompra } from "@/app/(app)/jobs/[jobId]/realizado/actions-pp";
 
 export type AberturaResult =
@@ -136,11 +137,16 @@ function mapDbError(msg: string): string {
 async function barrarConsumoSemSaldoAprovado(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
-  consumos: { job_origem_id: string; valor: number | string }[],
+  consumos: { job_origem_id: string | null; save_avulso_id: string | null; valor: number | string }[],
   quem: "Esta versão" | "Este job",
 ): Promise<string | null> {
+  // O consumo de save avulso (decisão 247): o da versão aprovada e o da
+  // cópia do job devolvido já estão no `usado` do crédito.
+  const recusaAvulso = await recusaDoConsumoDeSaveAvulso(supabase, tenantId, consumos, true, quem);
+  if (recusaAvulso) return recusaAvulso;
   const porOrigem = new Map<string, number>();
   for (const c of consumos) {
+    if (!c.job_origem_id) continue;
     porOrigem.set(c.job_origem_id, (porOrigem.get(c.job_origem_id) ?? 0) + Number(c.valor ?? 0));
   }
   const origens = [...porOrigem.keys()];
@@ -689,14 +695,14 @@ async function tentarEnviarJobParaAbertura(
     ? linhasDoJobDevolvido.length > 0
       ? await supabase
           .from("saves_consumos")
-          .select("job_origem_id, valor")
+          .select("job_origem_id, save_avulso_id, valor")
           .eq("tenant_id", session.activeTenant.id)
           .in("job_item_orcado_id", linhasDoJobDevolvido)
       : { data: [], error: null }
     : idsDaVersaoConsumo.length > 0
       ? await supabase
           .from("saves_consumos")
-          .select("job_origem_id, valor")
+          .select("job_origem_id, save_avulso_id, valor")
           .eq("tenant_id", session.activeTenant.id)
           .in("item_versao_id", idsDaVersaoConsumo)
           .is("job_item_orcado_id", null)
@@ -709,7 +715,7 @@ async function tentarEnviarJobParaAbertura(
   const semSaldo = await barrarConsumoSemSaldoAprovado(
     supabase,
     session.activeTenant.id,
-    (consumosRes.data ?? []) as { job_origem_id: string; valor: number }[],
+    (consumosRes.data ?? []) as { job_origem_id: string | null; save_avulso_id: string | null; valor: number }[],
     jobDevolvido ? "Este job" : "Esta versão",
   );
   if (semSaldo) return { ok: false, message: semSaldo };

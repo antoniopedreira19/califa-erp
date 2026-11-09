@@ -3,7 +3,10 @@ import { Receipt } from "lucide-react";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
+import { Suspense } from "react";
 import { ContasReceberTabs } from "./tabs";
+import { CreditosDeSave } from "./creditos-de-save";
+import { lerCreditosDeSave } from "./dados-creditos-de-save";
 import {
   FaturamentoList,
   type FaturamentoPendenteRow,
@@ -191,7 +194,7 @@ export default async function ContasReceberPage({
       .order("razao_social"),
     supabase
       .from("clientes")
-      .select("id, nome_fantasia, razao_social, cnpj")
+      .select("id, nome_fantasia, razao_social, cnpj, percentual_honorarios_padrao")
       .eq("tenant_id", tenantId)
       .eq("status", "ativo")
       .order("nome_fantasia"),
@@ -810,6 +813,12 @@ export default async function ContasReceberPage({
 
   // O CNPJ do tomador da avulsa nasce com o do cadastro do cliente; os já
   // usados em nota ou no envio viram atalhos debaixo do campo.
+  // Decisão 247: os honorários do save avulso nascem com os do cliente.
+  const honorariosPorCliente: Record<string, number> = Object.fromEntries(
+    ((clientesRes.data ?? []) as Array<{ id: string; percentual_honorarios_padrao: number | string | null }>).map(
+      (c) => [c.id, Number(c.percentual_honorarios_padrao ?? 0)],
+    ),
+  );
   const cnpjsPorCliente: Record<string, CnpjsDoCliente> = {};
   const soDigitos14 = (v: string | null | undefined) => {
     const d = (v ?? "").replace(/\D/g, "");
@@ -864,6 +873,7 @@ export default async function ContasReceberPage({
             fiscal={fiscal}
             jobs={jobsDoFaturar}
             cnpjsPorCliente={cnpjsPorCliente}
+            honorariosPorCliente={honorariosPorCliente}
           />
         }
         // As linhas da fila, não as parcelas: a nota do lote é uma linha só.
@@ -891,7 +901,21 @@ export default async function ContasReceberPage({
           />
         }
         titulosCount={linhasTitulos.filter((t) => t.status === "em_aberto").length}
+        // Decisão 247: por streaming, para não somar ao tempo das outras abas.
+        creditos={
+          <Suspense
+            fallback={<p className="py-10 text-center text-sm text-muted-foreground">Carregando os créditos de save…</p>}
+          >
+            <SecaoCreditosDeSave tenantId={tenantId} />
+          </Suspense>
+        }
       />
     </div>
   );
+}
+
+/** A aba "Créditos de save" (decisão 247), lida à parte por streaming. */
+async function SecaoCreditosDeSave({ tenantId }: { tenantId: string }) {
+  const clientes = await lerCreditosDeSave(createClient(), tenantId);
+  return <CreditosDeSave clientes={clientes} />;
 }

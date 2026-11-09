@@ -42,9 +42,12 @@ import type {
 
 /** Uma ponta do crédito: de qual job veio, ou para qual job foi. */
 export interface PontaDeSave {
+  /** O job de origem, ou o save avulso quando `avulso` (decisão 247). */
   jobId: string;
+  /** O código do job, ou o nome do save avulso. */
   codigo: string;
   valor: number;
+  avulso: boolean;
 }
 
 /** Um pedido de aprovação de save, como o pop-up o mostra (decisão 099).
@@ -303,14 +306,16 @@ export function CelulaSave({
               : sitConsumo === "recusado"
                 ? `Edição do consumo recusada pelo financeiro · segue o consumo aprovado: ${pontas}`
                 : estado.origens.length > 1
-                  ? `Consome saldo de ${estado.origens.length} jobs · ${pontas}`
-                  : `Pago pelo saldo de save do ${pontas}`,
+                  ? `Consome ${estado.origens.length} saldos · ${pontas}`
+                  : maior.avulso
+                    ? `Pago pelo save avulso ${pontas}`
+                    : `Pago pelo saldo de save do ${pontas}`,
         conteudo: (
           <span className={SAVE.botaoCodigo}>
             <ArrowDownLeft
               className={cn("h-[9px] w-[9px] flex-none", SAVE.icone)}
             />
-            {maior.codigo}
+            {maior.avulso ? <span className="max-w-[64px] truncate">{maior.codigo}</span> : maior.codigo}
             {resto.length > 0 && (
               <span className={SAVE.pastilhaMais}>+{resto.length}</span>
             )}
@@ -337,7 +342,7 @@ export function CelulaSave({
             <ArrowDownLeft
               className={cn("h-[9px] w-[9px] flex-none", SAVE.icone)}
             />
-            {maior?.codigo ?? "—"}
+            {maior?.avulso ? <span className="max-w-[64px] truncate">{maior.codigo}</span> : (maior?.codigo ?? "—")}
             {resto.length > 0 && (
               <span className={SAVE.pastilhaMais}>+{resto.length}</span>
             )}

@@ -43,6 +43,7 @@ import {
   ordensAlteradas,
 } from "@/lib/calculos/ordem-itens";
 import { formatCurrency } from "@/lib/utils";
+import { recusaDoConsumoDeSaveAvulso } from "@/lib/data/saves";
 import {
   FECHAMENTO_PADRAO,
   compraDaCotacao,
@@ -1927,10 +1928,14 @@ export async function moverItem(
 async function barrarConsumoSemSaldoAprovado(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
-  consumos: { job_origem_id: string; valor: number | string }[],
+  consumos: { job_origem_id: string | null; save_avulso_id: string | null; valor: number | string }[],
 ): Promise<string | null> {
+  // O consumo de save avulso (decisão 247), com o crédito dele.
+  const recusaAvulso = await recusaDoConsumoDeSaveAvulso(supabase, tenantId, consumos, false, "A versão");
+  if (recusaAvulso) return recusaAvulso;
   const porOrigem = new Map<string, number>();
   for (const c of consumos) {
+    if (!c.job_origem_id) continue;
     porOrigem.set(c.job_origem_id, (porOrigem.get(c.job_origem_id) ?? 0) + Number(c.valor ?? 0));
   }
   const origens = [...porOrigem.keys()];
@@ -2227,7 +2232,7 @@ async function aprovarVersaoInterna(
       // embed: uma FK só entre as duas tabelas.
       supabase
         .from("saves_consumos")
-        .select("job_origem_id, valor, item:versoes_orcamento_itens!inner(versao_orcamento_id)")
+        .select("job_origem_id, save_avulso_id, valor, item:versoes_orcamento_itens!inner(versao_orcamento_id)")
         .eq("tenant_id", session.activeTenant.id)
         .eq("item.versao_orcamento_id", versaoId)
         .is("substituido_em", null),
@@ -2384,7 +2389,7 @@ async function aprovarVersaoInterna(
   const semSaldo = await barrarConsumoSemSaldoAprovado(
     supabase,
     session.activeTenant.id,
-    (consumosRes.data ?? []) as { job_origem_id: string; valor: number | string }[],
+    (consumosRes.data ?? []) as { job_origem_id: string | null; save_avulso_id: string | null; valor: number | string }[],
   );
   if (semSaldo) return { ok: false, message: semSaldo };
 

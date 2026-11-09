@@ -277,6 +277,10 @@ o honorário **uma vez só**, no Job A.
 
 ## O que ficou de fora, de propósito
 
+> ⚠️ **09/11/2026 — [decisão 247](247-save-avulso.md).** Além do save de
+> um job, o cliente pode ter **save avulso**: o save faturado sem job pelo
+> financeiro, consumido nos jobs dele como o saldo de um job.
+
 - **Save entre clientes diferentes.** O crédito é do cliente.
 - **Uma linha de save consumida por mais de um job.** A alocação é
   exclusiva.

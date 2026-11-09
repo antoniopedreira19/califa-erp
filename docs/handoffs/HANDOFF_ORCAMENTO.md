@@ -6094,3 +6094,11 @@ motivo ficava no fim da janela, depois do Descritivo.
   por `FaixaDoHistorico`), e a linha de parâmetros e o resumo do topo
   (`MetaVersaoDoHistorico`, `ResumoDoHistorico`) mostram a versão escolhida.
 
+
+
+## ⚠️ Nota de 2026-11-09 — o save avulso como saldo na planilha (decisão 247)
+
+- O save faturado sem job pelo financeiro (save avulso) entra na lista de saldos do pop-up de save, numa seção "Save avulso · faturado sem job", com o nome dele e a NF. A aba do pop-up passou a "Consumir save" e o botão a "Selecionar saldo".
+- O save do orçamento inteiro (154) também consome um save avulso: "Consumir um saldo do cliente…" (`versao_save_consumir_avulso`, `versoes_orcamento.save_consumo_avulso_id`). A faixa diz 'Consumindo o saldo do save “Nome”'.
+- O consumo segue o save de hoje: rascunho reserva, a aprovação da versão confere o crédito, a abertura aprova o pedido. A importação por cima de uma versão que consome um save avulso confere o crédito antes de apagar as linhas.
+- Na coluna Save, o nome do save avulso corta com reticências; a dica traz o nome inteiro.

@@ -18,6 +18,8 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
+import { origensParaOBanco } from "@/lib/data/saves";
+import type { OrigemDeSave } from "@/lib/types";
 
 export type ActionResult =
   | { ok: true }
@@ -151,7 +153,9 @@ export async function marcarSaveDaLinha(
   return { ok: true };
 }
 
-/** Uma origem escolhida no pop-up: de qual job, e quanto. */
+/** Uma origem escolhida no pop-up: de qual saldo, e quanto. `jobOrigemId`
+ *  é o id do job de origem OU do save avulso (decisão 247) — o pop-up trata
+ *  as duas origens pelo mesmo campo, e `origensParaOBanco` as separa. */
 export interface OrigemEscolhida {
   jobOrigemId: string;
   valor: number;
@@ -189,9 +193,17 @@ export async function salvarConsumoDeSave(
     };
   }
 
-  const limpas = origens
-    .map((o) => ({ ...o, valor: Number(o.valor) }))
-    .filter((o) => o.jobOrigemId && Number.isFinite(o.valor) && o.valor > 0);
+  let limpas: OrigemDeSave[];
+  try {
+    limpas = await origensParaOBanco(
+      supabase,
+      session.activeTenant.id,
+      origens.filter((o) => Number.isFinite(Number(o.valor))),
+    );
+  } catch (e) {
+    console.error("[save.consumo.origens]", (e as Error).message);
+    return { ok: false, message: "Não foi possível conferir as origens do consumo. Tente de novo." };
+  }
 
   const total = limpas.reduce((s, o) => s + o.valor, 0);
   const orcado = Number(item.total_orcado ?? 0);
@@ -219,7 +231,8 @@ export async function salvarConsumoDeSave(
     const { error: insErr } = await supabase.from("saves_consumos").insert(
       limpas.map((o) => ({
         tenant_id: session.activeTenant.id,
-        job_origem_id: o.jobOrigemId,
+        job_origem_id: o.job_origem_id ?? null,
+        save_avulso_id: o.save_avulso_id ?? null,
         item_versao_id: itemId,
         valor: o.valor,
         created_by: session.profile.id ?? null,
@@ -321,7 +334,8 @@ export async function gerarSaveNoOrcamentoInteiro(
   return { ok: true };
 }
 
-/** Todas as linhas passam a consumir o próprio orçado do saldo do job. */
+/** Todas as linhas passam a consumir o próprio orçado do saldo escolhido:
+ *  o de um job, ou o de um save avulso (decisão 247). */
 export async function consumirSaldoNoOrcamentoInteiro(
   versaoId: string,
   jobOrigemId: string,
@@ -329,13 +343,29 @@ export async function consumirSaldoNoOrcamentoInteiro(
   const porta = await portaDoModo(versaoId, "consumir");
   if (!porta.ok) return porta;
   if (!jobOrigemId) {
-    return { ok: false, message: "Escolha o job de onde vem o saldo." };
+    return { ok: false, message: "Escolha de onde vem o saldo." };
   }
 
-  const { data, error } = await porta.supabase.rpc("versao_save_consumir_tudo", {
-    p_versao_id: versaoId,
-    p_job_id: jobOrigemId,
-  });
+  const { data: avulso, error: errAvulso } = await porta.supabase
+    .from("saves_avulsos")
+    .select("id")
+    .eq("tenant_id", porta.tenantId)
+    .eq("id", jobOrigemId)
+    .maybeSingle<{ id: string }>();
+  if (errAvulso) {
+    console.error("[save.orcamento.consumir.origem]", errAvulso.message);
+    return { ok: false, message: "Não foi possível conferir o saldo escolhido. Tente de novo." };
+  }
+
+  const { data, error } = avulso
+    ? await porta.supabase.rpc("versao_save_consumir_avulso", {
+        p_versao_id: versaoId,
+        p_save_avulso_id: jobOrigemId,
+      })
+    : await porta.supabase.rpc("versao_save_consumir_tudo", {
+        p_versao_id: versaoId,
+        p_job_id: jobOrigemId,
+      });
   if (error) {
     console.error("[save.orcamento.consumir]", error.message);
     return { ok: false, message: error.message };
@@ -346,7 +376,10 @@ export async function consumirSaldoNoOrcamentoInteiro(
     tenantId: porta.tenantId,
     entidadeTipo: "versoes_orcamento",
     entidadeId: versaoId,
-    metadata: { job_origem_id: jobOrigemId, ...((data ?? {}) as Record<string, unknown>) },
+    metadata: {
+      ...(avulso ? { save_avulso_id: jobOrigemId } : { job_origem_id: jobOrigemId }),
+      ...((data ?? {}) as Record<string, unknown>),
+    },
   });
 
   revalidatePath(`/orcamentos`, "layout");

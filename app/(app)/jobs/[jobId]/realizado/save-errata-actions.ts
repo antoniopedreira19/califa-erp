@@ -53,7 +53,7 @@ import {
   type BaseDosEspelhos,
   type LinhaDoEspelho,
 } from "@/lib/data/espelhos-do-job";
-import { revisaoPendenteDoJob } from "@/lib/data/saves";
+import { origensParaOBanco, revisaoPendenteDoJob } from "@/lib/data/saves";
 import type {
   JobStatus,
   OrigemDeSave,
@@ -268,14 +268,18 @@ async function conferirOrigensDoCliente(
   origens: OrigemDeSave[],
 ): Promise<string | null> {
   if (origens.length === 0) return null;
-  const ids = [...new Set([jobId, ...origens.map((o) => o.job_origem_id)])];
-  const { data, error } = await supabase
-    .from("jobs")
-    .select("id, cliente_id")
-    .eq("tenant_id", tenantId)
-    .in("id", ids);
-  if (error) {
-    console.error("[save.origens.cliente]", error.message);
+  const idsJobs = origens.map((o) => o.job_origem_id).filter((v): v is string => Boolean(v));
+  const idsAvulsos = origens.map((o) => o.save_avulso_id).filter((v): v is string => Boolean(v));
+  const ids = [...new Set([jobId, ...idsJobs])];
+  // O save avulso (decisão 247) também é do cliente: a mesma conferência.
+  const [{ data, error }, avulsosRes] = await Promise.all([
+    supabase.from("jobs").select("id, cliente_id").eq("tenant_id", tenantId).in("id", ids),
+    idsAvulsos.length
+      ? supabase.from("saves_avulsos").select("id, cliente_id").eq("tenant_id", tenantId).in("id", idsAvulsos)
+      : Promise.resolve({ data: [] as { id: string; cliente_id: string | null }[], error: null }),
+  ]);
+  if (error || avulsosRes.error) {
+    console.error("[save.origens.cliente]", (error ?? avulsosRes.error)?.message);
     return "Não foi possível conferir os jobs de origem do consumo. Tente de novo.";
   }
   const clienteDe = new Map<string, string | null>();
@@ -289,12 +293,18 @@ async function conferirOrigensDoCliente(
   if (!clienteDoJob) {
     return "Não foi possível conferir o cliente deste job. Tente de novo.";
   }
+  for (const a of (avulsosRes.data ?? []) as { id: string; cliente_id: string | null }[]) {
+    clienteDe.set(a.id, a.cliente_id ?? null);
+  }
   for (const o of origens) {
-    if (!clienteDe.has(o.job_origem_id)) {
-      return "Um dos jobs de origem do consumo não foi encontrado.";
+    const id = o.save_avulso_id ?? o.job_origem_id ?? "";
+    if (!clienteDe.has(id)) {
+      return o.save_avulso_id
+        ? "O save avulso do consumo não foi encontrado."
+        : "Um dos jobs de origem do consumo não foi encontrado.";
     }
-    if (clienteDe.get(o.job_origem_id) !== clienteDoJob) {
-      return "O consumo de save só pode usar saldo de jobs do mesmo cliente deste job.";
+    if (clienteDe.get(id) !== clienteDoJob) {
+      return "O consumo de save só pode usar saldo do mesmo cliente deste job.";
     }
   }
   return null;
@@ -360,16 +370,14 @@ export async function registrarErrataDeSave(
 
   // Uma entrada por origem, só valores positivos — a mesma forma que a RPC
   // grava. O consumo vazio é "tirar o consumo".
-  const origens: OrigemDeSave[] = [];
+  // A origem pode ser um job ou um save avulso (decisão 247).
+  let origens: OrigemDeSave[] = [];
   if (mudanca.tipo === "consumo") {
-    const porOrigem = new Map<string, number>();
-    for (const o of mudanca.origens) {
-      const valor = Number(o.valor || 0);
-      if (!o.jobOrigemId || !(valor > 0)) continue;
-      porOrigem.set(o.jobOrigemId, (porOrigem.get(o.jobOrigemId) ?? 0) + valor);
-    }
-    for (const [job_origem_id, valor] of porOrigem) {
-      origens.push({ job_origem_id, valor: dinheiro(valor) });
+    try {
+      origens = await origensParaOBanco(supabase, tenantId, mudanca.origens);
+    } catch (e) {
+      console.error("[save.origens]", (e as Error).message);
+      return { ok: false, message: "Não foi possível conferir as origens do consumo. Tente de novo." };
     }
     if (origens.some((o) => o.job_origem_id === jobId)) {
       return { ok: false, message: "Um job não pode consumir o próprio saldo de save." };
@@ -615,7 +623,7 @@ async function gravarNoJobDevolvido(
   // apagar e inserir são duas chamadas, e a linha não pode ficar sem nada.
   const { data: anteriores, error: antErr } = await supabase
     .from("saves_consumos")
-    .select("job_origem_id, valor")
+    .select("job_origem_id, save_avulso_id, valor")
     .eq("job_item_orcado_id", linha.id)
     .eq("tenant_id", tenantId);
   if (antErr) {
@@ -633,11 +641,12 @@ async function gravarNoJobDevolvido(
     return { ok: false, message: "Falha ao atualizar o consumo." };
   }
 
-  const inserir = (lista: { job_origem_id: string; valor: number }[]) =>
+  const inserir = (lista: OrigemDeSave[]) =>
     supabase.from("saves_consumos").insert(
       lista.map((o) => ({
         tenant_id: tenantId,
-        job_origem_id: o.job_origem_id,
+        job_origem_id: o.job_origem_id ?? null,
+        save_avulso_id: o.save_avulso_id ?? null,
         job_item_orcado_id: linha.id,
         valor: Number(o.valor),
         created_by: profileId,
@@ -648,7 +657,9 @@ async function gravarNoJobDevolvido(
     const { error: insErr } = await inserir(origens);
     if (insErr) {
       console.error("[save.devolvido.consumo]", insErr.message);
-      const antes = (anteriores ?? []) as { job_origem_id: string; valor: number }[];
+      const antes = ((anteriores ?? []) as { job_origem_id: string | null; save_avulso_id: string | null; valor: number }[]).map(
+        (a) => ({ job_origem_id: a.job_origem_id ?? undefined, save_avulso_id: a.save_avulso_id ?? undefined, valor: a.valor }),
+      );
       if (antes.length > 0) {
         const { error: volta } = await inserir(antes);
         if (volta) console.error("[save.devolvido.consumo_devolver]", volta.message);

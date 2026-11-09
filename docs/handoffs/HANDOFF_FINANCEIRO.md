@@ -8936,3 +8936,13 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
   No BB, 2 das novas repetem, com outro texto, linhas já importadas antes do início (−R$ 36.755,00 em 23/10 e R$ 300.000,00 em 26/10). Ficam fora da fila e do saldo.
 - **O fim do período do OFX vai até a última linha** (`lib/conciliacao/ofx.ts`, com teste): o Santander mandou o extrato "de 01/10 a 31/10" com as linhas e o saldo de 03/11. O quadro comparava o saldo do banco de 03/11 com o do sistema de 31/10 e mostrava R$ 876.460,67 de diferença. Reimportado, o extrato vai de 01/10 a 03/11, e a diferença é a das 38 linhas a conciliar.
 - **Falta:** o rendimento de outubro das aplicações (vem com o extrato delas) e o extrato das contas sem extrato no sistema.
+
+
+## ⚠️ Nota de 2026-11-09 — save avulso: o save faturado sem job (decisão 247)
+
+- **Faturar → "Save avulso"** (entre "Referente a um job" e "Sem job"): cliente, empresa, **Nome do save**, valor da NF, **Honorários (%)** (do cadastro do cliente) e **Imposto (%)**; o **crédito do cliente** é o principal da nota, NF × (1 − imposto) ÷ (1 + honorários). Centro de custo 01 · Receita e subtipo **Save** (novo), travados. Sem rateio de regional: a regional é a do job que consumir.
+- A nota sai como avulsa e o save avulso nasce junto, numa transação só (`emitir_faturamento_save_avulso`). A NF com o save já consumido não se cancela.
+- **Aba nova "Créditos de save"**: lista por cliente com o save avulso e os saves de jobs (Crédito, Consumido, Reservado, Saldo); o ícone de cada origem abre os jobs que consumiram, pelo nome do financeiro.
+- **Na abertura** (faixa Saves e bloco "Saves deste job"), o consumo de save avulso aparece como "do save “Nome”", e o saldo do cliente soma os saves avulsos.
+- **Fica de fora:** a receita do save avulso não migra para o job que consome na rentabilidade e no fluxo de caixa (pede decisão).
+- **Conferido:** NF TESTE-247 emitida pela tela (Empresa Teste, cliente Teste): crédito R$ 8.621,79, 01 · Receita · Save, sem rateio. Migrations `20261109940001` e `20261109940002`.

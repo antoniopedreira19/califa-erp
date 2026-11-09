@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useSearchParams } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -8,17 +9,22 @@ interface Props {
   faturamentoCount: number;
   titulos: React.ReactNode;
   titulosCount: number;
+  /** Decisão 247: os créditos de save por cliente. */
+  creditos: React.ReactNode;
 }
 
-type TabKey = "faturamento" | "titulos";
+type TabKey = "faturamento" | "titulos" | "creditos";
 
 export function ContasReceberTabs({
   faturamento,
   faturamentoCount,
   titulos,
   titulosCount,
+  creditos,
 }: Props) {
-  const [tab, setTab] = React.useState<TabKey>("faturamento");
+  // `?aba=creditos` abre direto nos créditos de save.
+  const aba = useSearchParams()?.get("aba");
+  const [tab, setTab] = React.useState<TabKey>(aba === "creditos" ? "creditos" : "faturamento");
   return (
     <div className="space-y-6">
       <div role="tablist" className="flex items-center gap-1 border-b border-border">
@@ -38,6 +44,9 @@ export function ContasReceberTabs({
             </span>
           )}
         </TabButton>
+        <TabButton active={tab === "creditos"} onClick={() => setTab("creditos")}>
+          Créditos de save
+        </TabButton>
       </div>
 
       <div role="tabpanel" className={cn(tab === "faturamento" ? "" : "hidden")}>
@@ -45,6 +54,9 @@ export function ContasReceberTabs({
       </div>
       <div role="tabpanel" className={cn(tab === "titulos" ? "" : "hidden")}>
         {titulos}
+      </div>
+      <div role="tabpanel" className={cn(tab === "creditos" ? "" : "hidden")}>
+        {creditos}
       </div>
     </div>
   );

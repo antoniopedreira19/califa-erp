@@ -24,7 +24,7 @@ import {
   type LinhaDoEspelho,
   type TotaisParaRpc,
 } from "@/lib/data/espelhos-do-job";
-import { grupoDoPedido, pedidosParaFinanceiroDoJob } from "@/lib/data/saves";
+import { grupoDoPedido, idDaOrigem, pedidosParaFinanceiroDoJob, rotulosDasOrigens } from "@/lib/data/saves";
 import { tipoGeraDesembolso } from "@/lib/calculos/versao-totais";
 import { linhasComPlanejadoDevolvido, planejadoAntesDoSave } from "@/lib/calculos/save-financeiro";
 import { desembolsoDaMidia } from "@/lib/calculos/midia-off";
@@ -442,7 +442,6 @@ export async function carregarAprovacaoDeSave(
   if (!p || p.situacao !== "aguardando") return { ok: false };
 
   const origens = (p.origens ?? []) as OrigemDeSave[];
-  const idsOrigem = [...new Set(origens.map((o) => o.job_origem_id))];
 
   const [pessoaRes, origensRes, espelhos, jobRes] = await Promise.all([
     p.enviado_por
@@ -452,9 +451,8 @@ export async function carregarAprovacaoDeSave(
           .eq("id", p.enviado_por)
           .maybeSingle<{ nome: string | null }>()
       : Promise.resolve({ data: null, error: null }),
-    idsOrigem.length
-      ? supabase.from("jobs").select("id, codigo").in("id", idsOrigem)
-      : Promise.resolve({ data: [] as any[], error: null }),
+    // O código do job, ou o nome do save avulso (decisão 247).
+    rotulosDasOrigens(supabase, origens),
     espelhosDaAprovacao(supabase, tenantId, jobId, p.id, p.momento),
     supabase
       .from("jobs")
@@ -473,11 +471,14 @@ export async function carregarAprovacaoDeSave(
     console.error("[abertura-job.aprovacao-save.espelhos]", espelhos.message);
     return { ok: false };
   }
-  const codigo = new Map<string, string>(
-    ((origensRes.data ?? []) as any[]).map((j) => [j.id, j.codigo ?? "—"]),
-  );
   const numOuNulo = (v: unknown) =>
     v === null || v === undefined ? null : Number(v);
+  // "TES-1003/26", ou "save “Verba PDV 2027”" (decisão 247): os textos dizem
+  // "do saldo do …" nos dois casos.
+  const rotuloDaOrigem = (o: OrigemDeSave) => {
+    const r = origensRes.get(idDaOrigem(o));
+    return r?.avulso ? `save “${r.codigo}”` : (r?.codigo ?? "—");
+  };
 
   return {
     ok: true,
@@ -492,8 +493,8 @@ export async function carregarAprovacaoDeSave(
       valor: Number(p.valor ?? 0),
       origens: origens
         .map((o) => ({
-          jobId: o.job_origem_id,
-          codigo: codigo.get(o.job_origem_id) ?? "—",
+          jobId: idDaOrigem(o),
+          codigo: rotuloDaOrigem(o),
           valor: Number(o.valor ?? 0),
         }))
         .sort((a, b) => b.valor - a.valor),

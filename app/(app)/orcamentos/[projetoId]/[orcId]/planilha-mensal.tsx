@@ -231,7 +231,8 @@ export function PlanilhaMensal({
         versaoId={versao.id}
         clienteNome={clienteNome}
         savePorPadrao={versao.save_por_padrao === true}
-        saveConsumoJobId={versao.save_consumo_job_id ?? null}
+        // O saldo que a versão inteira consome: de um job ou de um save avulso (247).
+        saveConsumoJobId={versao.save_consumo_job_id ?? versao.save_consumo_avulso_id ?? null}
         // O save do orçamento inteiro conta a versão toda, não só o mês.
         itensDaVersao={itens}
         savePorItem={savePorItem}

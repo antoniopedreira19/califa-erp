@@ -11,6 +11,12 @@
  *  Desde a decisão 099 (22/09/2026) o saldo é só de save APROVADO pelo
  *  financeiro, e as linhas do job carregam os pedidos de aprovação
  *  (`saves_aprovacoes`), que o pop-up de save mostra.
+ *
+ *  Desde a decisão 247 (09/11/2026) a origem de um consumo pode ser também
+ *  um SAVE AVULSO (`saves_avulsos`, saldo em `vw_saves_avulsos`): o save
+ *  faturado sem job pelo financeiro. Ele entra na lista de saldos ao lado
+ *  dos jobs, com `avulso: true`, o id dele no lugar do `jobId` e o nome
+ *  dele no lugar do código.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
@@ -29,11 +35,16 @@ import { jobCanceladoAntesDaAbertura } from "@/lib/types";
 import type { PedidoParaFinanceiro } from "@/lib/calculos/save-financeiro";
 import { rotuloMes } from "@/lib/calculos/meses-trimestre";
 
-/** Um job com saldo de save a oferecer. */
+/** Um saldo de save a oferecer: um job, ou um save avulso (decisão 247). */
 export interface SaldoDeSave {
+  /** O id da origem: o job, ou o save avulso quando `avulso`. */
   jobId: string;
+  /** O código do job, ou o nome do save avulso. */
   codigo: string;
+  /** O nome do job, ou "NF 4410 · 15/10/2026" no save avulso. */
   nome: string;
+  /** A origem é um save avulso (decisão 247), não um job. */
+  avulso: boolean;
   /** Total gerado pelas linhas em save do job. */
   gerado: number;
   /** Já consumido por consumos firmes. */
@@ -83,7 +94,7 @@ export async function saldosDeSaveDoCliente(
   clienteId: string,
   excluirJobId?: string | null,
 ): Promise<SaldoDeSave[]> {
-  const [saldosRes, linhasRes] = await Promise.all([
+  const [saldosRes, linhasRes, avulsosRes] = await Promise.all([
     supabase
       .from("vw_saves_por_job")
       .select(
@@ -96,7 +107,19 @@ export async function saldosDeSaveDoCliente(
       .from("vw_saves_linhas")
       .select("job_id, descricao, tipo_custo, valor")
       .eq("tenant_id", tenantId),
+    // Os saves avulsos do cliente (decisão 247), depois dos jobs.
+    supabase
+      .from("vw_saves_avulsos")
+      .select(
+        "id, nome, numero_nf, data_emissao, credito, consumido, reservado, reservado_aprovacao, disponivel, percentual_honorarios, percentual_imposto",
+      )
+      .eq("tenant_id", tenantId)
+      .eq("cliente_id", clienteId)
+      .order("data_emissao"),
   ]);
+  if (avulsosRes.error) {
+    console.error("[saves.saldos_avulsos]", avulsosRes.error.message);
+  }
 
   if (saldosRes.error) {
     console.error("[saves.saldos]", saldosRes.error.message);
@@ -117,12 +140,13 @@ export async function saldosDeSaveDoCliente(
     linhasPorJob.set(l.job_id, lista);
   }
 
-  return ((saldosRes.data ?? []) as any[])
+  const deJobs: SaldoDeSave[] = ((saldosRes.data ?? []) as any[])
     .filter((s) => s.job_id !== excluirJobId)
     .map((s) => ({
       jobId: s.job_id,
       codigo: s.job_codigo,
       nome: s.job_nome,
+      avulso: false,
       gerado: Number(s.saldo_gerado ?? 0),
       consumido: Number(s.consumido ?? 0),
       reservado: Number(s.reservado ?? 0),
@@ -132,6 +156,53 @@ export async function saldosDeSaveDoCliente(
       percentualImposto: Number(s.percentual_imposto ?? 0),
       linhas: linhasPorJob.get(s.job_id) ?? [],
     }));
+  const avulsos: SaldoDeSave[] = ((avulsosRes.data ?? []) as any[]).map((a) => ({
+    jobId: a.id,
+    codigo: a.nome,
+    nome: detalheDoSaveAvulso(a.numero_nf, a.data_emissao),
+    avulso: true,
+    gerado: Number(a.credito ?? 0),
+    consumido: Number(a.consumido ?? 0),
+    reservado: Number(a.reservado ?? 0),
+    reservadoAprovacao: Number(a.reservado_aprovacao ?? 0),
+    disponivel: Number(a.disponivel ?? 0),
+    percentualHonorarios: Number(a.percentual_honorarios ?? 0),
+    percentualImposto: Number(a.percentual_imposto ?? 0),
+    linhas: [
+      {
+        descricao: a.numero_nf ? `NF ${a.numero_nf} · save avulso` : "Save avulso",
+        tipoCusto: "—",
+        valor: Number(a.credito ?? 0),
+      },
+    ],
+  }));
+  return [...deJobs, ...avulsos];
+}
+
+/** "NF 4410 · 15/10/2026": o detalhe do save avulso nas listas (decisão 247). */
+export function detalheDoSaveAvulso(numeroNf: string | null, dataEmissao: string | null): string {
+  const data = dataEmissao ? dataEmissao.slice(0, 10).split("-").reverse().join("/") : null;
+  return [numeroNf ? `NF ${numeroNf}` : null, data].filter(Boolean).join(" · ") || "Save avulso";
+}
+
+/** As colunas de `saves_consumos` que dizem de onde vem o consumo: o job de
+ *  origem ou o save avulso (decisão 247), já com o código ou o nome. */
+const COLUNAS_ORIGEM = "valor, job_origem_id, save_avulso_id, jobs(codigo), saves_avulsos(nome)";
+
+/** A origem de um consumo lido com `COLUNAS_ORIGEM`. `null` para a origem
+ *  que é job e não está à vista (o embed com `jobs!inner` a tirava da lista
+ *  antes da decisão 247; o comportamento continua o mesmo). */
+function pontaDoConsumo(c: any): PontaDeSave | null {
+  if (c.save_avulso_id) {
+    return {
+      jobId: c.save_avulso_id,
+      codigo: c.saves_avulsos?.nome ?? "Save avulso",
+      valor: Number(c.valor ?? 0),
+      avulso: true,
+    };
+  }
+  if (!c.jobs) return null;
+  return { jobId: c.job_origem_id, codigo: c.jobs.codigo ?? "—", valor: Number(c.valor ?? 0), avulso: false };
 }
 
 /**
@@ -160,7 +231,7 @@ export async function saveDaVersao(
     // O que ESTAS linhas consomem de fora.
     supabase
       .from("saves_consumos")
-      .select("item_versao_id, valor, job_origem_id, jobs!inner(id, codigo)")
+      .select(`item_versao_id, ${COLUNAS_ORIGEM}`)
       .eq("tenant_id", tenantId)
       .in("item_versao_id", ids)
       .is("substituido_em", null),
@@ -178,12 +249,10 @@ export async function saveDaVersao(
 
   const origensPorItem = new Map<string, PontaDeSave[]>();
   const empilhaOrigem = (itemVersaoId: string, c: any) => {
+    const ponta = pontaDoConsumo(c);
+    if (!ponta) return;
     const lista = origensPorItem.get(itemVersaoId) ?? [];
-    lista.push({
-      jobId: c.job_origem_id,
-      codigo: c.jobs?.codigo ?? "—",
-      valor: Number(c.valor ?? 0),
-    });
+    lista.push(ponta);
     origensPorItem.set(itemVersaoId, lista);
   };
 
@@ -202,7 +271,7 @@ export async function saveDaVersao(
   if (idsCopiaConsumidora.length > 0) {
     const { data: consumosDaCopia } = await supabase
       .from("saves_consumos")
-      .select("job_item_orcado_id, valor, job_origem_id, jobs!inner(codigo)")
+      .select(`job_item_orcado_id, ${COLUNAS_ORIGEM}`)
       .eq("tenant_id", tenantId)
       .in("job_item_orcado_id", idsCopiaConsumidora);
 
@@ -296,6 +365,7 @@ export async function saveDaVersao(
           jobId: alvo.id,
           codigo: alvo.codigo,
           valor: Number(c.valor ?? 0),
+          avulso: false,
         });
       destinosPorJob.set(c.job_origem_id, lista);
     }
@@ -351,7 +421,7 @@ export async function saveDoJob(
     // De onde vem o dinheiro que paga estas linhas.
     supabase
       .from("saves_consumos")
-      .select("job_item_orcado_id, valor, job_origem_id, jobs!inner(codigo)")
+      .select(`job_item_orcado_id, ${COLUNAS_ORIGEM}`)
       .eq("tenant_id", tenantId)
       .in("job_item_orcado_id", orcadoIds),
     // Quem consumiu o saldo DESTE job. O saldo é do job, então o destino
@@ -367,12 +437,10 @@ export async function saveDoJob(
 
   const origensPorOrcado = new Map<string, PontaDeSave[]>();
   for (const c of (origensRes.data ?? []) as any[]) {
+    const ponta = pontaDoConsumo(c);
+    if (!ponta) continue;
     const lista = origensPorOrcado.get(c.job_item_orcado_id) ?? [];
-    lista.push({
-      jobId: c.job_origem_id,
-      codigo: (c.jobs as any)?.codigo ?? "—",
-      valor: Number(c.valor ?? 0),
-    });
+    lista.push(ponta);
     origensPorOrcado.set(c.job_item_orcado_id, lista);
   }
 
@@ -391,7 +459,7 @@ export async function saveDoJob(
     const porId = new Map(
       ((copias ?? []) as any[]).map((r) => [
         r.id,
-        { jobId: r.job_id as string, codigo: (r.jobs as any)?.codigo ?? "—" },
+        { jobId: r.job_id as string, codigo: (r.jobs as any)?.codigo ?? "—", avulso: false },
       ]),
     );
     for (const c of linhas) {
@@ -461,7 +529,7 @@ export async function saveDosJobs(
     // De onde vem o dinheiro que paga estas linhas.
     supabase
       .from("saves_consumos")
-      .select("job_item_orcado_id, valor, job_origem_id, jobs!inner(codigo)")
+      .select(`job_item_orcado_id, ${COLUNAS_ORIGEM}`)
       .eq("tenant_id", tenantId)
       .in("job_item_orcado_id", orcadoIds),
     // Quem consumiu o saldo de QUALQUER um destes jobs.
@@ -476,12 +544,10 @@ export async function saveDosJobs(
 
   const origensPorOrcado = new Map<string, PontaDeSave[]>();
   for (const c of (origensRes.data ?? []) as any[]) {
+    const ponta = pontaDoConsumo(c);
+    if (!ponta) continue;
     const lista = origensPorOrcado.get(c.job_item_orcado_id) ?? [];
-    lista.push({
-      jobId: c.job_origem_id,
-      codigo: (c.jobs as any)?.codigo ?? "—",
-      valor: Number(c.valor ?? 0),
-    });
+    lista.push(ponta);
     origensPorOrcado.set(c.job_item_orcado_id, lista);
   }
 
@@ -502,7 +568,7 @@ export async function saveDosJobs(
     const porId = new Map(
       ((copias ?? []) as any[]).map((r) => [
         r.id,
-        { jobId: r.job_id as string, codigo: (r.jobs as any)?.codigo ?? "—" },
+        { jobId: r.job_id as string, codigo: (r.jobs as any)?.codigo ?? "—", avulso: false },
       ]),
     );
     for (const c of linhas) {
@@ -595,22 +661,27 @@ export async function pedidosEMarcasDasLinhas(
 
   const idsPessoas = new Set<string>();
   const idsJobs = new Set<string>();
+  const idsAvulsos = new Set<string>();
   for (const p of linhas) {
     for (const k of ["enviado_por", "decidido_por", "retirado_por"]) {
       if (p[k]) idsPessoas.add(p[k]);
     }
     for (const o of [...(p.origens ?? []), ...(p.origens_antes ?? [])] as OrigemDeSave[]) {
       if (o?.job_origem_id) idsJobs.add(o.job_origem_id);
+      if (o?.save_avulso_id) idsAvulsos.add(o.save_avulso_id);
     }
   }
   for (const m of linhasMarca) if (m.save_marcado_por) idsPessoas.add(m.save_marcado_por);
 
-  const [pessoasRes, jobsRes] = await Promise.all([
+  const [pessoasRes, jobsRes, avulsosRes] = await Promise.all([
     idsPessoas.size
       ? supabase.from("profiles").select("id, nome").in("id", [...idsPessoas])
       : Promise.resolve({ data: [] as any[], error: null }),
     idsJobs.size
       ? supabase.from("jobs").select("id, codigo").in("id", [...idsJobs])
+      : Promise.resolve({ data: [] as any[], error: null }),
+    idsAvulsos.size
+      ? supabase.from("saves_avulsos").select("id, nome").in("id", [...idsAvulsos])
       : Promise.resolve({ data: [] as any[], error: null }),
   ]);
   const nome = new Map<string, string>(
@@ -619,12 +690,25 @@ export async function pedidosEMarcasDasLinhas(
   const codigo = new Map<string, string>(
     ((jobsRes.data ?? []) as any[]).map((r) => [r.id, r.codigo ?? "—"]),
   );
+  const nomeDoAvulso = new Map<string, string>(
+    ((avulsosRes.data ?? []) as any[]).map((r) => [r.id, r.nome ?? "Save avulso"]),
+  );
   const pontas = (lista: OrigemDeSave[] | null): PontaDeSave[] =>
-    (lista ?? []).map((o) => ({
-      jobId: o.job_origem_id,
-      codigo: codigo.get(o.job_origem_id) ?? "—",
-      valor: Number(o.valor ?? 0),
-    }));
+    (lista ?? []).map((o) =>
+      o.save_avulso_id
+        ? {
+            jobId: o.save_avulso_id,
+            codigo: nomeDoAvulso.get(o.save_avulso_id) ?? "Save avulso",
+            valor: Number(o.valor ?? 0),
+            avulso: true,
+          }
+        : {
+            jobId: o.job_origem_id ?? "",
+            codigo: codigo.get(o.job_origem_id ?? "") ?? "—",
+            valor: Number(o.valor ?? 0),
+            avulso: false,
+          },
+    );
   const numOuNulo = (v: unknown) => (v === null || v === undefined ? null : Number(v));
 
   for (const p of linhas) {
@@ -706,7 +790,7 @@ function paraPedidoDoFinanceiro(p: any): PedidoParaFinanceiro {
     situacao: p.situacao as SaveAprovacaoSituacao,
     momento: p.momento as SaveAprovacaoMomento,
     origensAntes: ((p.origens_antes ?? []) as OrigemDeSave[]).map((o) => ({
-      job_origem_id: o.job_origem_id,
+      ...(o.save_avulso_id ? { save_avulso_id: o.save_avulso_id } : { job_origem_id: o.job_origem_id }),
       valor: Number(o.valor ?? 0),
     })),
   };
@@ -833,4 +917,121 @@ export async function revisaoPendenteDoJob(
     pedidosAguardando,
     podeFechar: soDeSave && pedidosAguardando === 0,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Origens dos pedidos: job ou save avulso (decisão 247)
+// ---------------------------------------------------------------------------
+
+/** O id de uma origem guardada nos pedidos: o job, ou o save avulso. */
+export function idDaOrigem(o: OrigemDeSave): string {
+  return o.save_avulso_id ?? o.job_origem_id ?? "";
+}
+
+/**
+ * O código do job, ou o nome do save avulso, de cada origem, pelo id. Duas
+ * consultas em paralelo, só das que aparecem.
+ */
+export async function rotulosDasOrigens(
+  supabase: SupabaseClient,
+  origens: OrigemDeSave[],
+): Promise<Map<string, { codigo: string; avulso: boolean }>> {
+  const idsJobs = [...new Set(origens.map((o) => o.job_origem_id).filter((v): v is string => Boolean(v)))];
+  const idsAvulsos = [...new Set(origens.map((o) => o.save_avulso_id).filter((v): v is string => Boolean(v)))];
+  const [jobsRes, avulsosRes] = await Promise.all([
+    idsJobs.length
+      ? supabase.from("jobs").select("id, codigo").in("id", idsJobs)
+      : Promise.resolve({ data: [] as any[], error: null }),
+    idsAvulsos.length
+      ? supabase.from("saves_avulsos").select("id, nome").in("id", idsAvulsos)
+      : Promise.resolve({ data: [] as any[], error: null }),
+  ]);
+  const saida = new Map<string, { codigo: string; avulso: boolean }>();
+  for (const j of (jobsRes.data ?? []) as any[]) saida.set(j.id, { codigo: j.codigo ?? "—", avulso: false });
+  for (const a of (avulsosRes.data ?? []) as any[]) saida.set(a.id, { codigo: a.nome ?? "Save avulso", avulso: true });
+  return saida;
+}
+
+/**
+ * As origens escolhidas no pop-up de save, na forma que o banco grava: o id
+ * de cada uma é classificado como save avulso (decisão 247) ou job. O
+ * pop-up trata as duas pelo mesmo campo (`jobOrigemId`), como a lista de
+ * saldos; só aqui, antes da RPC, elas se separam. Uma entrada por origem,
+ * valores positivos somados.
+ */
+export async function origensParaOBanco(
+  supabase: SupabaseClient,
+  tenantId: string,
+  escolhidas: { jobOrigemId: string; valor: number }[],
+): Promise<OrigemDeSave[]> {
+  const porOrigem = new Map<string, number>();
+  for (const o of escolhidas) {
+    const valor = Number(o.valor || 0);
+    if (!o.jobOrigemId || !(valor > 0)) continue;
+    porOrigem.set(o.jobOrigemId, (porOrigem.get(o.jobOrigemId) ?? 0) + valor);
+  }
+  const ids = [...porOrigem.keys()];
+  const avulsos = new Set<string>();
+  if (ids.length > 0) {
+    const { data, error } = await supabase
+      .from("saves_avulsos")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .in("id", ids);
+    if (error) throw new Error(`[saves.origens_para_o_banco] ${error.message}`);
+    for (const a of (data ?? []) as { id: string }[]) avulsos.add(a.id);
+  }
+  return ids.map((id) => {
+    const valor = Math.round((porOrigem.get(id) ?? 0) * 100) / 100;
+    return avulsos.has(id) ? { save_avulso_id: id, valor } : { job_origem_id: id, valor };
+  });
+}
+
+/**
+ * O consumo de SAVE AVULSO (decisão 247) cabe no crédito? A mesma conferência
+ * que a aprovação da versão e o envio para abertura fazem para os jobs de
+ * origem, com o saldo de `vw_saves_avulsos`. `jaDescontado`: o consumo já
+ * segura saldo (versão aprovada, cópia do job devolvido) e já está no
+ * `usado` da view — então cabe quando o disponível não fica negativo. Sem
+ * ele (rascunho que vai ser aprovado), cabe quando não passa do disponível.
+ * Devolve a recusa, ou `null`.
+ */
+export async function recusaDoConsumoDeSaveAvulso(
+  supabase: SupabaseClient,
+  tenantId: string,
+  consumos: { save_avulso_id: string | null; valor: number | string }[],
+  jaDescontado: boolean,
+  quem: string,
+): Promise<string | null> {
+  const porAvulso = new Map<string, number>();
+  for (const c of consumos) {
+    if (!c.save_avulso_id) continue;
+    porAvulso.set(c.save_avulso_id, (porAvulso.get(c.save_avulso_id) ?? 0) + Number(c.valor ?? 0));
+  }
+  if (porAvulso.size === 0) return null;
+  const { data, error } = await supabase
+    .from("vw_saves_avulsos")
+    .select("id, nome, disponivel")
+    .eq("tenant_id", tenantId)
+    .in("id", [...porAvulso.keys()]);
+  if (error) {
+    console.error("[saves.consumo_avulso]", error.message);
+    return "Não foi possível conferir o saldo do save avulso. Tente de novo.";
+  }
+  const saldo = new Map(((data ?? []) as { id: string; nome: string; disponivel: number | string }[]).map((a) => [a.id, a]));
+  for (const [id, consome] of porAvulso) {
+    if (consome <= 0.004) continue;
+    const a = saldo.get(id);
+    const disp = Number(a?.disponivel ?? (jaDescontado ? -consome : 0));
+    const cabe = jaDescontado ? disp >= -0.005 : consome <= disp + 0.005;
+    if (cabe) continue;
+    const livre = Math.max(0, jaDescontado ? disp + consome : disp);
+    const nome = a?.nome ?? "save avulso";
+    const brl = (n: number) => n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    return (
+      `${quem} consome ${brl(consome)} do save avulso “${nome}”, ` +
+      `e o crédito disponível dele é de ${brl(livre)}. Ajuste o consumo.`
+    );
+  }
+  return null;
 }
