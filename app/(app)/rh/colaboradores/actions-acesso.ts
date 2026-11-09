@@ -625,37 +625,54 @@ export async function buscarProfilesParaVincular(input: {
   const service = createServiceClient();
   const tenantId = session.activeTenant.id;
 
-  // Busca profiles com membership nesse tenant + que ainda não estão
-  // vinculados a nenhum colaborador. Usa 2 queries e filtra no cliente
-  // pq não há FK direta de colaboradores a profiles e o PostgREST não
-  // ajuda nessa composição.
-  const [{ data: profiles, error: profErr }, { data: vinculados }] =
-    await Promise.all([
-      service
-        .from("profiles")
-        .select("id, nome, email, tenant_members!inner(tenant_id, status)")
-        .eq("tenant_members.tenant_id", tenantId)
-        .eq("tenant_members.status", "ativo")
-        .or(`nome.ilike.%${termoNorm}%,email.ilike.%${termoNorm}%`)
-        .limit(50),
-      service
-        .from("colaboradores")
-        .select("user_id")
-        .eq("tenant_id", tenantId)
-        .not("user_id", "is", null),
-    ]);
+  // PostgREST não resolve embed profiles ↔ tenant_members (as duas tabelas
+  // apontam pra auth.users, mas não têm FK direta entre si — PGRST200).
+  // Por isso, 3 queries independentes: profiles pelo termo, memberships do
+  // tenant e user_ids já vinculados — intersect no cliente.
+  const likeTermo = `%${termoNorm}%`;
+  const [
+    { data: profiles, error: profErr },
+    { data: memberships, error: membErr },
+    { data: vinculados },
+  ] = await Promise.all([
+    service
+      .from("profiles")
+      .select("id, nome, email")
+      .or(`nome.ilike.${likeTermo},email.ilike.${likeTermo}`)
+      .limit(100),
+    service
+      .from("tenant_members")
+      .select("user_id")
+      .eq("tenant_id", tenantId)
+      .eq("status", "ativo"),
+    service
+      .from("colaboradores")
+      .select("user_id")
+      .eq("tenant_id", tenantId)
+      .not("user_id", "is", null),
+  ]);
 
-  if (profErr) {
-    console.error("[buscarProfilesParaVincular]", profErr.message);
+  if (profErr || membErr) {
+    console.error(
+      "[buscarProfilesParaVincular]",
+      profErr?.message ?? membErr?.message,
+    );
     return { ok: false, message: "Falha na busca." };
   }
 
+  const idsDoTenant = new Set(
+    (memberships ?? []).map((r) => r.user_id as string),
+  );
   const idsJaVinculados = new Set(
     (vinculados ?? []).map((r) => r.user_id as string),
   );
 
   const livres = (profiles ?? [])
-    .filter((p) => !idsJaVinculados.has(p.id as string))
+    .filter(
+      (p) =>
+        idsDoTenant.has(p.id as string) &&
+        !idsJaVinculados.has(p.id as string),
+    )
     .slice(0, 20)
     .map((p) => ({
       id: p.id as string,

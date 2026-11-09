@@ -173,15 +173,33 @@ export default async function FreelancersListaPage({
       totaisQuery,
       // Jobs pro picker do Step 5 do dialog — produção + internos ativos.
       jobsProPickerDeFreelancer(supabase, session.activeTenant.id),
-      // Responsáveis (profiles ativos do tenant) pro combobox do Step 1
+      // Responsáveis (profiles ativos do tenant) pro combobox do Step 1.
+      // PostgREST não resolve embed profiles ↔ tenant_members (as duas
+      // apontam pra auth.users, sem FK direta — PGRST200). Puxa membership
+      // e profiles separados e intersecta abaixo.
       supabase
-        .from("profiles")
-        .select("id, nome, tenant_members!inner(status, tenant_id)")
-        .eq("ativo", true)
-        .eq("tenant_members.tenant_id", session.activeTenant.id)
-        .eq("tenant_members.status", "ativo")
-        .order("nome", { ascending: true }),
+        .from("tenant_members")
+        .select("user_id")
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("status", "ativo"),
     ]);
+
+  const idsDoTenant = Array.from(
+    new Set(
+      ((responsaveisNovoRes.data ?? []) as Array<{ user_id: string }>).map(
+        (r) => r.user_id,
+      ),
+    ),
+  );
+  const responsaveisProfilesRes =
+    idsDoTenant.length > 0
+      ? await supabase
+          .from("profiles")
+          .select("id, nome")
+          .eq("ativo", true)
+          .in("id", idsDoTenant)
+          .order("nome", { ascending: true })
+      : { data: [], error: null };
 
   if (freelancersRes.error) {
     console.error("[freelancers.lista]", freelancersRes.error.message);
@@ -205,9 +223,9 @@ export default async function FreelancersListaPage({
 
   const freelancers = freelancersRes.data ?? [];
   const cargos = cargosRes.data ?? [];
-  const responsaveisNovo = ((responsaveisNovoRes.data ?? []) as any[]).map(
-    (r) => ({ id: r.id as string, nome: r.nome as string }),
-  );
+  const responsaveisNovo = (
+    (responsaveisProfilesRes.data ?? []) as Array<{ id: string; nome: string }>
+  ).map((r) => ({ id: r.id, nome: r.nome }));
 
   // Cálculo dos 4 cards de análise
   const totaisRaw =
