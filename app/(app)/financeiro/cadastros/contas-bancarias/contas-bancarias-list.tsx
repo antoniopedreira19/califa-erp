@@ -40,6 +40,19 @@ export function ContasBancariasList({
   const router = useRouter();
   const [busca, setBusca] = React.useState("");
   const [status, setStatus] = React.useState<StatusFiltro>("ativas");
+  // As correntes ativas, com a aplicação automática que já aponta para cada
+  // uma (decisão 249): o formulário da conta de investimento escolhe entre elas.
+  const contasCorrentes = React.useMemo(
+    () =>
+      contas
+        .filter((c) => c.tipo === "corrente" && c.ativo)
+        .map((c) => ({
+          id: c.id,
+          nome: c.nome,
+          aplicacaoId: contas.find((a) => a.conta_corrente_id === c.id)?.id ?? null,
+        })),
+    [contas],
+  );
   const [pending, startTransition] = React.useTransition();
   const [editando, setEditando] = React.useState<ContaBancaria | null>(null);
   const [configCnab, setConfigCnab] = React.useState<ContaBancaria | null>(null);
@@ -115,7 +128,7 @@ export function ContasBancariasList({
           </Select>
         </div>
         {canEdit && (
-          <ContaBancariaDrawer mode="criar" empresasContabeis={empresasContabeis} />
+          <ContaBancariaDrawer mode="criar" empresasContabeis={empresasContabeis} contasCorrentes={contasCorrentes} />
         )}
       </div>
 
@@ -231,6 +244,7 @@ export function ContasBancariasList({
             if (!next) setEditando(null);
           }}
           empresasContabeis={empresasContabeis}
+          contasCorrentes={contasCorrentes}
         />
       )}
 

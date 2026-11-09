@@ -8954,3 +8954,11 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Fluxo de Caixa do Job:** o 4º prazo, Pagamento (abertura → data média dos pagamentos), e os saldos e prazos numa faixa só.
 - **Títulos de duas linhas:** nas colunas de valor, as duas linhas começam no mesmo ponto, em todas as listas com filtro por coluna.
 - **Banco:** `vw_fluxo_caixa_job_datas` (migration `20261109950001`, aditiva), uma linha por job; a lista não lê as linhas cruas do fluxo.
+
+## ⚠️ Nota de 2026-11-09 — a conta corrente com a aplicação automática numa linha só (decisão 249)
+
+- **O par:** `contas_bancarias.conta_corrente_id` liga a aplicação automática (ContaMax, Rende Fácil) à corrente dela (migration `20261109960001`, aditiva). Uma aplicação por corrente, com gatilho que confere tipo e tenant. Os 4 pares vieram das regras de transferência do extrato. As XP ficam sem par.
+- **Conciliação → lista de contas:** o par vira uma linha, "{corrente} · corrente + {aplicação}", com saldo, entradas, saídas e lançamentos somados. A coluna da esquerda abre e recolhe, e o clique na linha também. Abertas, a corrente e a aplicação aparecem recuadas, cada uma com o "›" para o extrato. Os pares chegam fechados.
+- **Cadastro da conta de investimento:** campo "Aplicação automática da conta", com as correntes livres.
+- **Importação:** na corrente com aplicação, o extrato sem nenhuma aplicação ou resgate em dia fechado é recusado (`lib/conciliacao/aplicacao-automatica.ts`, com teste). Conferido com o extrato de 31/10 da California Santander no formato novo.
+- **Fica para depois:** o rendimento mensal das aplicações, pelo extrato da aplicação.

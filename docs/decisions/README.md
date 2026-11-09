@@ -263,6 +263,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 246 | [A produção cancela o envio da prestação de contas da verba](246-cancelar-envio-da-prestacao.md) | 2026-11-06 |
 | 247 | [Save avulso: o save faturado sem job, crédito do cliente](247-save-avulso.md) | 2026-11-09 |
 | 248 | [O "Exibir" do Resultado de Job, o prazo de pagamento e os saldos e prazos numa faixa](248-exibir-no-resultado-de-job.md) | 2026-11-09 |
+| 249 | [A conta corrente com aplicação automática numa linha só, e só o extrato completo](249-conta-corrente-com-aplicacao-automatica.md) | 2026-11-09 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a

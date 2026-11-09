@@ -110,6 +110,10 @@ export type ContaResumo = {
   debitosPeriodo: number;
   lancamentosPeriodo: number;
   ultimoMovimento: string | null;
+  /** Na aplicação automática: a corrente dela (decisão 249). */
+  correnteId: string | null;
+  /** Na corrente: a aplicação automática dela, quando tem. */
+  aplicacaoId: string | null;
 };
 
 export type TotaisConciliacao = {

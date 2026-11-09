@@ -25,6 +25,7 @@ import { z } from "zod";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { arquivoEhDaConta, bancoDoArquivoConfere, contaTemNumero, digitais, rotuloDoBanco } from "@/lib/conciliacao/ofx";
+import { faltamAsAplicacoes } from "@/lib/conciliacao/aplicacao-automatica";
 import { formaDaBaixaPeloHistorico } from "@/lib/conciliacao/motor";
 import type { EntradaDaBaixaEmLote } from "@/lib/financeiro/baixa-em-lote";
 import { darBaixaEmLote } from "../actions-baixa-em-lote";
@@ -134,6 +135,36 @@ export async function importarExtrato(contaId: string, arquivo: ArquivoParaImpor
       motivo: "erro",
       message: `O arquivo é do banco ${rotuloDoBanco(a.bancoId)}, e a conta ${conta.nome} está cadastrada no ${conta.banco}.`,
     };
+  }
+
+  // Conta com aplicação automática (decisão 249): só o extrato completo, com
+  // as aplicações e os resgates do dia. Sem eles, a corrente não bate.
+  const { data: aplicacao, error: apErr } = await supabase
+    .from("contas_bancarias")
+    .select("id, nome")
+    .eq("tenant_id", tenantId)
+    .eq("conta_corrente_id", conta.id)
+    .eq("ativo", true)
+    .maybeSingle<{ id: string; nome: string }>();
+  if (apErr) console.error("[conciliacao.importar.aplicacao]", apErr.message);
+  if (aplicacao) {
+    const { data: regras, error: rgErr } = await supabase
+      .from("extrato_regras")
+      .select("padrao")
+      .eq("tenant_id", tenantId)
+      .eq("conta_bancaria_id", conta.id)
+      .eq("conta_destino_id", aplicacao.id)
+      .eq("ativa", true)
+      .returns<Array<{ padrao: string }>>();
+    if (rgErr) console.error("[conciliacao.importar.regras]", rgErr.message);
+    const geradoEm = a.geradoInstante ? a.geradoInstante.slice(0, 10) : null;
+    if (faltamAsAplicacoes(a.movimentos, (regras ?? []).map((r) => r.padrao), geradoEm)) {
+      return {
+        ok: false,
+        motivo: "erro",
+        message: `${a.nome} não traz as aplicações e os resgates automáticos da ${aplicacao.nome}. Baixe no banco o extrato completo, com as aplicações, e importe de novo.`,
+      };
+    }
   }
 
   // A impressão digital é calculada aqui, com a conta do servidor.
