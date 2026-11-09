@@ -11,10 +11,10 @@ import {
   linhasComPlanejadoDevolvido,
   planejadoAntesDoSave,
 } from "@/lib/calculos/save-financeiro";
-import { planejadoBrutoDoItem } from "@/lib/calculos/bv-planilha";
-import { fechamentoDosItens } from "@/lib/calculos/midia-off";
+import { planejadoBrutoDoItem, realizadoBrutoDoItem, realizadoVemDasPPs } from "@/lib/calculos/bv-planilha";
+import { fechamentoDosItens, realizadoDaLinhaMidia } from "@/lib/calculos/midia-off";
 import { rentabilidadeDoJob } from "@/lib/calculos/abertura-do-job";
-import type { PlanejadoAntesDoSave } from "@/lib/types";
+import type { PlanejadoAntesDoSave, TipoCusto } from "@/lib/types";
 
 /**
  * A Rentabilidade de cada job do financeiro, para as listas "Visualizar
@@ -47,6 +47,17 @@ export interface RentabilidadeDoJob {
   valorJob: number;
   deducoes: number;
   custoPlanejado: number;
+  /**
+   * O custo como o fluxo de caixa conta (decisão 248, Tiago, 09/11/2026): o
+   * planejado até o realizado ser assegurado, quando ele troca. Linha a
+   * linha: a linha com as PPs concluídas vale o realizado; a ainda aberta, o
+   * planejado, ou o realizado se já passou dele; em A e D o realizado é o
+   * orçado. Na Mídia Off, o maior entre o planejado e o realizado do job.
+   * A Rentabilidade continua no planejado (`custoPlanejado`).
+   */
+  custoProjetado: number;
+  /** O realizado do job (as PPs, ou o orçado em A e D). */
+  custoRealizado: number;
   /** Em R$, arredondada ao centavo. */
   valor: number;
   /** Em % do valor do job; 0 quando o valor do job é zero. */
@@ -72,6 +83,42 @@ type LinhaDoOrcado = {
   total_planejado: number | string | null;
   planejado_antes_save: PlanejadoAntesDoSave | null;
 };
+
+type RealizadoDoItem = {
+  job_item_orcado_id: string | null;
+  total_realizado: number | string | null;
+  pps_concluidas_em: string | null;
+};
+
+/** Uma página do realizado do tenant (uma linha por linha do orçado). */
+async function paginaDoRealizado(
+  supabase: SupabaseClient,
+  tenantId: string,
+  n: number,
+): Promise<RealizadoDoItem[]> {
+  const { data, error } = await supabase
+    .from("jobs_itens_realizado")
+    .select("job_item_orcado_id, total_realizado, pps_concluidas_em")
+    .eq("tenant_id", tenantId)
+    .order("id", { ascending: true })
+    .range(n * PAGINA, n * PAGINA + PAGINA - 1);
+  if (error) throw new Error(`[rentabilidade-dos-jobs.realizado] ${error.message}`);
+  return (data ?? []) as unknown as RealizadoDoItem[];
+}
+
+/** Todo o realizado do tenant, como `linhasDoOrcadoDoTenant`. */
+async function realizadoDoTenant(
+  supabase: SupabaseClient,
+  tenantId: string,
+): Promise<RealizadoDoItem[]> {
+  const lidas = await Promise.all(
+    Array.from({ length: PAGINAS_DE_SAIDA }, (_, n) => paginaDoRealizado(supabase, tenantId, n)),
+  );
+  for (let n = PAGINAS_DE_SAIDA; lidas[lidas.length - 1].length === PAGINA; n++) {
+    lidas.push(await paginaDoRealizado(supabase, tenantId, n));
+  }
+  return lidas.flat();
+}
 
 /** Uma página das linhas do orçado do tenant, na ordem estável do id. */
 async function paginaDoOrcado(
@@ -123,7 +170,7 @@ export async function rentabilidadeDosJobs(
 ): Promise<Map<string, RentabilidadeDoJob>> {
   const saida = new Map<string, RentabilidadeDoJob>();
   try {
-    const [jobsRes, linhas, pedidosPorJob] = await Promise.all([
+    const [jobsRes, linhas, pedidosPorJob, realizados] = await Promise.all([
       supabase
         .from("jobs")
         .select(SELECT_JOB_DOS_ESPELHOS)
@@ -132,8 +179,16 @@ export async function rentabilidadeDosJobs(
         .returns<JobDosEspelhos[]>(),
       linhasDoOrcadoDoTenant(supabase, tenantId),
       pedidosParaFinanceiroDoTenant(supabase, tenantId),
+      realizadoDoTenant(supabase, tenantId),
     ]);
     if (jobsRes.error) throw new Error(`[rentabilidade-dos-jobs.jobs] ${jobsRes.error.message}`);
+
+    const realizadoPorLinha = new Map<string, { valor: number; concluido: boolean }>();
+    for (const r of realizados) {
+      if (r.job_item_orcado_id) {
+        realizadoPorLinha.set(r.job_item_orcado_id, { valor: Number(r.total_realizado ?? 0), concluido: !!r.pps_concluidas_em });
+      }
+    }
 
     const linhasPorJob = new Map<string, LinhaDoOrcado[]>();
     for (const l of linhas) {
@@ -170,7 +225,39 @@ export async function rentabilidadeDosJobs(
         deducoes: totais.deducoesDoResultado,
         custoPlanejado: custoDaPlanilha + planejadoDosPedidos,
       };
-      saida.set(job.id, { ...entrada, ...rentabilidadeDoJob(entrada) });
+
+      // O custo projetado (decisão 248): o planejado até o realizado ser
+      // assegurado. A lista só tem jobs já abertos no financeiro.
+      let custoRealizado = 0;
+      let custoProjetado = 0;
+      if (base.midia) {
+        const midia = base.midia;
+        custoRealizado = linhasDoJob.reduce(
+          (s, l) => s + realizadoDaLinhaMidia(l.tipo_custo, l.total_orcado, realizadoPorLinha.get(l.id)?.valor ?? 0, midia, true),
+          0,
+        );
+        custoProjetado = Math.max(entrada.custoPlanejado, custoRealizado);
+      } else {
+        for (const l of linhasDoJob) {
+          const emSave = l.em_save === true;
+          const r = realizadoPorLinha.get(l.id);
+          const planejado = planejadoBrutoDoItem(Number(l.total_planejado ?? 0), emSave);
+          const realizado = realizadoBrutoDoItem(l.tipo_custo as TipoCusto, Number(l.total_orcado ?? 0), r?.valor ?? 0, true, emSave);
+          custoRealizado += realizado;
+          custoProjetado += emSave
+            ? 0
+            : !realizadoVemDasPPs(l.tipo_custo as TipoCusto) || r?.concluido
+              ? realizado
+              : Math.max(planejado, realizado);
+        }
+        custoProjetado += planejadoDosPedidos;
+      }
+      saida.set(job.id, {
+        ...entrada,
+        ...rentabilidadeDoJob(entrada),
+        custoProjetado: Math.round(custoProjetado * 100) / 100,
+        custoRealizado: Math.round(custoRealizado * 100) / 100,
+      });
     }
   } catch (e) {
     // Sem a rentabilidade a lista continua de pé, com travessão na coluna.

@@ -1,4 +1,5 @@
 "use client";
+import { dataMediaPonderada, diasEntre } from "@/lib/calculos/prazos-do-job";
 
 import * as React from "react";
 import { ChevronRight, Filter, TrendingUp } from "lucide-react";
@@ -37,6 +38,8 @@ export interface ContaNoFluxo {
  */
 export interface PrazosDoJob {
   jobId: string;
+  /** Abertura no financeiro: a ponta de partida do prazo de pagamento. */
+  abertura: string | null;
   faturamento: number | null;
   recebimento: number | null;
   total: number | null;
@@ -133,10 +136,38 @@ export function FluxoCaixaJobs({
   // e o vencimento MÉDIOS; sem nota, o previsto da abertura, até a última
   // parcela. "Último recebimento" deixou de ser verdade nos dois casos
   // (regra em `lib/calculos/prazos-do-job.ts`, decisão 075).
+  // Prazo de pagamento (decisão 248): da abertura até a data média dos
+  // pagamentos do job, ponderada pelo valor — o que já saiu da conta (na
+  // data do pagamento), os títulos a pagar (no vencimento) e o cronograma
+  // de desembolsos ainda sem PP (na data prevista), como o prazo de
+  // recebimento conta os títulos pagos ou não. Impostos ficam de fora: são
+  // recolhimento, não pagamento do custo do job. Segue os filtros de job e
+  // de conta da tela.
+  const pagamento = (() => {
+    const dias = prazosVisiveis.flatMap((p) => {
+      const data = dataMediaPonderada(
+        linhasFiltradas
+          .filter(
+            (l) =>
+              l.jobId === p.jobId &&
+              l.natureza === "saida" &&
+              l.origemTipo !== "previsao_imposto" &&
+              l.origemLancamento !== "imposto_baixa",
+          )
+          .map((l) => ({ data: l.dataEvento, peso: Math.abs(l.valor) })),
+      );
+      const d = diasEntre(p.abertura, data);
+      return d === null ? [] : [d];
+    });
+    if (dias.length === 0) return { dias: null as number | null, base: 0 };
+    return { dias: Math.round(dias.reduce((s, v) => s + v, 0) / dias.length), base: dias.length };
+  })();
+
   const cardsDePrazo = [
-    { rotulo: "Prazo de faturamento", ...media("faturamento"), fim: "abertura → faturamento" },
-    { rotulo: "Prazo de recebimento (do faturamento)", ...media("recebimento"), fim: "faturamento → recebimento" },
-    { rotulo: "Prazo de recebimento do job", ...media("total"), fim: "abertura → recebimento" },
+    { rotulo: "Faturamento", ...media("faturamento"), fim: "abertura → faturamento" },
+    { rotulo: "Recebimento do faturamento", ...media("recebimento"), fim: "faturamento → recebimento" },
+    { rotulo: "Recebimento do job", ...media("total"), fim: "abertura → recebimento" },
+    { rotulo: "Pagamento", ...pagamento, fim: "abertura → pagamento" },
   ];
 
   const subLinhas = (tom: NaturezaFluxo) => {
@@ -256,51 +287,53 @@ export function FluxoCaixaJobs({
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <CardSaldo
-          rotulo={`Saldo ${agregado ? "do projeto" : "do job"} hoje`}
-          valor={fluxo.saldoHoje}
-          moeda={moeda}
-          nota="Entradas menos saídas já movimentadas"
-        />
-        <CardSaldo
-          rotulo={`Saldo no fim ${agregado ? "do projeto" : "do job"}`}
-          valor={fluxo.saldoFim}
-          moeda={moeda}
-          nota={`Projeção até ${fluxo.ultimoMesLabel}`}
-          destacarPositivo
-        />
-      </div>
-
-      <div className="rounded-2xl border border-border bg-card px-[22px] pb-[18px] pt-4 shadow-soft">
-        <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.09em] text-[#8a8a8a]">
-          Prazos {agregado && jobFiltro === TODOS ? "· média dos jobs" : "do job"}
-        </p>
-        <div className="grid gap-3.5 sm:grid-cols-3">
+      {/* Saldos e prazos numa faixa só (decisão 248, Tiago: "muito espaço
+          vazio"): dois saldos e quatro prazos, lado a lado, com o mesmo
+          rótulo pequeno em cima de cada número. */}
+      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
+        <div className="grid grid-cols-[1.25fr_1.25fr_1fr_1fr_1fr_1fr] border-b border-border bg-muted/40 text-[10px] font-bold uppercase tracking-[0.09em] text-[#8a8a8a]">
+          <p className="col-span-2 px-5 py-2">Saldo {agregado ? "do projeto" : "do job"}</p>
+          <p className="col-span-4 border-l border-border px-5 py-2">
+            Prazos {agregado && jobFiltro === TODOS ? "· média dos jobs" : "do job"}
+          </p>
+        </div>
+        <div className="grid grid-cols-[1.25fr_1.25fr_1fr_1fr_1fr_1fr] divide-x divide-border">
+          <Indicador
+            rotulo="Hoje"
+            valor={
+              <span className={cn("font-mono text-xl font-bold", fluxo.saldoHoje < 0 ? "text-[#b3323c]" : "text-foreground")}>
+                {formatCurrency(fluxo.saldoHoje, moeda)}
+              </span>
+            }
+            nota="entradas menos saídas já movimentadas"
+          />
+          <Indicador
+            rotulo={`No fim ${agregado ? "do projeto" : "do job"}`}
+            valor={
+              <span className={cn("font-mono text-xl font-bold", fluxo.saldoFim < 0 ? "text-[#b3323c]" : "text-emerald-700")}>
+                {formatCurrency(fluxo.saldoFim, moeda)}
+              </span>
+            }
+            nota={`projeção até ${fluxo.ultimoMesLabel}`}
+          />
           {cardsDePrazo.map((p) => (
-            <div
+            <Indicador
               key={p.rotulo}
-              className="rounded-xl border border-border px-[15px] py-[13px]"
-            >
-              <p className="text-[11px] text-muted-foreground">{p.rotulo}</p>
-              <p className="mt-1.5 flex items-baseline gap-1.5">
-                <span className="font-mono text-[19px] font-bold">
-                  {p.dias === null ? "—" : p.dias}
+              rotulo={p.rotulo}
+              valor={
+                <span className="flex items-baseline gap-1.5">
+                  <span className="font-mono text-xl font-bold">{p.dias === null ? "—" : p.dias}</span>
+                  {p.dias !== null && <span className="text-[11.5px] text-muted-foreground">dias</span>}
                 </span>
-                {p.dias !== null && (
-                  <span className="text-[11.5px] text-muted-foreground">
-                    dias
-                  </span>
-                )}
-              </p>
-              <p className="mt-1 text-[11px] text-[#8a8a8a]">
-                {p.dias === null
+              }
+              nota={
+                p.dias === null
                   ? "sem data para fechar o prazo"
                   : agregado && jobFiltro === TODOS
-                    ? `${p.fim} · média de ${p.base} ${p.base === 1 ? "job" : "jobs"}`
-                    : p.fim}
-              </p>
-            </div>
+                    ? `${p.fim} · ${p.base} ${p.base === 1 ? "job" : "jobs"}`
+                    : p.fim
+              }
+            />
           ))}
         </div>
       </div>
@@ -854,37 +887,15 @@ function Celula({
   );
 }
 
-function CardSaldo({
-  rotulo,
-  valor,
-  moeda,
-  nota,
-  destacarPositivo,
-}: {
-  rotulo: string;
-  valor: number;
-  moeda: string;
-  nota: string;
-  destacarPositivo?: boolean;
-}) {
+/** Uma célula da faixa de saldos e prazos: rótulo, número e nota. */
+function Indicador({ rotulo, valor, nota }: { rotulo: string; valor: React.ReactNode; nota: string }) {
   return (
-    <div className="rounded-2xl border border-border bg-card px-[22px] py-[18px] shadow-soft">
-      <p className="text-[10px] font-bold uppercase tracking-[0.09em] text-[#8a8a8a]">
-        {rotulo}
+    <div className="min-w-0 px-5 py-3">
+      <p className="truncate text-[11px] text-muted-foreground">{rotulo}</p>
+      <div className="mt-0.5">{valor}</div>
+      <p className="mt-0.5 truncate text-[11px] text-[#8a8a8a]" title={nota}>
+        {nota}
       </p>
-      <p
-        className={cn(
-          "mt-1.5 font-mono text-2xl font-bold",
-          valor < 0
-            ? "text-[#b3323c]"
-            : destacarPositivo
-              ? "text-emerald-700"
-              : "text-foreground",
-        )}
-      >
-        {formatCurrency(valor, moeda)}
-      </p>
-      <p className="mt-1 text-[11.5px] text-muted-foreground">{nota}</p>
     </div>
   );
 }

@@ -180,7 +180,10 @@ export function FiltroDeColuna({
         >
           {/* Quebra em duas linhas em vez de cortar: o título é o que diz
               o que a coluna é. */}
-          <span className={cn("leading-tight", alinhar === "right" ? "text-right" : alinhar === "center" ? "text-center" : "text-left")}>{rotulo}</span>
+          {/* O título de duas linhas começa as duas no mesmo ponto também nas
+              colunas à direita ("Valor / recebido"), como nas colunas à
+              esquerda; o bloco continua encostado à direita (decisão 248). */}
+          <span className={cn("leading-tight", alinhar === "center" ? "text-center" : "text-left")}>{rotulo}</span>
           <span className={cn("inline-flex flex-none items-center gap-0.5", alinhar === "right" && "flex-row-reverse")}>
             {ordem === "asc" && <ArrowUp className="h-3 w-3" />}
             {ordem === "desc" && <ArrowDown className="h-3 w-3" />}

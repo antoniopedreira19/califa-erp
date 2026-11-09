@@ -8946,3 +8946,11 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Na abertura** (faixa Saves e bloco "Saves deste job"), o consumo de save avulso aparece como "do save “Nome”", e o saldo do cliente soma os saves avulsos.
 - **Receita migrada:** a parte da NF do save avulso que um job consome (consumo ÷ crédito × NF) entra no faturamento do job na `vw_job_rentabilidade` e divide o título no `vw_fluxo_caixa` (migration `20261109940003`), como no save de job. Aprovação da versão, abertura e errata de save conferidas pela tela no TES-1038/26.
 - **Conferido:** NF TESTE-247 emitida pela tela (Empresa Teste, cliente Teste): crédito R$ 8.621,79, 01 · Receita · Save, sem rateio. Migrations `20261109940001` e `20261109940002`.
+
+## ⚠️ Nota de 2026-11-09 — o "Exibir" do Resultado de Job e o prazo de pagamento (decisão 248)
+
+- **Resultado de Job e Visualizar Jobs:** colunas Serviço e Status (sem "Cancelamento solicitado"), "Recolher todos" em "Por projeto" e o "Exibir", que liga e desliga 27 colunas por grupo, guardado por tela no navegador.
+- **Custo e Impostos:** o planejado até o realizado ser assegurado, quando ele troca (custo linha a linha, pelas PPs concluídas; impostos pelo faturamento do job). A Rentabilidade continua no planejado.
+- **Fluxo de Caixa do Job:** o 4º prazo, Pagamento (abertura → data média dos pagamentos), e os saldos e prazos numa faixa só.
+- **Títulos de duas linhas:** nas colunas de valor, as duas linhas começam no mesmo ponto, em todas as listas com filtro por coluna.
+- **Banco:** `vw_fluxo_caixa_job_datas` (migration `20261109950001`, aditiva), uma linha por job; a lista não lê as linhas cruas do fluxo.
