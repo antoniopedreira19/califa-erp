@@ -96,6 +96,12 @@ export async function carregarHub(
     (c) => deTeste.has(c.empresa_contabil_id) === (visao === "teste"),
   );
 
+  // A corrente de cada aplicação automática (decisão 249): a tabela junta
+  // as duas numa linha só.
+  const aplicacaoDaCorrente = new Map(
+    daVisao.filter((c) => c.conta_corrente_id).map((c) => [c.conta_corrente_id as string, c.id]),
+  );
+
   const contas: ContaResumo[] = daVisao.map((c) => {
     const r = resumoPorConta.get(c.id);
     const agencia = c.agencia?.trim() || null;
@@ -114,6 +120,8 @@ export async function carregarHub(
       debitosPeriodo: Number(r?.debitos_periodo ?? 0),
       lancamentosPeriodo: r?.lancamentos_periodo ?? 0,
       ultimoMovimento: r?.ultimo_movimento ?? null,
+      correnteId: c.conta_corrente_id ?? null,
+      aplicacaoId: aplicacaoDaCorrente.get(c.id) ?? null,
     };
   });
 

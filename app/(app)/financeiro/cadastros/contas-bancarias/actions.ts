@@ -43,6 +43,13 @@ function mapDbError(msg: string): string {
   if (msg.includes("empresa_contabil_id")) {
     return "Empresa contábil inválida.";
   }
+  if (msg.includes("uq_contas_bancarias_aplicacao_da_corrente")) {
+    return "Essa conta corrente já tem uma aplicação automática.";
+  }
+  // As mensagens do gatilho do par (decisão 249) já vêm prontas para a tela.
+  if (msg.includes("aplicação automática") || msg.includes("conta corrente da aplicação")) {
+    return msg.replace(/^.*?ERROR:\s*/i, "");
+  }
   return "Não foi possível salvar a conta bancária.";
 }
 
@@ -70,6 +77,7 @@ export async function criarContaBancaria(
     saldo_inicial: formData.get("saldo_inicial")?.toString() ?? "",
     saldo_inicial_data: formData.get("saldo_inicial_data")?.toString() ?? "",
     ordem: formData.get("ordem")?.toString() ?? "",
+    conta_corrente_id: formData.get("conta_corrente_id")?.toString() ?? "",
   });
 
   if (!parsed.success) {
@@ -99,6 +107,8 @@ export async function criarContaBancaria(
       saldo_inicial: Number(d.saldo_inicial),
       saldo_inicial_data: d.saldo_inicial_data,
       ordem: d.ordem,
+      // Só a conta de investimento acompanha uma corrente (decisão 249).
+      conta_corrente_id: d.tipo === "investimento" ? d.conta_corrente_id : null,
       created_by: session.profile.id,
     })
     .select("id")
@@ -147,6 +157,7 @@ export async function editarContaBancaria(
     saldo_inicial: formData.get("saldo_inicial")?.toString() ?? "",
     saldo_inicial_data: formData.get("saldo_inicial_data")?.toString() ?? "",
     ordem: formData.get("ordem")?.toString() ?? "",
+    conta_corrente_id: formData.get("conta_corrente_id")?.toString() ?? "",
   });
 
   if (!parsed.success) {
@@ -217,6 +228,7 @@ export async function editarContaBancaria(
       saldo_inicial: Number(d.saldo_inicial),
       saldo_inicial_data: d.saldo_inicial_data,
       ordem: d.ordem,
+      conta_corrente_id: d.tipo === "investimento" ? d.conta_corrente_id : null,
     })
     .eq("id", id)
     .eq("tenant_id", session.activeTenant.id);

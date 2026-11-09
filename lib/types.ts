@@ -3686,6 +3686,10 @@ export interface ContaBancaria {
   saldo_inicial_data: string; // YYYY-MM-DD
   ativo: boolean;
   ordem: number;
+  /** Na conta de aplicação automática (ContaMax, Rende Fácil): a conta
+   *  corrente que ela acompanha. A lista da Conciliação mostra as duas numa
+   *  linha só (decisão 249). Nula no resto. */
+  conta_corrente_id: string | null;
   /** Convênio Santander "Pagamento a Fornecedores" contratado pra
    *  esta conta (20 pos alfanumérico). Adicionado em 21/09/2026 pelo
    *  módulo pgto-remessa (ADR 004). Nulo bloqueia geração de remessa

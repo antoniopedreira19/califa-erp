@@ -27,6 +27,13 @@ export const contaBancariaSchema = z.object({
     .string()
     .optional()
     .transform((v) => (v && v.length > 0 ? Number(v) : 0)),
+  /** Na conta de investimento que é a aplicação automática de uma corrente
+   *  (ContaMax, Rende Fácil): a corrente dela (decisão 249). Vazio: nenhuma. */
+  conta_corrente_id: z
+    .string()
+    .optional()
+    .transform((v) => (v && v.length > 0 ? v : null))
+    .refine((v) => v === null || z.string().uuid().safeParse(v).success, "Conta corrente inválida."),
 });
 
 export type ContaBancariaInput = z.infer<typeof contaBancariaSchema>;

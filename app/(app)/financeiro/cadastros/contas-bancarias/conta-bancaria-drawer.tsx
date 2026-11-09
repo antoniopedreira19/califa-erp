@@ -25,11 +25,19 @@ import { criarContaBancaria, editarContaBancaria } from "./actions";
 import type { ContaBancaria } from "@/lib/types";
 import type { EmpresaContabilSumario } from "./types";
 
+/** As correntes que podem ter aplicação automática (decisão 249), com a
+ *  aplicação que já aponta para cada uma. */
+export type CorrenteParaAplicacao = { id: string; nome: string; aplicacaoId: string | null };
+
+/** O valor do Select para "nenhuma": o Radix não aceita valor vazio. */
+const SEM_CORRENTE = "nenhuma";
+
 type Props =
   | {
       mode: "criar";
       trigger?: React.ReactNode;
       empresasContabeis: EmpresaContabilSumario[];
+      contasCorrentes: CorrenteParaAplicacao[];
     }
   | {
       mode: "editar";
@@ -39,6 +47,7 @@ type Props =
       open?: boolean;
       onOpenChange?: (open: boolean) => void;
       empresasContabeis: EmpresaContabilSumario[];
+      contasCorrentes: CorrenteParaAplicacao[];
     };
 
 export function ContaBancariaDrawer(props: Props) {
@@ -61,6 +70,9 @@ export function ContaBancariaDrawer(props: Props) {
     conta?.empresa_contabil_id ?? "",
   );
   const [tipo, setTipo] = React.useState<string>(conta?.tipo ?? "");
+  const [correnteId, setCorrenteId] = React.useState<string>(conta?.conta_corrente_id ?? SEM_CORRENTE);
+  // A corrente que já tem outra aplicação fica de fora: uma por corrente.
+  const correntesLivres = props.contasCorrentes.filter((c) => !c.aplicacaoId || c.aplicacaoId === conta?.id);
 
   const isControlled =
     props.mode === "editar" && (props as any).open !== undefined;
@@ -72,10 +84,12 @@ export function ContaBancariaDrawer(props: Props) {
     if (open && isEditar && conta) {
       setEmpresaContabilId(conta.empresa_contabil_id);
       setTipo(conta.tipo);
+      setCorrenteId(conta.conta_corrente_id ?? SEM_CORRENTE);
     }
     if (open && !isEditar) {
       setEmpresaContabilId("");
       setTipo("");
+      setCorrenteId(SEM_CORRENTE);
     }
   }, [open, isEditar, conta]);
 
@@ -95,6 +109,7 @@ export function ContaBancariaDrawer(props: Props) {
     // Injetar valores dos selects controlados
     formData.set("empresa_contabil_id", empresaContabilId);
     formData.set("tipo", tipo);
+    formData.set("conta_corrente_id", tipo === "investimento" && correnteId !== SEM_CORRENTE ? correnteId : "");
 
     startTransition(async () => {
       const res =
@@ -266,6 +281,37 @@ export function ContaBancariaDrawer(props: Props) {
                 </p>
               ))}
             </div>
+
+            {/* Aplicação automática (decisão 249): a conta de investimento
+                que o banco usa para aplicar o que sobra numa corrente. A
+                lista da Conciliação mostra as duas numa linha só. */}
+            {tipo === "investimento" && (
+              <div className="space-y-2">
+                <Label htmlFor="conta_corrente_id">Aplicação automática da conta</Label>
+                <Select value={correnteId} onValueChange={setCorrenteId}>
+                  <SelectTrigger id="conta_corrente_id">
+                    <SelectValue placeholder="Selecione a conta corrente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={SEM_CORRENTE}>Nenhuma (investimento à parte)</SelectItem>
+                    {correntesLivres.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Para a ContaMax e o Rende Fácil: o banco aplica sozinho o que sobra na corrente, e a Conciliação mostra as
+                  duas numa linha só, com o saldo somado.
+                </p>
+                {fieldErrors.conta_corrente_id?.map((msg, i) => (
+                  <p key={i} className="text-xs text-california-red">
+                    {msg}
+                  </p>
+                ))}
+              </div>
+            )}
 
             {/* Saldo inicial */}
             <div className="space-y-2">
