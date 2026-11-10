@@ -78,18 +78,26 @@ export function CardsResumoFolha({
         }
         tom={contagem.pendente_correcao > 0 ? "vermelho" : undefined}
       />
-      <CardKpi
-        icone={<Activity className="h-4 w-4" />}
-        rotulo="Progresso do fluxo"
-        valorPrincipal={`${contagem.paga}/${colaboradoresAtual}`}
-        valorSubtitulo="pagas"
-        rodape={
-          <BarraProgresso
-            total={colaboradoresAtual}
-            contagem={contagem}
+      {(() => {
+        const marco = marcoMaisAvancado(contagem, colaboradoresAtual);
+        return (
+          <CardKpi
+            icone={<Activity className="h-4 w-4" />}
+            rotulo="Progresso do fluxo"
+            valorPrincipal={`${marco.n}/${colaboradoresAtual}`}
+            valorSubtitulo={marco.label}
+            rodape={
+              <div className="space-y-1.5">
+                <BarraProgresso
+                  total={colaboradoresAtual}
+                  contagem={contagem}
+                />
+                <LegendaProgresso contagem={contagem} />
+              </div>
+            }
           />
-        }
-      />
+        );
+      })()}
     </div>
   );
 }
@@ -204,6 +212,56 @@ function Delta({
       {positivo ? "+" : "−"}
       {Math.abs(pct).toFixed(1).replace(".", ",")}% vs {nomeAnterior}
     </span>
+  );
+}
+
+/**
+ * Marco mais avancado atingido no fluxo (paga > aprovada > enviada >
+ * pendente > rascunho). Usado pra escolher o numero "X/total" do card
+ * — assim nao fica "0/207 pagas" quando as 207 ja estao enviadas.
+ */
+function marcoMaisAvancado(
+  contagem: ContagemStatus,
+  total: number,
+): { n: number; label: string } {
+  if (total === 0) return { n: 0, label: "sem linhas" };
+  if (contagem.paga > 0) return { n: contagem.paga, label: "pagas" };
+  if (contagem.aprovada > 0)
+    return { n: contagem.aprovada, label: "aprovadas" };
+  if (contagem.enviada > 0) return { n: contagem.enviada, label: "enviadas" };
+  if (contagem.pendente_correcao > 0)
+    return { n: contagem.pendente_correcao, label: "pendentes" };
+  return { n: 0, label: "em rascunho" };
+}
+
+/**
+ * Legenda abaixo da barra: lista os status com contagem > 0 com um
+ * quadradinho da cor correspondente. Deixa claro o que a barra mostra.
+ */
+function LegendaProgresso({ contagem }: { contagem: ContagemStatus }) {
+  const itens: Array<{ n: number; cor: string; nome: string }> = [
+    { n: contagem.paga, cor: "bg-emerald-600", nome: "pagas" },
+    { n: contagem.aprovada, cor: "bg-emerald-400", nome: "aprovadas" },
+    { n: contagem.enviada, cor: "bg-blue-500", nome: "enviadas" },
+    {
+      n: contagem.pendente_correcao,
+      cor: "bg-california-red",
+      nome: "pendentes",
+    },
+    { n: contagem.rascunho, cor: "bg-muted-foreground/30", nome: "em rascunho" },
+  ].filter((i) => i.n > 0);
+
+  if (itens.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+      {itens.map((i, idx) => (
+        <span key={idx} className="inline-flex items-center gap-1">
+          <span className={`inline-block h-2 w-2 rounded-sm ${i.cor}`} />
+          {i.n} {i.nome}
+        </span>
+      ))}
+    </div>
   );
 }
 
