@@ -229,7 +229,7 @@ export default async function AdminEmpresasPage() {
       <BotaoVoltar reserva="/admin" />
 
       <PageHeader
-        eyebrow="ADMINISTRAÇÃO"
+        eyebrow="CONFIGURAÇÕES"
         title="Empresas & regionais"
         description="Organograma do grupo California: empresas do tenant e as regionais que operam sob cada uma. A empresa marcada como principal é usada por padrão em novos projetos."
         icon={Building2}

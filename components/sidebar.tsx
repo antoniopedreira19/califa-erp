@@ -22,6 +22,7 @@ import {
   Users,
   UserCheck,
   Gavel,
+  FolderKanban,
 } from "lucide-react";
 
 type NavLink = {
@@ -94,6 +95,15 @@ const links: NavLink[] = [
     icon: UserCheck,
     permissao: "sidebar.freelancers",
   },
+  // Cadastros saiu da engrenagem e virou módulo (Tiago, 10/11/2026).
+  // Clientes e fornecedores moram em rotas próprias, filhas do hub.
+  {
+    href: "/cadastros",
+    label: "Cadastros",
+    icon: FolderKanban,
+    activePathPrefixes: ["/clientes", "/fornecedores"],
+    permissao: "sidebar.cadastros",
+  },
 ];
 
 // Larguras fixas em px pra animação de width funcionar (CSS não interpola auto/full).
@@ -126,22 +136,14 @@ export function Sidebar({
     (l) => (l.soDoComite ? doComite : !l.permissao || pode(role, l.permissao)),
   );
 
-  // Engrenagem no footer: agrupa Cadastros e Administração (ex-itens de nav).
-  // Só aparece se o usuário puder ver pelo menos uma das duas áreas — assim
-  // Freelancer e Produtor não veem um botão que abre uma página vazia.
-  const podeConfiguracoes =
-    pode(role, "sidebar.cadastros") || pode(role, "sidebar.administracao");
+  // Engrenagem no footer: abre direto as Configurações (/admin), só de
+  // administrador. Cadastros, que dividia o hub com ela, virou item da
+  // barra em 10/11/2026.
+  const podeConfiguracoes = pode(role, "sidebar.administracao");
   const configuracoesAtivo =
     pathname === "/configuracoes" ||
-    pathname.startsWith("/configuracoes/") ||
-    pathname === "/cadastros" ||
-    pathname.startsWith("/cadastros/") ||
     pathname === "/admin" ||
-    pathname.startsWith("/admin/") ||
-    pathname === "/clientes" ||
-    pathname.startsWith("/clientes/") ||
-    pathname === "/fornecedores" ||
-    pathname.startsWith("/fornecedores/");
+    pathname.startsWith("/admin/");
 
   // Largura do bg de cada item — animável porque são valores numéricos px.
   const itemBgWidth = expanded ? ITEM_W_EXPANDED : ITEM_W_COLLAPSED;
@@ -378,7 +380,7 @@ export function Sidebar({
             >
               {podeConfiguracoes && (
                 <Link
-                  href="/configuracoes"
+                  href="/admin"
                   onClick={() => setMobileOpen(false)}
                   title="Configurações"
                   className={cn(

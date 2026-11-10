@@ -25,7 +25,7 @@ export interface CidadeOption {
  *   no banco — assim o formulário fica com o mesmo `cidade_id` que se
  *   tivesse escolhido uma local.
  * - Se nem IBGE serve (matriz interna, ponto fora do mapa), o produtor
- *   ainda pode cadastrar manualmente em /cadastros/cidades.
+ *   ainda pode cadastrar manualmente em /admin/cidades.
  *
  * Nunca trava: o produtor completa o orçamento sem sair do formulário
  * mesmo pra cidade não cadastrada. Ver decisão "Opção C" (05/09/2026).
@@ -212,7 +212,7 @@ export function CidadeCombobox({
               </p>
               <p className="text-[11px] text-muted-foreground">
                 Você pode cadastrar manualmente em{" "}
-                <span className="font-mono">/cadastros/cidades</span>.
+                <span className="font-mono">/admin/cidades</span>.
               </p>
             </div>
           ) : (

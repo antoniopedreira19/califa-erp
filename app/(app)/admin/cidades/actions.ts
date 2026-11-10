@@ -60,8 +60,8 @@ export async function criarCidade(formData: FormData): Promise<ActionResult> {
     metadata: { nome: parsed.data.nome },
   });
 
-  revalidatePath("/cadastros/cidades");
-  revalidatePath("/cadastros");
+  revalidatePath("/admin/cidades");
+  revalidatePath("/admin");
   return { ok: true, id: data.id };
 }
 
@@ -103,7 +103,7 @@ export async function editarCidade(
     metadata: { nome: parsed.data.nome },
   });
 
-  revalidatePath("/cadastros/cidades");
+  revalidatePath("/admin/cidades");
   return { ok: true, id };
 }
 
@@ -131,8 +131,8 @@ export async function inativarCidade(id: string): Promise<ActionResult> {
     entidadeId: id,
   });
 
-  revalidatePath("/cadastros/cidades");
-  revalidatePath("/cadastros");
+  revalidatePath("/admin/cidades");
+  revalidatePath("/admin");
   return { ok: true, id };
 }
 
@@ -160,7 +160,7 @@ export async function reativarCidade(id: string): Promise<ActionResult> {
     entidadeId: id,
   });
 
-  revalidatePath("/cadastros/cidades");
-  revalidatePath("/cadastros");
+  revalidatePath("/admin/cidades");
+  revalidatePath("/admin");
   return { ok: true, id };
 }
