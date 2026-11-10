@@ -78,26 +78,10 @@ export function CardsResumoFolha({
         }
         tom={contagem.pendente_correcao > 0 ? "vermelho" : undefined}
       />
-      {(() => {
-        const marco = marcoMaisAvancado(contagem, colaboradoresAtual);
-        return (
-          <CardKpi
-            icone={<Activity className="h-4 w-4" />}
-            rotulo="Progresso do fluxo"
-            valorPrincipal={`${marco.n}/${colaboradoresAtual}`}
-            valorSubtitulo={marco.label}
-            rodape={
-              <div className="space-y-1.5">
-                <BarraProgresso
-                  total={colaboradoresAtual}
-                  contagem={contagem}
-                />
-                <LegendaProgresso contagem={contagem} />
-              </div>
-            }
-          />
-        );
-      })()}
+      <CardProgressoFluxo
+        total={colaboradoresAtual}
+        contagem={contagem}
+      />
     </div>
   );
 }
@@ -216,33 +200,26 @@ function Delta({
 }
 
 /**
- * Marco mais avancado atingido no fluxo (paga > aprovada > enviada >
- * pendente > rascunho). Usado pra escolher o numero "X/total" do card
- * — assim nao fica "0/207 pagas" quando as 207 ja estao enviadas.
+ * Card dedicado ao Progresso do fluxo: mostra Enviadas e Pagas lado a lado
+ * (2 marcos mais importantes), barra empilhada e legenda com os status
+ * intermediarios (aprovadas, pendentes, rascunho) quando existem.
  */
-function marcoMaisAvancado(
-  contagem: ContagemStatus,
-  total: number,
-): { n: number; label: string } {
-  if (total === 0) return { n: 0, label: "sem linhas" };
-  if (contagem.paga > 0) return { n: contagem.paga, label: "pagas" };
-  if (contagem.aprovada > 0)
-    return { n: contagem.aprovada, label: "aprovadas" };
-  if (contagem.enviada > 0) return { n: contagem.enviada, label: "enviadas" };
-  if (contagem.pendente_correcao > 0)
-    return { n: contagem.pendente_correcao, label: "pendentes" };
-  return { n: 0, label: "em rascunho" };
-}
+function CardProgressoFluxo({
+  total,
+  contagem,
+}: {
+  total: number;
+  contagem: ContagemStatus;
+}) {
+  // Enviadas = cumulativo (soma de tudo que ja saiu de rascunho)
+  const enviadasAcumulado =
+    contagem.enviada +
+    contagem.aprovada +
+    contagem.paga +
+    contagem.pendente_correcao;
 
-/**
- * Legenda abaixo da barra: lista os status com contagem > 0 com um
- * quadradinho da cor correspondente. Deixa claro o que a barra mostra.
- */
-function LegendaProgresso({ contagem }: { contagem: ContagemStatus }) {
-  const itens: Array<{ n: number; cor: string; nome: string }> = [
-    { n: contagem.paga, cor: "bg-emerald-600", nome: "pagas" },
+  const legendaItens: Array<{ n: number; cor: string; nome: string }> = [
     { n: contagem.aprovada, cor: "bg-emerald-400", nome: "aprovadas" },
-    { n: contagem.enviada, cor: "bg-blue-500", nome: "enviadas" },
     {
       n: contagem.pendente_correcao,
       cor: "bg-california-red",
@@ -251,16 +228,54 @@ function LegendaProgresso({ contagem }: { contagem: ContagemStatus }) {
     { n: contagem.rascunho, cor: "bg-muted-foreground/30", nome: "em rascunho" },
   ].filter((i) => i.n > 0);
 
-  if (itens.length === 0) return null;
-
   return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
-      {itens.map((i, idx) => (
-        <span key={idx} className="inline-flex items-center gap-1">
-          <span className={`inline-block h-2 w-2 rounded-sm ${i.cor}`} />
-          {i.n} {i.nome}
+    <div className="rounded-2xl border border-border bg-card p-5 shadow-soft flex flex-col justify-between min-h-[128px]">
+      <div className="flex items-center gap-2 text-muted-foreground">
+        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-california-red/10 text-california-red">
+          <Activity className="h-4 w-4" />
         </span>
-      ))}
+        <span className="text-xs font-semibold uppercase tracking-wide">
+          Progresso do fluxo
+        </span>
+      </div>
+
+      <div className="mt-3 space-y-2">
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-xs font-medium text-muted-foreground">
+            Enviadas
+          </span>
+          <span className="text-xl font-bold tabular-nums text-foreground">
+            {enviadasAcumulado}
+            <span className="text-sm font-medium text-muted-foreground">
+              /{total}
+            </span>
+          </span>
+        </div>
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-xs font-medium text-muted-foreground">
+            Pagas
+          </span>
+          <span className="text-xl font-bold tabular-nums text-foreground">
+            {contagem.paga}
+            <span className="text-sm font-medium text-muted-foreground">
+              /{total}
+            </span>
+          </span>
+        </div>
+
+        <BarraProgresso total={total} contagem={contagem} />
+
+        {legendaItens.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+            {legendaItens.map((i, idx) => (
+              <span key={idx} className="inline-flex items-center gap-1">
+                <span className={`inline-block h-2 w-2 rounded-sm ${i.cor}`} />
+                {i.n} {i.nome}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
