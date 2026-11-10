@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 
 import {
   erroDoNomeDoGrupo,
+  erroDoNomeDoItem,
   gruposQueSaem,
   mudancasDeEstrutura,
   resumoDaEstrutura,
@@ -148,4 +149,42 @@ test("nome: vazio, longo, repetido no job e no mês", () => {
   ];
   assert.equal(erroDoNomeDoGrupo("Equipe", "dez", mensal, null), null);
   assert.equal(erroDoNomeDoGrupo("Equipe", "out", mensal, null), "Já existe um grupo com esse nome neste mês.");
+});
+
+// ---- Decisão 252: o item que já existia ganha nome novo ----
+
+test("item renomeado: o espaço não conta, trocar o nome conta", () => {
+  const a = antes();
+  const igual: Organizacao = { ...a, linhas: a.linhas.map((l) => (l.id === "e1" ? { ...l, item: " Produtor " } : l)) };
+  assert.deepEqual(mudancasDeEstrutura(a, igual, new Map()), []);
+  const outro: Organizacao = {
+    ...a,
+    linhas: a.linhas.map((l) => (l.id === "e1" ? { ...l, item: "Produtor executivo " } : l)),
+  };
+  const m = mudancasDeEstrutura(a, outro, new Map());
+  assert.deepEqual(m, [{ tipo: "item_renomeado", chave: "e1", de: "Produtor", para: "Produtor executivo" }]);
+  assert.deepEqual(resumoDaEstrutura(m), ["1 item renomeado"]);
+});
+
+test("item renomeado e movido aparece nas duas mudanças; a linha nova não é renomeada", () => {
+  const a = antes();
+  const d: Organizacao = {
+    grupos: a.grupos,
+    linhas: [
+      ...a.linhas.map((l) => (l.id === "c1" ? { ...l, grupoId: "g1", item: "Fotógrafo still" } : l)),
+      { id: "nova:1", grupoId: "g3", item: "Banner" },
+    ],
+  };
+  const m = mudancasDeEstrutura(a, d, new Map([["nova:1", "g3"]]));
+  assert.deepEqual(
+    m.map((x) => x.tipo),
+    ["grupo_removido", "item_movido", "item_renomeado"],
+  );
+  assert.deepEqual(resumoDaEstrutura(m), ["1 item renomeado", "1 item movido", "1 grupo removido"]);
+});
+
+test("nome do item: vazio e longo não servem; repetido serve", () => {
+  assert.equal(erroDoNomeDoItem("  "), "Informe o nome do item.");
+  assert.equal(erroDoNomeDoItem("x".repeat(201)), "Máximo 200 caracteres.");
+  assert.equal(erroDoNomeDoItem("Bandeiras"), null);
 });

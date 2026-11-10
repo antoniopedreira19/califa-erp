@@ -2684,6 +2684,9 @@ export interface ParametrosPedidosDoJob {
 export interface EstruturaDaErrata {
   grupos_novos: Array<{ chave: string; nome: string; mes_id: string | null }>;
   grupos_renomeados: Array<{ grupo_id: string; nome: string }>;
+  /** Decisão 252: as linhas que já existiam e ganham nome novo. A pronta
+   *  gravada antes de 10/11/2026 não tem o campo — quem a lê usa `?? []`. */
+  itens_renomeados: Array<{ item_id: string; nome: string }>;
   /** A sequência inteira das linhas, agrupamento por agrupamento. `null`
    *  quando nenhuma linha mudou de lugar. */
   ordem: Array<{ item: string; grupo: string }> | null;
@@ -2696,6 +2699,9 @@ export type MudancaDeEstrutura =
   | { tipo: "grupo_renomeado"; chave: string; de: string; para: string }
   | { tipo: "grupo_removido"; chave: string; nome: string }
   | { tipo: "item_movido"; chave: string; item: string; de: string; para: string }
+  /** Decisão 252: o item (a linha que já existia) com nome novo. `chave` é
+   *  o id da linha no job. */
+  | { tipo: "item_renomeado"; chave: string; de: string; para: string }
   | { tipo: "ordem"; chave: string; grupo: string };
 
 /** A errata pronta para envio do job, como a página a recebe. */

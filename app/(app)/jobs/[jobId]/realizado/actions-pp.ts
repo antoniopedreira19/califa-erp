@@ -3046,6 +3046,34 @@ async function refazerPdfDaPP(
 }
 
 /**
+ * Decisão 252: a errata renomeou a linha, e as PPs GERADAS dela levam o
+ * "Item" no PDF (decisão 191). A ficha e o formulário já leem o nome da
+ * linha; o PDF é refeito aqui, um por um, depois que a errata foi gravada.
+ * Só a gerada: a que chegou ao financeiro não deixa a linha mudar de nome.
+ *
+ * Roda como o usuário (a RLS decide), só no job e no tenant dele. A falha
+ * não desfaz a errata — fica no log, e o próximo PDF refeito da PP sai com
+ * o nome novo.
+ */
+export async function refazerPdfsDasPPsGeradas(jobId: string, ppIds: string[]): Promise<void> {
+  if (ppIds.length === 0) return;
+  const session = await requireSession();
+  const tenantId = session.activeTenant.id;
+  const supabase = createClient();
+  const { data } = await supabase
+    .from("pedidos_compra")
+    .select("id, codigo")
+    .eq("tenant_id", tenantId)
+    .eq("job_id", jobId)
+    .eq("status", "gerada")
+    .in("id", ppIds);
+  for (const pp of (data ?? []) as Array<{ id: string; codigo: string }>) {
+    const erro = await refazerPdfDaPP(supabase, tenantId, pp.id);
+    if (erro) console.error("[pp.item_renomeado]", pp.codigo, erro);
+  }
+}
+
+/**
  * Decisão 190: depois de o status mudar (envio ao financeiro, cancelamento),
  * refaz o PDF com o selo do status novo. O status já está gravado e não
  * volta atrás se o PDF falhar — a falha fica no log, e o PDF velho continua

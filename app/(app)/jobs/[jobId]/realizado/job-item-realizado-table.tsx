@@ -28,7 +28,16 @@ import type { TomadorDaNf } from "./anexos-da-pp";
 import {
   textoAguardaAbertura,
 } from "./pp-a-emitir-ui";
-import { meioPeloAnexo, nomeContraparteBRPP, nomeDoCartaoCorporativo, ppStatusLabel, situacaoDaVerba } from "@/lib/types";
+import {
+  meioPeloAnexo,
+  nomeContraparteBRPP,
+  nomeDoCartaoCorporativo,
+  ppChegouAoFinanceiro,
+  ppStatusLabel,
+  situacaoDaVerba,
+} from "@/lib/types";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { erroDoNomeDoItem } from "@/lib/calculos/organizacao-errata";
 import { CalhaLinha } from "./calha-linha";
 import {
   NomeDoGrupoNaErrata,
@@ -1068,6 +1077,40 @@ export function JobItemRealizadoTable({
     return mapa;
   }, [modoDaEdicao, todosOsItens, realizadosMap, ppsPorItemId, aEmitirPorItemId, bvsPorItem]);
 
+  /** Decisão 252: as PPs que contam para o nome da linha. Com PP que já
+   *  chegou ao financeiro o nome não abre; com PP só gerada ele abre, e o
+   *  pop-up avisa que o "Item" dela muda junto. O servidor confere de novo. */
+  const ppsDoNomePorLinha = React.useMemo(() => {
+    const mapa = new Map<string, { enviadas: string[]; geradas: string[] }>();
+    for (const it of todosOsItens) {
+      const realizadoId = realizadosMap.get(it.id)?.id;
+      const pps = realizadoId ? (ppsPorItemId.get(realizadoId) ?? []) : [];
+      const enviadas = pps.filter((pp) => ppChegouAoFinanceiro(pp.status)).map((pp) => pp.codigo);
+      const geradas = pps.filter((pp) => pp.status === "gerada").map((pp) => pp.codigo);
+      if (enviadas.length > 0 || geradas.length > 0) mapa.set(it.id, { enviadas, geradas });
+    }
+    return mapa;
+  }, [todosOsItens, realizadosMap, ppsPorItemId]);
+
+  /** O nome novo de uma linha com PP gerada, esperando o "Renomear" do
+   *  pop-up (decisão 252). */
+  const [nomeComPP, setNomeComPP] = React.useState<{
+    itemId: string;
+    de: string;
+    para: string;
+    geradas: string[];
+    destino?: Direcao;
+  } | null>(null);
+
+  /** O nome recusado na célula (vazio não chega aqui; longo, sim). Some
+   *  sozinho, como o aviso do nome repetido do agrupamento. */
+  const [erroDoNome, setErroDoNome] = React.useState<{ itemId: string; texto: string } | null>(null);
+  React.useEffect(() => {
+    if (!erroDoNome) return;
+    const t = window.setTimeout(() => setErroDoNome(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [erroDoNome]);
+
   /** Linhas que a errata não toca por causa do save (decisão 099 §15),
    *  com o motivo de cada uma. O servidor tem a mesma trava. */
   const travadasPorSave = React.useMemo(() => {
@@ -1141,7 +1184,14 @@ export function JobItemRealizadoTable({
       ) {
         return null;
       }
-      if (coluna === "item") return errata.ehNova(rowId) ? "texto" : null;
+      // O nome: o da linha nova sempre; o da linha que já existia só na
+      // errata (decisão 252), e não com PP que já chegou ao financeiro.
+      if (coluna === "item") {
+        if (errata.ehNova(rowId)) return "texto";
+        if (modoDaEdicao !== "errata") return null;
+        if ((ppsDoNomePorLinha.get(rowId)?.enviadas.length ?? 0) > 0) return null;
+        return "texto";
+      }
       // No Interno o tipo é sempre F · Interno (decisão 105). Na edição do
       // financeiro, nunca na vermelha, que é da errata, nem na linha com BV.
       // Na com PP, a lista só traz os tipos com PP (revisão da decisão 115,
@@ -1177,6 +1227,7 @@ export function JobItemRealizadoTable({
       travadasPorSave,
       modoDaEdicao,
       travaDoTipoPorLinha,
+      ppsDoNomePorLinha,
     ],
   );
 
@@ -1293,6 +1344,40 @@ export function JobItemRealizadoTable({
 
   return (
     <>
+      {/* Decisão 252: o nome novo de uma linha com PP só gerada. A PP lê o
+          item da linha, então o "Item" dela muda junto — e o PDF é refeito
+          quando a errata for enviada. */}
+      <ConfirmDialog
+        open={nomeComPP !== null}
+        onOpenChange={(o) => {
+          if (o || !nomeComPP) return;
+          setNomeComPP(null);
+          selecao.focar();
+        }}
+        title="Este item já tem PP"
+        description={
+          nomeComPP && (
+            <>
+              {nomeComPP.geradas.length === 1
+                ? `A ${nomeComPP.geradas[0]} já foi gerada neste item. `
+                : `As PPs ${nomeComPP.geradas.join(", ")} já foram geradas neste item. `}
+              Quando a errata for enviada, o campo “Item” {nomeComPP.geradas.length === 1 ? "dela" : "delas"} passa
+              de “{nomeComPP.de}” para “{nomeComPP.para}”, e o PDF é refeito com o nome novo.
+            </>
+          )
+        }
+        confirmLabel="Renomear"
+        cancelLabel="Voltar"
+        variant="primary"
+        onConfirm={() => {
+          if (!nomeComPP || !errata) return;
+          const { itemId, para, destino } = nomeComPP;
+          errata.editarNome(itemId, para);
+          setNomeComPP(null);
+          if (destino) selecao.mover(destino, { linhaId: itemId, coluna: "item" });
+          selecao.focar();
+        }}
+      />
       {/* A faixa de erro que ficava aqui era do lançamento inline do
           realizado, que deixou de existir em 21/08/2026. Erro de PP e de
           BV vive no drawer que o produziu, junto do campo que o causou. */}
@@ -1732,20 +1817,46 @@ export function JobItemRealizadoTable({
                           />
                         )}
 
-                        {/* Item — só a linha NOVA da errata tem nome
-                            editável; as outras vêm da versão aprovada. */}
+                        {/* Item — a linha NOVA da errata tem nome editável;
+                            desde a decisão 252 a que já existia também, só
+                            na errata e sem PP enviada ao financeiro. */}
                         {abertaAqui("item") && errata ? (
                           <td className={cn("px-1.5 pl-[18px] align-middle", classeNeutra)}>
                             <CampoDaErrata
                               valor={item.item}
                               semente={sementeDe("item")}
                               onConfirmar={(v, d) => {
-                                errata.editarNome(item.id, v);
-                                fecharEMover({ linhaId: item.id, coluna: "item" }, d);
+                                const celula = { linhaId: item.id, coluna: "item" };
+                                if (errata.ehNova(item.id)) {
+                                  errata.editarNome(item.id, v);
+                                  fecharEMover(celula, d);
+                                  return;
+                                }
+                                const para = v.trim();
+                                // Vazio ou igual ao de agora: nada muda.
+                                if (para === "" || para === item.item.trim()) {
+                                  fecharEMover(celula, d);
+                                  return;
+                                }
+                                const erro = erroDoNomeDoItem(para);
+                                if (erro) {
+                                  setErroDoNome({ itemId: item.id, texto: erro });
+                                  fecharEMover(celula, d);
+                                  return;
+                                }
+                                const gravado = errata.nomeSalvoDe(item.id) ?? item.item;
+                                const geradas = ppsDoNomePorLinha.get(item.id)?.geradas ?? [];
+                                if (geradas.length > 0 && para !== gravado.trim()) {
+                                  setAberta(null);
+                                  setNomeComPP({ itemId: item.id, de: gravado, para, geradas, destino: d });
+                                  return;
+                                }
+                                errata.editarNome(item.id, para);
+                                fecharEMover(celula, d);
                               }}
                               onCancelar={() => setAberta(null)}
                               className={ERRATA.inputNome}
-                              ariaLabel="Descrição do item novo"
+                              ariaLabel={errata.ehNova(item.id) ? "Descrição do item novo" : "Nome do item"}
                             />
                           </td>
                         ) : (
@@ -1814,6 +1925,35 @@ export function JobItemRealizadoTable({
                                   {editando && errata?.ehNova(item.id)
                                     ? "Descrição do item"
                                     : "—"}
+                                </span>
+                              )}
+                              {/* Decisão 252: o nome novo da errata, com o
+                                  gravado na dica. */}
+                              {editando && errata?.nomeSalvoDe(item.id) != null && (
+                                <span
+                                  title={`Era ${errata.nomeSalvoDe(item.id)}`}
+                                  className={cn(ERRATA.tagAlterada, "flex-none")}
+                                >
+                                  renomeado
+                                </span>
+                              )}
+                              {editando &&
+                                modoDaEdicao === "errata" &&
+                                !item.cancelada_em &&
+                                (ppsDoNomePorLinha.get(item.id)?.enviadas.length ?? 0) > 0 &&
+                                aberta === null &&
+                                selecao.estaSelecionada(item.id, "item") && (
+                                  <span
+                                    title="O nome não muda: a linha tem PP enviada ao financeiro."
+                                    className="flex flex-none items-center gap-1 text-[11px] text-muted-foreground"
+                                  >
+                                    <Lock className="h-3 w-3" aria-hidden />
+                                    nome travado
+                                  </span>
+                                )}
+                              {erroDoNome?.itemId === item.id && (
+                                <span className="flex-none text-[11px] font-medium text-california-red">
+                                  {erroDoNome.texto}
                                 </span>
                               )}
                               {item.linha_vermelha && (

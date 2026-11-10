@@ -182,6 +182,15 @@ export function LinhaDeEstrutura({ m }: { m: MudancaDeEstrutura }) {
           <span className="text-[11px] text-muted-foreground">· ficou vazio</span>
         </>
       );
+    case "item_renomeado":
+      return (
+        <>
+          <span className={ERRATA.tagAlterada}>Item renomeado</span>
+          <span className="truncate text-[12.5px] text-muted-foreground line-through">{m.de}</span>
+          {seta}
+          <span className="truncate text-[12.5px] font-semibold text-foreground">{m.para}</span>
+        </>
+      );
     case "item_movido":
       return (
         <>

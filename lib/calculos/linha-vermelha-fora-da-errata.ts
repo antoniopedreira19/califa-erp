@@ -192,7 +192,13 @@ export function sobraErrata(c: {
   cancelamentos: unknown[];
   remocoes?: unknown[];
   meses_novos?: unknown[];
-  estrutura?: { grupos_novos: unknown[]; grupos_renomeados: unknown[]; ordem: unknown[] | null } | null;
+  estrutura?: {
+    grupos_novos: unknown[];
+    grupos_renomeados: unknown[];
+    /** Decisão 252. Ausente na pronta gravada antes de 10/11/2026. */
+    itens_renomeados?: unknown[];
+    ordem: unknown[] | null;
+  } | null;
   /** Decisão 233: os parâmetros do job que a errata muda. */
   parametros?: unknown;
 }): boolean {
@@ -204,6 +210,10 @@ export function sobraErrata(c: {
     c.cancelamentos.length > 0 ||
     (c.remocoes?.length ?? 0) > 0 ||
     (c.meses_novos?.length ?? 0) > 0 ||
-    (est !== null && (est.grupos_novos.length > 0 || est.grupos_renomeados.length > 0 || est.ordem !== null))
+    (est !== null &&
+      (est.grupos_novos.length > 0 ||
+        est.grupos_renomeados.length > 0 ||
+        (est.itens_renomeados?.length ?? 0) > 0 ||
+        est.ordem !== null))
   );
 }

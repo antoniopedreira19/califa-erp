@@ -6765,3 +6765,10 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 ## ⚠️ Nota de 2026-11-09 — errata de save com o save avulso (decisão 247)
 
 - A errata de save do job aberto e a gravação direta no job devolvido aceitam o save avulso como origem do consumo (`origensParaOBanco` separa job e save avulso pelo id). A conferência do cliente vale para os dois.
+
+## ⚠️ Nota de 2026-11-10 — a errata renomeia o item que já existe (decisão 252)
+
+- No "Editar planilha" da errata, o nome da linha que já existia passa a abrir (antes, só o da linha nova). Não abre na edição do financeiro, na linha cancelada, na travada pelo save e na linha com PP que chegou ao financeiro (cadeado "nome travado"). Com PP só gerada, o pop-up "Este item já tem PP" avisa que o "Item" dela muda junto.
+- A renomeação vai como `item_renomeado` na estrutura da errata (organização, como a 162): "1 item renomeado" no rodapé e no pop-up, e "Nenhum valor alterado" quando é só isso. O nome vale no job e, pela leitura da 226, no orçamento. O histórico dos dois volta ao nome de antes e marca a linha como "renomeada".
+- Banco: `registrar_errata_do_job` lê `estrutura.itens_renomeados` (migration `20261110800001`). Depois do registro, `refazerPdfsDasPPsGeradas` refaz o PDF das PPs geradas das linhas renomeadas.
+- O P-0006/26 foi para o tenant Sandbox em 09/11/2026: a tela foi conferida só em rascunho num job real (2GB-1002/26, descartado), e o banco numa transação desfeita.

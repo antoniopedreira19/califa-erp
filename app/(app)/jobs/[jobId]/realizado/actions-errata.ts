@@ -36,8 +36,10 @@ import type {
   CategoriaModeloPlanilha,
   MudancaDeEstrutura,
   ParametrosDoJobGravados,
+  PPStatus,
 } from "@/lib/types";
-import { jobAceitaAcoesPlanilha } from "@/lib/types";
+import { jobAceitaAcoesPlanilha, ppChegouAoFinanceiro } from "@/lib/types";
+import { refazerPdfsDasPPsGeradas } from "./actions-pp";
 import { travaDoJobDeMidia } from "@/lib/data/midia-do-job";
 import {
   erroDoNomeDoGrupo,
@@ -397,6 +399,16 @@ const conteudoSchema = z.object({
       grupos_renomeados: z
         .array(z.object({ grupo_id: z.string().uuid(), nome: z.string() }))
         .default([]),
+      // Decisão 252: o nome novo da linha que já existia. A pronta gravada
+      // antes de 10/11/2026 não tem o campo.
+      itens_renomeados: z
+        .array(
+          z.object({
+            item_id: z.string().uuid(),
+            nome: z.string().trim().min(1, "Informe o nome do item.").max(200, "O nome do item passa de 200 caracteres."),
+          }),
+        )
+        .default([]),
       ordem: z
         .array(z.object({ item: z.string().min(1), grupo: refDoGrupo }))
         .nullable()
@@ -715,6 +727,10 @@ export async function registrarErrata(
       faturamento_previsto_depois: depois.faturamentoPrevisto,
     },
   });
+
+  // Decisão 252: o PDF das PPs geradas das linhas renomeadas sai com o
+  // nome novo. Depois do registro: a errata não depende do PDF.
+  await refazerPdfsDasPPsGeradas(jobId, montada.ppsParaRefazer);
 
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath(`/financeiro/jobs/${jobId}`);
@@ -1161,6 +1177,9 @@ interface ErrataMontada {
   /** Decisão 233: o de → para dos parâmetros do job, quando a errata mexe
    *  neles. */
   parametros: { de: ParametrosDoJobGravados; para: ParametrosDoJobGravados; campos: string[] } | null;
+  /** Decisão 252: as PPs geradas das linhas renomeadas. O "Item" delas vem
+   *  da linha, e o PDF é refeito depois que a errata é registrada. */
+  ppsParaRefazer: string[];
 }
 
 /**
@@ -1190,7 +1209,10 @@ async function montarErrata(
   const est = conteudo.estrutura ?? null;
   const pediuOrganizacao =
     est !== null &&
-    (est.grupos_novos.length > 0 || est.grupos_renomeados.length > 0 || est.ordem !== null);
+    (est.grupos_novos.length > 0 ||
+      est.grupos_renomeados.length > 0 ||
+      est.itens_renomeados.length > 0 ||
+      est.ordem !== null);
   // Decisão 233: ou só os parâmetros do job — se mudaram mesmo, a conferência
   // fica mais abaixo.
   const pediuParametros = conteudo.parametros != null;
@@ -1448,6 +1470,72 @@ async function montarErrata(
     }
   }
 
+  // ---- Decisão 252: os itens renomeados ----
+  // O nome muda só na linha de pé, fora do save e sem PP que já chegou ao
+  // financeiro. A PP só gerada passa: ela lê o item da linha, e o PDF dela
+  // é refeito depois do registro (`ppsParaRefazer`). O banco confere de novo.
+  const nomeNovoDaLinha = new Map<string, string>();
+  const ppsParaRefazer: string[] = [];
+  for (const r of est?.itens_renomeados ?? []) {
+    const atual = porId.get(r.item_id);
+    if (!atual || nomeNovoDaLinha.has(r.item_id)) {
+      return { ok: false, message: "Um dos itens renomeados não pertence a este job. Recarregue a página." };
+    }
+    if (atual.cancelada_em) {
+      return { ok: false, message: `"${atual.item}" foi cancelada numa errata anterior e não muda de nome.` };
+    }
+    if (atual.em_save === true || Number(atual.save_consumido ?? 0) > 0 || pedidoQuePrende.has(atual.id)) {
+      return {
+        ok: false,
+        message: `"${atual.item}" está no save e não entra em errata. Resolva o save antes, pelo pop-up da coluna Save.`,
+      };
+    }
+    nomeNovoDaLinha.set(r.item_id, r.nome.trim());
+  }
+  if (nomeNovoDaLinha.size > 0) {
+    const { data: realizados, error: realizadosErr } = await supabase
+      .from("jobs_itens_realizado")
+      .select("id, job_item_orcado_id")
+      .eq("job_id", jobId)
+      .eq("tenant_id", session.activeTenant.id)
+      .in("job_item_orcado_id", [...nomeNovoDaLinha.keys()]);
+    if (realizadosErr) {
+      console.error("[errata.renomear.realizados]", realizadosErr.message);
+      return { ok: false, message: "Não foi possível conferir as PPs dos itens renomeados. Tente de novo." };
+    }
+    const linhaDoRealizado = new Map((realizados ?? []).map((r) => [r.id as string, r.job_item_orcado_id as string]));
+    if (linhaDoRealizado.size > 0) {
+      const { data: pps, error: ppsErr } = await supabase
+        .from("pedidos_compra")
+        .select("id, codigo, status, item_realizado_id")
+        .eq("job_id", jobId)
+        .eq("tenant_id", session.activeTenant.id)
+        .in("item_realizado_id", [...linhaDoRealizado.keys()])
+        .neq("status", "cancelada");
+      if (ppsErr) {
+        console.error("[errata.renomear.pps]", ppsErr.message);
+        return { ok: false, message: "Não foi possível conferir as PPs dos itens renomeados. Tente de novo." };
+      }
+      const enviadasPorLinha = new Map<string, string[]>();
+      for (const pp of (pps ?? []) as Array<{ id: string; codigo: string; status: PPStatus; item_realizado_id: string }>) {
+        const linha = linhaDoRealizado.get(pp.item_realizado_id);
+        if (!linha) continue;
+        if (ppChegouAoFinanceiro(pp.status)) {
+          enviadasPorLinha.set(linha, [...(enviadasPorLinha.get(linha) ?? []), pp.codigo]);
+        } else if (pp.status === "gerada") {
+          ppsParaRefazer.push(pp.id);
+        }
+      }
+      for (const [linha, codigos] of enviadasPorLinha) {
+        const nome = porId.get(linha)?.item ?? "o item";
+        return {
+          ok: false,
+          message: `"${nome}" já tem PP enviada ao financeiro (${codigos.join(", ")}): o nome dele não muda pela errata.`,
+        };
+      }
+    }
+  }
+
   const organizacao = montarOrganizacao(
     gruposDoJob,
     (itensAtuais as any[]).map((i) => ({
@@ -1592,7 +1680,8 @@ async function montarErrata(
     mudancas.push({
       acao: "alterada",
       copiaId: atual.id,
-      itemNome: atual.item,
+      // Decisão 252: o nome com que a linha fica.
+      itemNome: nomeNovoDaLinha.get(atual.id) ?? atual.item,
       grupoId: atual.grupo_id,
       grupoDoJob: atual.job_grupo_id,
       grupoNome: nomeFinalDaLinha(atual.id, atual.job_grupo_id),
@@ -2070,6 +2159,7 @@ async function montarErrata(
     perderamBv,
     devolveAoMural,
     parametros,
+    ppsParaRefazer,
   };
 }
 
@@ -2105,6 +2195,8 @@ interface EstruturaParaFuncao {
     { id: string; grupo: string; ordem: number } | { chave_nova: string; grupo: string; ordem: number }
   > | null;
   grupos_removidos: string[];
+  /** Decisão 252: id da linha e o nome com que ela fica. */
+  itens_renomeados: Array<{ id: string; nome: string }>;
   resumo: MudancaDeEstrutura[];
 }
 
@@ -2261,6 +2353,15 @@ function montarOrganizacao(
         .map(([chave]) => ({ id: chave, grupoId: g.id, item: itemDaNova(chave) })),
     ]);
   }
+  // Decisão 252: o nome novo das linhas que já existiam.
+  const renomesDeItem = new Map(
+    (est?.itens_renomeados ?? []).map((r) => [r.item_id, r.nome.trim()] as const),
+  );
+  if (renomesDeItem.size > 0) {
+    linhasDepois = linhasDepois.map((l) =>
+      renomesDeItem.has(l.id) ? { ...l, item: renomesDeItem.get(l.id)! } : l,
+    );
+  }
   const depois: Organizacao = { grupos: finais, linhas: linhasDepois };
 
   const saem = new Set(gruposQueSaem(antes, depois));
@@ -2276,6 +2377,10 @@ function montarOrganizacao(
       if (para) tocados.add(para);
     } else if (m.tipo === "ordem") {
       tocados.add(m.chave.slice("ordem:".length));
+    } else if (m.tipo === "item_renomeado") {
+      // O mês da linha renomeada (decisão 252), pelo agrupamento dela.
+      const g = grupoFinal.get(m.chave) ?? grupoAntes.get(m.chave);
+      if (g) tocados.add(g);
     } else {
       tocados.add(m.chave);
     }
@@ -2314,6 +2419,9 @@ function montarOrganizacao(
           )
         : null,
       grupos_removidos: [...saem].filter((id) => vivoPorId.has(id)),
+      itens_renomeados: lista.flatMap((m) =>
+        m.tipo === "item_renomeado" ? [{ id: m.chave, nome: m.para }] : [],
+      ),
       resumo: lista,
     };
   }

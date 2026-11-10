@@ -159,7 +159,7 @@ export type TipoDoMomento =
   | "linha_vermelha"
   | "atual";
 
-export type AcaoNaLinha = ErrataAcao | "save" | "movida";
+export type AcaoNaLinha = ErrataAcao | "save" | "movida" | "renomeada";
 
 /** O que um momento fez numa linha, visto do depois. */
 export interface MudancaNaLinha {
@@ -180,6 +180,9 @@ export interface MudancaNaLinha {
   savePara: boolean | null;
   /** Só no item movido: o agrupamento de onde ele saiu. */
   grupoDe: string | null;
+  /** Decisão 252: o nome de antes, quando o momento renomeou a linha — na
+   *  `renomeada` e também na alterada ou movida que mudou de nome junto. */
+  itemDe: string | null;
 }
 
 export interface VersaoDaPlanilha {
@@ -315,6 +318,7 @@ function mudanca(m: Partial<MudancaNaLinha> & Pick<MudancaNaLinha, "item" | "gru
     saveDe: null,
     savePara: null,
     grupoDe: null,
+    itemDe: null,
     ...m,
   };
 }
@@ -543,6 +547,15 @@ function reconstruir(d: DadosDoHistorico): {
         // (o renomeado ao nome de antes, o removido volta, o novo sai), depois
         // os itens voltam ao agrupamento de antes, pelo nome de antes.
         const passos = e.estrutura ?? [];
+        // Decisão 252: o item renomeado volta ao nome de antes; a mudança
+        // entra depois das linhas, para se juntar à delas.
+        const renomes = new Map<string, { de: string; para: string }>();
+        for (const p of passos) {
+          if (p.tipo !== "item_renomeado") continue;
+          const l = antes.itens.find((x) => x.id === p.chave);
+          if (l) l.item = p.de;
+          renomes.set(p.chave, { de: p.de, para: p.para });
+        }
         if (passos.length > 0) {
           for (const p of passos) {
             if (p.tipo === "grupo_renomeado") {
@@ -700,6 +713,23 @@ function reconstruir(d: DadosDoHistorico): {
               tipoPara: para.tipo,
               saveDe: l.em_save !== para.save ? l.em_save : null,
               savePara: l.em_save !== para.save ? para.save : null,
+            }),
+          );
+        }
+        for (const [itemId, r] of renomes) {
+          const junto = mudancas.find((m) => m.itemId === itemId);
+          if (junto) {
+            junto.itemDe = r.de;
+            continue;
+          }
+          const l = depois.itens.find((x) => x.id === itemId);
+          mudancas.push(
+            mudanca({
+              itemId,
+              item: r.para,
+              grupo: l ? nomeDoGrupo(depois, l.grupo_id) : "—",
+              acao: "renomeada",
+              itemDe: r.de,
             }),
           );
         }
