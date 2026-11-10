@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { CheckCircle2, XCircle } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CheckCircle2, Search, XCircle } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -12,6 +12,21 @@ import { tipoContratacaoLabel } from "@/lib/types";
 import type { ColaboradorPagamento } from "@/lib/financeiro/colaboradores-pagamento";
 import { RevisarFolhaDrawer } from "./revisar-folha-drawer";
 import type { FolhaLinhaFinanceiro } from "./people-list-types";
+
+type OrdenacaoColuna = "nome" | "valor" | null;
+type OrdenacaoDirecao = "asc" | "desc";
+
+const ESCOPO_OPCOES: {
+  valor: PeopleAprovarItem["escopo_tipo"];
+  label: string;
+}[] = [
+  { valor: "folha_mensal", label: "Folha" },
+  { valor: "ferias_usufruto", label: "Férias" },
+  { valor: "ferias_abono", label: "Abono" },
+  { valor: "decimo_terceiro_p1", label: "13º 1ª parcela" },
+  { valor: "decimo_terceiro_p2", label: "13º 2ª parcela" },
+  { valor: "decimo_terceiro_adiantamento", label: "13º adiantamento" },
+];
 
 const NOMES_MES = [
   "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
@@ -210,6 +225,106 @@ export function PeopleList({
 }) {
   const [revisandoId, setRevisandoId] = React.useState<string | null>(null);
 
+  // Filtros
+  const [busca, setBusca] = React.useState("");
+  const [filtroTipo, setFiltroTipo] = React.useState<string>("");
+  const [filtroFuncao, setFiltroFuncao] = React.useState<string>("");
+  const [filtroEmpresa, setFiltroEmpresa] = React.useState<string>("");
+  const [filtroRegional, setFiltroRegional] = React.useState<string>("");
+
+  // Ordenação
+  const [ordenacao, setOrdenacao] = React.useState<{
+    coluna: OrdenacaoColuna;
+    direcao: OrdenacaoDirecao;
+  }>({ coluna: null, direcao: "asc" });
+
+  function alternarOrdenacao(coluna: Exclude<OrdenacaoColuna, null>) {
+    setOrdenacao((atual) => {
+      if (atual.coluna !== coluna) return { coluna, direcao: "asc" };
+      if (atual.direcao === "asc") return { coluna, direcao: "desc" };
+      return { coluna: null, direcao: "asc" };
+    });
+  }
+
+  // Funções únicas presentes nos items — pro dropdown dinâmico.
+  const funcoesDisponiveis = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const i of items) {
+      if (i.funcao) set.add(i.funcao);
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [items]);
+
+  // Regionais filtradas pela empresa selecionada (se houver).
+  const regionaisFiltradas = React.useMemo(() => {
+    if (!filtroEmpresa) return regionais;
+    return regionais.filter((r) => r.empresa_id === filtroEmpresa);
+  }, [regionais, filtroEmpresa]);
+
+  // Se trocar empresa e a regional selecionada não pertencer, limpa.
+  React.useEffect(() => {
+    if (!filtroRegional) return;
+    const existe = regionaisFiltradas.some((r) => r.id === filtroRegional);
+    if (!existe) setFiltroRegional("");
+  }, [filtroRegional, regionaisFiltradas]);
+
+  const itemsFiltrados = React.useMemo(() => {
+    const buscaNormalizada = busca.trim().toLowerCase();
+    const filtrados = items.filter((item) => {
+      if (filtroTipo && item.escopo_tipo !== filtroTipo) return false;
+      if (filtroFuncao && item.funcao !== filtroFuncao) return false;
+
+      const alocacoes = alocacoesPorFolha[item.linha_id] ?? [];
+      if (filtroEmpresa) {
+        const temEmpresa = alocacoes.some(
+          (a) => a.empresa_id === filtroEmpresa,
+        );
+        if (!temEmpresa) return false;
+      }
+      if (filtroRegional) {
+        const temRegional = alocacoes.some(
+          (a) => a.regional_id === filtroRegional,
+        );
+        if (!temRegional) return false;
+      }
+
+      if (buscaNormalizada) {
+        const nome = (colaboradores[item.colaborador_id]?.nome ?? "").toLowerCase();
+        if (!nome.includes(buscaNormalizada)) return false;
+      }
+      return true;
+    });
+
+    if (ordenacao.coluna) {
+      const fator = ordenacao.direcao === "asc" ? 1 : -1;
+      filtrados.sort((a, b) => {
+        if (ordenacao.coluna === "nome") {
+          const na = colaboradores[a.colaborador_id]?.nome ?? "";
+          const nb = colaboradores[b.colaborador_id]?.nome ?? "";
+          return na.localeCompare(nb, "pt-BR") * fator;
+        }
+        if (ordenacao.coluna === "valor") {
+          const va = a.valor != null ? Number(a.valor) : 0;
+          const vb = b.valor != null ? Number(b.valor) : 0;
+          return (va - vb) * fator;
+        }
+        return 0;
+      });
+    }
+
+    return filtrados;
+  }, [
+    items,
+    busca,
+    filtroTipo,
+    filtroFuncao,
+    filtroEmpresa,
+    filtroRegional,
+    alocacoesPorFolha,
+    colaboradores,
+    ordenacao,
+  ]);
+
   const linhaRevisando = React.useMemo(() => {
     if (!revisandoId) return null;
     const item = items.find((i) => i.linha_id === revisandoId);
@@ -230,6 +345,77 @@ export function PeopleList({
 
   return (
     <div className="space-y-4">
+      {/* Barra de filtros */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex-1 min-w-[220px]">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            type="text"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por nome..."
+            className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-california-red/30"
+          />
+        </div>
+
+        <select
+          value={filtroTipo}
+          onChange={(e) => setFiltroTipo(e.target.value)}
+          className="rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-california-red/30"
+        >
+          <option value="">Todos os tipos</option>
+          {ESCOPO_OPCOES.map((o) => (
+            <option key={o.valor} value={o.valor}>
+              {o.label}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={filtroFuncao}
+          onChange={(e) => setFiltroFuncao(e.target.value)}
+          className="rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-california-red/30"
+        >
+          <option value="">Todas as funções</option>
+          {funcoesDisponiveis.map((f) => (
+            <option key={f} value={f}>
+              {f}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={filtroEmpresa}
+          onChange={(e) => setFiltroEmpresa(e.target.value)}
+          className="rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-california-red/30"
+        >
+          <option value="">Todas as empresas</option>
+          {empresas.map((e) => (
+            <option key={e.id} value={e.id}>
+              {e.nome_fantasia}
+            </option>
+          ))}
+        </select>
+
+        <select
+          value={filtroRegional}
+          onChange={(e) => setFiltroRegional(e.target.value)}
+          disabled={regionaisFiltradas.length === 0}
+          className="rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-california-red/30 disabled:opacity-50"
+        >
+          <option value="">Todas as regionais</option>
+          {regionaisFiltradas.map((r) => (
+            <option key={r.id} value={r.id}>
+              {r.nome}
+            </option>
+          ))}
+        </select>
+
+        <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+          {itemsFiltrados.length} de {items.length}
+        </span>
+      </div>
+
       <div className="overflow-hidden rounded-xl border border-border">
         <table className="w-full text-sm">
           <thead className="border-b border-border bg-muted/40">
@@ -241,7 +427,12 @@ export function PeopleList({
                 Competência
               </th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">
-                Colaborador
+                <ColunaOrdenavel
+                  rotulo="Colaborador"
+                  coluna="nome"
+                  ordenacao={ordenacao}
+                  onClick={() => alternarOrdenacao("nome")}
+                />
               </th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground w-32">
                 Função
@@ -256,7 +447,13 @@ export function PeopleList({
                 NF
               </th>
               <th className="px-4 py-3 text-right font-medium text-muted-foreground w-32">
-                Valor
+                <ColunaOrdenavel
+                  rotulo="Valor"
+                  coluna="valor"
+                  ordenacao={ordenacao}
+                  onClick={() => alternarOrdenacao("valor")}
+                  alinhamento="right"
+                />
               </th>
               <th className="px-4 py-3 text-center font-medium text-muted-foreground w-24">
                 Ação
@@ -264,7 +461,17 @@ export function PeopleList({
             </tr>
           </thead>
           <tbody>
-            {items.map((item) => {
+            {itemsFiltrados.length === 0 && (
+              <tr>
+                <td
+                  colSpan={9}
+                  className="px-4 py-12 text-center text-sm text-muted-foreground"
+                >
+                  Nenhum pagamento encontrado com os filtros atuais.
+                </td>
+              </tr>
+            )}
+            {itemsFiltrados.map((item) => {
               const colab = colaboradores[item.colaborador_id];
               const nomeColab = colab?.nome ?? "—";
               const variante = badgeVariantParaEscopo(item.escopo_tipo);
@@ -387,5 +594,36 @@ export function PeopleList({
         />
       )}
     </div>
+  );
+}
+
+function ColunaOrdenavel({
+  rotulo,
+  coluna,
+  ordenacao,
+  onClick,
+  alinhamento,
+}: {
+  rotulo: string;
+  coluna: Exclude<OrdenacaoColuna, null>;
+  ordenacao: { coluna: OrdenacaoColuna; direcao: OrdenacaoDirecao };
+  onClick: () => void;
+  alinhamento?: "right";
+}) {
+  const ativa = ordenacao.coluna === coluna;
+  const Icone = !ativa ? ArrowUpDown : ordenacao.direcao === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1 font-medium text-muted-foreground hover:text-foreground transition-colors ${
+        alinhamento === "right" ? "flex-row-reverse" : ""
+      }`}
+    >
+      {rotulo}
+      <Icone
+        className={`h-3 w-3 ${ativa ? "text-foreground" : "text-muted-foreground/60"}`}
+      />
+    </button>
   );
 }
