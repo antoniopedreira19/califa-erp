@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Users,
   Clock,
@@ -32,9 +32,15 @@ interface Props {
   freelancers: FreelancerComStatus[];
   /** Dropdowns de filtro (responsável/job/cargo). Renderizados no mesmo bloco da busca. */
   filtrosDropdowns?: React.ReactNode;
-  /** Chips de filtros ativos (status, ação, trabalho, card). */
-  chipsFiltros?: React.ReactNode;
 }
+
+const CHAVES_FILTRO = [
+  "card",
+  "responsavel",
+  "job",
+  "cargo",
+  "inicio_apos",
+] as const;
 
 /** Normaliza string pra comparação sem acento/caixa. */
 function norm(s: string | null | undefined): string {
@@ -53,10 +59,13 @@ const TIPO_LABEL: Record<TipoFreelancerContrato, string> = {
 export function ListaClient({
   freelancers,
   filtrosDropdowns,
-  chipsFiltros,
 }: Props) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [valoresVisiveis, setValoresVisiveis] = React.useState(false);
   const [busca, setBusca] = React.useState("");
+
+  const temFiltroAtivo = CHAVES_FILTRO.some((k) => searchParams.get(k));
 
   // Filtro client-side: nome_social, nome_completo e CPF. Sem round-trip e
   // sem query string — a URL só carrega os filtros de dropdown/chip.
@@ -104,7 +113,25 @@ export function ListaClient({
         {buscaInput}
         {filtrosDropdowns}
       </div>
-      {chipsFiltros}
+      {temFiltroAtivo && (
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-muted/30 px-4 py-2.5">
+          <p className="text-[11px] text-muted-foreground">
+            Filtros ativos escondem freelancers. Clique em{" "}
+            <span className="font-semibold text-foreground">
+              Limpar filtros
+            </span>{" "}
+            pra ver todos.
+          </p>
+          <button
+            type="button"
+            onClick={() => router.push("/freelancers/lista")}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/40 bg-white px-3 py-1.5 text-[11px] font-semibold text-california-red hover:bg-california-red hover:text-white transition-colors shrink-0"
+          >
+            <X className="h-3 w-3" />
+            Limpar filtros
+          </button>
+        </div>
+      )}
       {filtrados.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-10 text-center">
           <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-full bg-muted/50">

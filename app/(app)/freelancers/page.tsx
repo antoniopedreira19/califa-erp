@@ -34,7 +34,7 @@ export default async function FreelancersDashboardPage() {
   let viewQuery = supabase
     .from("freelancers_com_status")
     .select(
-      "id, status_real, status_calculado, data_inicio, responsavel_id, responsavel_nome",
+      "id, status_real, status_calculado, data_inicio, data_termino, responsavel_id, responsavel_nome",
     )
     .eq("tenant_id", session.activeTenant.id);
   if (!isAprovador) {
@@ -47,38 +47,50 @@ export default async function FreelancersDashboardPage() {
     status_real: boolean | null;
     status_calculado: string;
     data_inicio: string | null;
+    data_termino: string | null;
     responsavel_id: string | null;
     responsavel_nome: string | null;
   }>;
 
-  // Totais dos 4 cards de análise
-  const totaisAnalise: Record<CategoriaCard, number> = {
-    "na-ativa": 0,
+  // Totais dos 4 cards de ação + subcontador "vence em 7 dias"
+  const totaisAnalise: Record<Exclude<CategoriaCard, "vence-7d">, number> = {
     "em-dia": 0,
-    irregular: 0,
-    encerrados: 0,
+    vencidos: 0,
+    "sem-assinado": 0,
+    "sem-minuta": 0,
   };
+  const hojeDash = new Date();
+  const hojeDashISO = hojeDash.toISOString().slice(0, 10);
+  const d7Dash = new Date(hojeDash);
+  d7Dash.setDate(d7Dash.getDate() + 7);
+  const d7DashISO = d7Dash.toISOString().slice(0, 10);
+  let venceEm7DiasDash = 0;
   for (const r of rows) {
-    if (r.status_real === false || r.status_calculado === "encerrado") {
-      totaisAnalise.encerrados += 1;
-      continue;
-    }
-    if (r.status_real === true) {
-      totaisAnalise["na-ativa"] += 1;
+    if (r.status_real !== true || r.status_calculado === "encerrado") continue;
+    if (r.status_calculado === "regular" || r.status_calculado === "vencendo") {
+      totaisAnalise["em-dia"] += 1;
       if (
-        r.status_calculado === "regular" ||
-        r.status_calculado === "vencendo"
+        r.data_termino &&
+        r.data_termino >= hojeDashISO &&
+        r.data_termino <= d7DashISO
       ) {
-        totaisAnalise["em-dia"] += 1;
-      } else if (
-        ["irregular", "sem_minuta", "sem_assinado", "pendente"].includes(
-          r.status_calculado,
-        )
-      ) {
-        totaisAnalise.irregular += 1;
+        venceEm7DiasDash += 1;
       }
+    } else if (r.status_calculado === "irregular") {
+      totaisAnalise.vencidos += 1;
+    } else if (r.status_calculado === "sem_assinado") {
+      totaisAnalise["sem-assinado"] += 1;
+    } else if (r.status_calculado === "sem_minuta") {
+      totaisAnalise["sem-minuta"] += 1;
     }
   }
+  const totalAtividadeDash = rows.filter(
+    (r) => r.status_real === true && r.status_calculado !== "encerrado",
+  ).length;
+  const totalPrecisaAtencao =
+    totaisAnalise.vencidos +
+    totaisAnalise["sem-assinado"] +
+    totaisAnalise["sem-minuta"];
 
   // Saúde geral: % de ativos saudáveis. Aprovador vê todo o tenant;
   // GP/produtor vê só os freelas cujo contrato ativo tem ele como responsável.
@@ -194,7 +206,7 @@ export default async function FreelancersDashboardPage() {
       <HeroDashboard
         nomeUsuario={session.profile.nome}
         totalFreelancers={rows.length}
-        totalIrregular={totaisAnalise.irregular}
+        totalIrregular={totalPrecisaAtencao}
         mostrarNovaSolicitacao
         saude={{
           percentual: saudePercentual,
@@ -227,7 +239,11 @@ export default async function FreelancersDashboardPage() {
         }
       />
 
-      <CardsAnalise totais={totaisAnalise} />
+      <CardsAnalise
+        totais={totaisAnalise}
+        venceEm7Dias={venceEm7DiasDash}
+        totalEmAtividade={totalAtividadeDash}
+      />
 
       {isAprovador && performance.length > 0 ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">

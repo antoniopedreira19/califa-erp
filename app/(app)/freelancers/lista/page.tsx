@@ -7,7 +7,6 @@ import { pode } from "@/lib/permissoes";
 import type { FreelancerComStatus, FreelancerCargo } from "@/lib/types";
 import { ListaClient } from "./_components/lista-client";
 import { FiltrosDropdowns } from "./_components/filtros-dropdowns";
-import { ChipsFiltros } from "./_components/chips-filtros";
 import { GerenciarCargosDialog } from "./_components/gerenciar-cargos-dialog";
 import { CardsAnalise, type CategoriaCard } from "./_components/cards-analise";
 import { ExportarButton } from "./_components/exportar-button";
@@ -16,23 +15,12 @@ import { jobsProPickerDeFreelancer } from "@/lib/data/jobs-pro-picker-de-freelan
 
 export const dynamic = "force-dynamic";
 
-const STATUS_VALIDOS = new Set([
-  "regular",
-  "vencendo",
-  "irregular",
-  "sem_minuta",
-  "sem_assinado",
-  "agendado",
-  "pendente",
-  "encerrado",
-  "limbo",
-]);
-
 const CARDS_VALIDOS = new Set<CategoriaCard>([
-  "na-ativa",
   "em-dia",
-  "irregular",
-  "encerrados",
+  "vencidos",
+  "sem-assinado",
+  "sem-minuta",
+  "vence-7d",
 ]);
 
 export default async function FreelancersListaPage({
@@ -40,13 +28,11 @@ export default async function FreelancersListaPage({
 }: {
   searchParams: {
     q?: string;
-    status?: string;
     card?: string;
     inicio_apos?: string;
     responsavel?: string;
     job?: string;
     cargo?: string;
-    trabalho?: string;
   };
 }) {
   const session = await requireSession();
@@ -74,17 +60,8 @@ export default async function FreelancersListaPage({
   }
 
   // Busca por nome/CPF é 100% client-side em `ListaClient` — sem round-trip
-  // no servidor nem param na URL. Só os filtros que vêm dos dropdowns/chips
-  // continuam sendo passados via query string (persistem link compartilhável).
-
-  // Filtro por status_calculado via chips
-  const statusFiltro = (searchParams.status ?? "")
-    .split(",")
-    .map((s) => s.trim())
-    .filter((s) => STATUS_VALIDOS.has(s));
-  if (statusFiltro.length > 0) {
-    query = query.in("status_calculado", statusFiltro);
-  }
+  // no servidor nem param na URL. Só os filtros que vêm dos dropdowns +
+  // card ativo continuam sendo passados via query string (link compartilhável).
 
   // Filtro por data de início do contrato (>= inicio_apos)
   const inicioApos = searchParams.inicio_apos?.trim();
@@ -116,44 +93,49 @@ export default async function FreelancersListaPage({
     query = query.eq("cargo_contrato", cargoFiltro);
   }
 
-  // Filtro por status do trabalho (status_real)
-  const trabalhoFiltro = searchParams.trabalho?.trim();
-  if (trabalhoFiltro === "trabalhando") {
-    query = query.eq("status_real", true);
-  } else if (trabalhoFiltro === "inativo") {
-    query = query.eq("status_real", false);
-  }
-
-  // Filtro por card de análise (combina com os outros via AND)
+  // Filtro por card de ação (combina com os outros via AND). Cada card
+  // representa uma ação concreta a tomar; não existe card de "encerrados"
+  // porque a tela é sobre quem precisa de atenção, não sobre histórico.
   const cardFiltro = searchParams.card;
+  const hoje = new Date();
+  const hojeISO = hoje.toISOString().slice(0, 10);
+  const d7 = new Date(hoje);
+  d7.setDate(d7.getDate() + 7);
+  const d7ISO = d7.toISOString().slice(0, 10);
   if (cardFiltro && CARDS_VALIDOS.has(cardFiltro as CategoriaCard)) {
-    if (cardFiltro === "na-ativa") {
-      query = query.eq("status_real", true);
-    } else if (cardFiltro === "em-dia") {
+    if (cardFiltro === "em-dia") {
       query = query
         .eq("status_real", true)
         .in("status_calculado", ["regular", "vencendo"]);
-    } else if (cardFiltro === "irregular") {
+    } else if (cardFiltro === "vencidos") {
       query = query
         .eq("status_real", true)
-        .in("status_calculado", [
-          "irregular",
-          "sem_minuta",
-          "sem_assinado",
-          "pendente",
-        ]);
-    } else if (cardFiltro === "encerrados") {
-      // Qualquer um que não esteja trabalhando
-      query = query.or("status_real.eq.false,status_calculado.eq.encerrado");
+        .eq("status_calculado", "irregular");
+    } else if (cardFiltro === "sem-assinado") {
+      query = query
+        .eq("status_real", true)
+        .eq("status_calculado", "sem_assinado");
+    } else if (cardFiltro === "sem-minuta") {
+      query = query
+        .eq("status_real", true)
+        .eq("status_calculado", "sem_minuta");
+    } else if (cardFiltro === "vence-7d") {
+      // Subconjunto de "em dia" que vence nos proximos 7 dias — alerta
+      // de acao rapida.
+      query = query
+        .eq("status_real", true)
+        .in("status_calculado", ["regular", "vencendo"])
+        .gte("data_termino", hojeISO)
+        .lte("data_termino", d7ISO);
     }
   }
 
-  // Totais dos 4 cards (independentes dos filtros atuais pra o usuário
-  // ter sempre o retrato geral do escopo visível — tenant pra aprovador,
-  // só os próprios pra GP/produtor).
+  // Totais dos 4 cards + contador "vence em 7 dias" (independentes dos
+  // filtros atuais pra o usuário ter sempre o retrato geral do escopo
+  // visível — tenant pra aprovador, só os próprios pra GP/produtor).
   let totaisQuery = supabase
     .from("freelancers_com_status")
-    .select("status_real, status_calculado")
+    .select("status_real, status_calculado, data_termino")
     .eq("tenant_id", session.activeTenant.id);
   if (!isAprovador) {
     totaisQuery = totaisQuery.eq("freela_responsavel_id", session.profile.id);
@@ -227,37 +209,36 @@ export default async function FreelancersListaPage({
     (responsaveisProfilesRes.data ?? []) as Array<{ id: string; nome: string }>
   ).map((r) => ({ id: r.id, nome: r.nome }));
 
-  // Cálculo dos 4 cards de análise
+  // Cálculo dos 4 cards de ação + subcontador "vence em 7 dias"
   const totaisRaw =
     (totaisRes.data as Array<{
       status_real: boolean | null;
       status_calculado: string;
+      data_termino: string | null;
     }>) ?? [];
-  const totais: Record<CategoriaCard, number> = {
-    "na-ativa": 0,
+  const totais: Record<Exclude<CategoriaCard, "vence-7d">, number> = {
     "em-dia": 0,
-    irregular: 0,
-    encerrados: 0,
+    vencidos: 0,
+    "sem-assinado": 0,
+    "sem-minuta": 0,
   };
+  let venceEm7Dias = 0;
+  const totalEmAtividade = totaisRaw.filter(
+    (t) => t.status_real === true && t.status_calculado !== "encerrado",
+  ).length;
   for (const t of totaisRaw) {
-    if (t.status_real === false || t.status_calculado === "encerrado") {
-      totais.encerrados += 1;
-      continue;
-    }
-    if (t.status_real === true) {
-      totais["na-ativa"] += 1;
-      if (
-        t.status_calculado === "regular" ||
-        t.status_calculado === "vencendo"
-      ) {
-        totais["em-dia"] += 1;
-      } else if (
-        ["irregular", "sem_minuta", "sem_assinado", "pendente"].includes(
-          t.status_calculado,
-        )
-      ) {
-        totais.irregular += 1;
+    if (t.status_real !== true || t.status_calculado === "encerrado") continue;
+    if (t.status_calculado === "regular" || t.status_calculado === "vencendo") {
+      totais["em-dia"] += 1;
+      if (t.data_termino && t.data_termino >= hojeISO && t.data_termino <= d7ISO) {
+        venceEm7Dias += 1;
       }
+    } else if (t.status_calculado === "irregular") {
+      totais.vencidos += 1;
+    } else if (t.status_calculado === "sem_assinado") {
+      totais["sem-assinado"] += 1;
+    } else if (t.status_calculado === "sem_minuta") {
+      totais["sem-minuta"] += 1;
     }
   }
 
@@ -336,7 +317,11 @@ export default async function FreelancersListaPage({
         )}
       </div>
 
-      <CardsAnalise totais={totais} />
+      <CardsAnalise
+        totais={totais}
+        venceEm7Dias={venceEm7Dias}
+        totalEmAtividade={totalEmAtividade}
+      />
 
       <ListaClient
         freelancers={freelancers}
@@ -347,7 +332,6 @@ export default async function FreelancersListaPage({
             cargosDisponiveis={cargosDisponiveis}
           />
         }
-        chipsFiltros={<ChipsFiltros />}
       />
     </div>
   );
