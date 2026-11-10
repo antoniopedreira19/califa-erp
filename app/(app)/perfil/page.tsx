@@ -2,6 +2,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { buscarAlocacaoVigente } from "@/lib/alocacao/montar-snapshot";
 import type {
+  AlocacaoVigenteSnapshot,
   Colaborador,
   ColaboradorFeriasPeriodo,
   ColaboradorFeriasLancamento,
@@ -22,6 +23,26 @@ import { CardMinhasFerias } from "./card-minhas-ferias";
 import type { NfPendenteQuadro } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
+
+/** Resume a alocação vigente numa string curta pra exibir no card. */
+function resumirAlocacao(
+  snapshot: AlocacaoVigenteSnapshot | null,
+): string | null {
+  if (!snapshot || snapshot.itens.length === 0) return null;
+
+  const primeiro = snapshot.itens[0];
+  const empresa = primeiro.empresa_nome || "Empresa";
+
+  if (snapshot.itens.length === 1) {
+    const regs = primeiro.regionais;
+    if (regs.length === 0) return empresa;
+    if (regs.length === 1) return `${empresa} · ${regs[0].regional_nome}`;
+    return `${empresa} · ${regs.length} regionais`;
+  }
+
+  const restantes = snapshot.itens.length - 1;
+  return `${empresa} + ${restantes} ${restantes === 1 ? "empresa" : "empresas"}`;
+}
 
 export default async function PerfilPage() {
   const session = await requireSession();
@@ -194,6 +215,7 @@ export default async function PerfilPage() {
             colaboradorId={colab.id}
             tipoContratacao={colab.tipo_contratacao}
             linhas={linhasQuadro}
+            alocacaoResumo={resumirAlocacao(snapshotAlocacao)}
           />
           {!ehSocio && (
             <CardMinhasFerias

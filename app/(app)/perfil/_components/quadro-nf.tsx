@@ -12,6 +12,7 @@ export function QuadroNf(props: {
   colaboradorId: string;
   tipoContratacao: TipoContratacao;
   linhas: NfPendenteQuadro[];
+  alocacaoResumo: string | null;
 }) {
   if (!TIPOS_COM_NF.includes(props.tipoContratacao)) return null;
 
@@ -43,7 +44,13 @@ export function QuadroNf(props: {
           {props.linhas.map((l) => {
             // Chave única: escopo_tipo + escopo_id (pode ser null para stubs de 13°)
             const key = `${l.escopo_tipo}__${l.escopo_id ?? l.label}`;
-            return <QuadroNfLinha key={key} linha={l} />;
+            return (
+              <QuadroNfLinha
+                key={key}
+                linha={l}
+                alocacaoResumo={props.alocacaoResumo}
+              />
+            );
           })}
         </div>
       )}
