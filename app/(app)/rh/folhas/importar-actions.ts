@@ -546,6 +546,159 @@ export async function importarFolhaContabilidade(input: {
   };
 }
 
+export interface ResumoEnvioOperadora {
+  nome: string;
+  valor_integral: number;
+  vencimento: string | null; // ISO yyyy-mm-dd
+}
+
+export interface ResumoEnvioCompetencia {
+  pj: { linhas: number; total: number };
+  clt: { linhas: number; total: number };
+  operadoras: ResumoEnvioOperadora[];
+  total_descontado_colaborador: number;
+  total_parte_empresa: number;
+  total_operadoras: number;
+  rascunhos_a_enviar: number;
+}
+
+/**
+ * Resume o que sera enviado ao financeiro no clique de "Enviar". Lido pelo
+ * modal de confirmacao pra mostrar folha PJ + CLT + avulsas de operadoras.
+ * A acao real de envio e `enviarCompetencia` (abaixo).
+ */
+export async function resumoEnvioCompetencia(input: {
+  ano: number;
+  mes: number;
+}): Promise<ActionResult<ResumoEnvioCompetencia>> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "rh.folhas.ver");
+  if (!gate.ok) return gate;
+
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const [{ data: folhasData }, { data: fechamento }] = await Promise.all([
+    supabase
+      .from("folhas_pagamento")
+      .select("salario_base, origem, status")
+      .eq("tenant_id", tenantId)
+      .eq("competencia_ano", input.ano)
+      .eq("competencia_mes", input.mes)
+      .eq("tipo", "salario"),
+    supabase
+      .from("beneficio_fechamento_mensal")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("ano", input.ano)
+      .eq("mes", input.mes)
+      .is("reaberto_em", null)
+      .maybeSingle(),
+  ]);
+
+  const folhas = (folhasData ?? []) as {
+    salario_base: string | number;
+    origem: "california" | "contabilidade";
+    status: string;
+  }[];
+
+  const pjLinhas = folhas.filter((l) => l.origem === "california");
+  const cltLinhas = folhas.filter((l) => l.origem === "contabilidade");
+  const rascunhos = folhas.filter((l) => l.status === "rascunho").length;
+
+  const somar = (lista: typeof folhas) =>
+    lista.reduce((acc, l) => acc + Number(l.salario_base), 0);
+
+  // Agrega operadoras agrupando por fornecedor_id (quando existe) ou operadora.
+  let operadoras: ResumoEnvioOperadora[] = [];
+  let totalDescColab = 0;
+  let totalParteEmp = 0;
+
+  if (fechamento) {
+    const { data: linhasFech } = await supabase
+      .from("beneficio_fechamento_linha")
+      .select(
+        "valor_integral, valor_empresa, valor_colaborador, beneficio:beneficios(id, nome, operadora, fornecedor_id, dia_vencimento_fatura, vencimento_mes_seguinte)",
+      )
+      .eq("tenant_id", tenantId)
+      .eq("fechamento_id", fechamento.id);
+
+    type LinhaFech = {
+      valor_integral: string | number;
+      valor_empresa: string | number;
+      valor_colaborador: string | number;
+      beneficio: {
+        id: string;
+        nome: string;
+        operadora: string | null;
+        fornecedor_id: string | null;
+        dia_vencimento_fatura: number | null;
+        vencimento_mes_seguinte: boolean | null;
+      } | null;
+    };
+
+    const linhas = (linhasFech ?? []) as unknown as LinhaFech[];
+
+    // Agrupa: chave = fornecedor_id ?? operadora ?? nome do beneficio.
+    const porOperadora = new Map<
+      string,
+      {
+        nome: string;
+        valor: number;
+        dia: number | null;
+        mesSeguinte: boolean | null;
+      }
+    >();
+
+    for (const l of linhas) {
+      const b = l.beneficio;
+      if (!b) continue;
+      const chave = b.fornecedor_id ?? b.operadora ?? b.nome;
+      const nome = b.operadora ?? b.nome;
+      const atual = porOperadora.get(chave) ?? {
+        nome,
+        valor: 0,
+        dia: b.dia_vencimento_fatura,
+        mesSeguinte: b.vencimento_mes_seguinte,
+      };
+      atual.valor += Number(l.valor_integral);
+      porOperadora.set(chave, atual);
+      totalDescColab += Number(l.valor_colaborador);
+      totalParteEmp += Number(l.valor_empresa);
+    }
+
+    // Calcula ISO de vencimento (dia_vencimento no mes seguinte).
+    const calcVenc = (
+      dia: number | null,
+      mesSeg: boolean | null,
+    ): string | null => {
+      if (!dia) return null;
+      const ano = mesSeg && input.mes === 12 ? input.ano + 1 : input.ano;
+      const mes = mesSeg ? (input.mes === 12 ? 1 : input.mes + 1) : input.mes;
+      return `${ano}-${String(mes).padStart(2, "0")}-${String(dia).padStart(2, "0")}`;
+    };
+
+    operadoras = Array.from(porOperadora.values())
+      .map((o) => ({
+        nome: o.nome,
+        valor_integral: o.valor,
+        vencimento: calcVenc(o.dia, o.mesSeguinte),
+      }))
+      .sort((a, b) => a.nome.localeCompare(b.nome));
+  }
+
+  return {
+    ok: true,
+    pj: { linhas: pjLinhas.length, total: somar(pjLinhas) },
+    clt: { linhas: cltLinhas.length, total: somar(cltLinhas) },
+    operadoras,
+    total_descontado_colaborador: totalDescColab,
+    total_parte_empresa: totalParteEmp,
+    total_operadoras: operadoras.reduce((a, o) => a + o.valor_integral, 0),
+    rascunhos_a_enviar: rascunhos,
+  };
+}
+
 /**
  * Envia todas as linhas rascunho de uma competência (das duas origens) para
  * o financeiro, mudando status rascunho → enviada em bloco. Requer que ambos

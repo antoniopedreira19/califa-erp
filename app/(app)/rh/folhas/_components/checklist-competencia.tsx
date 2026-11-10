@@ -1,13 +1,12 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
-import { Check, Square, Upload, Send, Loader2 } from "lucide-react";
-import { enviarCompetencia } from "../importar-actions";
+import { Check, Square, Upload, Send } from "lucide-react";
 import { ImportarFolhaModal } from "./importar-folha-modal";
 import { BotaoGerarFolhaPj } from "./botao-gerar-folha-pj";
 import { BotaoAplicarBeneficios } from "./botao-aplicar-beneficios";
 import { BotaoDesaplicarBeneficios } from "./botao-desaplicar-beneficios";
+import { ModalEnviarFinanceiro } from "./modal-enviar-financeiro";
 
 const brl = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -35,9 +34,7 @@ export interface ChecklistCompetenciaProps {
 }
 
 export function ChecklistCompetencia(props: ChecklistCompetenciaProps) {
-  const router = useRouter();
-  const [pendingEnviar, startEnviar] = React.useTransition();
-  const [erro, setErro] = React.useState<string | null>(null);
+  const [modalAberto, setModalAberto] = React.useState(false);
   const [sucesso, setSucesso] = React.useState<string | null>(null);
 
   const temPj = props.pj.linhas > 0;
@@ -47,26 +44,8 @@ export function ChecklistCompetencia(props: ChecklistCompetenciaProps) {
 
   function handleEnviar() {
     if (!podeEnviar) return;
-    if (
-      !confirm(
-        `Enviar ${props.rascunhosAEnviar} linha${props.rascunhosAEnviar === 1 ? "" : "s"} desta competência ao financeiro? A aprovação continua em Contas a Pagar.`,
-      )
-    ) {
-      return;
-    }
-    setErro(null);
     setSucesso(null);
-    startEnviar(async () => {
-      const r = await enviarCompetencia({ ano: props.ano, mes: props.mes });
-      if (!r.ok) {
-        setErro(r.message);
-        return;
-      }
-      setSucesso(
-        `${r.linhas_enviadas} linha${r.linhas_enviadas === 1 ? "" : "s"} enviada${r.linhas_enviadas === 1 ? "" : "s"} ao financeiro.`,
-      );
-      router.refresh();
-    });
+    setModalAberto(true);
   }
 
   return (
@@ -84,7 +63,7 @@ export function ChecklistCompetencia(props: ChecklistCompetenciaProps) {
           <button
             type="button"
             onClick={handleEnviar}
-            disabled={!podeEnviar || pendingEnviar}
+            disabled={!podeEnviar}
             title={
               !temPj
                 ? "Gere a folha PJ antes."
@@ -98,21 +77,24 @@ export function ChecklistCompetencia(props: ChecklistCompetenciaProps) {
             }
             className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
-            {pendingEnviar ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Send className="h-4 w-4" />
-            )}
-            {pendingEnviar ? "Enviando..." : "Enviar ao financeiro"}
+            <Send className="h-4 w-4" />
+            Enviar ao financeiro
           </button>
         )}
       </div>
 
-      {erro && (
-        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {erro}
-        </div>
-      )}
+      <ModalEnviarFinanceiro
+        open={modalAberto}
+        onOpenChange={setModalAberto}
+        ano={props.ano}
+        mes={props.mes}
+        onEnviado={(n) =>
+          setSucesso(
+            `${n} linha${n === 1 ? "" : "s"} enviada${n === 1 ? "" : "s"} ao financeiro.`,
+          )
+        }
+      />
+
       {sucesso && (
         <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
           {sucesso}
