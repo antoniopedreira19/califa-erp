@@ -168,30 +168,48 @@ export async function anexarNfPorEscopo(input: {
 
   const nowIso = new Date().toISOString();
 
-  // 7. UPSERT via índice único (tenant_id, colaborador_id, escopo_tipo, escopo_id).
-  const { data: anexo, error: upsertError } = await supabase
-    .from("colaboradores_nf_anexos")
-    .upsert(
-      {
-        tenant_id: session.activeTenant.id,
-        colaborador_id: resolvido.colaboradorId,
-        competencia_ano: resolvido.competenciaAno,
-        competencia_mes: resolvido.competenciaMes,
-        escopo_tipo: input.escopoTipo,
-        escopo_id: input.escopoId,
-        arquivo_path: path,
-        arquivo_nome: input.file.name,
-        arquivo_tamanho_bytes: input.file.size,
-        uploaded_by: session.profile.id,
-        uploaded_at: nowIso,
-        updated_at: nowIso,
-      },
-      {
-        onConflict: "tenant_id,colaborador_id,escopo_tipo,escopo_id",
-      },
-    )
-    .select("id")
-    .single();
+  // 7. Grava metadado. UPDATE se ja existe anexo pra esse escopo, INSERT senao.
+  // Nao usa .upsert({onConflict}) porque o unique index `uniq_nf_anexos_escopo`
+  // e PARCIAL (WHERE escopo_id IS NOT NULL) e o Postgres so aceita ON CONFLICT
+  // em indice parcial com clausula WHERE casando — que o SDK do Supabase nao
+  // expoe. O SELECT em `existente` ja foi feito acima pra decidir o rollback
+  // do storage; reusamos aqui.
+  const payloadComum = {
+    arquivo_path: path,
+    arquivo_nome: input.file.name,
+    arquivo_tamanho_bytes: input.file.size,
+    uploaded_by: session.profile.id,
+    uploaded_at: nowIso,
+    updated_at: nowIso,
+  };
+
+  const resposta = existente
+    ? await supabase
+        .from("colaboradores_nf_anexos")
+        .update({
+          ...payloadComum,
+          competencia_ano: resolvido.competenciaAno,
+          competencia_mes: resolvido.competenciaMes,
+        })
+        .eq("id", existente.id)
+        .select("id")
+        .single()
+    : await supabase
+        .from("colaboradores_nf_anexos")
+        .insert({
+          ...payloadComum,
+          tenant_id: session.activeTenant.id,
+          colaborador_id: resolvido.colaboradorId,
+          competencia_ano: resolvido.competenciaAno,
+          competencia_mes: resolvido.competenciaMes,
+          escopo_tipo: input.escopoTipo,
+          escopo_id: input.escopoId,
+        })
+        .select("id")
+        .single();
+
+  const anexo = resposta.data;
+  const upsertError = resposta.error;
 
   if (upsertError || !anexo) {
     // Rollback do upload pra não deixar arquivo órfão.
