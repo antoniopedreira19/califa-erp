@@ -27,9 +27,9 @@ export default async function CidadesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <BotaoVoltar reserva="/cadastros" className="mb-3" />
+        <BotaoVoltar reserva="/admin" className="mb-3" />
         <PageHeader
-          eyebrow="CADASTROS"
+          eyebrow="CONFIGURAÇÕES"
           title="Cidades"
           description="Vocabulário de cidades compartilhado pelo tenant. Usado ao criar projetos."
           icon={MapPin}

@@ -16,7 +16,7 @@ export default async function AdminPermissoesPage() {
       <BotaoVoltar reserva="/admin/usuarios" />
 
       <PageHeader
-        eyebrow="ADMINISTRAÇÃO"
+        eyebrow="CONFIGURAÇÕES"
         title="Permissões por papel"
         description="Escolha um papel no topo pra ver o que ele pode fazer no sistema. As marcações são somente leitura — pra mudar uma permissão, edite a matriz no código e ela se propaga automaticamente."
         icon={ShieldCheck}

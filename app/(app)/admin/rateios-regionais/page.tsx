@@ -78,7 +78,7 @@ export default async function RateiosRegionaisPage() {
       <BotaoVoltar reserva="/admin" />
 
       <PageHeader
-        eyebrow="ADMINISTRAÇÃO"
+        eyebrow="CONFIGURAÇÕES"
         title="Rateios regionais"
         description="Percentual de distribuição do custo de colaboradores marcados como 'Todas as regionais' entre as regionais da empresa. Fonte-verdade única, editada 1×/ano. Regionais fora da lista têm 0% no ano."
         icon={Percent}

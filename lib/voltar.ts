@@ -263,7 +263,6 @@ const NOMES: Array<[RegExp, string | ((url: string) => string)]> = [
   [new RegExp(`^/rh/folhas/${ID}$`), "a folha"],
 
   [/^\/cadastros$/, "Cadastros"],
-  [/^\/cadastros\/cidades$/, "Cidades"],
   [/^\/cadastros\/veiculos$/, "Veículos"],
   [/^\/cadastros\/veiculos\/novo$/, "Novo veículo"],
   [new RegExp(`^/cadastros/veiculos/${ID}$`), "o veículo"],
@@ -274,7 +273,8 @@ const NOMES: Array<[RegExp, string | ((url: string) => string)]> = [
   [/^\/fornecedores\/novo$/, "Novo fornecedor"],
   [new RegExp(`^/fornecedores/${ID}$`), "o fornecedor"],
 
-  [/^\/admin$/, "Administração"],
+  [/^\/admin$/, "Configurações"],
+  [/^\/admin\/cidades$/, "Cidades"],
   [/^\/admin\/empresas$/, "Empresas"],
   [/^\/admin\/rateios-regionais$/, "Rateios regionais"],
   [/^\/admin\/usuarios$/, "Usuários"],

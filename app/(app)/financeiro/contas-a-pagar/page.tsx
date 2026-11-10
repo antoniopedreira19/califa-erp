@@ -560,6 +560,7 @@ export default async function PedidosCompraFinanceiroPage({
     faturas: faturasRes,
     remessasItens: remessasItensRes.data,
     tipos: tiposRes.data,
+    subtipos: subtiposRes.data,
   });
 
   // Aba "Cartão" — TODOS os títulos de cartão (a pagar + pagos). O filtro

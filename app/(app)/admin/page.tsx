@@ -1,16 +1,16 @@
 import Link from "next/link";
 import {
   ArrowRight,
+  Building,
   Building2,
   Percent,
-  ShieldCheck,
+  Settings as SettingsIcon,
   Users,
   type LucideIcon,
 } from "lucide-react";
 import { requireAdmin } from "@/lib/auth/session";
 import { createServiceClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
-import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +20,7 @@ export default async function AdminPage() {
   const tenantId = session.activeTenant.id;
 
   const anoAtual = new Date().getFullYear();
-  const [membersRes, empresasRes, rateiosDoAnoRes] = await Promise.all([
+  const [membersRes, empresasRes, rateiosDoAnoRes, cidadesRes] = await Promise.all([
     service
       .from("tenant_members")
       .select("*", { count: "exact", head: true })
@@ -36,9 +36,17 @@ export default async function AdminPage() {
       .select("empresa_id")
       .eq("tenant_id", tenantId)
       .eq("ano_vigencia", anoAtual),
+    // Cidades vieram de Cadastros em 2026-11-10, quando a engrenagem passou
+    // a abrir esta página direto (antes era o hub /configuracoes).
+    service
+      .from("cidades")
+      .select("*", { count: "exact", head: true })
+      .eq("tenant_id", tenantId)
+      .eq("ativo", true),
   ]);
 
   const ativosCount = membersRes.count ?? 0;
+  const cidadesCount = cidadesRes.count ?? 0;
   const empresasCount = empresasRes.count ?? 0;
   const empresasComRateio = new Set(
     ((rateiosDoAnoRes.data ?? []) as { empresa_id: string }[]).map(
@@ -48,12 +56,11 @@ export default async function AdminPage() {
 
   return (
     <div className="space-y-8">
-      <BotaoVoltar reserva="/configuracoes" />
       <PageHeader
-        eyebrow="ADMINISTRAÇÃO"
-        title="Administração"
+        eyebrow="SISTEMA"
+        title="Configurações"
         description="Gestão de acesso, papéis e regras internas do California ERP. Disponível apenas para administradores."
-        icon={ShieldCheck}
+        icon={SettingsIcon}
       />
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -84,6 +91,14 @@ export default async function AdminPage() {
               ? `empresa com rateio em ${anoAtual}`
               : `empresas com rateio em ${anoAtual}`
           }
+        />
+        <AdminCard
+          href="/admin/cidades"
+          icon={Building}
+          title="Cidades"
+          description="Vocabulário usado ao criar projetos — ex.: Salvador, São Paulo."
+          count={cidadesCount}
+          countLabel={cidadesCount === 1 ? "ativa" : "ativas"}
         />
       </div>
     </div>

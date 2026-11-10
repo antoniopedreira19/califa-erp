@@ -80,7 +80,7 @@ export async function listarCidadesIniciais(
  * Ordem no combobox: locais primeiro (já cadastradas, escolha de 1 clique)
  * e depois sugestões IBGE (com marcador visual). O usuário nunca fica
  * travado — se nenhuma cidade brasileira serve, ainda existe o cadastro
- * manual pelo /cadastros/cidades.
+ * manual pelo /admin/cidades.
  */
 export async function buscarSugestoesHibridas(
   tenantId: string,

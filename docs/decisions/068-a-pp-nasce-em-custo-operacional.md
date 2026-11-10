@@ -1,7 +1,7 @@
 # 068 — A PP nasce carimbada em Custo Operacional
 
 **Data:** 2026-09-10
-**Status:** aceita
+**Status:** aceita; item 3 revisto pela [251](251-subtipo-unico-completa-o-centro-de-custo.md) em 10/11/2026.
 **Contexto:** `pedidos_compra`, aba "Títulos a Pagar" de Contas a Pagar,
 e a previsão de fluxo de caixa que ainda vai ser destrinchada por centro
 de custo. Pedido do Tiago em 10/09/2026.
@@ -52,3 +52,12 @@ nenhuma com tipo nulo; nenhuma com subtipo preenchido. O trigger foi
 exercitado com um `insert` real dentro de uma transação revertida — a
 linha nasceu com o tipo `02` e subtipo nulo, e o `rollback` não deixou
 resíduo (27 PPs antes, 27 depois).
+
+## ⚠️ Revisão de 2026-11-10 — o subtipo único completa o centro (decisão 251)
+
+O subtipo continua vazio na PP, mas a "escolha" na baixa tinha uma opção
+só: o tipo 02 nunca ganhou subtipos além de "Geral (provisório)". Desde a
+[251](251-subtipo-unico-completa-o-centro-de-custo.md), o tipo com um
+único subtipo ativo completa o centro de custo do título na leitura, e a
+conciliação deixa de marcar a PP como "Sem centro de custo". Quando o 02
+ganhar um segundo subtipo ativo, a baixa volta a pedir a escolha.

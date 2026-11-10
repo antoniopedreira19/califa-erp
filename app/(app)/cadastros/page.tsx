@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { Users, Building2, Building, ArrowRight, FolderKanban, Radio, type LucideIcon } from "lucide-react";
+import { Users, Building2, ArrowRight, FolderKanban, Radio, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
-import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +16,9 @@ export default async function CadastrosPage() {
   // Categorias (item e de orçamento) estão em /orcamentos/categorias.
   // Regionais mudaram-se para /admin/empresas em 2026-09-08 — passaram a
   // viver dentro do organograma da empresa dona.
-  const [clientesRes, fornecedoresRes, cidadesRes, veiculosRes] = await Promise.all([
+  // Cidades mudaram-se para /admin/cidades (Configurações) em 2026-11-10,
+  // quando Cadastros virou módulo da barra lateral.
+  const [clientesRes, fornecedoresRes, veiculosRes] = await Promise.all([
     supabase
       .from("clientes")
       .select("*", { count: "exact", head: true })
@@ -28,11 +29,6 @@ export default async function CadastrosPage() {
       .select("*", { count: "exact", head: true })
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo"),
-    supabase
-      .from("cidades")
-      .select("*", { count: "exact", head: true })
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("ativo", true),
     // Veículos de mídia (decisão 150): fornecedores marcados como veículo,
     // ativos — o veículo sai da lista inativando o fornecedor.
     supabase
@@ -44,12 +40,10 @@ export default async function CadastrosPage() {
 
   if (clientesRes.error) console.error("[cadastros.clientes]", clientesRes.error.message);
   if (fornecedoresRes.error) console.error("[cadastros.fornecedores]", fornecedoresRes.error.message);
-  if (cidadesRes.error) console.error("[cadastros.cidades]", cidadesRes.error.message);
   if (veiculosRes.error) console.error("[cadastros.veiculos]", veiculosRes.error.message);
 
   return (
     <div className="space-y-8">
-      <BotaoVoltar reserva="/configuracoes" />
       <PageHeader
         eyebrow="CADASTROS"
         title="Cadastros da empresa"
@@ -72,20 +66,13 @@ export default async function CadastrosPage() {
           description="Pessoas físicas ou jurídicas que aparecem como custo nos itens da versão do orçamento."
           count={fornecedoresRes.count ?? 0}
         />
-        {/* Logo depois de Fornecedores, antes de Cidades (Tiago, 06/10/2026). */}
+        {/* Logo depois de Fornecedores (Tiago, 06/10/2026). */}
         <CadastroCard
           href="/cadastros/veiculos"
           icon={Radio}
           title="Veículos"
           description="Emissoras, exibidores e portais da Mídia Off. Cada veículo é um fornecedor."
           count={veiculosRes.count ?? 0}
-        />
-        <CadastroCard
-          href="/cadastros/cidades"
-          icon={Building}
-          title="Cidades"
-          description="Vocabulário usado ao criar projetos — ex.: Salvador, São Paulo."
-          count={cidadesRes.count ?? 0}
         />
       </div>
     </div>
