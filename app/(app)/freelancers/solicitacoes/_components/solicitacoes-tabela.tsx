@@ -18,6 +18,7 @@ import {
   FileSignature,
 } from "lucide-react";
 import { cn, formatCurrency, formatCpf, nomeCurto } from "@/lib/utils";
+import { formatarCargo } from "@/lib/formatar-cargo";
 import type {
   FreelancerSolicitacao,
   FreelancerSolicitacaoStatus,
@@ -1009,7 +1010,11 @@ function SolicitacaoRow({
         </p>
       </td>
       <td className="px-3 py-2.5 text-foreground">
-        {s.cargo || <span className="text-muted-foreground">—</span>}
+        {s.cargo ? (
+          formatarCargo(s.cargo)
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
       </td>
       <td className="px-3 py-2.5">
         <span

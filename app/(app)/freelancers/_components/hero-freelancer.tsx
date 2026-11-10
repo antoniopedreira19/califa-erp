@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import type { Freelancer, TipoFreelancerContrato } from "@/lib/types";
 import { cn, formatCurrency, initials, formatDate } from "@/lib/utils";
+import { formatarCargo } from "@/lib/formatar-cargo";
 
 const TIPO_LABEL: Record<TipoFreelancerContrato, string> = {
   mensal: "Mensal",
@@ -125,7 +126,7 @@ export function HeroFreelancer({
                 {contratoAtual.cargo && (
                   <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/15 px-2 py-0.5 text-[11px] font-semibold text-white">
                     <Briefcase className="h-3 w-3" />
-                    {contratoAtual.cargo}
+                    {formatarCargo(contratoAtual.cargo)}
                   </span>
                 )}
                 {contratoAtual.cidade && (

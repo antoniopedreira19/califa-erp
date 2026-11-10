@@ -36,6 +36,7 @@ import {
   contratoDispensaMinuta,
   firstAndLastName,
 } from "@/lib/utils";
+import { formatarCargo } from "@/lib/formatar-cargo";
 import {
   CAMPO_HISTORICO_LABELS,
   TIPO_CONTRATO_LABEL,
@@ -671,7 +672,7 @@ export function ContratoCard({
             </div>
             {contrato.cargo && (
               <p className="text-xs text-muted-foreground mt-0.5">
-                {contrato.cargo}
+                {formatarCargo(contrato.cargo)}
               </p>
             )}
             <div className="flex items-center gap-3 mt-2 text-[11px] text-muted-foreground flex-wrap">

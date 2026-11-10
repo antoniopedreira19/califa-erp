@@ -2,6 +2,7 @@ import Link from "next/link";
 import { UserCheck, Clock, CheckCircle2, Ban, XCircle, ArrowRight } from "lucide-react";
 import type { FreelancerSolicitacaoStatus } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { formatarCargo } from "@/lib/formatar-cargo";
 
 interface SolicitacaoResumo {
   id: string;
@@ -91,7 +92,7 @@ export function CardSolicitacoes({ solicitacoes, modo }: Props) {
                       {s.nome_freela}
                     </p>
                     <p className="text-[11px] text-muted-foreground truncate">
-                      {s.cargo ?? "—"}
+                      {s.cargo ? formatarCargo(s.cargo) : "—"}
                       {s.job_nome && (
                         <>
                           {" · "}

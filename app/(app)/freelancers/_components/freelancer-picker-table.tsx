@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Search, X, Lock } from "lucide-react";
 import { cn, initials, nomeCurto } from "@/lib/utils";
+import { formatarCargo } from "@/lib/formatar-cargo";
 import {
   Select,
   SelectContent,
@@ -251,7 +252,7 @@ export function FreelancerPickerTable({
                       </div>
                     </td>
                     <td className="px-3 py-3 text-foreground/80">
-                      {f.cargo_contrato ?? "—"}
+                      {f.cargo_contrato ? formatarCargo(f.cargo_contrato) : "—"}
                     </td>
                     <td className="px-3 py-3 text-foreground/80">
                       {f.nome_job ?? "—"}

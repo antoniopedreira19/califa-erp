@@ -12,6 +12,7 @@ import {
   HandCoins,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { formatarCargo } from "@/lib/formatar-cargo";
 import { createClient } from "@/lib/supabase/client";
 
 /**
@@ -604,7 +605,7 @@ function LinhaSolicitacao({
               {" · "}
             </span>
             <span className="text-muted-foreground font-normal">
-              {sol.cargo}
+              {formatarCargo(sol.cargo)}
             </span>
           </>
         )}

@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Loader2, ArrowLeft, UserCheck, Ban, AlertTriangle } from "lucide-react";
 import { cn, formatCpf, nomeCurto } from "@/lib/utils";
+import { formatarCargo } from "@/lib/formatar-cargo";
 import { createClient } from "@/lib/supabase/client";
 
 /**
@@ -267,7 +268,7 @@ export function HistoricoContratosFreela({
                       </td>
                       <td className="px-3 py-2.5">
                         <span className="text-xs text-muted-foreground">
-                          {c.cargo ?? "—"}
+                          {c.cargo ? formatarCargo(c.cargo) : "—"}
                         </span>
                       </td>
                       <td className="px-3 py-2.5">

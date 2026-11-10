@@ -3,7 +3,6 @@ import { createClient } from "@/lib/supabase/server";
 import type { FreelancerCargo } from "@/lib/types";
 import { HeroDashboard } from "./_components/hero-dashboard";
 import { CardsAnalise, type CategoriaCard } from "./lista/_components/cards-analise";
-import { CardsAcoesPrevistas } from "./_components/cards-acoes-previstas";
 import { GridNovosContratos } from "./_components/grid-novos-contratos";
 import { BuscarFreelancerPill } from "./_components/buscar-freelancer-pill";
 import { NovidadesPill } from "./_components/novidades-pill";
@@ -29,13 +28,13 @@ export default async function FreelancersDashboardPage() {
 
   const isAprovador = APROVADORES.has(session.activeRole);
 
-  // 1. Dados da view pro cálculo de análise + ações previstas + performance.
+  // 1. Dados da view pro cálculo de análise + performance.
   // GP/produtor vê só os freelas que ele é responsável (RLS do califa é frouxa
   // porque o Buscar freelancer precisa ver todos — filtro de escopo aqui).
   let viewQuery = supabase
     .from("freelancers_com_status")
     .select(
-      "id, status_real, status_calculado, acao_prevista, data_inicio, responsavel_id, responsavel_nome",
+      "id, status_real, status_calculado, data_inicio, responsavel_id, responsavel_nome",
     )
     .eq("tenant_id", session.activeTenant.id);
   if (!isAprovador) {
@@ -47,7 +46,6 @@ export default async function FreelancersDashboardPage() {
     id: string;
     status_real: boolean | null;
     status_calculado: string;
-    acao_prevista: string | null;
     data_inicio: string | null;
     responsavel_id: string | null;
     responsavel_nome: string | null;
@@ -98,20 +96,6 @@ export default async function FreelancersDashboardPage() {
   }
   const saudePercentual =
     ativosSaude > 0 ? Math.round((saudaveisSaude / ativosSaude) * 100) : 100;
-
-  // Totais das 5 ações previstas
-  const totaisAcoes = {
-    contratar: 0,
-    renovar: 0,
-    manter: 0,
-    substituir: 0,
-    encerrar: 0,
-  };
-  for (const r of rows) {
-    if (r.acao_prevista && r.acao_prevista in totaisAcoes) {
-      totaisAcoes[r.acao_prevista as keyof typeof totaisAcoes] += 1;
-    }
-  }
 
   // Novos contratos por janela (data_inicio nos últimos N dias)
   const hoje = new Date();
@@ -244,8 +228,6 @@ export default async function FreelancersDashboardPage() {
       />
 
       <CardsAnalise totais={totaisAnalise} />
-
-      <CardsAcoesPrevistas totais={totaisAcoes} />
 
       {isAprovador && performance.length > 0 ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">

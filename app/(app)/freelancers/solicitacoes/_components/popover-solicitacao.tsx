@@ -21,6 +21,7 @@ import {
   MessagesSquare,
 } from "lucide-react";
 import { cn, formatCpf, formatCurrency } from "@/lib/utils";
+import { formatarCargo } from "@/lib/formatar-cargo";
 import type {
   FreelancerSolicitacao,
   FreelancerSolicitacaoStatus,
@@ -281,7 +282,7 @@ export function PopoverSolicitacao({
                   : (s.job_nome ?? s.nome_job ?? "—")
               }
             />
-            {s.cargo && <Detalhe label="Cargo" valor={s.cargo} />}
+            {s.cargo && <Detalhe label="Cargo" valor={formatarCargo(s.cargo)} />}
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground">
                 Tipo

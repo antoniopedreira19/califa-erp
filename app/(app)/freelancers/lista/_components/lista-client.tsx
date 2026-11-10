@@ -25,6 +25,7 @@ import type {
   StatusCalculado,
   TipoFreelancerContrato,
 } from "@/lib/types";
+import { formatarCargo } from "@/lib/formatar-cargo";
 import { StatusBadge } from "../../_components/status-badge";
 
 interface Props {
@@ -247,9 +248,9 @@ function FreelancerRow({
       <td className="px-3 py-2.5">
         <span
           className="text-[11px] text-muted-foreground uppercase tracking-wide truncate block max-w-[120px]"
-          title={f.cargo_contrato ?? undefined}
+          title={f.cargo_contrato ? formatarCargo(f.cargo_contrato) : undefined}
         >
-          {f.cargo_contrato ?? "—"}
+          {f.cargo_contrato ? formatarCargo(f.cargo_contrato) : "—"}
         </span>
       </td>
       <td className="px-3 py-2.5">

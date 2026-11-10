@@ -2,6 +2,7 @@ import Link from "next/link";
 import { FileText, ArrowRight, Plus } from "lucide-react";
 import type { FreelancerContrato } from "@/lib/types";
 import { calcularTotalDiarias, formatCurrency, cn } from "@/lib/utils";
+import { formatarCargo } from "@/lib/formatar-cargo";
 
 interface ContratoLinha extends FreelancerContrato {
   job_codigo: string | null;
@@ -107,7 +108,11 @@ function ContratoRow({ contrato: c }: { contrato: ContratoLinha }) {
         </Link>
       </td>
       <td className="px-3 py-2.5 text-foreground">
-        {c.cargo || <span className="text-muted-foreground">—</span>}
+        {c.cargo ? (
+          formatarCargo(c.cargo)
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
       </td>
       <td className="px-3 py-2.5 text-right tabular-nums text-foreground">
         <div>
