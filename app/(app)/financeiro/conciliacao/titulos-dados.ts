@@ -339,6 +339,7 @@ export async function carregarTitulosDaConciliacao(
     faturas: faturasRes.data,
     remessasItens: remessasItensRes.data,
     tipos,
+    subtipos: subtiposRes.data ?? [],
   }).filter((t) => t.forma_pagamento !== "cartao_credito" && t.status === "a_pagar");
 
   // ---- A receber: o "Em aberto" de Títulos a Receber ----

@@ -8962,3 +8962,10 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Cadastro da conta de investimento:** campo "Aplicação automática da conta", com as correntes livres.
 - **Importação:** na corrente com aplicação, o extrato sem nenhuma aplicação ou resgate em dia fechado é recusado (`lib/conciliacao/aplicacao-automatica.ts`, com teste). Conferido com o extrato de 31/10 da California Santander no formato novo.
 - **Fica para depois:** o rendimento mensal das aplicações, pelo extrato da aplicação.
+
+## ⚠️ Nota de 2026-11-10 — o subtipo único completa o centro de custo (decisão 251, revê a 068)
+
+- **O problema:** a PP nasce só com o tipo 02 (decisão 068), e a conciliação marcava toda PP como "Sem centro de custo", sem baixa de um clique nem lote. O 02 tem um único subtipo ativo, "Geral (provisório)", o que as 135 baixas de PP já gravaram.
+- **A regra:** o título com tipo e sem subtipo, cujo tipo tem exatamente um subtipo ativo, fica com o centro completo por esse subtipo (`lib/financeiro/subtipo-unico.ts`, com teste). Aplicada em `montarTitulosAPagar`: Títulos a Pagar, aba Títulos e Conciliação automática. A baixa de um por um já abre com o subtipo escolhido.
+- **Só na leitura:** nenhuma PP é gravada e não há migration. Com um segundo subtipo ativo no tipo, a regra se desliga e a baixa volta a pedir a escolha.
+- **Conferido** na California Santander, de 01/11 a 06/11, contra a produção: Prontos para conciliar de 0 para 45, "Sem centro de custo" de 78 para 0.

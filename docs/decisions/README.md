@@ -264,6 +264,8 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 247 | [Save avulso: o save faturado sem job, crédito do cliente](247-save-avulso.md) | 2026-11-09 |
 | 248 | [O "Exibir" do Resultado de Job, o prazo de pagamento e os saldos e prazos numa faixa](248-exibir-no-resultado-de-job.md) | 2026-11-09 |
 | 249 | [A conta corrente com aplicação automática numa linha só, e só o extrato completo](249-conta-corrente-com-aplicacao-automatica.md) | 2026-11-09 |
+| 250 | *Reservada* (travar a planilha e a linha vermelha depois do envio, em outra sessão) | — |
+| 251 | [O tipo com um único subtipo ativo completa o centro de custo](251-subtipo-unico-completa-o-centro-de-custo.md) | 2026-11-10 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -276,4 +278,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 249**. (A 240 está em uso por outra frente, ainda sem arquivo neste índice.) (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 252**. (A 240 está em uso por outra frente, ainda sem arquivo neste índice.) (091 e 092 existem na pasta e ainda não estão nesta tabela.)

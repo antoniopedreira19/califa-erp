@@ -46,6 +46,7 @@ import {
   type FotoDePagamentoDaPP,
 } from "@/lib/data/foto-pagamento-da-pp";
 import { agruparEstornosPorBaixa } from "@/lib/data/estornos-de-baixa";
+import { subtipoDoTitulo, subtipoUnicoPorTipo, type SubtipoDoPlano } from "@/lib/financeiro/subtipo-unico";
 import {
   SELECT_BAIXA_DO_DOCUMENTO,
   agruparBaixasPorDocumento,
@@ -483,6 +484,9 @@ export function montarTitulosAPagar(e: {
   /** Os tipos do plano de contas: o Custo Operacional (02) é o centro de
    *  custo sugerido da PP. */
   tipos: Pick<PlanoContaTipo, "id" | "codigo">[] | null;
+  /** Os subtipos ativos do plano de contas: o tipo com um só completa o
+   *  centro de custo do título que veio sem subtipo (decisão 251). */
+  subtipos: SubtipoDoPlano[] | null;
 }): TituloRow[] {
   // -------------------------------------------------------------------
   // Títulos a pagar — a visão unificada
@@ -622,8 +626,9 @@ export function montarTitulosAPagar(e: {
         // (`20260910200001_pp_nasce_em_custo_operacional`), porque toda PP
         // é custo de job. No cartão, a aprovação sobrescreve com o que o
         // financeiro escolheu. O `??` continua aqui como rede para as
-        // linhas que porventura escapem — não é mais ele que decide, e o
-        // subtipo segue vazio de propósito: quem escolhe é a baixa.
+        // linhas que porventura escapem — não é mais ele que decide. O
+        // subtipo segue vazio na PP; o único ativo do tipo o completa no
+        // fim desta montagem (decisão 251).
         plano_conta_tipo_id:
           pp.plano_conta_tipo_id ?? custoOperacionalTipoId,
         plano_conta_subtipo_id: pp.plano_conta_subtipo_id ?? null,
@@ -1110,6 +1115,14 @@ export function montarTitulosAPagar(e: {
       compra_total: 0,
       estornado: 0,
     });
+  }
+
+  // Decisão 251: o tipo com um único subtipo ativo completa o centro de
+  // custo do título que veio sem subtipo (a PP nasce só com o tipo, 068).
+  // Só na leitura: nada se grava no título.
+  const unico = subtipoUnicoPorTipo(e.subtipos ?? []);
+  for (const t of titulos) {
+    t.plano_conta_subtipo_id = subtipoDoTitulo(t.plano_conta_tipo_id, t.plano_conta_subtipo_id, unico);
   }
 
   return titulos;
