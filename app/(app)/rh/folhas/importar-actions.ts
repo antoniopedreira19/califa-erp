@@ -64,6 +64,15 @@ export interface ResumoImportacao {
   warnings: FolhaImportacaoWarning[];
   totalizadores_pdf: FolhaImportacaoTotalizadores;
   preview: ResumoImportacaoLinha[];
+  /** Avisa que o PDF e de competencia diferente da selecionada. Nao bloqueia
+   *  a importacao — o RH decide se segue (ex: contabilidade ainda nao gerou
+   *  o PDF do mes atual e aproveita a importacao pra validar o parser). */
+  competencia_divergente: {
+    pdf_ano: number;
+    pdf_mes: number;
+    selecionado_ano: number;
+    selecionado_mes: number;
+  } | null;
 }
 
 function centavosParaBrlString(c: number): string {
@@ -132,15 +141,16 @@ export async function importarFolhaContabilidade(input: {
     return { ok: false, message: `Falha ao ler o PDF: ${msg}` };
   }
 
-  if (
+  const competenciaDivergente =
     parsed.competencia_ano !== input.ano ||
     parsed.competencia_mes !== input.mes
-  ) {
-    return {
-      ok: false,
-      message: `A competência do PDF (${String(parsed.competencia_mes).padStart(2, "0")}/${parsed.competencia_ano}) difere da selecionada (${String(input.mes).padStart(2, "0")}/${input.ano}).`,
-    };
-  }
+      ? {
+          pdf_ano: parsed.competencia_ano,
+          pdf_mes: parsed.competencia_mes,
+          selecionado_ano: input.ano,
+          selecionado_mes: input.mes,
+        }
+      : null;
 
   const warnings: FolhaImportacaoWarning[] = [];
   const preview: ResumoImportacaoLinha[] = [];
@@ -317,6 +327,7 @@ export async function importarFolhaContabilidade(input: {
       warnings,
       totalizadores_pdf,
       preview,
+      competencia_divergente: competenciaDivergente,
     };
   }
 
@@ -531,6 +542,7 @@ export async function importarFolhaContabilidade(input: {
     warnings,
     totalizadores_pdf,
     preview,
+    competencia_divergente: competenciaDivergente,
   };
 }
 

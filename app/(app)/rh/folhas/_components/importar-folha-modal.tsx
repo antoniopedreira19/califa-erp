@@ -176,6 +176,23 @@ export function ImportarFolhaModal(props: ImportarFolhaModalProps) {
             </div>
           )}
 
+          {preview?.competencia_divergente && (
+            <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>
+                A competência do PDF (
+                {String(preview.competencia_divergente.pdf_mes).padStart(2, "0")}/
+                {preview.competencia_divergente.pdf_ano}) difere da selecionada
+                (
+                {String(
+                  preview.competencia_divergente.selecionado_mes,
+                ).padStart(2, "0")}
+                /{preview.competencia_divergente.selecionado_ano}). Confira
+                antes de confirmar.
+              </span>
+            </div>
+          )}
+
           {preview && <PreviewTabela preview={preview} />}
 
           {preview && (
