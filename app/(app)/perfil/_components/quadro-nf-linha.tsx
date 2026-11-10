@@ -188,22 +188,6 @@ export function QuadroNfLinha({
 
         <div className="flex shrink-0 flex-col items-end gap-1">
           <BadgeTipo variante={variante} texto={tipoTexto} />
-          {linha.nf_anexada ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
-              <CheckCircle2 className="h-3 w-3" />
-              NF anexada
-            </span>
-          ) : emAtraso ? (
-            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-              <AlertCircle className="h-3 w-3" />
-              Em atraso
-            </span>
-          ) : (
-            <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800">
-              <Clock className="h-3 w-3" />
-              No prazo
-            </span>
-          )}
         </div>
       </div>
 
@@ -237,8 +221,24 @@ export function QuadroNfLinha({
         </div>
       )}
 
-      {/* Ação: botão alinhado à direita, separado por divisor sutil */}
-      <div className="flex items-center justify-end border-t border-border/50 pt-3">
+      {/* Ação: status à esquerda, botão à direita, separado por divisor sutil */}
+      <div className="flex items-center justify-between gap-3 border-t border-border/50 pt-3">
+        {linha.nf_anexada ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-800">
+            <CheckCircle2 className="h-3 w-3" />
+            NF anexada
+          </span>
+        ) : emAtraso ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
+            <AlertCircle className="h-3 w-3" />
+            Em atraso
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-xs font-medium text-sky-800">
+            <Clock className="h-3 w-3" />
+            No prazo
+          </span>
+        )}
         <input
           ref={inputRef}
           type="file"
