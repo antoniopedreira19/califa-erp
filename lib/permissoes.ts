@@ -31,7 +31,12 @@ export const permissoes = {
   // Sidebar — visibilidade dos itens de menu
   // ==================================================================
   "sidebar.home":                ["administrador", "gerente_producao", "produtor", "freelancer", "financeiro"],
-  "sidebar.cadastros":           ["administrador", "financeiro"],
+  /**
+   * Modulo Cadastros (item da barra desde 10/11/2026). Freelancer e RH
+   * ficam de fora (Tiago, 10/11/2026): o freelancer cadastra fornecedor so
+   * pelo formulario rapido da PP (`cadastros.fornecedores.inline`).
+   */
+  "sidebar.cadastros":           ["administrador", "financeiro", "gerente_producao", "produtor"],
   "sidebar.orcamentos":          ["administrador", "gerente_producao", "produtor", "freelancer", "financeiro"],
   "sidebar.jobs":                ["administrador", "gerente_producao", "produtor", "freelancer", "financeiro"],
   "sidebar.financeiro":          ["administrador", "financeiro"],
@@ -62,7 +67,16 @@ export const permissoes = {
    * entrou em 07/10/2026 (decisao do Tiago): os dados de faturamento do
    * cliente moram ali.
    */
-  "cadastros.clientes.editar":              ["administrador", "financeiro"],
+  /**
+   * GP entrou em 10/11/2026 (Tiago): cria e edita cliente pela tela, como
+   * Admin e Financeiro. Inativar e reativar ficaram em `.inativar`.
+   * Tambem e o lapis do campo Cliente no orcamento.
+   */
+  "cadastros.clientes.editar":              ["administrador", "financeiro", "gerente_producao"],
+  /** Abrir a tela de Clientes (lista e cadastro). 10/11/2026. */
+  "cadastros.clientes.ver":                 ["administrador", "financeiro", "gerente_producao"],
+  /** Inativar e reativar cliente — continua so de Admin e Financeiro. */
+  "cadastros.clientes.inativar":            ["administrador", "financeiro"],
   /**
    * Cadastro rapido de cliente DENTRO do formulario de projeto (decisao
    * 089, liberado em 18/09/2026). Vale so para CRIAR — abrir o cadastro de
@@ -79,6 +93,13 @@ export const permissoes = {
    * 142): a declaracao ficou so na tela, e e o financeiro quem a recebe.
    */
   "cadastros.fornecedores.editar":          ["administrador", "financeiro"],
+  /**
+   * Abrir as telas de Fornecedores e Veiculos (10/11/2026, Tiago). GP e
+   * Produtor criam e editam por elas com o mesmo gate da PP (`.inline`);
+   * inativar e reativar continuam em `.editar`. Freelancer nao abre a
+   * tela: fica so com o formulario rapido.
+   */
+  "cadastros.fornecedores.ver":             ["administrador", "financeiro", "gerente_producao", "produtor"],
   /**
    * Cadastro rapido de fornecedor DENTRO do fluxo de PP (drawer inline).
    * Inclui freelancer desde 18/09/2026 (decisao do Tiago): ele edita o

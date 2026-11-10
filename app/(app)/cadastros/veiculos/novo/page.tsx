@@ -1,9 +1,16 @@
+import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
+import { pode } from "@/lib/permissoes";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { VeiculoForm } from "../veiculo-form";
 
 export default async function NovoVeiculoPage() {
-  await requireSession();
+  const session = await requireSession();
+  // A página barra com a mesma regra do menu (10/11/2026): quem não vê
+  // Cadastros na barra não abre a tela digitando o endereço.
+  if (!pode(session.activeRole, "cadastros.fornecedores.ver")) {
+    redirect("/home?reason=sem_permissao_cadastros");
+  }
 
   return (
     // A página do "Novo fornecedor", para o veículo (decisão 150).

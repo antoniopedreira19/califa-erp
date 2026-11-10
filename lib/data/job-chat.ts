@@ -429,7 +429,9 @@ export function montarThreadChat(
                 ? `Agrupamento removido · ${m.nome} (ficou vazio)`
                 : m.tipo === "item_movido"
                   ? `Item movido · ${m.item}: ${m.de} → ${m.para}`
-                  : `Ordem · itens de ${m.grupo} em outra ordem`,
+                  : m.tipo === "item_renomeado"
+                    ? `Item renomeado · ${m.de} → ${m.para}`
+                    : `Ordem · itens de ${m.grupo} em outra ordem`,
         valor: "",
         tom: "texto",
       });

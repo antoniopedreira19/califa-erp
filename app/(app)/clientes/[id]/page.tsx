@@ -1,5 +1,6 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
+import { pode } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
 import type { Cliente, ClienteProduto, ClientePortal } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -14,6 +15,11 @@ export default async function EditarClientePage({
   params: { id: string };
 }) {
   const session = await requireSession();
+  // A página barra com a mesma regra do menu (10/11/2026): quem não vê
+  // Cadastros na barra não abre a tela digitando o endereço.
+  if (!pode(session.activeRole, "cadastros.clientes.ver")) {
+    redirect("/home?reason=sem_permissao_cadastros");
+  }
   const supabase = createClient();
 
   const [clienteRes, produtosRes, portaisRes, projetosRes] = await Promise.all([

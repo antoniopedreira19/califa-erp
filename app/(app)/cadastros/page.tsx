@@ -1,6 +1,8 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Users, Building2, ArrowRight, FolderKanban, Radio, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
+import { pode } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
 
@@ -8,6 +10,11 @@ export const dynamic = "force-dynamic";
 
 export default async function CadastrosPage() {
   const session = await requireSession();
+  // A página barra com a mesma regra do menu (10/11/2026): quem não vê
+  // Cadastros na barra não abre a tela digitando o endereço.
+  if (!pode(session.activeRole, "sidebar.cadastros")) {
+    redirect("/home?reason=sem_permissao_cadastros");
+  }
   const supabase = createClient();
 
   // Contagens de ativos em paralelo para cada cadastro do hub.
@@ -52,13 +59,17 @@ export default async function CadastrosPage() {
       />
 
       <div className="grid gap-4 md:grid-cols-2">
-        <CadastroCard
-          href="/clientes"
-          icon={Users}
-          title="Clientes"
-          description="Empresas contratantes para as quais a agência produz orçamentos."
-          count={clientesRes.count ?? 0}
-        />
+        {/* Clientes: Admin, Financeiro e GP (10/11/2026). O Produtor vê só
+            Fornecedores e Veículos. */}
+        {pode(session.activeRole, "cadastros.clientes.ver") && (
+          <CadastroCard
+            href="/clientes"
+            icon={Users}
+            title="Clientes"
+            description="Empresas contratantes para as quais a agência produz orçamentos."
+            count={clientesRes.count ?? 0}
+          />
+        )}
         <CadastroCard
           href="/fornecedores"
           icon={Building2}

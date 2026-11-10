@@ -84,6 +84,9 @@ export function resumoDaVersao(v: VersaoDaPlanilha): string {
   if (conta("alterada")) partes.push(plural(conta("alterada"), "linha alterada", "linhas alteradas"));
   if (conta("save")) partes.push(`save em ${plural(conta("save"), "linha", "linhas")}`);
   if (conta("movida")) partes.push(plural(conta("movida"), "item reorganizado", "itens reorganizados"));
+  // Decisão 252: o nome novo conta mesmo quando veio junto de outra mudança.
+  const renomeados = v.mudancas.filter((m) => m.itemDe !== null).length;
+  if (renomeados) partes.push(plural(renomeados, "item renomeado", "itens renomeados"));
   if (v.estrutura.length)
     partes.push(plural(v.estrutura.length, "mudança nos agrupamentos", "mudanças nos agrupamentos"));
   // Decisão 233: honorários, impostos, taxas e câmbio.
@@ -100,8 +103,11 @@ function textoDaMudanca(m: MudancaNaLinha, moeda: string): string {
     return `nova · ${r(m.orcadoPara)}${plan}`;
   }
   if (m.acao === "removida") return `removida · ${r(m.orcadoDe)} → ${r(0)}`;
-  if (m.acao === "movida") return `${m.grupoDe} → ${m.grupo}`;
+  const nome = m.itemDe !== null ? `nome “${m.itemDe}” → “${m.item}”` : null;
+  if (m.acao === "renomeada") return nome ?? "renomeada";
+  if (m.acao === "movida") return [`${m.grupoDe} → ${m.grupo}`, nome].filter(Boolean).join(" · ");
   const partes: string[] = [];
+  if (nome) partes.push(nome);
   if (m.tipoDe && m.tipoPara && m.tipoDe !== m.tipoPara) partes.push(`tipo ${m.tipoDe} → ${m.tipoPara}`);
   if (m.orcadoDe !== null && m.orcadoPara !== null && centavos(m.orcadoDe) !== centavos(m.orcadoPara))
     partes.push(`orçado ${r(m.orcadoDe)} → ${r(m.orcadoPara)}`);
@@ -473,7 +479,9 @@ export function SeloDaLinha({ mudanca, moeda }: { mudanca: MudancaNaLinha; moeda
       ? "nova"
       : mudanca.acao === "movida"
         ? "movida"
-        : mudanca.acao === "save"
+        : mudanca.acao === "renomeada"
+          ? "renomeada"
+          : mudanca.acao === "save"
           ? "save"
           : "alterada";
   const dica =

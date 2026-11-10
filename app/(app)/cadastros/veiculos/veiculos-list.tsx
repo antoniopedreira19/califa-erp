@@ -105,7 +105,15 @@ const COLUNAS: ColunaFiltravel<VeiculoDaTela>[] = [
   },
 ];
 
-export function VeiculosList({ veiculos }: { veiculos: VeiculoDaTela[] }) {
+export function VeiculosList({
+  veiculos,
+  podeInativar,
+}: {
+  veiculos: VeiculoDaTela[];
+  /** Inativar e reativar: só Admin e Financeiro (10/11/2026). Sem a
+   *  permissão, a coluna das ações fica vazia. */
+  podeInativar: boolean;
+}) {
   const router = useRouter();
   const [busca, setBusca] = React.useState("");
   const [meio, setMeio] = React.useState<string>(TODOS);
@@ -300,7 +308,7 @@ export function VeiculosList({ veiculos }: { veiculos: VeiculoDaTela[] }) {
                     )}
                   </TableCell>
                   <TableCell onClick={(e) => e.stopPropagation()}>
-                    {f.status === "ativo" ? (
+                    {!podeInativar ? null : f.status === "ativo" ? (
                       <button
                         type="button"
                         onClick={() => setAskInativar({ id: f.id, nome: f.nome })}

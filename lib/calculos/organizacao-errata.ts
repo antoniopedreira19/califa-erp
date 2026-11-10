@@ -41,6 +41,19 @@ export interface Organizacao {
 
 export const MAX_NOME_DO_GRUPO = 120;
 
+/** O mesmo limite da linha nova da errata (decisão 252). */
+export const MAX_NOME_DO_ITEM = 200;
+
+/** O erro do nome do item, ou `null` quando ele serve (decisão 252). Nome
+ *  repetido pode: a planilha já tem item com o mesmo nome em agrupamentos
+ *  diferentes (decisão 191). */
+export function erroDoNomeDoItem(nome: string): string | null {
+  const n = nome.trim();
+  if (n === "") return "Informe o nome do item.";
+  if (n.length > MAX_NOME_DO_ITEM) return "Máximo 200 caracteres.";
+  return null;
+}
+
 /** "TOOLKIT" e "toolkit " são o mesmo nome. */
 export function chaveDoNome(nome: string): string {
   return nome.trim().toLocaleLowerCase("pt-BR");
@@ -88,7 +101,8 @@ export function gruposQueSaem(antes: Organizacao, depois: Organizacao): string[]
 /**
  * O que a errata muda na organização, na ordem em que o pop-up lista:
  * agrupamentos novos, renomeados e que saem; itens que mudaram de
- * agrupamento; e os agrupamentos cujos itens ficaram em outra ordem.
+ * agrupamento; itens com nome novo (decisão 252); e os agrupamentos cujos
+ * itens ficaram em outra ordem.
  *
  * - O agrupamento novo que fica vazio não aparece: ele não chega a nascer.
  * - "Ordem" compara, dentro de cada agrupamento que já existia, só as
@@ -136,6 +150,14 @@ export function mudancasDeEstrutura(
     });
   }
 
+  // Decisão 252: a linha que já existia e ganhou outro nome.
+  const itemAntes = new Map(antes.linhas.map((l) => [l.id, l.item]));
+  for (const l of depois.linhas) {
+    const de = itemAntes.get(l.id);
+    if (de === undefined || de.trim() === l.item.trim()) continue;
+    lista.push({ tipo: "item_renomeado", chave: l.id, de, para: l.item.trim() });
+  }
+
   const posAntes = new Map(antes.linhas.map((l, k) => [l.id, k]));
   const chavesDasNovas = [...novasNoGrupo.keys()];
   const posNatural = (id: string) =>
@@ -164,6 +186,8 @@ export function resumoDaEstrutura(mudancas: MudancaDeEstrutura[]): string[] {
   const ren = de("grupo_renomeado");
   const gno = de("grupo_novo");
   const grm = de("grupo_removido");
+  const iren = de("item_renomeado");
+  if (iren) partes.push(`${iren} ${iren === 1 ? "item renomeado" : "itens renomeados"}`);
   if (mov) partes.push(`${mov} ${mov === 1 ? "item movido" : "itens movidos"}`);
   if (de("ordem")) partes.push("ordem alterada");
   if (ren) partes.push(`${ren} ${ren === 1 ? "grupo renomeado" : "grupos renomeados"}`);

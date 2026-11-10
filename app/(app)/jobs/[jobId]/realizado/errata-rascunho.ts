@@ -33,6 +33,11 @@
  * rascunho até a errata ser confirmada, com o mesmo Desfazer. Os
  * agrupamentos são os do JOB (`jobs_grupos`): a versão aprovada continua
  * como o cliente aprovou. A regra mora em `lib/calculos/organizacao-errata`.
+ *
+ * Desde 10/11/2026 (decisão 252) a linha que já existia também ganha nome
+ * novo — só na errata (o "Editar planilha" do financeiro não abre o nome).
+ * O nome vale no job e no orçamento, e vai como `item_renomeado` junto da
+ * organização: não mexe em valor.
  */
 
 import * as React from "react";
@@ -183,7 +188,12 @@ export interface RascunhoErrata {
   motivoPlanejadoTravado: (chave: string) => string | null;
   editarCampo: (chave: string, campo: CampoErrata, valor: string) => void;
   editarTipo: (chave: string, tipo: TipoCusto) => void;
+  /** O nome da linha nova, ou o nome novo da linha que já existia
+   *  (decisão 252). Nome vazio na que já existia volta ao salvo. */
   editarNome: (chave: string, nome: string) => void;
+  /** O nome gravado da linha que esta errata renomeia; `null` quando ela
+   *  não foi renomeada (ou é linha nova). Vai na dica da célula. */
+  nomeSalvoDe: (chave: string) => string | null;
   /** Devolve a chave da linha nova (`nova:N`), para a tela selecioná-la
    *  e abrir a descrição na hora. */
   adicionar: (grupoId: string, vermelha: boolean) => string;
@@ -263,6 +273,8 @@ export function useRascunhoErrata(
   const [grupos, setGrupos] = React.useState<GrupoDaErrata[]>(gruposIniciais);
   const [sequencia, setSequencia] = React.useState<string[] | null>(null);
   const [grupoDoItem, setGrupoDoItem] = React.useState<Record<string, string>>({});
+  // Decisão 252: o nome novo das linhas que já existiam (id → nome).
+  const [nomes, setNomes] = React.useState<Record<string, string>>({});
   const seqGrupoRef = React.useRef(0);
   // ⚠️ Ref, e não state. A chave da linha nova só precisa ser única — ela
   // não é lida na renderização, é gravada dentro da própria linha. Como
@@ -286,11 +298,12 @@ export function useRascunhoErrata(
     grupos: GrupoDaErrata[];
     sequencia: string[] | null;
     grupoDoItem: Record<string, string>;
+    nomes: Record<string, string>;
   };
   const [historico, setHistorico] = React.useState<Foto[]>([]);
   const alvoRef = React.useRef<string | null>(null);
-  const atualRef = React.useRef<Foto>({ edicoes, novas, canceladas, grupos, sequencia, grupoDoItem });
-  atualRef.current = { edicoes, novas, canceladas, grupos, sequencia, grupoDoItem };
+  const atualRef = React.useRef<Foto>({ edicoes, novas, canceladas, grupos, sequencia, grupoDoItem, nomes });
+  atualRef.current = { edicoes, novas, canceladas, grupos, sequencia, grupoDoItem, nomes };
 
   const fotografar = React.useCallback((alvo: string | null) => {
     // `alvo` null = ação estrutural, sempre vira passo.
@@ -306,6 +319,7 @@ export function useRascunhoErrata(
         grupos: [...a.grupos],
         sequencia: a.sequencia ? [...a.sequencia] : null,
         grupoDoItem: { ...a.grupoDoItem },
+        nomes: { ...a.nomes },
       },
     ]);
   }, []);
@@ -320,6 +334,7 @@ export function useRascunhoErrata(
       setGrupos(anterior.grupos);
       setSequencia(anterior.sequencia);
       setGrupoDoItem(anterior.grupoDoItem);
+      setNomes(anterior.nomes);
       // O próximo caractere digitado volta a valer como passo novo.
       alvoRef.current = null;
       return h.slice(0, -1);
@@ -333,6 +348,7 @@ export function useRascunhoErrata(
     setGrupos(gruposIniciais);
     setSequencia(null);
     setGrupoDoItem({});
+    setNomes({});
     setHistorico([]);
     alvoRef.current = null;
     seqRef.current = 0;
@@ -425,6 +441,13 @@ export function useRascunhoErrata(
     setGrupos(gruposDaPronta);
     setSequencia(est?.ordem ? est.ordem.map((o) => o.item) : null);
     setGrupoDoItem(grupoDaPronta);
+    // Decisão 252: os nomes novos da pronta, das linhas que seguem de pé.
+    // A pronta gravada antes de 10/11/2026 não tem o campo.
+    const nomesDaPronta: Record<string, string> = {};
+    for (const r of est?.itens_renomeados ?? []) {
+      if (ativas.has(r.item_id)) nomesDaPronta[r.item_id] = r.nome;
+    }
+    setNomes(nomesDaPronta);
     setHistorico([]);
     alvoRef.current = null;
     seqRef.current = seq;
@@ -441,6 +464,8 @@ export function useRascunhoErrata(
     () => new Map(itensSalvos.map((i) => [i.id, i])),
     [itensSalvos],
   );
+  const salvosPorIdRef = React.useRef(salvosPorId);
+  salvosPorIdRef.current = salvosPorId;
 
   const editarCampo = React.useCallback(
     (chave: string, campo: CampoErrata, valor: string) => {
@@ -469,10 +494,27 @@ export function useRascunhoErrata(
 
   const editarNome = React.useCallback((chave: string, nome: string) => {
     fotografar(`${chave}:nome`);
-    setNovas((lista) =>
-      lista.map((n) => (n.chave === chave ? { ...n, item: nome } : n)),
-    );
+    if (chave.startsWith("nova:")) {
+      setNovas((lista) =>
+        lista.map((n) => (n.chave === chave ? { ...n, item: nome } : n)),
+      );
+      return;
+    }
+    // Decisão 252: a linha que já existia. Voltar ao nome gravado (ou
+    // apagar tudo) desfaz a renomeação.
+    const salvo = salvosPorIdRef.current.get(chave);
+    if (!salvo || salvo.cancelada_em) return;
+    setNomes((mapa) => {
+      const resto = { ...mapa };
+      delete resto[chave];
+      return nome.trim() === "" || nome.trim() === salvo.item.trim() ? resto : { ...resto, [chave]: nome.trim() };
+    });
   }, [fotografar]);
+
+  const nomeSalvoDe = React.useCallback(
+    (chave: string) => (nomes[chave] !== undefined ? (salvosPorIdRef.current.get(chave)?.item ?? null) : null),
+    [nomes],
+  );
 
   const adicionar = React.useCallback((grupoId: string, vermelha: boolean): string => {
     fotografar(null);
@@ -511,6 +553,13 @@ export function useRascunhoErrata(
     setCanceladas((lista) =>
       lista.includes(chave) ? lista : [...lista, chave],
     );
+    // A cancelada não se renomeia (decisão 252): o nome volta ao gravado.
+    setNomes((mapa) => {
+      if (mapa[chave] === undefined) return mapa;
+      const resto = { ...mapa };
+      delete resto[chave];
+      return resto;
+    });
   }, [fotografar]);
 
   const reativar = React.useCallback((chave: string) => {
@@ -592,6 +641,9 @@ export function useRascunhoErrata(
             }
           : i,
       )
+      // Decisão 252: o nome novo, antes dos números. A cancelada não chega
+      // aqui com nome novo (`remover` o desfaz).
+      .map((i) => (nomes[i.id] !== undefined && !i.cancelada_em ? { ...i, item: nomes[i.id] } : i))
       .map((i) => {
         // Linha cancelada (agora ou numa errata anterior) não se corrige.
         if (i.cancelada_em) return i;
@@ -696,7 +748,7 @@ export function useRascunhoErrata(
             (posicao.get(b.i.id) ?? Number.MAX_SAFE_INTEGER) || a.k - b.k,
       )
       .map(({ i }, k) => ({ ...i, ordem: k + 1 }));
-  }, [ativo, itensSalvos, edicoes, novas, canceladas, interno, grupos, grupoDoItem, sequencia, planejadoLiberado]);
+  }, [ativo, itensSalvos, edicoes, novas, canceladas, interno, grupos, grupoDoItem, sequencia, planejadoLiberado, nomes]);
 
   // A lista mais recente, para as ações de organização lerem sem esperar
   // o próximo render.
@@ -961,6 +1013,10 @@ export function useRascunhoErrata(
       grupos_renomeados: grupos
         .filter((g) => g.nomeSalvo !== null && g.nome !== g.nomeSalvo)
         .map((g) => ({ grupo_id: g.id, nome: g.nome })),
+      // Decisão 252: o que a regra comum viu como renomeado.
+      itens_renomeados: estrutura.flatMap((m) =>
+        m.tipo === "item_renomeado" ? [{ item_id: m.chave, nome: m.para }] : [],
+      ),
       ordem: mexeuNaOrdem
         ? itens.map((i) => ({
             item: chaveDaNova.get(i.id) ?? i.id,
@@ -1054,6 +1110,7 @@ export function useRascunhoErrata(
     editarCampo,
     editarTipo,
     editarNome,
+    nomeSalvoDe,
     adicionar,
     remover,
     reativar,

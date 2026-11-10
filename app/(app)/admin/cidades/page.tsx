@@ -1,5 +1,5 @@
 import { MapPin } from "lucide-react";
-import { requireSession } from "@/lib/auth/session";
+import { requireAdmin } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import type { Cidade } from "@/lib/types";
 import { CidadesList } from "./cidades-list";
@@ -9,7 +9,8 @@ import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 export const dynamic = "force-dynamic";
 
 export default async function CidadesPage() {
-  const session = await requireSession();
+  // Só do Admin desde 10/11/2026, como o resto de Configurações.
+  const session = await requireAdmin();
   const supabase = createClient();
 
   const { data, error } = await supabase

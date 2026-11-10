@@ -100,8 +100,12 @@ function colunasDosFornecedores(ehVeiculo: Set<string>): ColunaFiltravel<Fornece
 export function FornecedoresList({
   fornecedores,
   veiculoIds,
+  podeInativar,
 }: {
   fornecedores: Fornecedor[];
+  /** Inativar e reativar: só Admin e Financeiro (10/11/2026). Sem a
+   *  permissão, a coluna das ações fica vazia. */
+  podeInativar: boolean;
   /** Quem também é veículo de mídia (decisão 150): ganha o selo "Veículo",
    *  que leva ao cadastro em Cadastros › Veículos. */
   veiculoIds: string[];
@@ -289,7 +293,7 @@ export function FornecedoresList({
                   )}
                 </TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
-                  {f.status === "ativo" ? (
+                  {!podeInativar ? null : f.status === "ativo" ? (
                     <button
                       type="button"
                       onClick={() =>

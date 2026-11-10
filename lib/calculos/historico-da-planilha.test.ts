@@ -677,3 +677,46 @@ test("decisão 233: a alteração do financeiro só de parâmetros ganha os rót
   assert.deepEqual(a1.mudancaDeParametros, [{ rotulo: "Honorários", de: "10%", para: "15%" }]);
   assert.equal(versoes.find((v) => v.chave === "abertura")!.parametros.percentual_honorarios, 10);
 });
+
+// ---- Decisão 252: o item renomeado pela errata ----
+
+test("o item renomeado volta ao nome de antes; a errata mostra de → para", () => {
+  const versoes = montarHistorico(
+    base({
+      linhas: [linha("1", "ga", 1, 100, 50), linha("2", "ga", 2, 300, 200)],
+      erratas: [
+        errata("e1", "2026-10-05T12:00:00Z", [
+          // A linha 2 mudou de valor E de nome na mesma errata.
+          itemDeErrata({
+            acao: "alterada",
+            job_item_orcado_id: "2",
+            valor_unitario_de: 250,
+            valor_unitario_para: 300,
+            total_de: 250,
+            total_para: 300,
+          }),
+        ], {
+          estrutura: [
+            { tipo: "item_renomeado", chave: "1", de: "Produtor", para: "Item 1" },
+            { tipo: "item_renomeado", chave: "2", de: "Filmaker", para: "Item 2" },
+          ],
+        }),
+      ],
+    }),
+  );
+  const antes = versoes.find((v) => v.chave === "abertura")!;
+  assert.equal(porId(antes.itens, "1")?.item, "Produtor");
+  assert.equal(porId(antes.itens, "2")?.item, "Filmaker");
+  const daErrata = versoes.find((v) => v.chave === "errata-e1")!;
+  const m1 = daErrata.mudancas.find((m) => m.itemId === "1")!;
+  assert.equal(m1.acao, "renomeada");
+  assert.equal(m1.itemDe, "Produtor");
+  assert.equal(m1.item, "Item 1");
+  // A alterada carrega o nome de antes: uma mudança só por linha.
+  const m2 = daErrata.mudancas.filter((m) => m.itemId === "2");
+  assert.equal(m2.length, 1);
+  assert.equal(m2[0].acao, "alterada");
+  assert.equal(m2[0].itemDe, "Filmaker");
+  // Hoje a planilha tem os nomes novos.
+  assert.equal(porId(versoes.find((v) => v.tipo === "atual")!.itens, "1")?.item, "Item 1");
+});

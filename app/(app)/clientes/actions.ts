@@ -299,7 +299,7 @@ function codigoMarca(seq: number): string {
 
 /**
  * Quem cria cliente ou acrescenta marca: a tela (`cadastros.clientes.editar`,
- * admin e financeiro desde 07/10/2026) ou o cadastro rápido de dentro do
+ * admin e financeiro desde 07/10/2026, GP desde 10/11/2026) ou o cadastro rápido de dentro do
  * projeto (`.inline`, admin e GP).
  */
 async function checarCriarCliente(
@@ -320,12 +320,12 @@ export async function criarCliente(
   opcoes?: { semRedirect?: boolean },
 ): Promise<ActionResult> {
   const session = await requireSession();
-  // CRIAR aceita a tela (`editar`: Admin e Financeiro) ou o gate largo
+  // CRIAR aceita a tela (`editar`: Admin, Financeiro e GP) ou o gate largo
   // (`inline`, liberado em 18/09/2026: Admin e GP). Quem cria orcamento
   // precisa poder cadastrar o cliente que o orcamento pede — e cliente novo
   // nao mexe no cadastro de ninguem. Abrir o cadastro de um cliente que JA
-  // existe (atualizarCliente, inativar, reativar) continua em
-  // `cadastros.clientes.editar`.
+  // existe (atualizarCliente) continua em `cadastros.clientes.editar`;
+  // inativar e reativar, em `cadastros.clientes.inativar` (10/11/2026).
   const gate = await checarCriarCliente(session);
   if (!gate.ok) return gate;
 
@@ -979,7 +979,7 @@ export async function atualizarCliente(
 
 export async function inativarCliente(id: string): Promise<ActionResult> {
   const session = await requireSession();
-  const gate = await checarPermissao(session, "cadastros.clientes.editar");
+  const gate = await checarPermissao(session, "cadastros.clientes.inativar");
   if (!gate.ok) return gate;
   const supabase = createClient();
 
@@ -1007,7 +1007,7 @@ export async function inativarCliente(id: string): Promise<ActionResult> {
 
 export async function reativarCliente(id: string): Promise<ActionResult> {
   const session = await requireSession();
-  const gate = await checarPermissao(session, "cadastros.clientes.editar");
+  const gate = await checarPermissao(session, "cadastros.clientes.inativar");
   if (!gate.ok) return gate;
   const supabase = createClient();
 

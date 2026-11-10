@@ -1,9 +1,16 @@
+import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
+import { pode } from "@/lib/permissoes";
 import { ClienteForm } from "../cliente-form";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
 export default async function NovoClientePage() {
-  await requireSession();
+  const session = await requireSession();
+  // A página barra com a mesma regra do menu (10/11/2026): quem não vê
+  // Cadastros na barra não abre a tela digitando o endereço.
+  if (!pode(session.activeRole, "cadastros.clientes.ver")) {
+    redirect("/home?reason=sem_permissao_cadastros");
+  }
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">

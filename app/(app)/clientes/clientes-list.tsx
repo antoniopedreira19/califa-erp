@@ -74,7 +74,15 @@ const COLUNAS: ColunaFiltravel<Cliente>[] = [
   },
 ];
 
-export function ClientesList({ clientes }: { clientes: Cliente[] }) {
+export function ClientesList({
+  clientes,
+  podeInativar,
+}: {
+  clientes: Cliente[];
+  /** Inativar e reativar: só Admin e Financeiro (10/11/2026). Sem a
+   *  permissão, a coluna das ações fica vazia. */
+  podeInativar: boolean;
+}) {
   const router = useRouter();
   const [busca, setBusca] = React.useState("");
   const [mostrarInativos, setMostrarInativos] = React.useState(false);
@@ -237,7 +245,7 @@ export function ClientesList({ clientes }: { clientes: Cliente[] }) {
                   )}
                 </TableCell>
                 <TableCell onClick={(e) => e.stopPropagation()}>
-                  {c.status === "ativo" ? (
+                  {!podeInativar ? null : c.status === "ativo" ? (
                     <button
                       type="button"
                       onClick={() =>

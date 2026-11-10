@@ -1,6 +1,8 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Users, Plus, } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
+import { pode } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
 import type { Cliente } from "@/lib/types";
 import { EmptyState } from "@/components/empty-state";
@@ -12,6 +14,11 @@ export const dynamic = "force-dynamic";
 
 export default async function ClientesPage() {
   const session = await requireSession();
+  // A página barra com a mesma regra do menu (10/11/2026): quem não vê
+  // Cadastros na barra não abre a tela digitando o endereço.
+  if (!pode(session.activeRole, "cadastros.clientes.ver")) {
+    redirect("/home?reason=sem_permissao_cadastros");
+  }
   const supabase = createClient();
 
   const { data: clientes, error } = await supabase
@@ -64,7 +71,10 @@ export default async function ClientesPage() {
           }
         />
       ) : (
-        <ClientesList clientes={rows} />
+        <ClientesList
+          clientes={rows}
+          podeInativar={pode(session.activeRole, "cadastros.clientes.inativar")}
+        />
       )}
     </div>
   );

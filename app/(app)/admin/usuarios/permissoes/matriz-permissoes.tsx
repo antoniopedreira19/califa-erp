@@ -44,19 +44,23 @@ const LINHAS: readonly Linha[] = [
   { modulo: "Painel inicial", permissoes: { ver: "sidebar.home" } },
 
   // ---- Cadastros ----
+  // 10/11/2026: GP entrou em Clientes; GP e Produtor, em Fornecedores e
+  // Veículos. "Excluir" aqui é inativar e reativar.
   { modulo: "Cadastros", item: "Clientes",
     permissoes: {
-      ver: "sidebar.cadastros",
+      ver: "cadastros.clientes.ver",
       criar: "cadastros.clientes.editar",
       editar: "cadastros.clientes.editar",
-      excluir: "cadastros.clientes.editar",
+      excluir: "cadastros.clientes.inativar",
     },
   },
+  // Quem abre a tela cria e edita por ela (o gate da action é o da PP,
+  // `.inline`, mais o `.editar`); o Freelancer não abre a tela.
   { modulo: "Cadastros", item: "Fornecedores (tela)",
     permissoes: {
-      ver: "sidebar.cadastros",
-      criar: "cadastros.fornecedores.editar",
-      editar: "cadastros.fornecedores.editar",
+      ver: "cadastros.fornecedores.ver",
+      criar: "cadastros.fornecedores.ver",
+      editar: "cadastros.fornecedores.ver",
       excluir: "cadastros.fornecedores.editar",
     },
   },
@@ -71,18 +75,10 @@ const LINHAS: readonly Linha[] = [
   // grava pelas actions de fornecedores, com os mesmos gates.
   { modulo: "Cadastros", item: "Veículos de mídia",
     permissoes: {
-      ver: "sidebar.cadastros",
-      criar: "cadastros.fornecedores.editar",
-      editar: "cadastros.fornecedores.editar",
+      ver: "cadastros.fornecedores.ver",
+      criar: "cadastros.fornecedores.ver",
+      editar: "cadastros.fornecedores.ver",
       excluir: "cadastros.fornecedores.editar",
-    },
-  },
-  { modulo: "Cadastros", item: "Empresas do grupo",
-    permissoes: {
-      ver: "sidebar.cadastros",
-      criar: "cadastros.empresas.editar",
-      editar: "cadastros.empresas.editar",
-      excluir: "cadastros.empresas.editar",
     },
   },
   { modulo: "Cadastros", item: "Contas bancárias",
@@ -117,14 +113,8 @@ const LINHAS: readonly Linha[] = [
       excluir: "cadastros.categorias_orcamento.editar",
     },
   },
-  { modulo: "Cadastros", item: "Cidades",
-    permissoes: {
-      ver: "sidebar.cadastros",
-      criar: "cadastros.cidades.editar",
-      editar: "cadastros.cidades.editar",
-      excluir: "cadastros.cidades.editar",
-    },
-  },
+  // Cidades e Empresas moram em Configurações (/admin), só do Admin.
+  // Criar cidade de dentro do orçamento é `cadastros.cidades.inline`.
 
   // ---- Orçamentos ----
   { modulo: "Orçamentos", item: "Projetos e orçamentos",
@@ -252,15 +242,34 @@ const LINHAS: readonly Linha[] = [
     permissoes: { ver: "relatorios.ver" },
   },
 
-  // ---- Administração ----
-  { modulo: "Administração", item: "Usuários",
+  // ---- Configurações (era Administração até 10/11/2026) ----
+  { modulo: "Configurações", item: "Empresas do grupo",
+    permissoes: {
+      ver: "sidebar.administracao",
+      criar: "cadastros.empresas.editar",
+      editar: "cadastros.empresas.editar",
+      excluir: "cadastros.empresas.editar",
+    },
+  },
+  { modulo: "Configurações", item: "Cidades",
+    permissoes: {
+      ver: "sidebar.administracao",
+      criar: "cadastros.cidades.editar",
+      editar: "cadastros.cidades.editar",
+      excluir: "cadastros.cidades.editar",
+    },
+  },
+  { modulo: "Configurações", item: "Cidade rápida dentro do orçamento",
+    permissoes: { criar: "cadastros.cidades.inline" },
+  },
+  { modulo: "Configurações", item: "Usuários",
     permissoes: {
       ver: "sidebar.administracao",
       criar: "cadastros.usuarios.editar",
       editar: "cadastros.usuarios.editar",
     },
   },
-  { modulo: "Administração", item: "Auditoria (feed de eventos)",
+  { modulo: "Configurações", item: "Auditoria (feed de eventos)",
     permissoes: { ver: "auditoria.ver" },
   },
 ];
