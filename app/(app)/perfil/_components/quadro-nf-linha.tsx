@@ -10,7 +10,7 @@ import {
   Loader2,
   Upload,
 } from "lucide-react";
-import { anexarNfPorEscopo } from "@/lib/nf/anexos-actions";
+import { anexarNfPorEscopoForm } from "@/lib/nf/anexos-actions";
 import type { NfPendenteQuadro } from "@/lib/types";
 import type { NfAnexoEscopo } from "@/lib/nf/anexos-escopo";
 
@@ -115,11 +115,11 @@ export function QuadroNfLinha({ linha }: { linha: NfPendenteQuadro }) {
     if (!linha.escopo_id) return;
     setErro(null);
     startTransition(async () => {
-      const r = await anexarNfPorEscopo({
-        escopoTipo: linha.escopo_tipo,
-        escopoId: linha.escopo_id as string,
-        file,
-      });
+      const formData = new FormData();
+      formData.append("escopoTipo", linha.escopo_tipo);
+      formData.append("escopoId", linha.escopo_id as string);
+      formData.append("file", file);
+      const r = await anexarNfPorEscopoForm(formData);
       if (!r.ok) {
         setErro(r.message);
         return;

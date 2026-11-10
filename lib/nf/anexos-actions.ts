@@ -228,6 +228,33 @@ export async function anexarNfPorEscopo(input: {
 }
 
 /**
+ * Wrapper client-friendly que recebe FormData. Server Actions do Next.js nao
+ * aceitam `File` dentro de objeto plano, so FormData direto ou File como
+ * argumento solto. Esta wrapper mantem a API interna (anexarNfPorEscopo com
+ * objeto) para chamadas server-to-server e expoe FormData para client.
+ */
+export async function anexarNfPorEscopoForm(
+  formData: FormData,
+): Promise<ActionResult<{ nfId: string }>> {
+  const escopoTipo = formData.get("escopoTipo");
+  const escopoId = formData.get("escopoId");
+  const file = formData.get("file");
+
+  if (typeof escopoTipo !== "string" || typeof escopoId !== "string") {
+    return { ok: false, message: "Escopo invalido." };
+  }
+  if (!(file instanceof File)) {
+    return { ok: false, message: "Arquivo ausente." };
+  }
+
+  return anexarNfPorEscopo({
+    escopoTipo: escopoTipo as NfAnexoEscopo,
+    escopoId,
+    file,
+  });
+}
+
+/**
  * Remove a NF vinculada a um escopo. Dono ou RH/admin.
  */
 export async function removerNfPorEscopo(input: {
