@@ -1,5 +1,6 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
+import { pode } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
 import type { Fornecedor } from "@/lib/types";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +12,11 @@ export const dynamic = "force-dynamic";
 /** O cadastro do veículo (decisão 150): o fornecedor marcado como veículo. */
 export default async function EditarVeiculoPage({ params }: { params: { id: string } }) {
   const session = await requireSession();
+  // A página barra com a mesma regra do menu (10/11/2026): quem não vê
+  // Cadastros na barra não abre a tela digitando o endereço.
+  if (!pode(session.activeRole, "cadastros.fornecedores.ver")) {
+    redirect("/home?reason=sem_permissao_cadastros");
+  }
   const supabase = createClient();
 
   const { data, error } = await supabase

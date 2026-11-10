@@ -118,6 +118,7 @@ test("sidebar do Administrador contem os 8 itens esperados", () => {
 test("sidebar do Gerente de Producao: Home, Orcamentos, Jobs, Desembolsos", () => {
   const esperados = new Set<Recurso>([
     "sidebar.home",
+    "sidebar.cadastros",
     "sidebar.orcamentos",
     "sidebar.jobs",
     "sidebar.desembolsos",
@@ -131,6 +132,7 @@ test("sidebar do Gerente de Producao: Home, Orcamentos, Jobs, Desembolsos", () =
 test("sidebar do Produtor: Home, Orcamentos, Jobs, Desembolsos", () => {
   const esperados = new Set<Recurso>([
     "sidebar.home",
+    "sidebar.cadastros",
     "sidebar.orcamentos",
     "sidebar.jobs",
     "sidebar.desembolsos",
@@ -321,6 +323,36 @@ test("Financeiro cria e edita cliente pela tela, nao pelo projeto (07/10/2026)",
   assert.equal(pode("produtor", "cadastros.clientes.editar"), false);
 });
 
+test("Modulo Cadastros: quem abre cada tela (Tiago, 10/11/2026)", () => {
+  // Menu: Admin, Financeiro, GP e Produtor. Freelancer e RH ficam fora;
+  // o Freelancer cadastra fornecedor so pelo formulario rapido da PP.
+  assert.deepEqual(
+    new Set(getRolesFor("sidebar.cadastros")),
+    new Set<AppRole>(["administrador", "financeiro", "gerente_producao", "produtor"]),
+  );
+  assert.equal(pode("freelancer", "sidebar.cadastros"), false);
+  assert.equal(pode("rh", "sidebar.cadastros"), false);
+  assert.equal(pode("freelancer", "cadastros.fornecedores.inline"), true);
+
+  // Clientes: Admin, Financeiro e GP veem, criam e editam; inativar
+  // continua de Admin e Financeiro.
+  const clientesVer = new Set<AppRole>(["administrador", "financeiro", "gerente_producao"]);
+  assert.deepEqual(new Set(getRolesFor("cadastros.clientes.ver")), clientesVer);
+  assert.deepEqual(new Set(getRolesFor("cadastros.clientes.editar")), clientesVer);
+  assert.deepEqual(
+    new Set(getRolesFor("cadastros.clientes.inativar")),
+    new Set<AppRole>(["administrador", "financeiro"]),
+  );
+
+  // Fornecedores e Veiculos: a tela abre para quem ve o menu; inativar
+  // continua em `.editar` (Admin e Financeiro).
+  assert.deepEqual(
+    new Set(getRolesFor("cadastros.fornecedores.ver")),
+    new Set(getRolesFor("sidebar.cadastros")),
+  );
+  assert.equal(pode("produtor", "cadastros.fornecedores.editar"), false);
+});
+
 test("Financeiro cria e edita fornecedor pela tela, nao pelo PP (07/10/2026)", () => {
   assert.equal(pode("financeiro", "cadastros.fornecedores.editar"), true);
   assert.equal(pode("administrador", "cadastros.fornecedores.editar"), true);
@@ -334,8 +366,9 @@ test("So Administrador e GP cadastram cliente INLINE (decisao do Tiago, 18/09/20
   assert.equal(pode("produtor", "cadastros.clientes.inline"), false);
   assert.equal(pode("freelancer", "cadastros.clientes.inline"), false);
   assert.equal(pode("financeiro", "cadastros.clientes.inline"), false);
-  // E o inline nunca vira a tela cheia.
-  assert.equal(pode("gerente_producao", "cadastros.clientes.editar"), false);
+  // GP tambem edita pela tela desde 10/11/2026 (ver teste do modulo
+  // Cadastros); o Produtor continua sem.
+  assert.equal(pode("produtor", "cadastros.clientes.editar"), false);
 });
 
 test("Quem envia job para faturamento cadastra portal do cliente INLINE (decisao 050)", () => {
@@ -344,8 +377,6 @@ test("Quem envia job para faturamento cadastra portal do cliente INLINE (decisao
   assert.deepEqual(inline, envia);
   assert.ok(inline.has("administrador"));
   assert.ok(inline.has("gerente_producao"));
-  // Mas nao via a tela cheia de clientes
-  assert.equal(pode("gerente_producao", "cadastros.clientes.editar"), false);
   assert.equal(pode("produtor", "cadastros.clientes.portal_inline"), false);
   assert.equal(pode("financeiro", "cadastros.clientes.portal_inline"), false);
   assert.equal(pode("freelancer", "cadastros.clientes.portal_inline"), false);

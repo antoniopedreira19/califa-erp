@@ -1,6 +1,8 @@
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Plus, Radio } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
+import { pode } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
 import type { Fornecedor } from "@/lib/types";
 import { EmptyState } from "@/components/empty-state";
@@ -17,6 +19,11 @@ export const dynamic = "force-dynamic";
  */
 export default async function VeiculosPage() {
   const session = await requireSession();
+  // A página barra com a mesma regra do menu (10/11/2026): quem não vê
+  // Cadastros na barra não abre a tela digitando o endereço.
+  if (!pode(session.activeRole, "cadastros.fornecedores.ver")) {
+    redirect("/home?reason=sem_permissao_cadastros");
+  }
   const supabase = createClient();
 
   const [veiculosRes, usoRes] = await Promise.all([
@@ -83,7 +90,10 @@ export default async function VeiculosPage() {
           }
         />
       ) : (
-        <VeiculosList veiculos={veiculos} />
+        <VeiculosList
+          veiculos={veiculos}
+          podeInativar={pode(session.activeRole, "cadastros.fornecedores.editar")}
+        />
       )}
     </div>
   );
