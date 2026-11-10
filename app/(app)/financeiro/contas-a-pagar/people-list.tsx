@@ -7,6 +7,14 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { PeopleAprovarItem, TipoContratacao, FolhaOrigem } from "@/lib/types";
 import { tipoContratacaoLabel } from "@/lib/types";
 import type { ColaboradorPagamento } from "@/lib/financeiro/colaboradores-pagamento";
@@ -15,6 +23,10 @@ import type { FolhaLinhaFinanceiro } from "./people-list-types";
 
 type OrdenacaoColuna = "nome" | "valor" | null;
 type OrdenacaoDirecao = "asc" | "desc";
+
+// Sentinel usado no Select pra representar "sem filtro" — Radix Select nao
+// aceita SelectItem value="" (crasha).
+const SEM_FILTRO = "__sem_filtro__";
 
 const ESCOPO_OPCOES: {
   valor: PeopleAprovarItem["escopo_tipo"];
@@ -346,72 +358,97 @@ export function PeopleList({
   return (
     <div className="space-y-4">
       {/* Barra de filtros */}
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[220px]">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por nome..."
-            className="w-full rounded-lg border border-border bg-background pl-9 pr-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-california-red/30"
-          />
-        </div>
+      <div className="flex flex-wrap items-end gap-3">
+        <CampoFiltro rotulo="Buscar" className="min-w-[240px] flex-1">
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Nome do colaborador"
+              className="pl-9"
+            />
+          </div>
+        </CampoFiltro>
 
-        <select
-          value={filtroTipo}
-          onChange={(e) => setFiltroTipo(e.target.value)}
-          className="rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-california-red/30"
-        >
-          <option value="">Todos os tipos</option>
-          {ESCOPO_OPCOES.map((o) => (
-            <option key={o.valor} value={o.valor}>
-              {o.label}
-            </option>
-          ))}
-        </select>
+        <CampoFiltro rotulo="Tipo" className="min-w-[160px]">
+          <Select
+            value={filtroTipo || SEM_FILTRO}
+            onValueChange={(v) => setFiltroTipo(v === SEM_FILTRO ? "" : v)}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SEM_FILTRO}>Todos</SelectItem>
+              {ESCOPO_OPCOES.map((o) => (
+                <SelectItem key={o.valor} value={o.valor}>
+                  {o.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CampoFiltro>
 
-        <select
-          value={filtroFuncao}
-          onChange={(e) => setFiltroFuncao(e.target.value)}
-          className="rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-california-red/30"
-        >
-          <option value="">Todas as funções</option>
-          {funcoesDisponiveis.map((f) => (
-            <option key={f} value={f}>
-              {f}
-            </option>
-          ))}
-        </select>
+        <CampoFiltro rotulo="Função" className="min-w-[180px]">
+          <Select
+            value={filtroFuncao || SEM_FILTRO}
+            onValueChange={(v) => setFiltroFuncao(v === SEM_FILTRO ? "" : v)}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SEM_FILTRO}>Todas</SelectItem>
+              {funcoesDisponiveis.map((f) => (
+                <SelectItem key={f} value={f}>
+                  {f}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CampoFiltro>
 
-        <select
-          value={filtroEmpresa}
-          onChange={(e) => setFiltroEmpresa(e.target.value)}
-          className="rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-california-red/30"
-        >
-          <option value="">Todas as empresas</option>
-          {empresas.map((e) => (
-            <option key={e.id} value={e.id}>
-              {e.nome_fantasia}
-            </option>
-          ))}
-        </select>
+        <CampoFiltro rotulo="Empresa" className="min-w-[180px]">
+          <Select
+            value={filtroEmpresa || SEM_FILTRO}
+            onValueChange={(v) => setFiltroEmpresa(v === SEM_FILTRO ? "" : v)}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SEM_FILTRO}>Todas</SelectItem>
+              {empresas.map((e) => (
+                <SelectItem key={e.id} value={e.id}>
+                  {e.nome_fantasia}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CampoFiltro>
 
-        <select
-          value={filtroRegional}
-          onChange={(e) => setFiltroRegional(e.target.value)}
-          disabled={regionaisFiltradas.length === 0}
-          className="rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-california-red/30 disabled:opacity-50"
-        >
-          <option value="">Todas as regionais</option>
-          {regionaisFiltradas.map((r) => (
-            <option key={r.id} value={r.id}>
-              {r.nome}
-            </option>
-          ))}
-        </select>
+        <CampoFiltro rotulo="Regional" className="min-w-[160px]">
+          <Select
+            value={filtroRegional || SEM_FILTRO}
+            onValueChange={(v) => setFiltroRegional(v === SEM_FILTRO ? "" : v)}
+            disabled={regionaisFiltradas.length === 0}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SEM_FILTRO}>Todas</SelectItem>
+              {regionaisFiltradas.map((r) => (
+                <SelectItem key={r.id} value={r.id}>
+                  {r.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </CampoFiltro>
 
-        <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+        <span className="ml-auto pb-2 text-xs text-muted-foreground tabular-nums">
           {itemsFiltrados.length} de {items.length}
         </span>
       </div>
@@ -593,6 +630,25 @@ export function PeopleList({
           }}
         />
       )}
+    </div>
+  );
+}
+
+function CampoFiltro({
+  rotulo,
+  className,
+  children,
+}: {
+  rotulo: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className={`flex flex-col gap-1 ${className ?? ""}`}>
+      <label className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+        {rotulo}
+      </label>
+      {children}
     </div>
   );
 }
