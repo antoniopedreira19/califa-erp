@@ -8,16 +8,21 @@
  * dia e a tabela com as linhas do banco na ordem do extrato
  * (`dia-a-dia-tabela.tsx`). O fechamento é o de sempre (decisão 205): fechar
  * o dia D é fechar a conciliação até D.
+ *
+ * "Retirar este extrato" tira da conta o último arquivo importado, para o
+ * arquivo errado ou para recomeçar: desfaz o que foi conciliado com as linhas
+ * dele (como o "Desfazer" de cada linha) e apaga as linhas.
  */
 
 import * as React from "react";
-import { CheckCheck, ChevronLeft, ChevronRight, Lock, Unlock } from "lucide-react";
+import { AlertTriangle, CheckCheck, ChevronLeft, ChevronRight, Lock, Trash2, Unlock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { diasDaConta, motivoDeNaoFechar, type DiaDaConta } from "@/lib/conciliacao/dia-a-dia";
 import { InfoDica, LinhaDeAvisos, LinhaDoArquivo, linhasComMutuo, type PropsDaFila } from "./fila-da-conta";
 import { itensDoSistema, TabelaDeComposicoes, type AcoesDoDia } from "./dia-a-dia-tabela";
-import { conciliarMisto } from "./actions-dia-a-dia";
+import { conciliarMisto, mudarDataDaBaixa, mudarDataDaPrevisao, previaDeRetirarExtrato, retirarExtrato, type PreviaDaRetirada } from "./actions-dia-a-dia";
 import { fecharConciliacao } from "./actions-fechamento";
 import { repactuarDataPagamento } from "../contas-a-pagar/actions-titulos";
 import { repactuarPrevisaoRecebimento } from "../contas-a-receber/actions";
@@ -53,7 +58,7 @@ export function ConciliacaoDiaADia(p: PropsDaFila) {
   const primeiroAberto = dias.find((d) => d.estado !== "fechado")?.data ?? dias[dias.length - 1]?.data ?? null;
   const [dia, setDia] = React.useState<string | null>(primeiroAberto);
   React.useEffect(() => setDia(primeiroAberto), [conta]); // eslint-disable-line react-hooks/exhaustive-deps
-  // O dia escolhido saiu da lista (fechou): vai ao primeiro aberto.
+  // O dia escolhido saiu da lista (fechou, ou o extrato foi retirado): vai ao primeiro aberto.
   React.useEffect(() => {
     if (dia && !dias.some((d) => d.data === dia)) setDia(primeiroAberto);
   }, [dias, dia, primeiroAberto]);
@@ -82,6 +87,8 @@ export function ConciliacaoDiaADia(p: PropsDaFila) {
   const servidor: AcoesDoDia = React.useMemo(
     () => ({
       conciliarMisto: (linhaId, lancamentoIds, itens) => rodar(() => conciliarMisto({ linhaId, lancamentoIds, itens })),
+      mudarDataDaBaixa: (lancamentoIds, data) => rodar(() => mudarDataDaBaixa(lancamentoIds, data)),
+      mudarDataDaPrevisao: (movimentoId, data) => rodar(() => mudarDataDaPrevisao(movimentoId, data)),
       mudarDataDoTitulo: (l, data) =>
         rodar(async () => {
           if (l.lado === "receber") {
@@ -96,9 +103,34 @@ export function ConciliacaoDiaADia(p: PropsDaFila) {
     [rodar],
   );
 
+  // ---- Retirar o extrato importado ----
+  const [retirando, setRetirando] = React.useState<PreviaDaRetirada | null>(null);
+  const [lendoPrevia, setLendoPrevia] = React.useState(false);
+  const abrirRetirada = async () => {
+    setLendoPrevia(true);
+    const r = await previaDeRetirarExtrato(conta);
+    setLendoPrevia(false);
+    if (r.ok) setRetirando(r.previa);
+    else p.avisar(r.message);
+  };
+
   return (
     <>
-      <LinhaDoArquivo banco={p.banco} importar={p.importar} />
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+        <LinhaDoArquivo banco={p.banco} importar={p.importar} />
+        {p.banco.ultima && (
+          <button
+            type="button"
+            disabled={pending || lendoPrevia}
+            onClick={abrirRetirada}
+            title="Tira da conta as linhas do último extrato importado e desfaz o que foi conciliado com elas. Para um arquivo importado errado, ou para recomeçar."
+            className="ml-auto inline-flex h-8 items-center gap-1.5 rounded-lg border border-border bg-white px-2.5 text-xs font-semibold text-muted-foreground hover:border-california-red/40 hover:text-california-red disabled:opacity-50"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Retirar este extrato
+          </button>
+        )}
+      </div>
       <LinhaDeAvisos {...p} />
 
       <BarraDeDias dias={dias} dia={dia} setDia={setDia} fechadaAte={p.fechadaAte} onFechar={fecharDia} ocupado={pending} />
@@ -139,6 +171,26 @@ export function ConciliacaoDiaADia(p: PropsDaFila) {
 
       <TabelaDeComposicoes p={p} dia={dia} itensDoSistema={doSistema} saldoBase={p.condicoes?.ate && typeof p.condicoes.saldo_banco === "number" ? { ate: p.condicoes.ate, saldo: p.condicoes.saldo_banco } : null} servidor={servidor} avisar={p.avisar} />
 
+      {retirando && (
+        <RetirarOExtrato
+          previa={retirando}
+          ocupado={pending}
+          onFechar={() => setRetirando(null)}
+          onConfirmar={(motivo) => {
+            const previa = retirando;
+            setRetirando(null);
+            // O servidor desfaz as conciliações em partes (cada chamada, poucas
+            // linhas) e só então apaga o arquivo: a tela repete até acabar.
+            rodar(async () => {
+              for (let volta = 0; volta <= previa.conciliadas + 2; volta++) {
+                const res = await retirarExtrato({ contaId: conta, importacaoId: previa.importacaoId, motivo, conciliadasNoInicio: previa.conciliadas });
+                if (!res.ok || !res.continua) return res;
+              }
+              return { ok: false, message: "Não foi possível desfazer todas as conciliações deste extrato. Desfaça as que restam pela linha e retire de novo." };
+            });
+          }}
+        />
+      )}
     </>
   );
 }
@@ -267,5 +319,67 @@ function BarraDeDias({
         Todos os dias
       </button>
     </div>
+  );
+}
+
+/** A confirmação de retirar o extrato: o que sai e o que é desfeito, com os números. O motivo só é pedido quando há conciliação a desfazer. */
+function RetirarOExtrato({ previa, ocupado, onFechar, onConfirmar }: { previa: PreviaDaRetirada; ocupado: boolean; onFechar: () => void; onConfirmar: (motivo: string) => void }) {
+  const { arquivo, linhas, conciliadas, ignoradas, fechadoAte, travada } = previa;
+  const [motivo, setMotivo] = React.useState("");
+  const pedeMotivo = conciliadas > 0;
+  const bloqueio = fechadoAte ? `A conta está fechada até ${ddmm(fechadoAte)} e este extrato tem linhas nesse período. Reabra a conciliação antes de retirar o extrato.` : travada;
+  return (
+    <Dialog open onOpenChange={(a) => !a && onFechar()}>
+      <DialogContent className="max-w-[540px]">
+        <DialogHeader>
+          <DialogTitle>Retirar o extrato importado</DialogTitle>
+          <DialogDescription>
+            O arquivo <strong className="font-semibold text-foreground">{arquivo}</strong> sai desta conta. Dá para importar o mesmo arquivo de novo depois.
+          </DialogDescription>
+        </DialogHeader>
+        <ul className="space-y-1.5 text-sm">
+          <li>
+            <strong className="font-semibold">{linhas === 1 ? "1 linha do banco" : `${linhas} linhas do banco`}</strong> {linhas === 1 ? "sai" : "saem"} da conciliação.
+          </li>
+          <li>
+            <strong className="font-semibold">{conciliadas === 0 ? "Nenhuma conciliação" : conciliadas === 1 ? "1 conciliação" : `${conciliadas} conciliações`}</strong>{" "}
+            {conciliadas === 0
+              ? "foi feita com essas linhas: nada é desfeito."
+              : `${conciliadas === 1 ? "é desfeita" : "são desfeitas"}, como no “Desfazer” de cada linha: o lançamento volta a ficar sem linha no banco, e a baixa dada num “baixar e conciliar” é cancelada (o título volta a em aberto).`}
+          </li>
+          {ignoradas > 0 && <li>{ignoradas === 1 ? "1 linha ignorada sai junto." : `${ignoradas} linhas ignoradas saem junto.`}</li>}
+          <li className="text-muted-foreground">Os lançamentos e os títulos do sistema não são apagados.</li>
+        </ul>
+        {pedeMotivo && !bloqueio && (
+          <textarea
+            value={motivo}
+            onChange={(e) => setMotivo(e.target.value)}
+            rows={2}
+            placeholder="Motivo (pelo menos 10 caracteres): fica registrado com quem retirou"
+            className="w-full min-w-0 rounded-lg border border-border bg-white px-3 py-2 text-sm"
+          />
+        )}
+        {bloqueio && (
+          <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-900">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span>{bloqueio}</span>
+          </div>
+        )}
+        <DialogFooter>
+          <button type="button" onClick={onFechar} className="inline-flex h-9 items-center rounded-lg border border-border bg-white px-3 text-sm font-semibold hover:bg-muted">
+            Cancelar
+          </button>
+          <button
+            type="button"
+            disabled={!!bloqueio || ocupado || (pedeMotivo && motivo.trim().length < 10)}
+            onClick={() => onConfirmar(motivo)}
+            className="inline-flex h-9 items-center gap-2 rounded-lg bg-california-red px-3 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Trash2 className="h-4 w-4" />
+            Retirar o extrato
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

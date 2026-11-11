@@ -99,6 +99,10 @@ export interface AcoesDoDia {
   /** Baixas já feitas e títulos em aberto pagos pela mesma linha do banco. */
   conciliarMisto: (linhaId: string, lancamentoIds: string[], itens: EntradaDaBaixaEmLote["itens"]) => void;
   mudarDataDoTitulo: (l: Linha, data: string) => void;
+  /** A baixa lançada no dia errado, ainda sem linha do banco. */
+  mudarDataDaBaixa: (lancamentoIds: string[], data: string) => void;
+  /** A previsão da planilha: a data ajustada sobrevive à carga nova. */
+  mudarDataDaPrevisao: (movimentoId: string, data: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -395,11 +399,15 @@ export function TabelaDeComposicoes({
   const linhaDe = (c: Candidato | null): Linha | null => (c?.k === "titulo" ? (p.contexto.linhaPorChave.get(c.t.id) ?? null) : null);
   const salvarData = (c: Candidato, data: string) => {
     setEditando(null);
+    if (c.k === "baixa") return servidor.mudarDataDaBaixa(c.l.ids, data);
+    if (c.k === "planilha") return servidor.mudarDataDaPrevisao(c.h.id, data);
     const l = linhaDe(c);
     if (l?.editaData) servidor.mudarDataDoTitulo(l, data);
   };
-  /** O que muda de data por aqui: nesta etapa, o título que a aba Títulos já edita (PP, avulso e nota). */
-  const editaData = (c: Candidato) => c.k === "titulo" && !!linhaDe(c)?.editaData;
+  /** O que muda de data por aqui: a baixa, a previsão da planilha e o título
+   *  que a aba Títulos já edita (PP, avulso e nota). O desembolso, a fatura, a
+   *  guia, o estorno e a transferência em aberto ficam para depois. */
+  const editaData = (c: Candidato) => (c.k === "baixa" ? true : c.k === "planilha" ? c.previsao : !!linhaDe(c)?.editaData);
   const lEdit = linhaDe(editando);
   const notaAReceber = editando?.k === "titulo" && lEdit?.lado === "receber" && lEdit?.editaData;
 
@@ -606,7 +614,12 @@ export function TabelaDeComposicoes({
                           ? `${lEdit.t.origem_label} · ${lEdit.t.parcela_numero}/${lEdit.t.parcela_total}`
                           : lEdit.t.origem_label
                         : (lEdit?.origem ?? "Título"),
-                vencOriginal: editando.k === "titulo" ? (lEdit?.lado === "pagar" ? lEdit.t.venc_original : lEdit?.vencimento) ?? null : null,
+                vencOriginal:
+                  editando.k === "titulo"
+                    ? ((lEdit?.lado === "pagar" ? lEdit.t.venc_original : lEdit?.vencimento) ?? null)
+                    : editando.k === "planilha"
+                      ? (editando.h.dataDaPlanilha ?? editando.data)
+                      : null,
                 primeiraData: editando.k === "titulo" && lEdit?.lado === "pagar" ? (lEdit.t.data_pagamento_primeira ?? null) : null,
                 dataAtual: editando.data,
               }
@@ -1337,6 +1350,8 @@ function LinhaSoNoSistema({ c, p, linhas, onEditarData, onAssociar }: { c: Candi
   const e = extras(c, p);
   const l = c.k === "titulo" ? p.contexto.linhaPorChave.get(c.t.id) : undefined;
   const venc = l?.vencimento && l.vencimento !== c.data ? l.vencimento : null;
+  // A previsão com a data ajustada pela tela mostra a da planilha embaixo.
+  const daPlanilha = c.k === "planilha" && c.h.dataDaPlanilha && c.h.dataDaPlanilha !== c.data ? c.h.dataDaPlanilha : null;
   const alvos = linhas.filter((x) => Math.sign(x.r.mov.valor) === Math.sign(c.valor));
   const menu: AcaoDescrita[] =
     c.k === "baixa" && c.l.cancelamento ? [{ rotulo: "Cancelar baixa", dica: "O banco não mostra este pagamento: cancela a baixa e o título volta a ficar em aberto.", icone: Undo2, onClick: () => p.acoes.cancelarBaixa(c.l), perigo: true }] : [];
@@ -1348,12 +1363,13 @@ function LinhaSoNoSistema({ c, p, linhas, onEditarData, onAssociar }: { c: Candi
         </td>
         <td className={cn("corte whitespace-nowrap font-mono text-xs", CEL)}>
           <span className="inline-flex items-start gap-1.5">
-            <button type="button" onClick={onEditarData ?? undefined} disabled={!onEditarData} title={!onEditarData ? "A data deste lançamento ainda não muda por aqui: mude na tela dele." : c.k === "baixa" ? "Editar a data da baixa" : "Editar data prevista de pagamento"} aria-label="Editar a data" className="rounded p-0.5 text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-30 hover:bg-muted hover:text-california-red">
+            <button type="button" onClick={onEditarData ?? undefined} disabled={!onEditarData} title={!onEditarData ? "A data deste lançamento ainda não muda por aqui: mude na tela dele." : c.k === "baixa" ? "Editar a data da baixa" : c.k === "planilha" ? "Editar a data da previsão" : "Editar data prevista de pagamento"} aria-label="Editar a data" className="rounded p-0.5 text-muted-foreground/60 disabled:cursor-not-allowed disabled:opacity-30 hover:bg-muted hover:text-california-red">
               <Pencil className="h-3 w-3" />
             </button>
             <span className="leading-tight">
               {ddmm(c.data)}
               {venc && <span className="block font-sans text-[10px] text-amber-700">venc. {ddmm(venc)}</span>}
+              {daPlanilha && <span className="block font-sans text-[10px] text-amber-700">planilha {ddmm(daPlanilha)}</span>}
             </span>
           </span>
         </td>

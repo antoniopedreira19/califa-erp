@@ -395,6 +395,8 @@ type CaudaCrua = {
   regional_todas: boolean | null;
   grupo: string | null;
   extrato_linha_id: string | null;
+  /** A data da planilha, quando a previsão tem outra data (ligada ao banco, ou ajustada pela tela). */
+  data_prevista: string | null;
   carga: { tipo: string; planilha_versao: string | null } | null;
 };
 
@@ -688,7 +690,7 @@ export async function carregarBancoDaConciliacao(
           (de, ate) =>
             supabase
               .from("historico_movimentos")
-              .select("id, data, valor, job_nome, descricao, fornecedor, regional_nome, regional_todas, grupo, extrato_linha_id, carga:historico_cargas!inner(tipo, situacao, planilha_versao)")
+              .select("id, data, data_prevista, valor, job_nome, descricao, fornecedor, regional_nome, regional_todas, grupo, extrato_linha_id, carga:historico_cargas!inner(tipo, situacao, planilha_versao)")
               .eq("tenant_id", tenantId)
               .eq("conta_bancaria_id", contaId)
               .in("carga.tipo", ["cauda", "previsao"])
@@ -738,6 +740,8 @@ export async function carregarBancoDaConciliacao(
       // Decisão 243: a regional da planilha ("TD" quando é de todas).
       regional: h.regional_todas ? "TD" : h.regional_nome,
       grupo: h.grupo,
+      // Decisão 253: a data que a planilha tem, quando a tela ajustou a da previsão.
+      dataDaPlanilha: h.data_prevista && h.data_prevista !== h.data ? h.data_prevista : null,
     };
     if (h.extrato_linha_id) {
       caudaPorLinha.set(h.extrato_linha_id, [...(caudaPorLinha.get(h.extrato_linha_id) ?? []), item]);
