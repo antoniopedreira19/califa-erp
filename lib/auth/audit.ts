@@ -260,6 +260,8 @@ export type AuditAction =
   | "pedido_compra.aprovada"
   | "pedido_compra.desaprovada"
   | "pedido_compra.reprovada"
+  // Decisão 253: "Reverter aprovação" no Contas a Pagar (avaliação ou rejeitar).
+  | "pedido_compra.aprovacao_revertida"
   // 07/10/2026 (decisão 153): a PP a emitir, antes de gerar a PP.
   | "pedido_compra.a_emitir.salva"
   | "pedido_compra.a_emitir.editada"
@@ -353,6 +355,7 @@ export type AuditAction =
   | "desembolso.aprovada"
   | "desembolso.rejeitada"
   | "desembolso.cancelada"
+  | "desembolso.aprovacao_revertida"
   | "desembolso.parcela_paga"
   | "desembolso.parcela_baixa_estornada"
   | "verba_producao.prestacao_fechada"

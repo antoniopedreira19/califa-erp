@@ -902,6 +902,10 @@ export async function devolverFolhaParaAprovacao(input: {
   contaAvulsaId?: string;
   folhaId?: string;
   motivo: string;
+  /** Decisão 253: "avaliacao" (o padrão) volta a linha para "Aguardando
+   *  aprovação"; "rejeitar" devolve ao RH como pendente de correção, com o
+   *  motivo — o mesmo estado da reprovação de uma linha enviada. */
+  destino?: "avaliacao" | "rejeitar";
 }): Promise<ActionResult> {
   const session = await requireSession();
   const gate = await checarPermissao(session, "rh.folhas.aprovar_financeiro");
@@ -1005,14 +1009,27 @@ export async function devolverFolhaParaAprovacao(input: {
     }
   }
 
+  const rejeitar = input.destino === "rejeitar";
   const { error: upError } = await supabase
     .from("folhas_pagamento")
-    .update({
-      status: "enviada",
-      aprovada_em: null,
-      aprovada_por: null,
-      data_pagamento: null,
-    })
+    .update(
+      rejeitar
+        ? {
+            status: "pendente_correcao",
+            motivo_pendencia: motivo,
+            reprovada_em: new Date().toISOString(),
+            reprovada_por: session.profile.id,
+            aprovada_em: null,
+            aprovada_por: null,
+            data_pagamento: null,
+          }
+        : {
+            status: "enviada",
+            aprovada_em: null,
+            aprovada_por: null,
+            data_pagamento: null,
+          },
+    )
     .eq("id", folhaId);
   if (upError) {
     console.error("[folha.devolver.up_folha]", upError.message);
@@ -1028,6 +1045,7 @@ export async function devolverFolhaParaAprovacao(input: {
       colaborador_id: folha.colaborador_id,
       competencia: chaveCompetencia(folha.competencia_ano, folha.competencia_mes),
       motivo,
+      destino: rejeitar ? "rejeitar" : "avaliacao",
       titulos_removidos: contas.map((c) => ({
         codigo: c.codigo,
         valor: (centavos(c.valor) / 100).toFixed(2),

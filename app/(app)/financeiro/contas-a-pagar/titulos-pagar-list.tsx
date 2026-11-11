@@ -34,7 +34,7 @@ import {
   Undo2,
   Wallet,
 } from "lucide-react";
-import { DevolverFolhaDialog } from "./devolver-folha-dialog";
+import { ReverterAprovacaoDialog } from "./reverter-aprovacao-dialog";
 import { verbaAguardaProducao } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -464,7 +464,13 @@ export function TitulosPagarList({
   );
 
   const [baixando, setBaixando] = React.useState<TituloRow | null>(null);
-  const [devolvendo, setDevolvendo] = React.useState<TituloRow | null>(null);
+  // Decisão 253: o "Reverter aprovação" de PP, desembolso e folha ainda sem
+  // baixa (substitui o "Devolver para a aprovação" da folha).
+  const [revertendo, setRevertendo] = React.useState<TituloRow | null>(null);
+  const reversivel = (r: TituloRow) =>
+    (r.origem === "pp" || r.origem === "desembolso" || (r.origem === "folha" && podeDevolverFolha)) &&
+    r.status !== "pago" &&
+    !ehParcial(r);
   /** Título JÁ PAGO aberto para conferência — e para estornar, se for o
    *  caso. Clicar na linha paga é o que o abre (18/08/2026). */
   const [conferindo, setConferindo] = React.useState<TituloRow | null>(null);
@@ -950,10 +956,31 @@ export function TitulosPagarList({
           setErroAcao(null);
           setConferindo(tituloDe(l));
         }}
+        sobOLapis={(l) => {
+          // Decisão 253: o ↺ do "Reverter aprovação", logo abaixo do lápis.
+          const r = tituloDe(l);
+          if (!reversivel(r)) return null;
+          return (
+            <button
+              type="button"
+              title="Reverter aprovação: voltar para avaliação ou rejeitar"
+              aria-label="Reverter aprovação"
+              onClick={(e) => {
+                e.stopPropagation();
+                setErroAcao(null);
+                setRevertendo(r);
+              }}
+              className="rounded p-0.5 text-muted-foreground/60 hover:bg-muted hover:text-california-red"
+            >
+              <Undo2 className="h-3 w-3" />
+            </button>
+          );
+        }}
         detalhes={(l) => {
           const r = tituloDe(l);
           // As ações que moravam soltas na linha (decisão 195): o olho do
-          // parcial e o "Devolver para a aprovação" da folha.
+          // parcial e, desde a 253, o "Reverter aprovação" (que também tem o
+          // ↺ embaixo do lápis).
           const acoes: AcaoDoDetalhe[] = [];
           if (ehParcial(r)) {
             acoes.push({
@@ -965,13 +992,13 @@ export function TitulosPagarList({
               },
             });
           }
-          if (podeDevolverFolha && r.origem === "folha" && r.status !== "pago" && !ehParcial(r)) {
+          if (reversivel(r)) {
             acoes.push({
-              rotulo: "Devolver para a aprovação",
+              rotulo: "Reverter aprovação",
               icone: Undo2,
               onClick: () => {
                 setErroAcao(null);
-                setDevolvendo(r);
+                setRevertendo(r);
               },
             });
           }
@@ -1013,18 +1040,23 @@ export function TitulosPagarList({
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <Info className="h-3.5 w-3.5" />
         Baixa é feita aqui. A aprovação e a rejeição continuam na aba de
-        Pedidos de Produção. O olho do título pago e o ⓘ do parcial abrem as
-        baixas para conferir e, se preciso, estornar ou cancelar.
+        Pedidos de Produção; antes da baixa, o ↺ embaixo da data reverte a
+        aprovação (volta para avaliação ou rejeita). O olho do título pago e o
+        ⓘ do parcial abrem as baixas para conferir e, se preciso, estornar ou
+        cancelar.
       </p>
 
-      {devolvendo && (
-        <DevolverFolhaDialog
-          contaAvulsaId={devolvendo.id}
-          descricao={devolvendo.descricao}
-          valor={devolvendo.valor}
-          open={devolvendo !== null}
+      {revertendo && (
+        <ReverterAprovacaoDialog
+          origem={revertendo.origem as "pp" | "desembolso" | "folha"}
+          tituloId={revertendo.id}
+          descricao={
+            revertendo.origem === "folha" ? revertendo.descricao : `${revertendo.origem_label} · ${revertendo.descricao}`
+          }
+          valor={revertendo.valor}
+          open={revertendo !== null}
           onOpenChange={(o) => {
-            if (!o) setDevolvendo(null);
+            if (!o) setRevertendo(null);
           }}
         />
       )}

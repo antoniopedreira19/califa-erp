@@ -106,6 +106,9 @@ export interface PropsDaPlanilha<L extends LinhaDaPlanilha> {
   onVerBaixas: (l: L) => void;
   /** O ⓘ da linha. */
   detalhes: (l: L) => React.ReactNode;
+  /** O ícone logo abaixo do lápis da data, na altura da linha do
+   *  vencimento (decisão 253: o ↺ do "Reverter aprovação"). */
+  sobOLapis?: (l: L) => React.ReactNode;
   /** O título que o motor achou numa linha do extrato do banco ainda não
    *  conciliada (decisão 202): a faixa verde na borda, o ícone do banco ao
    *  lado da data e o "Baixar" com a data e o valor do banco. */
@@ -402,6 +405,12 @@ function LinhaDaTabela<L extends LinhaDaPlanilha>({
         l.transferencia.destinoContaId !== p.contaId));
   const cancelado = l.status === "cancelado";
   const situacao = cancelado ? ({ tipo: "em_dia" } as const) : situacaoDaData(l, p.hoje);
+  const sobLapis = !l.pagoEm && !cancelado ? (p.sobOLapis?.(l) ?? null) : null;
+  // Embaixo do lápis fica uma coluna livre: o texto do vencimento começa
+  // depois dela, e o ícone de `sobOLapis` mora nela.
+  const recuo = l.editaData || sobLapis !== null;
+  const temLinhaDoVencimento =
+    situacao.tipo === "vencido" || situacao.tipo === "depois_do_vencimento" || situacao.tipo === "antes_do_vencimento";
   const atrasado = situacao.tipo === "vencido" || situacao.tipo === "depois_do_vencimento";
   const recebe = l.entra || (l.transferencia !== null && l.transferencia.destinoContaId === p.contaId);
   const { texto: textoReg, dica: dicaReg, rateado } = textoDaRegional(l.rateio);
@@ -517,6 +526,7 @@ function LinhaDaTabela<L extends LinhaDaPlanilha>({
         {!l.pagoEm && !cancelado && p.caixa(l)}
       </td>
       <td className="whitespace-nowrap px-3 py-2">
+        <div className="relative">
         <span className="inline-flex items-center gap-1.5">
           {l.editaData && !l.pagoEm && !cancelado && (
             <button
@@ -552,12 +562,12 @@ function LinhaDaTabela<L extends LinhaDaPlanilha>({
         {/* Embaixo da data prevista, só quando ela difere do vencimento, ou
             quando o título venceu (há quantos dias). */}
         {situacao.tipo === "vencido" ? (
-          <span className={cn("block text-[10px] font-semibold text-california-red", l.editaData && "pl-[18px]")}>
+          <span className={cn("block text-[10px] font-semibold text-california-red", recuo && "pl-[18px]")}>
             venceu há {situacao.dias} {situacao.dias === 1 ? "dia" : "dias"}
           </span>
         ) : situacao.tipo === "depois_do_vencimento" ? (
           <span
-            className={cn("block text-[10px] font-semibold text-california-red", l.editaData && "pl-[18px]")}
+            className={cn("block text-[10px] font-semibold text-california-red", recuo && "pl-[18px]")}
             title={
               recebe
                 ? "A data prevista é depois do vencimento: o cliente fica em atraso."
@@ -568,10 +578,18 @@ function LinhaDaTabela<L extends LinhaDaPlanilha>({
             <span className="block font-normal">{recebe ? "atraso do cliente" : "multa e juros"}</span>
           </span>
         ) : situacao.tipo === "antes_do_vencimento" ? (
-          <span className={cn("block text-[10px] text-amber-700", l.editaData && "pl-[18px]")}>
+          <span className={cn("block text-[10px] text-amber-700", recuo && "pl-[18px]")}>
             venc. {dataBR(situacao.vencimento).slice(0, 5)}
           </span>
         ) : null}
+        {sobLapis !== null && (
+          <>
+            {/* Sem a linha do vencimento, a altura dela fica reservada. */}
+            {!temLinhaDoVencimento && <span className="block h-5" />}
+            <span className="absolute left-0 top-5 flex h-5 items-center">{sobLapis}</span>
+          </>
+        )}
+        </div>
       </td>
       {celulaDoValor("credito")}
       {celulaDoValor("debito")}

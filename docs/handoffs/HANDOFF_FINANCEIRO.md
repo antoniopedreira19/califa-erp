@@ -8969,3 +8969,10 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **A regra:** o título com tipo e sem subtipo, cujo tipo tem exatamente um subtipo ativo, fica com o centro completo por esse subtipo (`lib/financeiro/subtipo-unico.ts`, com teste). Aplicada em `montarTitulosAPagar`: Títulos a Pagar, aba Títulos e Conciliação automática. A baixa de um por um já abre com o subtipo escolhido.
 - **Só na leitura:** nenhuma PP é gravada e não há migration. Com um segundo subtipo ativo no tipo, a regra se desliga e a baixa volta a pedir a escolha.
 - **Conferido** na California Santander, de 01/11 a 06/11, contra a produção: Prontos para conciliar de 0 para 45, "Sem centro de custo" de 78 para 0.
+
+## ⚠️ Nota de 2026-11-11 — "Reverter aprovação" no Contas a Pagar (decisão 253, revê a 083)
+
+- **Títulos a Pagar:** o ↺ logo abaixo do lápis da data (e no ⓘ) reverte a aprovação de PP, desembolso e folha **antes da baixa**. O pop-up pede o destino, "Voltar para avaliação" ou "Rejeitar", e o motivo (mínimo 10 caracteres). A remessa não trava a PP e o desembolso; a folha mantém a trava que já tinha.
+- **Tela da PP aprovada:** "Reverter aprovação" no rodapé, no lugar do "Reprovar PP" (que virou a saída "Rejeitar"). **Pedidos de Desembolsos:** "Reverter aprovação" ao lado de "Cancelar".
+- **Banco:** `reverter_aprovacao_pp` e `reverter_aprovacao_desembolso` (migration `20261111500001`, aditiva). A volta para avaliação desfaz o que a aprovação gravou (datas, forma, cartão, centro, prazo, foto dos anexos, "fora do cadastro") e põe o motivo no evento "Aprovação desfeita" da PP.
+- **Conferido no Sandbox:** PP-00102 voltou para avaliação pela tela e foi reaprovada (pediu de novo o "fora do cadastro"); PP-00111 rejeitada pela tela. Desembolso, papel de GP e a saída "Rejeitar" da folha, em transação desfeita.
