@@ -267,6 +267,8 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 250 | *Reservada* (travar a planilha e a linha vermelha depois do envio, em outra sessão) | — |
 | 251 | [O tipo com um único subtipo ativo completa o centro de custo](251-subtipo-unico-completa-o-centro-de-custo.md) | 2026-11-10 |
 | 252 | [A errata renomeia o item que já existe na planilha do job](252-errata-renomeia-o-item.md) | 2026-11-10 |
+| 253 | [Reverter a aprovação no Contas a Pagar: PP, desembolso e folha](253-reverter-aprovacao-no-contas-a-pagar.md) | 2026-11-11 |
+| 254 | [A conciliação dia a dia: a linha do banco com os lançamentos dela, e a correspondência só no mesmo dia](254-conciliacao-dia-a-dia.md) | 2026-11-11 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -279,4 +281,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 253**. (A 240 está em uso por outra frente, ainda sem arquivo neste índice.) (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 255**. (A 240 está em uso por outra frente, ainda sem arquivo neste índice.) (091 e 092 existem na pasta e ainda não estão nesta tabela.)

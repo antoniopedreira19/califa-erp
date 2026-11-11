@@ -12,7 +12,6 @@
 import type { MutuoDaLinha } from "@/lib/financeiro/mutuo";
 import {
   casar,
-  diasEntre,
   gruposDeIguais,
   type CentroDoTitulo,
   type GrupoDeIguais,
@@ -281,8 +280,51 @@ export interface ConciliacaoDaConta {
   naoApareceu: LancamentoSemLinha[];
 }
 
-/** Até quantos dias antes da data prevista a linha do banco reconhece a previsão da planilha (decisão 232). Depois dela, sem limite. */
-const JANELA_DA_PREVISAO = 10;
+/**
+ * O pagamento agrupado (decisão 254): o banco pagou num lançamento só várias
+ * baixas do MESMO fornecedor feitas no MESMO dia. Para cada linha do banco
+ * sem baixa de valor igual no dia, as baixas de um fornecedor naquele dia (de
+ * 2 a 6) que somam a linha centavo a centavo; só quando a combinação é única.
+ * Sai no formato da remessa já baixada, e o passo 1c do motor a liga.
+ */
+export function pagamentosAgrupados(pendentes: MovimentoDaLinha[], lancamentos: LancamentoSemLinha[]): RemessaBaixada[] {
+  const c = (v: number) => Math.round(Math.abs(v) * 100);
+  const saida: RemessaBaixada[] = [];
+  const usadas = new Set<string>();
+  for (const m of pendentes) {
+    const doDia = lancamentos.filter((l) => l.data === m.data && Math.sign(l.valor) === Math.sign(m.valor) && !usadas.has(l.id));
+    if (doDia.some((l) => c(l.valor) === c(m.valor))) continue;
+    const porFornecedor = new Map<string, LancamentoSemLinha[]>();
+    for (const l of doDia) if (l.fornecedor) porFornecedor.set(l.fornecedor, [...(porFornecedor.get(l.fornecedor) ?? []), l]);
+    const achadas: LancamentoSemLinha[][] = [];
+    for (const ls of porFornecedor.values()) {
+      if (ls.length < 2 || ls.length > 12) continue;
+      const busca = (i: number, escolhidas: LancamentoSemLinha[], soma: number): void => {
+        if (soma === c(m.valor) && escolhidas.length >= 2) {
+          achadas.push(escolhidas);
+          return;
+        }
+        if (escolhidas.length === 6 || soma >= c(m.valor)) return;
+        for (let k = i; k < ls.length; k++) busca(k + 1, [...escolhidas, ls[k]], soma + c(ls[k].valor));
+      };
+      busca(0, [], 0);
+    }
+    if (achadas.length !== 1) continue;
+    const ls = achadas[0];
+    ls.forEach((l) => usadas.add(l.id));
+    saida.push({
+      ...ls[0],
+      id: `ag:${m.id}`,
+      ids: ls.flatMap((l) => l.ids),
+      membros: ls.map((l) => l.id),
+      valor: Math.sign(m.valor) * (c(m.valor) / 100),
+      descricao: `${ls.length} baixas · ${ls[0].fornecedor}`,
+      corrigivel: false,
+      cancelamento: null,
+    });
+  }
+  return saida;
+}
 
 /** Roda o motor nas linhas do banco ainda sem solução. */
 export function conciliarConta(
@@ -312,7 +354,7 @@ export function conciliarConta(
   // (passo 1) continua na frente.
   const cauda = dados.historico ?? [];
   const temBaixa = (m: MovimentoDaLinha) =>
-    dados.lancamentos.some((l) => Math.round(l.valor * 100) === Math.round(m.valor * 100) && Math.abs(diasEntre(l.data, m.data)) <= 3);
+    dados.lancamentos.some((l) => Math.round(l.valor * 100) === Math.round(m.valor * 100) && l.data === m.data);
   // A linha que uma regra do extrato descreve (a tarifa, a aplicação e o
   // resgate automáticos) é do banco, não de um job: em 27/10/2026 uma
   // aplicação de R$ 11.000 casou com dois pagamentos de um job do mesmo dia
@@ -323,17 +365,18 @@ export function conciliarConta(
   };
   const doDia = casarComHistorico(pendentes.filter((m) => !temBaixa(m) && !daRegra(m)), cauda, { soNoDia: true });
   const usadasDaCauda = new Set([...doDia.values()].flat());
+  const agrupados = pagamentosAgrupados(pendentes.filter((m) => !doDia.has(m)), dados.lancamentos);
   const res = casar(pendentes.filter((m) => !doDia.has(m)), {
     titulos,
     lancamentos: dados.lancamentos,
     lotes,
-    remessasBaixadas: dados.remessasBaixadas,
+    remessasBaixadas: [...dados.remessasBaixadas, ...agrupados],
     regras: dados.regras,
   });
   // Depois dos títulos: o que ficou sem par procura a cauda até 5 dias e
   // pelas somas do dia.
   const semPar = res.filter((r) => r.estado === "sem_par").map((r) => r.mov);
-  const depois = casarComHistorico(semPar, cauda.filter((h) => !usadasDaCauda.has(h)));
+  const depois = casarComHistorico(semPar, cauda.filter((h) => !usadasDaCauda.has(h)), { janela: 0 });
   const doHistorico = new Map([...doDia, ...depois]);
   const porId = new Map(res.map((r) => [r.mov.id, r]));
   for (const [m, historicos] of doHistorico) {
@@ -350,23 +393,21 @@ export function conciliarConta(
     });
   }
   // Por último, as previsões da planilha (decisão 232): o que ainda ficou sem
-  // par procura a previsão de mesmo valor, até 10 dias antes da data prevista
-  // e sem limite depois dela. A previsão vencida e não paga continua valendo,
-  // como a do título a receber, que rola até o pagamento: o atraso e a
-  // inadimplência não a perdem. O título do sistema vem antes. Só se resolve
-  // sozinha a previsão única desse valor no alcance; com outra igual, pede
-  // conferência. A linha do banco até o dia da planilha não é previsão: a
-  // planilha já a teria como realizada.
+  // par procura a previsão de mesmo valor NO DIA (decisão 254; antes, até 10
+  // dias antes da data prevista e sem limite depois). A previsão de outra
+  // data não se perde: a pessoa muda a data dela ou a escolhe na linha. O
+  // título do sistema vem antes. Só se resolve sozinha a previsão única desse
+  // valor no dia; com outra igual, pede conferência. A linha do banco até o
+  // dia da planilha não é previsão: a planilha já a teria como realizada.
   const previsoes = dados.previsoes ?? [];
   if (previsoes.length) {
     const desde = dados.previsoesDesde ?? "";
     const aindaSemPar = semPar.filter((m) => !depois.has(m) && m.data > desde);
-    for (const [m, historicos] of casarComHistorico(aindaSemPar, previsoes, { janela: JANELA_DA_PREVISAO, semLimiteDeAtraso: true })) {
+    for (const [m, historicos] of casarComHistorico(aindaSemPar, previsoes, { soNoDia: true })) {
       const um = historicos.length === 1;
       const iguais = previsoes.filter(
-        (h) => Math.round(h.valor * 100) === Math.round(m.valor * 100) && diasEntre(m.data, h.data) <= JANELA_DA_PREVISAO,
+        (h) => Math.round(h.valor * 100) === Math.round(m.valor * 100) && h.data === m.data,
       ).length;
-      const atraso = um ? -diasEntre(m.data, historicos[0].data) : 0;
       porId.set(m.id, {
         mov: m,
         estado: "historico",
@@ -374,7 +415,7 @@ export function conciliarConta(
         candidatos: [],
         historicos,
         motivo: um
-          ? `A previsão da planilha para ${diaMes(historicos[0].data)}, com o mesmo valor${atraso > JANELA_DA_PREVISAO ? `, paga com ${atraso} dias de atraso` : ""}${iguais > 1 ? `; há ${iguais} previsões desse valor em aberto, confira` : ""}.`
+          ? `A previsão da planilha para ${diaMes(historicos[0].data)}, com o mesmo valor${iguais > 1 ? `; há ${iguais} previsões desse valor em aberto, confira` : ""}.`
           : `${historicos.length} previsões da planilha de ${diaMes(historicos[0].data)} que somam o valor do banco.`,
       });
     }
@@ -392,7 +433,7 @@ export function conciliarConta(
   return {
     resultados,
     titulos: new Map(titulos.map((t) => [t.id, t])),
-    lancamentos: new Map([...dados.lancamentos, ...dados.remessasBaixadas].map((l) => [l.id, l])),
+    lancamentos: new Map([...dados.lancamentos, ...dados.remessasBaixadas, ...agrupados].map((l) => [l.id, l])),
     naoApareceu,
   };
 }

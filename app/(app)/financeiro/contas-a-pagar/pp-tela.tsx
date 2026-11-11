@@ -49,6 +49,7 @@ import {
   Download,
   FileText,
   Paperclip,
+  Undo2,
   X,
 } from "lucide-react";
 import {
@@ -91,7 +92,8 @@ import {
   type CamposDoDocumento,
 } from "@/lib/calculos/prestacao-da-verba";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
-import { rejeitarPedidoCompraFinanceiro, reprovarPPAprovada } from "./actions";
+import { rejeitarPedidoCompraFinanceiro } from "./actions";
+import { ReverterAprovacaoDialog } from "./reverter-aprovacao-dialog";
 import {
   signedUrlPdf,
   signedUrlAnexo,
@@ -157,10 +159,9 @@ export function PPTela(
   const [motivo, setMotivo] = React.useState("");
   const [aprovarPrestacaoAberto, setAprovarPrestacaoAberto] = React.useState(false);
   const [askReprovar, setAskReprovar] = React.useState(false);
-  // Reprovar a PP APROVADA (decisão 083) — motivo próprio, para não
-  // dividir estado com a reprovação da prestação da verba.
-  const [askReprovarPP, setAskReprovarPP] = React.useState(false);
-  const [motivoPP, setMotivoPP] = React.useState("");
+  // Reverter a aprovação da PP (decisão 253, no lugar do "Reprovar PP" da
+  // 083): volta para avaliação ou rejeita, com motivo.
+  const [revertendo, setRevertendo] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
   // Módulo fiscal: as NFs do fornecedor em conferência, uma por anexo do
   // tipo NF (decisão 152). Moram aqui, e não no dossiê nem no pop-up,
@@ -395,23 +396,6 @@ export function PPTela(
     setToast(mensagem);
     router.refresh();
     setTimeout(() => onOpenChange(false), 1200);
-  }
-
-  function handleConfirmarReprovarPP() {
-    if (!pp) return;
-    startTransition(async () => {
-      const res = await reprovarPPAprovada({ pp_id: pp.id, motivo: motivoPP });
-      if (!res.ok) {
-        setErro(res.message);
-        setAskReprovarPP(false);
-        return;
-      }
-      setAskReprovarPP(false);
-      setMotivoPP("");
-      setToast(`${pp.codigo} reprovada — voltou para a produção corrigir ou cancelar.`);
-      router.refresh();
-      setTimeout(() => onOpenChange(false), 1200);
-    });
   }
 
   function handleConfirmarReprovar() {
@@ -719,17 +703,17 @@ export function PPTela(
           {financeiro && aprovada && (
             <div className="flex flex-none flex-wrap items-center gap-2.5 pt-3">
               <span className="mr-auto text-xs text-white/70">
-                Aprovada — já é título a pagar. A produção não cancela daqui:
-                quem devolve a PP para ela é o financeiro.
+                Aprovada — já é título a pagar. Antes da baixa, o financeiro
+                pode reverter: voltar para avaliação ou rejeitar.
               </span>
               <button
                 type="button"
-                onClick={() => setAskReprovarPP(true)}
+                onClick={() => setRevertendo(true)}
                 disabled={pending}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/40 bg-white px-3.5 py-2 text-sm font-semibold text-california-red transition-colors hover:bg-california-red/5 disabled:opacity-50"
               >
-                <Ban className="h-3.5 w-3.5" />
-                Reprovar PP
+                <Undo2 className="h-3.5 w-3.5" />
+                Reverter aprovação
               </button>
             </div>
           )}
@@ -955,56 +939,22 @@ export function PPTela(
             onConfirm={handleConfirmarReprovar}
           />
 
-          {/* Reprovar a PP já aprovada (decisão 083). */}
-          <ConfirmDialog
-            contentClassName="z-[60]"
-            overlayClassName="z-[60]"
-            open={askReprovarPP}
-            onOpenChange={(o) => {
-              setAskReprovarPP(o);
-              if (!o) setMotivoPP("");
-            }}
-            title={`Reprovar ${pp.codigo}?`}
-            description={
-              <div className="space-y-3">
-                <p>
-                  A PP sai de Títulos a Pagar e volta para a produção, que vê o
-                  motivo e reemite a PP (com outro código) ou só a cancela. As datas escolhidas na
-                  aprovação são desfeitas; o vencimento negociado com o fornecedor
-                  fica.
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Parcela já paga ou em fatura de cartão fechada impede a
-                  reprovação — nesses casos, estorne a baixa ou reabra a fatura
-                  antes.
-                </p>
-                <div>
-                  <label htmlFor="pp-tela-motivo-pp" className="text-xs font-medium">
-                    Motivo * (mín. 10 caracteres)
-                  </label>
-                  <textarea
-                    id="pp-tela-motivo-pp"
-                    value={motivoPP}
-                    onChange={(e) => setMotivoPP(e.target.value)}
-                    maxLength={500}
-                    rows={3}
-                    className="mt-1 w-full rounded border border-border p-2 text-sm"
-                    placeholder="Ex: a produção pediu para segurar — o fornecedor mudou o escopo."
-                  />
-                </div>
-              </div>
-            }
-            confirmLabel="Reprovar PP"
-            variant="destructive"
-            pending={pending}
-            confirmDisabled={motivoPP.trim().length < 10}
-            confirmDisabledReason={
-              motivoPP.trim().length < 10
-                ? "Escreva o motivo (mín. 10 caracteres) para liberar a reprovação."
-                : undefined
-            }
-            onConfirm={handleConfirmarReprovarPP}
-          />
+          {/* Reverter a aprovação (decisão 253). */}
+          {revertendo && (
+            <ReverterAprovacaoDialog
+              origem="pp"
+              id={pp.id}
+              descricao={`${pp.codigo} · ${pp.fornecedor_nome}`}
+              valor={pp.valor}
+              open={revertendo}
+              onOpenChange={setRevertendo}
+              aoReverter={() => {
+                setToast(`Aprovação de ${pp.codigo} revertida.`);
+                router.refresh();
+                setTimeout(() => onOpenChange(false), 1200);
+              }}
+            />
+          )}
         </>
       )}
     </>

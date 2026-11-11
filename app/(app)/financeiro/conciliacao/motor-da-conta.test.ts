@@ -310,7 +310,7 @@ test("as baixas da remessa: uma a uma, e o grupo só com a linha da soma (passo 
   assert.deepEqual(total.naoApareceu, []);
 });
 
-test("a cauda do histórico (A6): do mesmo dia antes do título, até 5 dias e pela soma depois", () => {
+test("a cauda do histórico (A6): do mesmo dia antes do título e pela soma do dia; a de outro dia não casa (decisão 254)", () => {
   const base = { lancamentos: [], remessasBaixadas: [], remessas: [], regras: [], periodos: [] };
   const cauda = [
     { id: "h1", data: "2026-10-19", valor: -600, job: "Job Exemplo 3T", descricao: null, fornecedor: "Fornecedor 001 Exemplo" },
@@ -338,28 +338,30 @@ test("a cauda do histórico (A6): do mesmo dia antes do título, até 5 dias e p
     resultados.map((r) => [r.mov.id, r.estado, (r.historicos ?? []).map((h) => h.id).join("+")]),
     [
       ["1", "historico", "h1"],
-      ["2", "historico", "h2"],
+      // A linha da planilha é de dois dias antes: não é sugerida.
+      ["2", "sem_par", ""],
       ["3", "historico", "h3+h4"],
       ["4", "sem_par", ""],
     ],
   );
   const secoes = secoesDoBanco(resultados);
-  assert.equal(secoes.historico.length, 3);
-  // As três têm confiança alta: vão para Prontos para conciliar (decisão 243).
-  assert.equal(resultados.filter((r) => r.estado === "historico" && r.confianca === "alta").length, 3);
+  assert.equal(secoes.historico.length, 2);
+  // As duas têm confiança alta: vão para Prontos para conciliar (decisão 243).
+  assert.equal(resultados.filter((r) => r.estado === "historico" && r.confianca === "alta").length, 2);
 });
 
-test("as previsões da planilha (decisão 232): depois da cauda, até 10 dias antes e sem limite de atraso; só a única vai para Prontos", () => {
+test("as previsões da planilha (decisões 232 e 254): depois da cauda, só a do dia; a única vai para Prontos", () => {
   const base = { lancamentos: [], remessasBaixadas: [], remessas: [], regras: [], periodos: [] };
   const historico = [{ id: "h1", data: "2026-10-21", valor: -500, job: "Job Exemplo 3T", descricao: null, fornecedor: "Fornecedor 001 Exemplo" }];
   const previsoes = [
     { id: "p1", data: "2026-10-28", valor: -500, job: "Job Exemplo 4T", descricao: null, fornecedor: "Fornecedor 001 Exemplo" },
     { id: "p2", data: "2026-10-28", valor: 9000, job: "Job Exemplo 4T", descricao: null, fornecedor: "Cliente Exemplo" },
-    { id: "p3", data: "2026-10-15", valor: -750, job: null, descricao: "Custo fixo", fornecedor: null },
-    { id: "p4", data: "2026-10-18", valor: -750, job: null, descricao: "Custo fixo", fornecedor: null },
+    { id: "p3", data: "2026-10-28", valor: -750, job: null, descricao: "Custo fixo", fornecedor: null },
+    { id: "p4", data: "2026-10-28", valor: -750, job: null, descricao: "Custo fixo", fornecedor: null },
     { id: "p5", data: "2026-11-20", valor: -1200, job: null, descricao: "Custo fixo", fornecedor: null },
     { id: "p6", data: "2026-08-15", valor: 3300, job: "Job Antigo 2T", descricao: null, fornecedor: "Cliente Atrasado" },
   ];
+  const dia = "2026-10-28";
   const { resultados } = conciliarConta(
     {
       ...base,
@@ -367,33 +369,36 @@ test("as previsões da planilha (decisão 232): depois da cauda, até 10 dias an
       previsoes,
       previsoesDesde: "2026-10-12",
       linhas: [
-        linhaDoBanco("1", { valor: -500 }),
-        linhaDoBanco("2", { valor: 9000, ordem: 1 }),
-        linhaDoBanco("3", { valor: -750, ordem: 2 }),
-        linhaDoBanco("4", { valor: -1200, ordem: 3 }),
-        linhaDoBanco("5", { valor: 3300, ordem: 4 }),
+        linhaDoBanco("1", { valor: -500, data: dia }),
+        // A previsão de R$ 9.000 é do dia seguinte ao desta linha.
+        linhaDoBanco("2", { valor: 9000, ordem: 1, data: "2026-10-27" }),
+        linhaDoBanco("3", { valor: -750, ordem: 2, data: dia }),
+        linhaDoBanco("4", { valor: -1200, ordem: 3, data: dia }),
+        linhaDoBanco("5", { valor: 3300, ordem: 4, data: dia }),
       ],
     },
     [],
     "conta",
     {},
-    "2026-10-21",
+    "2026-10-30",
   );
   assert.deepEqual(
-    resultados.map((r) => [r.mov.id, r.estado, r.confianca ?? "", (r.historicos ?? []).map((h) => h.id).join("+")]),
+    resultados.map((r) => [r.mov.id, r.estado, r.confianca ?? "", (r.historicos ?? []).map((h) => h.id).join("+")]).sort((a, b) => a[0].localeCompare(b[0])),
     [
-      ["1", "historico", "alta", "h1"],
-      ["2", "historico", "alta", "p2"],
-      ["3", "historico", "media", "p4"],
+      // A cauda de −500 é de uma semana antes: quem casa é a previsão do dia.
+      ["1", "historico", "alta", "p1"],
+      ["2", "sem_par", "", ""],
+      // Duas previsões iguais no dia: pede conferência.
+      ["3", "historico", "media", "p3"],
+      // A previsão futura e a vencida há meses não são sugeridas: a pessoa
+      // muda a data delas ou as escolhe na linha.
       ["4", "sem_par", "", ""],
-      ["5", "historico", "alta", "p6"],
+      ["5", "sem_par", "", ""],
     ],
   );
-  assert.match(resultados[4].motivo ?? "", /65 dias de atraso/);
-  // Só as de confiança alta vão para Prontos; a outra pede conferência.
   assert.deepEqual(
     resultados.filter((r) => r.estado === "historico" && r.confianca === "alta").map((r) => r.mov.id),
-    ["1", "2", "5"],
+    ["1"],
   );
 });
 
@@ -492,4 +497,38 @@ test("a linha da regra do extrato não vai para a cauda do histórico", () => {
     "2026-10-21",
   );
   assert.equal(resultados[0].estado, "regra");
+});
+
+// --- O pagamento agrupado (decisão 254) ----------------------------------------
+
+test("o pagamento agrupado: as baixas do mesmo fornecedor no dia que somam a linha, numa combinação só", () => {
+  const base = { remessasBaixadas: [], remessas: [], regras: [], periodos: [] };
+  const baixas = agruparComoNoBanco([
+    lanc("a", { valor: 33000 }),
+    lanc("b", { valor: 14000 }),
+    lanc("c", { valor: 10000 }),
+    lanc("d", { valor: 3000 }),
+    // De outro fornecedor e de outro dia: não entram na soma.
+    lanc("e", { valor: 3000, fornecedores: { nome: "FORNECEDOR 002 EXEMPLO", razao_social: null } }),
+    lanc("f", { valor: 3000, data_movimento: "2026-10-18" }),
+  ]);
+  const { resultados } = conciliarConta({ ...base, lancamentos: baixas, linhas: [linhaDoBanco("1", { valor: -60000 })] }, [], "conta", {}, "2026-10-21");
+  const [r] = resultados;
+  assert.equal(r.estado, "ja_lancado");
+  assert.deepEqual([...((r.lancamento as { membros?: string[] }).membros ?? [])].sort(), ["a", "b", "c", "d"]);
+  assert.deepEqual([...((r.lancamento as { ids?: string[] }).ids ?? [])].sort(), ["a", "b", "c", "d"]);
+  assert.match(r.motivo ?? "", /4 baixas do dia somam a linha/);
+});
+
+test("o pagamento agrupado não escolhe entre duas combinações, nem passa na frente da baixa de valor igual", () => {
+  const base = { remessasBaixadas: [], remessas: [], regras: [], periodos: [] };
+  // 430 + 610 e 740 + 300 dão os mesmos 1.040: o sistema não escolhe.
+  const duas = agruparComoNoBanco([lanc("a", { valor: 430 }), lanc("b", { valor: 610 }), lanc("c", { valor: 740 }), lanc("d", { valor: 300 })]);
+  const semEscolha = conciliarConta({ ...base, lancamentos: duas, linhas: [linhaDoBanco("1", { valor: -1040 })] }, [], "conta", {}, "2026-10-21");
+  assert.equal(semEscolha.resultados[0].estado, "sem_par");
+  // Com uma baixa do valor exato no dia, é ela que casa, sozinha.
+  const exata = agruparComoNoBanco([lanc("a", { valor: 430 }), lanc("b", { valor: 610 }), lanc("x", { valor: 1040 })]);
+  const [r] = conciliarConta({ ...base, lancamentos: exata, linhas: [linhaDoBanco("1", { valor: -1040 })] }, [], "conta", {}, "2026-10-21").resultados;
+  assert.equal(r.estado, "ja_lancado");
+  assert.equal(r.lancamento?.id, "x");
 });

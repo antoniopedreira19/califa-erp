@@ -11,7 +11,7 @@
  * `ReabrirDialog` em `banco.jsx`.
  */
 
-import type { CondicoesDoFechamento } from "@/lib/types";
+import type { CondicoesDoFechamento, SaldoDoDiaEmAberto } from "@/lib/types";
 import { formatDiaBr } from "@/lib/formatar-data-hora";
 import { formatBRL } from "@/lib/format";
 
@@ -53,9 +53,12 @@ export interface FechamentoDaConta {
   /** Do mais antigo para o mais novo. */
   registros: RegistroDoFechamento[];
   condicoes: CondicoesDoFechamento | null;
+  /** O saldo de cada dia em aberto com linha do banco (decisão 254); vazio
+   *  fora da Conciliação automática. */
+  saldosDosDias: SaldoDoDiaEmAberto[];
 }
 
-export const SEM_FECHAMENTO: FechamentoDaConta = { ativo: null, ultimo: null, registros: [], condicoes: null };
+export const SEM_FECHAMENTO: FechamentoDaConta = { ativo: null, ultimo: null, registros: [], condicoes: null, saldosDosDias: [] };
 
 /**
  * A linha do histórico da faixa (especificação, seção 6.4): "fechada até

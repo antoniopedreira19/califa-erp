@@ -26,7 +26,8 @@
  *   liga com as três condições do banco, e "Reabrir o período". Com a
  *   conciliação fechada, desfazer, corrigir e cancelar com data até lá
  *   avisam antes de chamar (o banco recusa de qualquer jeito).
- * - A tela (decisão 234): a fila dividida (fila-dividida.tsx) no lugar das
+ * - A tela (decisão 254): a conciliação dia a dia (dia-a-dia.tsx), que tomou
+ *   o lugar da fila dividida da decisão 234. O que segue da 234:
  *   seções separadas, o "Importar extrato do banco (OFX)" no topo (saiu do
  *   Extrato, que não mostra mais o banco) e o "Agrupar lançamentos" no lugar
  *   do "Conciliar em conjunto".
@@ -89,8 +90,7 @@ import {
 import type { AcoesDoBanco, ContextoDasCelulas } from "./banco-tabela";
 import { CancelarBaixaDialog, CorrigirBaixaDialog, ProcurarTituloDialog, RegraDialog } from "./banco-dialogos";
 import { AgruparLancamentosDialog, type SelecaoDoAgrupamento } from "./agrupar-lancamentos";
-import { FilaDividida } from "./fila-dividida";
-import { BotoesDoFechamento } from "./fechamento";
+import { ConciliacaoDiaADia } from "./dia-a-dia";
 import { mensagemDoPeriodoFechado, noPeriodoFechado, type FechamentoDaConta } from "@/lib/conciliacao/fechamento";
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
@@ -241,6 +241,24 @@ export function AbaBanco({
     if (r.mensagem) setAviso({ tom: "ok", texto: r.mensagem });
     depois?.();
   }
+
+  /** As ações da conciliação dia a dia (decisão 254): roda, avisa e relê a aba. */
+  const rodar = React.useCallback(
+    (acao: () => Promise<Resultado>, depois?: () => void) => {
+      setAviso(null);
+      startTransition(async () => {
+        const res = await acao();
+        if (!res.ok) {
+          setAviso({ tom: "erro", texto: res.message });
+          return;
+        }
+        if (res.mensagem) setAviso({ tom: "ok", texto: res.mensagem });
+        depois?.();
+        router.refresh();
+      });
+    },
+    [router],
+  );
 
   /** Na trava do fechamento, o que tem data até lá não muda (protótipo:
    *  `bloqueado`). O banco recusa de qualquer jeito; aqui avisa antes. */
@@ -698,7 +716,7 @@ export function AbaBanco({
 
   return (
     <div className="space-y-4">
-      <FilaDividida
+      <ConciliacaoDiaADia
         banco={banco}
         conciliacao={conciliacao}
         secoes={secoes}
@@ -706,16 +724,11 @@ export function AbaBanco({
         acoes={acoes}
         conciliarVarios={conciliarVarios}
         importar={<BotaoImportarExtrato onArquivo={importar} importando={importando} />}
-        fechamento={
-          <BotoesDoFechamento
-            contaId={contaId}
-            contaNome={banco.conta.nome}
-            bancoNome={banco.conta.banco}
-            fechamento={fechamento}
-            ocupado={pending}
-          />
-        }
         fechadaAte={fechamento.ativo?.ate ?? null}
+        condicoes={fechamento.condicoes}
+        saldosDosDias={fechamento.saldosDosDias}
+        rodar={rodar}
+        avisar={(texto) => setAviso({ tom: "erro", texto })}
         pending={pending}
         avisos={{ erroImportacao, falhaDoMotor, recusado, descartarRecusado: () => setRecusado(null) }}
       />

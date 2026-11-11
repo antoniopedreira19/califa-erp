@@ -32,6 +32,9 @@ export function FiltrosConta({
   // re-renderiza. `isPending` ativa o dimming da section pra sinalizar
   // que algo está em curso — mesmo padrão do relatório de rentabilidade.
   const [isPending, startTransition] = React.useTransition();
+  // A Conciliação automática não usa o De/Até (decisão 254): ela lê os dias
+  // em aberto da conta, e quem escolhe o dia é a barra de dias.
+  const naAutomatica = searchParams.get("aba") === "banco";
   // As datas seguem a URL (decisão 211, A3): o período que veio do servidor,
   // ou a escolha que ainda está navegando. Um link ou o voltar do navegador
   // trocam as props, e os campos acompanham.
@@ -93,6 +96,8 @@ export function FiltrosConta({
           </SelectContent>
         </Select>
       </div>
+      {!naAutomatica && (
+        <>
       <div className="space-y-1">
         <label className="text-[11px] uppercase text-muted-foreground">
           De
@@ -135,6 +140,8 @@ export function FiltrosConta({
           </Button>
         )}
       </div>
+        </>
+      )}
     </div>
   );
 }

@@ -9,6 +9,7 @@ import { desembolsoStatusLabel } from "@/lib/types";
 import { AprovarDesembolsoDialog } from "./aprovar-desembolso-dialog";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import { RejeitarDesembolsoDialog, type ModoDialog } from "./rejeitar-desembolso-dialog";
+import { ReverterAprovacaoDialog } from "./reverter-aprovacao-dialog";
 import {
   BarraDosFiltrosDeColuna,
   celulaData,
@@ -129,6 +130,7 @@ export function DesembolsosContasPagarList({ rows,
   cartoes }: DesembolsosContasPagarListProps) {
   const [filtro, setFiltro] = React.useState<FiltroStatus>("em_avaliacao");
   const [dialog, setDialog] = React.useState<DialogState>({ desembolso: null, tipo: null });
+  const [revertendo, setRevertendo] = React.useState<DesembolsoRow | null>(null);
 
   const contagens = React.useMemo(() => {
     const c = { em_avaliacao: 0, aprovada: 0, todas: rows.length };
@@ -327,14 +329,25 @@ export function DesembolsosContasPagarList({ rows,
                     )}
 
                     {r.status === "aprovada" && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        className="h-7 px-2 text-xs text-muted-foreground hover:bg-muted"
-                        onClick={() => abrirDialog(r, "cancelar")}
-                      >
-                        Cancelar
-                      </Button>
+                      <>
+                        {/* Decisão 253: antes da baixa, voltar para avaliação ou rejeitar. */}
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          onClick={() => setRevertendo(r)}
+                        >
+                          Reverter aprovação
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs text-muted-foreground hover:bg-muted"
+                          onClick={() => abrirDialog(r, "cancelar")}
+                        >
+                          Cancelar
+                        </Button>
+                      </>
                     )}
 
                     {(r.status === "pago" ||
@@ -364,6 +377,19 @@ export function DesembolsosContasPagarList({ rows,
         onOpenChange={(open) => { if (!open) fecharDialog(); }}
         modo={(dialog.tipo === "rejeitar" ? "rejeitar" : "cancelar") as ModoDialog}
       />
+
+      {revertendo && (
+        <ReverterAprovacaoDialog
+          origem="desembolso"
+          id={revertendo.id}
+          descricao={`${revertendo.codigo} · ${revertendo.descricao}`}
+          valor={revertendo.valor}
+          open={revertendo !== null}
+          onOpenChange={(o) => {
+            if (!o) setRevertendo(null);
+          }}
+        />
+      )}
     </div>
   );
 }

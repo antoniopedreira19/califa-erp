@@ -3937,7 +3937,8 @@ export type ConciliadaComo = "ligacao" | "baixa" | "avulso" | "regra" | "par" | 
 export interface BaixaCorrecao {
   id: string;
   tenant_id: string;
-  extrato_linha_id: string;
+  /** Nula só na correção já desfeita cujo extrato foi retirado (decisão 254). */
+  extrato_linha_id: string | null;
   documento_origem: "pp_baixa" | "avulsa_baixa" | "titulo_baixa";
   documento_id: string;
   lancamento_antes_id: string;
@@ -4003,6 +4004,17 @@ export interface CondicoesDoFechamento {
   saldo_banco?: number | null;
   saldo_sistema?: number;
   diferenca?: number | null;
+}
+
+/** O saldo de um dia em aberto (`saldos_dos_dias_em_aberto`, decisão 254),
+ *  pela mesma conta do fechamento: o cadeado do dia avisa antes do clique. */
+export interface SaldoDoDiaEmAberto {
+  data: string;
+  /** Nulo quando o extrato não informou o saldo. */
+  saldo_banco: number | null;
+  saldo_sistema: number;
+  /** Banco menos sistema; nulo sem o saldo do banco. */
+  diferenca: number | null;
 }
 
 // ---------- Decisão 211: o histórico da planilha financeira ----------

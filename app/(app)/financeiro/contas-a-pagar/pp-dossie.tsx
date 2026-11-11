@@ -734,8 +734,8 @@ function Estados({ pp, somenteLeitura }: { pp: PPRow; somenteLeitura: boolean })
             "Aprovada pelo financeiro — já é título a pagar."
           ) : (
             <>
-              Aprovada — já é título a pagar. Para devolvê-la à produção, use
-              &ldquo;Reprovar PP&rdquo; no rodapé.
+              Aprovada — já é título a pagar. Para voltá-la à avaliação ou
+              rejeitá-la, use &ldquo;Reverter aprovação&rdquo; no rodapé.
             </>
           )}
         </span>

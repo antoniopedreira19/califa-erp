@@ -66,9 +66,30 @@ papel já faz pela PP e pelo projeto:
   `/admin/cidades` (que só o Admin abre) e passou a dizer para pedir a um
   administrador.
 
-**Conferido** como administrador e na Matriz de permissões, papel a papel.
-**Não conferido logado como GP, Produtor ou Freelancer:** o GP Teste está
-sem vínculo com o tenant (entra em `sem_tenant`) e o Produtor Teste não
-existe mais. A regra está coberta pelo teste novo em
-`lib/permissoes.test.ts`; as 5 falhas que a suíte mostra são anteriores
-(listas de barra lateral desatualizadas desde os módulos Freelancers e RH).
+**Conferido no Sandbox em 2026-11-11**, logado como cada papel
+(`admin@`, `gp@` e `produtor@sandbox.local`):
+
+- **GP:** menu com Cadastros e sem engrenagem; cards Clientes, Fornecedores
+  e Veículos; listas sem Inativar/Reativar; `/admin`, `/admin/cidades` e
+  `/configuracoes` voltam para a Home. Editou o cliente "Teste 22" pela tela
+  (razão social e CNPJ de teste `11.222.333/0001-81`); a auditoria registra
+  `cliente.editado` por `gp@sandbox.local`.
+- **Produtor:** cards Fornecedores e Veículos, sem Clientes; `/clientes` e
+  `/clientes/<id>` vão para `/home?reason=sem_permissao_cadastros`;
+  `/admin/cidades` volta para a Home. Editou o telefone do "Fornecedor
+  Teste" pela tela; `fornecedor.editado` por `produtor@sandbox.local`, e
+  nenhuma `acao_negada` dos dois na hora do teste.
+- **Admin:** engrenagem leva a `/admin` (Configurações, com Cidades); listas
+  com Inativar; Cidades com "Nova cidade".
+- **Freelancer** (`freelancer@sandbox.local`, criado em 2026-11-11 só no
+  Sandbox, mesmo caminho dos outros três): menu só com Home, Orçamentos e
+  Jobs, sem engrenagem. `/cadastros`, `/clientes`, `/fornecedores`,
+  `/fornecedores/novo`, `/fornecedores/<id>`, `/cadastros/veiculos` e
+  `/cadastros/veiculos/novo` vão para `/home?reason=sem_permissao_cadastros`;
+  `/admin` e `/configuracoes` voltam para a Home. O formulário rápido de
+  fornecedor da PP não foi exercitado: o código dele não mudou, e o
+  freelancer do Sandbox ainda não está em nenhum job.
+
+A regra também está no teste novo de `lib/permissoes.test.ts`. As 5 falhas
+que a suíte mostra são anteriores (listas de barra lateral desatualizadas
+desde os módulos Freelancers e RH).

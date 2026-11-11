@@ -395,6 +395,8 @@ type CaudaCrua = {
   regional_todas: boolean | null;
   grupo: string | null;
   extrato_linha_id: string | null;
+  /** A data da planilha, quando a previsão tem outra data (ligada ao banco, ou ajustada pela tela). */
+  data_prevista: string | null;
   carga: { tipo: string; planilha_versao: string | null } | null;
 };
 
@@ -402,25 +404,31 @@ const assinado = (l: LancamentoCru) => (l.natureza === "entrada" ? Number(l.valo
 
 export async function carregarBancoDaConciliacao(
   supabase: Supabase,
-  args: { tenantId: string; contaId: string; dataDe: string; dataAte: string; periodoDoExtrato?: boolean },
+  args: { tenantId: string; contaId: string; dataDe: string; dataAte: string; diasAbertos?: boolean },
 ): Promise<DadosDaAbaBanco> {
   const { tenantId, contaId } = args;
   let { dataDe, dataAte } = args;
-  // Na Conciliação automática (decisão 239), as resolvidas são as do
-  // período do último extrato, e não as do filtro De/Até: é o que dá sentido
-  // ao "N de M conciliados" e aos Conciliados.
-  if (args.periodoDoExtrato) {
-    const { data: ult } = await supabase
-      .from("extrato_importacoes")
-      .select("periodo_inicio, periodo_fim")
-      .eq("tenant_id", tenantId)
-      .eq("conta_bancaria_id", contaId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle<{ periodo_inicio: string | null; periodo_fim: string | null }>();
-    if (ult?.periodo_inicio && ult.periodo_fim) {
-      dataDe = ult.periodo_inicio;
-      dataAte = ult.periodo_fim;
+  // Na Conciliação automática (decisão 254, revê a 239), as resolvidas são
+  // as dos dias em aberto: do começo da conta, ou do dia seguinte ao último
+  // fechado, em diante. A tela é dia a dia e precisa de cada dia inteiro (o
+  // "N de M linhas conciliadas" do dia e o saldo depois de cada linha).
+  if (args.diasAbertos) {
+    const [inicio, fechado] = await Promise.all([
+      supabase.from("contas_bancarias").select("saldo_inicial_data").eq("tenant_id", tenantId).eq("id", contaId).maybeSingle<{ saldo_inicial_data: string | null }>(),
+      supabase
+        .from("conciliacao_fechamentos")
+        .select("ate")
+        .eq("tenant_id", tenantId)
+        .eq("conta_bancaria_id", contaId)
+        .eq("ativo", true)
+        .maybeSingle<{ ate: string }>(),
+    ]);
+    const depoisDoFechado = fechado.data?.ate ? somaDias(fechado.data.ate, 1) : null;
+    const comeco = inicio.data?.saldo_inicial_data ?? null;
+    const de = [depoisDoFechado, comeco].filter((d): d is string => !!d).sort().pop();
+    if (de) {
+      dataDe = de;
+      dataAte = "9999-12-31";
     }
   }
 
@@ -682,7 +690,7 @@ export async function carregarBancoDaConciliacao(
           (de, ate) =>
             supabase
               .from("historico_movimentos")
-              .select("id, data, valor, job_nome, descricao, fornecedor, regional_nome, regional_todas, grupo, extrato_linha_id, carga:historico_cargas!inner(tipo, situacao, planilha_versao)")
+              .select("id, data, data_prevista, valor, job_nome, descricao, fornecedor, regional_nome, regional_todas, grupo, extrato_linha_id, carga:historico_cargas!inner(tipo, situacao, planilha_versao)")
               .eq("tenant_id", tenantId)
               .eq("conta_bancaria_id", contaId)
               .in("carga.tipo", ["cauda", "previsao"])
@@ -732,6 +740,8 @@ export async function carregarBancoDaConciliacao(
       // Decisão 243: a regional da planilha ("TD" quando é de todas).
       regional: h.regional_todas ? "TD" : h.regional_nome,
       grupo: h.grupo,
+      // Decisão 254: a data que a planilha tem, quando a tela ajustou a da previsão.
+      dataDaPlanilha: h.data_prevista && h.data_prevista !== h.data ? h.data_prevista : null,
     };
     if (h.extrato_linha_id) {
       caudaPorLinha.set(h.extrato_linha_id, [...(caudaPorLinha.get(h.extrato_linha_id) ?? []), item]);
