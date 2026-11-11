@@ -211,11 +211,25 @@ Criados via SQL direto em 03/09/2026 — todos vivem no tenant `agencia-californ
 | `freelancer_teste@califa-erp.local` | `freelancer` | Equipe do projeto `NOV-0004/26` (SEBRAE NOSSO CANTO 2026) |
 | `financeiro_teste@califa-erp.local` | `financeiro` | — |
 
-⚠️ **03/10/2026 — freelancer de teste que entra:** `claude.freelancer.teste@califa-erp.local`
-("Freelancer Teste Claude", `99b71b93-780a-40d5-9e37-62d563e696b6`), criado
-pela Admin API sem senha, com as 5 empresas. Não está em Equipe nenhuma:
-para testar, inclua-o na Equipe do `TES-P001/26` pelo "Editar projeto" e
-tire no fim. Os `*_teste@` da tabela acima não têm identidade no Auth.
+⚠️ **10/11/2026 — os testes com papel vão no Sandbox.** Os usuários
+`@califa-erp.local` (os da tabela acima e os `claude.*.teste`) foram apagados
+em 09/11/2026, quando a Empresa Teste e os projetos/jobs de teste
+(`P-0006/26`, `TES-*`) saíram da produção para o tenant `California Sandbox`
+(migrations `20261109970002` a `970005`, `20261110990001` e
+`20261110990002`). Teste que grava dado vai lá, com os usuários de teste do
+Sandbox, que só existem naquele tenant e não têm senha:
+
+| Email | Papel (`app_role`) |
+|---|---|
+| `admin@sandbox.local` | `administrador` |
+| `gp@sandbox.local` | `gerente_producao` |
+| `produtor@sandbox.local` | `produtor` |
+
+A entrada é por link mágico gerado pela Admin API, aberto numa janela
+anônima (o login vale por endereço e substituiria a sessão da janela
+normal). Nunca ponha usuário real no Sandbox: o sistema abre no vínculo mais
+antigo e o RLS (`is_tenant_member`) passaria a mostrar linhas do Sandbox nas
+consultas sem filtro de tenant.
 
 **Validação de RLS via SQL** (rodado em 03/09/2026, resultado esperado):
 
