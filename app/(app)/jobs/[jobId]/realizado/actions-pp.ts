@@ -1713,6 +1713,7 @@ async function finalizarPedidoCompraImpl(
   anexos: z.input<typeof anexoUploadedSchema>[],
   itemRealizadoId: string,
   ultimaPPDoItem: boolean,
+  gravadas: string[] = [],
 ): Promise<Result<{ codigo: string }>> {
   const gate = await checarGatesRealizado(itemRealizadoId);
   if (!gate.ok) return gate;
@@ -1734,9 +1735,12 @@ async function finalizarPedidoCompraImpl(
   const d = dadosParsed.data;
 
   // ---- Janelas de pagamento, prazo de envio e urgência (decisões 077 e 157) ----
+  // `gravadas` vem do PP a emitir: a data que o GP escolheu e que já passou
+  // pelo salvar/enviar (inclusive ao Comitê, decisão 223) é combinada —
+  // a demora do Comitê não queima a janela que o GP escolheu dentro do prazo.
   const erroJanela = validarVencimentosNasJanelas(
     d.parcelas.map((p) => p.data_vencimento),
-    [],
+    gravadas,
     await carregarFeriadosNacionais(supabase, session.activeTenant.id),
     ppAceitaQuarta({ urgente: d.urgente === true, verba: d.verba_producao }),
   );
@@ -4333,6 +4337,11 @@ export async function gerarPPDaPPAEmitir(id: string): Promise<Result<{ codigo: s
       nf_valor_na_pp: num(a.nf_valor_na_pp),
     }));
 
+  // A data que o GP combinou no PP a emitir (e que já passou pelo salvar
+  // e, se for o caso, pelo Comitê) é grandfathered: se ela não mudou aqui,
+  // o prazo de envio não é re-aplicado. É o que `salvarPPAEmitir` já faz.
+  const gravadas = (linha.dados.parcelas ?? []).map((p) => p.data_vencimento);
+
   let res: Result<{ codigo: string }>;
   try {
     res = await finalizarPedidoCompraImpl(
@@ -4341,6 +4350,7 @@ export async function gerarPPDaPPAEmitir(id: string): Promise<Result<{ codigo: s
       anexos,
       linha.item_realizado_id,
       linha.ultima_pp_do_item,
+      gravadas,
     );
   } catch (err) {
     console.error("[pp.a_emitir.gerar.exception]", err);
