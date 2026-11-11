@@ -81,7 +81,15 @@ papel já faz pela PP e pelo projeto:
   nenhuma `acao_negada` dos dois na hora do teste.
 - **Admin:** engrenagem leva a `/admin` (Configurações, com Cidades); listas
   com Inativar; Cidades com "Nova cidade".
-- **Freelancer:** o Sandbox não tem usuário freelancer; a regra está
-  coberta pelo teste novo em `lib/permissoes.test.ts`. As 5 falhas que a
-  suíte mostra são anteriores (listas de barra lateral desatualizadas desde
-  os módulos Freelancers e RH).
+- **Freelancer** (`freelancer@sandbox.local`, criado em 2026-11-11 só no
+  Sandbox, mesmo caminho dos outros três): menu só com Home, Orçamentos e
+  Jobs, sem engrenagem. `/cadastros`, `/clientes`, `/fornecedores`,
+  `/fornecedores/novo`, `/fornecedores/<id>`, `/cadastros/veiculos` e
+  `/cadastros/veiculos/novo` vão para `/home?reason=sem_permissao_cadastros`;
+  `/admin` e `/configuracoes` voltam para a Home. O formulário rápido de
+  fornecedor da PP não foi exercitado: o código dele não mudou, e o
+  freelancer do Sandbox ainda não está em nenhum job.
+
+A regra também está no teste novo de `lib/permissoes.test.ts`. As 5 falhas
+que a suíte mostra são anteriores (listas de barra lateral desatualizadas
+desde os módulos Freelancers e RH).
