@@ -35,18 +35,26 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "CPF inválido" }, { status: 400 });
   }
 
+  // RPC SECURITY DEFINER. SELECT direto em freelancers esbarra na RLS
+  // que esconde cadastros fora da responsabilidade do GP — o form não
+  // detectaria o freela cadastrado e a solicitação cairia como
+  // "contratação" (incidente Matheus, 11/11/2026, migration
+  // 20261111100004).
   const supabase = createClient();
-  const { data, error } = await supabase
-    .from("freelancers")
-    .select("id, nome_social")
-    .eq("tenant_id", session.activeTenant.id)
-    .eq("cpf", cpf)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc("freelancer_buscar_por_cpf", {
+    p_tenant_id: session.activeTenant.id,
+    p_cpf: cpf,
+  });
 
   if (error) {
     console.error("[api.freelancers.buscar-por-cpf]", error.message);
     return NextResponse.json({ error: "Erro ao consultar" }, { status: 500 });
   }
 
-  return NextResponse.json({ encontrado: data ?? null });
+  const encontrado =
+    Array.isArray(data) && data.length > 0
+      ? { id: data[0].id as string, nome_social: data[0].nome_social as string }
+      : null;
+
+  return NextResponse.json({ encontrado });
 }
