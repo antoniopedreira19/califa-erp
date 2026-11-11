@@ -648,6 +648,22 @@ export function gruposDeIguais<M extends MovimentoDoMotor>(pend: ResultadoDoMoto
  * a ter o valor e a data do banco. A diferença para o título vira juros e
  * multa só onde eles existem (boleto e guia); no resto, muda o valor pago.
  */
+/**
+ * A correção da baixa pelo valor do banco só cabe quando o banco pagou o
+ * mesmo ou menos (a parte que falta volta a aberto), ou quando é boleto de PP
+ * ou de avulsa (a diferença a mais vira juros). O banco que debitou A MAIS
+ * fora do boleto não corrige a baixa: provavelmente é outro pagamento.
+ * É a mesma regra que o pop-up "Corrigir a baixa" aplica.
+ */
+export function correcaoDaBaixaCabe(
+  lanc: { valor: number; juros?: number | null; forma?: string | null; origem?: string | null },
+  mov: { valor: number },
+): boolean {
+  const boleto = lanc.forma === "boleto" && (lanc.origem === "pp_baixa" || lanc.origem === "avulsa_baixa");
+  const principal = r2(Math.abs(lanc.valor) - (lanc.juros ?? 0));
+  return boleto || Math.abs(mov.valor) <= principal + 0.004;
+}
+
 export function correcaoDaBaixa(
   lanc: Pick<LancamentoDoMotor, "valor" | "juros" | "data">,
   mov: Pick<MovimentoDoMotor, "valor" | "data">,

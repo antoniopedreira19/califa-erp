@@ -13,6 +13,7 @@ import { lerOfx } from "./ofx";
 import {
   casar,
   correcaoDaBaixa,
+  correcaoDaBaixaCabe,
   ehCerto,
   gruposDeIguais,
   type LancamentoDoMotor,
@@ -251,4 +252,17 @@ test("a soma da mesma contraparte vai até 6 títulos do dia, e ignora o de outr
   // Dois do dia somam; o terceiro, de outro dia, não entra na conta.
   const [m] = casar([mov(0, -500)], { ...vazio, titulos: [titulo("a", 200), titulo("b", 300, { vencimento: "2026-10-20" })] });
   assert.equal(m.estado, "sem_par");
+});
+
+test("a correção da baixa só cabe com o banco igual ou menor, ou no boleto de PP e de avulsa", () => {
+  const pix = { valor: -800, forma: "pix", origem: "pp_baixa" };
+  assert.equal(correcaoDaBaixaCabe(pix, { valor: -799.4 }), true);
+  assert.equal(correcaoDaBaixaCabe(pix, { valor: -800 }), true);
+  // O banco debitou a mais fora do boleto: é outro pagamento, não correção.
+  assert.equal(correcaoDaBaixaCabe(pix, { valor: -800.6 }), false);
+  // No boleto, a diferença a mais vira juros.
+  assert.equal(correcaoDaBaixaCabe({ valor: -800, forma: "boleto", origem: "pp_baixa" }, { valor: -800.6 }), true);
+  assert.equal(correcaoDaBaixaCabe({ valor: -800, forma: "boleto", origem: "titulo_baixa" }, { valor: -800.6 }), false);
+  // Os juros já lançados não contam no principal.
+  assert.equal(correcaoDaBaixaCabe({ valor: -850, juros: 50, forma: "pix", origem: "pp_baixa" }, { valor: -810 }), false);
 });

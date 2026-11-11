@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { dataBR, TOM_DA_ETIQUETA } from "@/components/financeiro/planilha-de-titulos/planilha";
-import { correcaoDaBaixa, formaDoHistorico, retencaoQueExplica, type TituloDoMotor } from "@/lib/conciliacao/motor";
+import { correcaoDaBaixa, correcaoDaBaixaCabe, formaDoHistorico, retencaoQueExplica, type TituloDoMotor } from "@/lib/conciliacao/motor";
 import { normalizar } from "@/lib/conciliacao/ofx";
 import type { PlanoContaSubtipo, PlanoContaTipo } from "@/lib/types";
 import type { LancamentoSemLinha } from "./banco-dados";
@@ -96,7 +96,7 @@ export function CorrigirBaixaDialog({
     forma: boleto ? "boleto" : l.forma,
     origem: l.origem,
   });
-  const bancoMaior = !boleto && Math.abs(r.mov.valor) > antes.principal + 0.004;
+  const bancoMaior = !correcaoDaBaixaCabe(l, r.mov);
   const ficaEmAberto = r2(antes.principal - depois.principal);
   const linhas: Array<[string, string, string, boolean]> = [
     ["Data do pagamento", dataBR(antes.data), dataBR(depois.data), antes.data !== depois.data],

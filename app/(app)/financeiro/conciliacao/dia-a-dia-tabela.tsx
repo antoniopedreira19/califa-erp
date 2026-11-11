@@ -34,7 +34,7 @@ import { EditarPrevisaoDialog } from "../contas-a-receber/editar-previsao-dialog
 import { naOrdemDoExtrato, saldosDoExtrato, type SaldoBase } from "@/lib/conciliacao/dia-a-dia";
 import type { EntradaDaBaixaEmLote } from "@/lib/financeiro/baixa-em-lote";
 import type { LancamentoSemLinha } from "./banco-dados";
-import type { TituloDoMotor } from "@/lib/conciliacao/motor";
+import { correcaoDaBaixaCabe, RETENCOES_COMUNS, retencaoQueExplica, type TituloDoMotor } from "@/lib/conciliacao/motor";
 import type { Linha } from "./linhas-da-aba";
 
 const moeda = formatBRL;
@@ -198,13 +198,17 @@ function ajustesPossiveis(c: Pick<Comp, "itens" | "falta" | "r">): Ajuste[] {
   const baixas = c.itens.filter((i) => i.k === "baixa");
   const titulos = c.itens.filter((i) => i.k === "titulo");
   const bancoMaior = Math.abs(c.r.mov.valor) > Math.abs(c.r.mov.valor - c.falta);
-  if (baixas.length === 1 && c.itens.length === 1) return ["correcao"];
+  // A correção só quando o pop-up "Corrigir a baixa" a aceita: o banco que debitou a mais fora do boleto não corrige.
+  if (baixas.length === 1 && c.itens.length === 1) return baixas[0].k === "baixa" && correcaoDaBaixaCabe(baixas[0].l, c.r.mov) ? ["correcao"] : [];
   if (baixas.length || !titulos.length || titulos.length !== c.itens.length) return [];
   if (bancoMaior) return titulos.length === 1 && c.r.mov.valor < 0 ? ["juros"] : [];
   // Sobra: o último título pode ser pago só em parte, se a parte for positiva.
   const cabeParcial = Math.abs(titulos[titulos.length - 1].valor) - Math.abs(c.falta) > 0.004;
   const parcial: Ajuste[] = cabeParcial ? ["parcial"] : [];
-  return titulos.length === 1 && c.r.mov.valor > 0 ? ["retencao", ...parcial] : parcial;
+  // A retenção na fonte só quando as alíquotas de sempre explicam a diferença (o mesmo critério do motor e da lupa).
+  const unico = titulos.length === 1 && titulos[0].k === "titulo" ? titulos[0].t : null;
+  const retencao: Ajuste[] = unico && c.r.mov.valor > 0 && retencaoQueExplica(unico, Math.abs(c.r.mov.valor)) ? ["retencao"] : [];
+  return [...retencao, ...parcial];
 }
 
 /** Quanto o último título paga na baixa parcial. */
@@ -363,6 +367,13 @@ export function TabelaDeComposicoes({
     if (prontos.length !== itens.length) return avisar("Um dos títulos pede a baixa completa (centro de custo, fatura ou guia): concilie este título sozinho primeiro.");
     servidor.conciliarMisto(r.mov.id, baixas.flatMap((c) => c.l.ids), prontos);
   };
+  /** O título que a baixa de um clique aceita: com centro de custo completo e
+   *  sem nada que peça a baixa completa (o mesmo critério do lote da aba). */
+  const deUmCliqueOTitulo = (t: TituloDoMotor | null | undefined) => {
+    if (!t || !comCentro(t)) return false;
+    const l = p.contexto.linhaPorChave.get(t.id);
+    return !!l && itemDoLote(l) !== null;
+  };
   const conciliar = (c: Comp) => {
     const r = c.r;
     if (c.especial) return c.especial.k === "regra" ? acoes.lancarRegra([r]) : c.especial.k === "par" ? acoes.conciliarPar(r) : acoes.lancarMutuo(r);
@@ -376,7 +387,17 @@ export function TabelaDeComposicoes({
     if (baixas.length) return acoes.conciliarAgrupamento([r.mov.id], baixas.flatMap((i) => i.l.ids), [r.mov.data, ...baixas.map((i) => i.data)]);
     const ts = titulos.map((i) => i.t);
     // Um título: o que não é de um clique (ajuste, centro de custo) abre a baixa preenchida.
-    if (ts.length === 1) return c.estado === "bate" && comCentro(ts[0]) ? acoes.conciliarGrupo([r], ts) : acoes.conferirTitulo(r.titulo?.id === ts[0].id ? r : { ...r, retencaoSugerida: undefined, retencaoAliquotas: undefined, diferenca: undefined }, ts[0]);
+    if (ts.length === 1) {
+      if (c.estado === "bate" && deUmCliqueOTitulo(ts[0])) return acoes.conciliarGrupo([r], ts);
+      // A baixa completa abre com o ajuste escolhido na linha: a retenção na
+      // fonte vai preenchida; a baixa parcial não leva a retenção que o motor sugeriu.
+      const semRetencao = { ...r, retencaoSugerida: undefined, retencaoAliquotas: undefined };
+      const base = r.titulo?.id === ts[0].id ? r : { ...semRetencao, diferenca: undefined };
+      const ret = c.ajuste === "retencao" ? retencaoQueExplica(ts[0], Math.abs(r.mov.valor)) : null;
+      const aliquotas = ret ? RETENCOES_COMUNS.find((x) => x.nome === ret.nome)?.aliquotas : undefined;
+      if (ret && aliquotas) return acoes.conferirTitulo({ ...base, retencaoSugerida: ret.retidos, retencaoAliquotas: aliquotas }, ts[0]);
+      return acoes.conferirTitulo(c.ajuste === "parcial" ? { ...base, retencaoSugerida: undefined, retencaoAliquotas: undefined } : base, ts[0]);
+    }
     if (c.estado === "bate") return acoes.conciliarCombinacao({ ...r, estado: "combinacao", titulos: ts });
     if (c.ajuste === "parcial") return conciliarMisto(r, [], titulos, parteDoUltimo(c));
     return acoes.conferirCombinacao({ ...r, estado: "combinacao", titulos: ts });
@@ -390,8 +411,8 @@ export function TabelaDeComposicoes({
     (["ja_lancado", "soma", "regra"].includes(c.r.estado) ||
       (c.r.estado === "historico" && !!c.r.historicos?.length) ||
       (c.r.estado === "par" && c.r.mov.valor > 0) ||
-      (c.r.estado === "sugestao" && comCentro(c.r.titulo)) ||
-      (c.r.estado === "combinacao" && (c.r.titulos ?? []).every((t) => comCentro(t))));
+      (c.r.estado === "sugestao" && deUmCliqueOTitulo(c.r.titulo)) ||
+      (c.r.estado === "combinacao" && (c.r.titulos ?? []).every((t) => deUmCliqueOTitulo(t))));
   const emLote = comps.lista.filter(deUmClique);
 
   // ---- Editar a data, como na aba Títulos ----
@@ -1418,7 +1439,7 @@ function LinhaSoNoSistema({ c, p, linhas, onEditarData, onAssociar }: { c: Candi
                       {x.r.mov.historico}
                     </span>
                     <span className="text-right font-mono">{comSinal(x.r.mov.valor)}</span>
-                    <span className="text-right text-[11px] text-amber-800">{x.estado === "vazio" ? "faltando" : `${Math.abs(x.r.mov.valor) > Math.abs(x.soma) ? "falta" : "sobra"} ${moeda(Math.abs(x.falta))}`}</span>
+                    <span className="text-right text-[11px] text-amber-800">{x.estado === "vazio" ? (x.situacao === "sem" ? "faltando" : "a definir") : `${Math.abs(x.r.mov.valor) > Math.abs(x.soma) ? "falta" : "sobra"} ${moeda(Math.abs(x.falta))}`}</span>
                   </button>
                 ))}
                 {!alvos.length && <div className="px-2 py-4 text-center text-xs text-muted-foreground">Nenhuma linha do banco deste dia está a definir ou {"faltando"}.</div>}
