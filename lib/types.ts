@@ -4006,6 +4006,17 @@ export interface CondicoesDoFechamento {
   diferenca?: number | null;
 }
 
+/** O saldo de um dia em aberto (`saldos_dos_dias_em_aberto`, decisão 254),
+ *  pela mesma conta do fechamento: o cadeado do dia avisa antes do clique. */
+export interface SaldoDoDiaEmAberto {
+  data: string;
+  /** Nulo quando o extrato não informou o saldo. */
+  saldo_banco: number | null;
+  saldo_sistema: number;
+  /** Banco menos sistema; nulo sem o saldo do banco. */
+  diferenca: number | null;
+}
+
 // ---------- Decisão 211: o histórico da planilha financeira ----------
 
 /** carregando → ativa → substituída ou desfeita; carregando → descartada. */

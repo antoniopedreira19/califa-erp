@@ -726,6 +726,7 @@ export function AbaBanco({
         importar={<BotaoImportarExtrato onArquivo={importar} importando={importando} />}
         fechadaAte={fechamento.ativo?.ate ?? null}
         condicoes={fechamento.condicoes}
+        saldosDosDias={fechamento.saldosDosDias}
         rodar={rodar}
         avisar={(texto) => setAviso({ tom: "erro", texto })}
         pending={pending}

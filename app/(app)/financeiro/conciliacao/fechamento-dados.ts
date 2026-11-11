@@ -7,7 +7,7 @@
  */
 
 import type { createClient } from "@/lib/supabase/server";
-import type { CondicoesDoFechamento, ConciliacaoFechamento } from "@/lib/types";
+import type { CondicoesDoFechamento, ConciliacaoFechamento, SaldoDoDiaEmAberto } from "@/lib/types";
 import { SEM_FECHAMENTO, type FechamentoDaConta, type RegistroDoFechamento } from "@/lib/conciliacao/fechamento";
 
 type Supabase = ReturnType<typeof createClient>;
@@ -25,7 +25,7 @@ export async function carregarFechamentoDaConciliacao(
   supabase: Supabase,
   args: { tenantId: string; contaId: string; comCondicoes: boolean },
 ): Promise<FechamentoDaConta> {
-  const [registrosRes, condicoesRes] = await Promise.all([
+  const [registrosRes, condicoesRes, saldosRes] = await Promise.all([
     supabase
       .from("conciliacao_fechamentos")
       .select(
@@ -39,12 +39,17 @@ export async function carregarFechamentoDaConciliacao(
     args.comCondicoes
       ? supabase.rpc("condicoes_do_fechamento", { p_conta_id: args.contaId })
       : Promise.resolve({ data: null, error: null }),
+    // O saldo de cada dia em aberto (decisão 254): o cadeado avisa antes do clique.
+    args.comCondicoes
+      ? supabase.rpc("saldos_dos_dias_em_aberto", { p_conta_id: args.contaId })
+      : Promise.resolve({ data: null, error: null }),
   ]);
   if (registrosRes.error) {
     console.error("[conciliacao.fechamento]", registrosRes.error.message);
     return SEM_FECHAMENTO;
   }
   if (condicoesRes.error) console.error("[conciliacao.fechamento.condicoes]", condicoesRes.error.message);
+  if (saldosRes.error) console.error("[conciliacao.fechamento.saldos]", saldosRes.error.message);
 
   const registros: RegistroDoFechamento[] = (registrosRes.data ?? []).map((r) => ({
     id: r.id,
@@ -71,5 +76,11 @@ export async function carregarFechamentoDaConciliacao(
           diferenca: c.diferenca === null || c.diferenca === undefined ? null : Number(c.diferenca),
         }
       : null,
+    saldosDosDias: ((saldosRes.data as SaldoDoDiaEmAberto[] | null) ?? []).map((s) => ({
+      data: s.data,
+      saldo_banco: s.saldo_banco === null || s.saldo_banco === undefined ? null : Number(s.saldo_banco),
+      saldo_sistema: Number(s.saldo_sistema),
+      diferenca: s.diferenca === null || s.diferenca === undefined ? null : Number(s.diferenca),
+    })),
   };
 }

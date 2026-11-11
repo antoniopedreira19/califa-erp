@@ -4,6 +4,9 @@
  * conta com o que falta em cada um.
  */
 
+import { formatBRL } from "@/lib/format";
+import type { SaldoDoDiaEmAberto } from "@/lib/types";
+
 /** A ordem do extrato: o dia e, dentro dele, a ordem em que o banco mandou. */
 export const naOrdemDoExtrato = (
   a: { data: string; ordem: number; id: string },
@@ -91,8 +94,24 @@ export function diasDaConta(
     }));
 }
 
-/** Por que o dia ainda não fecha; nulo, pode fechar. */
-export function motivoDeNaoFechar(dias: DiaDaConta[], data: string): string | null {
+/** O saldo de um dia pela conta do fechamento (`saldos_dos_dias_em_aberto`). */
+export type SaldoDoDia = SaldoDoDiaEmAberto;
+
+/**
+ * O que o servidor recusaria no saldo do dia, dito antes do clique: o extrato
+ * sem saldo ou o saldo do banco diferente do sistema. Nulo, o saldo bate (ou
+ * o servidor não informou o dia, e é ele quem decide no clique).
+ */
+export function avisoDoSaldo(saldos: SaldoDoDia[], data: string): string | null {
+  const s = saldos.find((x) => x.data === data);
+  if (!s) return null;
+  if (s.saldo_banco === null || s.diferenca === null) return "O extrato importado não informa o saldo do banco: importe um arquivo com o saldo para fechar.";
+  if (Math.abs(s.diferenca) < 0.005) return null;
+  return `O saldo de ${data.slice(8, 10)}/${data.slice(5, 7)} não bate: banco ${formatBRL(s.saldo_banco)}, sistema ${formatBRL(s.saldo_sistema)} (diferença de ${formatBRL(Math.abs(s.diferenca))}).`;
+}
+
+/** Por que o dia ainda não fecha; nulo, pode fechar. O saldo vem por último: primeiro as pendências. */
+export function motivoDeNaoFechar(dias: DiaDaConta[], data: string, saldos: SaldoDoDia[]): string | null {
   const dia = dias.find((d) => d.data === data);
   if (!dia || dia.estado === "fechado") return null;
   if (dia.estado === "andamento") return "O extrato deste dia ainda não está completo: o arquivo foi gerado no próprio dia.";
@@ -100,5 +119,5 @@ export function motivoDeNaoFechar(dias: DiaDaConta[], data: string): string | nu
   const anteriores = dias.filter((d) => d.data < data && d.estado !== "fechado" && d.pendentes > 0);
   if (anteriores.length) return `Resolva antes ${anteriores.map((d) => ddmm(d.data)).join(", ")}: a conta fecha um dia depois do outro.`;
   if (dia.pendentes > 0) return `${dia.pendentes === 1 ? "Falta 1 item" : `Faltam ${dia.pendentes} itens`} para fechar este dia.`;
-  return null;
+  return avisoDoSaldo(saldos, data);
 }

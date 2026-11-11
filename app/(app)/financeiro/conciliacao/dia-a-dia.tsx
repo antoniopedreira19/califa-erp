@@ -19,7 +19,7 @@ import { AlertTriangle, CheckCheck, ChevronLeft, ChevronRight, Lock, Trash2, Unl
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { diasDaConta, motivoDeNaoFechar, type DiaDaConta } from "@/lib/conciliacao/dia-a-dia";
+import { avisoDoSaldo, diasDaConta, motivoDeNaoFechar, type DiaDaConta, type SaldoDoDia } from "@/lib/conciliacao/dia-a-dia";
 import { InfoDica, LinhaDeAvisos, LinhaDoArquivo, linhasComMutuo, type PropsDaFila } from "./fila-da-conta";
 import { itensDoSistema, TabelaDeComposicoes, type AcoesDoDia } from "./dia-a-dia-tabela";
 import { conciliarMisto, mudarDataDaBaixa, mudarDataDaPrevisao, previaDeRetirarExtrato, retirarExtrato, type PreviaDaRetirada } from "./actions-dia-a-dia";
@@ -133,7 +133,7 @@ export function ConciliacaoDiaADia(p: PropsDaFila) {
       </div>
       <LinhaDeAvisos {...p} />
 
-      <BarraDeDias dias={dias} dia={dia} setDia={setDia} fechadaAte={p.fechadaAte} onFechar={fecharDia} ocupado={pending} />
+      <BarraDeDias dias={dias} saldos={p.saldosDosDias} dia={dia} setDia={setDia} fechadaAte={p.fechadaAte} onFechar={fecharDia} ocupado={pending} />
 
       {/* ---- O resumo do dia ---- */}
       <div className="flex flex-wrap items-center gap-x-8 gap-y-3 rounded-xl border border-border bg-card px-4 py-3">
@@ -160,7 +160,17 @@ export function ConciliacaoDiaADia(p: PropsDaFila) {
         {pending && <span className="ml-auto text-xs font-semibold text-muted-foreground">Trabalhando…</span>}
       </div>
 
-      {dia && atual?.estado === "pronto" && !motivoDeNaoFechar(dias, dia) && (
+      {/* Tudo conciliado, mas o servidor recusaria o fechamento pelo saldo: dito antes do clique. */}
+      {dia && atual?.estado === "pronto" && motivoDeNaoFechar(dias, dia, []) === null && avisoDoSaldo(p.saldosDosDias, dia) && (
+        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <AlertTriangle className="h-5 w-5 text-amber-700" />
+          <span className="flex-1">
+            <strong>Tudo conciliado em {ddmm(dia)}, mas o dia ainda não fecha.</strong> {avisoDoSaldo(p.saldosDosDias, dia)}
+          </span>
+        </div>
+      )}
+
+      {dia && atual?.estado === "pronto" && !motivoDeNaoFechar(dias, dia, p.saldosDosDias) && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
           <CheckCheck className="h-5 w-5 text-emerald-700" />
           <span className="flex-1">
@@ -214,6 +224,7 @@ function Bloco({ rotulo, valor, cor, dica }: { rotulo: string; valor: string; co
 /** A barra de dias: um dia por vez, em ordem; o cadeado no lugar do número quando o dia não tem mais pendências. */
 function BarraDeDias({
   dias,
+  saldos,
   dia,
   setDia,
   fechadaAte,
@@ -221,6 +232,8 @@ function BarraDeDias({
   ocupado,
 }: {
   dias: DiaDaConta[];
+  /** O saldo de cada dia pela conta do fechamento: o cadeado avisa antes do clique. */
+  saldos: SaldoDoDia[];
   dia: string | null;
   setDia: (d: string | null) => void;
   fechadaAte: string | null;
@@ -248,7 +261,8 @@ function BarraDeDias({
       <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
         {dias.map((d) => {
           const ativo = d.data === dia;
-          const motivo = d.estado === "fechado" ? "Dia fechado" : motivoDeNaoFechar(dias, d.data);
+          const motivo = d.estado === "fechado" ? "Dia fechado" : motivoDeNaoFechar(dias, d.data, saldos);
+          const saldoNaoBate = d.estado === "pronto" && !!avisoDoSaldo(saldos, d.data);
           return (
             <div
               key={d.data}
@@ -268,7 +282,9 @@ function BarraDeDias({
                     : d.estado === "andamento"
                       ? "Em andamento: o extrato do dia ainda não está completo"
                       : d.estado === "pronto"
-                        ? "Tudo conciliado: pronto para fechar"
+                        ? saldoNaoBate
+                          ? "Tudo conciliado, mas o saldo do dia não confere com o banco"
+                          : "Tudo conciliado: pronto para fechar"
                         : `${d.pendentes} ${d.pendentes === 1 ? "item" : "itens"} para resolver`
                 }
                 className={cn("flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg pl-3 text-left", d.estado !== "fechado" && d.pendentes > 0 ? "pr-3" : "pr-1")}
