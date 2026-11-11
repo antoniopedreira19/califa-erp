@@ -1,7 +1,7 @@
 # 252 — A errata renomeia o item que já existe na planilha do job
 
 **Data:** 2026-11-10
-**Status:** aceita e implementada em 10/11/2026 (migration `20261110800001`).
+**Status:** aceita e implementada em 10/11/2026 (migration `20261110800001`); testada no Sandbox em 11/11/2026.
 **Quem decidiu:** Tiago, em 10/11/2026, a partir do relato de que "não está sendo possível modificar o nome de itens em Editar planilha". A regra que ele tinha em mente: o nome muda, mas só com a errata aprovada pelo financeiro.
 **Revê:** a [162](162-organizar-a-planilha-do-job-na-errata.md), que renomeava só o agrupamento. Completa a [226](226-linha-vermelha-fora-da-errata-e-versao-aprovada-com-as-erratas.md) (o orçamento lê o job) e a [191](191-item-da-planilha-no-pdf-da-pp.md) (o item no PDF da PP).
 
@@ -44,6 +44,14 @@ No "Editar planilha" (a errata do GP), só a linha nova tinha o nome editável. 
 
 ## Como foi conferido
 
-- Na tela, no 2GB-1002/26 (o job da foto do relato), **só em rascunho e descartado**: o Produtor (PP paga) não abre e mostra "nome travado"; a Impressão Papel Couchê (sem PP) renomeia com a pastilha; o Filmaker (PP-00787 gerada) abre o pop-up; o "Confirmar errata" lista os dois "Item renomeado" com "Nenhum valor muda". Nenhuma errata foi gravada.
-- No banco, no TES-1029/26 (tenant Sandbox), em transação desfeita: a função grava os dois nomes (linha sem PP e linha com PP gerada) e o de → para em `jobs_erratas.estrutura`; a linha com PP aprovada é recusada com "já tem PP enviada ao financeiro".
-- **Não conferido de ponta a ponta:** o registro pela tela, o PDF refeito e o histórico depois de uma errata real. O projeto de teste P-0006/26 foi movido para o tenant "California Sandbox" em 09/11/2026 (migration `20261109970002`, outra frente), e o usuário de administrador não tem acesso a ele.
+- **No Sandbox, de ponta a ponta (11/11/2026)**, como `admin@sandbox.local` no TES-1029/26 (P-0006/26):
+  - Item 1 de outubro (PP-00572 aprovada) não abre e mostra "nome travado".
+  - Item 2 de outubro (só a PP-00575, cancelada) foi renomeado sem pop-up.
+  - Item 2 de novembro (PP-00729 gerada) abriu o pop-up e foi renomeado.
+  - A errata "Teste da decisão 252" foi registrada com "Nenhum valor muda" e os dois "Item renomeado". No banco ficaram os dois nomes e o de → para em `jobs_erratas.estrutura`.
+  - O PDF da PP-00729 foi refeito no mesmo segundo e traz o nome novo.
+  - O Histórico do job mostra as duas linhas "renomeada", com o de → para na dica; a versão de 03/11 está com os nomes antigos.
+  - O orçamento mostra os nomes novos, e o "Aprovada pelo cliente" do Histórico dele mostra os antigos.
+- **Achado no teste:** depois do "Renomear" do pop-up, a seleção descia e, na última linha do grupo, abria um "Novo item" vazio. Agora a seleção fica no item renomeado.
+- **Comportamento que já existia:** Enter numa célula que não abre (a travada, por exemplo) desce para a linha de baixo, e Enter que confirma o nome da última linha do grupo abre o "Novo item", como nos valores.
+- Antes, em 10/11: a tela foi conferida em rascunho descartado no 2GB-1002/26 (produção), e a função do banco numa transação desfeita.

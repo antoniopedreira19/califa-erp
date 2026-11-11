@@ -1099,7 +1099,6 @@ export function JobItemRealizadoTable({
     de: string;
     para: string;
     geradas: string[];
-    destino?: Direcao;
   } | null>(null);
 
   /** O nome recusado na célula (vazio não chega aqui; longo, sim). Some
@@ -1371,10 +1370,13 @@ export function JobItemRealizadoTable({
         variant="primary"
         onConfirm={() => {
           if (!nomeComPP || !errata) return;
-          const { itemId, para, destino } = nomeComPP;
+          const { itemId, para } = nomeComPP;
           errata.editarNome(itemId, para);
           setNomeComPP(null);
-          if (destino) selecao.mover(destino, { linhaId: itemId, coluna: "item" });
+          // A seleção fica no item: depois do pop-up, andar (e, na última
+          // linha do grupo, abrir um "Novo item") surpreende quem só
+          // confirmou o nome.
+          selecao.selecionar({ linhaId: itemId, coluna: "item" });
           selecao.focar();
         }}
       />
@@ -1848,7 +1850,7 @@ export function JobItemRealizadoTable({
                                 const geradas = ppsDoNomePorLinha.get(item.id)?.geradas ?? [];
                                 if (geradas.length > 0 && para !== gravado.trim()) {
                                   setAberta(null);
-                                  setNomeComPP({ itemId: item.id, de: gravado, para, geradas, destino: d });
+                                  setNomeComPP({ itemId: item.id, de: gravado, para, geradas });
                                   return;
                                 }
                                 errata.editarNome(item.id, para);
