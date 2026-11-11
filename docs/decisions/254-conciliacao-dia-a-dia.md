@@ -64,8 +64,9 @@ A data da previsão da planilha foi conferida numa transação desfeita (o Sandb
 
 **Limites conhecidos, sem mudança de regra:**
 
-- "Retirar este extrato" recusa o arquivo que tem linha com correção de baixa registrada, mesmo desfeita (o registro da correção aponta para a linha do banco). Como só o último arquivo sai, os anteriores ficam presos com ele.
 - O cadeado do dia aparece livre quando as pendências zeram, mesmo com o saldo do banco diferente do sistema (linha ignorada, por exemplo); quem recusa é o servidor, com a mensagem do saldo.
 - Dois títulos com nota ou retenção na mesma linha não vão pela baixa de vários: baixa-se um a um e a linha fecha como pagamento agrupado (regra que já existia).
+
+**Revisto no mesmo dia (Tiago, 11/11/2026): a correção de baixa já desfeita não prende mais o extrato.** O roteiro mostrou que "Retirar este extrato" recusava o arquivo com qualquer correção registrada, mesmo desfeita, e como só o último arquivo sai, os anteriores ficavam presos com ele. Agora só a correção em vigor prende (e o IOF de mútuo, que não mudou). O registro da correção não é apagado: ele é o histórico do título, que o ⓘ lê pelo documento. Ao retirar o extrato, a correção desfeita só perde a ligação com a linha (`baixa_correcoes.extrato_linha_id` passou a aceitar nulo, com um CHECK que só deixa sem linha a correção desfeita), e os ids ficam na auditoria `extrato.retirado`. Migration `20261111700001_retirar_extrato_com_correcao_desfeita.sql`, aditiva. Conferido no Sandbox pela tela: o arquivo com a correção desfeita saiu, o anterior saiu em seguida, e o "Histórico da baixa" continuou no ⓘ da PP.
 
 **Não conferido pela tela (o Sandbox não tem o dado):** mútuo, previsão da planilha, o lápis do título a receber e "Conciliar as N prontas" com títulos em aberto.

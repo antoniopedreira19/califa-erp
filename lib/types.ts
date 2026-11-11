@@ -3937,7 +3937,8 @@ export type ConciliadaComo = "ligacao" | "baixa" | "avulso" | "regra" | "par" | 
 export interface BaixaCorrecao {
   id: string;
   tenant_id: string;
-  extrato_linha_id: string;
+  /** Nula só na correção já desfeita cujo extrato foi retirado (decisão 254). */
+  extrato_linha_id: string | null;
   documento_origem: "pp_baixa" | "avulsa_baixa" | "titulo_baixa";
   documento_id: string;
   lancamento_antes_id: string;

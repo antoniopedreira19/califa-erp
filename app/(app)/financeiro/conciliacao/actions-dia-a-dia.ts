@@ -212,7 +212,7 @@ async function lerPrevia(supabase: ReturnType<typeof createClient>, contaId: str
       fechadoAte: p.fechado_ate,
       travada:
         p.presas > 0
-          ? "Este extrato tem linha com correção de baixa ou IOF de mútuo registrados no histórico: ele não pode ser retirado."
+          ? "Este extrato tem linha com correção de baixa em vigor ou IOF de mútuo registrado no histórico: ele não pode ser retirado."
           : null,
     },
   };
