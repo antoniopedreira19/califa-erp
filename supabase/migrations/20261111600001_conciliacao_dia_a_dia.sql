@@ -1,8 +1,14 @@
 -- =============================================================================
--- 20261111500001 — A conciliação dia a dia: mudar a data da baixa e da
--- previsão da planilha, e retirar o extrato importado (decisão 253; Tiago,
+-- 20261111600001 — A conciliação dia a dia: mudar a data da baixa e da
+-- previsão da planilha, e retirar o extrato importado (decisão 254; Tiago,
 -- 11/11/2026)
 -- =============================================================================
+-- RENUMERADA antes de publicar: nasceu como decisão 253 e prefixo
+-- 20261111500001, os dois tomados no mesmo dia pela "Reverter aprovação" do
+-- Contas a Pagar, que chegou antes ao main. O corpo abaixo está como foi
+-- aplicado (os `comment on` dizem "Decisão 253"); a migration seguinte,
+-- 20261111600002, troca esses comentários no banco para 254.
+--
 -- A Conciliação automática passou a trabalhar um dia por vez, e a
 -- correspondência só vale no mesmo dia (o motor, em `lib/conciliacao`). Com
 -- isso, o que está no dia errado precisa mudar de dia sem cancelar e refazer,

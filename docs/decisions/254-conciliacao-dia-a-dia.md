@@ -40,7 +40,7 @@ O financeiro começou a conciliar pelo sistema e encontrou três coisas:
 - **Contas puras** (`lib/conciliacao/dia-a-dia.ts`, com teste): os dias da conta, o motivo de não fechar e o saldo por linha. **O saldo parte do saldo do banco que o servidor confere no fechamento** (`condicoes_do_fechamento`: o do último dia completo do extrato) e anda linha a linha; não é uma soma feita na tela a partir do zero.
 - **Leitura** (`banco-dados.ts`): a aba traz as linhas **dos dias em aberto inteiros** (do começo da conta, ou do dia seguinte ao último fechado), e não mais só as resolvidas do período do último extrato (239). É o que dá o "N de M linhas conciliadas" do dia e o saldo sem buraco.
 - **Ações** (`actions-dia-a-dia.ts`): `conciliarMisto`, `mudarDataDaBaixa`, `mudarDataDaPrevisao`, `previaDeRetirarExtrato` e `retirarExtrato` (em partes: desfaz poucas conciliações por chamada e só então apaga).
-- **Banco** (migration `20261111500001_conciliacao_dia_a_dia.sql`, aditiva): `mudar_data_da_baixa` (a mesma `_mudar_data_do_lancamento` que a conciliação já usa ao ligar; período aberto, sem data futura), `historico_previsoes_datas` com `mudar_data_da_previsao` e o gatilho da carga nova, `previa_de_retirar_extrato` e `retirar_extrato`. Auditoria: `baixa.data_alterada`, `historico.previsao_data_alterada` e `extrato.retirado`.
+- **Banco** (migration `20261111600001_conciliacao_dia_a_dia.sql`, aditiva; a `20261111600002` só troca os comentários do banco, porque a decisão nasceu 253 e foi renumerada antes de publicar): `mudar_data_da_baixa` (a mesma `_mudar_data_do_lancamento` que a conciliação já usa ao ligar; período aberto, sem data futura), `historico_previsoes_datas` com `mudar_data_da_previsao` e o gatilho da carga nova, `previa_de_retirar_extrato` e `retirar_extrato`. Auditoria: `baixa.data_alterada`, `historico.previsao_data_alterada` e `extrato.retirado`.
 
 ## Regras que valem registrar
 
@@ -52,8 +52,20 @@ O financeiro começou a conciliar pelo sistema e encontrou três coisas:
 
 ## Conferido
 
-No Sandbox (Conta Teste), pela tela, em 11/11/2026: importar um extrato de teste; mudar a data de uma baixa de 16/10 para 04/11 e a linha do dia virar Pronto; "Conciliar as 2 prontas" (ligação e regra); conciliar uma linha com uma baixa de outra data mais um título em aberto (a data da baixa foi para a do banco e o título ganhou a baixa); a lista de troca alinhada às colunas; a confirmação de mover (confirmar e cancelar); desfazer; retirar o extrato com 3 conciliações (pede motivo, desfaz e apaga) e sem nenhuma (não pede); importar de novo o mesmo arquivo. No fim o Sandbox voltou ao estado inicial, conferido no banco.
+No Sandbox, pela tela, em 11/11/2026, em duas passadas. No fim o Sandbox voltou ao estado inicial, conferido no banco (ficaram a conta de teste criada para isto, os dois extratos dela e uma regra só dela).
+
+**Na Conta Teste:** importar um extrato; mudar a data de uma baixa e a linha do dia virar Pronto; "Conciliar as 2 prontas" (ligação e regra); uma linha com baixa de outra data mais um título em aberto; a lista de troca alinhada às colunas; a confirmação de mover (confirmar e cancelar); desfazer; retirar o extrato com 3 conciliações (pede motivo, desfaz e apaga) e sem nenhuma (não pede); importar de novo o mesmo arquivo.
+
+**Numa conta nova ("Conta Teste 253", com saldo inicial, para o saldo bater), com 14 linhas de todo tipo:** combinação de dois títulos do dia; pagamento agrupado (duas baixas do mesmo fornecedor numa linha); PIX que saiu e voltou; correção da baixa com o banco a menos (com motivo) e recusada com o banco a mais; título de outra data pela baixa completa; criar regra e conciliar por ela; juros e multa; recebimento; retenção na fonte; baixa parcial com dois títulos na mesma linha; lançar avulso e baixar num clique; ignorar a linha; o lápis do título em aberto; fechar o dia pelo cadeado (um dia, depois três de uma vez), a recusa do servidor quando o saldo não bate e reabrir; desfazer cada tipo (ligação, baixa, duas baixas, regra, par, correção, ignorada); retirar da composição, Associar e "Voltar à sugestão"; um segundo arquivo importado.
 
 A data da previsão da planilha foi conferida numa transação desfeita (o Sandbox não tem previsões): ajuste gravado, volta à data ajustada ao desligar do banco, linha da carga nova nasce na data ajustada, voltar à data da planilha apaga o ajuste.
 
-**Não conferido pela tela:** fechar o dia pelo cadeado (a Conta Teste não zera as pendências nem bate o saldo; a ação é a `fechar_conciliacao` de sempre) e a baixa parcial com vários títulos na mesma linha.
+**O que o roteiro achou e foi corrigido antes de publicar:** a linha do banco maior que a baixa aparecia "Pronto · corrige a baixa", mas a correção só aceita banco a mais no boleto (a regra virou `correcaoDaBaixaCabe`, usada pela linha e pelo diálogo); o título com centro de custo mas fora da baixa em lote (PP fora do cadastro) não saía do lugar no Conciliar, e agora abre a baixa completa; o ajuste "retenção" abria a baixa como parcial, e agora leva as alíquotas e só aparece quando uma retenção comum explica a diferença; o Associar chamava de "faltando" a linha "A definir".
+
+**Limites conhecidos, sem mudança de regra:**
+
+- "Retirar este extrato" recusa o arquivo que tem linha com correção de baixa registrada, mesmo desfeita (o registro da correção aponta para a linha do banco). Como só o último arquivo sai, os anteriores ficam presos com ele.
+- O cadeado do dia aparece livre quando as pendências zeram, mesmo com o saldo do banco diferente do sistema (linha ignorada, por exemplo); quem recusa é o servidor, com a mensagem do saldo.
+- Dois títulos com nota ou retenção na mesma linha não vão pela baixa de vários: baixa-se um a um e a linha fecha como pagamento agrupado (regra que já existia).
+
+**Não conferido pela tela (o Sandbox não tem o dado):** mútuo, previsão da planilha, o lápis do título a receber e "Conciliar as N prontas" com títulos em aberto.

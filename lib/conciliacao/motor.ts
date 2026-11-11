@@ -4,7 +4,7 @@
  * `casar`, na versão recomendada, que a Alternativa aprovada usa). A ordem e
  * os limites de cada passo valem como especificação (seção 4.5).
  *
- * A correspondência só vale NO MESMO DIA (decisão 253, que revê as janelas
+ * A correspondência só vale NO MESMO DIA (decisão 254, que revê as janelas
  * da 199): a baixa, o título e a retenção de outro dia não são sugeridos,
  * ficam para a escolha da pessoa na linha ("Em outras datas"). Na fila única
  * de antes, o título de valor igual em qualquer data casava com a linha, e

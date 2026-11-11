@@ -1,5 +1,5 @@
 /**
- * As contas da conciliação dia a dia (decisão 253), sem tela e sem banco:
+ * As contas da conciliação dia a dia (decisão 254), sem tela e sem banco:
  * a ordem do extrato, o saldo do banco depois de cada linha e os dias da
  * conta com o que falta em cada um.
  */

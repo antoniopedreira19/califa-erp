@@ -40,7 +40,7 @@ export interface HistoricoDoMotor {
    *  Tipo: CO, CF…), para as colunas da fila (decisão 243). */
   regional?: string | null;
   grupo?: string | null;
-  /** Só na previsão com a data ajustada pela conciliação (decisão 253): a
+  /** Só na previsão com a data ajustada pela conciliação (decisão 254): a
    *  data que a planilha tem. Quem lê do banco manda sempre (nulo, sem ajuste). */
   dataDaPlanilha?: string | null;
 }

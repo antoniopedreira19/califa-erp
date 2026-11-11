@@ -146,7 +146,7 @@ export default async function ConciliacaoPage({
       contaId,
       dataDe,
       dataAte,
-      // Na Automática, as resolvidas dos dias em aberto (decisão 253).
+      // Na Automática, as resolvidas dos dias em aberto (decisão 254).
       diasAbertos: aba === "banco",
     }),
     // O fechamento da conciliação (decisão 205): a faixa das três abas, o

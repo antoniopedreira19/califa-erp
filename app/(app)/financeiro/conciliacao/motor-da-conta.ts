@@ -281,7 +281,7 @@ export interface ConciliacaoDaConta {
 }
 
 /**
- * O pagamento agrupado (decisão 253): o banco pagou num lançamento só várias
+ * O pagamento agrupado (decisão 254): o banco pagou num lançamento só várias
  * baixas do MESMO fornecedor feitas no MESMO dia. Para cada linha do banco
  * sem baixa de valor igual no dia, as baixas de um fornecedor naquele dia (de
  * 2 a 6) que somam a linha centavo a centavo; só quando a combinação é única.
@@ -393,7 +393,7 @@ export function conciliarConta(
     });
   }
   // Por último, as previsões da planilha (decisão 232): o que ainda ficou sem
-  // par procura a previsão de mesmo valor NO DIA (decisão 253; antes, até 10
+  // par procura a previsão de mesmo valor NO DIA (decisão 254; antes, até 10
   // dias antes da data prevista e sem limite depois). A previsão de outra
   // data não se perde: a pessoa muda a data dela ou a escolhe na linha. O
   // título do sistema vem antes. Só se resolve sozinha a previsão única desse

@@ -26,7 +26,7 @@
  *   liga com as três condições do banco, e "Reabrir o período". Com a
  *   conciliação fechada, desfazer, corrigir e cancelar com data até lá
  *   avisam antes de chamar (o banco recusa de qualquer jeito).
- * - A tela (decisão 253): a conciliação dia a dia (dia-a-dia.tsx), que tomou
+ * - A tela (decisão 254): a conciliação dia a dia (dia-a-dia.tsx), que tomou
  *   o lugar da fila dividida da decisão 234. O que segue da 234:
  *   seções separadas, o "Importar extrato do banco (OFX)" no topo (saiu do
  *   Extrato, que não mostra mais o banco) e o "Agrupar lançamentos" no lugar
@@ -242,7 +242,7 @@ export function AbaBanco({
     depois?.();
   }
 
-  /** As ações da conciliação dia a dia (decisão 253): roda, avisa e relê a aba. */
+  /** As ações da conciliação dia a dia (decisão 254): roda, avisa e relê a aba. */
   const rodar = React.useCallback(
     (acao: () => Promise<Resultado>, depois?: () => void) => {
       setAviso(null);

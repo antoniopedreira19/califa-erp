@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * A tabela da conciliação dia a dia (decisão 253): a linha do banco e, ao
+ * A tabela da conciliação dia a dia (decisão 254): a linha do banco e, ao
  * lado, os lançamentos do sistema que a compõem, na ordem do extrato.
  *
  * Uma regra só para todos os casos: cada linha do banco tem uma lista de

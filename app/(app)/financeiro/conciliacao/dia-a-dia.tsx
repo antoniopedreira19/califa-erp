@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * A Conciliação automática dia a dia (decisão 253).
+ * A Conciliação automática dia a dia (decisão 254).
  *
  * A fila única da conta virou um dia por vez: a barra de dias (com o que
  * falta em cada um e o cadeado de fechar no dia sem pendências), o resumo do

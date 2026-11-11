@@ -1,6 +1,6 @@
 /**
  * Testes do motor de correspondência (decisão 199, com a regra do mesmo dia
- * da decisão 253): sobre os dados do protótipo aprovado na 199, o motor só
+ * da decisão 254): sobre os dados do protótipo aprovado na 199, o motor só
  * difere dele onde o protótipo casava com outro dia.
  *
  * Rode com:  node --import tsx --test lib/conciliacao/motor.test.ts
@@ -61,10 +61,10 @@ const contagem = (res: Array<{ estado: string; confianca?: string }>) => {
   return c;
 };
 
-test("a contagem com os dados do protótipo, pela regra do mesmo dia (decisão 253)", async () => {
+test("a contagem com os dados do protótipo, pela regra do mesmo dia (decisão 254)", async () => {
   const { ofx, sistema } = await cenario();
   const res = casar(ofx.movimentos, sistema);
-  // Antes da 253 eram 40 sugestões altas, 2 diferenças, 2 combinações e 1 sem
+  // Antes da 254 eram 40 sugestões altas, 2 diferenças, 2 combinações e 1 sem
   // par: o que casava com título de outro dia agora fica sem par.
   assert.deepEqual(contagem(res), {
     "regra:alta": 5,
@@ -220,7 +220,7 @@ test("sem nada no sistema, a linha fica sem correspondência, com o motivo", () 
   assert.equal(r.motivo, "Nenhum título ou lançamento do sistema tem esse valor neste dia.");
 });
 
-// --- A regra do mesmo dia (decisão 253) ---------------------------------------
+// --- A regra do mesmo dia (decisão 254) ---------------------------------------
 
 test("o título de outro dia não casa com a linha, nem pelo valor exato", () => {
   const vespera = casar([mov(0, -3000)], { ...vazio, titulos: [titulo("a", 3000, { vencimento: "2026-10-18" })] });

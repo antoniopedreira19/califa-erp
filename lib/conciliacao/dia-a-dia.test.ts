@@ -1,5 +1,5 @@
 /**
- * Testes das contas da conciliação dia a dia (decisão 253): o saldo do banco
+ * Testes das contas da conciliação dia a dia (decisão 254): o saldo do banco
  * depois de cada linha e os dias da conta.
  *
  * Rode com:  node --import tsx --test lib/conciliacao/dia-a-dia.test.ts

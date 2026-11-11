@@ -408,7 +408,7 @@ export async function carregarBancoDaConciliacao(
 ): Promise<DadosDaAbaBanco> {
   const { tenantId, contaId } = args;
   let { dataDe, dataAte } = args;
-  // Na Conciliação automática (decisão 253, revê a 239), as resolvidas são
+  // Na Conciliação automática (decisão 254, revê a 239), as resolvidas são
   // as dos dias em aberto: do começo da conta, ou do dia seguinte ao último
   // fechado, em diante. A tela é dia a dia e precisa de cada dia inteiro (o
   // "N de M linhas conciliadas" do dia e o saldo depois de cada linha).
@@ -740,7 +740,7 @@ export async function carregarBancoDaConciliacao(
       // Decisão 243: a regional da planilha ("TD" quando é de todas).
       regional: h.regional_todas ? "TD" : h.regional_nome,
       grupo: h.grupo,
-      // Decisão 253: a data que a planilha tem, quando a tela ajustou a da previsão.
+      // Decisão 254: a data que a planilha tem, quando a tela ajustou a da previsão.
       dataDaPlanilha: h.data_prevista && h.data_prevista !== h.data ? h.data_prevista : null,
     };
     if (h.extrato_linha_id) {

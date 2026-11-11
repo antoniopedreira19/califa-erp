@@ -310,7 +310,7 @@ test("as baixas da remessa: uma a uma, e o grupo só com a linha da soma (passo 
   assert.deepEqual(total.naoApareceu, []);
 });
 
-test("a cauda do histórico (A6): do mesmo dia antes do título e pela soma do dia; a de outro dia não casa (decisão 253)", () => {
+test("a cauda do histórico (A6): do mesmo dia antes do título e pela soma do dia; a de outro dia não casa (decisão 254)", () => {
   const base = { lancamentos: [], remessasBaixadas: [], remessas: [], regras: [], periodos: [] };
   const cauda = [
     { id: "h1", data: "2026-10-19", valor: -600, job: "Job Exemplo 3T", descricao: null, fornecedor: "Fornecedor 001 Exemplo" },
@@ -350,7 +350,7 @@ test("a cauda do histórico (A6): do mesmo dia antes do título e pela soma do d
   assert.equal(resultados.filter((r) => r.estado === "historico" && r.confianca === "alta").length, 2);
 });
 
-test("as previsões da planilha (decisões 232 e 253): depois da cauda, só a do dia; a única vai para Prontos", () => {
+test("as previsões da planilha (decisões 232 e 254): depois da cauda, só a do dia; a única vai para Prontos", () => {
   const base = { lancamentos: [], remessasBaixadas: [], remessas: [], regras: [], periodos: [] };
   const historico = [{ id: "h1", data: "2026-10-21", valor: -500, job: "Job Exemplo 3T", descricao: null, fornecedor: "Fornecedor 001 Exemplo" }];
   const previsoes = [
@@ -499,7 +499,7 @@ test("a linha da regra do extrato não vai para a cauda do histórico", () => {
   assert.equal(resultados[0].estado, "regra");
 });
 
-// --- O pagamento agrupado (decisão 253) ----------------------------------------
+// --- O pagamento agrupado (decisão 254) ----------------------------------------
 
 test("o pagamento agrupado: as baixas do mesmo fornecedor no dia que somam a linha, numa combinação só", () => {
   const base = { remessasBaixadas: [], remessas: [], regras: [], periodos: [] };

@@ -70,7 +70,7 @@ export interface PropsDaFila {
   /** Até que dia a conciliação está fechada (decisão 205); nulo, aberta. */
   fechadaAte: string | null;
   /** As condições do fechamento no último dia completo do extrato: o saldo
-   *  do banco conferido pelo servidor, de onde parte a coluna Saldo (decisão 253). */
+   *  do banco conferido pelo servidor, de onde parte a coluna Saldo (decisão 254). */
   condicoes: FechamentoDaConta["condicoes"];
   /** Roda uma ação do servidor com o aviso da aba e a releitura da página. */
   rodar: (acao: () => Promise<ResultadoDaAcao>, depois?: () => void) => void;
