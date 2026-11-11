@@ -26,15 +26,16 @@ export const criarSolicitacaoSchema = z
       .trim()
       .min(2, { message: "Nome deve ter ao menos 2 caracteres" })
       .max(200),
+    // CPF é obrigatorio em TODA solicitação — contrato de ponta a ponta.
+    // Historicamente era opcional (optional+nullable) e isso causava
+    // solicitacoes orfas sem CPF que depois quebravam o cadastro via form
+    // publico. Freela sem CPF cadastrado = GP tem que digitar na hora.
     cpf_freela: z
       .string()
       .transform(onlyDigits)
-      .refine((v) => v === "" || v.length === 11, {
-        message: "CPF deve ter 11 dígitos",
-      })
-      .transform((v) => (v === "" ? null : v))
-      .nullable()
-      .optional(),
+      .refine((v) => v.length === 11, {
+        message: "CPF é obrigatório e deve ter 11 dígitos",
+      }),
     /** Quando o form já identificou um freela cadastrado (via debounce de CPF
      *  → endpoint /api/freelancers/buscar-por-cpf), envia o id explícito. É
      *  defesa em profundidade: o trigger do banco também resolve via CPF, mas

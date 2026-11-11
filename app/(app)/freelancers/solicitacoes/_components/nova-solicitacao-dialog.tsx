@@ -246,12 +246,14 @@ export function NovaSolicitacaoDialog({
     setFieldErrors({});
 
     // Validações client-side
+    // CPF e sempre obrigatorio — nao tem excecao de "freela travado": se o
+    // freela cadastrado nao tem CPF (legado), o GP tem que preencher aqui.
     const cpfDigits = onlyDigits(cpfFreela);
+    if (cpfDigits.length !== 11 || !isValidCpf(cpfDigits)) {
+      setErroGeral("CPF é obrigatório e deve ser válido.");
+      return;
+    }
     if (!travado) {
-      if (cpfDigits.length !== 11 || !isValidCpf(cpfDigits)) {
-        setErroGeral("CPF inválido.");
-        return;
-      }
       if (!nome.trim() || !sobrenome.trim()) {
         setErroGeral("Preencha nome e sobrenome.");
         return;
