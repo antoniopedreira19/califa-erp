@@ -122,6 +122,28 @@ export async function POST(
         { status: 409 },
       );
     }
+    // UNIQUE constraints por tenant: CNPJ ou CPF ja usados por outro freela.
+    // O erro cru do Postgres e ilegivel ("duplicate key value violates...").
+    if (msg.includes("uq_freelancers_tenant_cnpj")) {
+      return NextResponse.json(
+        {
+          error:
+            "Esse CNPJ já está cadastrado em outro freelancer. Confira o número ou fale com o RH.",
+          fieldErrors: { cnpj: ["CNPJ já cadastrado"] },
+        },
+        { status: 409 },
+      );
+    }
+    if (msg.includes("uq_freelancers_tenant_cpf")) {
+      return NextResponse.json(
+        {
+          error:
+            "Esse CPF já está cadastrado em outro freelancer. Confira o número ou fale com o RH.",
+          fieldErrors: { cpf: ["CPF já cadastrado"] },
+        },
+        { status: 409 },
+      );
+    }
     return NextResponse.json(
       { error: "Falha ao processar: " + msg },
       { status: 500 },
