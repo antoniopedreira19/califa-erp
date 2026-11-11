@@ -33,6 +33,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { dataBR } from "@/components/financeiro/planilha-de-titulos/planilha";
 import { rotuloDoBanco } from "@/lib/conciliacao/ofx";
 import { pixDeEmpresaDeFora } from "@/lib/financeiro/mutuo";
+import type { FechamentoDaConta } from "@/lib/conciliacao/fechamento";
 import type { GrupoDeIguais, TituloDoMotor } from "@/lib/conciliacao/motor";
 import { BotaoLancar } from "./mutuo-na-linha";
 import type { DadosDaAbaBanco, LancamentoSemLinha } from "./banco-dados";
@@ -54,6 +55,8 @@ const final4 = (s: string | null | undefined) => (s ? `••••${s.replace(/
 // O contrato com a aba
 // ---------------------------------------------------------------------------
 
+export type ResultadoDaAcao = { ok: true; mensagem?: string } | { ok: false; message: string };
+
 export interface PropsDaFila {
   banco: DadosDaAbaBanco;
   conciliacao: ConciliacaoDaConta;
@@ -64,10 +67,15 @@ export interface PropsDaFila {
   conciliarVarios: (rs: ResultadoDaLinha[]) => void;
   /** O botão "Importar extrato do banco (OFX)" do topo. */
   importar: React.ReactNode;
-  /** Fechar a conciliação / Reabrir o período. */
-  fechamento: React.ReactNode;
   /** Até que dia a conciliação está fechada (decisão 205); nulo, aberta. */
   fechadaAte: string | null;
+  /** As condições do fechamento no último dia completo do extrato: o saldo
+   *  do banco conferido pelo servidor, de onde parte a coluna Saldo (decisão 253). */
+  condicoes: FechamentoDaConta["condicoes"];
+  /** Roda uma ação do servidor com o aviso da aba e a releitura da página. */
+  rodar: (acao: () => Promise<ResultadoDaAcao>, depois?: () => void) => void;
+  /** Um aviso de erro na tela (o que não chega a ir ao servidor). */
+  avisar: (texto: string) => void;
   pending: boolean;
   avisos: {
     erroImportacao: string | null;
@@ -790,61 +798,6 @@ export function LinhaDeAvisos(p: PropsDaFila) {
           Nada novo neste arquivo
         </ChipDeAviso>
       )}
-    </div>
-  );
-}
-
-
-function Bloco({ rotulo, valor, cor, dica }: { rotulo: string; valor: string; cor?: string; dica: string }) {
-  return (
-    <div className="flex min-w-0 flex-col">
-      <span className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider text-muted-foreground">
-        {rotulo}
-        <InfoDica texto={dica} />
-      </span>
-      <span className={cn("font-mono text-base font-semibold", cor)}>{valor}</span>
-    </div>
-  );
-}
-
-/** Os saldos e o progresso numa faixa só, com Fechar/Reabrir. */
-export function FaixaDoTopo(p: PropsDaFila) {
-  const { banco, conciliacao } = p;
-  const u = banco.ultima;
-  const resultados = conciliacao.resultados;
-  const resolvidos = resultados.filter((r) => r.resolvido).length;
-  const pct = resultados.length ? Math.round((resolvidos / resultados.length) * 100) : 0;
-  const saldoBanco = u?.saldoBanco ?? null;
-  const saldoSistema = banco.saldoSistemaNoFim;
-  const dif = saldoBanco === null || saldoSistema === null ? null : r2(saldoBanco - saldoSistema);
-  return (
-    <div className="flex flex-wrap items-center gap-x-8 gap-y-3 rounded-xl border border-border bg-card px-4 py-3">
-      <Bloco rotulo="Saldo no banco" valor={saldoBanco === null ? "—" : moeda(saldoBanco)} dica={`Informado pelo arquivo, em ${dataBR(u?.saldoEm ?? u?.fim ?? "")}.`} />
-      <Bloco rotulo="Saldo do sistema" valor={saldoSistema === null ? "—" : moeda(saldoSistema)} dica={`O Extrato desta conta no fim de ${u?.fim ? dataBR(u.fim) : "—"}.`} />
-      <Bloco
-        rotulo="Diferença"
-        valor={dif === null ? "—" : dif === 0 ? "Bate ✓" : moeda(dif)}
-        cor={dif === 0 ? "text-emerald-700" : "text-california-red"}
-        dica={dif === null ? "O arquivo não informou o saldo." : dif === 0 ? "Banco e sistema contam a mesma história." : "Some quando cada linha do banco tiver o seu lançamento."}
-      />
-      <div className="flex min-w-[200px] flex-col gap-1.5">
-        <span className="text-xs font-semibold">
-          <span className="font-mono">{resolvidos}</span> de <span className="font-mono">{resultados.length}</span> conciliados
-        </span>
-        {/* O progresso é o do último extrato, e não o do filtro De/Até (decisão 239). */}
-        {u?.inicio && u.fim && (
-          <span className="text-[11px] text-muted-foreground">
-            no extrato de {dataBR(u.inicio).slice(0, 5)} a {dataBR(u.fim)}
-          </span>
-        )}
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-          <div className="h-full rounded-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
-        </div>
-      </div>
-      <div className="ml-auto flex flex-wrap items-center gap-2">
-        {p.pending && <span className="text-xs font-semibold text-muted-foreground">Trabalhando…</span>}
-        {p.fechamento}
-      </div>
     </div>
   );
 }
