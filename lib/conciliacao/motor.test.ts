@@ -1,7 +1,7 @@
 /**
- * Testes do motor de correspondência (decisão 199): o porte bate com o
- * `casar` do protótipo aprovado, linha a linha, sobre os mesmos dados, e com
- * a contagem da especificação (seção 8, Fase 3).
+ * Testes do motor de correspondência (decisão 199, com a regra do mesmo dia
+ * da decisão 253): sobre os dados do protótipo aprovado na 199, o motor só
+ * difere dele onde o protótipo casava com outro dia.
  *
  * Rode com:  node --import tsx --test lib/conciliacao/motor.test.ts
  */
@@ -60,44 +60,52 @@ const contagem = (res: Array<{ estado: string; confianca?: string }>) => {
   return c;
 };
 
-test("a contagem da especificação, com os dados do protótipo", async () => {
+test("a contagem com os dados do protótipo, pela regra do mesmo dia (decisão 253)", async () => {
   const { ofx, sistema } = await cenario();
   const res = casar(ofx.movimentos, sistema);
+  // Antes da 253 eram 40 sugestões altas, 2 diferenças, 2 combinações e 1 sem
+  // par: o que casava com título de outro dia agora fica sem par.
   assert.deepEqual(contagem(res), {
     "regra:alta": 5,
-    "sugestao:alta": 40,
-    "diferenca:media": 2,
-    "combinacao:alta": 2,
+    "sugestao:alta": 36,
+    "combinacao:alta": 1,
     "par:alta": 2,
     "divergencia:media": 1,
-    sem_par: 1,
+    sem_par: 8,
     "sugestao:media": 3,
     "ja_lancado:alta": 1,
     "soma:alta": 1,
   });
 });
 
-test("linha a linha, o mesmo resultado do protótipo", async () => {
+test("linha a linha: o mesmo resultado do protótipo onde ele casava no dia, e nada de outro dia", async () => {
   const { ofx, sistema, protoCasar } = await cenario();
   const nosso = casar(ofx.movimentos, sistema);
-  const dele = protoCasar(ofx.movimentos, sistema, { recomendada: true });
+  const dele = protoCasar(ofx.movimentos, sistema, { recomendada: true }) as Array<
+    ReturnType<CasarDoPrototipo>[number] & { titulo?: { id: string; vencimento?: string } | null; titulos?: Array<{ id: string; vencimento?: string }>; lancamento?: { data?: string } | null }
+  >;
   assert.equal(nosso.length, dele.length);
   nosso.forEach((r, i) => {
+    // Nada do que o motor sugere é de outro dia.
+    for (const t of [r.titulo, ...(r.titulos ?? [])]) if (t) assert.equal(t.vencimento, r.mov.data, `linha ${i}: título de outro dia`);
+    if (r.lancamento) assert.equal(r.lancamento.data, r.mov.data, `linha ${i}: baixa de outro dia`);
+    // E onde o protótipo casava só com o que é do dia, o resultado é o dele.
     const p = dele[i];
+    const doDia = [p.titulo, ...(p.titulos ?? [])].every((t) => !t || t.vencimento === r.mov.data) && (!p.lancamento || p.lancamento.data === r.mov.data);
+    if (!doDia || p.estado === "diferenca") return;
     assert.equal(r.estado, p.estado, `linha ${i}`);
-    assert.equal(r.confianca, p.confianca, `linha ${i}`);
     assert.equal(r.titulo?.id ?? null, p.titulo?.id ?? null, `linha ${i}`);
     assert.deepEqual((r.titulos ?? []).map((t) => t.id), (p.titulos ?? []).map((t) => t.id), `linha ${i}`);
     assert.equal(r.lote?.id ?? null, p.lote?.id ?? null, `linha ${i}`);
   });
 });
 
-test("as combinações: NF 1196 + NF 1197 e PP-00162 + PP-00163", async () => {
+test("as combinações: PP-00162 + PP-00163, do dia; NF 1196 (da véspera) + NF 1197 não se junta mais", async () => {
   const { ofx, sistema } = await cenario();
   const comb = casar(ofx.movimentos, sistema).filter((r) => r.estado === "combinacao");
   assert.deepEqual(
     comb.map((r) => (r.titulos ?? []).map((t) => t.ref).join("+")).sort(),
-    ["NF 1196+NF 1197", "PP-00162+PP-00163"],
+    ["PP-00162+PP-00163"],
   );
 });
 
@@ -208,5 +216,39 @@ test("a correção da baixa: os juros saem e o valor fica o do banco", () => {
 test("sem nada no sistema, a linha fica sem correspondência, com o motivo", () => {
   const [r] = casar([mov(0, -12.34)], vazio) as ResultadoDoMotor[];
   assert.equal(r.estado, "sem_par");
-  assert.equal(r.motivo, "Nenhum título ou lançamento do sistema tem esse valor.");
+  assert.equal(r.motivo, "Nenhum título ou lançamento do sistema tem esse valor neste dia.");
+});
+
+// --- A regra do mesmo dia (decisão 253) ---------------------------------------
+
+test("o título de outro dia não casa com a linha, nem pelo valor exato", () => {
+  const vespera = casar([mov(0, -3000)], { ...vazio, titulos: [titulo("a", 3000, { vencimento: "2026-10-18" })] });
+  assert.equal(vespera[0].estado, "sem_par");
+  const semana = casar([mov(0, -3000)], { ...vazio, titulos: [titulo("a", 3000, { vencimento: "2026-10-26" })] });
+  assert.equal(semana[0].estado, "sem_par");
+  // Com um do dia e outro de fora, o do dia casa sozinho, com confiança alta.
+  const [r] = casar([mov(0, -3000)], { ...vazio, titulos: [titulo("fora", 3000, { vencimento: "2026-10-18" }), titulo("dia", 3000)] });
+  assert.equal(r.titulo?.id, "dia");
+  assert.equal(r.confianca, "alta");
+});
+
+test("a baixa feita à mão só casa no dia dela: a de dois dias antes fica de fora", () => {
+  const l: LancamentoDoMotor = { id: "l1", data: "2026-10-17", valor: -250, descricao: "PP 1/1" };
+  assert.equal(casar([mov(0, -250)], { ...vazio, lancamentos: [l] })[0].estado, "sem_par");
+  assert.equal(casar([mov(0, -250)], { ...vazio, lancamentos: [{ ...l, data: "2026-10-19" }] })[0].estado, "ja_lancado");
+  // A que diverge por centavos também só no dia.
+  assert.equal(casar([mov(0, -250.5)], { ...vazio, lancamentos: [l] })[0].estado, "sem_par");
+  assert.equal(casar([mov(0, -250.5)], { ...vazio, lancamentos: [{ ...l, data: "2026-10-19" }] })[0].estado, "divergencia");
+});
+
+test("a soma da mesma contraparte vai até 6 títulos do dia, e ignora o de outro dia", () => {
+  const seis = [100, 200, 300, 400, 500, 600].map((v, i) => titulo(`t${i}`, v));
+  const [r] = casar([mov(0, -2100)], { ...vazio, titulos: seis });
+  assert.equal(r.estado, "combinacao");
+  assert.equal(r.titulos?.length, 6);
+  const sete = [...seis, titulo("t6", 700)];
+  assert.equal(casar([mov(0, -2800)], { ...vazio, titulos: sete })[0].estado, "sem_par");
+  // Dois do dia somam; o terceiro, de outro dia, não entra na conta.
+  const [m] = casar([mov(0, -500)], { ...vazio, titulos: [titulo("a", 200), titulo("b", 300, { vencimento: "2026-10-20" })] });
+  assert.equal(m.estado, "sem_par");
 });

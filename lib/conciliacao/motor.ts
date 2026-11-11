@@ -4,21 +4,27 @@
  * `casar`, na versão recomendada, que a Alternativa aprovada usa). A ordem e
  * os limites de cada passo valem como especificação (seção 4.5).
  *
+ * A correspondência só vale NO MESMO DIA (decisão 253, que revê as janelas
+ * da 199): a baixa, o título e a retenção de outro dia não são sugeridos,
+ * ficam para a escolha da pessoa na linha ("Em outras datas"). Na fila única
+ * de antes, o título de valor igual em qualquer data casava com a linha, e
+ * as correspondências erradas vieram daí.
+ *
  * Roda sobre as linhas do banco ainda sem solução, da tentativa mais certa
  * para a menos certa:
  *
- *   1.  a baixa feita à mão que bate (mesmo valor e sinal, até 3 dias);
+ *   1.  a baixa feita à mão que bate (mesmo valor e sinal, no dia);
  *   1c. as baixas de uma remessa, no mesmo dia, que somam a linha (o banco
  *       que debita a remessa inteira numa linha);
- *   1b. a baixa feita à mão que diverge (até R$ 1 ou 1%, até 3 dias);
+ *   1b. a baixa feita à mão que diverge (até R$ 1 ou 1%, no dia);
  *   2.  saiu e voltou (a devolução e a saída de mesmo valor no mesmo dia);
  *   2b. a regra do histórico (antes dos títulos: uma tarifa de R$ 250 não
  *       é a PP de R$ 250 que vence na semana — Tiago, 28/10/2026);
- *   3.  o título pelo valor exato, por pontos (data, forma, CNPJ);
+ *   3.  o título do dia pelo valor exato, por pontos (forma, CNPJ);
  *   3a. linhas iguais em número igual ao de títulos empatados;
  *   3b. a retenção na fonte que explica o banco ter menos;
  *   4.  a remessa (lote) que soma centavo a centavo;
- *   4b. de 2 a 4 títulos da mesma contraparte que somam a linha;
+ *   4b. de 2 a 6 títulos da mesma contraparte, do dia, que somam a linha;
  *   5.  juros e multa no boleto e na guia;
  *   7.  sem correspondência.
  *
@@ -296,7 +302,7 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
         !lancUsados.has(l.id) &&
         cents(l.valor) === cents(r.mov.valor) &&
         Math.sign(l.valor) === Math.sign(r.mov.valor) &&
-        Math.abs(diasEntre(somaDias(l.data, deslocamento), r.mov.data)) <= 3,
+        diasEntre(somaDias(l.data, deslocamento), r.mov.data) === 0,
     );
     if (l) {
       lancUsados.add(l.id);
@@ -315,14 +321,16 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
       (g) =>
         g.membros.every((id) => !lancUsados.has(id)) &&
         cents(g.valor) === cents(r.mov.valor) &&
-        Math.abs(diasEntre(somaDias(g.data, deslocamento), r.mov.data)) <= 3,
+        diasEntre(somaDias(g.data, deslocamento), r.mov.data) === 0,
     );
     if (g) {
       g.membros.forEach((id) => lancUsados.add(id));
       r.estado = "ja_lancado";
       r.lancamento = g;
       r.confianca = "alta";
-      r.motivo = `As ${g.membros.length} baixas da remessa somam a linha centavo a centavo. Conciliar só liga as linhas.`;
+      r.motivo = g.id.startsWith("ag:")
+        ? `${g.descricao}: as ${g.membros.length} baixas do dia somam a linha centavo a centavo. O banco pagou tudo num lançamento só.`
+        : `As ${g.membros.length} baixas da remessa somam a linha centavo a centavo. Conciliar só liga as linhas.`;
     }
   });
 
@@ -336,7 +344,7 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
         Math.sign(l.valor) === Math.sign(r.mov.valor) &&
         cents(l.valor) !== cents(r.mov.valor) &&
         Math.abs(Math.abs(l.valor) - Math.abs(r.mov.valor)) <= Math.max(1, Math.abs(r.mov.valor) * 0.01) &&
-        Math.abs(diasEntre(somaDias(l.data, deslocamento), r.mov.data)) <= 3,
+        diasEntre(somaDias(l.data, deslocamento), r.mov.data) === 0,
     );
     if (l) {
       lancUsados.add(l.id);
@@ -410,7 +418,7 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
   const pares: Array<{ r: ResultadoDoMotor<M>; t: TituloDoMotor; s: number }> = [];
   pendentes.forEach((r) => {
     titulos.forEach((t) => {
-      if (guardado(t) || !compativel(r.mov, t) || cents(t.liquido) !== cents(r.mov.valor)) return;
+      if (guardado(t) || !compativel(r.mov, t) || cents(t.liquido) !== cents(r.mov.valor) || venc(t) !== r.mov.data) return;
       pares.push({ r, t, s: pontuar(r.mov, t) });
     });
   });
@@ -475,7 +483,7 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
     if (r.estado !== "sem_par") return;
     for (const t of titulos) {
       if (usados.has(t.id) || guardado(t) || (t.retencao ?? 0) > 0 || !compativel(r.mov, t)) continue;
-      if (Math.abs(diasEntre(venc(t), r.mov.data)) > 10) continue;
+      if (venc(t) !== r.mov.data) continue;
       const combo = RETENCOES_COMUNS.find((c) => Math.abs(liquidoCom(t.valor, c.aliquotas) - Math.abs(r.mov.valor)) <= 0.01);
       if (!combo) continue;
       usados.add(t.id);
@@ -503,7 +511,7 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
   });
 
   // 4b. Vários títulos da mesma contraparte numa linha só (2 a 4, vencendo
-  //     até 10 dias da data, soma exata). Uma combinação só: alta; mais de
+  //     no dia, soma exata, de 2 a 6 títulos). Uma combinação só: alta; mais de
   //     uma: média.
   res.forEach((r) => {
     if (r.estado !== "sem_par") return;
@@ -512,7 +520,7 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
     const porContraparte = new Map<string, TituloDoMotor[]>();
     titulos.forEach((t) => {
       if (usados.has(t.id) || guardado(t) || !compativel(r.mov, t) || cents(t.liquido) >= alvo) return;
-      if (Math.abs(diasEntre(venc(t), r.mov.data)) > 10) return;
+      if (venc(t) !== r.mov.data) return;
       if (cnpj && t.cnpj && t.cnpj.replace(/\D/g, "") !== cnpj) return;
       porContraparte.set(t.contraparte, [...(porContraparte.get(t.contraparte) ?? []), t]);
     });
@@ -523,7 +531,7 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
           achadas.push(escolhidos);
           return;
         }
-        if (escolhidos.length === 4 || soma >= alvo) return;
+        if (escolhidos.length === 6 || soma >= alvo) return;
         for (let i = ini; i < ts.length; i++) busca(i + 1, [...escolhidos, ts[i]], soma + cents(ts[i].liquido));
       };
       busca(0, [], 0);
@@ -543,6 +551,7 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
   res.forEach((r) => {
     if (r.estado !== "sem_par" || r.mov.valor > 0 || forma(r.mov) !== "boleto") return;
     const cabe = (t: TituloDoMotor) => {
+      if (venc(t) !== r.mov.data) return false;
       if (t.lado !== "imposto" && (t.forma !== "boleto" || t.origem === "fatura")) return false;
       const dif = cents(r.mov.valor) - cents(t.liquido);
       if (dif <= 0) return false;
@@ -571,8 +580,8 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
   res.forEach((r) => {
     if (r.estado !== "sem_par") return;
     r.motivo = r.candidatos.length
-      ? `Os títulos de ${fmt(r.mov.valor)} já foram para outras linhas do extrato.`
-      : "Nenhum título ou lançamento do sistema tem esse valor.";
+      ? `Os títulos de ${fmt(r.mov.valor)} do dia já foram para outras linhas do extrato.`
+      : "Nenhum título ou lançamento do sistema tem esse valor neste dia.";
   });
   return res;
 }
