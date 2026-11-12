@@ -17,7 +17,7 @@ import {
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import { formatDocumento, formatTelefone } from "@/lib/utils";
-import type { Fornecedor } from "@/lib/types";
+import type { FornecedorDaLista } from "./colunas-da-lista";
 import { inativarFornecedor, reativarFornecedor } from "./actions";
 import {
   BarraDosFiltrosDeColuna,
@@ -26,7 +26,7 @@ import {
   type ColunaFiltravel,
 } from "@/components/ui/filtro-de-coluna";
 
-function fornecedorIncompleto(f: Fornecedor): boolean {
+function fornecedorIncompleto(f: FornecedorDaLista): boolean {
   return !f.cep || (!f.banco_codigo && !f.pix_chave);
 }
 
@@ -35,7 +35,7 @@ function fornecedorIncompleto(f: Fornecedor): boolean {
  * o mesmo filtro da aba PPs do job). As colunas dependem de quem é veículo
  * (o selo do Nome); a das ações (Inativar/Reativar) não filtra.
  */
-function colunasDosFornecedores(ehVeiculo: Set<string>): ColunaFiltravel<Fornecedor>[] {
+function colunasDosFornecedores(ehVeiculo: Set<string>): ColunaFiltravel<FornecedorDaLista>[] {
   return [
     {
       // A busca da coluna acha pela razão social e pelos selos da célula:
@@ -102,7 +102,7 @@ export function FornecedoresList({
   veiculoIds,
   podeInativar,
 }: {
-  fornecedores: Fornecedor[];
+  fornecedores: FornecedorDaLista[];
   /** Inativar e reativar: só Admin e Financeiro (10/11/2026). Sem a
    *  permissão, a coluna das ações fica vazia. */
   podeInativar: boolean;

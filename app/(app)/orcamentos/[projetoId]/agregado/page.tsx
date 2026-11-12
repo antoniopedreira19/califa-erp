@@ -39,6 +39,7 @@ import {
 import type { OrcamentoRascunho } from "../../_rascunho/tipos";
 import type { OrcamentoExportavel } from "../../_selecao/exportar-orcamentos-menu";
 import { carregarClienteDoOrcamento } from "@/lib/data/cliente-do-orcamento";
+import { todasAsLinhas } from "@/lib/supabase/todas-as-linhas";
 
 export const dynamic = "force-dynamic";
 
@@ -150,13 +151,18 @@ export default async function OrcamentosAgregadoPage({
       .eq("tenant_id", tenantId)
       .order("nome")
       .returns<Categoria[]>(),
-    supabase
-      .from("fornecedores")
-      .select("id, nome")
-      .eq("tenant_id", tenantId)
-      .eq("status", "ativo")
-      .order("nome")
-      .returns<{ id: string; nome: string }[]>(),
+    // Decisão 255: sem o corte de 1.000 linhas do PostgREST.
+    todasAsLinhas((de, ate) =>
+      supabase
+        .from("fornecedores")
+        .select("id, nome")
+        .eq("tenant_id", tenantId)
+        .eq("status", "ativo")
+        .order("nome")
+        .order("id")
+        .range(de, ate)
+        .returns<{ id: string; nome: string }[]>(),
+    ),
     // Só quem tem o papel Produtor (13/10/2026): a lista serve apenas ao
     // formulário de orçamento novo.
     listarProdutoresAtivos(tenantId),

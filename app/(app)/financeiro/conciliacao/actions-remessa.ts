@@ -17,6 +17,7 @@ import { carregarColaboradoresPagamento } from "@/lib/financeiro/colaboradores-p
 import { SELECT_PP_DO_FINANCEIRO, mapearPPsDoFinanceiro } from "../contas-a-pagar/dados-dos-titulos";
 import { montarDadosDaRemessa } from "../contas-a-pagar/titulos-da-remessa";
 import type { ContaSantanderElegivel, TituloElegivelParaRemessa } from "../contas-a-pagar/remessa-cnab-dialog";
+import { todasAsLinhas } from "@/lib/supabase/todas-as-linhas";
 
 type Resultado =
   | { ok: true; contasSantander: ContaSantanderElegivel[]; titulos: TituloElegivelParaRemessa[]; canGerar: boolean }
@@ -38,11 +39,16 @@ export async function carregarDadosDaRemessa(): Promise<Resultado> {
       .eq("ativo", true)
       .neq("tipo", "cartao_credito")
       .returns<ContaBancaria[]>(),
-    supabase
-      .from("fornecedores")
-      .select(`id, nome, razao_social, cpf_cnpj, ${COLUNAS_DE_PAGAMENTO}`)
-      .eq("tenant_id", tenantId)
-      .eq("status", "ativo"),
+    // Decisão 255: sem o corte de 1.000 linhas do PostgREST.
+    todasAsLinhas((de, ate) =>
+      supabase
+        .from("fornecedores")
+        .select(`id, nome, razao_social, cpf_cnpj, ${COLUNAS_DE_PAGAMENTO}`)
+        .eq("tenant_id", tenantId)
+        .eq("status", "ativo")
+        .order("id")
+        .range(de, ate),
+    ),
     carregarColaboradoresPagamento(supabase, tenantId),
     // Só a PP que pode ter título a pagar: a fora do cadastro e a verba
     // mudam o que o arquivo paga.

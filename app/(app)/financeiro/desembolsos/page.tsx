@@ -3,6 +3,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
 import { DesembolsosList, type DesembolsoRow } from "./desembolsos-list";
+import { todasAsLinhas } from "@/lib/supabase/todas-as-linhas";
 
 export const dynamic = "force-dynamic";
 
@@ -66,14 +67,19 @@ export default async function DesembolsosPage({
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .order("razao_social"),
-    supabase
-      .from("fornecedores")
-      // `cpf_cnpj` desde 10/09/2026: o campo de fornecedor busca por ele
-      // e o mostra como segunda linha da opção (decisão 067).
-      .select("id, nome, razao_social, cpf_cnpj")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("status", "ativo")
-      .order("nome"),
+    // Decisão 255: sem o corte de 1.000 linhas do PostgREST.
+    todasAsLinhas((de, ate) =>
+      supabase
+        .from("fornecedores")
+        // `cpf_cnpj` desde 10/09/2026: o campo de fornecedor busca por ele
+        // e o mostra como segunda linha da opção (decisão 067).
+        .select("id, nome, razao_social, cpf_cnpj")
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("status", "ativo")
+        .order("nome")
+        .order("id")
+        .range(de, ate),
+    ),
     supabase
       .from("clientes")
       .select("id, nome_fantasia, razao_social")

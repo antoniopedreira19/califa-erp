@@ -116,6 +116,23 @@ export async function lerDadosDaNFPorIA(input: {
   const cnpjEmissor = validarCnpj(dadosBrutos.cnpj_emissor);
   const cnpjTomador = validarCnpj(dadosBrutos.cnpj_tomador);
 
+  // Decisão 255: a tela da PP não traz mais o cadastro inteiro — só os
+  // fornecedores do job e os que a busca achou. O emissor que não está
+  // nessa lista é procurado no cadastro, pelo CNPJ, antes de a NF dizer
+  // "não está cadastrado no sistema".
+  let fornecedorDoEmissor = cnpjEmissor ? acharFornecedorPorCnpj(cnpjEmissor, input.fornecedores) : null;
+  if (cnpjEmissor && !fornecedorDoEmissor) {
+    const { data: noCadastro } = await supabase
+      .from("fornecedores")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("cpf_cnpj", cnpjEmissor)
+      .eq("status", "ativo")
+      .limit(1)
+      .maybeSingle<{ id: string }>();
+    fornecedorDoEmissor = noCadastro?.id ?? null;
+  }
+
   const dados: DadosExtraidosNF = {
     numero_nf: validarNumeroNF(dadosBrutos.numero_nf),
     data_emissao: validarDataEmissao(dadosBrutos.data_emissao, hojeIso),
@@ -131,9 +148,7 @@ export async function lerDadosDaNFPorIA(input: {
     emissor: {
       cnpj: cnpjEmissor,
       razao_social: dadosBrutos.razao_social_emissor?.trim() || null,
-      fornecedor_id_match: cnpjEmissor
-        ? acharFornecedorPorCnpj(cnpjEmissor, input.fornecedores)
-        : null,
+      fornecedor_id_match: fornecedorDoEmissor,
     },
     confianca_baixa: dadosBrutos.confianca_baixa,
   };

@@ -106,6 +106,7 @@ import {
   totaisDoFinanceiro,
 } from "@/lib/data/espelhos-do-job";
 import { faturamentoPorMes, type FaturamentoDoMes } from "@/lib/calculos/faturamento-por-mes";
+import { todasAsLinhas } from "@/lib/supabase/todas-as-linhas";
 
 export const dynamic = "force-dynamic";
 
@@ -408,13 +409,18 @@ export default async function OrcamentoDetailPage({
     // Alimenta só o campo de fornecedor do formulário de BV: nome e
     // documento, nada do cadastro completo. O documento entra desde
     // 09/09/2026 porque a busca do campo olha os dois (decisão 067).
-    supabase
-      .from("fornecedores")
-      .select("id, nome, cpf_cnpj")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("status", "ativo")
-      .order("nome")
-      .returns<{ id: string; nome: string; cpf_cnpj: string | null }[]>(),
+    // Decisão 255: sem o corte de 1.000 linhas do PostgREST.
+    todasAsLinhas((de, ate) =>
+      supabase
+        .from("fornecedores")
+        .select("id, nome, cpf_cnpj")
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("status", "ativo")
+        .order("nome")
+        .order("id")
+        .range(de, ate)
+        .returns<{ id: string; nome: string; cpf_cnpj: string | null }[]>(),
+    ),
     supabase
       .from("regionais")
       .select("id, nome")

@@ -47,6 +47,7 @@ import { montarFiscalDoFaturar } from "@/lib/fiscal/faturar";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { carregarExtrasDaPlanilha } from "@/lib/data/planilha-de-titulos";
 import { idsDaPlanilha } from "../conciliacao/linhas-da-aba";
+import { todasAsLinhas } from "@/lib/supabase/todas-as-linhas";
 
 export const dynamic = "force-dynamic";
 
@@ -198,12 +199,17 @@ export default async function ContasReceberPage({
       .eq("tenant_id", tenantId)
       .eq("status", "ativo")
       .order("nome_fantasia"),
-    supabase
-      .from("fornecedores")
-      .select("id, nome, razao_social")
-      .eq("tenant_id", tenantId)
-      .eq("status", "ativo")
-      .order("nome"),
+    // Decisão 255: sem o corte de 1.000 linhas do PostgREST.
+    todasAsLinhas((de, ate) =>
+      supabase
+        .from("fornecedores")
+        .select("id, nome, razao_social")
+        .eq("tenant_id", tenantId)
+        .eq("status", "ativo")
+        .order("nome")
+        .order("id")
+        .range(de, ate),
+    ),
     // Códigos dos jobs cobertos pelas notas. Limite alto o bastante para o
     // histórico e baixo o bastante para não virar varredura.
     consultarJobsDasNotas(supabase, tenantId),

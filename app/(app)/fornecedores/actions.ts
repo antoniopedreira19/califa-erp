@@ -25,9 +25,14 @@ import {
   BUCKET_DO_FORNECEDOR,
   caminhoDaDeclaracao,
   declaracaoDoTenant,
-  pendenciasDoCadastroFiscal,
   recusaDoArquivoDaDeclaracao,
 } from "@/lib/fiscal/regime-do-fornecedor";
+import {
+  COLUNAS_DA_TRAVA_DA_PP,
+  pendenciasDoCadastroNaPP,
+  type CadastroParaPP,
+} from "@/lib/cadastro-do-fornecedor-na-pp";
+import { buscarFornecedoresAtivos, type FornecedorDaBusca } from "@/lib/data/fornecedores-busca";
 
 /** O que o combo de fornecedor precisa saber de um cadastro — é o que o
  *  cadastro rápido devolve para a PP selecionar sem esperar o refresh. */
@@ -631,28 +636,61 @@ async function atualizarComSchema(
 }
 
 // ---------------------------------------------------------------------------
-// Decisão 166: regime e CNAE para gerar PP
+// Decisões 166 e 255: o cadastro completo para gerar PP
 // ---------------------------------------------------------------------------
 
 /**
- * O que falta no cadastro do fornecedor para gerar PP: o regime e o CNAE,
- * na pessoa jurídica.
- * O formulário da PP pergunta ao escolher o fornecedor e de novo depois de
- * cada edição do cadastro; `gerarPPDaPPAEmitir` confere no servidor.
+ * O que falta no cadastro do fornecedor para gerar PP. Desde a decisão 255:
+ * e-mail e telefone sempre, a conta ou o PIX quando a PP paga pelo
+ * cadastro, e o regime e o CNAE na pessoa jurídica (166).
+ *
+ * Volta as duas listas — pagando pelo cadastro e pagando por chave, boleto
+ * ou guia — porque quem escolhe é o formulário da PP, e o dado bancário não
+ * atravessa para o cliente. O formulário pergunta ao escolher o fornecedor
+ * e de novo depois de cada edição do cadastro; `gerarPPDaPPAEmitir` e a
+ * edição da PP gerada conferem no servidor.
  */
 export async function pendenciasDoCadastroDoFornecedor(
   id: string,
-): Promise<{ ok: true; falta: string[] } | { ok: false; message: string }> {
+): Promise<
+  | { ok: true; falta: string[]; faltaPagandoPeloCadastro: string[] }
+  | { ok: false; message: string }
+> {
   const session = await requireSession();
   const supabase = createClient();
   const { data, error } = await supabase
     .from("fornecedores")
-    .select("tipo_pessoa, regime_tributario, cnae")
+    .select(COLUNAS_DA_TRAVA_DA_PP)
     .eq("id", id)
     .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ tipo_pessoa: string; regime_tributario: string | null; cnae: string | null }>();
+    .maybeSingle<CadastroParaPP>();
   if (error || !data) return { ok: false, message: "Fornecedor não encontrado." };
-  return { ok: true, falta: pendenciasDoCadastroFiscal(data) };
+  return {
+    ok: true,
+    falta: pendenciasDoCadastroNaPP(data, { pagaPeloCadastro: false }),
+    faltaPagandoPeloCadastro: pendenciasDoCadastroNaPP(data, { pagaPeloCadastro: true }),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Decisão 255: a busca de fornecedor por digitação
+// ---------------------------------------------------------------------------
+
+/**
+ * Os fornecedores ativos que batem com o que foi digitado (nome, razão
+ * social ou documento, sem acento), no máximo 30. Termo vazio: os
+ * primeiros em ordem alfabética. É o que alimenta os combos de fornecedor
+ * no lugar da lista inteira, que o PostgREST cortava em 1.000.
+ *
+ * Quem lê é qualquer membro do tenant — a mesma regra do RLS de
+ * `fornecedores`, que já mandava a lista inteira para essas telas.
+ */
+export async function buscarFornecedoresParaEscolha(
+  termo: string,
+): Promise<{ ok: true; fornecedores: FornecedorDaBusca[] } | { ok: false; message: string }> {
+  const session = await requireSession();
+  if (typeof termo !== "string") return { ok: false, message: "Busca inválida." };
+  return buscarFornecedoresAtivos(createClient(), session.activeTenant.id, termo);
 }
 
 // ---------------------------------------------------------------------------

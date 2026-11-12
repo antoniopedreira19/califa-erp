@@ -78,6 +78,7 @@ import { carregarFaturasNaBaixa } from "@/lib/data/faturas-na-baixa";
 import type { FaturaDoCartaoNaBaixa } from "@/lib/financeiro/fatura-do-cartao";
 import { carregarExtrasDaPlanilha, type ExtrasDaPlanilha } from "@/lib/data/planilha-de-titulos";
 import { idsDaPlanilha } from "./linhas-da-aba";
+import { todasAsLinhas } from "@/lib/supabase/todas-as-linhas";
 
 export interface DadosDaAbaTitulos {
   /** O dia de hoje em Brasília: o vencido, o saldo previsto, os quadros. */
@@ -160,12 +161,17 @@ export async function carregarTitulosDaConciliacao(
       .in("status", ["aprovada", "pago"])
       .not("enviada_financeiro_em", "is", null),
     // Fornecedores ativos: o nome na lista a receber e o asterisco da 067.
-    supabase
-      .from("fornecedores")
-      .select(`id, nome, razao_social, cpf_cnpj, ${COLUNAS_DE_PAGAMENTO}`)
-      .eq("tenant_id", tenantId)
-      .eq("status", "ativo")
-      .order("nome"),
+    // Decisão 255: sem o corte de 1.000 linhas do PostgREST.
+    todasAsLinhas((de, ate) =>
+      supabase
+        .from("fornecedores")
+        .select(`id, nome, razao_social, cpf_cnpj, ${COLUNAS_DE_PAGAMENTO}`)
+        .eq("tenant_id", tenantId)
+        .eq("status", "ativo")
+        .order("nome")
+        .order("id")
+        .range(de, ate),
+    ),
     supabase
       .from("contas_avulsas")
       .select(SELECT_AVULSA_A_PAGAR)

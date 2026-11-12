@@ -61,7 +61,12 @@ import {
   type CnpjDoDocumento,
 } from "@/lib/fiscal/cnpj-da-pp";
 import { tomadoresPadrao } from "@/lib/fiscal/nf-da-pp";
-import { listarPendencias, pendenciasDoCadastroFiscal } from "@/lib/fiscal/regime-do-fornecedor";
+import { listarPendencias } from "@/lib/fiscal/regime-do-fornecedor";
+import {
+  COLUNAS_DA_TRAVA_DA_PP,
+  pendenciasDoCadastroNaPP,
+  type CadastroParaPP,
+} from "@/lib/cadastro-do-fornecedor-na-pp";
 // NÃO importar renderPedidoCompraPDF estaticamente. O módulo pedido-compra.ts
 // puxa pdfmake, que tem side-effects de inicialização que falham em runtime
 // serverless Vercel. Se importarmos aqui, TODAS as actions do arquivo caem
@@ -4293,17 +4298,23 @@ export async function gerarPPDaPPAEmitir(id: string): Promise<Result<{ codigo: s
     return { ok: false, message: "Abra a PP a emitir e responda se esta é a última PP deste item." };
   }
 
-  // Decisão 166: o cadastro do fornecedor precisa do regime e do CNAE.
-  // Vale para a PP comum e para a verba de um terceiro (decisão 164).
+  // Decisões 166 e 255: o cadastro do fornecedor precisa de e-mail e
+  // telefone, da conta ou do PIX quando a PP paga pelo cadastro, e do regime
+  // e do CNAE na pessoa jurídica. Vale para a PP comum e para a verba de um
+  // terceiro (decisão 164).
   const fornecedorDaPP = usaFornecedor(linha.dados) ? linha.dados.fornecedor_id ?? null : null;
   if (fornecedorDaPP) {
     const { data: cadastro } = await supabase
       .from("fornecedores")
-      .select("nome, tipo_pessoa, regime_tributario, cnae")
+      .select(COLUNAS_DA_TRAVA_DA_PP)
       .eq("id", fornecedorDaPP)
       .eq("tenant_id", tenantId)
-      .maybeSingle<{ nome: string; tipo_pessoa: string; regime_tributario: string | null; cnae: string | null }>();
-    const falta = pendenciasDoCadastroFiscal(cadastro);
+      .maybeSingle<CadastroParaPP & { nome: string }>();
+    // Aqui a PP já paga um fornecedor (`usaFornecedor`): sem pagamento fora
+    // do cadastro, paga pelo cadastro.
+    const falta = pendenciasDoCadastroNaPP(cadastro, {
+      pagaPeloCadastro: !linha.dados.pagamento_fora_do_cadastro,
+    });
     if (falta.length > 0) {
       const completa =
         pode(session.activeRole, "cadastros.fornecedores.editar") ||
@@ -5193,9 +5204,13 @@ async function editarPPGeradaImpl(
       message: "Este fornecedor não tem conta nem PIX no cadastro: escolha chave aleatória ou boleto.",
     };
   }
-  // Decisão 166: o cadastro do fornecedor precisa do regime e do CNAE.
+  // Decisões 166 e 255: o cadastro do fornecedor precisa de e-mail e
+  // telefone, da conta ou do PIX quando a PP paga pelo cadastro, e do regime
+  // e do CNAE na pessoa jurídica.
   if (pagaFornecedor) {
-    const falta = pendenciasDoCadastroFiscal(cadastro);
+    const falta = pendenciasDoCadastroNaPP(cadastro as CadastroParaPP | null, {
+      pagaPeloCadastro: !foraDoCadastroDe(d),
+    });
     if (falta.length > 0) {
       const completa =
         pode(session.activeRole, "cadastros.fornecedores.editar") ||
