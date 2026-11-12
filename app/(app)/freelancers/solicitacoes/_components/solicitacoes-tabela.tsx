@@ -58,6 +58,9 @@ interface Props {
   cargosDisponiveis: string[];
   jobsDisponiveis: Array<{ id: string; label: string }>;
   tipoFiltroAtual: string;
+  /** Pseudo-view do card "Minuta pronta pra gerar" — agrega cadastrada +
+   *  renovação aprovada. Vazio = nenhum card agregado ativo. */
+  viewAtual: string;
   activeRole: string;
   userId: string;
   publicOrigin: string;
@@ -128,6 +131,7 @@ export function SolicitacoesTabela({
   cargosDisponiveis,
   jobsDisponiveis,
   tipoFiltroAtual,
+  viewAtual,
   activeRole,
   userId,
   publicOrigin,
@@ -211,7 +215,8 @@ export function SolicitacoesTabela({
     solicitantesAtivos.size > 0 ||
     jobsAtivos.size > 0 ||
     cargoAtual !== "" ||
-    tipoAtual !== "";
+    tipoAtual !== "" ||
+    viewAtual !== "";
 
   function alterarQueryString(fn: (p: URLSearchParams) => void) {
     const params = new URLSearchParams(searchParams.toString());
@@ -285,6 +290,7 @@ export function SolicitacoesTabela({
       p.delete("cargo");
       p.delete("tipo");
       p.delete("job");
+      p.delete("view");
     });
   }
 
@@ -427,11 +433,18 @@ export function SolicitacoesTabela({
     }
   }
 
-  // Cards principais: as 3 situações onde o RH tem AÇÃO. Clique filtra a lista
-  // pra aquele status (exclusivo). Legenda contextual transforma o número em
-  // urgência ("há X dias", "N há +7d").
+  // Cards principais: as 3 situações onde o RH tem AÇÃO. Cada card carrega
+  // seu próprio handler (os filtros não são sempre "um status exclusivo" —
+  // "Aguardando o freela" combina status+tipo, "Minuta pronta pra gerar"
+  // agrega dois estados via pseudo-view). Legenda contextual transforma o
+  // número em urgência quando aplicável.
+  const aguardandoFreelaAtivo =
+    statusAtivos.size === 1 &&
+    statusAtivos.has("aprovada") &&
+    tipoAtual === "contratacao";
+  const minutaProntaAtivo = viewAtual === "minuta_pronta";
   const cardsAcao: Array<{
-    key: FreelancerSolicitacaoStatus;
+    key: string;
     titulo: string;
     valor: number;
     legenda: string | null;
@@ -439,6 +452,8 @@ export function SolicitacoesTabela({
     acento: string;
     acentoBg: string;
     numeroCor: string;
+    ativo: boolean;
+    onClick: () => void;
   }> = [
     {
       key: "pendente",
@@ -451,11 +466,13 @@ export function SolicitacoesTabela({
       acento: "text-amber-700",
       acentoBg: "bg-amber-50 border-amber-200",
       numeroCor: "text-amber-700",
+      ativo: statusAtivos.size === 1 && statusAtivos.has("pendente"),
+      onClick: () => aplicarStatusExclusivo("pendente"),
     },
     {
-      key: "aprovada",
+      key: "aguardando_freela",
       titulo: "Aguardando o freela",
-      valor: contagens.aprovada ?? 0,
+      valor: contagens.aprovada_contratacao ?? 0,
       legenda:
         indicadoresAcao.aprovadasMaisDeSeteDias > 0
           ? `${indicadoresAcao.aprovadasMaisDeSeteDias} há + de 7 dias`
@@ -464,16 +481,41 @@ export function SolicitacoesTabela({
       acento: "text-sky-700",
       acentoBg: "bg-sky-50 border-sky-200",
       numeroCor: "text-sky-700",
+      ativo: aguardandoFreelaAtivo,
+      onClick: () =>
+        alterarQueryString((p) => {
+          if (aguardandoFreelaAtivo) {
+            p.delete("status");
+            p.delete("tipo");
+            p.delete("view");
+          } else {
+            p.set("status", "aprovada");
+            p.set("tipo", "contratacao");
+            p.delete("view");
+          }
+        }),
     },
     {
-      key: "cadastrada",
+      key: "minuta_pronta",
       titulo: "Minuta pronta pra gerar",
-      valor: contagens.cadastrada ?? 0,
+      valor:
+        (contagens.cadastrada ?? 0) + (contagens.aprovada_renovacao ?? 0),
       legenda: null,
       icone: FileSignature,
       acento: "text-emerald-700",
       acentoBg: "bg-emerald-50 border-emerald-200",
       numeroCor: "text-emerald-700",
+      ativo: minutaProntaAtivo,
+      onClick: () =>
+        alterarQueryString((p) => {
+          if (minutaProntaAtivo) {
+            p.delete("view");
+          } else {
+            p.delete("status");
+            p.delete("tipo");
+            p.set("view", "minuta_pronta");
+          }
+        }),
     },
   ];
 
@@ -515,12 +557,12 @@ export function SolicitacoesTabela({
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {cardsAcao.map((c) => {
             const Icone = c.icone;
-            const ativo = statusAtivos.size === 1 && statusAtivos.has(c.key);
+            const ativo = c.ativo;
             return (
               <button
                 key={c.key}
                 type="button"
-                onClick={() => aplicarStatusExclusivo(c.key)}
+                onClick={c.onClick}
                 className={cn(
                   "group text-left rounded-2xl border bg-white p-4 transition-all shadow-soft",
                   "hover:border-foreground/20 hover:shadow-md",

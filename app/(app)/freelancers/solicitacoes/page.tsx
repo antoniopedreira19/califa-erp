@@ -34,6 +34,7 @@ export default async function SolicitacoesPage({
     solicitante?: string;
     cargo?: string;
     job?: string;
+    view?: string;
   };
 }) {
   const session = await requireSession();
@@ -65,6 +66,17 @@ export default async function SolicitacoesPage({
     .filter((s) => STATUS_VALIDOS.has(s));
   if (statusFiltro.length > 0) {
     query = query.in("status", statusFiltro);
+  }
+
+  // Pseudo-view "minuta_pronta": agrega os dois estados onde o RH precisa
+  // gerar minuta — contratação nova já cadastrada E renovação aprovada (a
+  // renovação criou contrato automático, mas a minuta ainda não existe).
+  // Só aplica se não tiver filtro explícito de status conflitante.
+  const viewFiltro = (searchParams.view ?? "").trim();
+  if (viewFiltro === "minuta_pronta" && statusFiltro.length === 0) {
+    query = query.or(
+      "status.eq.cadastrada,and(status.eq.aprovada,freelancer_id.not.is.null)",
+    );
   }
 
   const solicitanteFiltro = (searchParams.solicitante ?? "")
@@ -119,7 +131,7 @@ export default async function SolicitacoesPage({
     supabase.rpc("get_freelancer_solicitacao_mensagens_nao_lidas"),
     supabase
       .from("freelancer_solicitacoes")
-      .select("status, created_at")
+      .select("status, created_at, freelancer_id")
       .eq("tenant_id", tenantId),
     // Lista única de solicitantes (pra filtro). Admin vê todos, GP só a si
     // mesmo (via RLS). Query separada do join principal pra evitar explosão
@@ -259,14 +271,19 @@ export default async function SolicitacoesPage({
     naoLidasMap[linha.solicitacao_id] = Number(linha.nao_lidas);
   }
 
-  // Contagens globais por status + sinais de urgência pros cards principais:
-  //   - maisAntigaPendenteISO: data da pendente mais antiga (quanto tempo o
-  //     RH tá devendo a aprovação).
-  //   - aprovadasMaisDeSeteDias: quantas estão aprovadas mas o freela ainda
-  //     não cadastrou há mais de uma semana — sinal de cobrança ao freela.
+  // Contagens globais por status + sinais de urgência pros cards principais.
+  // Separa aprovada em contratação vs renovação porque os dois estados exigem
+  // ações diferentes do RH: contratação aprovada aguarda o freela cadastrar
+  // os dados; renovação aprovada já tem contrato criado e aguarda o RH gerar
+  // minuta. Usar `aprovada` cru no card misturava as duas coisas.
+  //   - maisAntigaPendenteISO: data da pendente mais antiga.
+  //   - aprovadasMaisDeSeteDias: só conta contratação nova — a renovação não
+  //     depende do freela, então não faz sentido "cobrar freela" nela.
   const contagens: Record<string, number> = {
     pendente: 0,
     aprovada: 0,
+    aprovada_contratacao: 0,
+    aprovada_renovacao: 0,
     cadastrada: 0,
     finalizada: 0,
     rejeitada: 0,
@@ -278,8 +295,13 @@ export default async function SolicitacoesPage({
   for (const r of (contagensRes.data ?? []) as Array<{
     status: string;
     created_at: string;
+    freelancer_id: string | null;
   }>) {
     if (r.status in contagens) contagens[r.status] += 1;
+    if (r.status === "aprovada") {
+      if (r.freelancer_id) contagens.aprovada_renovacao += 1;
+      else contagens.aprovada_contratacao += 1;
+    }
     if (r.status === "pendente") {
       if (!maisAntigaPendenteISO || r.created_at < maisAntigaPendenteISO) {
         maisAntigaPendenteISO = r.created_at;
@@ -287,12 +309,21 @@ export default async function SolicitacoesPage({
     }
     if (
       r.status === "aprovada" &&
+      !r.freelancer_id &&
       new Date(r.created_at).getTime() < seteDiasAtrasMs
     ) {
       aprovadasMaisDeSeteDias += 1;
     }
   }
-  const totalContagem = Object.values(contagens).reduce((a, b) => a + b, 0);
+  // Total usa só as chaves de status reais (as _contratacao/_renovacao são
+  // subdivisões, não contariam em dobro).
+  const totalContagem =
+    contagens.pendente +
+    contagens.aprovada +
+    contagens.cadastrada +
+    contagens.finalizada +
+    contagens.rejeitada +
+    contagens.cancelada;
   const indicadoresAcao = {
     maisAntigaPendenteISO,
     aprovadasMaisDeSeteDias,
@@ -348,6 +379,7 @@ export default async function SolicitacoesPage({
         cargosDisponiveis={cargosDisponiveis}
         jobsDisponiveis={jobsDisponiveis}
         tipoFiltroAtual={tipoFiltroValido}
+        viewAtual={viewFiltro === "minuta_pronta" ? "minuta_pronta" : ""}
         activeRole={session.activeRole}
         userId={session.profile.id}
         publicOrigin={publicOrigin}
