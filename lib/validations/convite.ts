@@ -7,6 +7,7 @@ const ROLES = [
   "produtor",
   "freelancer",
   "rh",
+  "colaborador",
 ] as const;
 
 export const conviteSchema = z.object({

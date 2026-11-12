@@ -33,6 +33,7 @@ const ROLES: AppRole[] = [
   "freelancer",
   "financeiro",
   "rh",
+  "colaborador",
   "administrador",
 ];
 
