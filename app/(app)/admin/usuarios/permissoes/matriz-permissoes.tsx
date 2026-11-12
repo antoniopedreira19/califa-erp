@@ -64,6 +64,10 @@ const LINHAS: readonly Linha[] = [
       excluir: "cadastros.fornecedores.editar",
     },
   },
+  // A planilha leva conta e PIX de todos (12/11/2026).
+  { modulo: "Cadastros", item: "Exportar fornecedores em Excel",
+    permissoes: { ver: "cadastros.fornecedores.exportar" },
+  },
   // Editar pelo lápis do campo entrou na decisão 177 (15/10/2026).
   { modulo: "Cadastros", item: "Fornecedor rápido dentro do PP",
     permissoes: {

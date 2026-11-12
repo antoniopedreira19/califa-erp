@@ -101,6 +101,13 @@ export const permissoes = {
    */
   "cadastros.fornecedores.ver":             ["administrador", "financeiro", "gerente_producao", "produtor"],
   /**
+   * Exportar o cadastro inteiro em Excel, pelo botao da tela de
+   * Fornecedores (12/11/2026). A planilha leva conta e PIX de todos de uma
+   * vez: fica com quem edita o cadastro (Admin e Financeiro), nao com
+   * todos que abrem a tela.
+   */
+  "cadastros.fornecedores.exportar":        ["administrador", "financeiro"],
+  /**
    * Cadastro rapido de fornecedor DENTRO do fluxo de PP (drawer inline).
    * Inclui freelancer desde 18/09/2026 (decisao do Tiago): ele edita o
    * realizado dos jobs dele (`jobs.editar_realizado`) e esbarra no mesmo

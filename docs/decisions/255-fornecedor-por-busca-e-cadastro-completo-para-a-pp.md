@@ -44,3 +44,12 @@ A planilha de pedidos de produção de 2026 tem 3.204 fornecedores com CPF ou CN
 
 - A página de Fornecedores continua desenhando a lista inteira no navegador (agora com poucas colunas). Com mais de 3 mil linhas, uma lista paginada no servidor fica para depois, se pesar.
 - A carga dos fornecedores da planilha é dado pessoal e não entra no repositório: é gravada pelo MCP, e aqui ficam só as contagens.
+
+## Complemento (12/11/2026): Regime, CNAE e "Exportar Excel" na tela de Fornecedores
+
+Pedido do Tiago, depois da consulta do regime e do CNAE em lote:
+
+- **A lista ganhou as colunas "Regime tributário" e "CNAE"**, depois do documento e antes do Contato. O título "Documento" virou **"CNPJ"** (a pessoa física continua mostrando o CPF nessa coluna). O regime é o gravado no cadastro; o CNAE sai com o código e a atividade embaixo. As duas filtram e ordenam pelo título, como as outras. A atividade vem montada do servidor só para os CNAEs da lista: a tabela inteira do CNAE não vai ao navegador.
+- **"Exportar Excel"**, ao lado de "Mostrar inativos", baixa os fornecedores **que a tela mostra** (busca, inativos e filtros dos títulos), na ordem dela, como o "Exportar Excel" da Visualizar Jobs. Cada linha leva **todos os campos do cadastro**, um por coluna: nome, razão social, tipo, CNPJ/CPF, status, regime (o gravado e o da consulta, com as datas), CNAE e atividade, declaração do Simples, e-mail, telefone, endereço, banco, agência, conta, PIX, "sem conta nem PIX", veículo de mídia, empresa de fora do grupo, observações e datas do cadastro. O arquivo se chama "Fornecedores - DD-MM-AAAA.xlsx", com "(filtrado)" quando algum filtro estava ligado.
+- **Só Administrador e Financeiro exportam** (`cadastros.fornecedores.exportar`): o arquivo leva conta e PIX de todos de uma vez. GP e Produtor abrem a tela e veem as colunas, mas não o botão, e a rota recusa (403). Cada exportação grava `fornecedores.exportados` na auditoria, com a quantidade e se estava filtrada.
+- Implementação: `POST /api/fornecedores/export` recebe os ids da tela e lê o cadastro inteiro de cada um; a planilha é montada por `lib/exportacao/planilha-de-fornecedores.ts` (teste em `planilha-de-fornecedores.test.ts`). Testado no Sandbox: filtrada (1 linha) e inteira com inativos (4), conferida com o banco; GP sem botão e com 403.
