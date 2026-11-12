@@ -132,46 +132,25 @@ export async function aprovarSolicitacao(
   }
 
   const supabase = createClient();
-  const agora = new Date();
-  const expiraEm = new Date(agora.getTime() + 30 * 24 * 60 * 60 * 1000);
 
-  // Lê a solicitação antes de aprovar pra decidir o que fazer:
-  //   - freelancer_id setado = renovação → cria contrato automaticamente
-  //     com os dados da solicitação (herda job_id/job_interno_id se tiver,
-  //     ou nasce legado quando só vier `nome_job` em texto)
-  //   - freelancer_id null = contratação nova → só muda status, aguarda
-  //     o freela preencher o form público (fluxo que já existia)
-  const { data: solicitacao, error: readErr } = await supabase
-    .from("freelancer_solicitacoes")
-    .select("*")
-    .eq("id", id)
-    .eq("tenant_id", session.activeTenant.id)
-    .eq("status", "pendente")
-    .maybeSingle();
-  if (readErr) {
-    console.error("[solicitacao.aprovar.read]", readErr.message);
-    return { ok: false, message: readErr.message };
-  }
-  if (!solicitacao) {
-    return { ok: false, message: "Solicitação não encontrada ou já processada" };
-  }
-
-  const { error } = await supabase
-    .from("freelancer_solicitacoes")
-    .update({
-      status: "aprovada",
-      aprovado_por: session.profile.id,
-      aprovado_em: agora.toISOString(),
-      expira_em: expiraEm.toISOString(),
-    })
-    .eq("id", id)
-    .eq("tenant_id", session.activeTenant.id)
-    .eq("status", "pendente");
+  // RPC única SECURITY DEFINER: UPDATE status='aprovada' + eventual criação
+  // de contrato (renovação) + eventual dispensa→finalizada numa transação só.
+  // Antes isso era feito em dois round-trips (UPDATE + RPC criar_contrato),
+  // e qualquer glitch na segunda chamada deixava a solicitação em estado
+  // zumbi (aprovada sem contrato) — incidente Bianca, 10/11/2026. Ver
+  // migration 20261112200001.
+  const { data, error } = await supabase.rpc("aprovar_solicitacao", {
+    p_solicitacao_id: id,
+  });
 
   if (error) {
     console.error("[solicitacao.aprovar]", error.message);
     return { ok: false, message: error.message };
   }
+
+  const row = (Array.isArray(data) && data.length > 0 ? data[0] : null) as
+    | { contrato_id: string | null; finalizada: boolean; is_renovacao: boolean }
+    | null;
 
   await logAuditEvent({
     acao: "freelancer_solicitacao.aprovada",
@@ -180,31 +159,14 @@ export async function aprovarSolicitacao(
     entidadeId: id,
   });
 
-  // Renovação: chama RPC SECURITY DEFINER que cria contrato (resolvendo
-  // nome do job sem passar pela RLS de empresa/regional), migra responsável
-  // se necessário, e já sobe pra 'finalizada' quando for diária curta.
-  // Antes era tudo inline em TS — mas isso dependia da RLS do usuário que
-  // aprova, e caiu silenciosamente quando Erica aprovou jobs sem permissão
-  // de SELECT em jobs (incidente Bruna/Raquel, 06/11/2026).
-  if (solicitacao.freelancer_id) {
-    const { data: rpcData, error: rpcErr } = await supabase.rpc(
-      "criar_contrato_de_renovacao",
-      { p_solicitacao_id: id },
-    );
-    if (rpcErr) {
-      console.error(
-        "[solicitacao.aprovar.criar_contrato_rpc]",
-        rpcErr.message,
-      );
-    } else if (Array.isArray(rpcData) && rpcData[0]?.finalizada) {
-      await logAuditEvent({
-        acao: "freelancer_solicitacao.finalizada_por_dispensa",
-        tenantId: session.activeTenant.id,
-        entidadeTipo: "freelancer_solicitacao",
-        entidadeId: id,
-        metadata: { contrato_id: rpcData[0]?.contrato_id ?? null },
-      });
-    }
+  if (row?.finalizada) {
+    await logAuditEvent({
+      acao: "freelancer_solicitacao.finalizada_por_dispensa",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "freelancer_solicitacao",
+      entidadeId: id,
+      metadata: { contrato_id: row.contrato_id ?? null },
+    });
   }
 
   revalidatePath("/freelancers/solicitacoes");
@@ -229,67 +191,42 @@ export async function aprovarSolicitacoesEmLote(
   }
 
   const supabase = createClient();
-  const agora = new Date();
-  const expiraEm = new Date(agora.getTime() + 30 * 24 * 60 * 60 * 1000);
+  let aprovadas = 0;
+  let falharam = 0;
 
-  const { data, error } = await supabase
-    .from("freelancer_solicitacoes")
-    .update({
-      status: "aprovada",
-      aprovado_por: session.profile.id,
-      aprovado_em: agora.toISOString(),
-      expira_em: expiraEm.toISOString(),
-    })
-    .in("id", ids)
-    .eq("tenant_id", session.activeTenant.id)
-    .eq("status", "pendente")
-    .select("id");
+  // Chama a RPC atômica uma vez por id. Cada chamada é uma transação
+  // Postgres independente, então um erro em uma solicitação não deixa
+  // outra em estado parcial. Audit events são logados com base no retorno
+  // de cada chamada.
+  for (const id of ids) {
+    const { data, error } = await supabase.rpc("aprovar_solicitacao", {
+      p_solicitacao_id: id,
+    });
+    if (error) {
+      console.error("[solicitacao.aprovar_lote]", id, error.message);
+      falharam++;
+      continue;
+    }
+    aprovadas++;
+    const row = (Array.isArray(data) && data.length > 0 ? data[0] : null) as
+      | { contrato_id: string | null; finalizada: boolean; is_renovacao: boolean }
+      | null;
 
-  if (error) {
-    console.error("[solicitacao.aprovar_lote]", error.message);
-    return { ok: false, message: error.message };
-  }
+    await logAuditEvent({
+      acao: "freelancer_solicitacao.aprovada",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "freelancer_solicitacao",
+      entidadeId: id,
+    });
 
-  const aprovadas = data?.length ?? 0;
-  const falharam = ids.length - aprovadas;
-
-  // Pros ids que viraram 'aprovada', chama a RPC pra cada renovação. A RPC
-  // valida se tem freelancer_id (contratação pula), resolve nome do job
-  // sem passar pela RLS de empresa/regional, cria contrato e sobe pra
-  // 'finalizada' se for diária curta. Ver migration 20261106100001.
-  const idsAprovados = (data ?? []).map((r: { id: string }) => r.id);
-  if (idsAprovados.length > 0) {
-    const { data: aprovadasData } = await supabase
-      .from("freelancer_solicitacoes")
-      .select("id, freelancer_id")
-      .in("id", idsAprovados)
-      .eq("tenant_id", session.activeTenant.id);
-    for (const sol of (aprovadasData ?? []) as Array<{
-      id: string;
-      freelancer_id: string | null;
-    }>) {
-      if (!sol.freelancer_id) continue; // Contratação nova — aguarda freela
-      const { data: rpcData, error: rpcErr } = await supabase.rpc(
-        "criar_contrato_de_renovacao",
-        { p_solicitacao_id: sol.id },
-      );
-      if (rpcErr) {
-        console.error(
-          "[solicitacao.aprovar_lote.criar_contrato_rpc]",
-          sol.id,
-          rpcErr.message,
-        );
-        continue;
-      }
-      if (Array.isArray(rpcData) && rpcData[0]?.finalizada) {
-        await logAuditEvent({
-          acao: "freelancer_solicitacao.finalizada_por_dispensa",
-          tenantId: session.activeTenant.id,
-          entidadeTipo: "freelancer_solicitacao",
-          entidadeId: sol.id,
-          metadata: { contrato_id: rpcData[0]?.contrato_id ?? null },
-        });
-      }
+    if (row?.finalizada) {
+      await logAuditEvent({
+        acao: "freelancer_solicitacao.finalizada_por_dispensa",
+        tenantId: session.activeTenant.id,
+        entidadeTipo: "freelancer_solicitacao",
+        entidadeId: id,
+        metadata: { contrato_id: row.contrato_id ?? null },
+      });
     }
   }
 
