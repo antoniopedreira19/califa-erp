@@ -20,6 +20,16 @@ type Props = {
   rows: SolicitacaoRow[];
 };
 
+const ORDEM_STATUS: Partial<Record<FeriasLancamentoStatus, number>> = {
+  pendente_aprovacao: 1,
+  aprovado: 2,
+  nf_anexada: 3,
+  enviado_financeiro: 4,
+  concluido: 5,
+  reprovado: 6,
+  cancelado: 7,
+};
+
 type FiltroStatus =
   | "todos"
   | "pendente_aprovacao"
@@ -86,10 +96,19 @@ export function SolicitacoesTabelaCliente({ rows }: Props) {
 
   const filtradas = React.useMemo(() => {
     const termo = busca.trim().toLowerCase();
-    return rows.filter((r) => {
+    const base = rows.filter((r) => {
       if (filtro !== "todos" && r.status !== filtro) return false;
       if (termo && !r.nome.toLowerCase().includes(termo)) return false;
       return true;
+    });
+    // Ordena pelo fluxo do pipeline (pendentes no topo, concluídos no fim).
+    // Status fora do fluxo (reprovado, cancelado, aguardando_financeiro
+    // legado) vão pro fim. Dentro do mesmo status, mais recente primeiro.
+    return base.sort((a, b) => {
+      const oa = ORDEM_STATUS[a.status] ?? 99;
+      const ob = ORDEM_STATUS[b.status] ?? 99;
+      if (oa !== ob) return oa - ob;
+      return (b.created_at ?? "").localeCompare(a.created_at ?? "");
     });
   }, [rows, busca, filtro]);
 
