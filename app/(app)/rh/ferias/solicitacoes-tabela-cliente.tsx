@@ -21,6 +21,7 @@ type Props = {
 };
 
 type FiltroStatus =
+  | "todos"
   | "pendente_aprovacao"
   | "aprovado"
   | "aguardando_financeiro"
@@ -31,6 +32,7 @@ const FILTROS: Array<{
   label: string;
   cor: string;
 }> = [
+  { key: "todos", label: "Todas", cor: "bg-muted text-muted-foreground" },
   {
     key: "pendente_aprovacao",
     label: "Pendentes",
@@ -56,13 +58,14 @@ const FILTROS: Array<{
 export function SolicitacoesTabelaCliente({ rows }: Props) {
   const router = useRouter();
   const [busca, setBusca] = React.useState("");
-  const [filtro, setFiltro] = React.useState<FiltroStatus>("pendente_aprovacao");
+  const [filtro, setFiltro] = React.useState<FiltroStatus>("todos");
   const [selecionada, setSelecionada] =
     React.useState<SolicitacaoRow | null>(null);
 
   // Contagens por status pros chips mostrarem badge
   const contagens = React.useMemo(() => {
     const m: Record<FiltroStatus, number> = {
+      todos: rows.length,
       pendente_aprovacao: 0,
       aprovado: 0,
       aguardando_financeiro: 0,
@@ -77,7 +80,7 @@ export function SolicitacoesTabelaCliente({ rows }: Props) {
   const filtradas = React.useMemo(() => {
     const termo = busca.trim().toLowerCase();
     return rows.filter((r) => {
-      if (r.status !== filtro) return false;
+      if (filtro !== "todos" && r.status !== filtro) return false;
       if (termo && !r.nome.toLowerCase().includes(termo)) return false;
       return true;
     });
