@@ -43,7 +43,7 @@ const FILTROS: Array<{
   },
   {
     key: "aguardando_financeiro",
-    label: "Ag. financeiro",
+    label: "Aguardando Financeiro",
     cor: "bg-purple-100 text-purple-800",
   },
   {
@@ -337,7 +337,7 @@ function BadgeStatus({ status }: { status: FeriasLancamentoStatus }) {
       dot: "bg-amber-500",
     },
     aguardando_financeiro: {
-      label: "Ag. financeiro",
+      label: "Aguardando Financeiro",
       cls: "bg-purple-100 text-purple-800",
       dot: "bg-purple-500",
     },

@@ -144,7 +144,7 @@ function BadgeStatusLancamento({ status }: { status: FeriasLancamentoStatus }) {
       label: "Aguardando aprovação",
       cls: "bg-amber-100 text-amber-900",
     },
-    aguardando_financeiro: { label: "Ag. financeiro", cls: "bg-purple-100 text-purple-800" },
+    aguardando_financeiro: { label: "Aguardando Financeiro", cls: "bg-purple-100 text-purple-800" },
     aprovado: { label: "Aprovado", cls: "bg-emerald-100 text-emerald-800" },
     reprovado: { label: "Reprovado", cls: "bg-red-100 text-red-800" },
     cancelado: {
