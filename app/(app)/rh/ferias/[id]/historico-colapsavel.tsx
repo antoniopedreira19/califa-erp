@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronDown, ChevronRight, History } from "lucide-react";
+import { ChevronDown, ChevronRight, History, Search, X } from "lucide-react";
 import type {
   FeriasLancamentoStatus,
   FeriasLancamentoTipo,
@@ -33,6 +33,21 @@ type Props = {
  */
 export function HistoricoColapsavel({ lancamentos }: Props) {
   const [aberto, setAberto] = React.useState(false);
+  const [busca, setBusca] = React.useState("");
+
+  const filtradas = React.useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    if (!termo) return lancamentos;
+    return lancamentos.filter((l) => {
+      const data = `${l.data_inicio} ${l.data_fim}`;
+      const tipo = tipoLabel(l.tipo).toLowerCase();
+      const obs = (l.observacao ?? "").toLowerCase();
+      return (
+        data.includes(termo) || tipo.includes(termo) || obs.includes(termo)
+      );
+    });
+  }, [lancamentos, busca]);
+
   return (
     <section>
       <button
@@ -56,11 +71,39 @@ export function HistoricoColapsavel({ lancamentos }: Props) {
       </button>
 
       {aberto && (
-        <ul className="mt-3 divide-y divide-border rounded-xl border border-border bg-white shadow-soft overflow-hidden">
-          {lancamentos.map((l) => (
-            <LinhaLancamento key={l.id} lanc={l} />
-          ))}
-        </ul>
+        <div className="mt-3 space-y-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <input
+              type="text"
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar por data, tipo ou observação..."
+              className="w-full rounded-lg border border-border bg-white pl-9 pr-9 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-california-red/15"
+            />
+            {busca && (
+              <button
+                type="button"
+                onClick={() => setBusca("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                aria-label="Limpar busca"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            )}
+          </div>
+          {filtradas.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
+              Nenhum lançamento encontrado.
+            </div>
+          ) : (
+            <ul className="divide-y divide-border rounded-xl border border-border bg-white shadow-soft overflow-hidden">
+              {filtradas.map((l) => (
+                <LinhaLancamento key={l.id} lanc={l} />
+              ))}
+            </ul>
+          )}
+        </div>
       )}
     </section>
   );

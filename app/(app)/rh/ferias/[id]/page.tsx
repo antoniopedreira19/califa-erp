@@ -1,21 +1,20 @@
 import { notFound } from "next/navigation";
 import {
-  AlertOctagon,
-  AlertTriangle,
-  CheckCircle2,
   FileText,
   Clock,
   CalendarDays,
   Palmtree,
+  Sparkles,
+  Plus,
 } from "lucide-react";
 import type { FeriasLancamentoStatus } from "@/lib/types";
+import { PeriodosDisponiveisColapsavel } from "./periodos-disponiveis-colapsavel";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import type {
   ColaboradorFeriasLancamento,
   ColaboradorFeriasPeriodo,
-  FeriasPeriodoStatus,
   TipoContratacao,
 } from "@/lib/types";
 import { HistoricoColapsavel } from "./historico-colapsavel";
@@ -155,41 +154,75 @@ export default async function ColaboradorFeriasPage({
     );
   }
 
-  // Lançamentos em andamento = tudo que não é "fechado". Quando o status
-  // vira concluido/cancelado/reprovado o lançamento sai da seção de
-  // acompanhamento e desce pro histórico.
-  const STATUS_EM_ANDAMENTO = new Set([
+  // Lançamento em andamento = qualquer um ainda em movimento no fluxo OU
+  // já concluído mas com o colaborador ainda fora (data_fim >= hoje). Só
+  // depois que ele "volta" (passa o data_fim) é que vai pro histórico —
+  // o RH precisa saber que a pessoa está em férias HOJE, mesmo que o
+  // financeiro já tenha pago.
+  const hojeISO = new Date().toISOString().slice(0, 10);
+  const STATUS_EM_ANDAMENTO_FLUXO = new Set<FeriasLancamentoStatus>([
     "pendente_aprovacao",
     "aprovado",
     "nf_anexada",
     "enviado_financeiro",
   ]);
-  const lancsEmAndamento = lancamentos.filter((l) =>
-    STATUS_EM_ANDAMENTO.has(l.status),
-  );
-  const periodosComLancAtivo = new Set(
-    lancsEmAndamento.map((l) => l.periodo_id).filter((x): x is string => !!x),
-  );
+  const idsEmAndamento = new Set<string>();
+  for (const l of lancamentos) {
+    if (STATUS_EM_ANDAMENTO_FLUXO.has(l.status)) idsEmAndamento.add(l.id);
+    else if (l.status === "concluido" && l.data_fim >= hojeISO)
+      idsEmAndamento.add(l.id);
+  }
+  const lancsEmAndamento = lancamentos.filter((l) => idsEmAndamento.has(l.id));
+  const lancsFinalizados = lancamentos.filter((l) => !idsEmAndamento.has(l.id));
 
-  // "Situação atual" agora cobre:
-  //   (a) aquisitivo em curso (hoje está dentro dele),
-  //   (b) qualquer aquisitivo com lançamento em andamento,
-  //   (c) vencido/em_alerta — RH precisa agir mesmo sem lanç ativo.
-  // Períodos "apto" sem lanç ativo e "incompleto" sem lanç ativo ficam
-  // de fora — não é o que o RH está acompanhando no momento.
-  const hojeISO = new Date().toISOString().slice(0, 10);
-  const periodosAtivos = periodos.filter(
+  // Saldo total = soma do saldo dos aquisitivos "não fechados" (apto,
+  // em curso, em alerta, vencido). O que já foi regularizado não entra.
+  const periodosQueContam = periodos.filter(
     (p) =>
-      (p.aquisitivo_inicio <= hojeISO && p.aquisitivo_fim >= hojeISO) ||
-      periodosComLancAtivo.has(p.id) ||
+      p.status === "apto" ||
+      p.status === "em_alerta" ||
       p.status === "vencido" ||
-      p.status === "em_alerta",
+      p.status === "incompleto",
   );
-
-  const saldoTotal = periodosAtivos.reduce((acc, p) => {
+  const saldoTotal = periodosQueContam.reduce((acc, p) => {
     const ocupados = diasOcupados.get(p.id) ?? 0;
     return acc + Math.max(p.dias_direito - ocupados, 0);
   }, 0);
+
+  // Lista de aquisitivos pra mostrar no colapsável "Períodos disponíveis".
+  // Os regularizados e não habilitados ficam de fora — não têm saldo útil.
+  const periodosDisponiveis = periodos
+    .filter(
+      (p) =>
+        p.status === "apto" ||
+        p.status === "em_alerta" ||
+        p.status === "vencido" ||
+        p.status === "incompleto",
+    )
+    .map((p) => {
+      const ocupados = diasOcupados.get(p.id) ?? 0;
+      return {
+        ...p,
+        saldo: Math.max(p.dias_direito - ocupados, 0),
+        diasUsados: ocupados,
+      };
+    });
+
+  // Pro CTA de "nada em andamento": próximo período que o colaborador
+  // pode tirar (saldo > 0). Prioriza vencido > alerta > apto > em curso.
+  const ordemCtaStatus: Record<string, number> = {
+    vencido: 1,
+    em_alerta: 2,
+    apto: 3,
+    incompleto: 4,
+  };
+  const proximoPeriodo =
+    periodosDisponiveis
+      .filter((p) => p.saldo > 0)
+      .sort(
+        (a, b) =>
+          (ordemCtaStatus[a.status] ?? 9) - (ordemCtaStatus[b.status] ?? 9),
+      )[0] ?? null;
 
   const salarioNum = salario?.valor != null ? Number(salario.valor) : null;
   const regionalLabel = alocacao?.usa_rateio_empresa
@@ -228,224 +261,111 @@ export default async function ColaboradorFeriasPage({
         botaoLancar={botaoLancar}
       />
 
-      {/* Situação atual */}
-      {periodosAtivos.length === 0 ? (
-        <div className="rounded-xl border border-border bg-muted/30 p-6 text-center">
-          <p className="text-sm text-muted-foreground">
-            Nenhum período de férias disponível no momento.
-          </p>
-        </div>
-      ) : (
-        <section className="space-y-4">
-          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {periodosAtivos.length === 1
-              ? "Situação atual"
-              : `Períodos pra tirar (${periodosAtivos.length})`}
-          </h2>
+      {/* EM ANDAMENTO — sempre aberto. Único foco visual do que importa:
+          solicitações em movimento OU concluídas com colaborador ainda
+          fora. Quando não há nada, vira um CTA apontando pro próximo
+          período disponível. */}
+      <section>
+        <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground mb-3 flex items-center gap-2">
+          <Sparkles className="h-3.5 w-3.5 text-california-red" />
+          Em andamento
+        </h2>
+        {lancsEmAndamento.length > 0 ? (
           <div className="space-y-3">
-            {periodosAtivos.map((p) => {
-              const usados = lancamentos
-                .filter(
-                  (l) =>
-                    l.periodo_id === p.id &&
-                    (l.status === "aprovado" || l.status === "concluido"),
-                )
-                .reduce((acc, l) => acc + l.dias, 0);
-              const ocupados = diasOcupados.get(p.id) ?? 0;
-              const lancsDoPeriodo = lancsEmAndamento.filter(
-                (l) => l.periodo_id === p.id,
-              );
-              return (
-                <div key={p.id} className="space-y-3">
-                  <HeroPeriodo
-                    periodo={p}
-                    usados={usados}
-                    saldo={Math.max(p.dias_direito - ocupados, 0)}
-                  />
-                  {lancsDoPeriodo.map((l) => (
-                    <CardSolicitacaoAtiva
-                      key={l.id}
-                      lancamento={l}
-                      nf={nfsPorLanc.get(l.id) ?? null}
-                    />
-                  ))}
-                </div>
-              );
-            })}
+            {lancsEmAndamento.map((l) => (
+              <CardSolicitacaoAtiva
+                key={l.id}
+                lancamento={l}
+                nf={nfsPorLanc.get(l.id) ?? null}
+              />
+            ))}
           </div>
-        </section>
+        ) : (
+          <CardVazioProximoPeriodo
+            proximoPeriodo={proximoPeriodo}
+            botaoLancar={botaoLancar}
+          />
+        )}
+      </section>
+
+      {/* Períodos disponíveis — colapsado por default */}
+      {periodosDisponiveis.length > 0 && (
+        <PeriodosDisponiveisColapsavel periodos={periodosDisponiveis} />
       )}
 
-      {/* Histórico colapsável — só lançamentos finalizados (concluído,
-          cancelado, reprovado). Tudo "em andamento" fica na seção acima. */}
-      {(() => {
-        const lancsFinalizados = lancamentos.filter(
-          (l) => !STATUS_EM_ANDAMENTO.has(l.status),
-        );
-        if (lancsFinalizados.length === 0) return null;
-        return (
-          <HistoricoColapsavel
-            lancamentos={lancsFinalizados.map((l) => ({
-              id: l.id,
-              tipo: l.tipo,
-              dias: l.dias,
-              dias_abono: l.dias_abono ?? 0,
-              data_inicio: l.data_inicio,
-              data_fim: l.data_fim,
-              status: l.status,
-              observacao: l.observacao,
-              lancado_direto_por_rh: l.lancado_direto_por_rh ?? false,
-              valor_total: l.valor_total ? Number(l.valor_total) : null,
-            }))}
-            tipoContratacao={c.tipo_contratacao}
-          />
-        );
-      })()}
+      {/* Histórico — colapsado por default, com busca interna */}
+      {lancsFinalizados.length > 0 && (
+        <HistoricoColapsavel
+          lancamentos={lancsFinalizados.map((l) => ({
+            id: l.id,
+            tipo: l.tipo,
+            dias: l.dias,
+            dias_abono: l.dias_abono ?? 0,
+            data_inicio: l.data_inicio,
+            data_fim: l.data_fim,
+            status: l.status,
+            observacao: l.observacao,
+            lancado_direto_por_rh: l.lancado_direto_por_rh ?? false,
+            valor_total: l.valor_total ? Number(l.valor_total) : null,
+          }))}
+          tipoContratacao={c.tipo_contratacao}
+        />
+      )}
     </div>
   );
 }
 
-/* --------------------- HERO DE PERÍODO --------------------- */
+/* --------------------- CARD VAZIO: PRÓXIMO PERÍODO --------------------- */
 
-function HeroPeriodo({
-  periodo: p,
-  usados,
-  saldo,
+function CardVazioProximoPeriodo({
+  proximoPeriodo,
+  botaoLancar,
 }: {
-  periodo: ColaboradorFeriasPeriodo;
-  usados: number;
-  saldo: number;
+  proximoPeriodo:
+    | {
+        aquisitivo_inicio: string;
+        aquisitivo_fim: string;
+        saldo: number;
+        dias_direito: number;
+        data_limite_gozo: string;
+        status: string;
+      }
+    | null;
+  botaoLancar: React.ReactNode;
 }) {
-  const pct = Math.min((usados / p.dias_direito) * 100, 100);
-  const rotulo = `${p.aquisitivo_inicio.slice(0, 4)}/${p.aquisitivo_fim.slice(0, 4)}`;
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
-  const limite = new Date(p.data_limite_gozo + "T00:00:00");
-  const dif = Math.ceil((limite.getTime() - hoje.getTime()) / 86_400_000);
-
-  const tom: Record<
-    "vencido" | "em_alerta" | "apto",
-    {
-      borda: string;
-      bg: string;
-      icone: React.ReactNode;
-      textoPrazo: string;
-    }
-  > = {
-    vencido: {
-      borda: "border-red-300",
-      bg: "bg-red-50/60",
-      icone: <AlertOctagon className="h-5 w-5 text-red-700" />,
-      textoPrazo: `há ${-dif} dias`,
-    },
-    em_alerta: {
-      borda: "border-amber-300",
-      bg: "bg-amber-50/60",
-      icone: <AlertTriangle className="h-5 w-5 text-amber-700" />,
-      textoPrazo: `em ${dif} dias`,
-    },
-    apto: {
-      borda: "border-emerald-300",
-      bg: "bg-emerald-50/40",
-      icone: <CheckCircle2 className="h-5 w-5 text-emerald-700" />,
-      textoPrazo: `em ${dif} dias`,
-    },
-  };
-  const t = tom[p.status as "vencido" | "em_alerta" | "apto"] ?? tom.apto;
-
-  return (
-    <div className={`rounded-xl border-2 ${t.borda} ${t.bg} p-5`}>
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex items-center gap-3">
-          {t.icone}
-          <div>
-            <p className="text-sm font-semibold">Período aquisitivo {rotulo}</p>
-            <p className="text-xs text-muted-foreground">
-              De{" "}
-              {new Date(p.aquisitivo_inicio + "T00:00:00").toLocaleDateString(
-                "pt-BR",
-              )}{" "}
-              a{" "}
-              {new Date(p.aquisitivo_fim + "T00:00:00").toLocaleDateString(
-                "pt-BR",
-              )}
-            </p>
-          </div>
-        </div>
-        <BadgePeriodo status={p.status} />
+  if (!proximoPeriodo) {
+    return (
+      <div className="rounded-xl border border-dashed border-border bg-muted/30 p-6 text-center">
+        <Palmtree className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
+        <p className="text-sm font-medium">Nada em andamento</p>
+        <p className="text-xs text-muted-foreground mt-1">
+          Colaborador sem solicitação ativa nem saldo disponível.
+        </p>
       </div>
-
-      <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Saldo pra tirar
+    );
+  }
+  const rotulo = `${proximoPeriodo.aquisitivo_inicio.slice(0, 4)}/${proximoPeriodo.aquisitivo_fim.slice(0, 4)}`;
+  const limite = new Date(
+    proximoPeriodo.data_limite_gozo + "T00:00:00",
+  ).toLocaleDateString("pt-BR");
+  return (
+    <div className="rounded-xl border border-dashed border-emerald-300 bg-emerald-50/40 p-5">
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-emerald-700 mb-1">
+            Nada em andamento · próximo período disponível
           </p>
-          <p className="mt-1 text-3xl font-bold tracking-tight leading-none">
-            {saldo}
-            <span className="text-sm font-medium text-muted-foreground ml-1">
-              dias
-            </span>
+          <p className="text-base font-semibold text-foreground">
+            Aquisitivo {rotulo} · {proximoPeriodo.saldo} de{" "}
+            {proximoPeriodo.dias_direito} dias livres
           </p>
-          <div className="mt-3 h-1.5 w-full rounded-full bg-white/80 overflow-hidden">
-            <div
-              className="h-full bg-california-red"
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-          <p className="mt-1.5 text-xs text-muted-foreground">
-            {usados}/{p.dias_direito} dias já gozados
-          </p>
-        </div>
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Prazo final
-          </p>
-          <p className="mt-1 text-lg font-semibold">
-            {new Date(p.data_limite_gozo + "T00:00:00").toLocaleDateString(
-              "pt-BR",
-            )}
-          </p>
-          <p className="text-xs text-muted-foreground">{t.textoPrazo}</p>
-        </div>
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Concessivo
-          </p>
-          <p className="mt-1 text-sm">
-            até{" "}
-            {new Date(p.concessivo_fim + "T00:00:00").toLocaleDateString(
-              "pt-BR",
-            )}
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Prazo pra gozar até {limite}
           </p>
         </div>
+        <div className="shrink-0">{botaoLancar}</div>
       </div>
     </div>
-  );
-}
-
-function BadgePeriodo({ status }: { status: FeriasPeriodoStatus }) {
-  const map: Record<FeriasPeriodoStatus, { label: string; cls: string }> = {
-    incompleto: { label: "Em curso", cls: "bg-muted text-muted-foreground" },
-    apto: { label: "Apto", cls: "bg-emerald-100 text-emerald-800" },
-    em_alerta: { label: "Em alerta", cls: "bg-amber-100 text-amber-900" },
-    vencido: { label: "Vencido", cls: "bg-red-100 text-red-800" },
-    regularizado: { label: "Regularizado", cls: "bg-sky-100 text-sky-800" },
-    nao_habilitado: {
-      label: "N/habilitado",
-      cls: "bg-muted text-muted-foreground",
-    },
-    pago_rescisao: {
-      label: "Pago rescis.",
-      cls: "bg-slate-200 text-slate-700",
-    },
-  };
-  const info = map[status];
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium shrink-0 ${info.cls}`}
-    >
-      {info.label}
-    </span>
   );
 }
 
