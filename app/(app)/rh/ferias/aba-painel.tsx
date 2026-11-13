@@ -493,9 +493,11 @@ function WidgetEstaSemana({
         <CalendarCheck className="h-4 w-4 text-california-red" />
         Esta semana
       </h3>
-      <div className="space-y-5">
+      <div className="space-y-6">
         <BlocoSemana
           titulo="Em férias agora"
+          contador={emFerias.length}
+          tom="info"
           itens={emFerias.map((l) => ({
             id: l.id,
             nome: l.colaborador?.nome ?? "—",
@@ -507,6 +509,8 @@ function WidgetEstaSemana({
         />
         <BlocoSemana
           titulo="Saindo nos próximos 7 dias"
+          contador={saindo.length}
+          tom="warning"
           itens={saindo.map((l) => ({
             id: l.id,
             nome: l.colaborador?.nome ?? "—",
@@ -522,6 +526,8 @@ function WidgetEstaSemana({
         />
         <BlocoSemana
           titulo="Voltando nos próximos 7 dias"
+          contador={voltando.length}
+          tom="ok"
           itens={voltando.map((l) => ({
             id: l.id,
             nome: l.colaborador?.nome ?? "—",
@@ -536,22 +542,56 @@ function WidgetEstaSemana({
   );
 }
 
+const BLOCO_TOM: Record<
+  "info" | "warning" | "ok",
+  { barra: string; texto: string; pill: string }
+> = {
+  info: {
+    barra: "bg-sky-500",
+    texto: "text-sky-800",
+    pill: "bg-sky-100 text-sky-800",
+  },
+  warning: {
+    barra: "bg-amber-500",
+    texto: "text-amber-800",
+    pill: "bg-amber-100 text-amber-800",
+  },
+  ok: {
+    barra: "bg-emerald-500",
+    texto: "text-emerald-800",
+    pill: "bg-emerald-100 text-emerald-800",
+  },
+};
+
 function BlocoSemana({
   titulo,
   itens,
   vazio,
+  contador,
+  tom,
 }: {
   titulo: string;
   itens: Array<{ id: string; nome: string; detalhe: string }>;
   vazio: string;
+  contador: number;
+  tom: "info" | "warning" | "ok";
 }) {
+  const t = BLOCO_TOM[tom];
   return (
     <div>
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
-        {titulo}
-      </p>
+      <div className="flex items-center gap-2 mb-2">
+        <span className={`inline-block h-4 w-1 rounded-full ${t.barra}`} />
+        <p className={`text-xs font-bold uppercase tracking-[0.08em] ${t.texto}`}>
+          {titulo}
+        </p>
+        <span
+          className={`inline-flex items-center justify-center min-w-[20px] rounded-full px-1.5 text-[10px] font-bold ${t.pill}`}
+        >
+          {contador}
+        </span>
+      </div>
       {itens.length === 0 ? (
-        <p className="text-sm text-muted-foreground italic">{vazio}</p>
+        <p className="text-sm text-muted-foreground italic pl-3">{vazio}</p>
       ) : (
         <ul className="space-y-1">
           {itens.map((i) => (
