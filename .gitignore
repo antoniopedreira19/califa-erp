@@ -75,6 +75,9 @@ CLAUDE.local.md
 # Planos de alteração montados fora do fluxo de tasks (uso local, enviados ao Claude Code sob demanda)
 planos-locais/
 tmp/
+# Arquivos temporarios criados pelo Claude durante investigacoes (podem conter PII).
+# Ficam locais pra retomar trabalho, mas NUNCA vao pro repo.
+tmp-*
 
 # Arquivos de sanitizacao de PII com CPFs reais (uso unico, apagar apos limpeza)
 .git-filter-replacements.txt
