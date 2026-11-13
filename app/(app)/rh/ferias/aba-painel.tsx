@@ -278,8 +278,12 @@ function HeroNovidades({
 }) {
   const totalNovidades = novidadesCriadas.length + novidadesAprovadas.length;
   return (
-    <div className="relative overflow-hidden rounded-2xl bg-california-dark text-white px-6 py-5 md:px-8 md:py-6 shadow-elevated">
-      <div className="absolute -top-16 -right-16 h-48 w-48 rounded-full bg-california-red/30 blur-3xl pointer-events-none" />
+    <div className="relative rounded-2xl bg-california-dark text-white px-6 py-5 md:px-8 md:py-6 shadow-elevated">
+      {/* Wrapper do blur decorativo — overflow-hidden fica aqui dentro
+          pra não cortar o dropdown absolute do Pill Novidades. */}
+      <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
+        <div className="absolute -top-16 -right-16 h-48 w-48 rounded-full bg-california-red/30 blur-3xl" />
+      </div>
       <div className="relative flex items-start justify-between gap-6 flex-wrap">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-white/60">
