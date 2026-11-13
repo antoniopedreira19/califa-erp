@@ -308,28 +308,33 @@ export default async function ColaboradorDetalhePage({
   const pendenciasPorCard = separarPendenciasPorCard(pendencias);
 
   // Dados de acesso ao sistema (card CardAcesso).
-  // Faz 2 round-trips via service client — não cabe em RLS do server client.
+  // 3 queries via service client — tenant_members e profiles não têm FK direta
+  // entre si (as duas apontam pra auth.users), então PostgREST não resolve
+  // embed e precisamos buscar o nome do profile numa query separada.
   // Só carrega se o colaborador já tem user_id vinculado.
   let acesso = null;
   let roleAtual: AppRole | null = null;
   let profileNome: string | null = null;
   if (colab.user_id) {
     const service = createServiceClient();
-    const [acessoRes, membershipRes] = await Promise.all([
+    const [acessoRes, membershipRes, profileRes] = await Promise.all([
       carregarAcessoColaborador(colab.user_id),
       service
         .from("tenant_members")
-        .select("role, profiles:profiles!user_id(nome)")
+        .select("role")
         .eq("tenant_id", session.activeTenant.id)
         .eq("user_id", colab.user_id)
         .maybeSingle(),
+      service
+        .from("profiles")
+        .select("nome")
+        .eq("id", colab.user_id)
+        .maybeSingle(),
     ]);
     acesso = acessoRes;
-    const m = membershipRes.data as
-      | { role: AppRole; profiles: { nome: string } | null }
-      | null;
-    roleAtual = (m?.role as AppRole | undefined) ?? null;
-    profileNome = m?.profiles?.nome ?? null;
+    roleAtual =
+      (membershipRes.data?.role as AppRole | undefined) ?? null;
+    profileNome = (profileRes.data?.nome as string | null | undefined) ?? null;
   }
 
   return (
