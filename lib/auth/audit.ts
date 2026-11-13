@@ -433,6 +433,13 @@ export type AuditAction =
   | "ferias.lancamento.reprovado"
   | "ferias.lancamento.cancelado_pelo_rh"
   | "ferias.lancamento.lancado_direto_pelo_rh"
+  // Correção manual via aba "Pendências de férias" (/rh/ferias?tab=pendencias):
+  // o RH atua sobre lançamentos já concluídos quando a planilha de origem
+  // deixou saldo irregular, duplicatas ou aquisitivo errado.
+  | "ferias.lancamento.excluido_por_pendencia"
+  | "ferias.lancamento.editado_por_pendencia"
+  | "ferias.lancamento.movido_por_pendencia"
+  | "ferias.lancamento.dividido_por_pendencia"
   | "ferias.recibo.gerado"
   // Benefícios (RH) — Fase 1
   | "beneficio.vinculo.criado"

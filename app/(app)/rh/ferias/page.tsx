@@ -7,15 +7,17 @@ import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { AbaPainel } from "./aba-painel";
 import { AbaQuadro } from "./aba-quadro";
 import { AbaFluxo } from "./aba-fluxo";
+import { AbaPendencias } from "./aba-pendencias";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "painel" | "quadro" | "fluxo";
+type Tab = "painel" | "quadro" | "fluxo" | "pendencias";
 
 const TABS: { key: Tab; label: string }[] = [
   { key: "painel", label: "Painel" },
   { key: "quadro", label: "Quadro" },
   { key: "fluxo", label: "Fluxo" },
+  { key: "pendencias", label: "Pendências" },
 ];
 
 export default async function FeriasPage({
@@ -75,11 +77,12 @@ export default async function FeriasPage({
       {tab === "painel" && <AbaPainel tenantId={tenantId} />}
       {tab === "quadro" && <AbaQuadro tenantId={tenantId} />}
       {tab === "fluxo" && <AbaFluxo tenantId={tenantId} />}
+      {tab === "pendencias" && <AbaPendencias tenantId={tenantId} />}
     </div>
   );
 }
 
 function normalizarTab(t: string | undefined): Tab {
-  const vals: Tab[] = ["painel", "quadro", "fluxo"];
+  const vals: Tab[] = ["painel", "quadro", "fluxo", "pendencias"];
   return (vals as string[]).includes(t ?? "") ? (t as Tab) : "painel";
 }
