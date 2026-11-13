@@ -3,7 +3,12 @@ import {
   AlertOctagon,
   AlertTriangle,
   CheckCircle2,
+  FileText,
+  Clock,
+  CalendarDays,
+  Palmtree,
 } from "lucide-react";
+import type { FeriasLancamentoStatus } from "@/lib/types";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
@@ -31,8 +36,14 @@ export default async function ColaboradorFeriasPage({
   const tenantId = session.activeTenant.id;
 
   const supabase = createClient();
-  const [colabRes, periodosRes, lancsRes, salarioRes, alocacaoRes] =
-    await Promise.all([
+  const [
+    colabRes,
+    periodosRes,
+    lancsRes,
+    salarioRes,
+    alocacaoRes,
+    nfsRes,
+  ] = await Promise.all([
       supabase
         .from("colaboradores")
         .select(
@@ -74,6 +85,15 @@ export default async function ColaboradorFeriasPage({
         .is("data_fim", null)
         .limit(1)
         .maybeSingle(),
+      // NFs anexadas pra lançamentos de férias (usufruto/abono) desse colab.
+      // O card de "solicitação em andamento" mostra o nome do arquivo quando
+      // o lançamento já está em nf_anexada ou enviado_financeiro.
+      supabase
+        .from("colaboradores_nf_anexos")
+        .select("id, escopo_tipo, escopo_id, arquivo_nome, uploaded_at")
+        .eq("colaborador_id", params.id)
+        .eq("tenant_id", tenantId)
+        .in("escopo_tipo", ["ferias_usufruto", "ferias_abono"]),
     ]);
 
   if (!colabRes.data) notFound();
@@ -99,6 +119,25 @@ export default async function ColaboradorFeriasPage({
     usa_rateio_empresa: boolean | null;
   } | null;
 
+  // Agrupa NFs por lançamento (escopo_id) pra o card olhar em O(1).
+  const nfsPorLanc = new Map<
+    string,
+    { id: string; arquivo_nome: string; uploaded_at: string }
+  >();
+  for (const n of (nfsRes.data ?? []) as Array<{
+    id: string;
+    escopo_id: string | null;
+    arquivo_nome: string;
+    uploaded_at: string;
+  }>) {
+    if (!n.escopo_id) continue;
+    nfsPorLanc.set(n.escopo_id, {
+      id: n.id,
+      arquivo_nome: n.arquivo_nome,
+      uploaded_at: n.uploaded_at,
+    });
+  }
+
   // Saldo por período (dias de direito − dias já usados/ocupados)
   const diasOcupados = new Map<string, number>();
   for (const l of lancamentos) {
@@ -116,12 +155,35 @@ export default async function ColaboradorFeriasPage({
     );
   }
 
-  // Períodos ativos (que precisam de ação): apto, em_alerta, vencido
+  // Lançamentos em andamento = tudo que não é "fechado". Quando o status
+  // vira concluido/cancelado/reprovado o lançamento sai da seção de
+  // acompanhamento e desce pro histórico.
+  const STATUS_EM_ANDAMENTO = new Set([
+    "pendente_aprovacao",
+    "aprovado",
+    "nf_anexada",
+    "enviado_financeiro",
+  ]);
+  const lancsEmAndamento = lancamentos.filter((l) =>
+    STATUS_EM_ANDAMENTO.has(l.status),
+  );
+  const periodosComLancAtivo = new Set(
+    lancsEmAndamento.map((l) => l.periodo_id).filter((x): x is string => !!x),
+  );
+
+  // "Situação atual" agora cobre:
+  //   (a) aquisitivo em curso (hoje está dentro dele),
+  //   (b) qualquer aquisitivo com lançamento em andamento,
+  //   (c) vencido/em_alerta — RH precisa agir mesmo sem lanç ativo.
+  // Períodos "apto" sem lanç ativo e "incompleto" sem lanç ativo ficam
+  // de fora — não é o que o RH está acompanhando no momento.
+  const hojeISO = new Date().toISOString().slice(0, 10);
   const periodosAtivos = periodos.filter(
     (p) =>
-      p.status === "apto" ||
-      p.status === "em_alerta" ||
-      p.status === "vencido",
+      (p.aquisitivo_inicio <= hojeISO && p.aquisitivo_fim >= hojeISO) ||
+      periodosComLancAtivo.has(p.id) ||
+      p.status === "vencido" ||
+      p.status === "em_alerta",
   );
 
   const saldoTotal = periodosAtivos.reduce((acc, p) => {
@@ -190,37 +252,55 @@ export default async function ColaboradorFeriasPage({
                 )
                 .reduce((acc, l) => acc + l.dias, 0);
               const ocupados = diasOcupados.get(p.id) ?? 0;
+              const lancsDoPeriodo = lancsEmAndamento.filter(
+                (l) => l.periodo_id === p.id,
+              );
               return (
-                <HeroPeriodo
-                  key={p.id}
-                  periodo={p}
-                  usados={usados}
-                  saldo={Math.max(p.dias_direito - ocupados, 0)}
-                />
+                <div key={p.id} className="space-y-3">
+                  <HeroPeriodo
+                    periodo={p}
+                    usados={usados}
+                    saldo={Math.max(p.dias_direito - ocupados, 0)}
+                  />
+                  {lancsDoPeriodo.map((l) => (
+                    <CardSolicitacaoAtiva
+                      key={l.id}
+                      lancamento={l}
+                      nf={nfsPorLanc.get(l.id) ?? null}
+                    />
+                  ))}
+                </div>
               );
             })}
           </div>
         </section>
       )}
 
-      {/* Histórico colapsável */}
-      {lancamentos.length > 0 && (
-        <HistoricoColapsavel
-          lancamentos={lancamentos.map((l) => ({
-            id: l.id,
-            tipo: l.tipo,
-            dias: l.dias,
-            dias_abono: l.dias_abono ?? 0,
-            data_inicio: l.data_inicio,
-            data_fim: l.data_fim,
-            status: l.status,
-            observacao: l.observacao,
-            lancado_direto_por_rh: l.lancado_direto_por_rh ?? false,
-            valor_total: l.valor_total ? Number(l.valor_total) : null,
-          }))}
-          tipoContratacao={c.tipo_contratacao}
-        />
-      )}
+      {/* Histórico colapsável — só lançamentos finalizados (concluído,
+          cancelado, reprovado). Tudo "em andamento" fica na seção acima. */}
+      {(() => {
+        const lancsFinalizados = lancamentos.filter(
+          (l) => !STATUS_EM_ANDAMENTO.has(l.status),
+        );
+        if (lancsFinalizados.length === 0) return null;
+        return (
+          <HistoricoColapsavel
+            lancamentos={lancsFinalizados.map((l) => ({
+              id: l.id,
+              tipo: l.tipo,
+              dias: l.dias,
+              dias_abono: l.dias_abono ?? 0,
+              data_inicio: l.data_inicio,
+              data_fim: l.data_fim,
+              status: l.status,
+              observacao: l.observacao,
+              lancado_direto_por_rh: l.lancado_direto_por_rh ?? false,
+              valor_total: l.valor_total ? Number(l.valor_total) : null,
+            }))}
+            tipoContratacao={c.tipo_contratacao}
+          />
+        );
+      })()}
     </div>
   );
 }
@@ -369,3 +449,153 @@ function BadgePeriodo({ status }: { status: FeriasPeriodoStatus }) {
   );
 }
 
+/* --------------------- CARD DE SOLICITAÇÃO ATIVA --------------------- */
+
+function CardSolicitacaoAtiva({
+  lancamento: l,
+  nf,
+}: {
+  lancamento: ColaboradorFeriasLancamento;
+  nf: { id: string; arquivo_nome: string; uploaded_at: string } | null;
+}) {
+  const inicio = new Date(l.data_inicio + "T00:00:00").toLocaleDateString(
+    "pt-BR",
+  );
+  const fim = new Date(l.data_fim + "T00:00:00").toLocaleDateString("pt-BR");
+
+  const statusInfo: Record<
+    FeriasLancamentoStatus,
+    { label: string; cls: string; hint: string }
+  > = {
+    pendente_aprovacao: {
+      label: "Pendente aprovação",
+      cls: "bg-amber-100 text-amber-900 border-amber-300",
+      hint: "RH precisa aprovar.",
+    },
+    aprovado: {
+      label: "Aprovado",
+      cls: "bg-emerald-100 text-emerald-800 border-emerald-300",
+      hint: "Aguardando colaborador anexar a NF.",
+    },
+    nf_anexada: {
+      label: "NF Anexada",
+      cls: "bg-sky-100 text-sky-800 border-sky-300",
+      hint: "Clique em Enviar pro Financeiro quando quiser liberar o pagamento.",
+    },
+    enviado_financeiro: {
+      label: "Enviado Financeiro",
+      cls: "bg-purple-100 text-purple-800 border-purple-300",
+      hint: "Na fila da aba People em Contas a Pagar.",
+    },
+    aguardando_financeiro: {
+      label: "Aguardando Financeiro",
+      cls: "bg-purple-100 text-purple-800 border-purple-300",
+      hint: "",
+    },
+    reprovado: {
+      label: "Reprovado",
+      cls: "bg-red-100 text-red-800 border-red-300",
+      hint: "",
+    },
+    cancelado: {
+      label: "Cancelado",
+      cls: "bg-muted text-muted-foreground border-border",
+      hint: "",
+    },
+    concluido: {
+      label: "Concluído",
+      cls: "bg-slate-200 text-slate-700 border-slate-300",
+      hint: "",
+    },
+  };
+  const si = statusInfo[l.status];
+
+  const tipoLabel =
+    l.tipo === "usufruto"
+      ? "Férias (usufruto)"
+      : l.tipo === "abono_combinado"
+        ? "Férias + abono"
+        : l.tipo === "abono_avulso"
+          ? "Abono avulso"
+          : "Abono excepcional";
+
+  return (
+    <div className="rounded-xl border border-border bg-white p-4 shadow-soft">
+      <div className="flex items-start justify-between gap-3 flex-wrap mb-3">
+        <div className="flex items-center gap-2">
+          <Palmtree className="h-4 w-4 text-california-red" />
+          <h3 className="text-sm font-semibold">{tipoLabel}</h3>
+        </div>
+        <span
+          className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${si.cls}`}
+        >
+          {si.label}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm mb-3">
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">
+            Período
+          </p>
+          <p className="flex items-center gap-1.5">
+            <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
+            {inicio} → {fim}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">
+            Dias
+          </p>
+          <p>
+            <span className="font-semibold">{l.dias}</span>
+            {(l.dias_abono ?? 0) > 0 && (
+              <span className="text-xs text-muted-foreground">
+                {" "}· {l.dias - (l.dias_abono ?? 0)}f + {l.dias_abono}a
+              </span>
+            )}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">
+            Valor
+          </p>
+          <p className="font-mono text-sm">
+            {l.valor_total
+              ? "R$ " +
+                Number(l.valor_total).toLocaleString("pt-BR", {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                })
+              : "—"}
+          </p>
+        </div>
+      </div>
+
+      {/* Bloco da NF: anexada ou pendente */}
+      {nf ? (
+        <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50/50 px-3 py-2 text-sm">
+          <FileText className="h-4 w-4 text-sky-700 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="font-medium text-sky-900 truncate">
+              {nf.arquivo_nome}
+            </p>
+            <p className="text-[11px] text-sky-800/70">
+              Anexada em{" "}
+              {new Date(nf.uploaded_at).toLocaleDateString("pt-BR")}
+            </p>
+          </div>
+        </div>
+      ) : l.status === "aprovado" ? (
+        <div className="flex items-center gap-2 rounded-lg border border-dashed border-amber-300 bg-amber-50/50 px-3 py-2 text-sm text-amber-900">
+          <Clock className="h-4 w-4 shrink-0" />
+          <span>Aguardando o colaborador anexar a NF.</span>
+        </div>
+      ) : null}
+
+      {si.hint && (
+        <p className="mt-2 text-xs text-muted-foreground">{si.hint}</p>
+      )}
+    </div>
+  );
+}
