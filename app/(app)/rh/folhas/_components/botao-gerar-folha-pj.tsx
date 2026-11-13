@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, CheckCircle2, Loader2, Play } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, Play, Palmtree } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { gerarFolha } from "../actions";
+import { gerarFolha, type DescontoFerias } from "../actions";
 
 interface Resultado {
   criadas: number;
@@ -18,6 +18,7 @@ interface Resultado {
   pulados_sem_salario: string[];
   pulados_sem_alocacao: string[];
   pulados_sem_rateio: string[];
+  descontados: DescontoFerias[];
 }
 
 export function BotaoGerarFolhaPj(props: { ano: number; mes: number }) {
@@ -41,6 +42,7 @@ export function BotaoGerarFolhaPj(props: { ano: number; mes: number }) {
         pulados_sem_salario: res.pulados_sem_salario,
         pulados_sem_alocacao: res.pulados_sem_alocacao,
         pulados_sem_rateio: res.pulados_sem_rateio,
+        descontados: res.descontados,
       });
     });
   }
@@ -114,6 +116,52 @@ export function BotaoGerarFolhaPj(props: { ano: number; mes: number }) {
                   )}
                 </span>
               </div>
+
+              {resultado.descontados.length > 0 && (
+                <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
+                  <p className="font-semibold mb-2 flex items-center gap-1.5">
+                    <Palmtree className="h-3.5 w-3.5" />
+                    {resultado.descontados.length} colaborador
+                    {resultado.descontados.length === 1 ? "" : "es"} com desconto
+                    automático por férias no mês
+                  </p>
+                  <ul className="space-y-1">
+                    {resultado.descontados.map((d, i) => (
+                      <li
+                        key={i}
+                        className="flex items-center justify-between gap-2"
+                      >
+                        <span className="truncate">
+                          <strong>{d.nome}</strong> · {d.dias_ferias} dia
+                          {d.dias_ferias === 1 ? "" : "s"} de férias
+                        </span>
+                        <span className="shrink-0 font-mono">
+                          R${" "}
+                          {Number(d.salario_original).toLocaleString("pt-BR", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                          {" → "}
+                          <strong>
+                            R${" "}
+                            {Number(d.salario_ajustado).toLocaleString(
+                              "pt-BR",
+                              {
+                                minimumFractionDigits: 2,
+                                maximumFractionDigits: 2,
+                              },
+                            )}
+                          </strong>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 opacity-70">
+                    O desconto é proporcional: salário cheio × (30 − dias de
+                    férias) / 30. A folha de férias já cobre esses dias.
+                  </p>
+                </div>
+              )}
 
               {(resultado.pulados_sem_salario.length > 0 ||
                 resultado.pulados_sem_alocacao.length > 0 ||

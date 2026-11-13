@@ -41,6 +41,13 @@ type ActionResult<T = Record<string, unknown>> =
  * primeiro dia)). CLT puro, estágio e sócio vêm pela importação do PDF da
  * contabilidade.
  */
+export type DescontoFerias = {
+  nome: string;
+  dias_ferias: number;
+  salario_original: number;
+  salario_ajustado: number;
+};
+
 export async function gerarFolha(input: {
   ano: number;
   mes: number;
@@ -51,6 +58,7 @@ export async function gerarFolha(input: {
     pulados_sem_salario: string[];
     pulados_sem_alocacao: string[];
     pulados_sem_rateio: string[];
+    descontados: DescontoFerias[];
   }>
 > {
   const session = await requireSession();
@@ -84,7 +92,9 @@ export async function gerarFolha(input: {
     pulados_sem_salario: string[];
     pulados_sem_alocacao: string[];
     pulados_sem_rateio: string[];
+    descontados?: DescontoFerias[];
   };
+  const descontados = resultado.descontados ?? [];
 
   if (resultado.criadas > 0) {
     await logAuditEvent({
@@ -102,6 +112,7 @@ export async function gerarFolha(input: {
         pulados_sem_salario: resultado.pulados_sem_salario,
         pulados_sem_alocacao: resultado.pulados_sem_alocacao,
         pulados_sem_rateio: resultado.pulados_sem_rateio,
+        descontados_por_ferias: descontados.length,
       },
     });
   }
@@ -112,7 +123,7 @@ export async function gerarFolha(input: {
   // e a página da competência é hidratada no primeiro acesso. Marcar
   // essas duas é trabalho de SSR gasto sem ninguém esperando.
   revalidatePath("/rh/folhas");
-  return { ok: true, ...resultado };
+  return { ok: true, ...resultado, descontados };
 }
 
 /**
