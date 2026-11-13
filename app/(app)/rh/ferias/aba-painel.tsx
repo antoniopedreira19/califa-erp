@@ -7,8 +7,6 @@ import {
   Palmtree,
   CalendarCheck,
   ChevronRight,
-  FileText,
-  CheckCircle2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
@@ -16,6 +14,12 @@ import type {
   ColaboradorFeriasLancamento,
   ColaboradorFeriasPeriodo,
 } from "@/lib/types";
+import {
+  PillNovidadesFerias,
+  type NovidadeSolicitacao,
+  type NovidadeNfAnexada,
+  type NovidadeFeriasPagas,
+} from "./pill-novidades-ferias";
 
 type Props = {
   tenantId: string;
@@ -69,8 +73,10 @@ export async function AbaPainel({ tenantId }: Props) {
     saindoSemanaRes,
     voltandoSemanaRes,
     vencendoRes,
-    novidadesCriadasRes,
-    novidadesAprovadasRes,
+    novidadesSolicitacoesRes,
+    novidadesNfsRes,
+    novidadesPagasRes,
+    dismissedRes,
   ] = await Promise.all([
     supabase
       .from("colaboradores")
@@ -129,30 +135,46 @@ export async function AbaPainel({ tenantId }: Props) {
       .in("status", ["vencido", "em_alerta"])
       .order("data_limite_gozo", { ascending: true })
       .limit(6),
-    // Novidades: solicitações feitas nos últimos 7 dias
+    // Novidades 1: solicitações feitas nos últimos 7 dias
     supabase
       .from("colaboradores_ferias_lancamentos")
       .select(
-        "id, data_inicio, data_fim, dias, created_at, colaborador:colaboradores!colaborador_id(id, nome)",
+        "id, data_inicio, dias, created_at, colaborador:colaboradores!colaborador_id(id, nome)",
       )
       .eq("tenant_id", tenantId)
       .eq("status", "pendente_aprovacao")
       .gte("created_at", seteDiasAtrasISO)
       .order("created_at", { ascending: false })
-      .limit(5),
-    // Novidades: aprovações nos últimos 7 dias (sem lançamento direto do RH
-    // pra evitar poluir com import histórico)
+      .limit(10),
+    // Novidades 2: NFs anexadas pelo colaborador nos últimos 7 dias
     supabase
-      .from("colaboradores_ferias_lancamentos")
+      .from("colaboradores_nf_anexos")
       .select(
-        "id, data_inicio, data_fim, dias, aprovado_em, colaborador:colaboradores!colaborador_id(id, nome)",
+        "id, colaborador_id, escopo_tipo, arquivo_nome, uploaded_at, colaborador:colaboradores!colaborador_id(id, nome)",
       )
       .eq("tenant_id", tenantId)
-      .in("status", ["aprovado", "concluido"])
-      .eq("lancado_direto_por_rh", false)
-      .gte("aprovado_em", seteDiasAtras.toISOString())
-      .order("aprovado_em", { ascending: false })
-      .limit(5),
+      .in("escopo_tipo", ["ferias_usufruto", "ferias_abono"])
+      .gte("uploaded_at", seteDiasAtras.toISOString())
+      .order("uploaded_at", { ascending: false })
+      .limit(10),
+    // Novidades 3: folhas de férias que o financeiro pagou nos últimos 7 dias
+    supabase
+      .from("folhas_pagamento")
+      .select(
+        "id, colaborador_id, tipo_folha_ferias, salario_base, paga_em, colaborador:colaboradores!colaborador_id(id, nome)",
+      )
+      .eq("tenant_id", tenantId)
+      .eq("tipo", "ferias")
+      .eq("status", "paga")
+      .gte("paga_em", seteDiasAtras.toISOString())
+      .order("paga_em", { ascending: false })
+      .limit(10),
+    // Dismissed IDs — notificações já marcadas como vistas (prefixo "ferias:")
+    supabase
+      .from("notificacoes_dismissed")
+      .select("notification_id")
+      .eq("tenant_id", tenantId)
+      .like("notification_id", "ferias:%"),
   ]);
 
   const kpis = {
@@ -175,9 +197,67 @@ export async function AbaPainel({ tenantId }: Props) {
   const saindo = (saindoSemanaRes.data ?? []) as unknown as Lanc[];
   const voltando = (voltandoSemanaRes.data ?? []) as unknown as Lanc[];
   const vencendo = (vencendoRes.data ?? []) as unknown as Periodo[];
-  const novidadesCriadas = (novidadesCriadasRes.data ?? []) as unknown as Lanc[];
-  const novidadesAprovadas = (novidadesAprovadasRes.data ??
-    []) as unknown as Lanc[];
+
+  // Mapeia as 3 fontes de novidade pros tipos que o Pill espera.
+  type NovidadeSolicRaw = {
+    id: string;
+    data_inicio: string;
+    dias: number;
+    created_at: string;
+    colaborador: { id: string; nome: string } | null;
+  };
+  type NovidadeNfRaw = {
+    id: string;
+    colaborador_id: string;
+    escopo_tipo: "ferias_usufruto" | "ferias_abono";
+    arquivo_nome: string;
+    uploaded_at: string;
+    colaborador: { id: string; nome: string } | null;
+  };
+  type NovidadePagaRaw = {
+    id: string;
+    colaborador_id: string;
+    tipo_folha_ferias: "usufruto" | "abono" | null;
+    salario_base: string | number;
+    paga_em: string;
+    colaborador: { id: string; nome: string } | null;
+  };
+
+  const novidadesSolicitacoes: NovidadeSolicitacao[] = (
+    (novidadesSolicitacoesRes.data ?? []) as unknown as NovidadeSolicRaw[]
+  ).map((n) => ({
+    lancamento_id: n.id,
+    colaborador_nome: n.colaborador?.nome ?? "—",
+    dias: n.dias,
+    data_inicio: n.data_inicio,
+    criado_em: n.created_at,
+  }));
+
+  const novidadesNfs: NovidadeNfAnexada[] = (
+    (novidadesNfsRes.data ?? []) as unknown as NovidadeNfRaw[]
+  ).map((n) => ({
+    anexo_id: n.id,
+    colaborador_id: n.colaborador_id,
+    colaborador_nome: n.colaborador?.nome ?? "—",
+    tipo: n.escopo_tipo,
+    arquivo_nome: n.arquivo_nome,
+    anexado_em: n.uploaded_at,
+  }));
+
+  const novidadesFeriasPagas: NovidadeFeriasPagas[] = (
+    (novidadesPagasRes.data ?? []) as unknown as NovidadePagaRaw[]
+  ).map((n) => ({
+    folha_id: n.id,
+    colaborador_id: n.colaborador_id,
+    colaborador_nome: n.colaborador?.nome ?? "—",
+    tipo: n.tipo_folha_ferias ?? "usufruto",
+    valor: Number(n.salario_base ?? 0),
+    pago_em: n.paga_em,
+  }));
+
+  const dismissedIds: string[] = (
+    (dismissedRes.data ?? []) as Array<{ notification_id: string }>
+  ).map((d) => d.notification_id);
 
   const totalAtivos = totalAtivosRes.count ?? 0;
   const primeiroNome = session.profile.nome.split(" ")[0];
@@ -196,8 +276,11 @@ export async function AbaPainel({ tenantId }: Props) {
         nome={primeiroNome}
         dataFormatada={dataFormatada}
         totalAtivos={totalAtivos}
-        novidadesCriadas={novidadesCriadas}
-        novidadesAprovadas={novidadesAprovadas}
+        tenantId={tenantId}
+        novidadesSolicitacoes={novidadesSolicitacoes}
+        novidadesNfs={novidadesNfs}
+        novidadesFeriasPagas={novidadesFeriasPagas}
+        dismissedIds={dismissedIds}
       />
 
       {/* Cards de ação */}
@@ -255,32 +338,27 @@ function HeroNovidades({
   nome,
   dataFormatada,
   totalAtivos,
-  novidadesCriadas,
-  novidadesAprovadas,
+  tenantId,
+  novidadesSolicitacoes,
+  novidadesNfs,
+  novidadesFeriasPagas,
+  dismissedIds,
 }: {
   nome: string;
   dataFormatada: string;
   totalAtivos: number;
-  novidadesCriadas: Array<{
-    id: string;
-    colaborador: { nome: string } | null;
-    dias: number;
-    data_inicio: string;
-    created_at?: string;
-  }>;
-  novidadesAprovadas: Array<{
-    id: string;
-    colaborador: { nome: string } | null;
-    dias: number;
-    data_inicio: string;
-    aprovado_em?: string;
-  }>;
+  tenantId: string;
+  novidadesSolicitacoes: NovidadeSolicitacao[];
+  novidadesNfs: NovidadeNfAnexada[];
+  novidadesFeriasPagas: NovidadeFeriasPagas[];
+  dismissedIds: string[];
 }) {
-  const totalNovidades = novidadesCriadas.length + novidadesAprovadas.length;
   return (
     <div className="relative rounded-2xl bg-california-dark text-white px-6 py-5 md:px-8 md:py-6 shadow-elevated">
-      {/* Wrapper do blur decorativo — overflow-hidden fica aqui dentro
-          pra não cortar o dropdown absolute do Pill Novidades. */}
+      {/* Blur decorativo — fica isolado num wrapper com overflow-hidden
+          pra não cortar o dropdown do Pill Novidades (renderizado via portal
+          pelo PillNovidadesFerias, mas ainda assim deixamos o hero sem
+          overflow pra não precisar depender de portal em todos os cantos). */}
       <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
         <div className="absolute -top-16 -right-16 h-48 w-48 rounded-full bg-california-red/30 blur-3xl" />
       </div>
@@ -302,118 +380,15 @@ function HeroNovidades({
           </p>
         </div>
 
-        {/* Pill Novidades */}
-        <PillNovidades
-          totalNovidades={totalNovidades}
-          novidadesCriadas={novidadesCriadas}
-          novidadesAprovadas={novidadesAprovadas}
+        <PillNovidadesFerias
+          tenantId={tenantId}
+          solicitacoes={novidadesSolicitacoes}
+          nfsAnexadas={novidadesNfs}
+          feriasPagas={novidadesFeriasPagas}
+          dismissedIds={dismissedIds}
         />
       </div>
     </div>
-  );
-}
-
-function PillNovidades({
-  totalNovidades,
-  novidadesCriadas,
-  novidadesAprovadas,
-}: {
-  totalNovidades: number;
-  novidadesCriadas: Array<{
-    id: string;
-    colaborador: { nome: string } | null;
-    dias: number;
-    data_inicio: string;
-    created_at?: string;
-  }>;
-  novidadesAprovadas: Array<{
-    id: string;
-    colaborador: { nome: string } | null;
-    dias: number;
-    data_inicio: string;
-    aprovado_em?: string;
-  }>;
-}) {
-  // Não renderiza se não há novidades — evita um dropdown vazio no hero.
-  if (totalNovidades === 0) {
-    return (
-      <div className="inline-flex items-center gap-2 rounded-full bg-white/5 border border-white/10 px-3.5 py-2 text-xs text-white/60">
-        <Sparkles className="h-3.5 w-3.5" />
-        <span>Sem novidades nesta semana</span>
-      </div>
-    );
-  }
-  return (
-    <details className="relative shrink-0">
-      <summary className="cursor-pointer list-none inline-flex items-center gap-2 rounded-full bg-california-red/90 hover:bg-california-red px-3.5 py-2 text-xs font-medium text-white shadow-soft transition-colors">
-        <Sparkles className="h-3.5 w-3.5" />
-        <span>Novidades</span>
-        <span className="inline-flex items-center justify-center min-w-[20px] rounded-full bg-white/20 px-1.5 text-[11px] font-semibold">
-          {totalNovidades}
-        </span>
-      </summary>
-      <div className="absolute right-0 top-full mt-2 z-50 w-[360px] max-h-[400px] overflow-y-auto rounded-xl border border-border bg-background text-foreground shadow-elevated p-3 space-y-3">
-        {novidadesCriadas.length > 0 && (
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-              <FileText className="h-3 w-3" />
-              Solicitações feitas ({novidadesCriadas.length})
-            </p>
-            <ul className="space-y-1.5">
-              {novidadesCriadas.map((l) => (
-                <li
-                  key={l.id}
-                  className="flex items-start gap-2 text-sm rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-1.5"
-                >
-                  <FileText className="h-3.5 w-3.5 text-amber-700 shrink-0 mt-0.5" />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium truncate">
-                      {l.colaborador?.nome ?? "—"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {l.dias}d · começa{" "}
-                      {new Date(
-                        l.data_inicio + "T00:00:00",
-                      ).toLocaleDateString("pt-BR")}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        {novidadesAprovadas.length > 0 && (
-          <div>
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
-              <CheckCircle2 className="h-3 w-3" />
-              Solicitações aprovadas ({novidadesAprovadas.length})
-            </p>
-            <ul className="space-y-1.5">
-              {novidadesAprovadas.map((l) => (
-                <li
-                  key={l.id}
-                  className="flex items-start gap-2 text-sm rounded-lg bg-emerald-50 border border-emerald-200 px-2.5 py-1.5"
-                >
-                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700 shrink-0 mt-0.5" />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium truncate">
-                      {l.colaborador?.nome ?? "—"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {l.dias}d · começa{" "}
-                      {new Date(
-                        l.data_inicio + "T00:00:00",
-                      ).toLocaleDateString("pt-BR")}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </div>
-    </details>
   );
 }
 
