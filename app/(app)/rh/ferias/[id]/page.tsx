@@ -1,19 +1,12 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import {
-  Palmtree,
   AlertOctagon,
   AlertTriangle,
   CheckCircle2,
-  CalendarClock,
-  DollarSign,
-  User,
-  Briefcase,
 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
-import { tipoContratacaoLabel } from "@/lib/types";
 import type {
   ColaboradorFeriasLancamento,
   ColaboradorFeriasPeriodo,
@@ -22,6 +15,7 @@ import type {
 } from "@/lib/types";
 import { HistoricoColapsavel } from "./historico-colapsavel";
 import { BotaoLancarDiretoCliente } from "./botao-lancar-direto";
+import { HeroColaboradorFerias } from "./hero-colaborador-ferias";
 
 export const dynamic = "force-dynamic";
 
@@ -135,50 +129,44 @@ export default async function ColaboradorFeriasPage({
     return acc + Math.max(p.dias_direito - ocupados, 0);
   }, 0);
 
-  const admissaoFmt = c.data_admissao
-    ? new Date(c.data_admissao + "T00:00:00").toLocaleDateString("pt-BR")
-    : "—";
+  const salarioNum = salario?.valor != null ? Number(salario.valor) : null;
+  const regionalLabel = alocacao?.usa_rateio_empresa
+    ? "Rateio da empresa"
+    : (alocacao?.regional?.nome ?? null);
 
-  const salarioFmt = salario?.valor
-    ? Number(salario.valor).toLocaleString("pt-BR", {
-        style: "currency",
-        currency: "BRL",
-      })
-    : null;
+  const botaoLancar = (
+    <BotaoLancarDiretoCliente
+      colaboradorId={c.id}
+      tipoContratacao={c.tipo_contratacao}
+      periodos={periodos.map((p) => ({
+        ...p,
+        saldo: Math.max(
+          p.dias_direito - (diasOcupados.get(p.id) ?? 0),
+          0,
+        ),
+      }))}
+    />
+  );
 
   return (
     <div className="space-y-6 max-w-[1200px] mx-auto">
       <BotaoVoltar reserva="/rh/ferias?tab=colaboradores" />
 
-      {/* Header do colaborador */}
-      <div className="rounded-2xl border border-border bg-white px-6 py-5 shadow-soft">
-        <div className="flex items-start justify-between gap-6 flex-wrap">
-          <div className="min-w-0 flex-1">
-            <h1 className="text-2xl font-bold tracking-tight">{c.nome}</h1>
-            <p className="mt-1 text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
-              {c.funcao && <>{c.funcao} · </>}
-              <span className="uppercase tracking-wider text-xs font-medium">
-                {tipoContratacaoLabel(c.tipo_contratacao)}
-              </span>
-              · Admissão {admissaoFmt}
-              {c.email && <> · {c.email}</>}
-            </p>
-          </div>
-          <div className="text-right shrink-0">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Saldo disponível
-            </p>
-            <p className="text-3xl font-bold tracking-tight leading-none mt-1">
-              {saldoTotal}
-              <span className="text-sm font-medium text-muted-foreground ml-1">
-                dias
-              </span>
-            </p>
-          </div>
-        </div>
-      </div>
+      <HeroColaboradorFerias
+        nome={c.nome}
+        tipo_contratacao={c.tipo_contratacao}
+        funcao={c.funcao}
+        data_admissao={c.data_admissao}
+        email={c.email}
+        status={c.status}
+        saldoDias={saldoTotal}
+        salario={salarioNum}
+        empresa={alocacao?.empresa?.nome ?? null}
+        regional={regionalLabel}
+        botaoLancar={botaoLancar}
+      />
 
-      {/* Situação atual + Lançar férias */}
+      {/* Situação atual */}
       {periodosAtivos.length === 0 ? (
         <div className="rounded-xl border border-border bg-muted/30 p-6 text-center">
           <p className="text-sm text-muted-foreground">
@@ -187,24 +175,11 @@ export default async function ColaboradorFeriasPage({
         </div>
       ) : (
         <section className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              {periodosAtivos.length === 1
-                ? "Situação atual"
-                : `Períodos pra tirar (${periodosAtivos.length})`}
-            </h2>
-            <BotaoLancarDiretoCliente
-              colaboradorId={c.id}
-              tipoContratacao={c.tipo_contratacao}
-              periodos={periodos.map((p) => ({
-                ...p,
-                saldo: Math.max(
-                  p.dias_direito - (diasOcupados.get(p.id) ?? 0),
-                  0,
-                ),
-              }))}
-            />
-          </div>
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            {periodosAtivos.length === 1
+              ? "Situação atual"
+              : `Períodos pra tirar (${periodosAtivos.length})`}
+          </h2>
           <div className="space-y-3">
             {periodosAtivos.map((p) => {
               const usados = lancamentos
@@ -227,43 +202,6 @@ export default async function ColaboradorFeriasPage({
           </div>
         </section>
       )}
-
-      {/* Grid: dados do colaborador */}
-      <div className="grid gap-4 md:grid-cols-2">
-        <BlocoInfo
-          titulo="Cargo e contratação"
-          icon={Briefcase}
-          itens={[
-            { label: "Função", valor: c.funcao ?? "—" },
-            {
-              label: "Regime",
-              valor: tipoContratacaoLabel(c.tipo_contratacao),
-            },
-            { label: "Admissão", valor: admissaoFmt },
-            { label: "Status", valor: c.status },
-          ]}
-        />
-        <BlocoInfo
-          titulo="Remuneração e alocação"
-          icon={DollarSign}
-          itens={[
-            {
-              label: "Salário atual",
-              valor: salarioFmt ?? "Não cadastrado",
-            },
-            {
-              label: "Empresa",
-              valor: alocacao?.empresa?.nome ?? "—",
-            },
-            {
-              label: "Regional",
-              valor: alocacao?.usa_rateio_empresa
-                ? "Rateio da empresa"
-                : (alocacao?.regional?.nome ?? "—"),
-            },
-          ]}
-        />
-      </div>
 
       {/* Histórico colapsável */}
       {lancamentos.length > 0 && (
@@ -431,34 +369,3 @@ function BadgePeriodo({ status }: { status: FeriasPeriodoStatus }) {
   );
 }
 
-/* --------------------- BLOCO INFO --------------------- */
-
-function BlocoInfo({
-  titulo,
-  icon: Icon,
-  itens,
-}: {
-  titulo: string;
-  icon: React.ComponentType<{ className?: string }>;
-  itens: Array<{ label: string; valor: string }>;
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-white p-4 shadow-soft">
-      <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3 flex items-center gap-1.5">
-        <Icon className="h-3.5 w-3.5" />
-        {titulo}
-      </h3>
-      <dl className="space-y-1.5">
-        {itens.map((i, idx) => (
-          <div
-            key={idx}
-            className="flex items-center justify-between gap-3 text-sm"
-          >
-            <dt className="text-muted-foreground">{i.label}</dt>
-            <dd className="font-medium text-right">{i.valor}</dd>
-          </div>
-        ))}
-      </dl>
-    </div>
-  );
-}
