@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Palmtree } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
+import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { AbaPainel } from "./aba-painel";
@@ -12,13 +13,6 @@ import { AbaPendencias } from "./aba-pendencias";
 export const dynamic = "force-dynamic";
 
 type Tab = "dashboard" | "solicitacoes" | "colaboradores" | "pendencias";
-
-const TABS: { key: Tab; label: string }[] = [
-  { key: "dashboard", label: "Dashboard" },
-  { key: "solicitacoes", label: "Solicitações" },
-  { key: "colaboradores", label: "Colaboradores" },
-  { key: "pendencias", label: "Pendências" },
-];
 
 export default async function FeriasPage({
   searchParams,
@@ -48,6 +42,26 @@ export default async function FeriasPage({
 
   const tab: Tab = normalizarTab(searchParams.tab);
 
+  // Badge da tab Solicitações: contagem de pendentes de aprovação.
+  // Puxado no server pra aparecer já na renderização inicial.
+  const supabase = createClient();
+  const { count: countPendentes } = await supabase
+    .from("colaboradores_ferias_lancamentos")
+    .select("id", { count: "exact", head: true })
+    .eq("tenant_id", tenantId)
+    .eq("status", "pendente_aprovacao");
+
+  const tabsConfig: { key: Tab; label: string; badge?: number }[] = [
+    { key: "dashboard", label: "Dashboard" },
+    {
+      key: "solicitacoes",
+      label: "Solicitações",
+      badge: countPendentes ?? 0,
+    },
+    { key: "colaboradores", label: "Colaboradores" },
+    { key: "pendencias", label: "Pendências" },
+  ];
+
   return (
     <div className="space-y-6 max-w-[1480px] mx-auto">
       <BotaoVoltar reserva="/rh" />
@@ -60,20 +74,32 @@ export default async function FeriasPage({
       {/* Tabs */}
       <div className="border-b border-border">
         <nav className="flex gap-6">
-          {TABS.map((t) => {
+          {tabsConfig.map((t) => {
             const ativo = t.key === tab;
+            const temBadge = typeof t.badge === "number" && t.badge > 0;
             return (
               <Link
                 key={t.key}
                 href={`/rh/ferias?tab=${t.key}`}
                 prefetch={false}
-                className={`px-1 pb-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                className={`px-1 pb-3 text-sm font-medium transition-colors border-b-2 -mb-px inline-flex items-center gap-1.5 ${
                   ativo
                     ? "border-california-red text-california-red"
                     : "border-transparent text-muted-foreground hover:text-foreground"
                 }`}
               >
-                {t.label}
+                <span>{t.label}</span>
+                {temBadge && (
+                  <span
+                    className={`inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold ${
+                      ativo
+                        ? "bg-california-red text-white"
+                        : "bg-california-red/10 text-california-red"
+                    }`}
+                  >
+                    {t.badge}
+                  </span>
+                )}
               </Link>
             );
           })}
