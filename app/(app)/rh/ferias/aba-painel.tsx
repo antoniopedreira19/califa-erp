@@ -1,26 +1,52 @@
 import Link from "next/link";
 import {
-  ArrowRight,
-  Palmtree,
-  CalendarCheck,
+  Sparkles,
   Clock,
   AlertTriangle,
   AlertOctagon,
-  Users,
+  Palmtree,
+  CalendarCheck,
+  ChevronRight,
+  FileText,
+  CheckCircle2,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
+import { requireSession } from "@/lib/auth/session";
 import type {
   ColaboradorFeriasLancamento,
   ColaboradorFeriasPeriodo,
-  FeriasLancamentoStatus,
-  FeriasLancamentoTipo,
 } from "@/lib/types";
 
 type Props = {
   tenantId: string;
 };
 
+const DIAS_SEMANA = [
+  "domingo",
+  "segunda-feira",
+  "terça-feira",
+  "quarta-feira",
+  "quinta-feira",
+  "sexta-feira",
+  "sábado",
+];
+const MESES = [
+  "janeiro",
+  "fevereiro",
+  "março",
+  "abril",
+  "maio",
+  "junho",
+  "julho",
+  "agosto",
+  "setembro",
+  "outubro",
+  "novembro",
+  "dezembro",
+];
+
 export async function AbaPainel({ tenantId }: Props) {
+  const session = await requireSession();
   const supabase = createClient();
 
   const hoje = new Date();
@@ -31,54 +57,65 @@ export async function AbaPainel({ tenantId }: Props) {
   semana.setDate(hoje.getDate() + 7);
   const semanaISO = semana.toISOString().slice(0, 10);
 
+  const seteDiasAtras = new Date(hoje);
+  seteDiasAtras.setDate(hoje.getDate() - 7);
+  const seteDiasAtrasISO = seteDiasAtras.toISOString().slice(0, 10);
+
   const [
-    aguardandoRes,
-    emAlertaRes,
+    totalAtivosRes,
     vencidasRes,
+    emAlertaRes,
     emFeriasHojeRes,
-    pendentesRes,
-    retornosRes,
+    saindoSemanaRes,
+    voltandoSemanaRes,
     vencendoRes,
-    emFeriasRes,
+    novidadesCriadasRes,
+    novidadesAprovadasRes,
   ] = await Promise.all([
     supabase
-      .from("colaboradores_ferias_lancamentos")
+      .from("colaboradores")
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
-      .eq("status", "pendente_aprovacao"),
-    supabase
-      .from("colaboradores_ferias_periodos")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", tenantId)
-      .eq("status", "em_alerta"),
+      .eq("status", "ativo")
+      .neq("tipo_contratacao", "socio"),
     supabase
       .from("colaboradores_ferias_periodos")
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
       .eq("status", "vencido"),
     supabase
-      .from("colaboradores_ferias_lancamentos")
+      .from("colaboradores_ferias_periodos")
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
-      .eq("status", "aprovado")
-      .lte("data_inicio", hojeISO)
-      .gte("data_fim", hojeISO),
-    supabase
-      .from("colaboradores_ferias_lancamentos")
-      .select(
-        "id, tipo, dias, data_inicio, data_fim, status, created_at, colaborador:colaboradores!colaborador_id(id, nome, tipo_contratacao)",
-      )
-      .eq("tenant_id", tenantId)
-      .eq("status", "pendente_aprovacao")
-      .order("created_at", { ascending: false })
-      .limit(5),
+      .eq("status", "em_alerta"),
     supabase
       .from("colaboradores_ferias_lancamentos")
       .select(
         "id, dias, data_inicio, data_fim, colaborador:colaboradores!colaborador_id(id, nome)",
       )
       .eq("tenant_id", tenantId)
-      .eq("status", "aprovado")
+      .in("status", ["aprovado", "concluido"])
+      .lte("data_inicio", hojeISO)
+      .gte("data_fim", hojeISO)
+      .order("data_inicio", { ascending: true }),
+    supabase
+      .from("colaboradores_ferias_lancamentos")
+      .select(
+        "id, dias, data_inicio, data_fim, colaborador:colaboradores!colaborador_id(id, nome)",
+      )
+      .eq("tenant_id", tenantId)
+      .in("status", ["aprovado", "concluido"])
+      .gt("data_inicio", hojeISO)
+      .lte("data_inicio", semanaISO)
+      .order("data_inicio", { ascending: true })
+      .limit(10),
+    supabase
+      .from("colaboradores_ferias_lancamentos")
+      .select(
+        "id, dias, data_inicio, data_fim, colaborador:colaboradores!colaborador_id(id, nome)",
+      )
+      .eq("tenant_id", tenantId)
+      .in("status", ["aprovado", "concluido"])
       .gte("data_fim", hojeISO)
       .lte("data_fim", semanaISO)
       .order("data_fim", { ascending: true })
@@ -86,356 +123,551 @@ export async function AbaPainel({ tenantId }: Props) {
     supabase
       .from("colaboradores_ferias_periodos")
       .select(
-        "id, numero, aquisitivo_inicio, aquisitivo_fim, concessivo_fim, data_limite_gozo, status, colaborador:colaboradores!colaborador_id(id, nome)",
+        "id, numero, aquisitivo_inicio, aquisitivo_fim, data_limite_gozo, status, colaborador:colaboradores!colaborador_id(id, nome)",
       )
       .eq("tenant_id", tenantId)
-      .in("status", ["em_alerta", "apto"])
+      .in("status", ["vencido", "em_alerta"])
       .order("data_limite_gozo", { ascending: true })
-      .limit(5),
+      .limit(6),
+    // Novidades: solicitações feitas nos últimos 7 dias
     supabase
       .from("colaboradores_ferias_lancamentos")
       .select(
-        "id, dias, data_inicio, data_fim, colaborador:colaboradores!colaborador_id(id, nome)",
+        "id, data_inicio, data_fim, dias, created_at, colaborador:colaboradores!colaborador_id(id, nome)",
       )
       .eq("tenant_id", tenantId)
-      .eq("status", "aprovado")
-      .lte("data_inicio", hojeISO)
-      .gte("data_fim", hojeISO)
-      .limit(10),
+      .eq("status", "pendente_aprovacao")
+      .gte("created_at", seteDiasAtrasISO)
+      .order("created_at", { ascending: false })
+      .limit(5),
+    // Novidades: aprovações nos últimos 7 dias (sem lançamento direto do RH
+    // pra evitar poluir com import histórico)
+    supabase
+      .from("colaboradores_ferias_lancamentos")
+      .select(
+        "id, data_inicio, data_fim, dias, aprovado_em, colaborador:colaboradores!colaborador_id(id, nome)",
+      )
+      .eq("tenant_id", tenantId)
+      .in("status", ["aprovado", "concluido"])
+      .eq("lancado_direto_por_rh", false)
+      .gte("aprovado_em", seteDiasAtras.toISOString())
+      .order("aprovado_em", { ascending: false })
+      .limit(5),
   ]);
 
   const kpis = {
-    aguardando: aguardandoRes.count ?? 0,
-    emAlerta: emAlertaRes.count ?? 0,
     vencidas: vencidasRes.count ?? 0,
-    emFeriasHoje: emFeriasHojeRes.count ?? 0,
+    emAlerta: emAlertaRes.count ?? 0,
+    emFeriasHoje: emFeriasHojeRes.data?.length ?? 0,
+    retornosSemana: voltandoSemanaRes.data?.length ?? 0,
   };
 
   type Lanc = ColaboradorFeriasLancamento & {
-    colaborador: { id: string; nome: string; tipo_contratacao?: string } | null;
+    colaborador: { id: string; nome: string } | null;
+    created_at?: string;
+    aprovado_em?: string;
   };
   type Periodo = ColaboradorFeriasPeriodo & {
     colaborador: { id: string; nome: string } | null;
   };
 
-  const pendentes = (pendentesRes.data ?? []) as unknown as Lanc[];
-  const retornos = (retornosRes.data ?? []) as unknown as Lanc[];
+  const emFerias = (emFeriasHojeRes.data ?? []) as unknown as Lanc[];
+  const saindo = (saindoSemanaRes.data ?? []) as unknown as Lanc[];
+  const voltando = (voltandoSemanaRes.data ?? []) as unknown as Lanc[];
   const vencendo = (vencendoRes.data ?? []) as unknown as Periodo[];
-  const emFerias = (emFeriasRes.data ?? []) as unknown as Lanc[];
+  const novidadesCriadas = (novidadesCriadasRes.data ?? []) as unknown as Lanc[];
+  const novidadesAprovadas = (novidadesAprovadasRes.data ??
+    []) as unknown as Lanc[];
+
+  const totalAtivos = totalAtivosRes.count ?? 0;
+  const primeiroNome = session.profile.nome.split(" ")[0];
+  const agora = new Date();
+  const dataFormatada =
+    DIAS_SEMANA[agora.getDay()] +
+    ", " +
+    agora.getDate() +
+    " de " +
+    MESES[agora.getMonth()];
 
   return (
     <div className="space-y-6">
-      {/* KPIs */}
+      {/* Hero */}
+      <HeroNovidades
+        nome={primeiroNome}
+        dataFormatada={dataFormatada}
+        totalAtivos={totalAtivos}
+        novidadesCriadas={novidadesCriadas}
+        novidadesAprovadas={novidadesAprovadas}
+      />
+
+      {/* Cards de ação */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <KpiCard
-          href="/rh/ferias?tab=solicitacoes&status=pendente_aprovacao"
-          icon={Clock}
-          label="Aguardando aprovação"
-          value={kpis.aguardando}
-          tom="atencao"
-        />
-        <KpiCard
-          href="/rh/ferias?tab=quadro"
-          icon={AlertTriangle}
-          label="Concessivos em alerta"
-          value={kpis.emAlerta}
-          tom="aviso"
-          hint="≤ 60 dias"
-        />
-        <KpiCard
-          href="/rh/ferias?tab=quadro"
+        <CardAcao
+          href="/rh/ferias?tab=colaboradores&status=vencido"
           icon={AlertOctagon}
           label="Férias vencidas"
+          descricao="Precisam gozar urgente"
           value={kpis.vencidas}
-          tom="urgente"
+          tom="danger"
         />
-        <KpiCard
-          icon={Users}
+        <CardAcao
+          href="/rh/ferias?tab=colaboradores&status=em_alerta"
+          icon={AlertTriangle}
+          label="Vencendo em 60d"
+          descricao="Concessivo chegando no fim"
+          value={kpis.emAlerta}
+          tom="warning"
+        />
+        <CardAcao
+          href="/rh/ferias?tab=colaboradores"
+          icon={Palmtree}
           label="Em férias hoje"
+          descricao="Afastados agora"
           value={kpis.emFeriasHoje}
-          tom="neutro"
+          tom="info"
+        />
+        <CardAcao
+          href="/rh/ferias?tab=colaboradores"
+          icon={CalendarCheck}
+          label="Retornam esta semana"
+          descricao="Voltam até 7 dias"
+          value={kpis.retornosSemana}
+          tom="ok"
         />
       </div>
 
-      {/* Grid de seções */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        {/* Solicitações pendentes */}
-        <section className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-          <header className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold">Solicitações pendentes</h3>
-            <Link
-              href="/rh/ferias?tab=solicitacoes"
-              prefetch={false}
-              className="inline-flex items-center gap-1 text-xs font-semibold text-california-red hover:underline"
-            >
-              Ver todas <ArrowRight className="h-3 w-3" />
-            </Link>
-          </header>
-          {pendentes.length === 0 ? (
-            <EmptyLine texto="Nenhuma solicitação aguardando." />
-          ) : (
-            <ul className="divide-y divide-border">
-              {pendentes.map((l) => (
-                <li
-                  key={l.id}
-                  className="flex items-center justify-between py-3 gap-3"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">
-                      {l.colaborador?.nome ?? "—"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {tipoLabel(l.tipo)} · {l.dias}{" "}
-                      {l.dias === 1 ? "dia" : "dias"} ·{" "}
-                      {formatarDataCurta(l.data_inicio)} a{" "}
-                      {formatarDataCurta(l.data_fim)}
-                    </p>
-                  </div>
-                  <StatusBadge status={l.status} />
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {/* Em férias hoje */}
-        <section className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-          <header className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold flex items-center gap-2">
-              <Palmtree className="h-4 w-4 text-california-red" />
-              Em férias hoje
-            </h3>
-            <span className="text-xs text-muted-foreground">
-              {emFerias.length}{" "}
-              {emFerias.length === 1 ? "pessoa" : "pessoas"}
-            </span>
-          </header>
-          {emFerias.length === 0 ? (
-            <EmptyLine texto="Nenhum colaborador em férias hoje." />
-          ) : (
-            <ul className="space-y-2">
-              {emFerias.map((l) => (
-                <li
-                  key={l.id}
-                  className="flex items-center justify-between gap-3 rounded-lg bg-muted/30 px-3 py-2"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">
-                      {l.colaborador?.nome ?? "—"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Volta em {formatarDataCurta(l.data_fim)}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {/* Retornos esta semana */}
-        <section className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-          <header className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold flex items-center gap-2">
-              <CalendarCheck className="h-4 w-4 text-california-red" />
-              Retornos esta semana
-            </h3>
-            <span className="text-xs text-muted-foreground">
-              próximos 7 dias
-            </span>
-          </header>
-          {retornos.length === 0 ? (
-            <EmptyLine texto="Ninguém volta de férias esta semana." />
-          ) : (
-            <ul className="divide-y divide-border">
-              {retornos.map((l) => (
-                <li
-                  key={l.id}
-                  className="flex items-center justify-between py-3 gap-3"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">
-                      {l.colaborador?.nome ?? "—"}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Volta em {formatarDataCurta(l.data_fim)}
-                    </p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-
-        {/* Concessivos vencendo */}
-        <section className="rounded-2xl border border-border bg-card p-6 shadow-soft">
-          <header className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-semibold flex items-center gap-2">
-              <Clock className="h-4 w-4 text-california-red" />
-              Concessivos vencendo
-            </h3>
-            <span className="text-xs text-muted-foreground">top 5</span>
-          </header>
-          {vencendo.length === 0 ? (
-            <EmptyLine texto="Nenhum concessivo próximo do vencimento." />
-          ) : (
-            <ul className="divide-y divide-border">
-              {vencendo.map((p) => {
-                const fim = new Date(p.data_limite_gozo + "T00:00:00");
-                const diasRest = Math.ceil(
-                  (fim.getTime() - new Date().getTime()) / 86_400_000,
-                );
-                const tom =
-                  p.status === "em_alerta"
-                    ? "text-amber-700"
-                    : "text-foreground";
-                return (
-                  <li
-                    key={p.id}
-                    className="flex items-center justify-between py-3 gap-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">
-                        {p.colaborador?.nome ?? "—"}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Período #{p.numero} · {p.aquisitivo_inicio.slice(0, 4)}/
-                        {p.aquisitivo_fim.slice(0, 4)}
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className={`text-sm font-medium ${tom}`}>
-                        {diasRest > 0
-                          ? `${diasRest} dias`
-                          : `vencido há ${-diasRest} dias`}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {formatarDataCurta(p.data_limite_gozo)}
-                      </p>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
+      {/* 2 widgets */}
+      <div className="grid gap-4 lg:grid-cols-2">
+        <WidgetEstaSemana
+          emFerias={emFerias}
+          saindo={saindo}
+          voltando={voltando}
+        />
+        <WidgetVencimentos vencendo={vencendo} />
       </div>
-
     </div>
   );
 }
 
-function KpiCard({
-  href,
-  icon: Icon,
-  label,
-  value,
-  tom,
-  hint,
+/* --------------------------- HERO + NOVIDADES --------------------------- */
+
+function HeroNovidades({
+  nome,
+  dataFormatada,
+  totalAtivos,
+  novidadesCriadas,
+  novidadesAprovadas,
 }: {
-  href?: string;
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-  value: number;
-  tom: "atencao" | "aviso" | "urgente" | "neutro";
-  hint?: string;
+  nome: string;
+  dataFormatada: string;
+  totalAtivos: number;
+  novidadesCriadas: Array<{
+    id: string;
+    colaborador: { nome: string } | null;
+    dias: number;
+    data_inicio: string;
+    created_at?: string;
+  }>;
+  novidadesAprovadas: Array<{
+    id: string;
+    colaborador: { nome: string } | null;
+    dias: number;
+    data_inicio: string;
+    aprovado_em?: string;
+  }>;
 }) {
-  const tomCls: Record<typeof tom, { chip: string; icon: string }> = {
-    atencao: {
-      chip: "bg-amber-50 border-amber-200",
-      icon: "text-amber-700 bg-amber-100",
-    },
-    aviso: {
-      chip: "bg-orange-50 border-orange-200",
-      icon: "text-orange-700 bg-orange-100",
-    },
-    urgente: {
-      chip: "bg-red-50 border-red-200",
-      icon: "text-red-700 bg-red-100",
-    },
-    neutro: {
-      chip: "bg-card border-border",
-      icon: "text-california-red bg-california-red/10",
-    },
-  };
-  const cls = tomCls[tom];
-  const conteudo = (
-    <>
-      <div className="flex items-center justify-between">
-        <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${cls.icon}`}>
-          <Icon className="h-5 w-5" />
+  const totalNovidades = novidadesCriadas.length + novidadesAprovadas.length;
+  return (
+    <div className="relative overflow-hidden rounded-2xl bg-california-dark text-white px-6 py-5 md:px-8 md:py-6 shadow-elevated">
+      <div className="absolute -top-16 -right-16 h-48 w-48 rounded-full bg-california-red/30 blur-3xl pointer-events-none" />
+      <div className="relative flex items-start justify-between gap-6 flex-wrap">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2 text-[11px] font-medium uppercase tracking-[0.18em] text-white/60">
+            <Sparkles className="h-3.5 w-3.5 text-california-red" />
+            <span className="capitalize">{dataFormatada}</span>
+          </div>
+          <h1 className="mt-1.5 text-2xl md:text-[28px] font-bold tracking-tight">
+            Olá, {nome}
+          </h1>
+          <p className="mt-1 text-sm text-white/65 max-w-2xl">
+            {totalAtivos}{" "}
+            {totalAtivos === 1
+              ? "colaborador ativo"
+              : "colaboradores ativos"}{" "}
+            nesse tenant
+          </p>
         </div>
+
+        {/* Pill Novidades */}
+        <PillNovidades
+          totalNovidades={totalNovidades}
+          novidadesCriadas={novidadesCriadas}
+          novidadesAprovadas={novidadesAprovadas}
+        />
       </div>
-      <p className="mt-4 text-3xl font-bold tracking-tight">{value}</p>
-      <p className="mt-1 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-        {label}
-      </p>
-      {hint && <p className="mt-1 text-xs text-muted-foreground">{hint}</p>}
-    </>
+    </div>
   );
-  if (href) {
+}
+
+function PillNovidades({
+  totalNovidades,
+  novidadesCriadas,
+  novidadesAprovadas,
+}: {
+  totalNovidades: number;
+  novidadesCriadas: Array<{
+    id: string;
+    colaborador: { nome: string } | null;
+    dias: number;
+    data_inicio: string;
+    created_at?: string;
+  }>;
+  novidadesAprovadas: Array<{
+    id: string;
+    colaborador: { nome: string } | null;
+    dias: number;
+    data_inicio: string;
+    aprovado_em?: string;
+  }>;
+}) {
+  // Não renderiza se não há novidades — evita um dropdown vazio no hero.
+  if (totalNovidades === 0) {
     return (
-      <Link
-        href={href}
-        prefetch={false}
-        className={`group block rounded-2xl border ${cls.chip} p-5 shadow-soft transition-all hover:shadow-elevated`}
-      >
-        {conteudo}
-      </Link>
+      <div className="inline-flex items-center gap-2 rounded-full bg-white/5 border border-white/10 px-3.5 py-2 text-xs text-white/60">
+        <Sparkles className="h-3.5 w-3.5" />
+        <span>Sem novidades nesta semana</span>
+      </div>
     );
   }
   return (
-    <div className={`rounded-2xl border ${cls.chip} p-5 shadow-soft`}>
-      {conteudo}
+    <details className="relative shrink-0">
+      <summary className="cursor-pointer list-none inline-flex items-center gap-2 rounded-full bg-california-red/90 hover:bg-california-red px-3.5 py-2 text-xs font-medium text-white shadow-soft transition-colors">
+        <Sparkles className="h-3.5 w-3.5" />
+        <span>Novidades</span>
+        <span className="inline-flex items-center justify-center min-w-[20px] rounded-full bg-white/20 px-1.5 text-[11px] font-semibold">
+          {totalNovidades}
+        </span>
+      </summary>
+      <div className="absolute right-0 top-full mt-2 z-50 w-[360px] max-h-[400px] overflow-y-auto rounded-xl border border-border bg-background text-foreground shadow-elevated p-3 space-y-3">
+        {novidadesCriadas.length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+              <FileText className="h-3 w-3" />
+              Solicitações feitas ({novidadesCriadas.length})
+            </p>
+            <ul className="space-y-1.5">
+              {novidadesCriadas.map((l) => (
+                <li
+                  key={l.id}
+                  className="flex items-start gap-2 text-sm rounded-lg bg-amber-50 border border-amber-200 px-2.5 py-1.5"
+                >
+                  <FileText className="h-3.5 w-3.5 text-amber-700 shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium truncate">
+                      {l.colaborador?.nome ?? "—"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {l.dias}d · começa{" "}
+                      {new Date(
+                        l.data_inicio + "T00:00:00",
+                      ).toLocaleDateString("pt-BR")}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {novidadesAprovadas.length > 0 && (
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+              <CheckCircle2 className="h-3 w-3" />
+              Solicitações aprovadas ({novidadesAprovadas.length})
+            </p>
+            <ul className="space-y-1.5">
+              {novidadesAprovadas.map((l) => (
+                <li
+                  key={l.id}
+                  className="flex items-start gap-2 text-sm rounded-lg bg-emerald-50 border border-emerald-200 px-2.5 py-1.5"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5 text-emerald-700 shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium truncate">
+                      {l.colaborador?.nome ?? "—"}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {l.dias}d · começa{" "}
+                      {new Date(
+                        l.data_inicio + "T00:00:00",
+                      ).toLocaleDateString("pt-BR")}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </details>
+  );
+}
+
+/* --------------------------- CARD DE AÇÃO ------------------------------- */
+
+type Tom = "danger" | "warning" | "ok" | "info";
+
+const TOM_STYLES: Record<
+  Tom,
+  { bg: string; number: string; icone: string; border: string }
+> = {
+  danger: {
+    bg: "bg-california-red/5",
+    number: "text-california-red",
+    icone: "text-california-red",
+    border: "border-california-red/20 hover:border-california-red/40",
+  },
+  warning: {
+    bg: "bg-amber-50/60",
+    number: "text-amber-700",
+    icone: "text-amber-600",
+    border: "border-amber-300/40 hover:border-amber-500/60",
+  },
+  info: {
+    bg: "bg-sky-50/50",
+    number: "text-sky-700",
+    icone: "text-sky-600",
+    border: "border-sky-300/40 hover:border-sky-500/60",
+  },
+  ok: {
+    bg: "bg-emerald-50/40",
+    number: "text-emerald-700",
+    icone: "text-emerald-600",
+    border: "border-emerald-300/40 hover:border-emerald-500/60",
+  },
+};
+
+function CardAcao({
+  href,
+  icon: Icon,
+  label,
+  descricao,
+  value,
+  tom,
+}: {
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  label: string;
+  descricao: string;
+  value: number;
+  tom: Tom;
+}) {
+  const s = TOM_STYLES[tom];
+  return (
+    <Link
+      href={href}
+      prefetch={false}
+      className={`block rounded-xl border p-4 transition-colors shadow-soft ${s.bg} ${s.border}`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <Icon className={`h-5 w-5 ${s.icone}`} />
+        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+      </div>
+      <p className={`mt-3 text-3xl font-bold tracking-tight ${s.number}`}>
+        {value}
+      </p>
+      <p className="mt-1 text-sm font-medium">{label}</p>
+      <p className="text-xs text-muted-foreground">{descricao}</p>
+    </Link>
+  );
+}
+
+/* --------------------------- WIDGETS ------------------------------------ */
+
+function WidgetEstaSemana({
+  emFerias,
+  saindo,
+  voltando,
+}: {
+  emFerias: Array<{
+    id: string;
+    colaborador: { nome: string } | null;
+    dias: number;
+    data_fim: string;
+  }>;
+  saindo: Array<{
+    id: string;
+    colaborador: { nome: string } | null;
+    dias: number;
+    data_inicio: string;
+  }>;
+  voltando: Array<{
+    id: string;
+    colaborador: { nome: string } | null;
+    dias: number;
+    data_fim: string;
+  }>;
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-background p-5">
+      <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
+        <CalendarCheck className="h-4 w-4 text-california-red" />
+        Esta semana
+      </h3>
+      <div className="space-y-5">
+        <BlocoSemana
+          titulo="Em férias agora"
+          itens={emFerias.map((l) => ({
+            id: l.id,
+            nome: l.colaborador?.nome ?? "—",
+            detalhe:
+              "até " +
+              new Date(l.data_fim + "T00:00:00").toLocaleDateString("pt-BR"),
+          }))}
+          vazio="Ninguém."
+        />
+        <BlocoSemana
+          titulo="Saindo nos próximos 7 dias"
+          itens={saindo.map((l) => ({
+            id: l.id,
+            nome: l.colaborador?.nome ?? "—",
+            detalhe:
+              new Date(l.data_inicio + "T00:00:00").toLocaleDateString(
+                "pt-BR",
+              ) +
+              " · " +
+              l.dias +
+              "d",
+          }))}
+          vazio="Nenhuma saída programada."
+        />
+        <BlocoSemana
+          titulo="Voltando nos próximos 7 dias"
+          itens={voltando.map((l) => ({
+            id: l.id,
+            nome: l.colaborador?.nome ?? "—",
+            detalhe:
+              "volta " +
+              new Date(l.data_fim + "T00:00:00").toLocaleDateString("pt-BR"),
+          }))}
+          vazio="Ninguém volta esta semana."
+        />
+      </div>
     </div>
   );
 }
 
-function EmptyLine({ texto }: { texto: string }) {
+function BlocoSemana({
+  titulo,
+  itens,
+  vazio,
+}: {
+  titulo: string;
+  itens: Array<{ id: string; nome: string; detalhe: string }>;
+  vazio: string;
+}) {
   return (
-    <p className="text-sm text-muted-foreground text-center py-6">{texto}</p>
+    <div>
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-1.5">
+        {titulo}
+      </p>
+      {itens.length === 0 ? (
+        <p className="text-sm text-muted-foreground italic">{vazio}</p>
+      ) : (
+        <ul className="space-y-1">
+          {itens.map((i) => (
+            <li
+              key={i.id}
+              className="flex items-center justify-between gap-3 text-sm py-0.5"
+            >
+              <span className="truncate font-medium">{i.nome}</span>
+              <span className="text-xs text-muted-foreground shrink-0">
+                {i.detalhe}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
 }
 
-function formatarDataCurta(d: string): string {
-  const parsed = new Date(d + "T00:00:00");
-  return parsed.toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-  });
-}
-
-function tipoLabel(t: FeriasLancamentoTipo): string {
-  switch (t) {
-    case "usufruto":
-      return "Férias";
-    case "abono_combinado":
-      return "Abono combinado";
-    case "abono_avulso":
-      return "Abono avulso";
-    case "abono_excepcional":
-      return "Abono excepcional";
-  }
-}
-
-function StatusBadge({ status }: { status: FeriasLancamentoStatus }) {
-  const map: Record<FeriasLancamentoStatus, { label: string; cls: string }> = {
-    pendente_aprovacao: {
-      label: "Pendente",
-      cls: "bg-amber-100 text-amber-900",
-    },
-    aguardando_financeiro: { label: "Ag. financeiro", cls: "bg-purple-100 text-purple-800" },
-    aprovado: { label: "Aprovado", cls: "bg-emerald-100 text-emerald-800" },
-    reprovado: { label: "Reprovado", cls: "bg-red-100 text-red-800" },
-    cancelado: { label: "Cancelado", cls: "bg-muted text-muted-foreground" },
-    concluido: { label: "Concluído", cls: "bg-slate-200 text-slate-700" },
-  };
-  const info = map[status];
+function WidgetVencimentos({
+  vencendo,
+}: {
+  vencendo: Array<{
+    id: string;
+    data_limite_gozo: string;
+    status: string;
+    aquisitivo_inicio: string;
+    aquisitivo_fim: string;
+    colaborador: { id: string; nome: string } | null;
+  }>;
+}) {
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
   return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium shrink-0 ${info.cls}`}
-    >
-      {info.label}
-    </span>
+    <div className="rounded-xl border border-border bg-background p-5">
+      <div className="flex items-center justify-between mb-4">
+        <h3 className="text-sm font-semibold flex items-center gap-2">
+          <Clock className="h-4 w-4 text-california-red" />
+          Próximos vencimentos
+        </h3>
+        <Link
+          href="/rh/ferias?tab=colaboradores&status=vencido"
+          prefetch={false}
+          className="text-xs text-california-red hover:underline"
+        >
+          Ver todos →
+        </Link>
+      </div>
+      {vencendo.length === 0 ? (
+        <p className="text-sm text-muted-foreground italic">
+          Nenhum concessivo próximo do vencimento.
+        </p>
+      ) : (
+        <ul className="divide-y divide-border">
+          {vencendo.map((p) => {
+            const limite = new Date(p.data_limite_gozo + "T00:00:00");
+            const dif = Math.ceil(
+              (limite.getTime() - hoje.getTime()) / 86_400_000,
+            );
+            const aq =
+              p.aquisitivo_inicio.slice(0, 4) +
+              "/" +
+              p.aquisitivo_fim.slice(0, 4);
+            const vencido = p.status === "vencido";
+            return (
+              <li
+                key={p.id}
+                className="flex items-center justify-between gap-3 py-2.5 text-sm"
+              >
+                <div className="min-w-0">
+                  <p className="font-medium truncate">
+                    {p.colaborador?.nome ?? "—"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Aquisitivo {aq}
+                  </p>
+                </div>
+                <div
+                  className={`text-xs text-right shrink-0 ${
+                    vencido
+                      ? "text-california-red font-semibold"
+                      : "text-amber-700"
+                  }`}
+                >
+                  {vencido ? "venceu há " + -dif + "d" : "vence em " + dif + "d"}
+                  <br />
+                  <span className="opacity-70">
+                    {limite.toLocaleDateString("pt-BR")}
+                  </span>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
   );
 }

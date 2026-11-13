@@ -11,12 +11,12 @@ import { AbaPendencias } from "./aba-pendencias";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "painel" | "quadro" | "fluxo" | "pendencias";
+type Tab = "dashboard" | "solicitacoes" | "colaboradores" | "pendencias";
 
 const TABS: { key: Tab; label: string }[] = [
-  { key: "painel", label: "Painel" },
-  { key: "quadro", label: "Quadro" },
-  { key: "fluxo", label: "Fluxo" },
+  { key: "dashboard", label: "Dashboard" },
+  { key: "solicitacoes", label: "Solicitações" },
+  { key: "colaboradores", label: "Colaboradores" },
   { key: "pendencias", label: "Pendências" },
 ];
 
@@ -35,9 +35,15 @@ export default async function FeriasPage({
 
   const tenantId = session.activeTenant.id;
 
-  // Abas removidas da UI redirecionam para Fluxo
-  if (searchParams.tab === "solicitacoes" || searchParams.tab === "pagamentos") {
-    redirect("/rh/ferias?tab=fluxo");
+  // Rotas antigas redirecionam pras novas (compat com links salvos).
+  if (searchParams.tab === "painel") {
+    redirect("/rh/ferias?tab=dashboard");
+  }
+  if (searchParams.tab === "quadro") {
+    redirect("/rh/ferias?tab=colaboradores");
+  }
+  if (searchParams.tab === "fluxo" || searchParams.tab === "pagamentos") {
+    redirect("/rh/ferias?tab=solicitacoes");
   }
 
   const tab: Tab = normalizarTab(searchParams.tab);
@@ -74,15 +80,15 @@ export default async function FeriasPage({
         </nav>
       </div>
 
-      {tab === "painel" && <AbaPainel tenantId={tenantId} />}
-      {tab === "quadro" && <AbaQuadro tenantId={tenantId} />}
-      {tab === "fluxo" && <AbaFluxo tenantId={tenantId} />}
+      {tab === "dashboard" && <AbaPainel tenantId={tenantId} />}
+      {tab === "solicitacoes" && <AbaFluxo tenantId={tenantId} />}
+      {tab === "colaboradores" && <AbaQuadro tenantId={tenantId} />}
       {tab === "pendencias" && <AbaPendencias tenantId={tenantId} />}
     </div>
   );
 }
 
 function normalizarTab(t: string | undefined): Tab {
-  const vals: Tab[] = ["painel", "quadro", "fluxo", "pendencias"];
-  return (vals as string[]).includes(t ?? "") ? (t as Tab) : "painel";
+  const vals: Tab[] = ["dashboard", "solicitacoes", "colaboradores", "pendencias"];
+  return (vals as string[]).includes(t ?? "") ? (t as Tab) : "dashboard";
 }

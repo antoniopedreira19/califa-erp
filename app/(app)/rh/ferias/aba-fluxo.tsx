@@ -1,89 +1,145 @@
 import { createClient } from "@/lib/supabase/server";
-import type { RhFeriasFluxoRow } from "@/lib/types";
-import type { FolhaDoc } from "./modal-documentos";
-import { FluxoKanban } from "./aba-fluxo-kanban";
+import type {
+  ColaboradorFeriasLancamento,
+  FeriasLancamentoStatus,
+  FeriasLancamentoTipo,
+  TipoContratacao,
+} from "@/lib/types";
+import { SolicitacoesTabelaCliente } from "./solicitacoes-tabela-cliente";
 
+export type SolicitacaoRow = {
+  id: string;
+  colaborador_id: string;
+  nome: string;
+  tipo_contratacao: TipoContratacao;
+  funcao: string | null;
+  tipo: FeriasLancamentoTipo;
+  dias: number;
+  dias_abono: number;
+  data_inicio: string;
+  data_fim: string;
+  status: FeriasLancamentoStatus;
+  lancado_direto_por_rh: boolean;
+  created_at: string;
+  aprovado_em: string | null;
+  motivo_reprovacao: string | null;
+  observacao: string | null;
+  saldo_colaborador: number;
+};
+
+/**
+ * Aba Solicitações — substituiu o kanban do antigo Fluxo em 2026-11-13.
+ * O kanban tinha 5 colunas das quais 4 ficavam vazias na maior parte do
+ * tempo; a Finalizadas virou depósito histórico de ~400 linhas rolando.
+ *
+ * Nova forma: tabela densa com chip de status pra filtrar + busca por
+ * nome + aprovar/reprovar inline nos pendentes. Clicar na linha abre
+ * detalhe do colaborador (saldo, alocação, histórico).
+ */
 export async function AbaFluxo({ tenantId }: { tenantId: string }) {
   const supabase = createClient();
 
-  // 1ª query: linhas do kanban (view)
-  const { data } = await supabase
-    .from("vw_rh_ferias_fluxo")
-    .select("*")
-    .eq("tenant_id", tenantId);
+  // Puxa TODAS as solicitações do tenant (até ~500 esperadas por ano).
+  // Em memória: ordenação + filtro vão ser client-side pra ficar
+  // instantâneos ao RH mudar chip de status.
+  const { data: lancs } = await supabase
+    .from("colaboradores_ferias_lancamentos")
+    .select(
+      "id, colaborador_id, tipo, dias, dias_abono, data_inicio, data_fim, status, lancado_direto_por_rh, created_at, aprovado_em, motivo_reprovacao, observacao",
+    )
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false });
 
-  const rows = (data ?? []) as RhFeriasFluxoRow[];
+  const lancamentos = (lancs ?? []) as Array<
+    Pick<
+      ColaboradorFeriasLancamento,
+      | "id"
+      | "colaborador_id"
+      | "tipo"
+      | "dias"
+      | "dias_abono"
+      | "data_inicio"
+      | "data_fim"
+      | "status"
+      | "lancado_direto_por_rh"
+      | "created_at"
+      | "aprovado_em"
+      | "motivo_reprovacao"
+      | "observacao"
+    >
+  >;
 
-  // 2ª query: folhas de pagamento vinculadas aos lançamentos visíveis
-  const lancamentoIds = rows
-    .map((r) => r.lancamento_id)
-    .filter((id): id is string => Boolean(id));
+  const colabIds = Array.from(
+    new Set(lancamentos.map((l) => l.colaborador_id)),
+  );
 
-  const folhasPorLancamento: Record<string, FolhaDoc[]> = {};
-
-  if (lancamentoIds.length > 0) {
-    const { data: folhasData } = await supabase
-      .from("folhas_pagamento")
-      .select(
-        "id, lancamento_ferias_id, origem, tipo_folha_ferias, salario_base, status, anexo_url",
-      )
+  const [colabsRes, periodosRes] = await Promise.all([
+    supabase
+      .from("colaboradores")
+      .select("id, nome, tipo_contratacao, funcao, status")
+      .in("id", colabIds.length > 0 ? colabIds : ["00000000-0000-0000-0000-000000000000"]),
+    supabase
+      .from("colaboradores_ferias_periodos")
+      .select("id, colaborador_id, dias_direito")
       .eq("tenant_id", tenantId)
-      .eq("tipo", "ferias")
-      .in("lancamento_ferias_id", lancamentoIds);
-
-    const folhas = folhasData ?? [];
-
-    // 3ª query: NFs que colaboradores PJ já anexaram
-    // Usamos os lancamento_ids das folhas california (PJ) como escopo_id
-    const lancamentoIdsComFolhaCalifornia = [
-      ...new Set(
-        folhas
-          .filter((f) => f.origem === "california" && f.lancamento_ferias_id)
-          .map((f) => f.lancamento_ferias_id as string),
+      .in(
+        "colaborador_id",
+        colabIds.length > 0
+          ? colabIds
+          : ["00000000-0000-0000-0000-000000000000"],
       ),
-    ];
+  ]);
 
-    const nfsAnexadas = new Set<string>();
+  const colabsPorId = new Map(
+    (colabsRes.data ?? []).map((c) => [c.id, c] as const),
+  );
 
-    if (lancamentoIdsComFolhaCalifornia.length > 0) {
-      const { data: nfsData } = await supabase
-        .from("colaboradores_nf_anexos")
-        .select("escopo_id, escopo_tipo")
-        .in("escopo_id", lancamentoIdsComFolhaCalifornia)
-        .in("escopo_tipo", ["ferias_usufruto", "ferias_abono"]);
-
-      for (const nf of nfsData ?? []) {
-        nfsAnexadas.add(`${nf.escopo_id}|${nf.escopo_tipo}`);
-      }
-    }
-
-    // Agrupa as folhas por lancamento_ferias_id, populando nf_anexada para PJ
-    for (const f of folhas) {
-      if (!f.lancamento_ferias_id) continue;
-      const lid = f.lancamento_ferias_id as string;
-      if (!folhasPorLancamento[lid]) folhasPorLancamento[lid] = [];
-
-      // Determina se a NF foi anexada para PJ:
-      // A chave no set usa o lancamento_id como escopo_id.
-      // O escopo_tipo varia conforme tipo_folha_ferias.
-      let nfAnexada = false;
-      if (f.origem === "california") {
-        const escopoTipo =
-          f.tipo_folha_ferias === "abono" ? "ferias_abono" : "ferias_usufruto";
-        nfAnexada = nfsAnexadas.has(`${lid}|${escopoTipo}`);
-      }
-
-      folhasPorLancamento[lid].push({
-        id: f.id as string,
-        origem: f.origem as "california" | "contabilidade",
-        tipo_folha_ferias: f.tipo_folha_ferias as "usufruto" | "abono" | null,
-        salario_base: Number(f.salario_base ?? 0),
-        status: f.status as FolhaDoc["status"],
-        anexo_url: (f.anexo_url as string | null) ?? null,
-        nf_anexada: nfAnexada,
-      });
-    }
+  // Calcula saldo total por colaborador: soma direito dos períodos menos
+  // consumo de todos os lançamentos aprovados/concluídos/pendentes.
+  const direitoPorColab = new Map<string, number>();
+  for (const p of periodosRes.data ?? []) {
+    const atual = direitoPorColab.get(p.colaborador_id) ?? 0;
+    direitoPorColab.set(p.colaborador_id, atual + (p.dias_direito ?? 0));
+  }
+  const consumidoPorColab = new Map<string, number>();
+  for (const l of lancamentos) {
+    if (
+      l.status !== "aprovado" &&
+      l.status !== "concluido" &&
+      l.status !== "pendente_aprovacao"
+    )
+      continue;
+    const atual = consumidoPorColab.get(l.colaborador_id) ?? 0;
+    consumidoPorColab.set(l.colaborador_id, atual + (l.dias ?? 0));
   }
 
-  return <FluxoKanban rows={rows} folhasPorLancamento={folhasPorLancamento} />;
+  const rows: SolicitacaoRow[] = lancamentos.map((l) => {
+    const c = colabsPorId.get(l.colaborador_id);
+    const saldo = Math.max(
+      (direitoPorColab.get(l.colaborador_id) ?? 0) -
+        (consumidoPorColab.get(l.colaborador_id) ?? 0),
+      0,
+    );
+    return {
+      id: l.id,
+      colaborador_id: l.colaborador_id,
+      nome: c?.nome ?? "—",
+      tipo_contratacao: (c?.tipo_contratacao ?? "pj") as TipoContratacao,
+      funcao: c?.funcao ?? null,
+      tipo: l.tipo,
+      dias: l.dias,
+      dias_abono: l.dias_abono ?? 0,
+      data_inicio: l.data_inicio,
+      data_fim: l.data_fim,
+      status: l.status,
+      lancado_direto_por_rh: l.lancado_direto_por_rh ?? false,
+      created_at: l.created_at,
+      aprovado_em: l.aprovado_em,
+      motivo_reprovacao: l.motivo_reprovacao,
+      observacao: l.observacao,
+      saldo_colaborador: saldo,
+    };
+  });
+
+  return <SolicitacoesTabelaCliente rows={rows} />;
 }

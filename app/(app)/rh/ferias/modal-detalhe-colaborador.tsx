@@ -8,6 +8,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   CalendarClock,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import {
   Dialog,
@@ -41,20 +43,20 @@ type Props = {
   onFechar: () => void;
 };
 
-type TabKey = "anteriores" | "futuros" | "historico";
-
 /**
- * Modal de detalhe do colaborador — hero fixo + abas pra contexto.
+ * Modal de detalhe do colaborador — hero fixo + histórico colapsável.
  *
  * Hierarquia visual:
  *   1. Hero(s) do(s) período(s) acionável(is) — SEMPRE fixo no topo
  *      do corpo. Se tiver 2+ (regra dos avós), lista todos como heros.
- *   2. Abas abaixo (3): Anteriores · Futuros · Histórico. Cada aba tem
- *      badge com contagem. Default = aba com conteúdo (prioriza
- *      Histórico se tiver, senão Anteriores, senão Futuros).
+ *   2. Histórico colapsado por padrão (começa minimizado). Lista única
+ *      de todos os lançamentos (agendados + concluídos + reprovados)
+ *      em ordem cronológica decrescente — mais recente primeiro.
  *
- * Substituiu os 3 colapsáveis (anteriores/futuros/histórico empilhados)
- * — ficava muita rolagem. Com abas o modal tem altura previsível.
+ * Foi simplificado em 2026-11-13: antes tinha 3 abas (Anteriores · Futuros
+ * · Histórico) com informações redundantes (período ativo já aparece no
+ * hero). RH só precisa confirmar situação atual e, quando quiser, abrir
+ * o histórico pra ver o que a pessoa já tirou.
  */
 export function ModalDetalheColaborador({
   colaborador,
@@ -107,23 +109,12 @@ export function ModalDetalheColaborador({
       p.status === "em_alerta" ||
       p.status === "vencido",
   );
-  const periodosPassados = periodos.filter(
-    (p) => p.status === "regularizado" || p.status === "pago_rescisao",
-  );
-  const periodosFuturos = periodos.filter(
-    (p) => p.status === "incompleto" || p.status === "nao_habilitado",
-  );
 
-  // Lançamentos — divididos entre acionáveis (agendados/pendentes/em curso)
-  // e histórico (concluído, reprovado, cancelado).
-  const hojeISO = new Date().toISOString().slice(0, 10);
-  const lancamentosAgendados = lancamentos.filter(
-    (l) =>
-      l.status === "pendente_aprovacao" ||
-      (l.status === "aprovado" && l.data_fim >= hojeISO),
-  );
-  const lancamentosHistorico = lancamentos.filter(
-    (l) => !lancamentosAgendados.includes(l),
+  // Histórico: TODOS os lançamentos ordenados por data_inicio decrescente
+  // (mais recente primeiro). Inclui pendentes, agendados, concluídos,
+  // reprovados — tudo numa única lista cronológica.
+  const historicoOrdenado = [...lancamentos].sort((a, b) =>
+    b.data_inicio.localeCompare(a.data_inicio),
   );
 
   const saldoTotal = periodosAtivos.reduce((acc, p) => {
@@ -184,12 +175,9 @@ export function ModalDetalheColaborador({
           )}
 
           {!formAberto && (
-            <ModalCorpoComTabs
+            <ModalCorpo
               periodosAtivos={periodosAtivos}
-              periodosPassados={periodosPassados}
-              periodosFuturos={periodosFuturos}
-              lancamentosAgendados={lancamentosAgendados}
-              lancamentosHistorico={lancamentosHistorico}
+              historicoOrdenado={historicoOrdenado}
               lancamentosTodos={lancamentos}
               diasUsadosPorPeriodo={diasUsadosPorPeriodo}
               diasOcupadosPorPeriodo={diasOcupadosPorPeriodo}
@@ -203,14 +191,11 @@ export function ModalDetalheColaborador({
   );
 }
 
-/* ----------------- Corpo do modal (hero fixo + tabs) ----------------- */
+/* ---------- Corpo do modal (hero fixo + histórico colapsável) ---------- */
 
-function ModalCorpoComTabs({
+function ModalCorpo({
   periodosAtivos,
-  periodosPassados,
-  periodosFuturos,
-  lancamentosAgendados,
-  lancamentosHistorico,
+  historicoOrdenado,
   lancamentosTodos,
   diasUsadosPorPeriodo,
   diasOcupadosPorPeriodo,
@@ -218,28 +203,14 @@ function ModalCorpoComTabs({
   onAbrirForm,
 }: {
   periodosAtivos: ColaboradorFeriasPeriodo[];
-  periodosPassados: ColaboradorFeriasPeriodo[];
-  periodosFuturos: ColaboradorFeriasPeriodo[];
-  lancamentosAgendados: ColaboradorFeriasLancamento[];
-  lancamentosHistorico: ColaboradorFeriasLancamento[];
+  historicoOrdenado: ColaboradorFeriasLancamento[];
   lancamentosTodos: ColaboradorFeriasLancamento[];
   diasUsadosPorPeriodo: Map<string, number>;
   diasOcupadosPorPeriodo: Map<string, number>;
   tipoContratacao: TipoContratacao;
   onAbrirForm: () => void;
 }) {
-  // Default da aba: prioriza o que o RH mais vai consultar. Histórico se
-  // existir, senão Anteriores, senão Futuros. Se nenhum tem conteúdo, cai
-  // em Anteriores (visualmente neutro).
-  const tabInicial: TabKey =
-    lancamentosAgendados.length + lancamentosHistorico.length > 0
-      ? "historico"
-      : periodosPassados.length > 0
-        ? "anteriores"
-        : "futuros";
-  const [tab, setTab] = React.useState<TabKey>(tabInicial);
-
-  const totalHistorico = lancamentosAgendados.length + lancamentosHistorico.length;
+  const [historicoAberto, setHistoricoAberto] = React.useState(false);
 
   return (
     <>
@@ -288,178 +259,42 @@ function ModalCorpoComTabs({
         </section>
       )}
 
-      {/* Tabs: contexto adicional (anteriores · futuros · histórico) */}
-      {(periodosPassados.length > 0 ||
-        periodosFuturos.length > 0 ||
-        totalHistorico > 0) && (
+      {/* Histórico colapsável — começa fechado */}
+      {historicoOrdenado.length > 0 && (
         <section className="pt-2">
-          <div className="border-b border-border">
-            <nav className="flex gap-4" role="tablist">
-              <AbaBotao
-                ativo={tab === "anteriores"}
-                onClick={() => setTab("anteriores")}
-                contagem={periodosPassados.length}
-                label="Anteriores"
-              />
-              <AbaBotao
-                ativo={tab === "futuros"}
-                onClick={() => setTab("futuros")}
-                contagem={periodosFuturos.length}
-                label="Futuros"
-              />
-              <AbaBotao
-                ativo={tab === "historico"}
-                onClick={() => setTab("historico")}
-                contagem={totalHistorico}
-                label="Histórico"
-              />
-            </nav>
-          </div>
+          <button
+            type="button"
+            onClick={() => setHistoricoAberto((x) => !x)}
+            aria-expanded={historicoAberto}
+            className="w-full flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-4 py-3 text-sm hover:bg-muted/30 transition-colors"
+          >
+            <span className="flex items-center gap-2 font-medium">
+              {historicoAberto ? (
+                <ChevronDown className="h-4 w-4" />
+              ) : (
+                <ChevronRight className="h-4 w-4" />
+              )}
+              Histórico de lançamentos
+            </span>
+            <span className="inline-flex items-center justify-center min-w-[24px] rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+              {historicoOrdenado.length}
+            </span>
+          </button>
 
-          <div className="pt-4">
-            {tab === "anteriores" && (
-              <AbaConteudoPeriodos
-                periodos={periodosPassados}
-                diasUsadosPorPeriodo={diasUsadosPorPeriodo}
-                vazio="Nenhum período anterior regularizado."
-              />
-            )}
-            {tab === "futuros" && (
-              <AbaConteudoPeriodos
-                periodos={periodosFuturos}
-                diasUsadosPorPeriodo={diasUsadosPorPeriodo}
-                vazio="Nenhum período futuro em curso."
-              />
-            )}
-            {tab === "historico" && (
-              <AbaConteudoHistorico
-                agendados={lancamentosAgendados}
-                historico={lancamentosHistorico}
-                tipoContratacao={tipoContratacao}
-              />
-            )}
-          </div>
+          {historicoAberto && (
+            <ul className="mt-3 divide-y divide-border rounded-lg border border-border">
+              {historicoOrdenado.map((l) => (
+                <LinhaLancamento
+                  key={l.id}
+                  lancamento={l}
+                  tipoContratacao={tipoContratacao}
+                />
+              ))}
+            </ul>
+          )}
         </section>
       )}
     </>
-  );
-}
-
-function AbaBotao({
-  ativo,
-  onClick,
-  label,
-  contagem,
-}: {
-  ativo: boolean;
-  onClick: () => void;
-  label: string;
-  contagem: number;
-}) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={ativo}
-      onClick={onClick}
-      className={`px-1 pb-2.5 text-sm font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5 ${
-        ativo
-          ? "border-california-red text-california-red"
-          : "border-transparent text-muted-foreground hover:text-foreground"
-      }`}
-    >
-      {label}
-      <span
-        className={`inline-flex items-center justify-center min-w-[20px] rounded-full px-1.5 py-0 text-[10px] font-semibold ${
-          ativo
-            ? "bg-california-red/10 text-california-red"
-            : "bg-muted text-muted-foreground"
-        }`}
-      >
-        {contagem}
-      </span>
-    </button>
-  );
-}
-
-function AbaConteudoPeriodos({
-  periodos,
-  diasUsadosPorPeriodo,
-  vazio,
-}: {
-  periodos: ColaboradorFeriasPeriodo[];
-  diasUsadosPorPeriodo: Map<string, number>;
-  vazio: string;
-}) {
-  if (periodos.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground text-center py-6">{vazio}</p>
-    );
-  }
-  return (
-    <ul className="divide-y divide-border rounded-lg border border-border">
-      {periodos.map((p) => (
-        <LinhaPeriodoCompacta
-          key={p.id}
-          periodo={p}
-          usados={diasUsadosPorPeriodo.get(p.id) ?? 0}
-        />
-      ))}
-    </ul>
-  );
-}
-
-function AbaConteudoHistorico({
-  agendados,
-  historico,
-  tipoContratacao,
-}: {
-  agendados: ColaboradorFeriasLancamento[];
-  historico: ColaboradorFeriasLancamento[];
-  tipoContratacao: TipoContratacao;
-}) {
-  if (agendados.length === 0 && historico.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground text-center py-6">
-        Nenhum lançamento registrado.
-      </p>
-    );
-  }
-  return (
-    <div className="space-y-5">
-      {agendados.length > 0 && (
-        <div>
-          <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-            Agendadas e pendentes ({agendados.length})
-          </h4>
-          <ul className="divide-y divide-border rounded-lg border border-border">
-            {agendados.map((l) => (
-              <LinhaLancamento
-                key={l.id}
-                lancamento={l}
-                tipoContratacao={tipoContratacao}
-              />
-            ))}
-          </ul>
-        </div>
-      )}
-      {historico.length > 0 && (
-        <div>
-          <h4 className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-2">
-            Concluídas ({historico.length})
-          </h4>
-          <ul className="divide-y divide-border rounded-lg border border-border">
-            {historico.map((l) => (
-              <LinhaLancamento
-                key={l.id}
-                lancamento={l}
-                tipoContratacao={tipoContratacao}
-              />
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
   );
 }
 
@@ -624,29 +459,6 @@ function HeroPeriodo({
         </div>
       )}
     </div>
-  );
-}
-
-/* ----------------------- Linha compacta de período ---------------------- */
-
-function LinhaPeriodoCompacta({
-  periodo: p,
-  usados,
-}: {
-  periodo: ColaboradorFeriasPeriodo;
-  usados: number;
-}) {
-  const aquisitivoRotulo = `${p.aquisitivo_inicio.slice(0, 4)}/${p.aquisitivo_fim.slice(0, 4)}`;
-  return (
-    <li className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm">
-      <div className="flex items-center gap-3 min-w-0">
-        <span className="font-medium">{aquisitivoRotulo}</span>
-        <span className="text-xs text-muted-foreground">
-          {usados}/{p.dias_direito} dias
-        </span>
-      </div>
-      <BadgePeriodo status={p.status} />
-    </li>
   );
 }
 
