@@ -79,7 +79,7 @@ export default async function ColaboradorFeriasPage({
       supabase
         .from("colaboradores_alocacoes")
         .select(
-          "id, empresa_id, regional_id, usa_rateio_empresa, data_inicio, empresa:empresas(nome), regional:regionais(nome)",
+          "id, empresa_id, regional_id, usa_rateio_empresa, data_inicio, empresa:empresas(nome_fantasia), regional:regionais(nome)",
         )
         .eq("colaborador_id", params.id)
         .is("data_fim", null)
@@ -114,7 +114,7 @@ export default async function ColaboradorFeriasPage({
     data_inicio: string | null;
   } | null;
   const alocacao = alocacaoRes.data as {
-    empresa: { nome: string } | null;
+    empresa: { nome_fantasia: string } | null;
     regional: { nome: string } | null;
     usa_rateio_empresa: boolean | null;
   } | null;
@@ -223,7 +223,7 @@ export default async function ColaboradorFeriasPage({
         status={c.status}
         saldoDias={saldoTotal}
         salario={salarioNum}
-        empresa={alocacao?.empresa?.nome ?? null}
+        empresa={alocacao?.empresa?.nome_fantasia ?? null}
         regional={regionalLabel}
         botaoLancar={botaoLancar}
       />

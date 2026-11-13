@@ -84,7 +84,7 @@ export async function AbaFluxo({ tenantId }: { tenantId: string }) {
     supabase
       .from("colaboradores_alocacoes")
       .select(
-        "colaborador_id, data_inicio, empresa:empresas(nome), regional:regionais(nome)",
+        "colaborador_id, data_inicio, empresa:empresas(nome_fantasia), regional:regionais(nome)",
       )
       .eq("tenant_id", tenantId)
       .in("colaborador_id", colabIdsSeguro)
@@ -100,7 +100,10 @@ export async function AbaFluxo({ tenantId }: { tenantId: string }) {
   type AlocRow = {
     colaborador_id: string;
     data_inicio: string | null;
-    empresa: { nome: string | null } | { nome: string | null }[] | null;
+    empresa:
+      | { nome_fantasia: string | null }
+      | { nome_fantasia: string | null }[]
+      | null;
     regional: { nome: string | null } | { nome: string | null }[] | null;
   };
   const alocacoesPorColab = new Map<
@@ -115,7 +118,7 @@ export async function AbaFluxo({ tenantId }: { tenantId: string }) {
     const emp = Array.isArray(a.empresa) ? a.empresa[0] : a.empresa;
     const reg = Array.isArray(a.regional) ? a.regional[0] : a.regional;
     alocacoesPorColab.set(a.colaborador_id, {
-      empresa: emp?.nome ?? null,
+      empresa: emp?.nome_fantasia ?? null,
       regional: reg?.nome ?? null,
     });
   }

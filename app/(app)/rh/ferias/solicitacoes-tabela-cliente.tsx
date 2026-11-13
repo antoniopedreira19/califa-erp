@@ -350,7 +350,7 @@ function Td({
       : align === "center"
         ? "text-center"
         : "text-left";
-  return <td className={`px-4 py-3 align-top ${alignCls}`}>{children}</td>;
+  return <td className={`px-4 py-3 align-middle ${alignCls}`}>{children}</td>;
 }
 
 /* ------------------------- Helpers visuais ------------------------- */
