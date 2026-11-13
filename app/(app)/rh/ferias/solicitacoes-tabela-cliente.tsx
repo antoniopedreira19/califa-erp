@@ -21,20 +21,16 @@ type Props = {
 };
 
 type FiltroStatus =
-  | "todos"
   | "pendente_aprovacao"
   | "aprovado"
-  | "reprovado"
-  | "concluido"
   | "aguardando_financeiro"
-  | "cancelado";
+  | "concluido";
 
 const FILTROS: Array<{
   key: FiltroStatus;
   label: string;
   cor: string;
 }> = [
-  { key: "todos", label: "Todos", cor: "bg-muted text-muted-foreground" },
   {
     key: "pendente_aprovacao",
     label: "Pendentes",
@@ -55,11 +51,6 @@ const FILTROS: Array<{
     label: "Concluídos",
     cor: "bg-slate-200 text-slate-700",
   },
-  {
-    key: "reprovado",
-    label: "Reprovados",
-    cor: "bg-red-100 text-red-800",
-  },
 ];
 
 export function SolicitacoesTabelaCliente({ rows }: Props) {
@@ -72,13 +63,10 @@ export function SolicitacoesTabelaCliente({ rows }: Props) {
   // Contagens por status pros chips mostrarem badge
   const contagens = React.useMemo(() => {
     const m: Record<FiltroStatus, number> = {
-      todos: rows.length,
       pendente_aprovacao: 0,
       aprovado: 0,
-      reprovado: 0,
-      concluido: 0,
       aguardando_financeiro: 0,
-      cancelado: 0,
+      concluido: 0,
     };
     for (const r of rows) {
       if (r.status in m) (m as Record<string, number>)[r.status] += 1;
@@ -89,7 +77,7 @@ export function SolicitacoesTabelaCliente({ rows }: Props) {
   const filtradas = React.useMemo(() => {
     const termo = busca.trim().toLowerCase();
     return rows.filter((r) => {
-      if (filtro !== "todos" && r.status !== filtro) return false;
+      if (r.status !== filtro) return false;
       if (termo && !r.nome.toLowerCase().includes(termo)) return false;
       return true;
     });
@@ -179,6 +167,7 @@ export function SolicitacoesTabelaCliente({ rows }: Props) {
               <thead className="bg-muted/20 border-b border-border">
                 <tr>
                   <Th>Colaborador</Th>
+                  <Th>Alocação</Th>
                   <Th>Período</Th>
                   <Th align="center">Dias</Th>
                   <Th>Tipo</Th>
@@ -251,8 +240,21 @@ function LinhaSolicitacao({
         <p className="text-[11px] text-muted-foreground mt-0.5 uppercase tracking-wider">
           {regimeLabel}
           {r.funcao && <> · {r.funcao}</>}
-          {r.saldo_colaborador > 0 && <> · saldo {r.saldo_colaborador}d</>}
         </p>
+      </Td>
+      <Td>
+        {r.alocacao_empresa ? (
+          <>
+            <p className="text-xs text-foreground">{r.alocacao_empresa}</p>
+            {r.alocacao_regional && (
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                {r.alocacao_regional}
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="text-xs text-muted-foreground">—</p>
+        )}
       </Td>
       <Td>
         <p className="text-sm text-foreground">

@@ -24,30 +24,30 @@ export type SolicitacaoRow = {
   aprovado_em: string | null;
   motivo_reprovacao: string | null;
   observacao: string | null;
-  saldo_colaborador: number;
+  alocacao_empresa: string | null;
+  alocacao_regional: string | null;
 };
 
 /**
  * Aba Solicitações — substituiu o kanban do antigo Fluxo em 2026-11-13.
- * O kanban tinha 5 colunas das quais 4 ficavam vazias na maior parte do
- * tempo; a Finalizadas virou depósito histórico de ~400 linhas rolando.
  *
- * Nova forma: tabela densa com chip de status pra filtrar + busca por
- * nome + aprovar/reprovar inline nos pendentes. Clicar na linha abre
- * detalhe do colaborador (saldo, alocação, histórico).
+ * Filtro intencional: só mostra lançamentos que nasceram como solicitação
+ * do colaborador (lancado_direto_por_rh = false). Imports históricos e
+ * registros diretos pelo RH ficam fora — eles não têm fluxo de aprovação
+ * nem NF pra acompanhar, viram ruído na lista.
  */
 export async function AbaFluxo({ tenantId }: { tenantId: string }) {
   const supabase = createClient();
 
-  // Puxa TODAS as solicitações do tenant (até ~500 esperadas por ano).
-  // Em memória: ordenação + filtro vão ser client-side pra ficar
-  // instantâneos ao RH mudar chip de status.
+  // Puxa só solicitações reais (não-import). Esperado ficar baixo,
+  // ordenação + filtro continuam client-side.
   const { data: lancs } = await supabase
     .from("colaboradores_ferias_lancamentos")
     .select(
       "id, colaborador_id, tipo, dias, dias_abono, data_inicio, data_fim, status, lancado_direto_por_rh, created_at, aprovado_em, motivo_reprovacao, observacao",
     )
     .eq("tenant_id", tenantId)
+    .eq("lancado_direto_por_rh", false)
     .order("created_at", { ascending: false });
 
   const lancamentos = (lancs ?? []) as Array<
@@ -73,53 +73,56 @@ export async function AbaFluxo({ tenantId }: { tenantId: string }) {
     new Set(lancamentos.map((l) => l.colaborador_id)),
   );
 
-  const [colabsRes, periodosRes] = await Promise.all([
+  const colabIdsSeguro =
+    colabIds.length > 0 ? colabIds : ["00000000-0000-0000-0000-000000000000"];
+
+  const [colabsRes, alocacoesRes] = await Promise.all([
     supabase
       .from("colaboradores")
       .select("id, nome, tipo_contratacao, funcao, status")
-      .in("id", colabIds.length > 0 ? colabIds : ["00000000-0000-0000-0000-000000000000"]),
+      .in("id", colabIdsSeguro),
     supabase
-      .from("colaboradores_ferias_periodos")
-      .select("id, colaborador_id, dias_direito")
+      .from("colaboradores_alocacoes")
+      .select(
+        "colaborador_id, data_inicio, empresa:empresas(nome), regional:regionais(nome)",
+      )
       .eq("tenant_id", tenantId)
-      .in(
-        "colaborador_id",
-        colabIds.length > 0
-          ? colabIds
-          : ["00000000-0000-0000-0000-000000000000"],
-      ),
+      .in("colaborador_id", colabIdsSeguro)
+      .is("data_fim", null),
   ]);
 
   const colabsPorId = new Map(
     (colabsRes.data ?? []).map((c) => [c.id, c] as const),
   );
 
-  // Calcula saldo total por colaborador: soma direito dos períodos menos
-  // consumo de todos os lançamentos aprovados/concluídos/pendentes.
-  const direitoPorColab = new Map<string, number>();
-  for (const p of periodosRes.data ?? []) {
-    const atual = direitoPorColab.get(p.colaborador_id) ?? 0;
-    direitoPorColab.set(p.colaborador_id, atual + (p.dias_direito ?? 0));
-  }
-  const consumidoPorColab = new Map<string, number>();
-  for (const l of lancamentos) {
-    if (
-      l.status !== "aprovado" &&
-      l.status !== "concluido" &&
-      l.status !== "pendente_aprovacao"
-    )
-      continue;
-    const atual = consumidoPorColab.get(l.colaborador_id) ?? 0;
-    consumidoPorColab.set(l.colaborador_id, atual + (l.dias ?? 0));
+  // Pega a alocação ativa mais recente por colaborador. Pode ter mais
+  // de uma (rateio), aqui só a primeira — é só pra identificar na linha.
+  type AlocRow = {
+    colaborador_id: string;
+    data_inicio: string | null;
+    empresa: { nome: string | null } | { nome: string | null }[] | null;
+    regional: { nome: string | null } | { nome: string | null }[] | null;
+  };
+  const alocacoesPorColab = new Map<
+    string,
+    { empresa: string | null; regional: string | null }
+  >();
+  const alocacoesOrdenadas = ((alocacoesRes.data ?? []) as AlocRow[]).sort(
+    (a, b) => (b.data_inicio ?? "").localeCompare(a.data_inicio ?? ""),
+  );
+  for (const a of alocacoesOrdenadas) {
+    if (alocacoesPorColab.has(a.colaborador_id)) continue;
+    const emp = Array.isArray(a.empresa) ? a.empresa[0] : a.empresa;
+    const reg = Array.isArray(a.regional) ? a.regional[0] : a.regional;
+    alocacoesPorColab.set(a.colaborador_id, {
+      empresa: emp?.nome ?? null,
+      regional: reg?.nome ?? null,
+    });
   }
 
   const rows: SolicitacaoRow[] = lancamentos.map((l) => {
     const c = colabsPorId.get(l.colaborador_id);
-    const saldo = Math.max(
-      (direitoPorColab.get(l.colaborador_id) ?? 0) -
-        (consumidoPorColab.get(l.colaborador_id) ?? 0),
-      0,
-    );
+    const alocacao = alocacoesPorColab.get(l.colaborador_id);
     return {
       id: l.id,
       colaborador_id: l.colaborador_id,
@@ -137,7 +140,8 @@ export async function AbaFluxo({ tenantId }: { tenantId: string }) {
       aprovado_em: l.aprovado_em,
       motivo_reprovacao: l.motivo_reprovacao,
       observacao: l.observacao,
-      saldo_colaborador: saldo,
+      alocacao_empresa: alocacao?.empresa ?? null,
+      alocacao_regional: alocacao?.regional ?? null,
     };
   });
 
