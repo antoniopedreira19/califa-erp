@@ -5440,12 +5440,17 @@ export type FeriasLancamentoTipo =
   | "abono_avulso"
   | "abono_excepcional";
 
-/** Status do lançamento. Fluxo típico: pendente_aprovacao → em_analise (op.)
- *  → aguardando_financeiro → aprovado → concluido. Alternativas: reprovado, cancelado. */
+/** Status do lançamento. Fluxo real:
+ *    pendente_aprovacao → aprovado → nf_anexada → enviado_financeiro → concluido.
+ *  Alternativas: reprovado, cancelado.
+ *  `aguardando_financeiro` existe no enum mas é valor morto desde
+ *  20261026700007 — nada escreve nele (ver 20261113300001). */
 export type FeriasLancamentoStatus =
   | "pendente_aprovacao"
   | "aguardando_financeiro"
   | "aprovado"
+  | "nf_anexada"
+  | "enviado_financeiro"
   | "reprovado"
   | "cancelado"
   | "concluido";

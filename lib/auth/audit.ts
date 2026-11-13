@@ -433,6 +433,7 @@ export type AuditAction =
   | "ferias.solicitacao.criada"
   | "ferias.solicitacao.cancelada_pelo_colaborador"
   | "ferias.lancamento.aprovado"
+  | "ferias.lancamento.enviado_financeiro"
   | "ferias.lancamento.reprovado"
   | "ferias.lancamento.cancelado_pelo_rh"
   | "ferias.lancamento.lancado_direto_pelo_rh"

@@ -131,11 +131,19 @@ function BadgeStatus({ status }: { status: FeriasLancamentoStatus }) {
       label: "Pendente",
       cls: "bg-amber-100 text-amber-900",
     },
+    aprovado: { label: "Aprovado", cls: "bg-emerald-100 text-emerald-800" },
+    nf_anexada: {
+      label: "NF Anexada",
+      cls: "bg-sky-100 text-sky-800",
+    },
+    enviado_financeiro: {
+      label: "Enviado Financeiro",
+      cls: "bg-purple-100 text-purple-800",
+    },
     aguardando_financeiro: {
       label: "Aguardando Financeiro",
       cls: "bg-purple-100 text-purple-800",
     },
-    aprovado: { label: "Aprovado", cls: "bg-emerald-100 text-emerald-800" },
     reprovado: { label: "Reprovado", cls: "bg-red-100 text-red-800" },
     cancelado: {
       label: "Cancelado",

@@ -727,3 +727,88 @@ export async function obterUrlRecibo(
   return { ok: true, url: data.signedUrl };
 }
 
+// ---------- Enviar pro Financeiro ----------
+
+/**
+ * Transição manual do RH: lançamento em `nf_anexada` vira
+ * `enviado_financeiro`, e as folhas de pagamento em rascunho desse
+ * lançamento viram `enviada` — é só com status `enviada` que a view
+ * vw_people_aprovar_financeiro expõe elas pra aba People do Contas
+ * a Pagar. Até esse momento, o financeiro não vê nada.
+ *
+ * Idempotente: se já está em `enviado_financeiro`, retorna ok sem
+ * mexer no banco (evita double-click gerar erro visual).
+ */
+export async function enviarProFinanceiro(
+  lancamentoId: string,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const bloqueio = assertRh(session.activeRole);
+  if (bloqueio) return bloqueio;
+
+  const tenantId = session.activeTenant.id;
+  const lanc = await carregarLancamento(lancamentoId, tenantId);
+  if (!lanc) return { ok: false, message: "Lançamento não encontrado." };
+
+  if (lanc.status === "enviado_financeiro") {
+    return { ok: true, id: lanc.id };
+  }
+  if (lanc.status !== "nf_anexada") {
+    return {
+      ok: false,
+      message:
+        "Só é possível enviar pro financeiro quando a NF já foi anexada.",
+    };
+  }
+
+  const supabase = createClient();
+
+  const { error: lancErr } = await supabase
+    .from("colaboradores_ferias_lancamentos")
+    .update({ status: "enviado_financeiro" })
+    .eq("id", lancamentoId)
+    .eq("status", "nf_anexada");
+  if (lancErr) {
+    console.error("[rh.ferias.enviarFinanceiro.lanc]", lancErr.message);
+    return { ok: false, message: "Falha ao mudar status: " + lancErr.message };
+  }
+
+  // Empurra as folhas rascunho pra enviada — sem isso a view People
+  // não enxerga. Já em rascunho são as folhas que foram criadas em
+  // criarFolhasDePagamentoDeFerias no momento da aprovação.
+  const { error: folhasErr } = await supabase
+    .from("folhas_pagamento")
+    .update({ status: "enviada" })
+    .eq("lancamento_ferias_id", lancamentoId)
+    .eq("status", "rascunho");
+  if (folhasErr) {
+    console.error("[rh.ferias.enviarFinanceiro.folhas]", folhasErr.message);
+    // Não dá rollback manual — RLS é a garantia. Avisa pro RH acompanhar.
+    return {
+      ok: true,
+      id: lanc.id,
+      aviso:
+        "Status atualizado, mas falhou ao enviar folha(s) pro financeiro: " +
+        folhasErr.message +
+        ". Avise o administrador.",
+    };
+  }
+
+  await logAuditEvent({
+    acao: "ferias.lancamento.enviado_financeiro",
+    tenantId,
+    entidadeTipo: "ferias_lancamento",
+    entidadeId: lanc.id,
+    metadata: {
+      colaborador_id: lanc.colaborador_id,
+      tipo: lanc.tipo,
+      dias: lanc.dias,
+    },
+  });
+
+  revalidatePath("/rh/ferias");
+  revalidatePath("/perfil");
+  revalidatePath("/financeiro/contas-a-pagar");
+  return { ok: true, id: lanc.id };
+}
+

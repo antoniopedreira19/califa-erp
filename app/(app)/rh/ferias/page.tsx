@@ -42,21 +42,23 @@ export default async function FeriasPage({
 
   const tab: Tab = normalizarTab(searchParams.tab);
 
-  // Badge da tab Solicitações: contagem de pendentes de aprovação.
-  // Puxado no server pra aparecer já na renderização inicial.
+  // Badge da tab Solicitações: pendentes de aprovação + NF anexada
+  // (ambos exigem ação do RH — pendente precisa aprovar, nf_anexada
+  // precisa clicar "Enviar pro Financeiro"). Puxado no server pra
+  // aparecer já na renderização inicial.
   const supabase = createClient();
-  const { count: countPendentes } = await supabase
+  const { count: countParaAgir } = await supabase
     .from("colaboradores_ferias_lancamentos")
     .select("id", { count: "exact", head: true })
     .eq("tenant_id", tenantId)
-    .eq("status", "pendente_aprovacao");
+    .in("status", ["pendente_aprovacao", "nf_anexada"]);
 
   const tabsConfig: { key: Tab; label: string; badge?: number }[] = [
     { key: "dashboard", label: "Dashboard" },
     {
       key: "solicitacoes",
       label: "Solicitações",
-      badge: countPendentes ?? 0,
+      badge: countParaAgir ?? 0,
     },
     { key: "colaboradores", label: "Colaboradores" },
     { key: "pendencias", label: "Pendências" },

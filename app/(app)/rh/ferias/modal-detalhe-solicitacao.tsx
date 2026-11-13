@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import {
   Loader2,
   AlertCircle,
@@ -10,6 +11,8 @@ import {
   FileText,
   TrendingDown,
   Info,
+  User,
+  Send,
 } from "lucide-react";
 import {
   Dialog,
@@ -29,6 +32,7 @@ import {
   aprovarLancamento,
   reprovarLancamento,
   previewValoresFerias,
+  enviarProFinanceiro,
 } from "./actions";
 
 type Props = {
@@ -106,7 +110,20 @@ export function ModalDetalheSolicitacao({ row, onFechar, onSucesso }: Props) {
     onSucesso();
   }
 
+  async function handleEnviarFinanceiro() {
+    setEnviando(true);
+    setErro(null);
+    const res = await enviarProFinanceiro(row.id);
+    setEnviando(false);
+    if (!res.ok) {
+      setErro(res.message);
+      return;
+    }
+    onSucesso();
+  }
+
   const pendente = row.status === "pendente_aprovacao";
+  const podeEnviarFinanceiro = row.status === "nf_anexada";
   const regimeLabel = tipoContratacaoLabel(row.tipo_contratacao);
   const inicio = new Date(row.data_inicio + "T00:00:00").toLocaleDateString(
     "pt-BR",
@@ -280,10 +297,34 @@ export function ModalDetalheSolicitacao({ row, onFechar, onSucesso }: Props) {
 
         {/* Rodapé — botões */}
         {!pendente ? (
-          <DialogFooter>
-            <DialogClose asChild>
-              <Button variant="outline">Fechar</Button>
-            </DialogClose>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Link
+              href={`/rh/ferias/${row.colaborador_id}`}
+              prefetch={false}
+              className="inline-flex items-center gap-1.5 h-9 px-3 rounded-md border border-border bg-background text-sm font-medium hover:bg-muted transition-colors"
+            >
+              <User className="h-4 w-4" />
+              Ver colaborador
+            </Link>
+            {podeEnviarFinanceiro && (
+              <Button
+                onClick={handleEnviarFinanceiro}
+                disabled={enviando}
+                className="bg-purple-600 hover:bg-purple-700"
+              >
+                {enviando ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                ) : (
+                  <Send className="h-4 w-4 mr-1" />
+                )}
+                Enviar pro Financeiro
+              </Button>
+            )}
+            {!podeEnviarFinanceiro && (
+              <DialogClose asChild>
+                <Button variant="outline">Fechar</Button>
+              </DialogClose>
+            )}
           </DialogFooter>
         ) : modoReprovar ? (
           <DialogFooter>

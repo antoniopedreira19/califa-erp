@@ -24,7 +24,8 @@ type FiltroStatus =
   | "todos"
   | "pendente_aprovacao"
   | "aprovado"
-  | "aguardando_financeiro"
+  | "nf_anexada"
+  | "enviado_financeiro"
   | "concluido";
 
 const FILTROS: Array<{
@@ -44,8 +45,13 @@ const FILTROS: Array<{
     cor: "bg-emerald-100 text-emerald-800",
   },
   {
-    key: "aguardando_financeiro",
-    label: "Aguardando Financeiro",
+    key: "nf_anexada",
+    label: "NF Anexada",
+    cor: "bg-sky-100 text-sky-800",
+  },
+  {
+    key: "enviado_financeiro",
+    label: "Enviado Financeiro",
     cor: "bg-purple-100 text-purple-800",
   },
   {
@@ -68,7 +74,8 @@ export function SolicitacoesTabelaCliente({ rows }: Props) {
       todos: rows.length,
       pendente_aprovacao: 0,
       aprovado: 0,
-      aguardando_financeiro: 0,
+      nf_anexada: 0,
+      enviado_financeiro: 0,
       concluido: 0,
     };
     for (const r of rows) {
@@ -339,15 +346,25 @@ function BadgeStatus({ status }: { status: FeriasLancamentoStatus }) {
       cls: "bg-amber-100 text-amber-900",
       dot: "bg-amber-500",
     },
-    aguardando_financeiro: {
-      label: "Aguardando Financeiro",
-      cls: "bg-purple-100 text-purple-800",
-      dot: "bg-purple-500",
-    },
     aprovado: {
       label: "Aprovado",
       cls: "bg-emerald-100 text-emerald-800",
       dot: "bg-emerald-500",
+    },
+    nf_anexada: {
+      label: "NF Anexada",
+      cls: "bg-sky-100 text-sky-800",
+      dot: "bg-sky-500",
+    },
+    enviado_financeiro: {
+      label: "Enviado Financeiro",
+      cls: "bg-purple-100 text-purple-800",
+      dot: "bg-purple-500",
+    },
+    aguardando_financeiro: {
+      label: "Aguardando Financeiro",
+      cls: "bg-purple-100 text-purple-800",
+      dot: "bg-purple-500",
     },
     reprovado: {
       label: "Reprovado",
