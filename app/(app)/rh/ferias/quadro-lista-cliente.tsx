@@ -3,7 +3,6 @@
 import * as React from "react";
 import { Search, X } from "lucide-react";
 import { LinhaQuadro } from "./linha-quadro";
-import { ModalDetalheWrapper } from "./modal-detalhe-wrapper";
 import type { QuadroColaboradorRow } from "./aba-quadro";
 
 type Props = {
@@ -39,15 +38,13 @@ const STATUS_PERIODO = [
  * Agora: filtros vivem em state local, aplicados em memória sobre as rows
  * já carregadas. Instantâneo (<10ms).
  *
- * Modal continua client-side via state local (ModalDetalheWrapper).
+ * Linhas são `<Link>` pra /rh/ferias/[id] (2026-11-13: tirou o modal
+ * de detalhe e trocou por página completa com URL própria).
  */
 export function QuadroListaCliente({ rows }: Props) {
   const [busca, setBusca] = React.useState("");
   const [tipoContratacao, setTipoContratacao] = React.useState("");
   const [statusPeriodo, setStatusPeriodo] = React.useState("");
-  const [colabSelecionadoId, setColabSelecionadoId] = React.useState<
-    string | null
-  >(null);
 
   const rowsFiltradas = React.useMemo(() => {
     let res = rows;
@@ -164,21 +161,10 @@ export function QuadroListaCliente({ rows }: Props) {
           </div>
           <ul className="divide-y divide-border">
             {rowsFiltradas.map((row) => (
-              <LinhaQuadro
-                key={row.id}
-                row={row}
-                onAbrir={() => setColabSelecionadoId(row.id)}
-              />
+              <LinhaQuadro key={row.id} row={row} />
             ))}
           </ul>
         </div>
-      )}
-
-      {colabSelecionadoId && (
-        <ModalDetalheWrapper
-          colaboradorId={colabSelecionadoId}
-          onFechar={() => setColabSelecionadoId(null)}
-        />
       )}
     </>
   );

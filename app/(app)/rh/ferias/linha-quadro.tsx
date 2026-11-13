@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import type { FeriasPeriodoStatus } from "@/lib/types";
 import { tipoContratacaoLabel } from "@/lib/types";
@@ -8,23 +9,9 @@ import type { QuadroColaboradorRow } from "./aba-quadro";
 
 type Props = {
   row: QuadroColaboradorRow;
-  /** Callback de abertura do modal — gerenciado por state local no
-   *  QuadroListaCliente pra evitar round-trip RSC (Onda 3). */
-  onAbrir: () => void;
 };
 
-export function LinhaQuadro({ row, onAbrir }: Props) {
-  function abrirDetalhe() {
-    onAbrir();
-  }
-
-  function onKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      abrirDetalhe();
-    }
-  }
-
+export function LinhaQuadro({ row }: Props) {
   const admissaoFmt = row.data_admissao
     ? new Date(row.data_admissao + "T00:00:00").toLocaleDateString("pt-BR")
     : "—";
@@ -36,11 +23,9 @@ export function LinhaQuadro({ row, onAbrir }: Props) {
     : "—";
 
   return (
-    <li
-      role="button"
-      tabIndex={0}
-      onClick={abrirDetalhe}
-      onKeyDown={onKeyDown}
+    <Link
+      href={`/rh/ferias/${row.id}`}
+      prefetch={false}
       className="grid md:grid-cols-[2fr_0.9fr_0.9fr_1fr_1fr_1fr_0.3fr] gap-x-4 gap-y-1 px-5 py-3 cursor-pointer transition-colors hover:bg-muted/30"
     >
       {/* Colaborador: nome + função + tipo */}
@@ -144,7 +129,7 @@ export function LinhaQuadro({ row, onAbrir }: Props) {
           />
         )}
       </div>
-    </li>
+    </Link>
   );
 }
 
