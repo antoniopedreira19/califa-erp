@@ -18,6 +18,7 @@ import type { BandeiraCartao, ContaBancaria, PlanoContaSubtipo, PlanoContaTipo }
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
 import type { RendimentoLancado } from "../contas-a-receber/recebimento-avulso-dialog";
 import { carregarImpostos, type DadosDosImpostos } from "../fiscal/impostos/dados";
+import { todasAsLinhas } from "@/lib/supabase/todas-as-linhas";
 
 export interface DadosDoNovoLancamento {
   tenantId: string;
@@ -54,12 +55,17 @@ export async function carregarDadosDoNovoLancamento(): Promise<Resultado> {
         .eq("ativo", true)
         .order("codigo")
         .returns<PlanoContaSubtipo[]>(),
-      supabase
-        .from("fornecedores")
-        .select("id, nome, razao_social, cpf_cnpj")
-        .eq("tenant_id", tenantId)
-        .eq("status", "ativo")
-        .order("nome"),
+      // Decisão 255: sem o corte de 1.000 linhas do PostgREST.
+      todasAsLinhas((de, ate) =>
+        supabase
+          .from("fornecedores")
+          .select("id, nome, razao_social, cpf_cnpj")
+          .eq("tenant_id", tenantId)
+          .eq("status", "ativo")
+          .order("nome")
+          .order("id")
+          .range(de, ate),
+      ),
       supabase
         .from("clientes")
         .select("id, nome_fantasia, razao_social")

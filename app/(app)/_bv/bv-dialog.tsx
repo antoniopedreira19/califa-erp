@@ -15,6 +15,11 @@ import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
 import { NovoFornecedorDialog } from "@/app/(app)/fornecedores/novo-fornecedor-dialog";
 import {
+  juntarFornecedores,
+  useBuscaDeFornecedores,
+} from "@/app/(app)/fornecedores/use-busca-de-fornecedores";
+import type { FornecedorDaBusca } from "@/lib/data/fornecedores-busca";
+import {
   carregarFornecedor,
   type FornecedorResumo,
 } from "@/app/(app)/fornecedores/actions";
@@ -161,6 +166,21 @@ interface Props {
 
 /** Aceita "1.234,56" e "1234.56". Vírgula presente ⇒ ponto é milhar.
  *  Mesma regra da edição inline da planilha. */
+/** O fornecedor achado pela busca, no formato da lista do BV (decisão
+ *  255). O nome é a razão social, como na lista que o job manda. */
+function opcaoDaBusca(f: FornecedorDaBusca): FornecedorOpcao {
+  return { id: f.id, nome: f.razao_social ?? f.nome, cpf_cnpj: f.cpf_cnpj };
+}
+
+/** Nome em cima, documento embaixo — e a busca olha os dois. */
+function itemDoFornecedor(f: FornecedorOpcao) {
+  return {
+    value: f.id,
+    label: f.nome,
+    descricao: f.cpf_cnpj ? formatDocumento(f.cpf_cnpj) : undefined,
+  };
+}
+
 function parseNumero(raw: string): number | null {
   const s = raw.trim();
   if (s === "") return null;
@@ -304,24 +324,27 @@ export function BvDialog({
    *  servidor. Ele fica aqui até o dialog fechar e a tela recarregar. */
   const [fornecedorNovo, setFornecedorNovo] =
     React.useState<FornecedorOpcao | null>(null);
-  const fornecedoresVisiveis = React.useMemo(
-    () =>
-      fornecedorNovo && !fornecedores.some((f) => f.id === fornecedorNovo.id)
-        ? [...fornecedores, fornecedorNovo].sort((x, y) =>
-            x.nome.localeCompare(y.nome, "pt-BR"),
-          )
-        : fornecedores,
-    [fornecedores, fornecedorNovo],
+  // Decisão 255: a tela manda só os fornecedores que já aparecem nela; o
+  // combo busca o resto no servidor, e o que a busca trouxe entra aqui para
+  // o BV achar o escolhido pelo id. Como no job, o nome é a razão social.
+  const { achados, buscar } = useBuscaDeFornecedores();
+  const achadosComoOpcao = React.useMemo(
+    () => achados.map(opcaoDaBusca),
+    [achados],
   );
-  /** Nome em cima, documento embaixo — e a busca olha os dois. */
+  const fornecedoresVisiveis = React.useMemo(() => {
+    const juntos = juntarFornecedores(fornecedores, achadosComoOpcao);
+    return fornecedorNovo && !juntos.some((f) => f.id === fornecedorNovo.id)
+      ? [...juntos, fornecedorNovo].sort((x, y) => x.nome.localeCompare(y.nome, "pt-BR"))
+      : juntos;
+  }, [fornecedores, achadosComoOpcao, fornecedorNovo]);
   const itensFornecedor = React.useMemo(
-    () =>
-      fornecedoresVisiveis.map((f) => ({
-        value: f.id,
-        label: f.nome,
-        descricao: f.cpf_cnpj ? formatDocumento(f.cpf_cnpj) : undefined,
-      })),
+    () => fornecedoresVisiveis.map(itemDoFornecedor),
     [fornecedoresVisiveis],
+  );
+  const buscarItensFornecedor = React.useCallback(
+    async (termo: string) => (await buscar(termo)).map((f) => itemDoFornecedor(opcaoDaBusca(f))),
+    [buscar],
   );
   React.useEffect(() => {
     if (!fornecedorEditando) {
@@ -769,6 +792,7 @@ export function BvDialog({
                       <Combobox
                         id="bv-fornecedor"
                         items={itensFornecedor}
+                        buscar={buscarItensFornecedor}
                         value={fornecedorId}
                         onChange={setFornecedorId}
                         placeholder="Selecione o fornecedor"

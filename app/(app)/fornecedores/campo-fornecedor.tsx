@@ -25,6 +25,7 @@ import { cn, formatDocumento } from "@/lib/utils";
 import type { Fornecedor } from "@/lib/types";
 import { NovoFornecedorDialog, type ContextoCadastro } from "./novo-fornecedor-dialog";
 import { carregarFornecedor, type FornecedorResumo } from "./actions";
+import { juntarFornecedores, useBuscaDeFornecedores } from "./use-busca-de-fornecedores";
 
 /** O mínimo que a tela precisa carregar para alimentar o campo. */
 export interface FornecedorDoCampo {
@@ -33,6 +34,15 @@ export interface FornecedorDoCampo {
   /** Segunda linha da opção e chave de busca. Opcional: tela que ainda
    *  não pede a coluna continua funcionando, só sem o documento. */
   cpf_cnpj?: string | null;
+}
+
+/** Nome em cima, documento embaixo — e a busca olha os dois. */
+function itemDoFornecedor(f: FornecedorDoCampo) {
+  return {
+    value: f.id,
+    label: f.nome,
+    descricao: f.cpf_cnpj ? formatDocumento(f.cpf_cnpj) : undefined,
+  };
 }
 
 export function CampoFornecedor({
@@ -73,25 +83,21 @@ export function CampoFornecedor({
   const [fornecedorNovo, setFornecedorNovo] =
     React.useState<FornecedorDoCampo | null>(null);
 
-  const visiveis = React.useMemo(
-    () =>
-      fornecedorNovo && !fornecedores.some((f) => f.id === fornecedorNovo.id)
-        ? [...fornecedores, fornecedorNovo].sort((x, y) =>
-            x.nome.localeCompare(y.nome, "pt-BR"),
-          )
-        : fornecedores,
-    [fornecedores, fornecedorNovo],
-  );
+  // Decisão 255: o combo busca no servidor enquanto se digita — a lista
+  // da tela é só o que ela já conhece (o escolhido, o recém-criado), e a
+  // aberta mostra 30 por vez em vez do cadastro inteiro.
+  const { achados, buscar } = useBuscaDeFornecedores();
+  const visiveis = React.useMemo(() => {
+    const juntos = juntarFornecedores<FornecedorDoCampo>(fornecedores, achados);
+    return fornecedorNovo && !juntos.some((f) => f.id === fornecedorNovo.id)
+      ? [...juntos, fornecedorNovo].sort((x, y) => x.nome.localeCompare(y.nome, "pt-BR"))
+      : juntos;
+  }, [fornecedores, achados, fornecedorNovo]);
 
-  /** Nome em cima, documento embaixo — e a busca olha os dois. */
-  const itens = React.useMemo(
-    () =>
-      visiveis.map((f) => ({
-        value: f.id,
-        label: f.nome,
-        descricao: f.cpf_cnpj ? formatDocumento(f.cpf_cnpj) : undefined,
-      })),
-    [visiveis],
+  const itens = React.useMemo(() => visiveis.map(itemDoFornecedor), [visiveis]);
+  const buscarItens = React.useCallback(
+    async (termo: string) => (await buscar(termo)).map(itemDoFornecedor),
+    [buscar],
   );
 
   // Só abre a edição quando o cadastro completo chegou: dialog vazio
@@ -131,6 +137,7 @@ export function CampoFornecedor({
           <Combobox
             id={id}
             items={itens}
+            buscar={buscarItens}
             value={value}
             onChange={onChange}
             placeholder={placeholder}

@@ -353,6 +353,16 @@ test("Modulo Cadastros: quem abre cada tela (Tiago, 10/11/2026)", () => {
   assert.equal(pode("produtor", "cadastros.fornecedores.editar"), false);
 });
 
+test("Exportar fornecedores em Excel: so Admin e Financeiro (12/11/2026)", () => {
+  assert.deepEqual(
+    new Set(getRolesFor("cadastros.fornecedores.exportar")),
+    new Set<AppRole>(["administrador", "financeiro"]),
+  );
+  assert.equal(pode("gerente_producao", "cadastros.fornecedores.exportar"), false);
+  assert.equal(pode("produtor", "cadastros.fornecedores.exportar"), false);
+  assert.equal(pode("freelancer", "cadastros.fornecedores.exportar"), false);
+});
+
 test("Financeiro cria e edita fornecedor pela tela, nao pelo PP (07/10/2026)", () => {
   assert.equal(pode("financeiro", "cadastros.fornecedores.editar"), true);
   assert.equal(pode("administrador", "cadastros.fornecedores.editar"), true);

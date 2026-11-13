@@ -186,6 +186,10 @@ import { NovoFornecedorDialog } from "@/app/(app)/fornecedores/novo-fornecedor-d
 import { envioDispensaNf, type MidiaSystemDoJob } from "@/lib/calculos/midia-system";
 import type { FornecedorResumo } from "@/app/(app)/fornecedores/actions";
 import {
+  juntarFornecedores,
+  useBuscaDeFornecedores,
+} from "@/app/(app)/fornecedores/use-busca-de-fornecedores";
+import {
   PAGAMENTO_PELO_CADASTRO,
   PagamentoDaPPField,
   estadoDoPagamento,
@@ -202,6 +206,21 @@ import {
   problemaDoPagamentoDoTitular,
   type PagamentoDoTitularEstado,
 } from "./pagamento-do-titular-field";
+
+/** A opção do combo de fornecedor: nome em cima, documento embaixo — e a
+ *  busca olha os dois (09/09/2026). */
+function opcaoDoFornecedor(f: {
+  id: string;
+  nome: string;
+  razao_social: string | null;
+  cpf_cnpj?: string | null;
+}) {
+  return {
+    value: f.id,
+    label: f.razao_social ?? f.nome,
+    descricao: f.cpf_cnpj ? formatDocumento(f.cpf_cnpj) : undefined,
+  };
+}
 
 interface Props {
   open: boolean;
@@ -498,24 +517,34 @@ export function GerarPPDrawer({
   /** Remonta o campo quando o pagamento chega depois (PP gerada em edição):
    *  as caixas da chave guardam o valor de quando montaram. */
   const [vezPagTitular, setVezPagTitular] = React.useState(0);
-  // Decisão 166: o que falta no cadastro do fornecedor escolhido (regime e
-  // CNAE da pessoa jurídica) — na PP comum e na verba de um terceiro, que
-  // pagam um fornecedor. Relido depois de cada edição do cadastro.
-  const [faltaNoCadastro, setFaltaNoCadastro] = React.useState<string[]>([]);
+  // Decisões 166 e 255: o que falta no cadastro do fornecedor escolhido —
+  // e-mail e telefone sempre, a conta ou o PIX quando a PP paga pelo
+  // cadastro, o regime e o CNAE da pessoa jurídica — na PP comum e na verba
+  // de um terceiro, que pagam um fornecedor. Relido depois de cada edição
+  // do cadastro; a conta entra ou sai conforme o pagamento escolhido.
+  const [pendenciasDoCadastro, setPendenciasDoCadastro] = React.useState<{
+    falta: string[];
+    faltaPagandoPeloCadastro: string[];
+  }>({ falta: [], faltaPagandoPeloCadastro: [] });
   const [versaoDoCadastro, setVersaoDoCadastro] = React.useState(0);
   React.useEffect(() => {
+    const nada = { falta: [], faltaPagandoPeloCadastro: [] };
     if (!fornecedorId || !usaFornecedor) {
-      setFaltaNoCadastro([]);
+      setPendenciasDoCadastro(nada);
       return;
     }
     let vivo = true;
     pendenciasDoCadastroDoFornecedor(fornecedorId).then((r) => {
-      if (vivo) setFaltaNoCadastro(r.ok ? r.falta : []);
+      if (vivo) setPendenciasDoCadastro(r.ok ? r : nada);
     });
     return () => {
       vivo = false;
     };
   }, [fornecedorId, usaFornecedor, versaoDoCadastro]);
+  const faltaNoCadastro =
+    pagamento.escolha === "cadastro"
+      ? pendenciasDoCadastro.faltaPagandoPeloCadastro
+      : pendenciasDoCadastro.falta;
   const cadastroIncompleto = usaFornecedor && Boolean(fornecedorId) && faltaNoCadastro.length > 0;
   // O lápis abre o cadastro inteiro, todo editável. Desde a decisão 177 a
   // produção o tem sempre, e não só com o cadastro pendente (166).
@@ -538,25 +567,27 @@ export function GerarPPDrawer({
   const [nomeSugerido, setNomeSugerido] = React.useState("");
   const [fornecedorNovo, setFornecedorNovo] =
     React.useState<FornecedorResumo | null>(null);
+  // Decisão 255: a página manda só os fornecedores que já aparecem no job; o
+  // combo busca o resto no servidor, e o que a busca trouxe entra aqui para
+  // a PP achar o escolhido pelo id (revisão, NF, lápis).
+  const { achados: fornecedoresAchados, buscar: buscarFornecedores } = useBuscaDeFornecedores();
   const fornecedoresVisiveis = React.useMemo(() => {
-    if (!fornecedorNovo || fornecedores.some((f) => f.id === fornecedorNovo.id)) {
-      return fornecedores;
+    const juntos = juntarFornecedores(fornecedores, fornecedoresAchados);
+    if (!fornecedorNovo || juntos.some((f) => f.id === fornecedorNovo.id)) {
+      return juntos;
     }
-    return [...fornecedores, fornecedorNovo].sort((a, b) =>
+    return [...juntos, fornecedorNovo].sort((a, b) =>
       (a.razao_social ?? a.nome).localeCompare(b.razao_social ?? b.nome),
     );
-  }, [fornecedores, fornecedorNovo]);
+  }, [fornecedores, fornecedoresAchados, fornecedorNovo]);
 
-  /** As opções do combo: nome em cima, documento embaixo — e a busca do
-   *  Combobox olha os dois (09/09/2026). */
   const itensFornecedor = React.useMemo(
-    () =>
-      fornecedoresVisiveis.map((f) => ({
-        value: f.id,
-        label: f.razao_social ?? f.nome,
-        descricao: f.cpf_cnpj ? formatDocumento(f.cpf_cnpj) : undefined,
-      })),
+    () => fornecedoresVisiveis.map(opcaoDoFornecedor),
     [fornecedoresVisiveis],
+  );
+  const buscarItensFornecedor = React.useCallback(
+    async (termo: string) => (await buscarFornecedores(termo)).map(opcaoDoFornecedor),
+    [buscarFornecedores],
   );
 
   /** O cadastro completo que o lápis abre. Carregado sob demanda: a lista
@@ -1601,9 +1632,9 @@ export function GerarPPDrawer({
         disabled={pending}
         anexoPath={a.path || null}
         anexoMimetype={a.mime}
-        fornecedores={fornecedores}
+        fornecedores={fornecedoresVisiveis}
         fornecedorAtualId={fornecedorId || null}
-        fornecedorAtualNome={fornecedores.find((f) => f.id === fornecedorId)?.nome ?? null}
+        fornecedorAtualNome={fornecedoresVisiveis.find((f) => f.id === fornecedorId)?.nome ?? null}
         servicoAtual={servico}
         onUsarDescricao={(d) => setServico(d)}
         leitura={a.leitura}
@@ -1627,6 +1658,7 @@ export function GerarPPDrawer({
                           documento, que é o que separa homônimos. */}
                       <Combobox
                         items={itensFornecedor}
+                        buscar={buscarItensFornecedor}
                         value={fornecedorId || null}
                         onChange={(v) => {
                           setFornecedorId(v ?? "");

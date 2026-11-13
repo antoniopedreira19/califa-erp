@@ -59,6 +59,7 @@ import type {
   DesembolsoStatus,
 } from "@/lib/types";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
+import { todasAsLinhas } from "@/lib/supabase/todas-as-linhas";
 
 export const dynamic = "force-dynamic";
 
@@ -233,16 +234,21 @@ export default async function PedidosCompraFinanceiroPage({
       .eq("ativo", true)
       .order("razao_social"),
     // Fornecedores ativos (dropdown)
-    supabase
-      .from("fornecedores")
-      // Os nove campos de pagamento entram para o asterisco da decisão
-      // 067 (comparar a foto da PP com o cadastro de hoje) e, desde a
-      // decisão 137, para a coluna "Dados de pagamento" da remessa — o
-      // único lugar em que chave e conta vão ao cliente.
-      .select(`id, nome, razao_social, cpf_cnpj, ${COLUNAS_DE_PAGAMENTO}`)
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("status", "ativo")
-      .order("nome"),
+    // Decisão 255: sem o corte de 1.000 linhas do PostgREST.
+    todasAsLinhas((de, ate) =>
+      supabase
+        .from("fornecedores")
+        // Os nove campos de pagamento entram para o asterisco da decisão
+        // 067 (comparar a foto da PP com o cadastro de hoje) e, desde a
+        // decisão 137, para a coluna "Dados de pagamento" da remessa — o
+        // único lugar em que chave e conta vão ao cliente.
+        .select(`id, nome, razao_social, cpf_cnpj, ${COLUNAS_DE_PAGAMENTO}`)
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("status", "ativo")
+        .order("nome")
+        .order("id")
+        .range(de, ate),
+    ),
     // Clientes ativos (dropdown)
     supabase
       .from("clientes")

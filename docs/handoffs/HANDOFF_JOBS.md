@@ -6773,3 +6773,11 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - Banco: `registrar_errata_do_job` lê `estrutura.itens_renomeados` (migration `20261110800001`). Depois do registro, `refazerPdfsDasPPsGeradas` refaz o PDF das PPs geradas das linhas renomeadas.
 - O P-0006/26 foi para o tenant Sandbox em 09/11/2026: a tela foi conferida só em rascunho num job real (2GB-1002/26, descartado), e o banco numa transação desfeita.
 - 11/11/2026: testada de ponta a ponta no Sandbox (TES-1029/26): errata registrada, PDF da PP gerada refeito com o nome novo, histórico do job e do orçamento conferidos. Depois do "Renomear" do pop-up a seleção fica no item (antes descia e, na última linha do grupo, abria um "Novo item").
+
+
+## ⚠️ Nota de 2026-11-12 — fornecedor por busca e o cadastro completo para a PP (decisão 255, amplia a 166)
+
+- O combo de fornecedor da PP e o do BV buscam no servidor enquanto se digita (`buscar_fornecedores`, migration `20261112600001`): 30 por vez, por nome, razão social ou documento, sem acento. A tela do job deixou de carregar o cadastro inteiro (o PostgREST corta em 1.000): `carregar-detalhe.ts` traz só os fornecedores das PPs, das PPs a emitir e dos BVs do job.
+- A trava da PP ficou maior: e-mail e telefone sempre (PF e PJ), conta ou PIX quando o pagamento é "Cadastro do fornecedor", e regime e CNAE na PJ. Mesma mensagem e mesmo lápis da 166; a lista troca ao trocar o pagamento. Conferida em `gerarPPDaPPAEmitir` e em `editarPPGerada`.
+- A leitura da NF pela IA procura o CNPJ do emissor no cadastro quando ele não está entre os fornecedores da tela.
+- Testada no Sandbox (TES-1038/26, como GP): busca por nome e por CNPJ com pontuação, a mensagem da PF e da PJ, a conta saindo da lista com boleto, e o lápis completando o cadastro e liberando o "Gerar PP". Os dois fornecedores de teste ("FORNECEDOR 901/902 EXEMPLO") foram gravados no Sandbox como a carga grava (só nome e documento).

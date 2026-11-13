@@ -87,6 +87,15 @@ interface ComboboxProps {
   alinharLista?: "start" | "end";
   /** Uma linha de explicação no topo da lista, acima da busca. */
   cabecalhoLista?: React.ReactNode;
+  /**
+   * Busca no servidor (decisão 255, 12/11/2026). Com ela, a lista é o que a
+   * busca devolve para o que foi digitado — e, ao abrir sem nada digitado,
+   * os primeiros. `items` passa a ser só o que a tela já conhece (o
+   * escolhido, o recém-cadastrado): mostra o nome no campo e serve de lista
+   * enquanto a primeira busca não volta. É o caminho do cadastro que cresce
+   * (fornecedores): carregá-lo inteiro esbarra no corte de 1.000 linhas.
+   */
+  buscar?: (termo: string) => Promise<ReadonlyArray<ComboboxItem>>;
 }
 
 export function Combobox({
@@ -105,10 +114,51 @@ export function Combobox({
   larguraLista,
   alinharLista = "start",
   cabecalhoLista,
+  buscar,
 }: ComboboxProps) {
   const listaId = React.useId();
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
+
+  // Decisão 255: a busca no servidor. A função fica num ref para a tela não
+  // precisar memorizá-la — a busca só corre de novo quando o texto muda ou
+  // a lista abre.
+  const remoto = Boolean(buscar);
+  const buscarRef = React.useRef(buscar);
+  buscarRef.current = buscar;
+  const [achados, setAchados] = React.useState<ReadonlyArray<ComboboxItem> | null>(null);
+  const [buscando, setBuscando] = React.useState(false);
+  React.useEffect(() => {
+    const fn = buscarRef.current;
+    if (!remoto || !open || !fn) return;
+    let vivo = true;
+    const termo = query.trim();
+    setBuscando(true);
+    // Digitando, espera a pausa; ao abrir, busca na hora.
+    const espera = setTimeout(
+      () => {
+        fn(termo)
+          .then((r) => {
+            if (vivo) setAchados(r);
+          })
+          .catch(() => {
+            if (vivo) setAchados([]);
+          })
+          .finally(() => {
+            if (vivo) setBuscando(false);
+          });
+      },
+      termo ? 250 : 0,
+    );
+    return () => {
+      vivo = false;
+      clearTimeout(espera);
+    };
+  }, [remoto, open, query]);
+  /** O que a busca já trouxe, para o campo mostrar o nome do escolhido
+   *  mesmo que a tela não o tenha em `items`. */
+  const vistosRef = React.useRef(new Map<string, ComboboxItem>());
+  for (const i of achados ?? []) vistosRef.current.set(i.value, i);
   const gatilhoRef = React.useRef<HTMLButtonElement>(null);
   const [dentroDeDialog, setDentroDeDialog] = React.useState(false);
 
@@ -123,8 +173,12 @@ export function Combobox({
   }
 
   const selected = React.useMemo(
-    () => items.find((i) => i.value === value) ?? null,
-    [items, value],
+    () =>
+      items.find((i) => i.value === value) ??
+      (value ? (vistosRef.current.get(value) ?? null) : null),
+    // `achados` entra para reler o mapa depois de cada busca.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [items, value, achados],
   );
 
   /** Sem acento e em minúsculas: "cenografia" acha "Cenografia Vértice". */
@@ -134,7 +188,7 @@ export function Combobox({
       .replace(/[\u0300-\u036f]/g, "")
       .toLowerCase();
 
-  const filtered = React.useMemo(() => {
+  const filtradosAqui = React.useMemo(() => {
     const q = normalizar(query.trim());
     if (!q) return items;
     return items.filter(
@@ -144,6 +198,9 @@ export function Combobox({
         (i.busca ? normalizar(i.busca).includes(q) : false),
     );
   }, [items, query]);
+  // Na busca no servidor, a lista é a que ela devolveu; até a primeira
+  // resposta, o que a tela já conhece.
+  const filtered = remoto && achados !== null ? achados : filtradosAqui;
 
   return (
     <>
@@ -245,7 +302,9 @@ export function Combobox({
           </div>
           <div id={listaId} role="listbox" className="max-h-64 overflow-y-auto py-1">
             {filtered.length === 0 && (
-              <p className="px-3 py-2 text-sm text-muted-foreground">Nenhum resultado.</p>
+              <p className="px-3 py-2 text-sm text-muted-foreground">
+                {remoto && buscando ? "Buscando…" : "Nenhum resultado."}
+              </p>
             )}
             {filtered.map((item, i) => (
               <React.Fragment key={item.value}>
@@ -287,7 +346,7 @@ export function Combobox({
 
           {/* Busca sem resultado não é beco: daqui se cadastra, já com o
               que foi digitado (desenho "PP - Campo Fornecedor"). */}
-          {acaoSemResultado && filtered.length === 0 && query.trim().length > 1 && (
+          {acaoSemResultado && filtered.length === 0 && !buscando && query.trim().length > 1 && (
             <button
               type="button"
               onClick={() => {

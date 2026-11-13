@@ -8990,3 +8990,9 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Correção de baixa desfeita não prende o extrato** (revisto em 11/11, migration `20261111700001`): ao retirar, a correção fica no histórico do título sem a linha do banco (`baixa_correcoes.extrato_linha_id` aceita nulo só na desfeita). A correção em vigor e o IOF de mútuo continuam prendendo.
 - **O cadeado avisa o saldo que não bate antes do clique** (revisto em 11/11, migration `20261111800001`): `saldos_dos_dias_em_aberto` devolve o saldo de cada dia em aberto pela conta do fechamento; com diferença, o cadeado fica desligado com o motivo e o dia mostra a faixa de aviso (`avisoDoSaldo` em `lib/conciliacao/dia-a-dia.ts`).
 - **`_condicoes_do_fechamento` sem acesso direto** (11/11, migration `20261111900001`): a função interna não confere papel e estava com EXECUTE para `authenticated`, apesar do REVOKE da migration que a criou. Retirado de novo. Outras funções internas `_...` SECURITY DEFINER seguem abertas a `authenticated` e precisam de revisão uma a uma (algumas são usadas por policy).
+
+
+## ⚠️ Nota de 2026-11-12 — fornecedores sem o corte de 1.000 (decisão 255)
+
+- O cadastro de fornecedores passou de 3 mil com a carga da planilha de 12/11. As telas que leem a lista inteira (Contas a Pagar, Conciliação — títulos e remessa —, Contas a Receber, desembolso, conta avulsa e recorrência) leem página a página (`lib/supabase/todas-as-linhas.ts`); antes o PostgREST cortava em 1.000 sem aviso, e a PP de um fornecedor depois do milésimo perderia nome e conta no financeiro.
+- O campo de fornecedor (conta avulsa, recorrência e desembolso) busca no servidor enquanto se digita, como o da PP.

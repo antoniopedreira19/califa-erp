@@ -179,7 +179,6 @@ export async function carregarDetalheDoJob(
     itensRes,
     realizadosRes,
     ppsRes,
-    fornecedoresRes,
     empresasRes,
     categoriasRes,
     erratasRes,
@@ -258,15 +257,6 @@ export async function carregarDetalheDoJob(
       .eq("job_id", raw.id)
       .eq("tenant_id", session.activeTenant.id)
       .order("created_at", { ascending: false }),
-    supabase
-      .from("fornecedores")
-      // `cpf_cnpj` entrou em 09/09/2026: o campo de fornecedor da PP virou
-      // um combo com busca, e o documento é o que separa homônimos — a
-      // busca olha nome E documento, e a opção mostra os dois.
-      .select("id, nome, razao_social, status, cpf_cnpj")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("status", "ativo")
-      .order("nome"),
     supabase
       .from("empresas")
       // `cnpj` entrou em 07/10/2026 (decisão 152): a NF da PP sugere o CNPJ
@@ -701,17 +691,65 @@ export async function carregarDetalheDoJob(
         .map((pp) => pp.fornecedor_id as string),
     ),
   );
+  // Decisão 255: a tela não carrega mais o cadastro inteiro de fornecedores
+  // (o PostgREST corta em 1.000, e o cadastro passou de 3 mil com a carga
+  // da planilha de 12/11/2026). Vêm só os que aparecem no job — nas PPs,
+  // nas PPs a emitir e nos BVs —, que dão nome às linhas e abrem o combo; o
+  // combo da PP e o do BV buscam o resto no servidor enquanto se digita.
+  const idsDoJob = Array.from(
+    new Set(
+      [
+        ...((ppsRes.data ?? []) as any[]),
+        ...((aEmitirRes.data ?? []) as any[]),
+        ...((bvsRes.data ?? []) as any[]),
+      ]
+        .map((r) => r.fornecedor_id as string | null)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  );
+  /** `.in()` em lotes: a lista de ids vai na URL. */
+  const emLotes = (ids: string[]) => {
+    const lotes: string[][] = [];
+    for (let i = 0; i < ids.length; i += 100) lotes.push(ids.slice(i, i + 100));
+    return lotes;
+  };
+  const [cadastrosComFoto, cadastrosDoJob] = await Promise.all([
+    Promise.all(
+      emLotes(idsComFoto).map((lote) =>
+        supabase
+          .from("fornecedores")
+          .select(`id, ${COLUNAS_DE_PAGAMENTO}`)
+          .eq("tenant_id", session.activeTenant.id)
+          .in("id", lote),
+      ),
+    ),
+    Promise.all(
+      emLotes(idsDoJob).map((lote) =>
+        supabase
+          .from("fornecedores")
+          // `cpf_cnpj` entrou em 09/09/2026: o campo de fornecedor da PP
+          // virou um combo com busca, e o documento é o que separa
+          // homônimos — a busca olha nome E documento, e a opção mostra os
+          // dois.
+          .select("id, nome, razao_social, status, cpf_cnpj")
+          .eq("tenant_id", session.activeTenant.id)
+          .eq("status", "ativo")
+          .in("id", lote),
+      ),
+    ),
+  ]);
   const pagamentoAtualPorFornecedor = new Map<string, DadosDePagamento>();
-  if (idsComFoto.length > 0) {
-    const { data: cadastros } = await supabase
-      .from("fornecedores")
-      .select(`id, ${COLUNAS_DE_PAGAMENTO}`)
-      .eq("tenant_id", session.activeTenant.id)
-      .in("id", idsComFoto);
-    for (const f of (cadastros ?? []) as any[]) {
+  for (const res of cadastrosComFoto) {
+    for (const f of (res.data ?? []) as any[]) {
       pagamentoAtualPorFornecedor.set(f.id as string, f as DadosDePagamento);
     }
   }
+  for (const res of cadastrosDoJob) {
+    if (res.error) console.error("[job.fornecedores]", res.error.message);
+  }
+  const fornecedoresDoJob = cadastrosDoJob
+    .flatMap((res) => (res.data ?? []) as any[])
+    .sort((a, b) => String(a.nome).localeCompare(String(b.nome), "pt-BR"));
 
   // A PP a emitir (decisão 153): as abertas, por item; e, das que já
   // viraram PP, a que cada PP nova substitui.
@@ -871,7 +909,7 @@ export async function carregarDetalheDoJob(
     ppsPorItemId.set(pp.item_realizado_id, atuais);
   }
 
-  const fornecedores = (fornecedoresRes.data ?? []) as any[];
+  const fornecedores = fornecedoresDoJob;
   const empresas = (empresasRes.data ?? []) as any[];
 
   if (categoriasRes.error)

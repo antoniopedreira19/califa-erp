@@ -18,6 +18,9 @@ export type AuditAction =
   | "fornecedor.criado"
   | "fornecedor.editado"
   | "fornecedor.inativado"
+  // "Exportar Excel" da tela de Fornecedores (12/11/2026): o arquivo leva
+  // conta e PIX; o metadata guarda quantos e se a lista estava filtrada.
+  | "fornecedores.exportados"
   | "orcamento.criado"
   | "orcamento.editado"
   | "orcamento.arquivado"

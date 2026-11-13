@@ -1,12 +1,14 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
-import { Building2, Plus, } from "lucide-react";
+import { Building2, Plus } from "lucide-react";
+import { descricaoDoCnae } from "@/lib/fiscal/cnaes";
 import { requireSession } from "@/lib/auth/session";
 import { pode } from "@/lib/permissoes";
 import { createClient } from "@/lib/supabase/server";
-import type { Fornecedor } from "@/lib/types";
 import { EmptyState } from "@/components/empty-state";
 import { FornecedoresList } from "./fornecedores-list";
+import { COLUNAS_DA_LISTA_DE_FORNECEDORES, type FornecedorDaLista } from "./colunas-da-lista";
+import { todasAsLinhas } from "@/lib/supabase/todas-as-linhas";
 import { PageHeader } from "@/components/ui/page-header";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 
@@ -22,12 +24,18 @@ export default async function FornecedoresPage() {
   const supabase = createClient();
 
   const [{ data: fornecedores, error }, veiculosRes] = await Promise.all([
-    supabase
-      .from("fornecedores")
-      .select("*")
-      .eq("tenant_id", session.activeTenant.id)
-      .order("nome", { ascending: true })
-      .returns<Fornecedor[]>(),
+    // Decisão 255: o cadastro inteiro, página a página (o PostgREST corta
+    // em 1.000), e só as colunas que a lista mostra.
+    todasAsLinhas((de, ate) =>
+      supabase
+        .from("fornecedores")
+        .select(COLUNAS_DA_LISTA_DE_FORNECEDORES)
+        .eq("tenant_id", session.activeTenant.id)
+        .order("nome", { ascending: true })
+        .order("id")
+        .range(de, ate)
+        .returns<FornecedorDaLista[]>(),
+    ),
     // Quem também é veículo de mídia ganha o selo (decisão 150).
     supabase
       .from("veiculos_midia")
@@ -40,6 +48,15 @@ export default async function FornecedoresPage() {
   if (veiculosRes.error) console.error("[fornecedores.page.veiculos]", veiculosRes.error.message);
   const rows = fornecedores ?? [];
   const veiculoIds = (veiculosRes.data ?? []).map((v) => v.fornecedor_id);
+  // A atividade de cada CNAE que aparece na lista (12/11/2026): a lista
+  // inteira do CNAE fica no servidor, a tela recebe só as que usa.
+  const descricaoDosCnaes: Record<string, string> = {};
+  for (const f of rows) {
+    if (!f.cnae || f.cnae in descricaoDosCnaes) continue;
+    const atividade = descricaoDoCnae(f.cnae);
+    if (atividade) descricaoDosCnaes[f.cnae] = atividade;
+  }
+  const podeExportar = pode(session.activeRole, "cadastros.fornecedores.exportar");
 
   return (
     <div className="space-y-6">
@@ -81,6 +98,8 @@ export default async function FornecedoresPage() {
         <FornecedoresList
           fornecedores={rows}
           veiculoIds={veiculoIds}
+          descricaoDosCnaes={descricaoDosCnaes}
+          podeExportar={podeExportar}
           podeInativar={pode(session.activeRole, "cadastros.fornecedores.editar")}
         />
       )}
