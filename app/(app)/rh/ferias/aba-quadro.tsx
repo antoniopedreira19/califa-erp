@@ -43,6 +43,7 @@ export type QuadroColaboradorRow = {
     vencendo_30d: boolean;
     vencida_recente: boolean; // vencido com saldo, data_limite <= 1 ano atrás
     pendente_aprovacao: boolean;
+    aguardando_nf: boolean; // status = aprovado (colaborador precisa anexar)
     aguardando_financeiro: boolean; // status = nf_anexada (RH precisa enviar)
   };
 };
@@ -146,6 +147,7 @@ export async function AbaQuadro({ tenantId, filtroInicial }: Props) {
       saindo_7d: boolean;
       voltando_7d: boolean;
       pendente_aprovacao: boolean;
+      aguardando_nf: boolean;
       aguardando_financeiro: boolean;
     }
   >();
@@ -155,9 +157,14 @@ export async function AbaQuadro({ tenantId, filtroInicial }: Props) {
       saindo_7d: false,
       voltando_7d: false,
       pendente_aprovacao: false,
+      aguardando_nf: false,
       aguardando_financeiro: false,
     };
     if (l.status === "pendente_aprovacao") f.pendente_aprovacao = true;
+    // Pela trigger fn_sincroniza_status_lanc_por_nf, status='aprovado'
+    // significa que ainda não tem NF anexada. Logo este estado é o
+    // "colaborador precisa anexar NF".
+    if (l.status === "aprovado") f.aguardando_nf = true;
     if (l.status === "nf_anexada") f.aguardando_financeiro = true;
     // Em férias agora = solicitação em qualquer status "ativo" com datas
     // contendo hoje (inclusive concluídas — colaborador continua fora até
@@ -253,6 +260,7 @@ export async function AbaQuadro({ tenantId, filtroInicial }: Props) {
         vencendo_30d,
         vencida_recente,
         pendente_aprovacao: flagsFluxo?.pendente_aprovacao ?? false,
+        aguardando_nf: flagsFluxo?.aguardando_nf ?? false,
         aguardando_financeiro: flagsFluxo?.aguardando_financeiro ?? false,
       },
     };

@@ -11,6 +11,7 @@ import {
   AlertOctagon,
   Hourglass,
   Send,
+  FileClock,
 } from "lucide-react";
 import { LinhaQuadro } from "./linha-quadro";
 import type { QuadroColaboradorRow } from "./aba-quadro";
@@ -42,6 +43,7 @@ type FiltroKey =
   | "vencida_recente"
   | "vencendo_30d"
   | "pendente_aprovacao"
+  | "aguardando_nf"
   | "aguardando_financeiro";
 
 const FILTROS: Array<{
@@ -101,6 +103,13 @@ const FILTROS: Array<{
     corAtivo: "bg-amber-600 text-white",
   },
   {
+    key: "aguardando_nf",
+    label: "Aguardando NF",
+    icon: FileClock,
+    cor: "bg-sky-100 text-sky-800",
+    corAtivo: "bg-sky-600 text-white",
+  },
+  {
     key: "aguardando_financeiro",
     label: "Aguardando envio",
     icon: Send,
@@ -131,6 +140,7 @@ export function QuadroListaCliente({ rows, filtroInicial }: Props) {
       vencendo_30d: 0,
       vencida_recente: 0,
       pendente_aprovacao: 0,
+      aguardando_nf: 0,
       aguardando_financeiro: 0,
     };
     for (const r of rows) {
@@ -140,6 +150,7 @@ export function QuadroListaCliente({ rows, filtroInicial }: Props) {
       if (r.flags.vencendo_30d) m.vencendo_30d += 1;
       if (r.flags.vencida_recente) m.vencida_recente += 1;
       if (r.flags.pendente_aprovacao) m.pendente_aprovacao += 1;
+      if (r.flags.aguardando_nf) m.aguardando_nf += 1;
       if (r.flags.aguardando_financeiro) m.aguardando_financeiro += 1;
     }
     return m;

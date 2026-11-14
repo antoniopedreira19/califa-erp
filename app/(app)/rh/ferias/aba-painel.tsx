@@ -9,6 +9,7 @@ import {
   Hourglass,
   Send,
   Users,
+  FileClock,
   ChevronRight,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
@@ -90,6 +91,7 @@ export async function AbaPainel({ tenantId }: Props) {
   const [
     totalAtivosRes,
     pendentesAprovacaoRes,
+    aguardandoNfRes,
     aguardandoFinanceiroRes,
     lancsAtivosRes,
     periodosAtivosRes,
@@ -110,6 +112,15 @@ export async function AbaPainel({ tenantId }: Props) {
       .select("colaborador_id")
       .eq("tenant_id", tenantId)
       .eq("status", "pendente_aprovacao")
+      .eq("lancado_direto_por_rh", false),
+    // Aguardando NF do colaborador. Pela trigger fn_sincroniza_status_lanc_por_nf,
+    // um lançamento fica em 'aprovado' só enquanto não tem NF — anexar sobe
+    // pra 'nf_anexada'. Logo filtro simples basta: status='aprovado'.
+    supabase
+      .from("colaboradores_ferias_lancamentos")
+      .select("colaborador_id")
+      .eq("tenant_id", tenantId)
+      .eq("status", "aprovado")
       .eq("lancado_direto_por_rh", false),
     // Aguardando RH enviar pro financeiro (nf_anexada)
     supabase
@@ -179,6 +190,9 @@ export async function AbaPainel({ tenantId }: Props) {
   // ele conta 1 vez no card.
   const colabsPendentes = new Set(
     (pendentesAprovacaoRes.data ?? []).map((x) => x.colaborador_id),
+  );
+  const colabsAguardandoNf = new Set(
+    (aguardandoNfRes.data ?? []).map((x) => x.colaborador_id),
   );
   const colabsAguardando = new Set(
     (aguardandoFinanceiroRes.data ?? []).map((x) => x.colaborador_id),
@@ -257,6 +271,7 @@ export async function AbaPainel({ tenantId }: Props) {
     vencendo30d: colabsVencendo30d.size,
     vencidasRecentes: colabsVencidasRecentes.size,
     pendentesAprovacao: colabsPendentes.size,
+    aguardandoNf: colabsAguardandoNf.size,
     aguardandoFinanceiro: colabsAguardando.size,
   };
 
@@ -345,7 +360,7 @@ export async function AbaPainel({ tenantId }: Props) {
           <span className="inline-block h-4 w-1 rounded-full bg-california-red" />
           Precisa de ação
         </h2>
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <CardAcao
             href="/rh/ferias?tab=colaboradores&filtro=vencida_recente"
             icon={AlertOctagon}
@@ -361,6 +376,14 @@ export async function AbaPainel({ tenantId }: Props) {
             descricao="RH precisa aprovar"
             value={kpis.pendentesAprovacao}
             tom="warning"
+          />
+          <CardAcao
+            href="/rh/ferias?tab=colaboradores&filtro=aguardando_nf"
+            icon={FileClock}
+            label="Aguardando NF"
+            descricao="Colaborador precisa anexar"
+            value={kpis.aguardandoNf}
+            tom="info"
           />
           <CardAcao
             href="/rh/ferias?tab=solicitacoes"
