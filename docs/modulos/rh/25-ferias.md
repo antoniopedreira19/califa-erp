@@ -7,6 +7,7 @@
 > Este documento é a fonte-verdade do subsistema — toda decisão nova entra aqui, não em commit ou chat.
 >
 > **Evoluções pós-implementação:**
+> - **Fluxo de 5 etapas da solicitação** (pendente → aprovado → NF anexada → enviado financeiro → concluído) documentado em [`41-ferias-fluxo-solicitacao.md`](41-ferias-fluxo-solicitacao.md). **Leia esse doc antes de mexer em qualquer coisa do subsistema.**
 > - Notificações de férias removidas em 2026-10-03 (ver [handoff](../../handoffs/2026-10-03-perfil-redesign-e-cleanup-notificacoes.md)). Vão renascer no [hub central de notificações](../../pendencias/hub-central-notificacoes.md).
 > - Sócios excluídos do subsistema por migration `20261002000012`.
 > - Import histórico documentado em [`40-historico-ferias-importado.md`](40-historico-ferias-importado.md).
