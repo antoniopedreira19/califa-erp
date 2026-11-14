@@ -1,19 +1,18 @@
 import Link from "next/link";
 import {
   Sparkles,
-  Clock,
+  Palmtree,
+  ArrowRight,
+  ArrowLeft,
   AlertTriangle,
   AlertOctagon,
-  Palmtree,
-  CalendarCheck,
+  Hourglass,
+  Send,
+  Users,
   ChevronRight,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
-import type {
-  ColaboradorFeriasLancamento,
-  ColaboradorFeriasPeriodo,
-} from "@/lib/types";
 import {
   PillNovidadesFerias,
   type NovidadeSolicitacao,
@@ -49,6 +48,21 @@ const MESES = [
   "dezembro",
 ];
 
+const DIAS_VENCIDA_RECENTE = 365;
+
+/**
+ * Dashboard reescrito em 2026-11-14. Antes: 4 cards + 2 widgets grandes
+ * repetindo a mesma info. Agora: hero com Novidades + 8 cards clicáveis
+ * sem lista nenhuma. Cada card → /rh/ferias?tab=colaboradores&filtro=X
+ * com o chip correspondente já ativo. Lista fica só na tela de
+ * Colaboradores (fonte-verdade única).
+ *
+ * Divisão dos 8 cards:
+ *   Linha 1 — PRECISA DE AÇÃO:
+ *     Vencidas (<1 ano) · Pendentes aprovação · Aguardando envio · Vencendo 30d
+ *   Linha 2 — ESTA SEMANA:
+ *     Em férias hoje · Saindo 7d · Voltando 7d · Total ativos
+ */
 export async function AbaPainel({ tenantId }: Props) {
   const session = await requireSession();
   const supabase = createClient();
@@ -57,9 +71,17 @@ export async function AbaPainel({ tenantId }: Props) {
   hoje.setHours(0, 0, 0, 0);
   const hojeISO = hoje.toISOString().slice(0, 10);
 
-  const semana = new Date(hoje);
-  semana.setDate(hoje.getDate() + 7);
-  const semanaISO = semana.toISOString().slice(0, 10);
+  const em7d = new Date(hoje);
+  em7d.setDate(hoje.getDate() + 7);
+  const em7dISO = em7d.toISOString().slice(0, 10);
+
+  const em30d = new Date(hoje);
+  em30d.setDate(hoje.getDate() + 30);
+  const em30dISO = em30d.toISOString().slice(0, 10);
+
+  const limiteVencidaRecente = new Date(hoje);
+  limiteVencidaRecente.setDate(hoje.getDate() - DIAS_VENCIDA_RECENTE);
+  const limiteVencidaRecenteISO = limiteVencidaRecente.toISOString().slice(0, 10);
 
   const seteDiasAtras = new Date(hoje);
   seteDiasAtras.setDate(hoje.getDate() - 7);
@@ -67,12 +89,10 @@ export async function AbaPainel({ tenantId }: Props) {
 
   const [
     totalAtivosRes,
-    vencidasRes,
-    emAlertaRes,
-    emFeriasHojeRes,
-    saindoSemanaRes,
-    voltandoSemanaRes,
-    vencendoRes,
+    pendentesAprovacaoRes,
+    aguardandoFinanceiroRes,
+    lancsAtivosRes,
+    periodosAtivosRes,
     novidadesSolicitacoesRes,
     novidadesNfsRes,
     novidadesPagasRes,
@@ -84,70 +104,35 @@ export async function AbaPainel({ tenantId }: Props) {
       .eq("tenant_id", tenantId)
       .eq("status", "ativo")
       .neq("tipo_contratacao", "socio"),
-    supabase
-      .from("colaboradores_ferias_periodos")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", tenantId)
-      .eq("status", "vencido"),
-    supabase
-      .from("colaboradores_ferias_periodos")
-      .select("id", { count: "exact", head: true })
-      .eq("tenant_id", tenantId)
-      .eq("status", "em_alerta"),
-    // Em férias hoje / Saindo / Voltando: só lançamentos nascidos no
-    // sistema (lancado_direto_por_rh=false). Imports da planilha FériasAtt
-    // têm datas sintéticas que caem sem querer nessas janelas — se
-    // entrassem, o Dashboard mostraria 200 pessoas em férias quando
-    // ninguém efetivamente está.
+    // Pendentes de aprovação — contagem por colaborador distinto
     supabase
       .from("colaboradores_ferias_lancamentos")
-      .select(
-        "id, dias, data_inicio, data_fim, colaborador:colaboradores!colaborador_id(id, nome)",
-      )
+      .select("colaborador_id")
       .eq("tenant_id", tenantId)
-      .eq("lancado_direto_por_rh", false)
-      .in("status", ["aprovado", "nf_anexada", "enviado_financeiro", "concluido"])
-      .lte("data_inicio", hojeISO)
-      .gte("data_fim", hojeISO)
-      .order("data_inicio", { ascending: true }),
+      .eq("status", "pendente_aprovacao")
+      .eq("lancado_direto_por_rh", false),
+    // Aguardando RH enviar pro financeiro (nf_anexada)
     supabase
       .from("colaboradores_ferias_lancamentos")
-      .select(
-        "id, dias, data_inicio, data_fim, colaborador:colaboradores!colaborador_id(id, nome)",
-      )
+      .select("colaborador_id")
       .eq("tenant_id", tenantId)
-      .eq("lancado_direto_por_rh", false)
-      .in("status", ["aprovado", "nf_anexada", "enviado_financeiro", "concluido"])
-      .gt("data_inicio", hojeISO)
-      .lte("data_inicio", semanaISO)
-      .order("data_inicio", { ascending: true })
-      .limit(10),
+      .eq("status", "nf_anexada")
+      .eq("lancado_direto_por_rh", false),
+    // Lançamentos ativos pra em_ferias / saindo / voltando
     supabase
       .from("colaboradores_ferias_lancamentos")
-      .select(
-        "id, dias, data_inicio, data_fim, colaborador:colaboradores!colaborador_id(id, nome)",
-      )
+      .select("colaborador_id, status, data_inicio, data_fim")
       .eq("tenant_id", tenantId)
       .eq("lancado_direto_por_rh", false)
-      .in("status", ["aprovado", "nf_anexada", "enviado_financeiro", "concluido"])
-      .gte("data_fim", hojeISO)
-      .lte("data_fim", semanaISO)
-      .order("data_fim", { ascending: true })
-      .limit(10),
-    // Próximos vencimentos: sem .limit() aqui porque precisamos ver TODOS
-    // vencidos/em_alerta pra reduzir a 1 por colaborador em memória.
-    // Com colaboradores antigos acumulando 4-5 aquisitivos vencidos desde
-    // 2015, limitar na query derrubava os mais recentes e deixava só os
-    // mais antigos — o que não ajuda o RH (ninguém vai regularizar 2015/16,
-    // o que importa é o atual).
+      .in("status", ["aprovado", "nf_anexada", "enviado_financeiro", "concluido"]),
+    // Períodos pra vencendo 30d / vencidas recentes
+    // Puxamos todos vencidos+em_alerta e reduzimos em memória pra 1 por
+    // colaborador (o mais recente — o relevante pro RH acompanhar).
     supabase
       .from("colaboradores_ferias_periodos")
-      .select(
-        "id, numero, aquisitivo_inicio, aquisitivo_fim, data_limite_gozo, status, colaborador:colaboradores!colaborador_id(id, nome)",
-      )
+      .select("colaborador_id, aquisitivo_inicio, aquisitivo_fim, data_limite_gozo, status, dias_direito, id")
       .eq("tenant_id", tenantId)
-      .in("status", ["vencido", "em_alerta"])
-      .order("aquisitivo_fim", { ascending: false }),
+      .in("status", ["vencido", "em_alerta", "apto", "incompleto"]),
     // Novidades 1: solicitações feitas nos últimos 7 dias
     supabase
       .from("colaboradores_ferias_lancamentos")
@@ -182,7 +167,6 @@ export async function AbaPainel({ tenantId }: Props) {
       .gte("paga_em", seteDiasAtras.toISOString())
       .order("paga_em", { ascending: false })
       .limit(10),
-    // Dismissed IDs — notificações já marcadas como vistas (prefixo "ferias:")
     supabase
       .from("notificacoes_dismissed")
       .select("notification_id")
@@ -190,43 +174,93 @@ export async function AbaPainel({ tenantId }: Props) {
       .like("notification_id", "ferias:%"),
   ]);
 
-  const kpis = {
-    vencidas: vencidasRes.count ?? 0,
-    emAlerta: emAlertaRes.count ?? 0,
-    emFeriasHoje: emFeriasHojeRes.data?.length ?? 0,
-    retornosSemana: voltandoSemanaRes.data?.length ?? 0,
-  };
+  // Dedup distintos por colaborador para pendente_aprovacao e nf_anexada.
+  // Faz sentido contar pessoa (não lançamento): se 1 colab tem 2 pendentes,
+  // ele conta 1 vez no card.
+  const colabsPendentes = new Set(
+    (pendentesAprovacaoRes.data ?? []).map((x) => x.colaborador_id),
+  );
+  const colabsAguardando = new Set(
+    (aguardandoFinanceiroRes.data ?? []).map((x) => x.colaborador_id),
+  );
 
-  type Lanc = ColaboradorFeriasLancamento & {
-    colaborador: { id: string; nome: string } | null;
-    created_at?: string;
-    aprovado_em?: string;
+  // Flags por colaborador vindas de lançamentos ativos de férias.
+  // Em férias hoje / saindo 7d / voltando 7d
+  type LancAtivo = {
+    colaborador_id: string;
+    data_inicio: string;
+    data_fim: string;
+    status: string;
   };
-  type Periodo = ColaboradorFeriasPeriodo & {
-    colaborador: { id: string; nome: string } | null;
-  };
-
-  const emFerias = (emFeriasHojeRes.data ?? []) as unknown as Lanc[];
-  const saindo = (saindoSemanaRes.data ?? []) as unknown as Lanc[];
-  const voltando = (voltandoSemanaRes.data ?? []) as unknown as Lanc[];
-  // Reduz vencidos/em_alerta a 1 por colaborador: o aquisitivo mais atual
-  // (maior aquisitivo_fim). Depois ordena pelo mais crítico (data_limite
-  // ascendente — quem venceu há mais tempo primeiro) e corta em 6.
-  const vencendoTodos = (vencendoRes.data ?? []) as unknown as Periodo[];
-  const vencendoPorColab = new Map<string, Periodo>();
-  for (const p of vencendoTodos) {
-    const colabId = p.colaborador?.id;
-    if (!colabId) continue;
-    const existente = vencendoPorColab.get(colabId);
-    if (!existente || p.aquisitivo_fim > existente.aquisitivo_fim) {
-      vencendoPorColab.set(colabId, p);
+  const lancAtivos = (lancsAtivosRes.data ?? []) as LancAtivo[];
+  const colabsEmFerias = new Set<string>();
+  const colabsSaindo = new Set<string>();
+  const colabsVoltando = new Set<string>();
+  for (const l of lancAtivos) {
+    if (l.data_inicio <= hojeISO && l.data_fim >= hojeISO) {
+      colabsEmFerias.add(l.colaborador_id);
+    }
+    if (l.data_inicio > hojeISO && l.data_inicio <= em7dISO) {
+      colabsSaindo.add(l.colaborador_id);
+    }
+    if (l.data_fim >= hojeISO && l.data_fim <= em7dISO) {
+      colabsVoltando.add(l.colaborador_id);
     }
   }
-  const vencendo = Array.from(vencendoPorColab.values())
-    .sort((a, b) => a.data_limite_gozo.localeCompare(b.data_limite_gozo))
-    .slice(0, 6);
 
-  // Mapeia as 3 fontes de novidade pros tipos que o Pill espera.
+  // Períodos: pra cada colaborador, pega o aquisitivo relevante (mais
+  // crítico: vencido > alerta > apto > incompleto). Classifica em
+  // "vencida recente" (venceu nos últimos 365 dias) ou "vencendo 30d".
+  type Periodo = {
+    colaborador_id: string;
+    data_limite_gozo: string;
+    status: string;
+    dias_direito: number;
+    id: string;
+  };
+  const prioridade: Record<string, number> = {
+    vencido: 1, em_alerta: 2, apto: 3, incompleto: 4,
+  };
+  const periodosRaw = (periodosAtivosRes.data ?? []) as Periodo[];
+  const relevantePorColab = new Map<string, Periodo>();
+  for (const p of periodosRaw) {
+    const existente = relevantePorColab.get(p.colaborador_id);
+    if (!existente) { relevantePorColab.set(p.colaborador_id, p); continue; }
+    const pa = prioridade[p.status] ?? 9;
+    const pb = prioridade[existente.status] ?? 9;
+    if (pa < pb) relevantePorColab.set(p.colaborador_id, p);
+    else if (pa === pb && p.data_limite_gozo < existente.data_limite_gozo) {
+      relevantePorColab.set(p.colaborador_id, p);
+    }
+  }
+
+  const colabsVencendo30d = new Set<string>();
+  const colabsVencidasRecentes = new Set<string>();
+  for (const [colabId, p] of relevantePorColab) {
+    if (p.status === "vencido" && p.data_limite_gozo >= limiteVencidaRecenteISO) {
+      colabsVencidasRecentes.add(colabId);
+    }
+    if (
+      (p.status === "em_alerta" || p.status === "apto") &&
+      p.data_limite_gozo >= hojeISO &&
+      p.data_limite_gozo <= em30dISO
+    ) {
+      colabsVencendo30d.add(colabId);
+    }
+  }
+
+  const kpis = {
+    emFeriasHoje: colabsEmFerias.size,
+    saindo7d: colabsSaindo.size,
+    voltando7d: colabsVoltando.size,
+    totalAtivos: totalAtivosRes.count ?? 0,
+    vencendo30d: colabsVencendo30d.size,
+    vencidasRecentes: colabsVencidasRecentes.size,
+    pendentesAprovacao: colabsPendentes.size,
+    aguardandoFinanceiro: colabsAguardando.size,
+  };
+
+  // Mapeia as 3 fontes de novidade pros tipos que o Pill espera
   type NovidadeSolicRaw = {
     id: string;
     data_inicio: string;
@@ -250,7 +284,6 @@ export async function AbaPainel({ tenantId }: Props) {
     paga_em: string;
     colaborador: { id: string; nome: string } | null;
   };
-
   const novidadesSolicitacoes: NovidadeSolicitacao[] = (
     (novidadesSolicitacoesRes.data ?? []) as unknown as NovidadeSolicRaw[]
   ).map((n) => ({
@@ -260,7 +293,6 @@ export async function AbaPainel({ tenantId }: Props) {
     data_inicio: n.data_inicio,
     criado_em: n.created_at,
   }));
-
   const novidadesNfs: NovidadeNfAnexada[] = (
     (novidadesNfsRes.data ?? []) as unknown as NovidadeNfRaw[]
   ).map((n) => ({
@@ -271,7 +303,6 @@ export async function AbaPainel({ tenantId }: Props) {
     arquivo_nome: n.arquivo_nome,
     anexado_em: n.uploaded_at,
   }));
-
   const novidadesFeriasPagas: NovidadeFeriasPagas[] = (
     (novidadesPagasRes.data ?? []) as unknown as NovidadePagaRaw[]
   ).map((n) => ({
@@ -282,12 +313,10 @@ export async function AbaPainel({ tenantId }: Props) {
     valor: Number(n.salario_base ?? 0),
     pago_em: n.paga_em,
   }));
-
   const dismissedIds: string[] = (
     (dismissedRes.data ?? []) as Array<{ notification_id: string }>
   ).map((d) => d.notification_id);
 
-  const totalAtivos = totalAtivosRes.count ?? 0;
   const primeiroNome = session.profile.nome.split(" ")[0];
   const agora = new Date();
   const dataFormatada =
@@ -299,11 +328,10 @@ export async function AbaPainel({ tenantId }: Props) {
 
   return (
     <div className="space-y-6">
-      {/* Hero */}
       <HeroNovidades
         nome={primeiroNome}
         dataFormatada={dataFormatada}
-        totalAtivos={totalAtivos}
+        totalAtivos={kpis.totalAtivos}
         tenantId={tenantId}
         novidadesSolicitacoes={novidadesSolicitacoes}
         novidadesNfs={novidadesNfs}
@@ -311,51 +339,89 @@ export async function AbaPainel({ tenantId }: Props) {
         dismissedIds={dismissedIds}
       />
 
-      {/* Cards de ação */}
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <CardAcao
-          href="/rh/ferias?tab=colaboradores&status=vencido"
-          icon={AlertOctagon}
-          label="Férias vencidas"
-          descricao="Precisam gozar urgente"
-          value={kpis.vencidas}
-          tom="danger"
-        />
-        <CardAcao
-          href="/rh/ferias?tab=colaboradores&status=em_alerta"
-          icon={AlertTriangle}
-          label="Vencendo em 60d"
-          descricao="Concessivo chegando no fim"
-          value={kpis.emAlerta}
-          tom="warning"
-        />
-        <CardAcao
-          href="/rh/ferias?tab=colaboradores"
-          icon={Palmtree}
-          label="Em férias hoje"
-          descricao="Afastados agora"
-          value={kpis.emFeriasHoje}
-          tom="info"
-        />
-        <CardAcao
-          href="/rh/ferias?tab=colaboradores"
-          icon={CalendarCheck}
-          label="Retornam esta semana"
-          descricao="Voltam até 7 dias"
-          value={kpis.retornosSemana}
-          tom="ok"
-        />
-      </div>
+      {/* PRECISA DE AÇÃO */}
+      <section className="space-y-3">
+        <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground flex items-center gap-2">
+          <span className="inline-block h-4 w-1 rounded-full bg-california-red" />
+          Precisa de ação
+        </h2>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <CardAcao
+            href="/rh/ferias?tab=colaboradores&filtro=vencida_recente"
+            icon={AlertOctagon}
+            label="Férias vencidas"
+            descricao="Precisam agendar"
+            value={kpis.vencidasRecentes}
+            tom="danger"
+          />
+          <CardAcao
+            href="/rh/ferias?tab=solicitacoes"
+            icon={Hourglass}
+            label="Pendentes aprovação"
+            descricao="RH precisa aprovar"
+            value={kpis.pendentesAprovacao}
+            tom="warning"
+          />
+          <CardAcao
+            href="/rh/ferias?tab=solicitacoes"
+            icon={Send}
+            label="Aguardando envio"
+            descricao="NF anexada, enviar ao financeiro"
+            value={kpis.aguardandoFinanceiro}
+            tom="roxo"
+          />
+          <CardAcao
+            href="/rh/ferias?tab=colaboradores&filtro=vencendo_30d"
+            icon={AlertTriangle}
+            label="Vencendo em 30d"
+            descricao="Concessivo chegando no fim"
+            value={kpis.vencendo30d}
+            tom="warning"
+          />
+        </div>
+      </section>
 
-      {/* 2 widgets */}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <WidgetEstaSemana
-          emFerias={emFerias}
-          saindo={saindo}
-          voltando={voltando}
-        />
-        <WidgetVencimentos vencendo={vencendo} />
-      </div>
+      {/* ESTA SEMANA */}
+      <section className="space-y-3">
+        <h2 className="text-[11px] font-bold uppercase tracking-[0.1em] text-muted-foreground flex items-center gap-2">
+          <span className="inline-block h-4 w-1 rounded-full bg-sky-500" />
+          Esta semana
+        </h2>
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <CardAcao
+            href="/rh/ferias?tab=colaboradores&filtro=em_ferias_hoje"
+            icon={Palmtree}
+            label="Em férias hoje"
+            descricao="Afastados agora"
+            value={kpis.emFeriasHoje}
+            tom="info"
+          />
+          <CardAcao
+            href="/rh/ferias?tab=colaboradores&filtro=saindo_7d"
+            icon={ArrowRight}
+            label="Saindo em 7 dias"
+            descricao="Vão iniciar as férias"
+            value={kpis.saindo7d}
+            tom="warning"
+          />
+          <CardAcao
+            href="/rh/ferias?tab=colaboradores&filtro=voltando_7d"
+            icon={ArrowLeft}
+            label="Voltando em 7 dias"
+            descricao="Encerram as férias"
+            value={kpis.voltando7d}
+            tom="ok"
+          />
+          <CardAcao
+            href="/rh/ferias?tab=colaboradores"
+            icon={Users}
+            label="Total ativos"
+            descricao="Colaboradores no quadro"
+            value={kpis.totalAtivos}
+            tom="neutro"
+          />
+        </div>
+      </section>
     </div>
   );
 }
@@ -383,10 +449,6 @@ function HeroNovidades({
 }) {
   return (
     <div className="relative rounded-2xl bg-california-dark text-white px-6 py-5 md:px-8 md:py-6 shadow-elevated">
-      {/* Blur decorativo — fica isolado num wrapper com overflow-hidden
-          pra não cortar o dropdown do Pill Novidades (renderizado via portal
-          pelo PillNovidadesFerias, mas ainda assim deixamos o hero sem
-          overflow pra não precisar depender de portal em todos os cantos). */}
       <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
         <div className="absolute -top-16 -right-16 h-48 w-48 rounded-full bg-california-red/30 blur-3xl" />
       </div>
@@ -401,9 +463,7 @@ function HeroNovidades({
           </h1>
           <p className="mt-1 text-sm text-white/65 max-w-2xl">
             {totalAtivos}{" "}
-            {totalAtivos === 1
-              ? "colaborador ativo"
-              : "colaboradores ativos"}{" "}
+            {totalAtivos === 1 ? "colaborador ativo" : "colaboradores ativos"}{" "}
             nesse tenant
           </p>
         </div>
@@ -422,7 +482,7 @@ function HeroNovidades({
 
 /* --------------------------- CARD DE AÇÃO ------------------------------- */
 
-type Tom = "danger" | "warning" | "ok" | "info";
+type Tom = "danger" | "warning" | "ok" | "info" | "roxo" | "neutro";
 
 const TOM_STYLES: Record<
   Tom,
@@ -451,6 +511,18 @@ const TOM_STYLES: Record<
     number: "text-emerald-700",
     icone: "text-emerald-600",
     border: "border-emerald-300/40 hover:border-emerald-500/60",
+  },
+  roxo: {
+    bg: "bg-purple-50/50",
+    number: "text-purple-700",
+    icone: "text-purple-600",
+    border: "border-purple-300/40 hover:border-purple-500/60",
+  },
+  neutro: {
+    bg: "bg-muted/40",
+    number: "text-foreground",
+    icone: "text-muted-foreground",
+    border: "border-border hover:border-muted-foreground/40",
   },
 };
 
@@ -486,235 +558,5 @@ function CardAcao({
       <p className="mt-1 text-sm font-medium">{label}</p>
       <p className="text-xs text-muted-foreground">{descricao}</p>
     </Link>
-  );
-}
-
-/* --------------------------- WIDGETS ------------------------------------ */
-
-function WidgetEstaSemana({
-  emFerias,
-  saindo,
-  voltando,
-}: {
-  emFerias: Array<{
-    id: string;
-    colaborador: { nome: string } | null;
-    dias: number;
-    data_fim: string;
-  }>;
-  saindo: Array<{
-    id: string;
-    colaborador: { nome: string } | null;
-    dias: number;
-    data_inicio: string;
-  }>;
-  voltando: Array<{
-    id: string;
-    colaborador: { nome: string } | null;
-    dias: number;
-    data_fim: string;
-  }>;
-}) {
-  return (
-    <div className="rounded-xl border border-border bg-background p-5">
-      <h3 className="text-sm font-semibold mb-4 flex items-center gap-2">
-        <CalendarCheck className="h-4 w-4 text-california-red" />
-        Esta semana
-      </h3>
-      <div className="space-y-6">
-        <BlocoSemana
-          titulo="Em férias agora"
-          contador={emFerias.length}
-          tom="info"
-          itens={emFerias.map((l) => ({
-            id: l.id,
-            nome: l.colaborador?.nome ?? "—",
-            detalhe:
-              "até " +
-              new Date(l.data_fim + "T00:00:00").toLocaleDateString("pt-BR"),
-          }))}
-          vazio="Ninguém."
-        />
-        <BlocoSemana
-          titulo="Saindo nos próximos 7 dias"
-          contador={saindo.length}
-          tom="warning"
-          itens={saindo.map((l) => ({
-            id: l.id,
-            nome: l.colaborador?.nome ?? "—",
-            detalhe:
-              new Date(l.data_inicio + "T00:00:00").toLocaleDateString(
-                "pt-BR",
-              ) +
-              " · " +
-              l.dias +
-              "d",
-          }))}
-          vazio="Nenhuma saída programada."
-        />
-        <BlocoSemana
-          titulo="Voltando nos próximos 7 dias"
-          contador={voltando.length}
-          tom="ok"
-          itens={voltando.map((l) => ({
-            id: l.id,
-            nome: l.colaborador?.nome ?? "—",
-            detalhe:
-              "volta " +
-              new Date(l.data_fim + "T00:00:00").toLocaleDateString("pt-BR"),
-          }))}
-          vazio="Ninguém volta esta semana."
-        />
-      </div>
-    </div>
-  );
-}
-
-const BLOCO_TOM: Record<
-  "info" | "warning" | "ok",
-  { barra: string; texto: string; pill: string }
-> = {
-  info: {
-    barra: "bg-sky-500",
-    texto: "text-sky-800",
-    pill: "bg-sky-100 text-sky-800",
-  },
-  warning: {
-    barra: "bg-amber-500",
-    texto: "text-amber-800",
-    pill: "bg-amber-100 text-amber-800",
-  },
-  ok: {
-    barra: "bg-emerald-500",
-    texto: "text-emerald-800",
-    pill: "bg-emerald-100 text-emerald-800",
-  },
-};
-
-function BlocoSemana({
-  titulo,
-  itens,
-  vazio,
-  contador,
-  tom,
-}: {
-  titulo: string;
-  itens: Array<{ id: string; nome: string; detalhe: string }>;
-  vazio: string;
-  contador: number;
-  tom: "info" | "warning" | "ok";
-}) {
-  const t = BLOCO_TOM[tom];
-  return (
-    <div>
-      <div className="flex items-center gap-2 mb-2">
-        <span className={`inline-block h-4 w-1 rounded-full ${t.barra}`} />
-        <p className={`text-xs font-bold uppercase tracking-[0.08em] ${t.texto}`}>
-          {titulo}
-        </p>
-        <span
-          className={`inline-flex items-center justify-center min-w-[20px] rounded-full px-1.5 text-[10px] font-bold ${t.pill}`}
-        >
-          {contador}
-        </span>
-      </div>
-      {itens.length === 0 ? (
-        <p className="text-sm text-muted-foreground italic pl-3">{vazio}</p>
-      ) : (
-        <ul className="space-y-1">
-          {itens.map((i) => (
-            <li
-              key={i.id}
-              className="flex items-center justify-between gap-3 text-sm py-0.5"
-            >
-              <span className="truncate font-medium">{i.nome}</span>
-              <span className="text-xs text-muted-foreground shrink-0">
-                {i.detalhe}
-              </span>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-}
-
-function WidgetVencimentos({
-  vencendo,
-}: {
-  vencendo: Array<{
-    id: string;
-    data_limite_gozo: string;
-    status: string;
-    aquisitivo_inicio: string;
-    aquisitivo_fim: string;
-    colaborador: { id: string; nome: string } | null;
-  }>;
-}) {
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
-  return (
-    <div className="rounded-xl border border-border bg-background p-5">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold flex items-center gap-2">
-          <Clock className="h-4 w-4 text-california-red" />
-          Próximos vencimentos
-        </h3>
-        <Link
-          href="/rh/ferias?tab=colaboradores&status=vencido"
-          prefetch={false}
-          className="text-xs text-california-red hover:underline"
-        >
-          Ver todos →
-        </Link>
-      </div>
-      {vencendo.length === 0 ? (
-        <p className="text-sm text-muted-foreground italic">
-          Nenhum concessivo próximo do vencimento.
-        </p>
-      ) : (
-        <ul className="divide-y divide-border">
-          {vencendo.map((p) => {
-            const limite = new Date(p.data_limite_gozo + "T00:00:00");
-            const dif = Math.ceil(
-              (limite.getTime() - hoje.getTime()) / 86_400_000,
-            );
-            const aq =
-              p.aquisitivo_inicio.slice(0, 4) +
-              "/" +
-              p.aquisitivo_fim.slice(0, 4);
-            const vencido = p.status === "vencido";
-            return (
-              <li
-                key={p.id}
-                className="flex items-center justify-between gap-3 py-2.5 text-sm"
-              >
-                <div className="min-w-0">
-                  <p className="font-medium truncate">
-                    {p.colaborador?.nome ?? "—"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Aquisitivo {aq}
-                  </p>
-                </div>
-                <div
-                  className={`text-xs text-right shrink-0 ${
-                    vencido
-                      ? "text-california-red font-semibold"
-                      : "text-amber-700"
-                  }`}
-                >
-                  {vencido ? "venceu há " + -dif + "d" : "vence em " + dif + "d"}
-                  <br />
-                  <span className="opacity-70">
-                    {limite.toLocaleDateString("pt-BR")}
-                  </span>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </div>
   );
 }

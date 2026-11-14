@@ -8,11 +8,10 @@ import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { AbaPainel } from "./aba-painel";
 import { AbaQuadro } from "./aba-quadro";
 import { AbaFluxo } from "./aba-fluxo";
-import { AbaPendencias } from "./aba-pendencias";
 
 export const dynamic = "force-dynamic";
 
-type Tab = "dashboard" | "solicitacoes" | "colaboradores" | "pendencias";
+type Tab = "dashboard" | "solicitacoes" | "colaboradores";
 
 export default async function FeriasPage({
   searchParams,
@@ -20,6 +19,7 @@ export default async function FeriasPage({
   searchParams: {
     tab?: string;
     status?: string;
+    filtro?: string;
   };
 }) {
   const session = await requireSession();
@@ -39,13 +39,16 @@ export default async function FeriasPage({
   if (searchParams.tab === "fluxo" || searchParams.tab === "pagamentos") {
     redirect("/rh/ferias?tab=solicitacoes");
   }
+  // Tab Pendências removida em 2026-11-14 — pendências residuais ficam
+  // no histórico de cada colaborador em /rh/ferias/[id]. Link antigo
+  // redireciona pro Dashboard.
+  if (searchParams.tab === "pendencias") {
+    redirect("/rh/ferias?tab=dashboard");
+  }
 
   const tab: Tab = normalizarTab(searchParams.tab);
 
-  // Badge da tab Solicitações: pendentes de aprovação + NF anexada
-  // (ambos exigem ação do RH — pendente precisa aprovar, nf_anexada
-  // precisa clicar "Enviar pro Financeiro"). Puxado no server pra
-  // aparecer já na renderização inicial.
+  // Badge da tab Solicitações: pendentes + nf_anexada (exigem ação do RH).
   const supabase = createClient();
   const { count: countParaAgir } = await supabase
     .from("colaboradores_ferias_lancamentos")
@@ -61,7 +64,6 @@ export default async function FeriasPage({
       badge: countParaAgir ?? 0,
     },
     { key: "colaboradores", label: "Colaboradores" },
-    { key: "pendencias", label: "Pendências" },
   ];
 
   return (
@@ -110,13 +112,14 @@ export default async function FeriasPage({
 
       {tab === "dashboard" && <AbaPainel tenantId={tenantId} />}
       {tab === "solicitacoes" && <AbaFluxo tenantId={tenantId} />}
-      {tab === "colaboradores" && <AbaQuadro tenantId={tenantId} />}
-      {tab === "pendencias" && <AbaPendencias tenantId={tenantId} />}
+      {tab === "colaboradores" && (
+        <AbaQuadro tenantId={tenantId} filtroInicial={searchParams.filtro} />
+      )}
     </div>
   );
 }
 
 function normalizarTab(t: string | undefined): Tab {
-  const vals: Tab[] = ["dashboard", "solicitacoes", "colaboradores", "pendencias"];
+  const vals: Tab[] = ["dashboard", "solicitacoes", "colaboradores"];
   return (vals as string[]).includes(t ?? "") ? (t as Tab) : "dashboard";
 }

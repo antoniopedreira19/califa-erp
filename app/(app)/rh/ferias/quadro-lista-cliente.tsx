@@ -1,12 +1,23 @@
 "use client";
 
 import * as React from "react";
-import { Search, X } from "lucide-react";
+import {
+  Search,
+  X,
+  Palmtree,
+  ArrowRight,
+  ArrowLeft,
+  AlertTriangle,
+  AlertOctagon,
+  Hourglass,
+  Send,
+} from "lucide-react";
 import { LinhaQuadro } from "./linha-quadro";
 import type { QuadroColaboradorRow } from "./aba-quadro";
 
 type Props = {
   rows: QuadroColaboradorRow[];
+  filtroInicial?: string;
 };
 
 const TIPOS_CONTRATACAO = [
@@ -18,33 +29,121 @@ const TIPOS_CONTRATACAO = [
   { valor: "socio", label: "Sócio" },
 ];
 
-const STATUS_PERIODO = [
-  { valor: "", label: "Todos", cls: "" },
-  { valor: "vencido", label: "Vencidos", cls: "bg-red-100 text-red-800" },
-  { valor: "em_alerta", label: "Em alerta", cls: "bg-amber-100 text-amber-900" },
-  { valor: "apto", label: "Aptos", cls: "bg-emerald-100 text-emerald-800" },
+/**
+ * Chips contextuais: ligados 1:1 com os cards do Dashboard. Clicar num
+ * card do /rh/ferias?tab=dashboard → vai pra ?tab=colaboradores&filtro=X
+ * e o chip X fica ativo já de cara. Mesma contagem pros dois lados.
+ */
+type FiltroKey =
+  | ""
+  | "em_ferias_hoje"
+  | "saindo_7d"
+  | "voltando_7d"
+  | "vencida_recente"
+  | "vencendo_30d"
+  | "pendente_aprovacao"
+  | "aguardando_financeiro";
+
+const FILTROS: Array<{
+  key: FiltroKey;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  cor: string;
+  corAtivo: string;
+}> = [
   {
-    valor: "incompleto",
-    label: "Em curso",
-    cls: "bg-muted text-muted-foreground",
+    key: "",
+    label: "Todos",
+    icon: Search,
+    cor: "bg-muted text-muted-foreground",
+    corAtivo: "bg-foreground text-background",
+  },
+  {
+    key: "em_ferias_hoje",
+    label: "Em férias hoje",
+    icon: Palmtree,
+    cor: "bg-sky-100 text-sky-800",
+    corAtivo: "bg-sky-600 text-white",
+  },
+  {
+    key: "saindo_7d",
+    label: "Saindo 7d",
+    icon: ArrowRight,
+    cor: "bg-amber-100 text-amber-900",
+    corAtivo: "bg-amber-600 text-white",
+  },
+  {
+    key: "voltando_7d",
+    label: "Voltando 7d",
+    icon: ArrowLeft,
+    cor: "bg-emerald-100 text-emerald-800",
+    corAtivo: "bg-emerald-600 text-white",
+  },
+  {
+    key: "vencendo_30d",
+    label: "Vencendo em 30d",
+    icon: AlertTriangle,
+    cor: "bg-amber-100 text-amber-900",
+    corAtivo: "bg-amber-600 text-white",
+  },
+  {
+    key: "vencida_recente",
+    label: "Vencidas",
+    icon: AlertOctagon,
+    cor: "bg-red-100 text-red-800",
+    corAtivo: "bg-red-600 text-white",
+  },
+  {
+    key: "pendente_aprovacao",
+    label: "Pendentes aprovação",
+    icon: Hourglass,
+    cor: "bg-amber-100 text-amber-900",
+    corAtivo: "bg-amber-600 text-white",
+  },
+  {
+    key: "aguardando_financeiro",
+    label: "Aguardando envio",
+    icon: Send,
+    cor: "bg-purple-100 text-purple-800",
+    corAtivo: "bg-purple-600 text-white",
   },
 ];
 
-/**
- * Quadro + filtros 100% client-side (Onda 3.5).
- *
- * Antes: cada chip de filtro clicado disparava router.push → request RSC
- * completa com 3 queries + render. 1,5-6s por clique, sensação de travamento.
- * Agora: filtros vivem em state local, aplicados em memória sobre as rows
- * já carregadas. Instantâneo (<10ms).
- *
- * Linhas são `<Link>` pra /rh/ferias/[id] (2026-11-13: tirou o modal
- * de detalhe e trocou por página completa com URL própria).
- */
-export function QuadroListaCliente({ rows }: Props) {
+function parseFiltro(v: string | undefined): FiltroKey {
+  const vals: FiltroKey[] = FILTROS.map((f) => f.key);
+  return (vals as string[]).includes(v ?? "") ? (v as FiltroKey) : "";
+}
+
+export function QuadroListaCliente({ rows, filtroInicial }: Props) {
   const [busca, setBusca] = React.useState("");
   const [tipoContratacao, setTipoContratacao] = React.useState("");
-  const [statusPeriodo, setStatusPeriodo] = React.useState("");
+  const [filtro, setFiltro] = React.useState<FiltroKey>(
+    parseFiltro(filtroInicial),
+  );
+
+  // Contagens de cada chip (sempre sobre o universo total, não o filtrado)
+  const contagens = React.useMemo(() => {
+    const m: Record<FiltroKey, number> = {
+      "": rows.length,
+      em_ferias_hoje: 0,
+      saindo_7d: 0,
+      voltando_7d: 0,
+      vencendo_30d: 0,
+      vencida_recente: 0,
+      pendente_aprovacao: 0,
+      aguardando_financeiro: 0,
+    };
+    for (const r of rows) {
+      if (r.flags.em_ferias_hoje) m.em_ferias_hoje += 1;
+      if (r.flags.saindo_7d) m.saindo_7d += 1;
+      if (r.flags.voltando_7d) m.voltando_7d += 1;
+      if (r.flags.vencendo_30d) m.vencendo_30d += 1;
+      if (r.flags.vencida_recente) m.vencida_recente += 1;
+      if (r.flags.pendente_aprovacao) m.pendente_aprovacao += 1;
+      if (r.flags.aguardando_financeiro) m.aguardando_financeiro += 1;
+    }
+    return m;
+  }, [rows]);
 
   const rowsFiltradas = React.useMemo(() => {
     let res = rows;
@@ -58,21 +157,19 @@ export function QuadroListaCliente({ rows }: Props) {
       res = res.filter((r) => r.tipo_contratacao === tipoContratacao);
     }
 
-    if (statusPeriodo) {
-      res = res.filter((r) => r.periodoAtivo?.status === statusPeriodo);
+    if (filtro) {
+      res = res.filter((r) => r.flags[filtro]);
     }
 
     return res;
-  }, [rows, busca, tipoContratacao, statusPeriodo]);
+  }, [rows, busca, tipoContratacao, filtro]);
 
-  const temFiltroAtivo = Boolean(
-    busca || tipoContratacao || statusPeriodo,
-  );
+  const temFiltroAtivo = Boolean(busca || tipoContratacao || filtro);
 
   function limparFiltros() {
     setBusca("");
     setTipoContratacao("");
-    setStatusPeriodo("");
+    setFiltro("");
   }
 
   return (
@@ -121,20 +218,30 @@ export function QuadroListaCliente({ rows }: Props) {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {STATUS_PERIODO.map((s) => {
-            const ativo = s.valor === statusPeriodo;
+          {FILTROS.map((f) => {
+            const ativo = f.key === filtro;
+            const count = contagens[f.key];
+            const Icon = f.icon;
             return (
               <button
-                key={s.valor}
+                key={f.key || "todos"}
                 type="button"
-                onClick={() => setStatusPeriodo(s.valor)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  ativo
-                    ? "bg-california-red text-white"
-                    : s.cls || "bg-muted text-muted-foreground hover:bg-muted/70"
+                onClick={() => setFiltro(f.key)}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  ativo ? f.corAtivo : f.cor + " hover:brightness-95"
                 }`}
               >
-                {s.label}
+                <Icon className="h-3 w-3" />
+                {f.label}
+                {count > 0 && (
+                  <span
+                    className={`inline-flex items-center justify-center min-w-[18px] rounded-full px-1 text-[10px] font-semibold ${
+                      ativo ? "bg-white/25" : "bg-white/60"
+                    }`}
+                  >
+                    {count}
+                  </span>
+                )}
               </button>
             );
           })}
