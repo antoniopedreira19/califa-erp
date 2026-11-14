@@ -94,13 +94,19 @@ export async function AbaPainel({ tenantId }: Props) {
       .select("id", { count: "exact", head: true })
       .eq("tenant_id", tenantId)
       .eq("status", "em_alerta"),
+    // Em férias hoje / Saindo / Voltando: só lançamentos nascidos no
+    // sistema (lancado_direto_por_rh=false). Imports da planilha FériasAtt
+    // têm datas sintéticas que caem sem querer nessas janelas — se
+    // entrassem, o Dashboard mostraria 200 pessoas em férias quando
+    // ninguém efetivamente está.
     supabase
       .from("colaboradores_ferias_lancamentos")
       .select(
         "id, dias, data_inicio, data_fim, colaborador:colaboradores!colaborador_id(id, nome)",
       )
       .eq("tenant_id", tenantId)
-      .in("status", ["aprovado", "concluido"])
+      .eq("lancado_direto_por_rh", false)
+      .in("status", ["aprovado", "nf_anexada", "enviado_financeiro", "concluido"])
       .lte("data_inicio", hojeISO)
       .gte("data_fim", hojeISO)
       .order("data_inicio", { ascending: true }),
@@ -110,7 +116,8 @@ export async function AbaPainel({ tenantId }: Props) {
         "id, dias, data_inicio, data_fim, colaborador:colaboradores!colaborador_id(id, nome)",
       )
       .eq("tenant_id", tenantId)
-      .in("status", ["aprovado", "concluido"])
+      .eq("lancado_direto_por_rh", false)
+      .in("status", ["aprovado", "nf_anexada", "enviado_financeiro", "concluido"])
       .gt("data_inicio", hojeISO)
       .lte("data_inicio", semanaISO)
       .order("data_inicio", { ascending: true })
@@ -121,11 +128,18 @@ export async function AbaPainel({ tenantId }: Props) {
         "id, dias, data_inicio, data_fim, colaborador:colaboradores!colaborador_id(id, nome)",
       )
       .eq("tenant_id", tenantId)
-      .in("status", ["aprovado", "concluido"])
+      .eq("lancado_direto_por_rh", false)
+      .in("status", ["aprovado", "nf_anexada", "enviado_financeiro", "concluido"])
       .gte("data_fim", hojeISO)
       .lte("data_fim", semanaISO)
       .order("data_fim", { ascending: true })
       .limit(10),
+    // Próximos vencimentos: sem .limit() aqui porque precisamos ver TODOS
+    // vencidos/em_alerta pra reduzir a 1 por colaborador em memória.
+    // Com colaboradores antigos acumulando 4-5 aquisitivos vencidos desde
+    // 2015, limitar na query derrubava os mais recentes e deixava só os
+    // mais antigos — o que não ajuda o RH (ninguém vai regularizar 2015/16,
+    // o que importa é o atual).
     supabase
       .from("colaboradores_ferias_periodos")
       .select(
@@ -133,8 +147,7 @@ export async function AbaPainel({ tenantId }: Props) {
       )
       .eq("tenant_id", tenantId)
       .in("status", ["vencido", "em_alerta"])
-      .order("data_limite_gozo", { ascending: true })
-      .limit(6),
+      .order("aquisitivo_fim", { ascending: false }),
     // Novidades 1: solicitações feitas nos últimos 7 dias
     supabase
       .from("colaboradores_ferias_lancamentos")
@@ -196,7 +209,22 @@ export async function AbaPainel({ tenantId }: Props) {
   const emFerias = (emFeriasHojeRes.data ?? []) as unknown as Lanc[];
   const saindo = (saindoSemanaRes.data ?? []) as unknown as Lanc[];
   const voltando = (voltandoSemanaRes.data ?? []) as unknown as Lanc[];
-  const vencendo = (vencendoRes.data ?? []) as unknown as Periodo[];
+  // Reduz vencidos/em_alerta a 1 por colaborador: o aquisitivo mais atual
+  // (maior aquisitivo_fim). Depois ordena pelo mais crítico (data_limite
+  // ascendente — quem venceu há mais tempo primeiro) e corta em 6.
+  const vencendoTodos = (vencendoRes.data ?? []) as unknown as Periodo[];
+  const vencendoPorColab = new Map<string, Periodo>();
+  for (const p of vencendoTodos) {
+    const colabId = p.colaborador?.id;
+    if (!colabId) continue;
+    const existente = vencendoPorColab.get(colabId);
+    if (!existente || p.aquisitivo_fim > existente.aquisitivo_fim) {
+      vencendoPorColab.set(colabId, p);
+    }
+  }
+  const vencendo = Array.from(vencendoPorColab.values())
+    .sort((a, b) => a.data_limite_gozo.localeCompare(b.data_limite_gozo))
+    .slice(0, 6);
 
   // Mapeia as 3 fontes de novidade pros tipos que o Pill espera.
   type NovidadeSolicRaw = {
