@@ -12,6 +12,7 @@ import {
   Hourglass,
   Send,
   FileClock,
+  ChevronRight,
 } from "lucide-react";
 import { LinhaQuadro } from "./linha-quadro";
 import type { QuadroColaboradorRow } from "./aba-quadro";
@@ -30,11 +31,6 @@ const TIPOS_CONTRATACAO = [
   { valor: "socio", label: "Sócio" },
 ];
 
-/**
- * Chips contextuais: ligados 1:1 com os cards do Dashboard. Clicar num
- * card do /rh/ferias?tab=dashboard → vai pra ?tab=colaboradores&filtro=X
- * e o chip X fica ativo já de cara. Mesma contagem pros dois lados.
- */
 type FiltroKey =
   | ""
   | "em_ferias_hoje"
@@ -46,13 +42,57 @@ type FiltroKey =
   | "aguardando_nf"
   | "aguardando_financeiro";
 
-const FILTROS: Array<{
+type CardAcaoConfig = {
+  key: FiltroKey;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  tom: "danger" | "warning" | "info" | "roxo";
+};
+
+// Cards no topo — ação urgente do RH
+const CARDS_ACAO: CardAcaoConfig[] = [
+  {
+    key: "vencida_recente",
+    label: "Férias vencidas",
+    icon: AlertOctagon,
+    tom: "danger",
+  },
+  {
+    key: "pendente_aprovacao",
+    label: "Pendentes aprovação",
+    icon: Hourglass,
+    tom: "warning",
+  },
+  {
+    key: "aguardando_nf",
+    label: "Aguardando NF",
+    icon: FileClock,
+    tom: "info",
+  },
+  {
+    key: "aguardando_financeiro",
+    label: "Aguardando envio",
+    icon: Send,
+    tom: "roxo",
+  },
+  {
+    key: "vencendo_30d",
+    label: "Vencendo em 30d",
+    icon: AlertTriangle,
+    tom: "warning",
+  },
+];
+
+type ChipConfig = {
   key: FiltroKey;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   cor: string;
   corAtivo: string;
-}> = [
+};
+
+// Chips embaixo — visão contextual (quem está fora esta semana)
+const CHIPS_SEMANA: ChipConfig[] = [
   {
     key: "",
     label: "Todos",
@@ -81,46 +121,58 @@ const FILTROS: Array<{
     cor: "bg-emerald-100 text-emerald-800",
     corAtivo: "bg-emerald-600 text-white",
   },
-  {
-    key: "vencendo_30d",
-    label: "Vencendo em 30d",
-    icon: AlertTriangle,
-    cor: "bg-amber-100 text-amber-900",
-    corAtivo: "bg-amber-600 text-white",
+];
+
+const TOM_STYLES: Record<
+  CardAcaoConfig["tom"],
+  { bg: string; number: string; icone: string; border: string; borderAtivo: string }
+> = {
+  danger: {
+    bg: "bg-california-red/5",
+    number: "text-california-red",
+    icone: "text-california-red",
+    border: "border-california-red/20 hover:border-california-red/40",
+    borderAtivo: "border-california-red ring-2 ring-california-red/20",
   },
-  {
-    key: "vencida_recente",
-    label: "Vencidas",
-    icon: AlertOctagon,
-    cor: "bg-red-100 text-red-800",
-    corAtivo: "bg-red-600 text-white",
+  warning: {
+    bg: "bg-amber-50/60",
+    number: "text-amber-700",
+    icone: "text-amber-600",
+    border: "border-amber-300/40 hover:border-amber-500/60",
+    borderAtivo: "border-amber-600 ring-2 ring-amber-500/20",
   },
-  {
-    key: "pendente_aprovacao",
-    label: "Pendentes aprovação",
-    icon: Hourglass,
-    cor: "bg-amber-100 text-amber-900",
-    corAtivo: "bg-amber-600 text-white",
+  info: {
+    bg: "bg-sky-50/50",
+    number: "text-sky-700",
+    icone: "text-sky-600",
+    border: "border-sky-300/40 hover:border-sky-500/60",
+    borderAtivo: "border-sky-600 ring-2 ring-sky-500/20",
   },
-  {
-    key: "aguardando_nf",
-    label: "Aguardando NF",
-    icon: FileClock,
-    cor: "bg-sky-100 text-sky-800",
-    corAtivo: "bg-sky-600 text-white",
+  roxo: {
+    bg: "bg-purple-50/50",
+    number: "text-purple-700",
+    icone: "text-purple-600",
+    border: "border-purple-300/40 hover:border-purple-500/60",
+    borderAtivo: "border-purple-600 ring-2 ring-purple-500/20",
   },
-  {
-    key: "aguardando_financeiro",
-    label: "Aguardando envio",
-    icon: Send,
-    cor: "bg-purple-100 text-purple-800",
-    corAtivo: "bg-purple-600 text-white",
-  },
+};
+
+const TODAS_FILTRO_KEYS: FiltroKey[] = [
+  "",
+  "em_ferias_hoje",
+  "saindo_7d",
+  "voltando_7d",
+  "vencida_recente",
+  "vencendo_30d",
+  "pendente_aprovacao",
+  "aguardando_nf",
+  "aguardando_financeiro",
 ];
 
 function parseFiltro(v: string | undefined): FiltroKey {
-  const vals: FiltroKey[] = FILTROS.map((f) => f.key);
-  return (vals as string[]).includes(v ?? "") ? (v as FiltroKey) : "";
+  return (TODAS_FILTRO_KEYS as string[]).includes(v ?? "")
+    ? (v as FiltroKey)
+    : "";
 }
 
 export function QuadroListaCliente({ rows, filtroInicial }: Props) {
@@ -130,7 +182,7 @@ export function QuadroListaCliente({ rows, filtroInicial }: Props) {
     parseFiltro(filtroInicial),
   );
 
-  // Contagens de cada chip (sempre sobre o universo total, não o filtrado)
+  // Contagens de cada filtro (sempre sobre o universo total, não o filtrado)
   const contagens = React.useMemo(() => {
     const m: Record<FiltroKey, number> = {
       "": rows.length,
@@ -183,9 +235,43 @@ export function QuadroListaCliente({ rows, filtroInicial }: Props) {
     setFiltro("");
   }
 
+  function toggleFiltro(key: FiltroKey) {
+    // Clicar no card/chip ativo → desseleciona (volta pra Todos)
+    setFiltro((atual) => (atual === key ? "" : key));
+  }
+
   return (
     <>
-      {/* Filtros */}
+      {/* Cards de ação (cliques filtram a lista) */}
+      <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-5 mb-4">
+        {CARDS_ACAO.map((c) => {
+          const s = TOM_STYLES[c.tom];
+          const value = contagens[c.key];
+          const ativo = filtro === c.key;
+          const Icon = c.icon;
+          return (
+            <button
+              key={c.key}
+              type="button"
+              onClick={() => toggleFiltro(c.key)}
+              className={`block rounded-xl border p-4 transition-all text-left shadow-soft ${s.bg} ${
+                ativo ? s.borderAtivo : s.border
+              }`}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <Icon className={`h-5 w-5 ${s.icone}`} />
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              </div>
+              <p className={`mt-3 text-3xl font-bold tracking-tight ${s.number}`}>
+                {value}
+              </p>
+              <p className="mt-1 text-sm font-medium">{c.label}</p>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Chips contextuais + busca */}
       <div className="space-y-3 mb-5">
         <div className="flex items-center gap-3 flex-wrap">
           <div className="relative flex-1 min-w-[200px] max-w-md">
@@ -229,7 +315,7 @@ export function QuadroListaCliente({ rows, filtroInicial }: Props) {
         </div>
 
         <div className="flex flex-wrap gap-2">
-          {FILTROS.map((f) => {
+          {CHIPS_SEMANA.map((f) => {
             const ativo = f.key === filtro;
             const count = contagens[f.key];
             const Icon = f.icon;
@@ -268,13 +354,12 @@ export function QuadroListaCliente({ rows, filtroInicial }: Props) {
         </div>
       ) : (
         <div className="rounded-2xl border border-border bg-card shadow-soft overflow-hidden">
-          <div className="hidden md:grid grid-cols-[2fr_0.9fr_0.9fr_1fr_1fr_1fr_0.3fr] gap-4 bg-muted/40 px-5 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          <div className="hidden md:grid grid-cols-[2fr_0.9fr_0.9fr_1fr_1.4fr_0.3fr] gap-4 bg-muted/40 px-5 py-3 text-xs font-medium uppercase tracking-wider text-muted-foreground">
             <span>Colaborador</span>
             <span>Admissão</span>
             <span>Aquisitivo</span>
             <span>Dias pend.</span>
-            <span>Situação</span>
-            <span>Data limite</span>
+            <span>Prazo</span>
             <span className="sr-only">Ação</span>
           </div>
           <ul className="divide-y divide-border">

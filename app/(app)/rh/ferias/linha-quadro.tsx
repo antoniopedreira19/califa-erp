@@ -22,11 +22,13 @@ export function LinhaQuadro({ row }: Props) {
       ).toLocaleDateString("pt-BR")
     : "—";
 
+  // Grid reduziu de 7 → 6 colunas: situação+data limite consolidaram
+  // numa coluna só "Prazo" (data + label do status).
   return (
     <Link
       href={`/rh/ferias/${row.id}`}
       prefetch={false}
-      className="grid md:grid-cols-[2fr_0.9fr_0.9fr_1fr_1fr_1fr_0.3fr] gap-x-4 gap-y-1 px-5 py-3 cursor-pointer transition-colors hover:bg-muted/30"
+      className="grid md:grid-cols-[2fr_0.9fr_0.9fr_1fr_1.4fr_0.3fr] gap-x-4 gap-y-1 px-5 py-3 cursor-pointer transition-colors hover:bg-muted/30"
     >
       {/* Colaborador: nome + função + tipo */}
       <div className="min-w-0">
@@ -65,30 +67,26 @@ export function LinhaQuadro({ row }: Props) {
         )}
       </div>
 
-      {/* Situação */}
+      {/* Prazo (consolidado: data + situação) */}
       <div className="hidden md:block self-center">
         {row.periodoAtivo ? (
-          <BadgeSituacao
-            status={row.periodoAtivo.status}
-            diasAteLimite={row.periodoAtivo.diasAteLimite}
-          />
-        ) : (
-          <span className="text-xs text-muted-foreground">Sem período</span>
-        )}
-      </div>
-
-      {/* Data limite */}
-      <div className="hidden md:block self-center">
-        {row.periodoAtivo ? (
-          <div>
-            <p className="text-sm">{limiteFmt}</p>
-            <p
-              className={`text-xs ${tomDiasAteLimite(row.periodoAtivo.diasAteLimite)}`}
-            >
-              {row.periodoAtivo.diasAteLimite > 0
-                ? `em ${row.periodoAtivo.diasAteLimite} dias`
-                : `há ${-row.periodoAtivo.diasAteLimite} dias`}
+          <div className="flex flex-col gap-1">
+            <p className="text-sm leading-tight">
+              <span>{limiteFmt}</span>
+              <span
+                className={`text-xs ml-2 ${tomDiasAteLimite(row.periodoAtivo.diasAteLimite)}`}
+              >
+                {row.periodoAtivo.diasAteLimite > 0
+                  ? `em ${row.periodoAtivo.diasAteLimite}d`
+                  : `há ${-row.periodoAtivo.diasAteLimite}d`}
+              </span>
             </p>
+            <div>
+              <BadgeSituacao
+                status={row.periodoAtivo.status}
+                diasAteLimite={row.periodoAtivo.diasAteLimite}
+              />
+            </div>
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">—</p>
@@ -146,23 +144,28 @@ function BadgeSituacao({
   status: FeriasPeriodoStatus;
   diasAteLimite: number;
 }) {
-  // Rótulos alinhados com os da aba "Acompanhamento" da planilha
+  // Rótulos pensados pra gestor de pessoas: ação em vez de categoria
+  // técnica. 'Vence em breve' cobre apto <=60d + em_alerta no mesmo
+  // termo porque pro RH é a mesma ação (conversar com a pessoa).
   const map: Record<FeriasPeriodoStatus, { label: string; cls: string }> = {
     incompleto: {
-      label: "Período incompleto",
+      label: "Gerando direito",
       cls: "bg-muted text-muted-foreground",
     },
     apto: {
-      label: diasAteLimite <= 60 ? "Em alerta" : "Dentro do prazo",
+      label: diasAteLimite <= 60 ? "Vence em breve" : "Pode tirar",
       cls:
         diasAteLimite <= 60
           ? "bg-amber-100 text-amber-900"
           : "bg-emerald-100 text-emerald-800",
     },
-    em_alerta: { label: "Em alerta", cls: "bg-amber-100 text-amber-900" },
+    em_alerta: {
+      label: "Vence em breve",
+      cls: "bg-amber-100 text-amber-900",
+    },
     vencido: { label: "Vencido", cls: "bg-red-100 text-red-800" },
     regularizado: {
-      label: "Regularizado",
+      label: "Férias tiradas",
       cls: "bg-sky-100 text-sky-800",
     },
     nao_habilitado: {
