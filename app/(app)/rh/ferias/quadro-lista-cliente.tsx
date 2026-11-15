@@ -13,7 +13,16 @@ import {
   Send,
   FileClock,
   ChevronRight,
+  ArrowUpAZ,
+  Clock,
 } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { LinhaQuadro } from "./linha-quadro";
 import type { QuadroColaboradorRow } from "./aba-quadro";
 
@@ -22,14 +31,11 @@ type Props = {
   filtroInicial?: string;
 };
 
-const TIPOS_CONTRATACAO = [
-  { valor: "", label: "Todos" },
-  { valor: "clt", label: "CLT" },
-  { valor: "pj", label: "PJ" },
-  { valor: "estagio", label: "Estágio" },
-  { valor: "art", label: "ART" },
-  { valor: "socio", label: "Sócio" },
-];
+// Sentinel pra "Todos" nos selects Radix (value="" crasha)
+const TIPO_TODOS = "__todos__";
+const ORDEM_ALFABETICA = "alfabetica";
+const ORDEM_VENCIMENTO = "vencimento";
+type OrdemKey = typeof ORDEM_ALFABETICA | typeof ORDEM_VENCIMENTO;
 
 type FiltroKey =
   | ""
@@ -177,7 +183,8 @@ function parseFiltro(v: string | undefined): FiltroKey {
 
 export function QuadroListaCliente({ rows, filtroInicial }: Props) {
   const [busca, setBusca] = React.useState("");
-  const [tipoContratacao, setTipoContratacao] = React.useState("");
+  const [tipoContratacao, setTipoContratacao] = React.useState(TIPO_TODOS);
+  const [ordem, setOrdem] = React.useState<OrdemKey>(ORDEM_ALFABETICA);
   const [filtro, setFiltro] = React.useState<FiltroKey>(
     parseFiltro(filtroInicial),
   );
@@ -216,7 +223,7 @@ export function QuadroListaCliente({ rows, filtroInicial }: Props) {
       res = res.filter((r) => r.nome.toLowerCase().includes(q));
     }
 
-    if (tipoContratacao) {
+    if (tipoContratacao !== TIPO_TODOS) {
       res = res.filter((r) => r.tipo_contratacao === tipoContratacao);
     }
 
@@ -224,14 +231,31 @@ export function QuadroListaCliente({ rows, filtroInicial }: Props) {
       res = res.filter((r) => r.flags[filtro]);
     }
 
-    return res;
-  }, [rows, busca, tipoContratacao, filtro]);
+    // Ordenação:
+    //   alfabetica: pelo nome (A→Z)
+    //   vencimento: quem vence mais cedo primeiro (sem período ativo vai pro fim)
+    const ordenadas = [...res];
+    if (ordem === ORDEM_ALFABETICA) {
+      ordenadas.sort((a, b) =>
+        a.nome.localeCompare(b.nome, "pt-BR", { sensitivity: "base" }),
+      );
+    } else {
+      ordenadas.sort((a, b) => {
+        const aLim = a.periodoAtivo?.data_limite_gozo ?? "9999-12-31";
+        const bLim = b.periodoAtivo?.data_limite_gozo ?? "9999-12-31";
+        return aLim.localeCompare(bLim);
+      });
+    }
+    return ordenadas;
+  }, [rows, busca, tipoContratacao, filtro, ordem]);
 
-  const temFiltroAtivo = Boolean(busca || tipoContratacao || filtro);
+  const temFiltroAtivo = Boolean(
+    busca || tipoContratacao !== TIPO_TODOS || filtro,
+  );
 
   function limparFiltros() {
     setBusca("");
-    setTipoContratacao("");
+    setTipoContratacao(TIPO_TODOS);
     setFiltro("");
   }
 
@@ -285,17 +309,51 @@ export function QuadroListaCliente({ rows, filtroInicial }: Props) {
             />
           </div>
 
-          <select
-            value={tipoContratacao}
-            onChange={(e) => setTipoContratacao(e.target.value)}
-            className="rounded-lg border border-border bg-white px-3 py-2 text-sm transition-colors focus:border-california-red focus:outline-none focus:ring-2 focus:ring-california-red/15"
+          <Select value={tipoContratacao} onValueChange={setTipoContratacao}>
+            <SelectTrigger className="h-9 w-[170px] text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent
+              side="bottom"
+              avoidCollisions={false}
+              className="w-[--radix-select-trigger-width]"
+            >
+              <SelectItem value={TIPO_TODOS}>Todos os tipos</SelectItem>
+              <SelectItem value="pj">PJ</SelectItem>
+              <SelectItem value="clt_recibo">CLT + Recibo</SelectItem>
+              <SelectItem value="clt">CLT</SelectItem>
+              <SelectItem value="estagio">Estágio</SelectItem>
+              <SelectItem value="art">ART</SelectItem>
+              <SelectItem value="socio">Sócio</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <Select
+            value={ordem}
+            onValueChange={(v) => setOrdem(v as OrdemKey)}
           >
-            {TIPOS_CONTRATACAO.map((t) => (
-              <option key={t.valor} value={t.valor}>
-                {t.label}
-              </option>
-            ))}
-          </select>
+            <SelectTrigger className="h-9 w-[170px] text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent
+              side="bottom"
+              avoidCollisions={false}
+              className="w-[--radix-select-trigger-width]"
+            >
+              <SelectItem value={ORDEM_ALFABETICA}>
+                <span className="inline-flex items-center gap-1.5">
+                  <ArrowUpAZ className="h-3.5 w-3.5" />
+                  Ordem alfabética
+                </span>
+              </SelectItem>
+              <SelectItem value={ORDEM_VENCIMENTO}>
+                <span className="inline-flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5" />
+                  Vencimento
+                </span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
 
           {temFiltroAtivo && (
             <button
