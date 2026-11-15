@@ -8996,3 +8996,11 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 
 - O cadastro de fornecedores passou de 3 mil com a carga da planilha de 12/11. As telas que leem a lista inteira (Contas a Pagar, Conciliação — títulos e remessa —, Contas a Receber, desembolso, conta avulsa e recorrência) leem página a página (`lib/supabase/todas-as-linhas.ts`); antes o PostgREST cortava em 1.000 sem aviso, e a PP de um fornecedor depois do milésimo perderia nome e conta no financeiro.
 - O campo de fornecedor (conta avulsa, recorrência e desembolso) busca no servidor enquanto se digita, como o da PP.
+
+## ⚠️ Nota de 2026-11-15 — a recorrência da planilha assume o item de vez (revisão da decisão 235)
+
+- **O erro:** a `vw_fluxo_caixa` só tirava a previsão da planilha enquanto a recorrência estava ativa e dentro da `data_fim`. As duas recorrências de R$ 75 mil pararam sozinhas depois do título de dezembro, e a previsão delas voltou: novembro e dezembro contavam R$ 150 mil a mais cada um.
+- **Agora:** basta a recorrência ter `previsao_chave` (mesma empresa, mesmo Tipo e competência a partir do trimestre em que ela nasceu). Pausada, encerrada ou excluída com títulos, a previsão continua fora. Só volta se a recorrência for apagada de vez, e isso só acontece com a que nunca gerou título.
+- **Conferido:** saíram 4 previsões, R$ 300 mil no total, e nada mais mudou.
+- **Na tela:** pausar não cancela o título que já nasceu.
+- **Migration:** `20261115800001`.
