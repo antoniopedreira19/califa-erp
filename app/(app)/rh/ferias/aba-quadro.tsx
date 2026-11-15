@@ -190,6 +190,11 @@ export async function AbaQuadro({ tenantId, filtroInicial }: Props) {
 
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
+  const limiteVencidoAntigoISO = (() => {
+    const d = new Date(hoje);
+    d.setDate(d.getDate() - DIAS_VENCIDA_RECENTE);
+    return d.toISOString().slice(0, 10);
+  })();
 
   const prioridade: Record<FeriasPeriodoStatus, number> = {
     vencido: 1,
@@ -202,11 +207,22 @@ export async function AbaQuadro({ tenantId, filtroInicial }: Props) {
   };
 
   const rows: QuadroColaboradorRow[] = colaboradores.map((c) => {
-    const periodosDoColab = (periodosPorColab.get(c.id) ?? []).sort((a, b) => {
-      const dp = prioridade[a.status] - prioridade[b.status];
-      if (dp !== 0) return dp;
-      return a.data_limite_gozo.localeCompare(b.data_limite_gozo);
-    });
+    // Excluir "vencidos antigos" (data_limite_gozo passou há mais de
+    // DIAS_VENCIDA_RECENTE). São aquisitivos onde a pessoa pulou alguns
+    // dias no passado mas voltou a tirar normalmente — ninguém vai
+    // regularizar 2 dias de 2017 agora, é só ruído histórico. Esses
+    // continuam aparecendo no histórico do colaborador em /rh/ferias/[id],
+    // só somem da linha "aquisitivo ativo" do Quadro.
+    const periodosDoColab = (periodosPorColab.get(c.id) ?? [])
+      .filter((p) => {
+        if (p.status !== "vencido") return true;
+        return p.data_limite_gozo >= limiteVencidoAntigoISO;
+      })
+      .sort((a, b) => {
+        const dp = prioridade[a.status] - prioridade[b.status];
+        if (dp !== 0) return dp;
+        return a.data_limite_gozo.localeCompare(b.data_limite_gozo);
+      });
 
     const ativo = periodosDoColab[0] ?? null;
 
