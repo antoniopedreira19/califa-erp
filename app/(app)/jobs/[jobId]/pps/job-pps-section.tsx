@@ -192,7 +192,7 @@ export interface EdicaoDaPPNaAba {
 
 /** "aguardando_prestacao" junta verba sem prestação e prestação reprovada:
  *  nos dois casos a próxima ação é da produção (decisão 081, 4a). */
-type Filtro = "todas" | PPStatus | "aguardando_prestacao" | "comite";
+type Filtro = "todas" | PPStatus | "aguardando_prestacao" | "pronta_para_envio" | "comite";
 
 /**
  * As colunas que filtram e ordenam pelo título, como no Excel (pedido do
@@ -220,9 +220,11 @@ interface LinhaPP {
 const CHIPS: Array<{ key: Filtro; label: string }> = [
   { key: "todas", label: "Todas" },
   { key: "comite", label: "Comitê" },
-  // Decisão 242: "Pronta para envio" é uma Gerada — sai dos filtros e
-  // fica só a marca na linha, embaixo do selo.
   { key: "gerada", label: "Gerada" },
+  // Decisão 242 (revisão de 15/11/2026): a Gerada que o produtor deixou
+  // pronta — documentos conferidos no pop-up do envio, falta só o GP
+  // enviar. Recorte dentro da Gerada, que segue contando as prontas.
+  { key: "pronta_para_envio", label: "Pronta para envio" },
   { key: "em_avaliacao", label: "Em avaliação" },
   { key: "pago", label: "Pago" },
   // Decisão 242: o nome da ação que a produção faz.
@@ -596,6 +598,7 @@ export function JobPPsSection({
     const aguardaProducao =
       verbaAguardaProducao(situacaoDaVerba(pp)) || midiaAguardaProducao(situacaoMidiaDaPP(pp, midiaSystem));
     if (f === "aguardando_prestacao") return aguardaProducao;
+    if (f === "pronta_para_envio") return prontaParaEnvio(pp);
     return pp.status === f;
   }
   const quantas = (f: Filtro) => linhasDaTabela.filter((pp) => passaNoFiltro(pp, f)).length;
@@ -2053,10 +2056,11 @@ function AcoesDoComite({ c, trava, pending, onCancelarEnvio, onEditar, onGerar, 
 
 
 /* ---- A barra de filtros (decisão 242) ----
- * Os filtros na ordem do caminho da PP — Comitê, Gerada, Em avaliação,
- * Pago — e depois os desvios: Prestar contas, Rejeitado, Cancelada.
- * Todo filtro com o número de PPs (a Pronta para envio é uma Gerada). */
-const FLUXO: Filtro[] = ["comite", "gerada", "em_avaliacao", "pago"];
+ * Os filtros na ordem do caminho da PP — Comitê, Gerada, Pronta para envio,
+ * Em avaliação, Pago — e depois os desvios: Prestar contas, Rejeitado, Cancelada.
+ * Todo filtro com o número de PPs. A Pronta para envio é um recorte da
+ * Gerada (a marca do produtor) e vem logo depois dela. */
+const FLUXO: Filtro[] = ["comite", "gerada", "pronta_para_envio", "em_avaliacao", "pago"];
 const DESVIOS: Filtro[] = ["aguardando_prestacao", "rejeitada", "cancelada"];
 
 interface ItemDoFiltro {

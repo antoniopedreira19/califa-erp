@@ -6721,7 +6721,7 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
   acompanha os filtros.
 - Filtros num controle só, na ordem do caminho da PP (Todas │ Comitê ›
   Gerada › Em avaliação › Pago │ Prestar contas · Rejeitado · Cancelada),
-  todos com o número; ← → trocam. "Pronta para envio" deixou de ser filtro
+  todos com o número; ← → trocam. "Pronta para envio" deixou de ser filtro (voltou em 15/11, nota abaixo)
   (a marca na linha ficou vermelha); "Aguardando prestação" virou "Prestar
   contas".
 - O cartão do painel do item diz "Em avaliação no Comitê" no lugar de
@@ -6781,3 +6781,11 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - A trava da PP ficou maior: e-mail e telefone sempre (PF e PJ), conta ou PIX quando o pagamento é "Cadastro do fornecedor", e regime e CNAE na PJ. Mesma mensagem e mesmo lápis da 166; a lista troca ao trocar o pagamento. Conferida em `gerarPPDaPPAEmitir` e em `editarPPGerada`.
 - A leitura da NF pela IA procura o CNPJ do emissor no cadastro quando ele não está entre os fornecedores da tela.
 - Testada no Sandbox (TES-1038/26, como GP): busca por nome e por CNPJ com pontuação, a mensagem da PF e da PJ, a conta saindo da lista com boleto, e o lápis completando o cadastro e liberando o "Gerar PP". Os dois fornecedores de teste ("FORNECEDOR 901/902 EXEMPLO") foram gravados no Sandbox como a carga grava (só nome e documento).
+
+## ⚠️ Nota de 2026-11-15 — "Pronta para envio" volta como filtro (revisão da decisão 242)
+
+- A aba PPs ganha de volta o filtro "Pronta para envio", logo depois da
+  Gerada: Comitê › Gerada › Pronta para envio › Em avaliação › Pago. Vale a
+  marca do produtor (`pronta_para_envio_em`, decisão 160). A Gerada segue
+  contando as prontas.
+
