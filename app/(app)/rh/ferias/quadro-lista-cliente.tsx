@@ -328,33 +328,6 @@ export function QuadroListaCliente({ rows, filtroInicial }: Props) {
             </SelectContent>
           </Select>
 
-          <Select
-            value={ordem}
-            onValueChange={(v) => setOrdem(v as OrdemKey)}
-          >
-            <SelectTrigger className="h-9 w-[170px] text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent
-              side="bottom"
-              avoidCollisions={false}
-              className="w-[--radix-select-trigger-width]"
-            >
-              <SelectItem value={ORDEM_ALFABETICA}>
-                <span className="inline-flex items-center gap-1.5">
-                  <ArrowUpAZ className="h-3.5 w-3.5" />
-                  Ordem alfabética
-                </span>
-              </SelectItem>
-              <SelectItem value={ORDEM_VENCIMENTO}>
-                <span className="inline-flex items-center gap-1.5">
-                  <Clock className="h-3.5 w-3.5" />
-                  Vencimento
-                </span>
-              </SelectItem>
-            </SelectContent>
-          </Select>
-
           {temFiltroAtivo && (
             <button
               type="button"
@@ -372,7 +345,7 @@ export function QuadroListaCliente({ rows, filtroInicial }: Props) {
           </span>
         </div>
 
-        <div className="flex flex-wrap gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           {CHIPS_SEMANA.map((f) => {
             const ativo = f.key === filtro;
             const count = contagens[f.key];
@@ -400,6 +373,33 @@ export function QuadroListaCliente({ rows, filtroInicial }: Props) {
               </button>
             );
           })}
+
+          <Select
+            value={ordem}
+            onValueChange={(v) => setOrdem(v as OrdemKey)}
+          >
+            <SelectTrigger className="ml-auto h-8 w-[140px] text-xs whitespace-nowrap">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent
+              side="bottom"
+              avoidCollisions={false}
+              className="w-[--radix-select-trigger-width]"
+            >
+              <SelectItem value={ORDEM_ALFABETICA}>
+                <span className="inline-flex items-center gap-1.5">
+                  <ArrowUpAZ className="h-3.5 w-3.5" />
+                  Alfabética
+                </span>
+              </SelectItem>
+              <SelectItem value={ORDEM_VENCIMENTO}>
+                <span className="inline-flex items-center gap-1.5">
+                  <Clock className="h-3.5 w-3.5" />
+                  Vencimento
+                </span>
+              </SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
