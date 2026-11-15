@@ -41,7 +41,11 @@ export function HistoricoColapsavel({ lancamentos }: Props) {
     return lancamentos.filter((l) => {
       const data = `${l.data_inicio} ${l.data_fim}`;
       const tipo = tipoLabel(l.tipo).toLowerCase();
-      const obs = (l.observacao ?? "").toLowerCase();
+      // Obs técnica de import não entra na busca — senão o RH digita
+      // "import" e aparece tudo.
+      const obs = isObsImport(l.observacao)
+        ? ""
+        : (l.observacao ?? "").toLowerCase();
       return (
         data.includes(termo) || tipo.includes(termo) || obs.includes(termo)
       );
@@ -138,7 +142,11 @@ function LinhaLancamento({ lanc: l }: { lanc: Lanc }) {
             )}
             {l.lancado_direto_por_rh && <> · lançado pelo RH</>}
           </p>
-          {l.observacao && (
+          {/* Observações técnicas de import ("[Import xxx]") são
+              rastreamento interno — não trazem valor pro usuário,
+              escondidas. Observações manuais (notas do RH, motivos
+              de reprovação) continuam aparecendo. */}
+          {l.observacao && !isObsImport(l.observacao) && (
             <p className="text-xs text-muted-foreground italic mt-1">
               &ldquo;{l.observacao}&rdquo;
             </p>
@@ -155,6 +163,16 @@ function LinhaLancamento({ lanc: l }: { lanc: Lanc }) {
       </div>
     </li>
   );
+}
+
+/**
+ * Detecta observação técnica de import (histórico FériasAtt, 21.22.23,
+ * FeriasPendencias, 15.18, ControleFerias). São rastros internos pro
+ * dev — o usuário não precisa ver.
+ */
+function isObsImport(obs: string | null): boolean {
+  if (!obs) return false;
+  return obs.trimStart().startsWith("[Import");
 }
 
 function tipoLabel(t: FeriasLancamentoTipo): string {
