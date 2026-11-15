@@ -67,26 +67,30 @@ export function LinhaQuadro({ row }: Props) {
         )}
       </div>
 
-      {/* Prazo (consolidado: data + situação) */}
+      {/* Prazo (consolidado: badge em cima, data+contagem embaixo).
+          Antes: "02/06/2027 em 199d · [Pode tirar]" — cérebro lia como
+          "em 199d pode tirar", ambíguo. Agora badge vem primeiro
+          (ação) e a linha debaixo clarifica com "vence em X dias". */}
       <div className="hidden md:block self-center">
         {row.periodoAtivo ? (
           <div className="flex flex-col gap-1">
-            <p className="text-sm leading-tight">
-              <span>{limiteFmt}</span>
-              <span
-                className={`text-xs ml-2 ${tomDiasAteLimite(row.periodoAtivo.diasAteLimite)}`}
-              >
-                {row.periodoAtivo.diasAteLimite > 0
-                  ? `em ${row.periodoAtivo.diasAteLimite}d`
-                  : `há ${-row.periodoAtivo.diasAteLimite}d`}
-              </span>
-            </p>
             <div>
               <BadgeSituacao
                 status={row.periodoAtivo.status}
                 diasAteLimite={row.periodoAtivo.diasAteLimite}
               />
             </div>
+            <p className="text-xs text-muted-foreground leading-tight">
+              <span
+                className={tomDiasAteLimite(row.periodoAtivo.diasAteLimite)}
+              >
+                {row.periodoAtivo.diasAteLimite > 0
+                  ? `Vence em ${row.periodoAtivo.diasAteLimite} dias`
+                  : `Venceu há ${-row.periodoAtivo.diasAteLimite} dias`}
+              </span>
+              <span className="mx-1">·</span>
+              <span>{limiteFmt}</span>
+            </p>
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">—</p>
