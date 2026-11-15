@@ -84,7 +84,11 @@ export async function AbaFluxo({ tenantId }: { tenantId: string }) {
     supabase
       .from("colaboradores_alocacoes")
       .select(
-        "colaborador_id, data_inicio, empresa:empresas(nome_fantasia), regional:regionais(nome)",
+        // Pedir empresa_id e regional_id junto com o embed é o padrão
+        // do /rh/ferias/[id] — sem eles, o PostgREST às vezes falha
+        // de resolver o embed em queries com .in() + muitos resultados,
+        // e retorna empresa/regional como null em silêncio.
+        "colaborador_id, empresa_id, regional_id, data_inicio, empresa:empresas(nome_fantasia), regional:regionais(nome)",
       )
       .eq("tenant_id", tenantId)
       .in("colaborador_id", colabIdsSeguro)
