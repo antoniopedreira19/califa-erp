@@ -5,6 +5,7 @@ import { buscarAlocacaoVigente } from "@/lib/alocacao/montar-snapshot";
 import type {
   Colaborador,
   ColaboradorAlocacao,
+  ColaboradorDocumento,
   ColaboradorFeriasPeriodo,
   ColaboradorSalario,
   Empresa,
@@ -73,6 +74,7 @@ export default async function ColaboradorDetalhePage({
     historico13Res,
     periodosFeriasRes,
     folhasRecentesRes,
+    documentosRes,
   ] = await Promise.all([
     supabase
       .from("colaboradores")
@@ -172,6 +174,13 @@ export default async function ColaboradorDetalhePage({
       .order("competencia_ano", { ascending: false })
       .order("competencia_mes", { ascending: false })
       .limit(16),
+    // Documentos pessoais anexados (perfil completo + wizard de boas-vindas).
+    supabase
+      .from("colaboradores_documentos")
+      .select("*")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("colaborador_id", params.id)
+      .order("uploaded_at", { ascending: false }),
   ]);
 
   if (!colabRes.data) {
@@ -503,7 +512,12 @@ export default async function ColaboradorDetalhePage({
             profileNome={profileNome}
           />
         }
-        documentos={<CardDocumentos tipoContratacao={colab.tipo_contratacao} />}
+        documentos={
+          <CardDocumentos
+            tipoContratacao={colab.tipo_contratacao}
+            documentos={(documentosRes.data ?? []) as ColaboradorDocumento[]}
+          />
+        }
         financeiro={
           <div className="grid gap-4">
             <CardSalarios

@@ -4,6 +4,7 @@ import { buscarAlocacaoVigente } from "@/lib/alocacao/montar-snapshot";
 import type {
   AlocacaoVigenteSnapshot,
   Colaborador,
+  ColaboradorDocumento,
   ColaboradorFeriasPeriodo,
   ColaboradorFeriasLancamento,
   Nivel,
@@ -121,6 +122,7 @@ export default async function PerfilPage() {
     membershipRes,
     resumoBeneficios,
     { data: linhasNfData },
+    { data: documentosData },
   ] = await Promise.all([
     ehSocio
       ? Promise.resolve({ data: [] })
@@ -159,6 +161,13 @@ export default async function PerfilPage() {
       .eq("colaborador_id", colab.id)
       .order("competencia_ano", { ascending: false })
       .order("competencia_mes", { ascending: false }),
+    // Documentos pessoais (wizard de boas-vindas + edição posterior).
+    supabase
+      .from("colaboradores_documentos")
+      .select("*")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("colaborador_id", colab.id)
+      .order("uploaded_at", { ascending: false }),
   ]);
 
   const linhasQuadro = (linhasNfData ?? []) as NfPendenteQuadro[];
@@ -241,7 +250,14 @@ export default async function PerfilPage() {
             nivel={colab.nivel}
           />
           <CardBeneficios resumo={resumoBeneficios} />
-          <CardDocumentos />
+          {colab.tipo_contratacao !== "socio" && (
+            <CardDocumentos
+              colaboradorId={colab.id}
+              tenantId={session.activeTenant.id}
+              tipoContratacao={colab.tipo_contratacao}
+              documentos={(documentosData ?? []) as ColaboradorDocumento[]}
+            />
+          )}
           {colab.tipo_contratacao !== "socio" && (
             <div className="rounded-2xl border border-border bg-white p-5 shadow-soft">
               <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-foreground mb-3">
