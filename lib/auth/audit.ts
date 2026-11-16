@@ -420,6 +420,11 @@ export type AuditAction =
   | "colaborador.nf_anexada"
   | "colaborador.nf_removida"
   | "colaborador.nf_baixada"
+  // Wizard de boas-vindas (perfil complementar, 2026-11-16)
+  | "perfil.rascunho_salvo"
+  | "perfil.completado"
+  | "perfil.documento_anexado"
+  | "perfil.documento_removido"
   // Rateio anual por regional (2026-09-23)
   | "rateio.regional.salvo"
   | "rateio.regional.copiado"
