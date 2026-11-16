@@ -2174,6 +2174,9 @@ function FormularioDeFaturar({
   // Decisão 256: o valor das deduções, como no emissor da NFS-e. Sugere o
   // custo AR (repasse) dos jobs da nota; quem fatura confirma ou ajusta.
   const pctDaNota = (v: number) => `${(v * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+  // O botão preenche o que cabe na nota: a dedução nunca passa do total.
+  const deducaoSugerida = centavos(Math.min(repasseSugerido, totalNf));
+  const deducaoLimitada = repasseSugerido > totalNf + 0.004 && totalNf > 0.004;
   const campoDeducoes = (
     <Campo
       rotulo="Valor das deduções (repasse)"
@@ -2190,16 +2193,16 @@ function FormularioDeFaturar({
               setErro(null);
             }}
           />
-          {repasseSugerido > 0.004 ? (
+          {deducaoSugerida > 0.004 ? (
             <button
               type="button"
               onClick={() => {
-                setDeducoes(centavos(Math.min(repasseSugerido, totalNf)));
+                setDeducoes(deducaoSugerida);
                 setErro(null);
               }}
               className="justify-self-start rounded-lg border border-border bg-white px-3 py-1.5 text-[12px] font-semibold text-foreground transition-colors hover:border-california-red hover:text-california-red"
             >
-              Usar {formatMoney(repasseSugerido)}
+              Usar {formatMoney(deducaoSugerida)}
             </button>
           ) : jobsDaNota.length > 0 && !(avulso && !adicional) ? (
             <span className="text-[12px] text-muted-foreground">
@@ -2216,6 +2219,13 @@ function FormularioDeFaturar({
             previstos) = <strong className="font-semibold text-foreground">{formatMoney(x.sugerido)}</strong>
           </p>
         ))}
+        {/* O custo AR maior que o faturamento (dado de planilha fora do
+            comum) daria dedução acima da nota, que o servidor recusa. */}
+        {deducaoLimitada && (
+          <p className="text-[11.5px] leading-snug text-amber-800">
+            Limitado ao valor desta nota ({formatMoney(totalNf)}): a dedução não passa do total.
+          </p>
+        )}
       </div>
     </Campo>
   );
