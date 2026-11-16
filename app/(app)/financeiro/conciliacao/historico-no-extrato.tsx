@@ -165,6 +165,15 @@ function Linha({ l }: { l: LinhaDoHistorico }) {
       <td className="whitespace-nowrap px-3 py-2 text-right font-mono text-xs font-semibold">{dinheiro(l.saldo)}</td>
       <td className="px-3 py-2 text-xs">
         <span className="break-words">{l.descricao ?? <span className="text-muted-foreground">—</span>}</span>
+        {/* Decisão 261: a PP paga antes de a conta começar no sistema, baixada por esta linha. */}
+        {l.pp && (
+          <span
+            className="ml-1.5 inline-flex whitespace-nowrap rounded bg-muted px-1.5 py-px font-mono text-[10px] text-foreground"
+            title={`Baixa da ${l.pp.codigo} no sistema, nesta data e nesta conta`}
+          >
+            {l.pp.codigo}
+          </span>
+        )}
       </td>
       <td className="px-3 py-2 text-xs">
         <span className="block truncate" title={l.fornecedor ?? undefined}>

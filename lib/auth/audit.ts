@@ -289,6 +289,9 @@ export type AuditAction =
   // Tela 3.2 — a baixa passou a ser da PARCELA, e a data de pagamento do
   // título virou repactuável.
   | "pedido_compra.parcela_paga"
+  // Decisão 261: a parcela paga antes de a conta começar no sistema, baixada
+  // pela linha do histórico da planilha, na data e na conta dela.
+  | "pedido_compra.parcela_paga_pelo_historico"
   // 18/08/2026: o estorno acompanhou a baixa e também virou por parcela.
   // `pedido_compra.baixa_estornada` (mais abaixo) é o registro histórico
   // do estorno da PP inteira, que existiu até aqui.

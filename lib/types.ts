@@ -4133,6 +4133,12 @@ export interface HistoricoMovimento {
   aba: string;
   linha: number;
   digital: string;
+  /**
+   * Decisão 261: a baixa do sistema que esta linha registra — a PP paga
+   * antes de a conta começar no sistema (`baixar_parcela_pp_pelo_historico`).
+   * Cancelar a baixa desliga.
+   */
+  lancamento_id: string | null;
   created_at: string;
 }
 
