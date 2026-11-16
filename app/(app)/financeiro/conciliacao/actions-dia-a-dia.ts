@@ -302,3 +302,125 @@ export async function retirarExtrato(entrada: {
     }. Dá para importar o mesmo arquivo de novo.`,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Decisão 262 (parte 1): o acerto guardado no banco, o centro de custo trocado
+// na linha e o valor do título corrigido pela linha.
+// ---------------------------------------------------------------------------
+
+const ITEM = z.string().regex(/^[tlh]:.+/).max(300);
+const AJUSTE = z.enum(["juros", "retencao", "parcial", "correcao", "valor"]);
+
+/** Guarda o acerto da linha (sem itens nem caso especial, tira). Rascunho: não revalida a página. */
+export async function salvarAcertoDaLinha(entrada: {
+  linhaId: string;
+  itens: string[];
+  ajuste: string | null;
+  especial: { k: string; texto: string } | null;
+}): Promise<Resultado> {
+  if (!UUID.safeParse(entrada.linhaId).success || !z.array(ITEM).max(200).safeParse(entrada.itens).success) {
+    return { ok: false, message: "Entrada inválida." };
+  }
+  if (entrada.ajuste !== null && !AJUSTE.safeParse(entrada.ajuste).success) return { ok: false, message: "Entrada inválida." };
+  const g = await gate();
+  if (!g.ok) return g;
+  const { error } = await g.supabase.rpc("salvar_acerto_da_linha", {
+    p_linha_id: entrada.linhaId,
+    p_itens: entrada.itens,
+    p_ajuste: entrada.ajuste,
+    p_especial: entrada.especial ? { k: String(entrada.especial.k).slice(0, 20), texto: String(entrada.especial.texto).slice(0, 500) } : null,
+  });
+  if (error) {
+    console.error("[conciliacao.salvar_acerto]", error.message);
+    return { ok: false, message: mensagemDoBanco(error.message, "Não foi possível guardar o acerto da linha.") };
+  }
+  return { ok: true };
+}
+
+/** Guarda o centro de custo escolhido para um lançamento (tipo nulo tira). Rascunho: não revalida a página. */
+export async function salvarCentroDaConciliacao(entrada: {
+  contaId: string;
+  item: string;
+  tipoId: string | null;
+  subtipoId: string | null;
+}): Promise<Resultado> {
+  if (
+    !UUID.safeParse(entrada.contaId).success ||
+    !ITEM.safeParse(entrada.item).success ||
+    (entrada.tipoId !== null && !UUID.safeParse(entrada.tipoId).success) ||
+    (entrada.subtipoId !== null && !UUID.safeParse(entrada.subtipoId).success)
+  ) {
+    return { ok: false, message: "Entrada inválida." };
+  }
+  const g = await gate();
+  if (!g.ok) return g;
+  const { error } = await g.supabase.rpc("salvar_centro_da_conciliacao", {
+    p_conta_id: entrada.contaId,
+    p_item: entrada.item,
+    p_tipo_id: entrada.tipoId,
+    p_subtipo_id: entrada.subtipoId,
+  });
+  if (error) {
+    console.error("[conciliacao.salvar_centro]", error.message);
+    return { ok: false, message: mensagemDoBanco(error.message, "Não foi possível guardar o centro de custo.") };
+  }
+  return { ok: true };
+}
+
+/** O centro de custo escolhido na linha para uma baixa já feita: gravado antes de conciliar a linha. */
+export async function trocarCentroDosLancamentos(lancamentoIds: string[], tipoId: string, subtipoId: string): Promise<Resultado> {
+  if (!z.array(UUID).min(1).max(100).safeParse(lancamentoIds).success || !UUID.safeParse(tipoId).success || !UUID.safeParse(subtipoId).success) {
+    return { ok: false, message: "Entrada inválida." };
+  }
+  const g = await gate();
+  if (!g.ok) return g;
+  const { error } = await g.supabase.rpc("trocar_centro_dos_lancamentos", { p_lancamento_ids: lancamentoIds, p_tipo_id: tipoId, p_subtipo_id: subtipoId });
+  if (error) {
+    console.error("[conciliacao.trocar_centro_dos_lancamentos]", error.message);
+    return { ok: false, message: mensagemDoBanco(error.message, "Não foi possível trocar o centro de custo da baixa.") };
+  }
+  return { ok: true };
+}
+
+/** O centro de custo escolhido na linha para uma linha da planilha: gravado antes de conciliar a linha. */
+export async function trocarCentroDasPrevisoes(movimentoIds: string[], tipoId: string, subtipoId: string): Promise<Resultado> {
+  if (!z.array(UUID).min(1).max(100).safeParse(movimentoIds).success || !UUID.safeParse(tipoId).success || !UUID.safeParse(subtipoId).success) {
+    return { ok: false, message: "Entrada inválida." };
+  }
+  const g = await gate();
+  if (!g.ok) return g;
+  const { error } = await g.supabase.rpc("trocar_centro_das_previsoes", { p_movimento_ids: movimentoIds, p_tipo_id: tipoId, p_subtipo_id: subtipoId });
+  if (error) {
+    console.error("[conciliacao.trocar_centro_das_previsoes]", error.message);
+    return { ok: false, message: mensagemDoBanco(error.message, "Não foi possível trocar o centro de custo da linha da planilha.") };
+  }
+  return { ok: true };
+}
+
+/**
+ * "Corrigir o valor do título" (o custo fixo com valor estimado): o título
+ * avulso passa ao valor que o banco pagou e sai a baixa pela linha. Se a
+ * baixa falhar, o valor corrigido fica (é o valor certo) e a linha volta a
+ * pedir a conciliação.
+ */
+export async function corrigirValorDoTituloEBaixar(entrada: { linhaId: string; itens: ItensDaBaixa }): Promise<Resultado> {
+  if (!UUID.safeParse(entrada.linhaId).success || !Array.isArray(entrada.itens) || entrada.itens.length !== 1) {
+    return { ok: false, message: "Entrada inválida." };
+  }
+  const item = entrada.itens[0];
+  if (item.alvo.modulo !== "pagar" || (item.alvo.origem !== "avulso" && item.alvo.origem !== "recorrencia")) {
+    return { ok: false, message: "Só o título avulso (ou de recorrência) corrige o valor pela linha." };
+  }
+  const g = await gate();
+  if (!g.ok) return g;
+  const { data, error } = await g.supabase.rpc("corrigir_valor_do_titulo_pela_linha", { p_linha_id: entrada.linhaId, p_conta_avulsa_id: item.alvo.id });
+  if (error) {
+    console.error("[conciliacao.corrigir_valor_do_titulo]", error.message);
+    return { ok: false, message: mensagemDoBanco(error.message, "Não foi possível corrigir o valor do título.") };
+  }
+  const r = data as { de: number; para: number };
+  const baixa = await baixarEConciliar({ linhaId: entrada.linhaId, itens: [{ ...item, aberto: Number(r.para) }] });
+  if (!baixa.ok) return { ok: false, message: `O título passou a ${Number(r.para).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}, mas a baixa não saiu: ${baixa.message}` };
+  revalidar();
+  return { ok: true, mensagem: `O título passou de ${Number(r.de).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} para ${Number(r.para).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}, com a baixa e a conciliação.` };
+}

@@ -40,6 +40,8 @@ export interface HistoricoDoMotor {
    *  Tipo: CO, CF…), para as colunas da fila (decisão 243). */
   regional?: string | null;
   grupo?: string | null;
+  /** Decisão 262: o subtipo do plano de contas da linha, para a coluna Subtipo da conciliação. */
+  subtipo?: string | null;
   /** Só na previsão com a data ajustada pela conciliação (decisão 254): a
    *  data que a planilha tem. Quem lê do banco manda sempre (nulo, sem ajuste). */
   dataDaPlanilha?: string | null;

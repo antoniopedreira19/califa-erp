@@ -276,7 +276,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 259 | [Pagamentos atrasados em job encerrado ou finalizado: o financeiro libera, a produção lança e a planilha volta a travar](259-pagamentos-atrasados-em-job-encerrado.md) | 2026-11-16 |
 | 260 | [O Faturar "em pé", a lista do Faturamento pela situação e o recebimento antes da NF no Recebimento avulso](260-faturar-em-pe-e-lista-do-faturamento.md) | 2026-11-16 |
 | 261 | [A baixa de PP paga antes de a conta começar no sistema, pela linha do histórico](261-baixa-de-pp-paga-antes-de-a-conta-comecar.md) | 2026-11-16 |
-| 262 | *Reservada* (a conciliação: acertar e conciliar, em outra sessão) | — |
+| 262 | [Conciliação automática: acertar a linha e conciliar no fim, centro de custo na linha e fechamento por mês](262-conciliacao-acertar-e-conciliar.md) | 2026-11-16 |
 | 263 | [O envio em lote parecido com o envio de um job: cada nota num cartão, os jobs marcados na própria nota](263-envio-em-lote-como-o-envio-de-um-job.md) | 2026-11-16 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
