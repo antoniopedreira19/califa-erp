@@ -53,7 +53,7 @@ function derivarStatusAdiantamento(
   tem_nf: boolean,
   tipo_contratacao: string,
 ): { label: string; variant: "legado" | "aguardando_nf" | "aguardando_aprovacao" | "aprovado" | "pago" } {
-  if (!folha_status) return { label: "Pré-fluxo (legado)", variant: "legado" };
+  if (!folha_status) return { label: "Antigo", variant: "legado" };
   if (folha_status === "paga") return { label: "Pago", variant: "pago" };
   if (folha_status === "aprovada") return { label: "Aprovado — a pagar", variant: "aprovado" };
   // status === 'enviada' (ou 'pendente_correcao' tratado como enviada)
