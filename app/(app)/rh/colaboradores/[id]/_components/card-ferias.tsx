@@ -55,10 +55,6 @@ const STATUS_STYLE: Record<
 };
 
 const STATUS_ATIVOS: FeriasPeriodoStatus[] = ["apto", "em_alerta", "vencido"];
-const STATUS_HISTORICO: FeriasPeriodoStatus[] = [
-  "regularizado",
-  "pago_rescisao",
-];
 
 interface Props {
   colaboradorId: string;
@@ -74,11 +70,6 @@ export function CardFerias({
   const ativos = periodos
     .filter((p) => STATUS_ATIVOS.includes(p.status))
     .sort((a, b) => a.numero - b.numero);
-  const historicos = periodos
-    .filter((p) => STATUS_HISTORICO.includes(p.status))
-    .sort((a, b) => b.numero - a.numero);
-
-  const temAlgumaCoisa = ativos.length > 0 || historicos.length > 0;
 
   return (
     <div className="rounded-2xl border border-border bg-white p-5 shadow-soft">
@@ -100,7 +91,7 @@ export function CardFerias({
         </Link>
       </div>
 
-      {!temAlgumaCoisa ? (
+      {ativos.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           Nenhum período aquisitivo ativo. Novos períodos aparecem quando o
           colaborador completa 1 ano de admissão.
@@ -119,26 +110,11 @@ export function CardFerias({
             </span>
           </div>
 
-          {ativos.length > 0 && (
-            <ul className="space-y-2 mb-4">
-              {ativos.map((p) => (
-                <AquisitivoAtivo key={p.id} periodo={p} />
-              ))}
-            </ul>
-          )}
-
-          {historicos.length > 0 && (
-            <div>
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
-                Histórico
-              </p>
-              <ul className="space-y-1.5">
-                {historicos.map((p) => (
-                  <AquisitivoHistorico key={p.id} periodo={p} />
-                ))}
-              </ul>
-            </div>
-          )}
+          <ul className="space-y-2">
+            {ativos.map((p) => (
+              <AquisitivoAtivo key={p.id} periodo={p} />
+            ))}
+          </ul>
         </>
       )}
     </div>
@@ -205,31 +181,3 @@ function AquisitivoAtivo({ periodo: p }: { periodo: FeriasPeriodoResumo }) {
   );
 }
 
-function AquisitivoHistorico({
-  periodo: p,
-}: {
-  periodo: FeriasPeriodoResumo;
-}) {
-  const style = STATUS_STYLE[p.status];
-  return (
-    <li className="flex items-center justify-between gap-3 rounded-lg bg-muted/30 px-3 py-1.5">
-      <div className="min-w-0 flex items-baseline gap-2 flex-wrap">
-        <span className="text-xs font-medium text-foreground">
-          Aquisitivo #{p.numero}
-        </span>
-        <span className="text-[11px] text-muted-foreground tabular-nums">
-          {formatDate(p.aquisitivo_inicio)} → {formatDate(p.aquisitivo_fim)}
-        </span>
-      </div>
-      <span
-        className={cn(
-          "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold shrink-0",
-          style.chip,
-        )}
-      >
-        <span className={cn("h-1.5 w-1.5 rounded-full", style.dot)} />
-        {style.label}
-      </span>
-    </li>
-  );
-}
