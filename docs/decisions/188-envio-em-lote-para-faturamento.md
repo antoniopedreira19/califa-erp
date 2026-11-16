@@ -3,7 +3,10 @@
 **Data:** 2026-10-19
 **Status:** aceita. **Entregas 1, 2 e 3 implementadas em 19/10/2026** (o
 envio pela lista de Jobs; a nota do lote na fila do financeiro e no Faturar;
-"Repetir" e "Copiar de um envio anterior", §6a).
+"Repetir" e "Copiar de um envio anterior", §6a). **Revista pela
+[263](263-envio-em-lote-como-o-envio-de-um-job.md) em 16/11/2026**: o pop-up
+ficou parecido com o envio de um job, e o vencimento, as parcelas e o CNAE
+passaram a ser de cada nota (regras 2, 3 e 5 e §2).
 **Quem decidiu:** Tiago, de 16 a 19/10/2026, sobre o protótipo interativo
 ("Envio em Lote", quatro versões comentadas no próprio protótipo) e o e-mail
 real do faturamento do Fee Ânima.
@@ -46,21 +49,23 @@ passa a existir.
    regional continuam as de cada job; a contábil é a do CNPJ que emite a nota,
    escolhido pelo financeiro no Faturar. Como o lote não mistura empresas, a
    regra da 184 (a nota sai na empresa do job) segue valendo.
-2. **As notas são as que o cliente pediu.** Cada uma tem tomador, CNPJ (ou
-   "exterior", 184), valor e descritivo. Uma nota pode juntar jobs; um job
+2. **As notas são as que o cliente pediu.** Cada uma tem CNPJ (ou
+   "exterior", 184), valor e descritivo — e, desde a 263, vencimento,
+   parcelas e CNAE; o nome do tomador saiu da tela. Uma nota pode juntar jobs; um job
    pode ser dividido entre notas.
 3. **Rateio** de cada nota:
    - **Proporcional** (padrão): a nota se divide entre os jobs na proporção do
      que falta de cada um. Fecha sozinho, no centavo, quando as notas somam o
-     valor dos jobs;
+     valor dos jobs. Desde a 263, pode ser de **alguns jobs** (os marcados na
+     nota), na mesma proporção entre eles;
    - **Só o job X**: a nota é toda daquele job;
    - **Dividir à mão**: quem envia escreve quanto vai para cada job.
 4. **O valor de cada job não é editável**: é o faturamento previsto, ou o do
    mês no Fee e no Always On, relido no servidor como no envio de um job só.
-5. **Vale para todas as notas:** o vencimento, o número de parcelas (1 a 3,
-   de 30 em 30 dias; cada parcela leva os jobs na proporção deles na nota), o
-   CNAE sugerido e o portal do cliente (com o "+" para cadastrar um novo, 050).
-   **Por job:** o número da PO.
+5. **Por nota (desde a 263):** o vencimento, as parcelas (atalhos 1×, 2×,
+   3×, 6×, "Nova parcela" e a lixeira; cada parcela leva os jobs na proporção
+   deles na nota) e o CNAE sugerido. **Vale para todas as notas:** o portal do
+   cliente (com o "+" para cadastrar um novo, 050). **Por job:** o número da PO.
 6. **Observação** opcional para o financeiro (pedido do Tiago em 19/10): vai
    com o envio e não sai na nota.
 7. **Contatos de cobrança:** a união dos contatos dos jobs; a lista revista no
@@ -73,6 +78,12 @@ passa a existir.
     aguardando ou nunca enviado, revisão da abertura, errata pronta parada,
     "já enviado" e o autor (administrador ou GP). O job que não passa fica
     fora do lote, com o motivo, e os outros seguem.
+
+> ⚠️ **Revisão de 2026-11-16 (decisão 263).** A regra 5 dizia que o
+> vencimento, o número de parcelas (1 a 3) e o CNAE valiam para todas as
+> notas. Passaram a ser de cada nota, como no envio de um job, e a nota
+> proporcional pode ser de alguns jobs (regra 3). As regras acima já estão
+> corrigidas; o porquê está na 263.
 
 ## 2. A tela (design aprovado em 19/10/2026)
 
@@ -99,6 +110,16 @@ Saíram durante o desenho, a pedido do Tiago: o "Colar do e-mail do cliente"
 (cada GP e cada cliente escreve de um jeito; só voltaria com leitura por IA,
 o mesmo caminho da 178 opção A) e a aba da matriz nota × job (o rateio já se
 faz e se vê na linha da nota).
+
+> ⚠️ **Revisão de 2026-11-16 (decisão 263).** O pop-up descrito acima foi
+> refeito: abre já com a nota 1; cada nota é o cartão do envio de um job
+> (CNPJ, valor, vencimento, CNAE, parcelas e descritivo), com os jobs da
+> nota no pé do cartão (caixa de marcar, porcentagem e valor; "Dividir à
+> mão" com valor e porcentagem); só a nota em edição fica aberta; à direita,
+> o valor a faturar com a porcentagem de cada job, sem barras nem cores, e a
+> PO de cada job. Os cartões coloridos dos jobs, a tabela de notas, o campo
+> do tomador e os atalhos "Uma nota para todos os jobs" / "Uma nota por job"
+> saíram.
 
 ## 3. No banco
 

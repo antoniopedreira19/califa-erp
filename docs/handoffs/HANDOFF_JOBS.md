@@ -5839,6 +5839,7 @@ protótipo. Regra completa na decisão 188.
   quem ficou fora com o motivo. Cartões dos jobs com a barra do que já está
   nas notas; tabela das notas com o "Rateio" (Proporcional · Só o job · Dividir
   à mão); vencimento, parcelas, CNAE e portal comuns; observação; contatos.
+  (Refeito pela decisão 263 em 16/11/2026: ver a nota no fim.)
 - **Envio** (`actions-envio-lote.ts` → `enviar_lote_para_faturamento`): confere
   cada job de novo com a mesma régua da página do job
   (`lib/faturamento/conferir-envio-do-job.ts`), refaz o rateio com os valores
@@ -6820,3 +6821,13 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - **Painel do item ("Já no financeiro"):** "Cancelar PP" habilitado na rejeitada para o produtor; na em avaliação, apagado com "PP em avaliação no financeiro: só o GP cancela." O pop-up de cancelar a rejeitada diz que ela ainda conta no realizado. "Editar e Reemitir PP" aparece para quem gera PP; a PP nova sai como PP a emitir, o produtor gera e usa o "Deixar pronta para envio" (decisão 160).
 - **Aba PPs e gaveta "Ver formulário":** o mesmo cancelar; o ícone de reemitir segue `editable` (gerar PP) em vez de `podeEnviar`.
 - **Código:** `cancelaPPNoPapel` em `lib/permissoes.ts` (com teste); `cancelarPedidoCompra` e `cancelarERefazerPP` em `realizado/actions-pp.ts`. Sem migration.
+
+## ⚠️ Nota de 2026-11-16 — o envio em lote parecido com o envio de um job (decisão 263)
+
+- **Pop-up** (`envio-em-lote-dialog.tsx`): abre já com a nota 1 (CNPJ do cliente, valor dos jobs, vencimento sugerido). Cada nota é o cartão do envio de um job: CNPJ (ou exterior), valor, vencimento, CNAE, atalhos 1×/2×/3×/6× com "Nova parcela" e lixeira, e descritivo de uma linha que cresce no foco. O campo do tomador saiu.
+- **Jobs da nota:** no pé do cartão, caixa de marcar, porcentagem e valor de cada job; até 4 jobs numa linha. Desmarcar tira o job ("fora desta nota"); um só marcado leva a nota inteira; alguns marcados dividem a nota entre eles, na proporção do que falta de cada um (regra nova). "Dividir à mão" abre valor e porcentagem na mesma linha.
+- **Muitas notas:** só a nota em edição fica aberta; as outras viram uma linha com o que falta. O título conta as notas e as pendências; "Adicionar nota fiscal" também embaixo.
+- **À direita:** valor a faturar com a porcentagem de cada job e o que falta dele, sem barras nem cores; a PO de cada job; portal, observação e contatos. Largura 1.280 px.
+- **Envio:** o vencimento, as parcelas e o CNAE vão por nota (`actions-envio-lote.ts`, `envio-faturamento-lote.ts`); a nota de alguns jobs leva `jobs_da_nota` e entra na conta de `ratearNotas` (5 testes novos). Sem migration.
+- **Testado** no Sandbox: TET-1006, TET-1007 e TET-1008/26 (Teste 22) enviados em 3 notas — uma de dois jobs em 2 parcelas com CNAE, uma dividida à mão pela porcentagem e uma com os três.
+- **Fica de fora:** a cópia de um envio anterior traz a nota de alguns jobs como nota de todos; 5 jobs ou mais em duas linhas não foi visto na tela.

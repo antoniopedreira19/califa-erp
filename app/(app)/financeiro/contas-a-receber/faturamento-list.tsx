@@ -188,8 +188,9 @@ export interface NotaDoLote {
   ordem: number;
   total: number;
   /** Para quem a nota sai, como a produção escreveu (a instituição do
-   *  e-mail do cliente). */
-  tomador_nome: string;
+   *  e-mail do cliente). Nulo desde a decisão 263 quando a nota sai para
+   *  um CNPJ que não é o do cliente: o envio só pede o CNPJ. */
+  tomador_nome: string | null;
   /** O valor da nota pedida, somadas as partes dos jobs. */
   valor: number;
   /** A observação do envio para o financeiro. Não sai na nota. */

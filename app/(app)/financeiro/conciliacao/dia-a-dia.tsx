@@ -27,6 +27,20 @@ import { fecharConciliacao } from "./actions-fechamento";
 import { repactuarDataPagamento } from "../contas-a-pagar/actions-titulos";
 import { repactuarPrevisaoRecebimento } from "../contas-a-receber/actions";
 
+/** Os créditos e os débitos de um lado (banco ou sistema) — decisão 262. */
+export interface CreditosEDebitos {
+  creditos: number;
+  debitos: number;
+}
+export interface TotaisDoDia {
+  banco: CreditosEDebitos;
+  sistema: CreditosEDebitos;
+}
+const separar = (vs: number[]): CreditosEDebitos => ({
+  creditos: r2(vs.filter((v) => v > 0).reduce((s, v) => s + v, 0)),
+  debitos: r2(vs.filter((v) => v < 0).reduce((s, v) => s + v, 0)),
+});
+
 const moeda = formatBRL;
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const ddmm = (iso: string | null | undefined) => (iso ? `${iso.slice(8, 10)}/${iso.slice(5, 7)}` : "—");
@@ -67,9 +81,11 @@ export function ConciliacaoDiaADia(p: PropsDaFila) {
   // ---- O resumo do dia ----
   const linhasDoDia = resultados.filter((r) => !dia || r.mov.data === dia);
   const semLinhaDoDia = doSistema.filter((c) => !c.daLinha && c.k === "baixa" && (!dia || c.data === dia));
-  const noBanco = r2(linhasDoDia.filter((r) => r.resolvido?.estado !== "ignorado").reduce((s, r) => s + r.mov.valor, 0));
-  const noSistema = r2(linhasDoDia.filter((r) => r.resolvido?.estado === "conciliado").reduce((s, r) => s + r.mov.valor, 0) + semLinhaDoDia.reduce((s, c) => s + c.valor, 0));
-  const diferenca = r2(noBanco - noSistema);
+  // Decisão 262: os créditos e os débitos do banco e do sistema, separados, com a diferença de cada um.
+  const totais: TotaisDoDia = {
+    banco: separar(linhasDoDia.filter((r) => r.resolvido?.estado !== "ignorado").map((r) => r.mov.valor)),
+    sistema: separar([...linhasDoDia.filter((r) => r.resolvido?.estado === "conciliado").map((r) => r.mov.valor), ...semLinhaDoDia.map((c) => c.valor)]),
+  };
   const resolvidas = linhasDoDia.filter((r) => r.resolvido).length;
 
   const fecharDia = (data: string) => {
@@ -141,14 +157,7 @@ export function ConciliacaoDiaADia(p: PropsDaFila) {
           <span className="text-[11px] uppercase tracking-wider text-muted-foreground">{dia ? "Dia" : "Período"}</span>
           <span className="text-base font-semibold">{dia ? `${diaDaSemana(dia)}, ${ddmm(dia)}` : "Todos os dias em aberto"}</span>
         </div>
-        <Bloco rotulo="No banco" valor={comSinal(noBanco)} dica="A soma das linhas do banco neste dia." />
-        <Bloco rotulo="No sistema" valor={comSinal(noSistema)} dica="A soma do que o sistema tem neste dia: o que já foi conciliado e as baixas ainda sem linha." />
-        <Bloco
-          rotulo="Diferença"
-          valor={diferenca === 0 ? "Bate ✓" : moeda(Math.abs(diferenca))}
-          cor={diferenca === 0 ? "text-emerald-700" : "text-california-red"}
-          dica="Some quando cada linha do banco do dia tiver o seu lançamento, e cada baixa do dia a sua linha."
-        />
+        <QuadroDosTotais totais={totais} />
         <div className="flex min-w-[190px] flex-col gap-1.5">
           <span className="text-xs font-semibold">
             <span className="font-mono">{resolvidas}</span> de <span className="font-mono">{linhasDoDia.length}</span> linhas conciliadas
@@ -209,17 +218,6 @@ export function ConciliacaoDiaADia(p: PropsDaFila) {
 // Peças
 // ---------------------------------------------------------------------------
 
-function Bloco({ rotulo, valor, cor, dica }: { rotulo: string; valor: string; cor?: string; dica: string }) {
-  return (
-    <div className="flex min-w-0 flex-col">
-      <span className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider text-muted-foreground">
-        {rotulo}
-        <InfoDica texto={dica} />
-      </span>
-      <span className={cn("font-mono text-base font-semibold", cor)}>{valor}</span>
-    </div>
-  );
-}
 
 /** A barra de dias: um dia por vez, em ordem; o cadeado no lugar do número quando o dia não tem mais pendências. */
 function BarraDeDias({
@@ -397,5 +395,70 @@ function RetirarOExtrato({ previa, ocupado, onFechar, onConfirmar }: { previa: P
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/** Os créditos e os débitos do dia, do banco e do sistema, com a diferença de cada um. */
+function QuadroDosTotais({ totais }: { totais: TotaisDoDia }) {
+  const { banco, sistema } = totais;
+  const dif = (a: number, b: number) => {
+    const d = r2(a - b);
+    return Math.round(d * 100) === 0 ? <span className="text-emerald-700">Bate ✓</span> : <span className="text-california-red">{moeda(Math.abs(d))}</span>;
+  };
+  const cab = "px-3 pb-1 text-right text-[11px] font-normal uppercase tracking-wider text-muted-foreground";
+  const rot = "py-0.5 pr-3 text-left text-[11px] uppercase tracking-wider text-muted-foreground";
+  const val = "px-3 py-0.5 text-right font-mono text-sm font-semibold whitespace-nowrap";
+  return (
+    <table className="table-fixed border-separate border-spacing-0">
+      <colgroup>
+        <col style={{ width: 118 }} />
+        <col style={{ width: 168 }} />
+        <col style={{ width: 168 }} />
+        <col style={{ width: 168 }} />
+      </colgroup>
+      <thead>
+        <tr>
+          <th />
+          <th className={cab}>Créditos</th>
+          <th className={cab}>Débitos</th>
+          <th className={cab}>Líquido</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <th className={rot}>
+            <span className="inline-flex items-center gap-1">
+              No banco
+              <InfoDica texto="As linhas do banco do dia (a ignorada fica de fora): o que entrou, o que saiu e o líquido." />
+            </span>
+          </th>
+          <td className={cn(val, "text-emerald-700")}>{comSinal(banco.creditos)}</td>
+          <td className={cn(val, "text-california-red")}>{comSinal(banco.debitos)}</td>
+          <td className={val}>{comSinal(r2(banco.creditos + banco.debitos))}</td>
+        </tr>
+        <tr>
+          <th className={rot}>
+            <span className="inline-flex items-center gap-1">
+              No sistema
+              <InfoDica texto="O que o sistema tem neste dia: o que já foi conciliado e as baixas ainda sem linha no banco. A linha acertada entra quando for conciliada." />
+            </span>
+          </th>
+          <td className={cn(val, "text-emerald-700")}>{comSinal(sistema.creditos)}</td>
+          <td className={cn(val, "text-california-red")}>{comSinal(sistema.debitos)}</td>
+          <td className={val}>{comSinal(r2(sistema.creditos + sistema.debitos))}</td>
+        </tr>
+        <tr>
+          <th className={cn(rot, "border-t border-border pt-1")}>
+            <span className="inline-flex items-center gap-1">
+              Diferença
+              <InfoDica texto="Some quando cada linha do banco do dia tiver o seu lançamento, e cada baixa do dia a sua linha." />
+            </span>
+          </th>
+          <td className={cn(val, "border-t border-border pt-1")}>{dif(banco.creditos, sistema.creditos)}</td>
+          <td className={cn(val, "border-t border-border pt-1")}>{dif(banco.debitos, sistema.debitos)}</td>
+          <td className={cn(val, "border-t border-border pt-1")}>{dif(banco.creditos + banco.debitos, sistema.creditos + sistema.debitos)}</td>
+        </tr>
+      </tbody>
+    </table>
   );
 }

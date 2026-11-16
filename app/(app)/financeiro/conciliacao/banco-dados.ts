@@ -200,7 +200,11 @@ export interface DadosDaAbaBanco {
   /** Decisão 243: de cada baixa da fila (as sem linha e as ligadas), o
    *  fornecedor, o job e a regional como o Extrato mostra — a mesma leitura
    *  (`montarLinhasDeLancamentos`), então as duas abas nunca divergem. */
-  extratoPorLancamento: Record<string, { fornecedor: string | null; job: { codigo: string; nome: string } | null; jobs: number; reg: string | null; tipo: string | null; tri: string | null }>;
+  extratoPorLancamento: Record<string, { fornecedor: string | null; job: { codigo: string; nome: string } | null; jobs: number; reg: string | null; tipo: string | null; tri: string | null; /** Decisão 262: a coluna Subtipo da conciliação. */ subtipo: string | null }>;
+  /** Decisão 262: o acerto guardado de cada linha do banco ainda sem conciliação. */
+  acertos: Record<string, { itens: string[]; ajuste: "juros" | "retencao" | "parcial" | "correcao" | "valor" | null; especial: { k: "regra" | "par" | "mutuo"; texto: string } | null }>;
+  /** Decisão 262: o centro de custo escolhido na tela para um lançamento (chave da tela: "t:", "l:", "h:"). */
+  centros: Record<string, { tipoId: string; subtipoId: string | null }>;
 }
 
 /** `.in()` com muitos ids estoura o tamanho do endereço da consulta: com
@@ -250,6 +254,8 @@ async function comoNoExtrato(supabase: Supabase, tenantId: string, ids: string[]
             ? String((l as { outra_conta?: string | null }).outra_conta).toUpperCase()
             : l.tipo_codigo || null,
       tri: l.tri_do_tipo ?? null,
+      // Decisão 262: a coluna Subtipo (centro de custo) da conciliação.
+      subtipo: l.subtipo_nome && !["—", "fora do DRE"].includes(l.subtipo_nome) ? l.subtipo_nome : null,
     };
   }
   return out;
@@ -690,7 +696,7 @@ export async function carregarBancoDaConciliacao(
           (de, ate) =>
             supabase
               .from("historico_movimentos")
-              .select("id, data, data_prevista, valor, job_nome, descricao, fornecedor, regional_nome, regional_todas, grupo, extrato_linha_id, carga:historico_cargas!inner(tipo, situacao, planilha_versao)")
+              .select("id, data, data_prevista, valor, job_nome, descricao, fornecedor, regional_nome, regional_todas, grupo, extrato_linha_id, subtipo:plano_contas_subtipos(nome), carga:historico_cargas!inner(tipo, situacao, planilha_versao)")
               .eq("tenant_id", tenantId)
               .eq("conta_bancaria_id", contaId)
               .in("carga.tipo", ["cauda", "previsao"])
@@ -740,6 +746,8 @@ export async function carregarBancoDaConciliacao(
       // Decisão 243: a regional da planilha ("TD" quando é de todas).
       regional: h.regional_todas ? "TD" : h.regional_nome,
       grupo: h.grupo,
+      // Decisão 262: a coluna Subtipo da conciliação.
+      subtipo: (h as { subtipo?: { nome: string } | null }).subtipo?.nome ?? null,
       // Decisão 254: a data que a planilha tem, quando a tela ajustou a da previsão.
       dataDaPlanilha: h.data_prevista && h.data_prevista !== h.data ? h.data_prevista : null,
     };
@@ -778,7 +786,8 @@ export async function carregarBancoDaConciliacao(
   }));
 
   // O mútuo e as baixas como o Extrato as mostra (decisão 243): juntos.
-  const [mutuo, extratoPorLancamento] = await Promise.all([
+  const pendentesDaConta = linhas.filter((l) => !l.conciliada && !l.ignorada).map((l) => l.id);
+  const [mutuo, extratoPorLancamento, acertosRes, centrosRes] = await Promise.all([
     contextoDoMutuoNaConta(
       supabase,
       tenantId,
@@ -786,7 +795,27 @@ export async function carregarBancoDaConciliacao(
       linhas.filter((l) => !l.conciliada && !l.ignorada),
     ),
     comoNoExtrato(supabase, tenantId, [...lancamentos.map((l) => l.id), ...linhas.flatMap((l) => l.ligados.map((x) => x.id))]),
+    supabase
+      .from("conciliacao_acertos")
+      .select("extrato_linha_id, itens, ajuste, especial")
+      .eq("tenant_id", tenantId)
+      .eq("conta_bancaria_id", contaId),
+    supabase
+      .from("conciliacao_centros")
+      .select("item, plano_conta_tipo_id, plano_conta_subtipo_id")
+      .eq("tenant_id", tenantId)
+      .eq("conta_bancaria_id", contaId),
   ]);
+  // Só o acerto das linhas ainda em aberto (a conciliada não guarda acerto).
+  const abertas = new Set(pendentesDaConta);
+  const acertos: DadosDaAbaBanco["acertos"] = {};
+  for (const a of (acertosRes.data ?? []) as Array<{ extrato_linha_id: string; itens: string[]; ajuste: DadosDaAbaBanco["acertos"][string]["ajuste"]; especial: DadosDaAbaBanco["acertos"][string]["especial"] }>) {
+    if (abertas.has(a.extrato_linha_id)) acertos[a.extrato_linha_id] = { itens: a.itens ?? [], ajuste: a.ajuste ?? null, especial: a.especial ?? null };
+  }
+  const centros: DadosDaAbaBanco["centros"] = {};
+  for (const c of (centrosRes.data ?? []) as Array<{ item: string; plano_conta_tipo_id: string; plano_conta_subtipo_id: string | null }>) {
+    centros[c.item] = { tipoId: c.plano_conta_tipo_id, subtipoId: c.plano_conta_subtipo_id };
+  }
 
   return {
     conta,
@@ -799,6 +828,8 @@ export async function carregarBancoDaConciliacao(
     remessasBaixadas,
     mutuo,
     extratoPorLancamento,
+    acertos,
+    centros,
     saldoSistemaNoFim: saldoNoFim === null ? null : r2(saldoNoFim),
     historico,
     previsoes,

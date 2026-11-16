@@ -9104,3 +9104,8 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Extrato:** a linha do histórico mostra o código da PP, e a baixa ligada sai da parte do sistema naquele período.
 - **Aplicado:** 9 PPs do DEE-1001/26 (10 parcelas), de 21/07 a 08/10, na California Santander.
 - **Migration** `20261116800001_baixa_pelo_historico.sql`.
+
+## ⚠️ Nota de 2026-11-16 — a nota do envio em lote traz o CNAE e os vencimentos dela (decisão 263)
+
+- O envio em lote passou a mandar o **vencimento, as parcelas e o CNAE de cada nota** (antes eram os mesmos para todas). A fila e o Faturar já liam por nota: a nota do lote chega com as parcelas e o "Sugerido pelo GP" dela.
+- O envio só pede o CNPJ. O **nome do tomador** vem quando o CNPJ é o do cliente (ou o de um envio copiado); com outro CNPJ, vem vazio. O tipo (`tomador_nome` em `faturamento-list.tsx` e `page.tsx`) passou a `string | null`, e o Faturar mostra "Veio do envio em lote de …", sem "Tomador:" vazio.

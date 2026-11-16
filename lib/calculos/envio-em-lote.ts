@@ -1,12 +1,14 @@
 /**
- * As contas do envio em lote para faturamento (decisão 188, 19/10/2026).
+ * As contas do envio em lote para faturamento (decisão 188, 19/10/2026;
+ * a nota de alguns jobs, decisão 263, 16/11/2026).
  *
  * O lote junta jobs de um mesmo cliente e de uma mesma empresa, e as notas
  * são as que o cliente pediu — uma nota pode juntar jobs, e um job pode ser
  * dividido entre notas. Cada nota diz de que jobs ela é ("Rateio"):
  *
  *   - `proporcional`: a nota se divide entre os jobs na proporção do que
- *     falta de cada um, depois das notas de um job só e das divididas à mão;
+ *     falta de cada um, depois das notas de um job só e das divididas à mão.
+ *     Com `jobs` (decisão 263), só entre os jobs marcados na nota;
  *   - o id de um job: a nota é toda daquele job ("Só o job X");
  *   - `manual`: quem envia escreve quanto vai para cada job.
  *
@@ -30,6 +32,8 @@ export interface NotaParaRatear {
   modo: ModoDoRateio;
   /** Só no modo manual: id do job → reais. */
   manual?: Record<string, number>;
+  /** Decisão 263: no proporcional, só estes jobs (os marcados na nota); ausente = todos. */
+  jobs?: string[];
 }
 
 export interface JobParaRatear {
@@ -70,8 +74,39 @@ export function ratearNotas(
     }
   }
 
+  // 1b. Decisão 263: as proporcionais de alguns jobs, na proporção do
+  // que falta de cada um deles. Sem proporcional de todos depois, a última
+  // fecha os jobs dela no centavo quando o valor bate com o que falta.
+  const deAlguns = (n: NotaParaRatear) => n.modo === PROPORCIONAL && !!n.jobs && n.jobs.length > 0;
+  const algumas = notas.filter((n) => deAlguns(n) && centavos(n.valor) > 0);
+  const temDeTodos = notas.some((n) => n.modo === PROPORCIONAL && !deAlguns(n) && centavos(n.valor) > 0);
+  algumas.forEach((n, k) => {
+    const sel = jobs.filter((j) => n.jobs!.includes(j.id));
+    if (sel.length === 0) return;
+    const v = centavos(n.valor);
+    const rs = sel.map((j) => Math.max(0, resto[j.id]));
+    const soma = rs.reduce((s, x) => s + x, 0);
+    let fatias: number[];
+    if (!temDeTodos && k === algumas.length - 1 && v === soma) fatias = rs;
+    else {
+      const pesos = soma > 0 ? rs : sel.map((j) => centavos(j.valor));
+      const somaPesos = pesos.reduce((s, x) => s + x, 0) || 1;
+      const bruto = pesos.map((r) => (v * r) / somaPesos);
+      fatias = bruto.map(Math.floor);
+      const ordem = bruto.map((b, i) => [b - fatias[i], i] as const).sort((a, b) => b[0] - a[0] || a[1] - b[1]);
+      let sobra = v - fatias.reduce((s, x) => s + x, 0);
+      for (let t = 0; sobra > 0; t++, sobra--) fatias[ordem[t % ordem.length][1]]++;
+    }
+    sel.forEach((j, i) => {
+      if (fatias[i] > 0) {
+        partes[n.id][j.id] = fatias[i];
+        resto[j.id] -= fatias[i];
+      }
+    });
+  });
+
   // 2. As proporcionais, na proporção do que falta de cada job.
-  const prop = notas.filter((n) => n.modo === PROPORCIONAL && centavos(n.valor) > 0);
+  const prop = notas.filter((n) => n.modo === PROPORCIONAL && !deAlguns(n) && centavos(n.valor) > 0);
   const restos = jobs.map((j) => Math.max(0, resto[j.id]));
   const somaRestos = restos.reduce((s, x) => s + x, 0);
   if (prop.length === 0 || somaRestos <= 0) return partes;
