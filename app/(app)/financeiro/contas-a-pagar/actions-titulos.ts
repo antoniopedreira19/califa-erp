@@ -1119,6 +1119,109 @@ export async function darBaixaTitulo(input: unknown): Promise<ResultBaixa> {
 }
 
 // ---------------------------------------------------------------------
+// Baixa da parcela paga antes de a conta começar no sistema (decisão 261)
+// ---------------------------------------------------------------------
+
+const baixaPeloHistoricoSchema = z.object({
+  parcela_id: z.string().uuid(),
+  movimento_ids: z
+    .array(z.string().uuid())
+    .min(1, "Escolha as linhas do histórico que pagaram esta parcela."),
+  plano_conta_tipo_id: z.string().uuid({ message: "Escolha o centro de custo." }),
+  plano_conta_subtipo_id: z.string().uuid({ message: "Escolha o centro de custo." }),
+  forma_pagamento: z.enum(["pix", "transferencia", "boleto"], {
+    errorMap: () => ({ message: "Escolha a forma do pagamento." }),
+  }),
+});
+
+/**
+ * Baixa da parcela de PP paga por fora antes de a conta começar no sistema
+ * (decisão 261, 16/11/2026).
+ *
+ * A baixa comum recusa data anterior ao saldo inicial da conta. Aqui a data
+ * e a conta vêm das linhas do histórico da planilha que registram o
+ * pagamento (mesma conta, mesmo dia, soma igual ao que falta da parcela), e
+ * as linhas ficam ligadas à baixa — o Extrato mostra a PP na linha do
+ * histórico e não repete a baixa. O saldo e a conciliação contam a partir do
+ * saldo inicial, então não se movem. As travas moram na RPC
+ * `baixar_parcela_pp_pelo_historico`.
+ */
+export async function baixarParcelaPeloHistorico(input: unknown): Promise<Result> {
+  const parsed = baixaPeloHistoricoSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const d = parsed.data;
+
+  const gate = await checarGateFinanceiro(
+    "pedido_compra",
+    null,
+    "pedido_compra.parcela_paga_pelo_historico",
+  );
+  if (!gate.ok) return gate;
+  const { session, supabase } = gate;
+
+  const { data: parcela } = await supabase
+    .from("pedidos_compra_parcelas")
+    .select("id, numero, valor, pago_em, pedido:pedidos_compra!inner(id, codigo, status, job_id)")
+    .eq("id", d.parcela_id)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{
+      id: string;
+      numero: number;
+      valor: string | number;
+      pago_em: string | null;
+      pedido: { id: string; codigo: string; status: string; job_id: string } | null;
+    }>();
+  if (!parcela?.pedido) return { ok: false, message: "Parcela não encontrada." };
+  if (parcela.pago_em) return { ok: false, message: "Esta parcela já está paga." };
+  if (parcela.pedido.status !== "aprovada") {
+    return { ok: false, message: "A PP precisa estar aprovada antes da baixa." };
+  }
+
+  const { data: lancId, error } = await supabase.rpc("baixar_parcela_pp_pelo_historico", {
+    p_parcela_id: d.parcela_id,
+    p_movimento_ids: d.movimento_ids,
+    p_tipo_id: d.plano_conta_tipo_id,
+    p_subtipo_id: d.plano_conta_subtipo_id,
+    p_forma_pagamento: d.forma_pagamento,
+  });
+  if (error) {
+    console.error("[titulos.baixa.historico]", error.message);
+    return { ok: false, message: mensagemDeBaixa(error.message) };
+  }
+
+  const { data: lanc } = await supabase
+    .from("lancamentos_financeiros")
+    .select("data_movimento, conta_bancaria_id, valor")
+    .eq("id", lancId as string)
+    .maybeSingle<{ data_movimento: string; conta_bancaria_id: string; valor: string | number }>();
+
+  await logAuditEvent({
+    acao: "pedido_compra.parcela_paga_pelo_historico",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "pedido_compra",
+    entidadeId: parcela.pedido.id,
+    metadata: {
+      pp_codigo: parcela.pedido.codigo,
+      parcela_id: parcela.id,
+      parcela_numero: parcela.numero,
+      valor: Number(parcela.valor),
+      valor_baixa: lanc ? Number(lanc.valor) : null,
+      pago_em: lanc?.data_movimento ?? null,
+      conta_bancaria_id: lanc?.conta_bancaria_id ?? null,
+      lancamento_id: lancId,
+      forma_pagamento: d.forma_pagamento,
+      historico_movimento_ids: d.movimento_ids,
+      job_id: parcela.pedido.job_id,
+    },
+  });
+
+  revalidarFinanceiro(parcela.pedido.job_id);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------
 // Repactuar a data de pagamento
 // ---------------------------------------------------------------------
 

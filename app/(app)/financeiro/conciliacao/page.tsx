@@ -214,7 +214,15 @@ export default async function ConciliacaoPage({
     // fiscal, entrega 2). A leitura das guias só consulta o banco quando há
     // lançamento `imposto_baixa` no período, e corre junto com a montagem
     // das linhas: as duas só dependem da consulta acima.
-    const brutos: unknown[] = data ?? [];
+    // Decisão 261: a baixa da PP paga antes de a conta começar no sistema
+    // aparece na linha do histórico que a registra (com o código da PP);
+    // aqui ela sairia uma segunda vez, na parte do sistema.
+    const naLinhaDoHistorico = new Set(
+      (historico?.linhas ?? []).map((l) => l.lancamentoId).filter((id): id is string => !!id),
+    );
+    const brutos: unknown[] = (data ?? []).filter(
+      (r) => !naLinhaDoHistorico.has((r as { id: string }).id),
+    );
     const idsDasGuias = (brutos as Array<{ id: string; origem: string }>)
       .filter((r) => r.origem === "imposto_baixa")
       .map((r) => r.id);

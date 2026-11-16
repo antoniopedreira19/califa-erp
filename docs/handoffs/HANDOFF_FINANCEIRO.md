@@ -9095,3 +9095,12 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Recebimento antes da NF:** é o primeiro cartão do Recebimento avulso, com os campos logo abaixo do job. O item da conciliação abre o mesmo cartão.
 - **Pendência (D16):** registrar o recebimento antes da NF direto da linha do extrato, na conciliação bancária, como o "Lançar avulso". Fica para um segundo momento.
 - **Sem migration.**
+
+## ⚠️ Nota de 2026-11-16 — a baixa de PP paga antes de a conta começar no sistema (decisão 261)
+
+- **O caso:** PP aprovada e paga por fora, antes do saldo inicial da conta, com o pagamento já no histórico da planilha. A baixa comum recusa a data.
+- **Novo caminho:** `baixarParcelaPeloHistorico` (Contas a Pagar, admin ou financeiro) → RPC `baixar_parcela_pp_pelo_historico`. Baixa a parcela na data e na conta da linha do histórico (mesmo dia, soma igual ao que falta), e liga a linha à baixa (`historico_movimentos.lancamento_id`). Ainda sem botão na tela.
+- **Saldo e conciliação:** não se movem; contam a partir do saldo inicial. `_conta_da_baixa` só aceita a data anterior com a liberação desta RPC, na mesma transação.
+- **Extrato:** a linha do histórico mostra o código da PP, e a baixa ligada sai da parte do sistema naquele período.
+- **Aplicado:** 9 PPs do DEE-1001/26 (10 parcelas), de 21/07 a 08/10, na California Santander.
+- **Migration** `20261116800001_baixa_pelo_historico.sql`.

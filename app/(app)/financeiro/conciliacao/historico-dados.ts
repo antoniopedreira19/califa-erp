@@ -41,6 +41,13 @@ export interface LinhaDoHistorico {
   cod: string | null;
   aba: string;
   linha: number;
+  /**
+   * Decisão 261: a baixa do sistema que esta linha registra (PP paga antes
+   * de a conta começar no sistema) e a PP dela. A página tira essa baixa da
+   * parte do sistema, para o mesmo pagamento não aparecer duas vezes.
+   */
+  lancamentoId: string | null;
+  pp: { id: string; codigo: string } | null;
 }
 
 export interface HistoricoDoExtrato {
@@ -78,6 +85,9 @@ type LinhaDaFuncao = {
   cod: string | null;
   aba: string;
   linha: number;
+  lancamento_id: string | null;
+  pp_id: string | null;
+  pp_codigo: string | null;
 };
 
 type RespostaDaFuncao = {
@@ -138,6 +148,8 @@ export async function carregarHistoricoDoExtrato(
       cod: l.cod,
       aba: l.aba,
       linha: l.linha,
+      lancamentoId: l.lancamento_id ?? null,
+      pp: l.pp_id && l.pp_codigo ? { id: l.pp_id, codigo: l.pp_codigo } : null,
     };
   });
   return {
