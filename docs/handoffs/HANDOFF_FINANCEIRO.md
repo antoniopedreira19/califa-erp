@@ -9029,3 +9029,12 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Faturamento Agrupado** só de um cliente, com a barra fixa no rodapé.
 - **Apuração:** a guia de ISS usa a base sem as deduções; PIS, COFINS, IRPJ e CSLL seguem sobre o total.
 - **Migration:** `20261115900001_novo_faturamento.sql` (colunas e funções; duas regras mais largas, autorizadas).
+
+## ⚠️ Nota de 2026-11-15 — o rateio de regional fecha no centavo (fluxo de caixa)
+
+- **O erro:** a `vw_fluxo_caixa` arredondava cada pedaço do rateio de regional sozinho. A baixa da AV-00026 (R$ 4.069,86, SP 30 / NE 25 / RJ 25 / NO 20) saía como 4.069,87 no fluxo de 03/11 da Santander, um centavo acima do extrato. No previsto, 24 avulsas de recorrência e 170 ocorrências futuras tinham ±0,01.
+- **Regra (Tiago, 15/11):** cada pedaço continua arredondado ao centavo, e a diferença fica com a regional de **maior percentual**; no empate, a primeira em ordem alfabética. Vale para o realizado (lançamento, incluindo a parte em save) e para o previsto (avulsa, parcela de desembolso, título e recorrência). A SP da AV-00026 ficou com 1.220,95.
+- **Na tela:** o card "Rateio de regional" da avulsa e da recorrência usa a mesma regra (`lib/calculos/rateio-regional.ts`). Antes, ele jogava a diferença na última linha, numa ordem que o banco não garante: mostrava NO 813,96 enquanto o fluxo mostrava 813,97.
+- **Conferido:** todo lançamento realizado soma, na view, o próprio valor (a migration confere isso antes de terminar). Mudaram 195 linhas, todas em 1 centavo, e nenhuma ganhou ou perdeu linha. A conciliação de 03/11 da Santander fecha com diferença zero. No Sandbox, a AV-00006 (R$ 4.069,86, mesmo rateio, criada pela tela) mostra o mesmo valor por regional no card e na view.
+- **Fora:** fatura de cartão e folha previstas (somam por regional antes de arredondar) e as views de DRE e rentabilidade.
+- **Migration:** `20261115950001`.
