@@ -146,10 +146,13 @@ export async function corrigirSalarioAtual(
   valorReciboNovo?: string,
 ): Promise<ActionResult> {
   const session = await requireSession();
-  if (session.activeRole !== "administrador") {
+  if (
+    session.activeRole !== "administrador" &&
+    session.activeRole !== "rh"
+  ) {
     return {
       ok: false,
-      message: "Apenas administrador pode corrigir salário sem gerar histórico.",
+      message: "Só administrador ou RH pode corrigir salário sem gerar histórico.",
     };
   }
 

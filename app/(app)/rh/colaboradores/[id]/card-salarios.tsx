@@ -27,13 +27,13 @@ export function CardSalarios({
   colaboradorId,
   tipoContratacao,
   salarios,
-  isAdmin,
+  podeCorrigir,
   pendencia,
 }: {
   colaboradorId: string;
   tipoContratacao: TipoContratacao;
   salarios: ColaboradorSalario[];
-  isAdmin: boolean;
+  podeCorrigir: boolean;
   pendencia?: NivelPendencia;
 }) {
   const ehHibrido = tipoContratacao === "clt_recibo";
@@ -287,7 +287,7 @@ export function CardSalarios({
                       {vigente.motivo ? ` · ${vigente.motivo}` : ""}
                     </p>
                   </div>
-                  {isAdmin && (
+                  {podeCorrigir && (
                     <button
                       type="button"
                       onClick={() => {
@@ -295,7 +295,7 @@ export function CardSalarios({
                         setOpenCorrigir(true);
                       }}
                       className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-white/70 hover:text-foreground transition-colors"
-                      title="Corrigir digitação (não gera histórico — apenas admin)"
+                      title="Corrigir digitação (sobrescreve o vigente sem gerar histórico)"
                     >
                       <Pencil className="h-3 w-3" />
                       Corrigir
@@ -331,7 +331,7 @@ export function CardSalarios({
       </div>
 
       {/* Modal de correção (só admin) */}
-      {isAdmin && (
+      {podeCorrigir && (
         <Dialog open={openCorrigir} onOpenChange={setOpenCorrigir}>
           <DialogContent>
             <DialogHeader>

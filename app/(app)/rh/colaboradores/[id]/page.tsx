@@ -406,7 +406,11 @@ export default async function ColaboradorDetalhePage({
     .slice()
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
-  const isAdmin = session.activeRole === "administrador";
+  // "Corrigir salário" (sobrescreve vigente sem gerar histórico) é operação
+  // sensível — era só admin, mas RH precisa pra ajustar digitação sem poluir
+  // a timeline com uma "mudança" que não aconteceu.
+  const podeCorrigirSalario =
+    session.activeRole === "administrador" || session.activeRole === "rh";
 
   const pendencias = avaliarPendencias({
     colaborador: {
@@ -524,7 +528,7 @@ export default async function ColaboradorDetalhePage({
               colaboradorId={colab.id}
               tipoContratacao={colab.tipo_contratacao}
               salarios={salarios}
-              isAdmin={isAdmin}
+              podeCorrigir={podeCorrigirSalario}
               pendencia={pendenciasPorCard.salario}
             />
             <div className="grid gap-4 lg:grid-cols-2">
