@@ -9018,7 +9018,7 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 
 - A lista de PPs do Contas a Pagar parava nas 1.000 mais recentes: com 1.045 enviadas, as 45 mais antigas (08/09 a 05/10) e os títulos delas sumiam da lista e de Títulos a Pagar, sem aviso.
 - Ela, a aba Títulos da Conciliação e a remessa agora leem as PPs página a página (`todasAsLinhas`, ordem por `created_at` e `id`).
-- As outras leituras da página estão abaixo de 1.000 (baixas 335, `vw_a_pagar` 387); as duas crescem com as PPs e são as próximas a passar.
+- No mesmo dia, antes do limite: as baixas, os estornos e a `vw_a_pagar` (335, 0 e 398) também leem página a página, no Contas a Pagar, na aba Títulos da Conciliação e na remessa — uma baixa depois da milésima deixaria o título pago como "a pagar".
 
 ## ⚠️ Nota de 2026-11-15 — "+ Faturamento": o Novo faturamento e o Faturar unificado (decisão 256, revê a 184 e a 130)
 

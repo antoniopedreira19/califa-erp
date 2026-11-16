@@ -66,11 +66,19 @@ export async function carregarDadosDaRemessa(): Promise<Resultado> {
         .range(de, ate),
     ),
     supabase.from("pedidos_compra_retencoes").select("pedido_compra_id, imposto, aliquota").eq("tenant_id", tenantId),
-    supabase
-      .from("vw_a_pagar")
-      .select("origem_tipo, origem_id, descricao, valor, fornecedor_id, colaborador_id")
-      .eq("tenant_id", tenantId)
-      .eq("natureza", "saida"),
+    // Página a página (decisão 255, 15/11/2026): o título depois do
+    // milésimo sumiria da remessa sem aviso. `origem_tipo` + `origem_id` é
+    // a chave.
+    todasAsLinhas((de, ate) =>
+      supabase
+        .from("vw_a_pagar")
+        .select("origem_tipo, origem_id, descricao, valor, fornecedor_id, colaborador_id")
+        .eq("tenant_id", tenantId)
+        .eq("natureza", "saida")
+        .order("origem_tipo")
+        .order("origem_id")
+        .range(de, ate),
+    ),
   ]);
   for (const [nome, res] of [
     ["contas", contasRes],

@@ -215,22 +215,33 @@ export default async function PedidosCompraFinanceiroPage({
     // As baixas registradas (decisão 125: parcela de PP e avulsa podem ter
     // várias), com conta, centro de custo e impostos retidos — o popup do
     // olho e o "falta R$ X" da linha. Da mais antiga para a mais nova: a
-    // última de cada documento é a que a linha paga mostra.
-    supabase
-      .from("lancamentos_financeiros")
-      .select(SELECT_BAIXA_A_PAGAR)
-      .eq("tenant_id", session.activeTenant.id)
-      .in("origem", ORIGENS_DA_BAIXA_A_PAGAR)
-      .order("data_movimento", { ascending: true })
-      .order("created_at", { ascending: true }),
+    // última de cada documento é a que a linha paga mostra. Página a página
+    // (decisão 255, 15/11/2026): as baixas crescem com as PPs, e a que
+    // ficasse depois da milésima deixaria o título pago como "a pagar".
+    todasAsLinhas((de, ate) =>
+      supabase
+        .from("lancamentos_financeiros")
+        .select(SELECT_BAIXA_A_PAGAR)
+        .eq("tenant_id", session.activeTenant.id)
+        .in("origem", ORIGENS_DA_BAIXA_A_PAGAR)
+        .order("data_movimento", { ascending: true })
+        .order("created_at", { ascending: true })
+        .order("id")
+        .range(de, ate),
+    ),
     // Estornos das baixas (decisão 120): o popup do olho lista, e a linha
-    // mostra "estornado R$ X".
-    supabase
-      .from("lancamentos_financeiros")
-      .select(SELECT_ESTORNO_DE_BAIXA)
-      .eq("tenant_id", session.activeTenant.id)
-      .in("origem", ORIGENS_DO_ESTORNO_A_PAGAR)
-      .not("estorno_de_lancamento_id", "is", null),
+    // mostra "estornado R$ X". Página a página, pelo mesmo motivo.
+    todasAsLinhas((de, ate) =>
+      supabase
+        .from("lancamentos_financeiros")
+        .select(SELECT_ESTORNO_DE_BAIXA)
+        .eq("tenant_id", session.activeTenant.id)
+        .in("origem", ORIGENS_DO_ESTORNO_A_PAGAR)
+        .not("estorno_de_lancamento_id", "is", null)
+        .order("created_at")
+        .order("id")
+        .range(de, ate),
+    ),
     // Empresas ativas (dropdown do drawer)
     supabase
       .from("empresas")
@@ -369,11 +380,18 @@ export default async function PedidosCompraFinanceiroPage({
           .order("competencia_fechamento", { ascending: true })
       : Promise.resolve({ data: null, error: null }),
     // CNAB: títulos a pagar (saída) via vw_a_pagar — pra o Dialog de remessa.
-    supabase
-      .from("vw_a_pagar")
-      .select("origem_tipo, origem_id, descricao, valor, fornecedor_id, colaborador_id")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("natureza", "saida"),
+    // Página a página (decisão 255, 15/11/2026): o título depois do milésimo
+    // sumiria da remessa sem aviso. `origem_tipo` + `origem_id` é a chave.
+    todasAsLinhas((de, ate) =>
+      supabase
+        .from("vw_a_pagar")
+        .select("origem_tipo, origem_id, descricao, valor, fornecedor_id, colaborador_id")
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("natureza", "saida")
+        .order("origem_tipo")
+        .order("origem_id")
+        .range(de, ate),
+    ),
     // Colaboradores como o financeiro enxerga (decisão 132): nome,
     // contratação e pagamento, pelo RPC — serve à aba de folha e ao
     // diálogo da remessa. Inclui inativos: a última folha de quem saiu
