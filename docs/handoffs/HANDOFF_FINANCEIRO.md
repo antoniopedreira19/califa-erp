@@ -9063,3 +9063,12 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Não mudam:** a tela da PP e Títulos a Pagar.
 - **Sem migration.**
 
+## ⚠️ Nota de 2026-11-16 — quantas PPs em cada regional e empresa (decisão 258)
+
+- **Seletor de regionais da aba PPs:** ao lado de cada regional, quantas PPs ela tem no chip escolhido. Em cima, o que o número conta ("PPs em avaliação"…).
+- **Seletor de empresas do cabeçalho:** o mesmo por empresa, só com a aba PPs à vista.
+- **Regra:** a mesma do número do chip, sem a busca. Cada seletor ignora a própria seleção; o de empresa respeita as regionais marcadas.
+- **Empresas não marcadas:** uma leitura leve no mesmo `Promise.all` traz só empresa, status, regional e prestação em avaliação. Não roda quando todas estão marcadas.
+- **Novo:** `components/ui/contagem-nos-seletores.tsx` (provider entre a lista e o cabeçalho). Os dois seletores ganharam as props opcionais `contagens` e `legenda`.
+- **Sem migration.**
+

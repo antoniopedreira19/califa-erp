@@ -54,6 +54,7 @@ import {
 } from "@/components/ui/filtro-de-coluna";
 import { formatDiaBr } from "@/lib/formatar-data-hora";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
+import { usePublicarContagemPorEmpresa } from "@/components/ui/contagem-nos-seletores";
 
 /** Decisão 257: a Planilha Interna do job em leitura, com a linha da PP em
  *  destaque — o mesmo pop-up da abertura. Carregado só quando abre: a
@@ -673,6 +674,40 @@ interface PedidosCompraListProps {
   /** Módulo fiscal: o que a NF do fornecedor e a aprovação leem do
    *  cadastro de impostos, das notas dos jobs e das PPs anteriores. */
   fiscal: FiscalDaAprovacaoPP;
+  /** As PPs das empresas que NÃO estão marcadas no seletor do cabeçalho,
+   *  só com o que a contagem precisa (16/11/2026): a página carrega só as
+   *  das marcadas, e o seletor mostra quantas cada empresa tem. Todas
+   *  marcadas = lista vazia. */
+  ppsDeOutrasEmpresas: PPParaContagem[];
+}
+
+/** O mínimo de uma PP para as contagens dos seletores. */
+export interface PPParaContagem {
+  empresa_id: string;
+  status: PPStatus;
+  regional_id: string | null;
+  prestacao_em_avaliacao: boolean;
+}
+
+/** Os nomes que o número dos seletores conta, pelo chip escolhido. */
+const LEGENDA_DAS_CONTAGENS: Record<FiltroStatus, string> = {
+  todas: "Todas as PPs",
+  prestacoes: "Prestações em avaliação",
+  gerada: "PPs geradas",
+  em_avaliacao: "PPs em avaliação",
+  aprovada: "PPs aprovadas",
+  pago: "PPs pagas",
+  rejeitada: "PPs rejeitadas",
+  cancelada: "PPs canceladas",
+};
+
+/** A PP entra no chip escolhido? A mesma regra dos números dos chips. */
+function entraNoChip(
+  r: { status: PPStatus; prestacao_em_avaliacao: boolean },
+  filtro: FiltroStatus,
+): boolean {
+  if (filtro === "prestacoes") return r.prestacao_em_avaliacao;
+  return filtro === "todas" || r.status === filtro;
 }
 
 export function PedidosCompraList({
@@ -683,6 +718,7 @@ export function PedidosCompraList({
   tipos,
   subtipos,
   fiscal,
+  ppsDeOutrasEmpresas,
 }: PedidosCompraListProps) {
   const [filtro, setFiltro] = React.useState<FiltroStatus>("em_avaliacao");
   // Vazio = todas as regionais (16/09/2026: o filtro virou múltiplo).
@@ -718,6 +754,38 @@ export function PedidosCompraList({
     }
     return c;
   }, [rowsPorRegional]);
+
+  /** Quantas PPs do chip escolhido cada regional e cada empresa têm, nos
+   *  seletores (16/11/2026, pedido do Tiago). A mesma base dos números dos
+   *  chips: a busca não entra. Cada seletor ignora a própria seleção — o
+   *  número diz quantas aparecem ao marcar aquela — e respeita a do outro. */
+  const paraContagem = React.useMemo(
+    () =>
+      rows.map((r) => ({
+        empresa_id: r.empresa_id,
+        status: r.status,
+        regional_id: r.regional_id,
+        prestacao_em_avaliacao: r.prestacao?.status === "em_avaliacao",
+      })),
+    [rows],
+  );
+  const contagemPorRegional = React.useMemo(() => {
+    const c: Record<string, number> = {};
+    for (const r of paraContagem)
+      if (r.regional_id && entraNoChip(r, filtro)) c[r.regional_id] = (c[r.regional_id] ?? 0) + 1;
+    return c;
+  }, [paraContagem, filtro]);
+  const contagemPorEmpresa = React.useMemo(() => {
+    const porEmpresa: Record<string, number> = {};
+    for (const r of [...paraContagem, ...ppsDeOutrasEmpresas]) {
+      if (!entraNoChip(r, filtro)) continue;
+      if (regionaisFiltro.length > 0 && !(r.regional_id && regionaisFiltro.includes(r.regional_id))) continue;
+      porEmpresa[r.empresa_id] = (porEmpresa[r.empresa_id] ?? 0) + 1;
+    }
+    return { legenda: LEGENDA_DAS_CONTAGENS[filtro], porEmpresa };
+  }, [paraContagem, ppsDeOutrasEmpresas, filtro, regionaisFiltro]);
+  // O seletor de empresas mora no cabeçalho da página, fora desta lista.
+  usePublicarContagemPorEmpresa(contagemPorEmpresa);
 
   /** O que passa nos filtros de CIMA (regional, chip e busca). Os filtros
    *  dos títulos vêm depois, sobre esta lista. */
@@ -804,6 +872,8 @@ export function PedidosCompraList({
               regionais={regionaisOrdenadas}
               selecionadas={regionaisFiltro}
               onSelectionChange={setRegionaisFiltro}
+              contagens={contagemPorRegional}
+              legenda={LEGENDA_DAS_CONTAGENS[filtro]}
             />
             <div className="relative w-56">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />

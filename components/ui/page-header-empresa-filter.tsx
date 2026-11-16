@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import type { Empresa } from "@/lib/types";
 import { MultiSelectEmpresas } from "@/components/ui/multi-select-empresas";
 import { setActiveEmpresas } from "@/app/actions/set-active-empresas";
+import { useContagemPorEmpresa } from "@/components/ui/contagem-nos-seletores";
 
 export type PageHeaderEmpresaFilterProps = {
   empresas: Empresa[];
@@ -31,6 +32,9 @@ export function PageHeaderEmpresaFilter({
   activeEmpresas,
 }: PageHeaderEmpresaFilterProps) {
   const router = useRouter();
+  /** Quantas linhas da tela cada empresa tem no filtro atual — só onde a
+   *  tela publica (a aba PPs do Contas a Pagar, 16/11/2026). */
+  const contagem = useContagemPorEmpresa();
   const [isPending, startTransition] = React.useTransition();
   // isCommitting cobre a janela entre "fechou popover" e "startTransition
   // disparou". Sem ele, o await setActiveEmpresas (100-300ms de rede)
@@ -118,6 +122,8 @@ export function PageHeaderEmpresaFilter({
         onSelectionChange={handleSelectionChange}
         onOpenChange={handleOpenChange}
         hasChanges={dirty}
+        contagens={contagem?.porEmpresa}
+        legenda={contagem?.legenda}
       />
       <RefreshFeedback active={isBusy} />
     </>

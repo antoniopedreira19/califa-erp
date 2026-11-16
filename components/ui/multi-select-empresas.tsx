@@ -10,6 +10,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { cn } from "@/lib/utils";
 
 export type MultiSelectEmpresasProps = {
   empresas: Empresa[];
@@ -29,6 +30,12 @@ export type MultiSelectEmpresasProps = {
   showApplyButton?: boolean;
   /** Só habilita "Aplicar" quando há mudança pendente. */
   hasChanges?: boolean;
+  /** Quantas linhas da tela cada empresa tem no filtro atual: o número à
+   *  direita do nome (16/11/2026, lista de PPs do Contas a Pagar). Sem ele,
+   *  o seletor fica como sempre foi. */
+  contagens?: Record<string, number>;
+  /** O que o número conta ("PPs em avaliação"), em cima da lista. */
+  legenda?: string;
 };
 
 /**
@@ -49,6 +56,8 @@ export function MultiSelectEmpresas(props: MultiSelectEmpresasProps) {
     onOpenChange,
     showApplyButton = true,
     hasChanges = false,
+    contagens,
+    legenda,
   } = props;
 
   const [open, setOpen] = React.useState(false);
@@ -109,6 +118,11 @@ export function MultiSelectEmpresas(props: MultiSelectEmpresasProps) {
             Limpar
           </Button>
         </div>
+        {contagens && legenda && (
+          <p className="px-2 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {legenda}
+          </p>
+        )}
         <div className="pt-2 space-y-1 max-h-72 overflow-y-auto">
           {empresas.map((e) => {
             const checked = selecionadas.includes(e.id);
@@ -124,6 +138,16 @@ export function MultiSelectEmpresas(props: MultiSelectEmpresasProps) {
                 <span className="text-sm truncate">
                   {e.nome_fantasia ?? e.razao_social}
                 </span>
+                {contagens && (
+                  <span
+                    className={cn(
+                      "ml-auto pl-2 text-xs tabular-nums",
+                      (contagens[e.id] ?? 0) > 0 ? "font-semibold text-foreground" : "text-muted-foreground/60",
+                    )}
+                  >
+                    {contagens[e.id] ?? 0}
+                  </span>
+                )}
               </label>
             );
           })}

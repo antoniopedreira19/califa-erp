@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useInformarListaVisivel } from "@/components/ui/contagem-nos-seletores";
 import { MessagesSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { ChatPPsFab } from "./chat/chat-pps-fab";
@@ -76,6 +77,9 @@ export function ContasPagarTabs({
   // que o financeiro faz todo dia é dar baixa, não avaliar PP. A URL
   // manda quando diz qual aba quer.
   const [tab, setTabState] = React.useState<TabKey>(tabInicial ?? "titulos");
+  // O seletor de empresas do cabeçalho mostra quantas PPs cada empresa tem
+  // só com a aba PPs à vista: as abas ficam montadas, só escondidas.
+  useInformarListaVisivel(tab === "pps");
 
   // A navegação interna da aba Cartão empurra `?tab=cartao&cartao=…` e o
   // servidor re-renderiza a página: o estado local sobrevive, mas a aba
