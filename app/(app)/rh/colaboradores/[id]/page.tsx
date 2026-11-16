@@ -160,7 +160,8 @@ export default async function ColaboradorDetalhePage({
       .eq("colaborador_id", params.id)
       .eq("tenant_id", session.activeTenant.id)
       .order("numero", { ascending: true }),
-    // Últimas folhas de pagamento do colaborador (todas as origens).
+    // Últimas folhas de pagamento do colaborador (todas as origens). Limite
+    // mais largo que o display pra permitir pareamento CLT+RECIBO abaixo.
     supabase
       .from("folhas_pagamento")
       .select(
@@ -170,7 +171,7 @@ export default async function ColaboradorDetalhePage({
       .eq("colaborador_id", params.id)
       .order("competencia_ano", { ascending: false })
       .order("competencia_mes", { ascending: false })
-      .limit(8),
+      .limit(16),
   ]);
 
   if (!colabRes.data) {
@@ -304,7 +305,7 @@ export default async function ColaboradorDetalhePage({
     .filter((p) => STATUS_SALDO.includes(p.status))
     .reduce((acc, p) => acc + (p.dias_direito ?? 0), 0);
 
-  const folhasRecentes: FolhaRecente[] = (
+  const folhasRaw = (
     (folhasRecentesRes.data ?? []) as {
       id: string;
       competencia_ano: number;
@@ -323,6 +324,48 @@ export default async function ColaboradorDetalhePage({
     salario_base: Number(f.salario_base),
     origem: f.origem,
   }));
+
+  // Pra CLT+RECIBO, toda competência deveria ter 2 folhas: uma california
+  // (Recibo) e uma contabilidade (CLT importada do PDF). Quando só existe
+  // a california, sintetiza uma linha fantasma "Aguardando contabilidade"
+  // pra deixar visível que o fechamento daquela competência ainda está
+  // pela metade. Só vale pra tipo='salario' — férias e 13º têm fluxo próprio.
+  const folhasRecentes: FolhaRecente[] = (() => {
+    const isCltRecibo = colab.tipo_contratacao === "clt_recibo";
+    if (!isCltRecibo) return folhasRaw.slice(0, 8);
+
+    const chaveCompetencia = (ano: number, mes: number) =>
+      `${ano}-${String(mes).padStart(2, "0")}`;
+    const temContabilidadeSalario = new Set(
+      folhasRaw
+        .filter((f) => f.tipo === "salario" && f.origem === "contabilidade")
+        .map((f) => chaveCompetencia(f.competencia_ano, f.competencia_mes)),
+    );
+
+    const resultado: FolhaRecente[] = [];
+    for (const f of folhasRaw) {
+      resultado.push(f);
+      const precisaGhost =
+        f.tipo === "salario" &&
+        f.origem === "california" &&
+        !temContabilidadeSalario.has(
+          chaveCompetencia(f.competencia_ano, f.competencia_mes),
+        );
+      if (precisaGhost) {
+        resultado.push({
+          id: `ghost-${f.id}`,
+          competencia_ano: f.competencia_ano,
+          competencia_mes: f.competencia_mes,
+          tipo: "salario",
+          status: "aguardando",
+          salario_base: 0,
+          origem: "contabilidade",
+          aguardando: true,
+        });
+      }
+    }
+    return resultado.slice(0, 8);
+  })();
 
   const empresas = (empresasRes.data ?? []) as Pick<
     Empresa,

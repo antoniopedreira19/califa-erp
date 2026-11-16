@@ -1,4 +1,4 @@
-import { Receipt, ArrowRight } from "lucide-react";
+import { Receipt, ArrowRight, Hourglass } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
 
@@ -61,11 +61,14 @@ export interface FolhaRecente {
   status: string;
   salario_base: number;
   origem: "california" | "contabilidade";
+  /** TRUE quando a linha é sintetizada no front — folha CLT de um
+   *  CLT+RECIBO que ainda não chegou pelo PDF da contabilidade. */
+  aguardando?: boolean;
 }
 
 const ORIGEM_LABEL: Record<FolhaRecente["origem"], string> = {
-  california: "California (RPA)",
-  contabilidade: "Contabilidade (CLT)",
+  california: "Recibo",
+  contabilidade: "CLT",
 };
 
 interface Props {
@@ -100,17 +103,28 @@ export function CardFolha({ folhas }: Props) {
       ) : (
         <ul className="space-y-2">
           {folhas.map((f) => {
-            const style =
-              STATUS_STYLE[f.status] ?? {
-                label: f.status,
-                chip: "bg-slate-50 text-slate-700 border-slate-200",
-                dot: "bg-slate-400",
-              };
             const tipoLabel = TIPO_LABEL[f.tipo] ?? f.tipo;
+            const aguardando = f.aguardando === true;
+            const style = aguardando
+              ? {
+                  label: "Aguardando contabilidade",
+                  chip: "bg-amber-50 text-amber-700 border-amber-200",
+                  dot: "bg-amber-500",
+                }
+              : STATUS_STYLE[f.status] ?? {
+                  label: f.status,
+                  chip: "bg-slate-50 text-slate-700 border-slate-200",
+                  dot: "bg-slate-400",
+                };
             return (
               <li
                 key={f.id}
-                className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2"
+                className={cn(
+                  "flex items-center justify-between gap-3 rounded-lg border px-3 py-2",
+                  aguardando
+                    ? "border-dashed border-border bg-muted/20"
+                    : "border-border bg-background",
+                )}
               >
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-foreground">
@@ -121,9 +135,16 @@ export function CardFolha({ folhas }: Props) {
                     </span>
                   </p>
                   <div className="flex items-center gap-2 flex-wrap mt-0.5">
-                    <span className="text-[11px] text-muted-foreground tabular-nums">
-                      {brl.format(f.salario_base)}
-                    </span>
+                    {aguardando ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground italic">
+                        <Hourglass className="h-3 w-3" />
+                        PDF da contabilidade ainda não importado
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground tabular-nums">
+                        {brl.format(f.salario_base)}
+                      </span>
+                    )}
                     <span className="inline-flex items-center rounded-full bg-muted px-1.5 py-0 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
                       {ORIGEM_LABEL[f.origem]}
                     </span>
