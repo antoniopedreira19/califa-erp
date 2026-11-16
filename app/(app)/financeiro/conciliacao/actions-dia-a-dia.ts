@@ -19,6 +19,9 @@
  * `desfazerConciliacao` de sempre (que cancela a baixa nascida na
  * conciliação), em partes, para nenhuma chamada passar do tempo da função;
  * o banco só apaga com todas as linhas sem conciliação.
+ *
+ * Decisão 262: o acerto e o centro de custo da linha, o "Corrigir o valor do
+ * título" e o recebimento antes da NF pela linha do banco.
  */
 
 import { revalidatePath } from "next/cache";
@@ -423,4 +426,57 @@ export async function corrigirValorDoTituloEBaixar(entrada: { linhaId: string; i
   if (!baixa.ok) return { ok: false, message: `O título passou a ${Number(r.para).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}, mas a baixa não saiu: ${baixa.message}` };
   revalidar();
   return { ok: true, mensagem: `O título passou de ${Number(r.de).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })} para ${Number(r.para).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}, com a baixa e a conciliação.` };
+}
+
+/**
+ * Recebimento antes da NF pela linha do banco (decisão 262, D11): a data, o
+ * valor e a conta vêm da linha de entrada; o alvo é a nota do envio, o BV ou
+ * o job sem envio. O banco grava o recebimento e concilia a linha na mesma
+ * transação (`registrar_recebimento_antes_nf_pela_linha`), com as travas de
+ * sempre (saldo, papel, conta, centro de custo, internacional, nota de lote).
+ * O Desfazer da linha cancela o recebimento.
+ */
+export async function registrarRecebimentoAntesNfPelaLinha(entrada: {
+  linhaId: string;
+  envioNotaId: string | null;
+  itemBvId: string | null;
+  jobId: string | null;
+  tipoId: string;
+  subtipoId: string;
+}): Promise<Resultado> {
+  const ok = z
+    .object({
+      linhaId: UUID,
+      envioNotaId: UUID.nullable(),
+      itemBvId: UUID.nullable(),
+      jobId: UUID.nullable(),
+      tipoId: z.string().uuid("Selecione o centro de custo do recebimento."),
+      subtipoId: z.string().uuid("Selecione o centro de custo do recebimento."),
+    })
+    .refine((e) => [e.envioNotaId, e.itemBvId, e.jobId].filter(Boolean).length === 1, { message: "Escolha o job ou o BV do recebimento." })
+    .safeParse(entrada);
+  if (!ok.success) return { ok: false, message: ok.error.issues[0]?.message ?? "Entrada inválida." };
+  const g = await gate();
+  if (!g.ok) return g;
+  const e = ok.data;
+  const { data, error } = await g.supabase.rpc("registrar_recebimento_antes_nf_pela_linha", {
+    p_linha_id: e.linhaId,
+    p_envio_nota_id: e.envioNotaId,
+    p_item_bv_id: e.itemBvId,
+    p_job_id: e.jobId,
+    p_tipo_id: e.tipoId,
+    p_subtipo_id: e.subtipoId,
+  });
+  if (error) {
+    console.error("[conciliacao.recebimento_antes_nf_pela_linha]", error.message);
+    return { ok: false, message: mensagemDoBanco(error.message, "Não foi possível registrar o recebimento.") };
+  }
+  revalidar();
+  const presoAoJob = (data as { preso_ao_job?: boolean } | null)?.preso_ao_job === true;
+  return {
+    ok: true,
+    mensagem: presoAoJob
+      ? "Recebimento antes da NF registrado e conciliado com a linha. Fica preso ao job: o Novo faturamento associa à nota."
+      : "Recebimento antes da NF registrado e conciliado com a linha. Na emissão da nota, entra como a parcela 1, já recebida.",
+  };
 }

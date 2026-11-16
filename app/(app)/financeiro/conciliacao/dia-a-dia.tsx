@@ -407,7 +407,7 @@ function RetirarOExtrato({ previa, ocupado, onFechar, onConfirmar }: { previa: P
               : `${conciliadas === 1 ? "é desfeita" : "são desfeitas"}, como no “Desfazer” de cada linha: o lançamento volta a ficar sem linha no banco, e a baixa dada num “baixar e conciliar” é cancelada (o título volta a em aberto).`}
           </li>
           {ignoradas > 0 && <li>{ignoradas === 1 ? "1 linha ignorada sai junto." : `${ignoradas} linhas ignoradas saem junto.`}</li>}
-          <li className="text-muted-foreground">Os lançamentos e os títulos do sistema não são apagados.</li>
+          <li className="text-muted-foreground">Os títulos do sistema não são apagados. O que foi lançado pela própria linha (pela regra, no PIX que voltou ou no recebimento antes da NF) sai junto.</li>
         </ul>
         {pedeMotivo && !bloqueio && (
           <textarea

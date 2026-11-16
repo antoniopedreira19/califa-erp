@@ -1,10 +1,10 @@
 # 262 — Conciliação automática: acertar a linha e conciliar no fim, centro de custo na linha e fechamento por mês
 
 **Data:** 2026-11-16
-**Status:** aceita (protótipo aprovado pelo Tiago em 16/11/2026: "Gostei, agora está funcionando. Aprovado, pode implementar"). Em implementação, em três partes: a 1 e a 2 no sistema.
+**Status:** aceita (protótipo aprovado pelo Tiago em 16/11/2026: "Gostei, agora está funcionando. Aprovado, pode implementar"). Implementada em três partes, as três no sistema.
 **Quem decidiu:** Tiago.
 **Protótipo:** `.claude/prototipos/conciliacao-dia-a-dia/` (versão 56), com o histórico das versões no `LEIAME.md` de lá.
-**Migrations:** parte 1, `20261116950001_conciliacao_acerto_e_centro_na_linha.sql`; parte 2, `20261116960001_conciliacao_reabrir_mes_a_mes.sql`.
+**Migrations:** parte 1, `20261116950001_conciliacao_acerto_e_centro_na_linha.sql`; parte 2, `20261116960001_conciliacao_reabrir_mes_a_mes.sql`; parte 3, `20261116970001_conciliacao_recebimento_antes_nf_pela_linha.sql`.
 **Relacionadas:** [254](254-conciliacao-dia-a-dia.md) (a conciliação dia a dia), [205](205-fechamento-da-conciliacao.md) (o fechamento), [235](235-custos-fixos-como-recorrencias.md) (a chave da recorrência), [251](251-subtipo-unico-completa-o-centro-de-custo.md) (o subtipo único), [256](256-novo-faturamento-e-faturar-unificado.md) e [260](260-faturar-em-pe-e-lista-do-faturamento.md) (o recebimento antes da NF; pendência D16).
 
 ## O problema
@@ -26,6 +26,7 @@ Na conta real (o acerto da California Santander de 01 a 11/11/2026), a sugestão
 | D9 | Um pop-up por vez | A lista de lançamentos, o Tipo e o Subtipo nunca ficam abertos juntos. |
 | D10 | Fechamento por mês (parte 2) | O dia não fecha mais; o mês fecha ("Fechar outubro") com as condições de hoje no último dia dele, e reabre mês a mês. Na Conciliação automática, a **linha dos meses** (os fechados com cadeado e o "Reabrir" do último, os abertos com o que falta e o "Fechar"); no Extrato e nos Títulos, a faixa "Os meses". |
 | D11 | Recebimento antes da NF pela linha (parte 3) | No ⋯ da linha de entrada, "Recebimento antes da NF": a data, o valor e a conta vêm da linha; escolhe o job (ou BV) e o centro de custo; grava e concilia (pendência D16 da 260). O internacional fica no Recebimento avulso. |
+| D12 | Desfazer do recebimento pela linha | **Desfaz tudo** (escolha do Tiago em 16/11/2026): o Desfazer da linha cancela o recebimento que ela criou, e a linha volta a pendente, como no "Lançar avulso", na regra e no PIX que voltou. Depois de a nota sair, cancela a baixa da parcela 1, como no avulso. |
 
 ## Como funciona (parte 1)
 
@@ -42,6 +43,12 @@ Na conta real (o acerto da California Santander de 01 a 11/11/2026), a sugestão
 - "Reabrir outubro": `reabrir_mes_da_conciliacao` (motivo de 10 caracteres ou mais, auditado como `conciliacao.reaberta` com `mes_a_mes`). Reabre só outubro: se setembro já tinha sido fechado alguma vez, um registro novo deixa a conta fechada até 30/09 (`reabertura_de` aponta para o registro reaberto, e o histórico diz "Setembro continuou fechado ao reabrir outubro"); se nunca foi, a conta fica toda aberta. O diálogo diz qual dos dois antes do clique. `reabrir_conciliacao` fica no banco, sem uso na tela.
 - No Extrato e nos Títulos, a faixa "Os meses": os fechados, cada mês aberto até o de hoje (o reaberto em amarelo, com quem reabriu e o motivo na dica) e "Reabrir outubro" (ou "Fechar outubro de novo", com a conta toda aberta). Na Conciliação automática a faixa sai, e tudo fica na linha dos meses. O i do "Fechamento" explica o que o mês fechado trava e mostra o histórico.
 - O fechamento antigo, por dia (só no Sandbox, todos inativos em 16/11/2026), aparece como "Fechado até 19/10".
+
+## Como funciona (parte 3)
+
+- `registrar_recebimento_antes_nf_pela_linha(linha, nota do envio | BV | job, tipo, subtipo)`: trava a linha (de entrada, pendente), chama as funções de sempre (`registrar_recebimento_antes_nf` ou `registrar_recebimento_antes_nf_do_job`, que conferem o saldo, o papel, a conta e o centro, e auditam) com a data, a conta e o valor da linha, e concilia a linha como `avulso` (`conciliar_linha`). Tudo numa transação. Recusa o internacional (a nota do envio de job com câmbio fechado) e a nota do envio em lote, como a lista de escolha.
+- O Desfazer: `_cancelamento_da_baixa` devolve o recebimento que ainda espera a nota (`recebimento_antes_nf`), e a tela o cancela pelo `cancelar_recebimento_antes_nf`, com o motivo "Conciliação com o banco desfeita"; o lançamento apagado solta a linha. A linha conciliada diz "Lançado pela linha do banco: Recebimento antes da NF · …".
+- A lista de escolha é a mesma do Recebimento avulso (`carregarAlvosDoRecebimentoAntesNf`): a nota do envio esperando nota, o BV e o job sem envio, com o saldo; o valor da linha acima do saldo é recusado antes de gravar.
 
 ## Entregas
 
