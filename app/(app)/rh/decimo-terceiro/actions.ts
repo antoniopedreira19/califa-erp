@@ -453,7 +453,7 @@ export async function editarLinhaDecimoTerceiro(
 
 export async function recalcularFolhaDecimoTerceiro(
   folhaId: string,
-): Promise<ActionResult<{ total_recalculadas: number }>> {
+): Promise<ActionResult<{ total_recalculadas: number; total_adicionadas: number }>> {
   const session = await requireSession();
   if (!pode(session.activeRole, "rh.decimo_terceiro.editar")) {
     return { ok: false, message: "Sem permissão para esta ação." };
@@ -483,20 +483,10 @@ export async function recalcularFolhaDecimoTerceiro(
     return { ok: false, message: `Falha ao buscar linhas: ${errLinhas.message}` };
   }
 
-  if (!linhas || linhas.length === 0) {
-    await supabase
-      .from("decimo_terceiro_folhas")
-      .update({
-        recalculada_em: new Date().toISOString(),
-        recalculada_por: session.profile.id,
-      })
-      .eq("id", folhaId)
-      .eq("tenant_id", tenantId);
-    return { ok: true, total_recalculadas: 0 };
-  }
+  const linhasExistentes = linhas ?? [];
 
   // Rebuscar salário vigente + valor_recibo (parte PJ do híbrido).
-  const colabIds = linhas.map((l) => l.colaborador_id);
+  const colabIds = linhasExistentes.map((l) => l.colaborador_id);
   const { data: salariosAtuais, error: errSal } = await supabase
     .from("colaboradores_salarios")
     .select("colaborador_id, valor, valor_recibo")
@@ -580,7 +570,7 @@ export async function recalcularFolhaDecimoTerceiro(
   // Promise.all enfileira no PostgREST (limite de conexões concorrentes)
   // e fica muito pior que batches menores processados em sequência.
   const BATCH_SIZE = 25;
-  const todosOsUpdates = linhas.map((l) => async () => {
+  const todosOsUpdates = linhasExistentes.map((l) => async () => {
       const salarioVigente =
         salPorColab.get(l.colaborador_id) ?? l.snapshot_salario;
       const admissaoAtual =
@@ -659,7 +649,231 @@ export async function recalcularFolhaDecimoTerceiro(
       message: `Falha ao recalcular: ${primeiroErro.error.message}`,
     };
   }
-  const total = linhas.length;
+  const total = linhasExistentes.length;
+
+  // Parte 5 — adicionar colaboradores elegíveis sem linha na folha.
+  // Cenário: colaborador cadastrado DEPOIS da criação da folha (ex: migração
+  // do RH antigo, contratação nova). "Recalcular" deve reconciliar a folha
+  // com o estado atual do cadastro, não só atualizar números.
+  const { data: todosColabs, error: errAllColabs } = await supabase
+    .from("colaboradores")
+    .select("id, nome, cpf, tipo_contratacao, funcao, data_admissao, data_encerramento")
+    .eq("tenant_id", tenantId)
+    .in("tipo_contratacao", ["clt", "clt_recibo", "pj", "mei"])
+    .lte("data_admissao", fimDoAno);
+  if (errAllColabs) {
+    return {
+      ok: false,
+      message: `Falha ao buscar colaboradores elegíveis: ${errAllColabs.message}`,
+    };
+  }
+
+  // Puxa colaborador_id de TODAS as linhas (inclusive editadas manualmente,
+  // que ficaram fora de linhasExistentes). Senão, uma linha editada seria
+  // tratada como ausente e viraria duplicata.
+  const { data: todasLinhasIds, error: errTodasLinhas } = await supabase
+    .from("decimo_terceiro_linhas")
+    .select("colaborador_id")
+    .eq("folha_id", folhaId)
+    .eq("tenant_id", tenantId);
+  if (errTodasLinhas) {
+    return {
+      ok: false,
+      message: `Falha ao verificar linhas existentes: ${errTodasLinhas.message}`,
+    };
+  }
+  const jaNaFolhaIds = new Set(
+    (todasLinhasIds ?? []).map((l) => l.colaborador_id),
+  );
+  const faltantes = (todosColabs ?? []).filter(
+    (c) =>
+      !jaNaFolhaIds.has(c.id) &&
+      (c.data_encerramento == null || c.data_encerramento > fimDoAno),
+  );
+
+  let totalAdicionadas = 0;
+
+  if (faltantes.length > 0) {
+    const faltantesIds = faltantes.map((c) => c.id);
+
+    const { data: salFaltantes, error: errSalF } = await supabase
+      .from("colaboradores_salarios")
+      .select("colaborador_id, valor, valor_recibo")
+      .eq("tenant_id", tenantId)
+      .is("data_fim", null)
+      .in("colaborador_id", faltantesIds);
+    if (errSalF) {
+      return {
+        ok: false,
+        message: `Falha ao buscar salários dos novos: ${errSalF.message}`,
+      };
+    }
+
+    const { data: adF, error: errAdF } = await supabase
+      .from("decimo_terceiro_adiantamentos")
+      .select("colaborador_id, valor")
+      .eq("tenant_id", tenantId)
+      .eq("ano", folha.ano)
+      .in("colaborador_id", faltantesIds);
+    if (errAdF) {
+      return {
+        ok: false,
+        message: `Falha ao buscar adiantamentos dos novos: ${errAdF.message}`,
+      };
+    }
+
+    const { data: pacotesF, error: errAlocF } = await supabase
+      .from("colaboradores_alocacoes")
+      .select("id, colaborador_id")
+      .eq("tenant_id", tenantId)
+      .is("data_fim", null)
+      .in("colaborador_id", faltantesIds);
+    if (errAlocF) {
+      return {
+        ok: false,
+        message: `Falha ao buscar alocações dos novos: ${errAlocF.message}`,
+      };
+    }
+    const pacoteIdsF = (pacotesF ?? []).map((p) => p.id);
+    const pacoteColabMapF = new Map<string, string>(
+      (pacotesF ?? []).map((p) => [p.id, p.colaborador_id]),
+    );
+    const { data: itensAlocF, error: errItensF } =
+      pacoteIdsF.length > 0
+        ? await supabase
+            .from("colaboradores_alocacoes_itens")
+            .select("alocacao_id, empresa_id, percentual_empresa")
+            .in("alocacao_id", pacoteIdsF)
+            .order("percentual_empresa", { ascending: false })
+        : { data: [], error: null };
+    if (errItensF) {
+      return {
+        ok: false,
+        message: `Falha ao buscar itens de alocação dos novos: ${errItensF.message}`,
+      };
+    }
+
+    // Reajustes no ano pros faltantes (mesma lógica da criação).
+    const { data: salDoAnoF } = await supabase
+      .from("colaboradores_salarios")
+      .select("colaborador_id, data_inicio")
+      .eq("tenant_id", tenantId)
+      .in("colaborador_id", faltantesIds)
+      .gte("data_inicio", `${folha.ano}-01-01`)
+      .lte("data_inicio", `${folha.ano}-12-31`);
+    const colabsNoAnoF = Array.from(
+      new Set((salDoAnoF ?? []).map((r) => r.colaborador_id)),
+    );
+    const reajusteNoAnoSetF = new Set<string>();
+    if (colabsNoAnoF.length > 0) {
+      const { data: antF } = await supabase
+        .from("colaboradores_salarios")
+        .select("colaborador_id")
+        .eq("tenant_id", tenantId)
+        .in("colaborador_id", colabsNoAnoF)
+        .lt("data_inicio", `${folha.ano}-01-01`);
+      const temAnteriorF = new Set(
+        (antF ?? []).map((r) => r.colaborador_id),
+      );
+      for (const id of colabsNoAnoF) {
+        if (temAnteriorF.has(id)) reajusteNoAnoSetF.add(id);
+      }
+    }
+
+    const salPorColabF = new Map(
+      (salFaltantes ?? []).map((s) => [s.colaborador_id, s.valor]),
+    );
+    const reciboPorColabF = new Map(
+      (salFaltantes ?? []).map((s) => [s.colaborador_id, s.valor_recibo]),
+    );
+    const empresaPorColabF = new Map<string, string>();
+    for (const item of itensAlocF ?? []) {
+      const cId = pacoteColabMapF.get(item.alocacao_id);
+      if (cId && !empresaPorColabF.has(cId) && item.empresa_id) {
+        empresaPorColabF.set(cId, item.empresa_id);
+      }
+    }
+    const adPorColabF = new Map<string, number>();
+    for (const a of adF ?? []) {
+      adPorColabF.set(
+        a.colaborador_id,
+        (adPorColabF.get(a.colaborador_id) ?? 0) + Number(a.valor),
+      );
+    }
+
+    // Monta linhas pra inserir — descarta quem não tem salário vigente
+    // (mesmo critério da criação; evita linha quebrada sem valor).
+    const novasLinhas = faltantes
+      .filter((c) => salPorColabF.has(c.id))
+      .map((c) => {
+        const salarioNum = Number(salPorColabF.get(c.id));
+        const reciboRaw = reciboPorColabF.get(c.id);
+        const valorReciboNum =
+          reciboRaw != null && Number(reciboRaw) > 0
+            ? Number(reciboRaw)
+            : null;
+        const totalAdiantado = adPorColabF.get(c.id) ?? 0;
+        const calc = calcularLinhaDecimoTerceiro({
+          salario: salarioNum,
+          dataAdmissao: new Date(`${c.data_admissao}T00:00:00Z`),
+          ano: folha.ano,
+          tipoContratacao: c.tipo_contratacao as TipoContratacao,
+          totalAdiantado,
+          valorRecibo: valorReciboNum,
+        });
+        const obsAuto =
+          calc.avos === 0 ? "Admitido após 15/12 — sem direito a avos" : null;
+        return {
+          tenant_id: tenantId,
+          folha_id: folhaId,
+          colaborador_id: c.id,
+          snapshot_nome: c.nome,
+          snapshot_cpf: c.cpf,
+          snapshot_tipo_contratacao: c.tipo_contratacao,
+          snapshot_funcao: c.funcao,
+          snapshot_data_admissao: c.data_admissao,
+          snapshot_salario: salarioNum,
+          snapshot_valor_recibo: calc.parteClt ? valorReciboNum : null,
+          snapshot_empresa_id: empresaPorColabF.get(c.id) ?? null,
+          avos: calc.avos,
+          total_adiantado: totalAdiantado,
+          primeira_parcela: calc.primeiraParcela,
+          segunda_parcela: calc.segundaParcela,
+          desconto_inss: calc.descontoInss,
+          desconto_irrf: calc.descontoIrrf,
+          total_bruto: calc.totalBruto,
+          total_liquido: calc.totalLiquido,
+          parte_clt_primeira_parcela: calc.parteClt?.primeiraParcela ?? null,
+          parte_clt_segunda_parcela: calc.parteClt?.segundaParcela ?? null,
+          parte_clt_desconto_inss: calc.parteClt?.descontoInss ?? null,
+          parte_clt_desconto_irrf: calc.parteClt?.descontoIrrf ?? null,
+          parte_clt_total_liquido: calc.parteClt?.totalLiquido ?? null,
+          parte_pj_primeira_parcela: calc.partePj?.primeiraParcela ?? null,
+          parte_pj_segunda_parcela: calc.partePj?.segundaParcela ?? null,
+          parte_pj_total_liquido: calc.partePj?.totalLiquido ?? null,
+          editado_manualmente: false,
+          salario_editado: null,
+          avos_editado: null,
+          obs: obsAuto,
+          teve_reajuste_no_ano: reajusteNoAnoSetF.has(c.id),
+          created_by: session.profile.id,
+          updated_by: session.profile.id,
+        };
+      });
+
+    if (novasLinhas.length > 0) {
+      const { error: errInsert } = await supabase
+        .from("decimo_terceiro_linhas")
+        .insert(novasLinhas);
+      if (errInsert) {
+        return {
+          ok: false,
+          message: `Falha ao adicionar colaboradores novos: ${errInsert.message}`,
+        };
+      }
+      totalAdicionadas = novasLinhas.length;
+    }
+  }
 
   await supabase
     .from("decimo_terceiro_folhas")
@@ -675,12 +889,20 @@ export async function recalcularFolhaDecimoTerceiro(
     tenantId,
     entidadeTipo: "decimo_terceiro_folha",
     entidadeId: folhaId,
-    metadata: { ano: folha.ano, total_recalculadas: total },
+    metadata: {
+      ano: folha.ano,
+      total_recalculadas: total,
+      total_adicionadas: totalAdicionadas,
+    },
   });
 
   revalidatePath(`/rh/decimo-terceiro/${folha.ano}`);
 
-  return { ok: true, total_recalculadas: total };
+  return {
+    ok: true,
+    total_recalculadas: total,
+    total_adicionadas: totalAdicionadas,
+  };
 }
 
 // ----------------- Exportar XLSX -----------------

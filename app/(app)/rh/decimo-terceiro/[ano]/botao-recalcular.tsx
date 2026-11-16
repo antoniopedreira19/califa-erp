@@ -17,6 +17,11 @@ export function BotaoRecalcular({ folhaId }: { folhaId: string }) {
       alert(res.message);
       return;
     }
+    if (res.total_adicionadas > 0) {
+      alert(
+        `${res.total_adicionadas} colaborador${res.total_adicionadas > 1 ? "es" : ""} adicionado${res.total_adicionadas > 1 ? "s" : ""} à folha.`,
+      );
+    }
     router.refresh();
   }
 
