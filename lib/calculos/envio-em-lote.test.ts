@@ -27,6 +27,99 @@ import {
 
 const somaDaNota = (p: Record<string, number>) => Object.values(p).reduce((s, x) => s + x, 0);
 
+// ---------------------------------------------------------------------------
+// Decisão 263 (16/11/2026): a nota proporcional de alguns jobs (os marcados).
+// ---------------------------------------------------------------------------
+
+test("263: nota de dois jobs na proporção entre eles; a de todos fecha o resto", () => {
+  const jobs: JobParaRatear[] = [
+    { id: "a", valor: 5000 },
+    { id: "b", valor: 3000 },
+    { id: "c", valor: 2000 },
+  ];
+  const notas: NotaParaRatear[] = [
+    { id: "n1", valor: 8000, modo: PROPORCIONAL, jobs: ["a", "b"] },
+    { id: "n2", valor: 2000, modo: PROPORCIONAL },
+  ];
+  const p = ratearNotas(notas, jobs);
+  assert.deepEqual(p.n1, { a: 500000, b: 300000 });
+  assert.deepEqual(p.n2, { c: 200000 });
+});
+
+test("263: a de alguns jobs divide o que falta deles depois da nota de um job só", () => {
+  const jobs: JobParaRatear[] = [
+    { id: "a", valor: 5000 },
+    { id: "b", valor: 3000 },
+    { id: "c", valor: 2000 },
+  ];
+  const notas: NotaParaRatear[] = [
+    { id: "so-a", valor: 1000, modo: "a" },
+    { id: "ab", valor: 3500, modo: PROPORCIONAL, jobs: ["a", "b"] },
+    { id: "todos", valor: 5500, modo: PROPORCIONAL },
+  ];
+  const p = ratearNotas(notas, jobs);
+  // Falta 4.000 do a e 3.000 do b: 3.500 se dividem 4:3.
+  assert.deepEqual(p.ab, { a: 200000, b: 150000 });
+  for (const j of jobs) assert.equal(centavosDoJobNasNotas(p, j.id), centavos(j.valor), j.id);
+  notas.forEach((n) => assert.equal(somaDaNota(p[n.id]), centavos(n.valor), n.id));
+});
+
+test("263: sem nota de todos, a última de alguns jobs fecha os jobs dela no centavo", () => {
+  const jobs: JobParaRatear[] = [
+    { id: "a", valor: 1000 },
+    { id: "b", valor: 1000 },
+    { id: "c", valor: 1000.01 },
+  ];
+  const notas: NotaParaRatear[] = [
+    { id: "n1", valor: 666.67, modo: PROPORCIONAL, jobs: ["a", "b"] },
+    { id: "n2", valor: 1333.33, modo: PROPORCIONAL, jobs: ["a", "b"] },
+    { id: "n3", valor: 1000.01, modo: "c" },
+  ];
+  const p = ratearNotas(notas, jobs);
+  for (const j of jobs) assert.equal(centavosDoJobNasNotas(p, j.id), centavos(j.valor), j.id);
+  notas.forEach((n) => assert.equal(somaDaNota(p[n.id]), centavos(n.valor), n.id));
+});
+
+test("263: 12 notas em 4 jobs (todas, um job só, dois jobs e à mão) fecham cada job", () => {
+  const jobs: JobParaRatear[] = [
+    { id: "j1", valor: 160746.36 },
+    { id: "j2", valor: 63948.98 },
+    { id: "j3", valor: 110570.26 },
+    { id: "j4", valor: 182502.92 },
+  ];
+  const fixas: NotaParaRatear[] = [
+    { id: "so-j4", valor: 45625.73, modo: "j4" },
+    { id: "so-j1", valor: 16074.64, modo: "j1" },
+    { id: "j1j2-a", valor: 26963.44, modo: PROPORCIONAL, jobs: ["j1", "j2"] },
+    { id: "j1j2-b", valor: 22469.53, modo: PROPORCIONAL, jobs: ["j1", "j2"] },
+    { id: "mao-1", valor: 21705.33, modo: MANUAL, manual: { j1: 12859.71, j3: 8845.62 } },
+    { id: "mao-2", valor: 14787.12, modo: MANUAL, manual: { j2: 3836.94, j4: 10950.18 } },
+  ];
+  const total = jobs.reduce((s, j) => s + centavos(j.valor), 0);
+  const resto = total - fixas.reduce((s, n) => s + centavos(n.valor), 0);
+  const pesos = [24, 20, 17, 15, 13, 11];
+  let usado = 0;
+  const todas: NotaParaRatear[] = pesos.map((w, k) => {
+    const c = k === pesos.length - 1 ? resto - usado : Math.round((resto * w) / 100);
+    usado += c;
+    return { id: `todas-${k}`, valor: c / 100, modo: PROPORCIONAL };
+  });
+  const notas = [...todas, ...fixas];
+  const p = ratearNotas(notas, jobs);
+  for (const j of jobs) assert.equal(centavosDoJobNasNotas(p, j.id), centavos(j.valor), j.id);
+  notas.forEach((n) => assert.equal(somaDaNota(p[n.id]), centavos(n.valor), n.id));
+  assert.deepEqual(Object.keys(p["j1j2-a"]).sort(), ["j1", "j2"]);
+});
+
+test("263: lista de jobs vazia vale como todos (a conta de antes)", () => {
+  const jobs: JobParaRatear[] = [
+    { id: "a", valor: 84500 },
+    { id: "b", valor: 38900 },
+  ];
+  const p = ratearNotas([{ id: "n1", valor: 123400, modo: PROPORCIONAL, jobs: [] }], jobs);
+  assert.deepEqual(p.n1, { a: 8450000, b: 3890000 });
+});
+
 test("uma nota para todos os jobs: cada job inteiro nela", () => {
   const jobs: JobParaRatear[] = [
     { id: "a", valor: 84500 },

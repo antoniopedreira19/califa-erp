@@ -40,6 +40,26 @@ export const notaDoLoteSchema = z
     rateio: z.string().min(1),
     /** Só na divisão à mão: id do job → valor. */
     manual: z.record(z.string(), z.number().nonnegative()).optional(),
+    /** Decisão 263: o CNAE e as parcelas de cada nota, como no envio de um job. */
+    cnae_sugerido: z
+      .string()
+      .trim()
+      .max(60)
+      .nullable()
+      .optional()
+      .transform((v) => (v && v.length > 0 ? v : null)),
+    parcelas: z
+      .array(
+        z.object({
+          valor: z.number().positive("Cada parcela precisa de valor maior que zero."),
+          data_vencimento: z.string().regex(dateRegex, "Informe o vencimento de cada parcela."),
+        }),
+      )
+      .min(1)
+      .max(12)
+      .optional(),
+    /** Decisão 263: na proporcional, só estes jobs (os marcados na linha da nota). */
+    jobs_da_nota: z.array(z.string()).optional(),
   })
   .superRefine((n, ctx) => {
     if (n.tomador_exterior) return;
@@ -59,6 +79,10 @@ export type NotaDoLoteInput = z.input<typeof notaDoLoteSchema>;
  * vencimento e o número de parcelas, o CNAE sugerido, o portal, a
  * observação para o financeiro e os contatos de cobrança (que passam a ser
  * os de cada job, como no envio de um job só, D1).
+ *
+ * Desde a decisão 263 (16/11/2026), o vencimento, as parcelas e o CNAE vêm
+ * em cada nota, como no envio de um job; os de cima só valem para a nota
+ * que não os mandar.
  *
  * O valor de cada job não está aqui: é relido no servidor, como no envio
  * de um job só.
@@ -80,8 +104,9 @@ export const envioEmLoteSchema = z.object({
     .min(1, "Escolha os jobs do envio."),
   /** O mês dos jobs mensais (Fee e Always On); nulo sem mensal. */
   mes: z.string().regex(dateRegex).nullable().default(null),
-  vencimento: z.string().regex(dateRegex, "Informe o vencimento."),
-  parcelas: z.number().int().min(1).max(3),
+  // Decisão 263: o vencimento e as parcelas vêm em cada nota; estes ficam para quem não os mandar.
+  vencimento: z.string().regex(dateRegex, "Informe o vencimento.").optional(),
+  parcelas: z.number().int().min(1).max(3).default(1),
   cnae_sugerido: z
     .string()
     .trim()

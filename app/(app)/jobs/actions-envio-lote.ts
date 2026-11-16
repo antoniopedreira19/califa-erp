@@ -547,9 +547,19 @@ export async function enviarLoteParaFaturamento(input: EnvioEmLoteInput): Promis
       }
     }
   }
+  // Decisão 263: as parcelas de cada nota fecham com o valor dela (como no envio de um job).
+  for (const [i, n] of notas.entries()) {
+    if (n.parcelas && n.parcelas.reduce((s, x) => s + centavos(x.valor), 0) !== centavos(n.valor)) {
+      return { ok: false, message: `As parcelas da nota ${i + 1} não fecham com o valor dela.` };
+    }
+    if (!n.parcelas && !dados.vencimento) return { ok: false, message: `Informe o vencimento da nota ${i + 1}.` };
+    if (n.jobs_da_nota && n.jobs_da_nota.some((jid) => !valorDe.has(jid))) {
+      return { ok: false, message: `A nota ${i + 1} aponta para um job que não está no lote.` };
+    }
+  }
   const jobsParaRatear = lidos.map((j) => ({ id: j.id, valor: valorDe.get(j.id)!.valor }));
   const partes = ratearNotas(
-    notas.map((n) => ({ id: n.id, valor: n.valor, modo: n.rateio, manual: n.manual })),
+    notas.map((n) => ({ id: n.id, valor: n.valor, modo: n.rateio, manual: n.manual, jobs: n.jobs_da_nota })),
     jobsParaRatear,
   );
   for (const [i, n] of notas.entries()) {
@@ -602,7 +612,7 @@ export async function enviarLoteParaFaturamento(input: EnvioEmLoteInput): Promis
       cnpj: n.cnpj,
       tomador_exterior: n.tomador_exterior,
       valor: n.valor,
-      cnae_sugerido: dados.cnae_sugerido,
+      cnae_sugerido: n.cnae_sugerido ?? dados.cnae_sugerido,
       descritivo: n.descritivo,
       rateio: n.rateio === PROPORCIONAL ? "proporcional" : n.rateio === MANUAL ? "manual" : "job",
     })),
@@ -625,9 +635,11 @@ export async function enviarLoteParaFaturamento(input: EnvioEmLoteInput): Promis
             lote_nota_ordem: i + 1,
             cnpj: n.cnpj,
             tomador_exterior: n.tomador_exterior,
-            cnae_sugerido: dados.cnae_sugerido,
+            cnae_sugerido: n.cnae_sugerido ?? dados.cnae_sugerido,
             descritivo: n.descritivo,
-            parcelas: parcelasDaParte(partes[n.id][j.id], dados.parcelas, dados.vencimento),
+            parcelas: n.parcelas
+              ? partesNasParcelas(partes[n.id][j.id], n.parcelas)
+              : parcelasDaParte(partes[n.id][j.id], dados.parcelas, dados.vencimento ?? ""),
           })),
       };
     }),
@@ -724,4 +736,25 @@ export async function enviarLoteParaFaturamento(input: EnvioEmLoteInput): Promis
   revalidatePath("/financeiro/contas-a-receber");
 
   return { ok: true, loteId: loteId as string, qtdJobs: lidos.length, qtdNotas: notas.length };
+}
+
+/**
+ * Decisão 263: a parte de um job numa nota, dividida pelas parcelas
+ * DA NOTA, na proporção do valor de cada parcela. A última leva o resto do
+ * centavo; parcela que sairia zerada para este job não entra.
+ */
+function partesNasParcelas(
+  parteCentavos: number,
+  parcelas: Array<{ valor: number; data_vencimento: string }>,
+): Array<{ valor: number; data_vencimento: string }> {
+  const totais = parcelas.map((x) => centavos(x.valor));
+  const soma = totais.reduce((s, x) => s + x, 0);
+  let usado = 0;
+  return parcelas
+    .map((x, i) => {
+      const v = i === parcelas.length - 1 ? parteCentavos - usado : Math.round((parteCentavos * totais[i]) / soma);
+      usado += v;
+      return { valor: v / 100, data_vencimento: x.data_vencimento };
+    })
+    .filter((x) => x.valor > 0);
 }

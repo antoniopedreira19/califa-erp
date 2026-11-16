@@ -363,7 +363,7 @@ export default async function ContasReceberPage({
     lote_nota: {
       id: string;
       ordem: number;
-      tomador_nome: string;
+      tomador_nome: string | null;
       valor: string | number;
       lote: {
         id: string;

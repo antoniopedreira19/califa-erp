@@ -1382,10 +1382,14 @@ function FormularioDeFaturar({
               </button>
             </span>
           ) : loteDaNota ? (
-            <>
-              Tomador: <strong className="font-semibold text-foreground">{loteDaNota.tomador_nome}</strong> · veio do envio
-              em lote{autorDoDescritivo ? ` de ${autorDoDescritivo}` : ""}.
-            </>
+            loteDaNota.tomador_nome ? (
+              <>
+                Tomador: <strong className="font-semibold text-foreground">{loteDaNota.tomador_nome}</strong> · veio do envio
+                em lote{autorDoDescritivo ? ` de ${autorDoDescritivo}` : ""}.
+              </>
+            ) : (
+              `Veio do envio em lote${autorDoDescritivo ? ` de ${autorDoDescritivo}` : ""}.`
+            )
           ) : (
             `Veio do envio${autorDoDescritivo ? ` de ${autorDoDescritivo}` : ""}. Troque se a nota sai para outra empresa do cliente.`
           )}
