@@ -177,12 +177,16 @@ export default async function ColaboradorFeriasPage({
 
   // Saldo total = soma do saldo dos aquisitivos "não fechados" (apto,
   // em curso, em alerta, vencido). O que já foi regularizado não entra.
+  // Aquisitivos futuros (data de início > hoje) ficam de fora — o
+  // colaborador ainda não tem direito ao que não começou. Isso aparece
+  // quando o gerador cria períodos 2 anos à frente.
   const periodosQueContam = periodos.filter(
     (p) =>
-      p.status === "apto" ||
-      p.status === "em_alerta" ||
-      p.status === "vencido" ||
-      p.status === "incompleto",
+      (p.status === "apto" ||
+        p.status === "em_alerta" ||
+        p.status === "vencido" ||
+        p.status === "incompleto") &&
+      p.aquisitivo_inicio <= hojeISO,
   );
   const saldoTotal = periodosQueContam.reduce((acc, p) => {
     const ocupados = diasOcupados.get(p.id) ?? 0;
@@ -191,13 +195,15 @@ export default async function ColaboradorFeriasPage({
 
   // Lista de aquisitivos pra mostrar no colapsável "Períodos disponíveis".
   // Os regularizados e não habilitados ficam de fora — não têm saldo útil.
+  // Também corta aquisitivos futuros pelo mesmo motivo do saldo.
   const periodosDisponiveis = periodos
     .filter(
       (p) =>
-        p.status === "apto" ||
-        p.status === "em_alerta" ||
-        p.status === "vencido" ||
-        p.status === "incompleto",
+        (p.status === "apto" ||
+          p.status === "em_alerta" ||
+          p.status === "vencido" ||
+          p.status === "incompleto") &&
+        p.aquisitivo_inicio <= hojeISO,
     )
     .map((p) => {
       const ocupados = diasOcupados.get(p.id) ?? 0;
@@ -233,13 +239,15 @@ export default async function ColaboradorFeriasPage({
     <BotaoLancarDiretoCliente
       colaboradorId={c.id}
       tipoContratacao={c.tipo_contratacao}
-      periodos={periodos.map((p) => ({
-        ...p,
-        saldo: Math.max(
-          p.dias_direito - (diasOcupados.get(p.id) ?? 0),
-          0,
-        ),
-      }))}
+      periodos={periodos
+        .filter((p) => p.aquisitivo_inicio <= hojeISO)
+        .map((p) => ({
+          ...p,
+          saldo: Math.max(
+            p.dias_direito - (diasOcupados.get(p.id) ?? 0),
+            0,
+          ),
+        }))}
     />
   );
 
