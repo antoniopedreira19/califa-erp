@@ -22,7 +22,7 @@
  */
 
 import * as React from "react";
-import { Barcode, Landmark, Zap } from "lucide-react";
+import { Barcode, Landmark, Link2, Zap } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { problemaDaChavePix } from "@/lib/pix";
 import type { PagamentoForaDoCadastroInput } from "@/lib/validations/pagamento-fora-do-cadastro";
@@ -30,13 +30,38 @@ import type { PagamentoForaDoCadastroDaPP } from "@/lib/types";
 import { resumoDoPagamentoDoFornecedor } from "./actions-pp";
 
 // ---------------------------------------------------------------------------
+// Link de pagamento (16/11/2026)
+// ---------------------------------------------------------------------------
+
+const LINK_MAX = 2048;
+
+/** Mesma régua do servidor (`lib/validations/pagamento-fora-do-cadastro.ts`). */
+export function problemaDoLinkDePagamento(link: string): string | null {
+  const v = link.trim();
+  if (!v) return "Cole o link de pagamento que o fornecedor mandou.";
+  if (v.length > LINK_MAX) return `O link tem mais de ${LINK_MAX} caracteres.`;
+  let url: URL;
+  try {
+    url = new URL(v);
+  } catch {
+    return "Cole um link que comece com http:// ou https://.";
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:") {
+    return "Cole um link que comece com http:// ou https://.";
+  }
+  if (!url.hostname) return "O link não tem endereço.";
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Estado
 // ---------------------------------------------------------------------------
 
 export interface PagamentoDaPPEstado {
   /** Null = o fornecedor não tem conta nem PIX e ainda não se escolheu. */
-  escolha: "cadastro" | "aleatoria" | "boleto" | "guia" | null;
+  escolha: "cadastro" | "aleatoria" | "boleto" | "guia" | "link" | null;
   pix_chave: string;
+  pagamento_link: string;
   /** O cadastro do fornecedor é "Sem conta nem PIX" (lido com o resumo). */
   semCadastro: boolean;
 }
@@ -44,6 +69,7 @@ export interface PagamentoDaPPEstado {
 export const PAGAMENTO_PELO_CADASTRO: PagamentoDaPPEstado = {
   escolha: "cadastro",
   pix_chave: "",
+  pagamento_link: "",
   semCadastro: false,
 };
 
@@ -52,11 +78,16 @@ export function estadoDoPagamento(
   p: PagamentoForaDoCadastroDaPP | null | undefined,
 ): PagamentoDaPPEstado {
   if (!p) return PAGAMENTO_PELO_CADASTRO;
-  if (p.meio === "boleto" || p.meio === "guia") return { escolha: p.meio, pix_chave: "", semCadastro: false };
+  if (p.meio === "boleto" || p.meio === "guia") {
+    return { escolha: p.meio, pix_chave: "", pagamento_link: "", semCadastro: false };
+  }
+  if (p.meio === "link") {
+    return { escolha: "link", pix_chave: "", pagamento_link: p.pagamento_link ?? "", semCadastro: false };
+  }
   // Só a chave aleatória continua; uma PP a emitir antiga com outro meio
   // volta para a escolha, e quem salvar decide de novo.
   if (p.meio === "pix" && p.pix_tipo === "aleatoria") {
-    return { escolha: "aleatoria", pix_chave: p.pix_chave ?? "", semCadastro: false };
+    return { escolha: "aleatoria", pix_chave: p.pix_chave ?? "", pagamento_link: "", semCadastro: false };
   }
   return PAGAMENTO_PELO_CADASTRO;
 }
@@ -65,17 +96,21 @@ export function estadoDoPagamento(
 export function pagamentoParaEnvio(e: PagamentoDaPPEstado): PagamentoForaDoCadastroInput | null {
   if (e.escolha === "cadastro" || e.escolha === null) return null;
   if (e.escolha === "boleto" || e.escolha === "guia") return { meio: e.escolha };
+  if (e.escolha === "link") return { meio: "link", pagamento_link: e.pagamento_link.trim() };
   return { meio: "pix", pix_tipo: "aleatoria", pix_chave: e.pix_chave.trim() };
 }
 
 /** O primeiro problema, com a mesma régua do servidor. Null = pode gerar. */
 export function problemaDoPagamento(e: PagamentoDaPPEstado): string | null {
   if (e.escolha === null || (e.escolha === "cadastro" && e.semCadastro)) {
-    return "Este fornecedor não tem conta nem PIX no cadastro: escolha chave aleatória, boleto ou guia.";
+    return "Este fornecedor não tem conta nem PIX no cadastro: escolha chave aleatória, boleto, guia ou link.";
   }
   if (e.escolha === "aleatoria") {
     if (!e.pix_chave.trim()) return "Cole a chave aleatória que o fornecedor mandou.";
     return problemaDaChavePix("aleatoria", e.pix_chave);
+  }
+  if (e.escolha === "link") {
+    return problemaDoLinkDePagamento(e.pagamento_link);
   }
   return null;
 }
@@ -96,6 +131,7 @@ const OPCOES: Array<{
   { valor: "aleatoria", rotulo: "Chave aleatória", Icone: Zap },
   { valor: "boleto", rotulo: "Boleto", Icone: Barcode },
   { valor: "guia", rotulo: "Guia", Icone: Landmark },
+  { valor: "link", rotulo: "Link de pagamento", Icone: Link2 },
 ];
 
 export function PagamentoDaPPField({
@@ -158,11 +194,16 @@ export function PagamentoDaPPField({
   }, [resumoAtual, valor.semCadastro, valor.escolha]);
 
   // O erro da chave espera a pessoa sair do campo: enquanto ela cola ou
-  // digita, a chave está incompleta e não errada.
+  // digita, a chave está incompleta e não errada. Mesma régua para o link.
   const [saiuDaChave, setSaiuDaChave] = React.useState(false);
+  const [saiuDoLink, setSaiuDoLink] = React.useState(false);
   const problemaChave =
     valor.escolha === "aleatoria" && valor.pix_chave && (saiuDaChave || destacarFalta)
       ? problemaDaChavePix("aleatoria", valor.pix_chave)
+      : null;
+  const problemaLink =
+    valor.escolha === "link" && valor.pagamento_link && (saiuDoLink || destacarFalta)
+      ? problemaDoLinkDePagamento(valor.pagamento_link)
       : null;
   const semCadastro = valor.semCadastro;
   const faltaEscolha = destacarFalta && valor.escolha === null;
@@ -192,6 +233,7 @@ export function PagamentoDaPPField({
                 title={riscado ? "O cadastro deste fornecedor não tem conta nem PIX." : undefined}
                 onClick={() => {
                   setSaiuDaChave(false);
+                  setSaiuDoLink(false);
                   set({ escolha: o.valor });
                 }}
                 className={cn(
@@ -221,7 +263,7 @@ export function PagamentoDaPPField({
 
         {semCadastro && (valor.escolha === null || valor.escolha === "cadastro") && (
           <p className={cn("text-[12px]", faltaEscolha ? "text-california-red" : "text-muted-foreground")}>
-            Sem conta nem PIX no cadastro: escolha chave aleatória, boleto ou guia.
+            Sem conta nem PIX no cadastro: escolha chave aleatória, boleto, guia ou link.
           </p>
         )}
 
@@ -261,6 +303,35 @@ export function PagamentoDaPPField({
             Anexe o boleto abaixo, com o tipo{" "}
             <strong className="font-semibold text-foreground">Boleto</strong>.
           </p>
+        )}
+
+        {valor.escolha === "link" && (
+          <div>
+            <input
+              aria-label="Link de pagamento desta PP"
+              value={valor.pagamento_link}
+              onChange={(e) => set({ pagamento_link: e.target.value })}
+              onBlur={() => setSaiuDoLink(true)}
+              disabled={disabled}
+              placeholder="Cole o link de pagamento que o fornecedor mandou"
+              spellCheck={false}
+              inputMode="url"
+              className={cn(
+                CAIXA,
+                "font-mono",
+                problemaLink || (destacarFalta && !valor.pagamento_link)
+                  ? "border-california-red"
+                  : "border-border",
+              )}
+            />
+            {problemaLink ? (
+              <p className="mt-1 text-[11.5px] text-california-red">{problemaLink}</p>
+            ) : (
+              <p className="mt-1 text-[12px] text-muted-foreground">
+                O link sai no PDF para o financeiro abrir e pagar. A NF segue obrigatória nos anexos.
+              </p>
+            )}
+          </div>
         )}
       </div>
     </div>

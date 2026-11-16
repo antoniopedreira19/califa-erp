@@ -73,6 +73,7 @@ export const SELECT_PP_DO_FINANCEIRO = `
         fornecedor_conta, fornecedor_conta_dv, fornecedor_tipo_conta,
         fornecedor_pix_tipo, fornecedor_pix_chave,
         pagamento_fora_do_cadastro_meio, pagamento_fora_do_cadastro_motivo,
+        pagamento_fora_do_cadastro_link,
         cancelada_em, motivo_cancelamento,
         rejeitada_em, motivo_rejeicao, pago_em, verba_producao, sem_nf_na_auditoria,
         tipo_verba, verba_titular_tipo, verba_titular_nome,
@@ -258,6 +259,7 @@ export function mapearPPsDoFinanceiro(
     dados_pagamento_congelados_em: string | null;
     pagamento_fora_do_cadastro_meio: string | null;
     pagamento_fora_do_cadastro_motivo: string | null;
+    pagamento_fora_do_cadastro_link: string | null;
     forma_pagamento: FormaPagamento | null;
     cartao_credito_id: string | null;
     plano_conta_tipo_id: string | null;

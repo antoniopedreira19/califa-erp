@@ -521,7 +521,7 @@ async function resolverOrigem(
       .from("pedidos_compra_parcelas")
       .select(
         // Decisão 137: o meio fora do cadastro e a foto em que ele está.
-        "id, valor, pago_em, pedido:pedidos_compra(id, status, servico, fornecedor_id, verba_producao, retencoes:pedidos_compra_retencoes(imposto, aliquota), pagamento_fora_do_cadastro_meio, pagamento_fora_do_cadastro_motivo, pagamento_fora_do_cadastro_aprovado_em, fornecedor_banco_codigo, fornecedor_banco_nome, fornecedor_agencia, fornecedor_agencia_dv, fornecedor_conta, fornecedor_conta_dv, fornecedor_tipo_conta, fornecedor_pix_tipo, fornecedor_pix_chave)",
+        "id, valor, pago_em, pedido:pedidos_compra(id, status, servico, fornecedor_id, verba_producao, retencoes:pedidos_compra_retencoes(imposto, aliquota), pagamento_fora_do_cadastro_meio, pagamento_fora_do_cadastro_motivo, pagamento_fora_do_cadastro_link, pagamento_fora_do_cadastro_aprovado_em, fornecedor_banco_codigo, fornecedor_banco_nome, fornecedor_agencia, fornecedor_agencia_dv, fornecedor_conta, fornecedor_conta_dv, fornecedor_tipo_conta, fornecedor_pix_tipo, fornecedor_pix_chave)",
       )
       .eq("id", item.origemId)
       .eq("tenant_id", tenantId)
@@ -539,6 +539,7 @@ async function resolverOrigem(
           retencoes: Array<{ imposto: string; aliquota: number | string | null }> | null;
           pagamento_fora_do_cadastro_meio: string | null;
           pagamento_fora_do_cadastro_motivo: string | null;
+          pagamento_fora_do_cadastro_link: string | null;
           pagamento_fora_do_cadastro_aprovado_em: string | null;
           fornecedor_banco_codigo: string | null;
           fornecedor_banco_nome: string | null;
@@ -566,7 +567,8 @@ async function resolverOrigem(
     }
     // Decisão 161: a remessa ainda não paga boleto (o segmento J não existe
     // no gerador). A PP paga por boleto sai pelo boleto anexado; a paga por
-    // guia (decisão 227), pela guia anexada.
+    // guia (decisão 227), pela guia anexada; a paga por link (16/11/2026),
+    // pelo link abaixo.
     if (foraDoCadastro?.meio === "boleto") {
       return {
         ok: false,
@@ -577,6 +579,12 @@ async function resolverOrigem(
       return {
         ok: false,
         message: "PP paga por guia: pague pela guia anexada, fora da remessa.",
+      };
+    }
+    if (foraDoCadastro?.meio === "link") {
+      return {
+        ok: false,
+        message: "PP paga por link: pague abrindo o link, fora da remessa.",
       };
     }
     if (data.pago_em) return { ok: false, message: "Parcela já baixada." };

@@ -63,6 +63,7 @@ export const COLUNAS_DE_PAGAMENTO =
  * O que a produção escolhe no formulário quando a PP não paga pelo
  * cadastro: UM meio. Desde a decisão 161, chave aleatória (`pix`) ou
  * `boleto`, sem motivo; `conta` e o motivo ficam para as PPs anteriores.
+ * Desde 16/11/2026, também `link` (URL colada no formulário).
  * Já validado e normalizado por `pagamentoForaDoCadastroSchema`.
  */
 export interface PagamentoForaDoCadastro {
@@ -76,6 +77,7 @@ export interface PagamentoForaDoCadastro {
   conta: string | null;
   conta_dv: string | null;
   tipo_conta: TipoContaBancariaFornecedor | null;
+  pagamento_link: string | null;
 }
 
 /** Os campos de cada meio — o que "trocar o meio" troca, e mais nada. No
@@ -90,6 +92,12 @@ const CAMPOS_DO_MEIO: Record<MeioForaDoCadastro, Array<keyof DadosDePagamento>> 
   ],
   // Guia (decisão 227): como o boleto, nada do cadastro é pagamento.
   guia: [
+    "banco_codigo", "banco_nome", "agencia", "agencia_dv", "conta", "conta_dv", "tipo_conta",
+    "pix_tipo", "pix_chave",
+  ],
+  // Link (16/11/2026): como o boleto, nada do cadastro é pagamento — a URL
+  // mora numa coluna própria da PP, fora da foto do cadastro.
+  link: [
     "banco_codigo", "banco_nome", "agencia", "agencia_dv", "conta", "conta_dv", "tipo_conta",
     "pix_tipo", "pix_chave",
   ],
@@ -118,10 +126,10 @@ export function aplicarPagamentoForaDoCadastro(
     pix_tipo: cadastro?.pix_tipo ?? null,
     pix_chave: cadastro?.pix_chave ?? null,
   };
-  // Boleto (decisão 161) e guia (227): o documento continua o de sempre,
-  // com o cadastro como está; o PDF só troca a linha do PIX por "Boleto" ou
-  // "Guia".
-  if (!fora || fora.meio === "boleto" || fora.meio === "guia") return base;
+  // Boleto (decisão 161), guia (227) e link (16/11/2026): o documento
+  // continua o de sempre, com o cadastro como está; o PDF só troca a linha
+  // do PIX por "Boleto", "Guia" ou o link de pagamento.
+  if (!fora || fora.meio === "boleto" || fora.meio === "guia" || fora.meio === "link") return base;
   if (fora.meio === "pix") {
     return { ...base, pix_tipo: fora.pix_tipo, pix_chave: fora.pix_chave };
   }
@@ -149,6 +157,7 @@ export function camposDoPagamentoForaDoCadastro(
   return {
     pagamento_fora_do_cadastro_meio: fora?.meio ?? null,
     pagamento_fora_do_cadastro_motivo: fora?.motivo ?? null,
+    pagamento_fora_do_cadastro_link: fora?.meio === "link" ? (fora.pagamento_link ?? null) : null,
     pagamento_fora_do_cadastro_aprovado_por: null,
     pagamento_fora_do_cadastro_aprovado_em: null,
   };
@@ -164,12 +173,14 @@ export function lerPagamentoForaDoCadastro(
   pp: Partial<FotoDePagamentoDaPP> & {
     pagamento_fora_do_cadastro_meio?: string | null;
     pagamento_fora_do_cadastro_motivo?: string | null;
+    pagamento_fora_do_cadastro_link?: string | null;
   },
 ): PagamentoForaDoCadastroDaPP | null {
   const meio = pp.pagamento_fora_do_cadastro_meio;
-  if (meio !== "pix" && meio !== "conta" && meio !== "boleto" && meio !== "guia") return null;
+  if (meio !== "pix" && meio !== "conta" && meio !== "boleto" && meio !== "guia" && meio !== "link") return null;
   const pix = meio === "pix";
   const conta = meio === "conta";
+  const link = meio === "link";
   return {
     meio,
     motivo: pp.pagamento_fora_do_cadastro_motivo?.trim() || null,
@@ -182,6 +193,7 @@ export function lerPagamentoForaDoCadastro(
     conta: conta ? (pp.fornecedor_conta ?? null) : null,
     conta_dv: conta ? (pp.fornecedor_conta_dv ?? null) : null,
     tipo_conta: conta ? (pp.fornecedor_tipo_conta ?? null) : null,
+    pagamento_link: link ? (pp.pagamento_fora_do_cadastro_link ?? null) : null,
   };
 }
 
@@ -259,7 +271,9 @@ export function cadastroMudouDepoisDaFoto(
   // é do cadastro entra na conta.
   const meio = pp.pagamento_fora_do_cadastro_meio;
   const ignorados =
-    meio === "pix" || meio === "conta" || meio === "boleto" || meio === "guia" ? CAMPOS_DO_MEIO[meio] : [];
+    meio === "pix" || meio === "conta" || meio === "boleto" || meio === "guia" || meio === "link"
+      ? CAMPOS_DO_MEIO[meio]
+      : [];
   return (Object.keys(foto) as Array<keyof DadosDePagamento>)
     .filter((campo) => !ignorados.includes(campo))
     .some((campo) => (foto[campo] ?? null) !== (cadastro[campo] ?? null));

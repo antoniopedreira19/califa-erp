@@ -207,6 +207,10 @@ interface Dados {
    *  só a linha do PIX vira "Pagamento: Boleto". Na paga por guia (decisão
    *  227), "Pagamento: Guia". */
   pagamentoPeloAnexo?: MeioPeloAnexo | null;
+  /** 16/11/2026: a PP paga por link de pagamento. A linha do PIX vira
+   *  "Pagamento: Link" + a URL em destaque. Mutuamente exclusivo com
+   *  `pagamentoPeloAnexo`. */
+  linkDePagamento?: string | null;
   /** Decisão 178: a prévia da conferência lado a lado, montada com os dados
    *  do formulário antes de gerar. Sai com a marca d'água "PRÉVIA" em toda
    *  página e o aviso no cabeçalho; não é gravada em lugar nenhum. */
@@ -323,6 +327,7 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
     responsavelNome,
     parcelas,
     pagamentoPeloAnexo,
+    linkDePagamento,
     previa,
     selo,
   } = dados;
@@ -842,12 +847,26 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
                     { text: "" },
                     { text: "" },
                   ]
-                : [
-                    { text: "Tipo de Chave PIX:", bold: true, fontSize: 8 },
-                    { text: fmtTipoPix(fornecedor?.pix_tipo), fontSize: 8 },
-                    { text: "Chave PIX:", bold: true, fontSize: 8 },
-                    { text: fornecedor?.pix_chave ?? "", fontSize: 8 },
-                  ],
+                : linkDePagamento
+                  ? [
+                      { text: "Pagamento:", bold: true, fontSize: 8 },
+                      {
+                        text: [
+                          { text: "Link · ", bold: true },
+                          { text: linkDePagamento, link: linkDePagamento, color: "#1a4b8c", decoration: "underline" },
+                        ],
+                        colSpan: 3,
+                        fontSize: 8,
+                      },
+                      { text: "" },
+                      { text: "" },
+                    ]
+                  : [
+                      { text: "Tipo de Chave PIX:", bold: true, fontSize: 8 },
+                      { text: fmtTipoPix(fornecedor?.pix_tipo), fontSize: 8 },
+                      { text: "Chave PIX:", bold: true, fontSize: 8 },
+                      { text: fornecedor?.pix_chave ?? "", fontSize: 8 },
+                    ],
               [
                 { text: "E-mail:", bold: true, fontSize: 8 },
                 {

@@ -378,6 +378,7 @@ function ppGeradaComoAEmitir(pp: PedidoCompraNaLista): PPAEmitir {
             conta: fora.conta,
             conta_dv: fora.conta_dv,
             tipo_conta: fora.tipo_conta,
+            pagamento_link: fora.pagamento_link,
           }
         : null,
     },

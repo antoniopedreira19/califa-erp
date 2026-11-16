@@ -46,6 +46,7 @@ test("outro PIX troca só a chave e mantém a conta do cadastro", () => {
     conta: null,
     conta_dv: null,
     tipo_conta: null,
+    pagamento_link: null,
   });
   assert.equal(r.pix_tipo, "aleatoria");
   assert.equal(r.pix_chave, "7c1e9a52-3b4d-4f8e-9a61-2d5c8b0e4f13");
@@ -65,6 +66,7 @@ test("outra conta troca só a conta, com o nome do banco, e mantém a chave", ()
     conta: "0012345",
     conta_dv: "6",
     tipo_conta: "corrente",
+    pagamento_link: null,
   });
   assert.equal(r.banco_codigo, "237");
   assert.equal(r.banco_nome, "Banco Bradesco S.A.");
@@ -90,6 +92,7 @@ test("o asterisco ignora o meio trocado e continua olhando o outro", () => {
     conta: null,
     conta_dv: null,
     tipo_conta: null,
+    pagamento_link: null,
   };
   const pp = {
     ...tirarFoto(cadastro, fora),
@@ -115,6 +118,7 @@ test("a leitura devolve só o meio trocado", () => {
       conta: null,
       conta_dv: null,
       tipo_conta: null,
+      pagamento_link: null,
     }),
     pagamento_fora_do_cadastro_meio: "pix",
     pagamento_fora_do_cadastro_motivo: "Chave temporária do fornecedor",

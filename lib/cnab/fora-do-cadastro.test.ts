@@ -34,6 +34,7 @@ const outroPix: PagamentoForaDoCadastroDaPP = {
   conta: null,
   conta_dv: null,
   tipo_conta: null,
+  pagamento_link: null,
 };
 
 const outraConta: PagamentoForaDoCadastroDaPP = {
@@ -48,6 +49,7 @@ const outraConta: PagamentoForaDoCadastroDaPP = {
   conta: "998877",
   conta_dv: "1",
   tipo_conta: "corrente",
+  pagamento_link: null,
 };
 
 test("outro PIX: paga na chave da PP, por PIX, e tira a conta do cadastro", () => {
@@ -96,4 +98,16 @@ test("boleto nunca entra no arquivo (decisão 161)", () => {
     pix_chave: null,
   };
   assert.throws(() => aplicarForaDoCadastroNaRemessa(cadastro, boleto), /boleto/);
+});
+
+test("link de pagamento nunca entra no arquivo (16/11/2026)", () => {
+  const link: PagamentoForaDoCadastroDaPP = {
+    ...outroPix,
+    meio: "link",
+    motivo: null,
+    pix_tipo: null,
+    pix_chave: null,
+    pagamento_link: "https://mpago.la/abc123",
+  };
+  assert.throws(() => aplicarForaDoCadastroNaRemessa(cadastro, link), /link/);
 });

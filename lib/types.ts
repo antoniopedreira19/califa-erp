@@ -123,8 +123,10 @@ export type PixTipoChave = "cpf" | "cnpj" | "email" | "telefone" | "aleatoria";
 /** O meio que uma PP troca quando não paga pelo cadastro (decisão 127).
  *  Desde a decisão 161 (09/10/2026) a tela oferece chave aleatória (`pix`)
  *  e `boleto`; desde a 227 (29/10/2026), também `guia` (taxa, licença ou
- *  alvará de órgão público). `conta` fica para o legado (nenhuma PP o usou). */
-export type MeioForaDoCadastro = "pix" | "conta" | "boleto" | "guia";
+ *  alvará de órgão público); desde 16/11/2026, também `link` (link de
+ *  pagamento que o fornecedor manda — Mercado Pago, Stripe, PagSeguro…).
+ *  `conta` fica para o legado (nenhuma PP o usou). */
+export type MeioForaDoCadastro = "pix" | "conta" | "boleto" | "guia" | "link";
 
 /** Os meios pagos pelo documento anexado: sem dado digitado, fora da
  *  remessa, e o envio ao financeiro exige o anexo do tipo do meio. O boleto
@@ -162,6 +164,8 @@ export interface PagamentoForaDoCadastroDaPP {
   conta: string | null;
   conta_dv: string | null;
   tipo_conta: TipoContaBancariaFornecedor | null;
+  /** 16/11/2026: a URL do link de pagamento, quando `meio === "link"`. */
+  pagamento_link: string | null;
 }
 
 export type UF =
@@ -2107,6 +2111,9 @@ export interface PedidoCompra {
    *  com este meio trocado. Null = paga pelo cadastro. */
   pagamento_fora_do_cadastro_meio: MeioForaDoCadastro | null;
   pagamento_fora_do_cadastro_motivo: string | null;
+  /** 16/11/2026: a URL do link de pagamento, quando `meio === "link"`.
+   *  Null nos demais meios. */
+  pagamento_fora_do_cadastro_link: string | null;
   /** A marcação "Aprovar pagamento fora do cadastro". PP fora do cadastro
    *  só vira aprovada com ela (CHECK `pp_fora_do_cadastro_aprovado`). */
   pagamento_fora_do_cadastro_aprovado_por: string | null;
@@ -3105,6 +3112,8 @@ export interface DadosDaPPAEmitir {
     conta: string | null;
     conta_dv: string | null;
     tipo_conta: TipoContaBancariaFornecedor | null;
+    /** 16/11/2026: a URL do link de pagamento, quando `meio === "link"`. */
+    pagamento_link: string | null;
   } | null;
 }
 

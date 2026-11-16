@@ -385,6 +385,9 @@ function auditoriaDoForaDoCadastro(fora: PagamentoForaDoCadastro | null) {
   // Decisão 161: o boleto não tem dado digitado — o arquivo vai nos anexos.
   // A guia (decisão 227), também não.
   if (fora.meio === "boleto" || fora.meio === "guia") return { meio: fora.meio };
+  // 16/11/2026: o link mora numa coluna própria e sai no PDF — a auditoria
+  // guarda a URL.
+  if (fora.meio === "link") return { meio: fora.meio, pagamento_link: fora.pagamento_link };
   return fora.meio === "pix"
     ? { meio: fora.meio, motivo: fora.motivo, pix_tipo: fora.pix_tipo, pix_chave: fora.pix_chave }
     : {
@@ -1500,6 +1503,10 @@ async function renderizarDocumentoDaPP(args: {
   /** Decisão 161: a PP paga por boleto — o PDF troca a linha do PIX por
    *  "Pagamento: Boleto"; na paga por guia (227), "Pagamento: Guia". */
   pagamentoPeloAnexo?: MeioPeloAnexo | null;
+  /** 16/11/2026: a URL do link de pagamento (meio `link`). O PDF troca a
+   *  linha do PIX por "Pagamento: Link · <URL>". Mutuamente exclusivo com
+   *  `pagamentoPeloAnexo`. */
+  linkDePagamento?: string | null;
   /** Decisão 178: a prévia da conferência — marca d'água e sem gravar. */
   previa?: boolean;
   /** Decisão 190: o selo "não pague" da PP gerada e da cancelada; null na
@@ -1529,6 +1536,7 @@ async function renderizarDocumentoDaPP(args: {
       reembolso_deslocamentos: args.pp.reembolso_deslocamentos,
     },
     pagamentoPeloAnexo: args.pagamentoPeloAnexo ?? null,
+    linkDePagamento: args.linkDePagamento ?? null,
     previa: args.previa === true,
     selo: args.selo,
     empresa: args.empresa as never,
@@ -2170,6 +2178,7 @@ async function finalizarPedidoCompraImpl(
       empresa: cnpjDaPP.empresa,
       fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
       pagamentoPeloAnexo: meioPeloAnexo(foraDoCadastroDe(d)?.meio),
+      linkDePagamento: foraDoCadastroDe(d)?.meio === "link" ? (foraDoCadastroDe(d)?.pagamento_link ?? null) : null,
       cartao: cartaoDe(d),
       responsavelVerbaNome: tipoVerba ? (titular.nome ?? "") : null,
       pagamentoDoTitular,
@@ -2748,6 +2757,7 @@ export async function previaDoPdfDaPP(
       empresa: cnpjDaPP.empresa,
       fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
       pagamentoPeloAnexo: meioPeloAnexo(foraDoCadastroDe(d)?.meio),
+      linkDePagamento: foraDoCadastroDe(d)?.meio === "link" ? (foraDoCadastroDe(d)?.pagamento_link ?? null) : null,
       cartao: cartaoDe(d),
       responsavelVerbaNome: tipoVerba ? (titular.nome ?? "") : null,
       pagamentoDoTitular: pagamentoDigitadoNoPdf(pagTitularDaPrevia),
@@ -3005,6 +3015,7 @@ async function refazerPdfDaPP(
     reembolso_tipo: ReembolsoTipo | null;
     reembolso_deslocamentos: DeslocamentosDoReembolso | null;
     pagamento_fora_do_cadastro_meio: string | null;
+    pagamento_fora_do_cadastro_link: string | null;
     /** Decisão 209. */
     cartao_corporativo: boolean | null;
     cartao_plataforma: string | null;
@@ -3080,6 +3091,8 @@ async function refazerPdfDaPP(
       cartao: cartaoDaLinha(pp),
       pagamentoDoTitular: pagamentoDoTitularDaPP(pp),
       pagamentoPeloAnexo: meioPeloAnexo(pp.pagamento_fora_do_cadastro_meio),
+      linkDePagamento:
+        pp.pagamento_fora_do_cadastro_meio === "link" ? (pp.pagamento_fora_do_cadastro_link ?? null) : null,
       responsavelVerbaNome: !pp.verba_producao
         ? null
         : verbaDeResponsavel(pp)
@@ -4975,6 +4988,10 @@ export async function atualizarVencimentoDaPP(
       pagamentoPeloAnexo: meioPeloAnexo(
         (ppBruta as { pagamento_fora_do_cadastro_meio?: string | null }).pagamento_fora_do_cadastro_meio,
       ),
+      linkDePagamento:
+        (ppBruta as { pagamento_fora_do_cadastro_meio?: string | null }).pagamento_fora_do_cadastro_meio === "link"
+          ? ((ppBruta as { pagamento_fora_do_cadastro_link?: string | null }).pagamento_fora_do_cadastro_link ?? null)
+          : null,
       responsavelVerbaNome: !pp.verba_producao
         ? null
         : verbaDeResponsavel(pp)
@@ -5351,6 +5368,7 @@ async function editarPPGeradaImpl(
     empresa: cnpjDaPP.empresa,
     fornecedor: fornecedorDoDocumento(fornRes.data ?? null, foraDoCadastroDe(d)),
     pagamentoPeloAnexo: meioPeloAnexo(foraDoCadastroDe(d)?.meio),
+    linkDePagamento: foraDoCadastroDe(d)?.meio === "link" ? (foraDoCadastroDe(d)?.pagamento_link ?? null) : null,
     cartao: cartaoDe(d),
     // Decisão 171: a verba tem titular nas três; nada novo grava responsável.
     responsavelVerbaNome: tipoVerba ? (titular.nome ?? "") : null,

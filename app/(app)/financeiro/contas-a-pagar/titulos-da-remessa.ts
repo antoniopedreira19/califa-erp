@@ -170,8 +170,9 @@ export function montarDadosDaRemessa(e: EntradaDaRemessa): {
       const fora = origemTipo === "pp" ? (foraPorParcela.get(row.origem_id) ?? null) : null;
       // Decisão 161: PP paga por boleto não entra na remessa (o gerador não
       // tem o segmento J) — paga-se pelo boleto anexado. A paga por guia
-      // (decisão 227) também não: paga-se pela guia anexada.
-      if (fora?.meio === "boleto" || fora?.meio === "guia") return null;
+      // (decisão 227) também não: paga-se pela guia anexada. A paga por link
+      // (16/11/2026) também não: paga-se abrindo o link.
+      if (fora?.meio === "boleto" || fora?.meio === "guia" || fora?.meio === "link") return null;
       const pixFora = fora?.meio === "pix" ? pixDe(fora.pix_tipo, fora.pix_chave) : null;
       const contaFora = fora?.meio === "conta" ? contaDe(fora) : null;
       const bruto = Number(row.valor);

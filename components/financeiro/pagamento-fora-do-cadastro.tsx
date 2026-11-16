@@ -50,18 +50,20 @@ export const ROTULO_CONTA: Record<TipoContaBancariaFornecedor, string> = {
   pagamento: "Pagamento",
 };
 
-/** "PIX · Aleatória", "Boleto", "Guia" ou "ITAÚ UNIBANCO". */
+/** "PIX · Aleatória", "Boleto", "Guia", "Link de pagamento" ou "ITAÚ UNIBANCO". */
 export function meioLegivel(p: PagamentoForaDoCadastroDaPP): string {
   if (p.meio === "boleto") return "Boleto";
   if (p.meio === "guia") return "Guia";
+  if (p.meio === "link") return "Link de pagamento";
   if (p.meio === "pix") return p.pix_tipo ? `PIX · ${ROTULO_PIX[p.pix_tipo]}` : "PIX";
   return p.banco_codigo ? nomeCurtoDoBanco(p.banco_codigo, p.banco_nome) : "Conta";
 }
 
-/** A chave, ou agência e conta — o que se digita no banco para pagar. */
+/** A chave, o link ou agência e conta — o que se digita no banco para pagar. */
 export function destinoLegivel(p: PagamentoForaDoCadastroDaPP): string {
   if (p.meio === "boleto") return "Pagar pelo boleto anexado";
   if (p.meio === "guia") return "Pagar pela guia anexada";
+  if (p.meio === "link") return p.pagamento_link ?? "";
   if (p.meio === "pix") return chavePixLegivel(p.pix_tipo, p.pix_chave);
   const tipo = p.tipo_conta ? ROTULO_CONTA[p.tipo_conta] : "Conta";
   return `Ag. ${p.agencia ?? ""}${p.agencia_dv ? `-${p.agencia_dv}` : ""} · ${tipo} ${p.conta ?? ""}-${p.conta_dv ?? ""}`;
@@ -95,7 +97,18 @@ export function PagamentoForaDoCadastroCartao({
         <span className="text-muted-foreground">{meioLegivel(pagamento)}</span>
       </p>
       <p className="mt-1 break-words font-mono text-[12.5px] font-semibold leading-snug tracking-[-0.01em]">
-        {destinoLegivel(pagamento)}
+        {pagamento.meio === "link" && pagamento.pagamento_link ? (
+          <a
+            href={pagamento.pagamento_link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-amber-900 underline decoration-amber-700/40 underline-offset-2 hover:decoration-amber-700"
+          >
+            {pagamento.pagamento_link}
+          </a>
+        ) : (
+          destinoLegivel(pagamento)
+        )}
       </p>
       {!semMotivo && pagamento.motivo && (
         <p className="mt-0.5 text-[11.5px] leading-snug text-muted-foreground">{pagamento.motivo}</p>
