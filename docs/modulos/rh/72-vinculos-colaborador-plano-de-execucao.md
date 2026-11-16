@@ -2,9 +2,9 @@
 
 > Companion de [70-vinculos-colaborador.md](70-vinculos-colaborador.md) e [71-vinculos-colaborador-modelo-de-dados.md](71-vinculos-colaborador-modelo-de-dados.md).
 >
-> Fase 1 dividida em 4 sessões curtas. Ao final, os 5 casos de virada ficam regularizados e a fundação pronta pra Fase 2 (UI).
+> Fase 1 dividida em 4 sessões curtas. Ao final, os 4 casos de virada ficam regularizados e a fundação pronta pra Fase 2 (UI).
 
-## Fase 1 — Fundação + 5 casos (sessões S1 a S4)
+## Fase 1 — Fundação + 4 casos (sessões S1 a S4)
 
 ### S1 — Fundação: tabela + enum + triggers básicos
 
@@ -57,13 +57,12 @@
 
 **Risco**: **médio-alto**. Trigger central do subsistema de férias. Quebrou → impacta todo cálculo de aquisitivos.
 
-### S4 — 5 casos de virada
+### S4 — 4 casos de virada
 
-**Entregável**: migration `20261116100004_vinculos_viradas_5_casos.sql`. Os 5 colaboradores têm 2 vínculos cada (antigo encerrado + novo ativo). Aquisitivos antigos CLT viraram `pago_rescisao`. Novos aquisitivos PJ começam da data da virada.
+**Entregável**: migration `20261116100004_vinculos_viradas_4_casos.sql`. Os 4 colaboradores têm 2 vínculos cada (antigo encerrado + novo ativo). Aquisitivos antigos CLT viraram `pago_rescisao`. Novos aquisitivos PJ começam da data da virada.
 
 **Pré-requisitos**:
-- Lista final dos 5 casos confirmada com RH, com datas exatas (P1 e P2 da spec). Nomes e datas ficam no handoff da sessão, não no repo (PII).
-- 5º caso identificado (o nome originalmente mencionado na ata foi descartado).
+- Lista final dos 4 casos confirmada com RH, com datas exatas (P1 e P2 da spec). Nomes e datas ficam no handoff da sessão, não no repo (PII).
 
 **Passos:**
 1. Escrever migration com guarda de tenant + backup de `colaboradores_ferias_periodos` + `colaboradores_ferias_lancamentos`.
@@ -144,7 +143,7 @@ Depois que todas as queries migraram:
 - **CP1** (fim de S1): nenhuma — fundação invisível.
 - **CP2** (fim de S2): técnica — contagem bate.
 - **CP3** (fim de S3): técnica crítica — snapshots antes/depois iguais.
-- **CP4** (fim de S4): com RH — datas dos 5 casos conferem com o real.
+- **CP4** (fim de S4): com RH — datas dos 4 casos conferem com o real.
 - **CP5** (fim de Fase 2): com RH — RH consegue encerrar/criar vínculo sozinho pela UI.
 - **CP6** (fim de Fase 3): técnica — sem query remanescente lendo `colaboradores.tipo_contratacao`.
 
@@ -154,14 +153,14 @@ Depois que todas as queries migraram:
 |---|---|
 | Trigger quebra cálculo de férias de todos | S3 tem checkpoint técnico crítico — validar que snapshot pré/pós é idêntico pros 198 colaboradores onde nada deveria mudar. |
 | Loop de triggers (vínculo → colab → férias → vínculo?) | Teste no Sandbox. Função `fn_colab_sincroniza_tipo_do_vinculo_ativo` só faz UPDATE se tipo mudou (evita loop). |
-| 5º caso errado | Pré-requisito explícito pra S4: confirmação com RH antes de rodar. |
+| Caso errado (confundir quem entra) | Pré-requisito explícito pra S4: confirmação com RH antes de rodar. |
 | RH perde histórico porque a UI não mostra vínculos ainda | Fase 2 resolve. Até lá, consulta via SQL ou spec. |
 | Query futura esquecer de usar view e ler `c.tipo_contratacao` que já foi aposentada | S11 só roda depois que grep mostrar zero ocorrências. |
 
 ## Métricas de sucesso da Fase 1
 
 - Fase 1 aplicada sem rollback em prod.
-- Os 5 colaboradores têm vínculos corretos (verificado por SQL + visualização na tela).
+- Os 4 colaboradores têm vínculos corretos (verificado por SQL + visualização na tela).
 - Pros outros ~198 colaboradores, `select count(*) from colaboradores_ferias_periodos where ...` dá o mesmo número antes e depois (nenhum período foi criado/deletado indevidamente).
 - Nenhum ticket de bug ligado a férias nos primeiros 7 dias após aplicação.
 

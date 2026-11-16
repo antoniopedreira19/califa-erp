@@ -229,9 +229,9 @@ Após essa migration: todo colaborador ativo tem 1 vínculo ativo igual ao estad
 
 **Primeira migration com impacto comportamental.** Mas como pra todos os colaboradores `vinculo_ativo.data_inicio == colaborador.data_admissao`, não há mudança prática — os aquisitivos existentes continuam válidos.
 
-### Migration 4 — 5 casos de virada (`20261116100004_vinculos_viradas_5_casos.sql`)
+### Migration 4 — 4 casos de virada (`20261116100004_vinculos_viradas_4_casos.sql`)
 
-Pra cada um dos 5 casos (nomes + UUIDs + datas no handoff da sessão, não aqui por PII):
+Pra cada um dos 4 casos (nomes + UUIDs + datas no handoff da sessão, não aqui por PII):
 
 ```sql
 -- 1. Encerrar o vínculo ativo atual com motivo e data_fim = dia anterior à virada
@@ -318,10 +318,10 @@ Fase 3 vai migrar queries pra ler de `colaborador_vinculos` diretamente. Lista p
 
 Antes de rodar migration 4:
 
-- [ ] Confirmar os 5 casos com RH + datas exatas.
+- [ ] Confirmar os 4 casos com RH + datas exatas.
 - [ ] Rodar migrations 1–3 no Sandbox (`california-sandbox`).
 - [ ] Validar que Quadro de Férias continua com os mesmos aquisitivos no Sandbox (nada mudou pra ninguém).
-- [ ] Rodar migration 4 no Sandbox com os 5 casos.
+- [ ] Rodar migration 4 no Sandbox com os 4 casos.
 - [ ] Validar pro caso principal escolhido: aquisitivo novo começa na data da virada, antigos viraram `pago_rescisao`.
 - [ ] Repetir em prod.
 

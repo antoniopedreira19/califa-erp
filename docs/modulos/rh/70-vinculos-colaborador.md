@@ -1,8 +1,8 @@
 # Vínculos de Colaborador — Spec viva
 
-> **Status**: **Fase 1 em modelagem** (2026-11-16). Aprovado pelo Antonio após ata da reunião interna com o RH (16/11/2026). Resolve 5 casos imediatos de colaboradores que trocaram de modalidade (CLT → PJ) e cujo vínculo CLT foi formalmente encerrado + abre caminho pra futuro refactor de modelo. Nomes e datas específicas dos casos vivem na migration S4 e no handoff da sessão — fora do repo por PII.
+> **Status**: **Fase 1 em modelagem** (2026-11-16). Aprovado pelo Antonio após ata da reunião interna com o RH (16/11/2026). Resolve 4 casos imediatos de colaboradores que trocaram de modalidade (CLT → PJ) e cujo vínculo CLT foi formalmente encerrado + abre caminho pra futuro refactor de modelo. Nomes e datas específicas dos casos vivem na migration S4 e no handoff da sessão — fora do repo por PII.
 >
-> **Depende** de nada. **Bloqueia** nada crítico — módulo de férias já opera, a mudança só corrige contagem pros 5 casos citados.
+> **Depende** de nada. **Bloqueia** nada crítico — módulo de férias já opera, a mudança só corrige contagem pros 4 casos citados.
 >
 > Este documento é a fonte-verdade do subsistema — toda decisão nova entra aqui, não em commit ou chat.
 
@@ -10,12 +10,11 @@
 
 O modelo atual assume que **1 colaborador = 1 vínculo pro resto da vida na empresa**. A coluna `colaboradores.tipo_contratacao` + `data_admissao` dizem o tipo atual e quando a pessoa entrou. A trigger `fn_gerar_ferias_periodos` usa a `data_admissao` como base pra gerar os aquisitivos de férias.
 
-Isso quebra em **5 casos reais** no tenant Califa (nomes e datas específicas no handoff da sessão + migration S4, não aqui por PII):
+Isso quebra em **4 casos reais** no tenant Califa (nomes e datas específicas no handoff da sessão + migration S4, não aqui por PII):
 
-- 4 colaboradores com virada CLT → PJ confirmados pela reunião do RH em 16/11/2026.
-- 1 colaborador adicional a identificar (originalmente nomeado na ata foi descartado; o 5º real ainda será mapeado).
+- 4 colaboradores com virada CLT → PJ confirmados pela reunião do RH em 16/11/2026. A ata original tinha 5 nomes; 1 foi descartada pelo próprio RH como "não precisa ajuste" durante a validação.
 
-Nos 5 casos, o colaborador recebeu **verbas rescisórias da CLT** (incluindo férias proporcionais) e começou um novo vínculo. O sistema continua contando aquisitivos de férias desde a admissão CLT original — o que gera:
+Nos 4 casos, o colaborador recebeu **verbas rescisórias da CLT** (incluindo férias proporcionais) e começou um novo vínculo. O sistema continua contando aquisitivos de férias desde a admissão CLT original — o que gera:
 - Aquisitivos pré-virada que **já foram pagos na rescisão**, aparecendo como pendentes.
 - Data de vencimento de concessivo calculada errado (parte da admissão antiga, não da virada).
 - Base de salário errada pro cálculo de férias (usa a última salário cadastrada, mas sem vincular ao tipo de contratação correto no momento).
@@ -24,20 +23,20 @@ A planilha "Data de Admissão" da Controle e Planejamento de Férias já lida co
 
 ## 2. Objetivo da Fase 1
 
-Modelar a estrutura `colaborador_vinculos` e **destravar os 5 casos de virada** com o mínimo de impacto no resto do sistema.
+Modelar a estrutura `colaborador_vinculos` e **destravar os 4 casos de virada** com o mínimo de impacto no resto do sistema.
 
 Entregáveis:
 
 1. Tabela nova `colaborador_vinculos` com o histórico de vínculos trabalhistas de cada colaborador.
 2. Migration de backfill: todo colaborador ativo ganha **1 vínculo ativo** correspondente ao estado atual (`tipo_contratacao` + `data_admissao` vigentes).
-3. Pros 5 casos de virada: migration manual cria **2 vínculos** (1 antigo encerrado + 1 novo ativo com a data da virada).
+3. Pros 4 casos de virada: migration manual cria **2 vínculos** (1 antigo encerrado + 1 novo ativo com a data da virada).
 4. Trigger `fn_gerar_ferias_periodos` ajustada pra usar `vinculo_ativo.data_inicio` em vez de `colaborador.data_admissao`.
 5. Aquisitivos de vínculos **encerrados** ficam marcados como `pago_rescisao` (status que já existe no enum de períodos). Lançamentos antigos preservados.
 6. `colaboradores.tipo_contratacao` e `colaboradores.data_admissao` **continuam existindo e sincronizados** com o vínculo ativo via trigger. Zero query da aplicação precisa ser migrada na Fase 1.
 
 ## 3. Fora de escopo (Fase 1)
 
-- **UI de gestão de vínculos**. Pros 5 casos iniciais, intervenção é via migration SQL. RH ainda não consegue encerrar/criar vínculo pela interface. **Entra na Fase 2.**
+- **UI de gestão de vínculos**. Pros 4 casos iniciais, intervenção é via migration SQL. RH ainda não consegue encerrar/criar vínculo pela interface. **Entra na Fase 2.**
 - **Migração das queries da aplicação** pra ler `vinculo_ativo.tipo_contratacao` em vez de `colaboradores.tipo_contratacao`. **Entra na Fase 3**, se e quando quiser. Hoje nada depende disso porque mantemos a coluna sincronizada.
 - **Histórico salarial por vínculo**. Hoje `colaboradores_salarios` tem N salários por colaborador independentes de vínculo. Continua assim. Relatórios "quanto Marisa ganhava como CLT vs PJ" vão ter que inferir pelas datas. **Fora do refactor atual.**
 - **Unificação com `freelancer_contratos`**. Modelo paralelo em `/freelancers` continua separado. Dívida arquitetural reconhecida. Próximo refactor quando/se quiser unificar.
@@ -90,7 +89,7 @@ Nova regra:
 
 ### 5.4 Edição manual na Fase 1
 
-- Pros 5 casos iniciais: migration SQL cria os vínculos encerrado + ativo.
+- Pros 4 casos iniciais: migration SQL cria os vínculos encerrado + ativo.
 - Pra qualquer nova virada que aconteça **antes da Fase 2**, continua sendo via SQL direto (o modelo já suporta, só não tem botão).
 - **Documentar no handoff** quando acontecer, pra manter rastro.
 
@@ -102,7 +101,7 @@ Nova regra:
 
 **D3 — Aquisitivos de vínculo encerrado viram `pago_rescisao`, não são apagados.** Preserva lançamentos antigos (histórico de férias gozadas). Enum `ferias_periodo_status` já tem esse valor.
 
-**D4 — Backfill cria 1 vínculo ativo por colaborador** usando os valores atuais. Pros 5 casos de virada, migration manual adiciona o vínculo encerrado antes do ativo.
+**D4 — Backfill cria 1 vínculo ativo por colaborador** usando os valores atuais. Pros 4 casos de virada, migration manual adiciona o vínculo encerrado antes do ativo.
 
 **D5 — Sem UI na Fase 1.** Intervenção via SQL. UI entra na Fase 2.
 
@@ -110,7 +109,7 @@ Nova regra:
 
 ## 7. Pendências
 
-- **P1 — Confirmar os 5 casos** (nomes + datas no handoff da sessão, não aqui). Necessário antes de rodar a migration manual.
+- **P1 — Confirmar os 4 casos** (nomes + datas no handoff da sessão, não aqui). Necessário antes de rodar a migration manual.
 - **P2 — Datas exatas dos confirmados**: cross-check com a planilha "Data de Admissão" da Controle e Planejamento 2026.
 - **P3 — O que acontece com `data_encerramento` de colaboradores ativos.** Hoje `data_encerramento IS NULL` + `status='ativo'`. Após a Fase 1, se um dia a pessoa for desligada, o vínculo ativo deve ser encerrado mas `data_encerramento` em `colaboradores` também? Alinhamento com RH.
 
