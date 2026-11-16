@@ -9013,3 +9013,9 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Lista de PPs, colunas:** Código, Valor, Parcela, Fornecedor, Prazo original, Enviada por, Job, **Abertura do job**, **Faturamento**, Status e o ícone da planilha; a Emissão saiu. O Faturamento é a esteira de Visualizar Jobs (`faturamentoPorJob`), lida no mesmo `Promise.all` da página. O ícone abre a Planilha Interna do job no pop-up de leitura da abertura, com a linha da PP na borda vermelha.
 - **Atenção:** em 15/11 nenhum job com PP está faturado pelo sistema (1 nota emitida no tenant, sem job) — a coluna só mostra Faturado quando as notas forem emitidas por ele.
 - **Sem migration.**
+
+## ⚠️ Nota de 2026-11-15 — a lista de PPs sem o corte de 1.000 (amplia a decisão 255)
+
+- A lista de PPs do Contas a Pagar parava nas 1.000 mais recentes: com 1.045 enviadas, as 45 mais antigas (08/09 a 05/10) e os títulos delas sumiam da lista e de Títulos a Pagar, sem aviso.
+- Ela, a aba Títulos da Conciliação e a remessa agora leem as PPs página a página (`todasAsLinhas`, ordem por `created_at` e `id`).
+- As outras leituras da página estão abaixo de 1.000 (baixas 335, `vw_a_pagar` 387); as duas crescem com as PPs e são as próximas a passar.

@@ -1,7 +1,7 @@
 # 255 — Fornecedor por busca no servidor, e o cadastro completo para a PP sair
 
 **Data:** 2026-11-12
-**Status:** aceita e implementada em 12/11/2026.
+**Status:** aceita e implementada em 12/11/2026. Ampliada em 15/11/2026: as leituras de PPs do financeiro também passam a ler página a página (nota no fim).
 **Quem decidiu:** Tiago, em 12/11/2026, depois da conferência da planilha "Base Fornecedores California" com o cadastro: "pode corrigir e depois cadastrar tudo"; conta ou PIX só quando a PP paga pelo cadastro (chave aleatória, boleto e guia não exigem).
 **Amplia:** a trava do cadastro da [166](166-regime-e-cnae-do-fornecedor.md) (regime e CNAE). O cadastro rápido da [048](048-fornecedor-nasce-de-dentro-da-pp.md) e o "Sem conta nem PIX" da [161](161-pp-por-boleto-ou-chave-aleatoria.md) continuam.
 
@@ -53,3 +53,9 @@ Pedido do Tiago, depois da consulta do regime e do CNAE em lote:
 - **"Exportar Excel"**, ao lado de "Mostrar inativos", baixa os fornecedores **que a tela mostra** (busca, inativos e filtros dos títulos), na ordem dela, como o "Exportar Excel" da Visualizar Jobs. Cada linha leva **todos os campos do cadastro**, um por coluna: nome, razão social, tipo, CNPJ/CPF, status, regime (o gravado e o da consulta, com as datas), CNAE e atividade, declaração do Simples, e-mail, telefone, endereço, banco, agência, conta, PIX, "sem conta nem PIX", veículo de mídia, empresa de fora do grupo, observações e datas do cadastro. O arquivo se chama "Fornecedores - DD-MM-AAAA.xlsx", com "(filtrado)" quando algum filtro estava ligado.
 - **Só Administrador e Financeiro exportam** (`cadastros.fornecedores.exportar`): o arquivo leva conta e PIX de todos de uma vez. GP e Produtor abrem a tela e veem as colunas, mas não o botão, e a rota recusa (403). Cada exportação grava `fornecedores.exportados` na auditoria, com a quantidade e se estava filtrada.
 - Implementação: `POST /api/fornecedores/export` recebe os ids da tela e lê o cadastro inteiro de cada um; a planilha é montada por `lib/exportacao/planilha-de-fornecedores.ts` (teste em `planilha-de-fornecedores.test.ts`). Testado no Sandbox: filtrada (1 linha) e inteira com inativos (4), conferida com o banco; GP sem botão e com 403.
+
+## ⚠️ 15/11/2026 — as PPs do financeiro também leem página a página
+
+- **O erro:** a lista de PPs do Contas a Pagar lia as PPs enviadas num select só e parava em 1.000, sem aviso. Com 1.045 PPs enviadas na produção, as 45 mais antigas (de 08/09 a 05/10) sumiam da lista — "Pagas" mostrava 288 de 314 — e os títulos delas, de Títulos a Pagar.
+- **Agora:** essa leitura, a da aba Títulos da Conciliação e a da remessa (PPs aprovadas e pagas, 466 em 15/11, que só crescem) usam o `todasAsLinhas`, ordenadas por `created_at` e `id`.
+- **As outras leituras do Contas a Pagar** estavam abaixo de 1.000 em 15/11 — baixas 335, `vw_a_pagar` 387, avulsas 221, itens de remessa 176 — e seguem num select só. As baixas e a `vw_a_pagar` crescem com as PPs: quando chegarem perto de 1.000, entram no mesmo caminho.

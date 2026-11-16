@@ -51,13 +51,20 @@ export async function carregarDadosDaRemessa(): Promise<Resultado> {
     ),
     carregarColaboradoresPagamento(supabase, tenantId),
     // Só a PP que pode ter título a pagar: a fora do cadastro e a verba
-    // mudam o que o arquivo paga.
-    supabase
-      .from("pedidos_compra")
-      .select(SELECT_PP_DO_FINANCEIRO)
-      .eq("tenant_id", tenantId)
-      .in("status", ["aprovada", "pago"])
-      .not("enviada_financeiro_em", "is", null),
+    // mudam o que o arquivo paga. Página a página (15/11/2026), como as
+    // outras leituras de PPs do financeiro: o corte de 1.000 do PostgREST
+    // sumiria com títulos sem aviso.
+    todasAsLinhas((de, ate) =>
+      supabase
+        .from("pedidos_compra")
+        .select(SELECT_PP_DO_FINANCEIRO)
+        .eq("tenant_id", tenantId)
+        .in("status", ["aprovada", "pago"])
+        .not("enviada_financeiro_em", "is", null)
+        .order("created_at")
+        .order("id")
+        .range(de, ate),
+    ),
     supabase.from("pedidos_compra_retencoes").select("pedido_compra_id, imposto, aliquota").eq("tenant_id", tenantId),
     supabase
       .from("vw_a_pagar")

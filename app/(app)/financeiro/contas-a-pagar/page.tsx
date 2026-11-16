@@ -145,7 +145,10 @@ export default async function PedidosCompraFinanceiroPage({
     faturasNaBaixa,
     faturamentoDosJobs,
   ] = await Promise.all([
-    (() => {
+    // Página a página (15/11/2026): o PostgREST corta em 1.000 linhas sem
+    // aviso, e com 1.045 PPs enviadas as 45 mais antigas sumiam da lista —
+    // e os títulos delas, de Títulos a Pagar. Ver `todasAsLinhas`.
+    todasAsLinhas((de, ate) => {
       let q = supabase
         .from("pedidos_compra")
         .select(SELECT_PP_DO_FINANCEIRO)
@@ -159,8 +162,8 @@ export default async function PedidosCompraFinanceiroPage({
         // ser enviada.
         .not("enviada_financeiro_em", "is", null);
       if (empresaFiltroIds.length > 0) q = q.in("empresa_id", empresaFiltroIds);
-      return q.order("created_at", { ascending: false });
-    })(),
+      return q.order("created_at", { ascending: false }).order("id").range(de, ate);
+    }),
     supabase
       .from("contas_bancarias")
       .select("*")

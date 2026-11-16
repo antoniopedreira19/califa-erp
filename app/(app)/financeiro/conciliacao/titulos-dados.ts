@@ -153,13 +153,20 @@ export async function carregarTitulosDaConciliacao(
   ] = await Promise.all([
     // ---- A pagar ----
     // Só aprovada e paga viram título; a paga entra porque uma parcela
-    // dela pode ter voltado a aberto (baixa cancelada).
-    supabase
-      .from("pedidos_compra")
-      .select(SELECT_PP_DO_FINANCEIRO)
-      .eq("tenant_id", tenantId)
-      .in("status", ["aprovada", "pago"])
-      .not("enviada_financeiro_em", "is", null),
+    // dela pode ter voltado a aberto (baixa cancelada). Página a página
+    // (15/11/2026): as pagas só crescem, e o corte de 1.000 do PostgREST
+    // sumiria com títulos em aberto sem aviso.
+    todasAsLinhas((de, ate) =>
+      supabase
+        .from("pedidos_compra")
+        .select(SELECT_PP_DO_FINANCEIRO)
+        .eq("tenant_id", tenantId)
+        .in("status", ["aprovada", "pago"])
+        .not("enviada_financeiro_em", "is", null)
+        .order("created_at")
+        .order("id")
+        .range(de, ate),
+    ),
     // Fornecedores ativos: o nome na lista a receber e o asterisco da 067.
     // Decisão 255: sem o corte de 1.000 linhas do PostgREST.
     todasAsLinhas((de, ate) =>
