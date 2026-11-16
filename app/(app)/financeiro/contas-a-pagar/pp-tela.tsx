@@ -94,6 +94,7 @@ import {
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { rejeitarPedidoCompraFinanceiro } from "./actions";
 import { ReverterAprovacaoDialog } from "./reverter-aprovacao-dialog";
+import { SeloDaPPAtrasadaNaTela } from "@/app/(app)/_pagamentos-atrasados/componentes";
 import {
   signedUrlPdf,
   signedUrlAnexo,
@@ -460,6 +461,8 @@ export function PPTela(
                 Urgente
               </Badge>
             )}
+            {/* Decisão 259: a PP de pagamento atrasado, com a competência. */}
+            {pp.pagamento_atrasado && <SeloDaPPAtrasadaNaTela liberacao={pp.pagamento_atrasado} />}
             <DialogDescription asChild>
               <span id="pp-tela-descricao" className="text-xs text-white/60">
                 {aoLadoDoPainel !== null

@@ -43,6 +43,11 @@ export interface DadosPpLinha {
   concluido: boolean;
   /** Abre o painel "Destrinchar realizado" do item. */
   onAbrirPainel: (itemRealizadoId: string) => void;
+  /** Decisão 259: por que a linha não recebe PP — o custo AR do job fechado
+   *  e já faturado. Sem PP na linha, o "Gerar PP" fica travado com o motivo
+   *  na dica; com PP, o chip "PPs · N" abre o painel para ver. Nulo: livre.
+   *  Obrigatório: quem monta a calha manda `null` explícito. */
+  travadaPor: string | null;
 }
 
 export function CalhaLinha({
@@ -136,6 +141,19 @@ function descreverPp(
       criar: false,
       onClick: abrir,
       badge: pendentes,
+    };
+  }
+
+  // Decisão 259: o AR do job fechado e já faturado — o "Gerar PP" travado.
+  if (pp.travadaPor) {
+    return {
+      chave: "pp",
+      rotulo: "Gerar PP",
+      sigla: "PP",
+      titulo: pp.travadaPor,
+      icone: FilePlus,
+      criar: true,
+      disabled: true,
     };
   }
 

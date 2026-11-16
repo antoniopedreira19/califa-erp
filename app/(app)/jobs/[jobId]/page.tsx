@@ -52,6 +52,8 @@ import { ErratasCard } from "./erratas-card";
 import { AlteracoesFinanceiroCard } from "./alteracoes-financeiro-card";
 import { JobChatSection } from "./comunicacao/job-chat-section";
 import { carregarDetalheDoJob } from "./carregar-detalhe";
+import { pagamentosAtrasadosNaPlanilha } from "@/lib/data/pagamentos-atrasados";
+import { jobFechado } from "@/lib/pagamentos-atrasados";
 import { cancelamentoDoJob, travaDoCancelamento } from "@/lib/data/cancelamentos";
 import { MenuDoJob } from "./cancelamento/menu-do-job";
 import type { PPDoPedido } from "./cancelamento/solicitar-cancelamento-dialog";
@@ -190,7 +192,22 @@ export default async function JobDetailPage({
     ppsQuePossoPrestarContas,
     papelNaErrata,
     errataPronta,
+    pagamentosAtrasados,
   } = detalhe;
+
+  // Decisão 259: os pagamentos atrasados do job fechado, para a planilha
+  // (o selo, o Editar planilha de linha vermelha e o Concluir) e para o
+  // formulário da PP (a aba PPs também edita a PP atrasada).
+  const pagamentosAtrasadosDaPlanilha = pagamentosAtrasadosNaPlanilha({
+    pagamentos: pagamentosAtrasados,
+    role: session.activeRole,
+    job: { competencia_trimestre: raw.competencia_trimestre ?? null, competencia_ano: raw.competencia_ano ?? null },
+    temAR: itens.some((it) => it.tipo_custo === "AR" && !it.cancelada_em),
+  });
+  const liberacaoAbertaDoJob =
+    jobFechado(job.status) && pagamentosAtrasados.atual && !pagamentosAtrasados.atual.conclusaoPedidaEm
+      ? pagamentosAtrasados.atual
+      : null;
 
   // Decisão 242: as PPs a emitir que foram ao Comitê entram na aba PPs, com
   // o último pedido de cada uma (os cancelados já ficam de fora). A que foi
@@ -514,6 +531,8 @@ export default async function JobDetailPage({
             // O "Editar orçado" é do financeiro (decisão 115); aqui a
             // produção corrige pela errata.
             edicaoDoFinanceiro={null}
+            // Decisão 259: os pagamentos atrasados do job fechado.
+            pagamentosAtrasados={pagamentosAtrasadosDaPlanilha}
             // A linha de parâmetros (decisão 224). A produção a muda pelo
             // "Editar planilha", que vira errata (decisão 233), com a trava
             // da errata: sem envio para faturamento (no mensal, de nenhum
@@ -635,6 +654,9 @@ export default async function JobDetailPage({
             // Decisão 160: o envio, o formulário e a PP ao lado dos
             // documentos também pela aba — com o que o painel do item usa.
             statusDoJob={job.status}
+            // Decisão 259: a PP de pagamento atrasado editada pela aba.
+            pagamentoAtrasadoAberto={liberacaoAbertaDoJob}
+            podeConcluirPPsAtrasadas={pagamentosAtrasadosDaPlanilha.podeCriarLinha}
             tomadoresDaNf={tomadoresDaNf}
             tomadorPorEmpresa={tomadorPorEmpresa}
             empresas={empresas}
@@ -723,6 +745,9 @@ export default async function JobDetailPage({
         jobId={job.id}
         jobCodigo={job.codigo}
         status={job.status}
+        // Decisão 259: o rodapé do job fechado diz que há pagamentos
+        // atrasados liberados.
+        pagamentosAtrasadosLiberados={liberacaoAbertaDoJob !== null}
         orcamentoHref={`/orcamentos/${job.projeto_id}/${job.orcamento_id}?v=${job.versao_orcamento_aprovada_id}`}
         podeEnviarFaturamento={podeEnviarFaturamento && !comPedido}
         aberturaEmRevisao={job.abertura_em_revisao}

@@ -54,6 +54,8 @@ import {
 } from "@/components/ui/filtro-de-coluna";
 import { formatDiaBr } from "@/lib/formatar-data-hora";
 import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
+import type { LiberacaoPagamentosAtrasados } from "@/lib/pagamentos-atrasados";
+import { SeloAtrasadoNaLista, SeloCartaoNaLista } from "@/app/(app)/_pagamentos-atrasados/componentes";
 import { usePublicarContagemPorEmpresa } from "@/components/ui/contagem-nos-seletores";
 
 /** Decisão 257: a Planilha Interna do job em leitura, com a linha da PP em
@@ -101,6 +103,10 @@ export interface PPRow {
   urgente_justificativa: string | null;
   urgente_em: string | null;
   urgente_por_nome: string | null;
+  /** Decisão 259: a PP de pagamento atrasado — a liberação do financeiro
+   *  (competência, motivo, quem liberou). Nula na PP de sempre;
+   *  obrigatória para o `.map` não descartá-la. */
+  pagamento_atrasado: LiberacaoPagamentosAtrasados | null;
   /**
    * Documentos anexados no instante da aprovação. Três estados
    * diferentes, e a tela distingue os três: `null` = aprovada antes do
@@ -559,6 +565,9 @@ function colunasDoModo(prestacoes: boolean): ColunaFiltravel<PPRow>[] {
           r.codigo,
           urgenteVisivel(r) ? "Urgente" : "",
           r.verba_producao ? (r.tipo_verba === "reembolso" ? "Reembolso" : "Verba") : "",
+          // Decisão 259: os selos novos da célula também são achados.
+          r.cartao_corporativo ? "Cartão" : "",
+          r.pagamento_atrasado ? "Atrasado" : "",
         ].join(" "),
       }),
     },
@@ -1006,18 +1015,32 @@ export function PedidosCompraList({
                   {/* Decisão 257: o selo Verba/Reembolso logo embaixo do
                       código, para a coluna ficar estreita. No filtro de
                       prestações a linha é a da prestação. */}
-                  {r.verba_producao && (
+                  {/* Decisão 259: a PP de pagamento atrasado leva o selo
+                      "Atrasado · 4T/26" no mesmo lugar, e ele toma o lugar
+                      do selo do tipo (Reembolso, Cartão) — o tipo segue na
+                      coluna Fornecedor e na tela da PP. O cartão
+                      corporativo ganha "Cartão", como a Verba e o
+                      Reembolso. */}
+                  {filtro === "prestacoes" && r.verba_producao ? (
                     <span className="mt-1 flex font-sans">
-                      {filtro === "prestacoes" ? (
-                        <SeloPrestacao />
-                      ) : (
-                        <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
-                          {/* Decisão 187: o reembolso mora no campo da verba. */}
-                          {r.tipo_verba === "reembolso" ? "Reembolso" : "Verba"}
-                        </span>
-                      )}
+                      <SeloPrestacao />
                     </span>
-                  )}
+                  ) : r.pagamento_atrasado ? (
+                    <span className="mt-1 flex font-sans">
+                      <SeloAtrasadoNaLista liberacao={r.pagamento_atrasado} />
+                    </span>
+                  ) : r.verba_producao ? (
+                    <span className="mt-1 flex font-sans">
+                      <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                        {/* Decisão 187: o reembolso mora no campo da verba. */}
+                        {r.tipo_verba === "reembolso" ? "Reembolso" : "Verba"}
+                      </span>
+                    </span>
+                  ) : r.cartao_corporativo ? (
+                    <span className="mt-1 flex font-sans">
+                      <SeloCartaoNaLista />
+                    </span>
+                  ) : null}
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums font-semibold">
                   {formatMoney(r.valor)}

@@ -52,6 +52,14 @@ import {
 import { destinoPorTecla } from "@/lib/calculos/ordem-itens";
 import { GerarPPDrawer } from "./gerar-pp-drawer";
 import { useCustosDoSocio } from "./custo-do-socio";
+import {
+  MSG_AR_JOB_FATURADO,
+  competenciaLonga,
+  jobFechado,
+  type PagamentosAtrasadosNaPlanilha,
+} from "@/lib/pagamentos-atrasados";
+import { formatDiaBr } from "@/lib/formatar-data-hora";
+import { RelogioDaLinhaAtrasada, SeloDaPPAtrasada } from "@/app/(app)/_pagamentos-atrasados/componentes";
 import type { CustoDoSocio } from "@/lib/types";
 import { PainelPPsItem } from "./painel-pps-item";
 import { PrestarContasDrawer } from "../pps/prestar-contas-drawer";
@@ -296,6 +304,12 @@ interface Props {
    *  VERMELHA, não. Hoje todo mundo passa — a separação existe para o dia
    *  em que os papéis entrarem, e para o gate nascer num lugar só. */
   podeEditarLinhas?: boolean;
+  /** Decisão 259: o "Editar planilha" do job fechado e liberado — só entra
+   *  linha vermelha nova; as linhas que já existem não abrem. */
+  soLinhaVermelha?: boolean;
+  /** Decisão 259: os pagamentos atrasados do job (a liberação, as marcas
+   *  das linhas vermelhas criadas nela, a trava do AR no job faturado). */
+  pagamentosAtrasados?: PagamentosAtrasadosNaPlanilha | null;
   /** Quem está editando o orçado (decisão 115). `financeiro` é o "Editar
    *  orçado" da tela do job no financeiro: abrem os valores do orçado (P1)
    *  e, desde 08/10/2026, o tipo de custo da linha sem nada lançado (sem
@@ -793,6 +807,8 @@ export function JobItemRealizadoTable({
   seloDaLinha,
   errata,
   podeEditarLinhas = true,
+  soLinhaVermelha = false,
+  pagamentosAtrasados = null,
   modoDaEdicao = "errata",
   mesDoTrecho = null,
   orcadoVisivel = true,
@@ -808,7 +824,41 @@ export function JobItemRealizadoTable({
   /** A errata organiza a planilha (09/10/2026): mover item, renomear,
    *  criar e remover agrupamento. Só na errata — o "Editar orçado" do
    *  financeiro mexe em valor, não em organização. */
-  const organizando = editando && modoDaEdicao === "errata";
+  const organizando = editando && modoDaEdicao === "errata" && !soLinhaVermelha;
+  // Decisão 259: os pagamentos atrasados do job fechado.
+  const jobFechadoPA = jobFechado(statusDoJob);
+  const liberacaoAbertaPA =
+    jobFechadoPA && pagamentosAtrasados?.atual && !pagamentosAtrasados.atual.conclusaoPedidaEm
+      ? pagamentosAtrasados.atual
+      : null;
+  /** A liberação de cada id: nomeia a competência das linhas vermelhas
+   *  criadas nela (e das PPs, que já trazem a própria). */
+  const liberacoesPorId = React.useMemo(
+    () => new Map((pagamentosAtrasados?.todas ?? []).map((l) => [l.id, l])),
+    [pagamentosAtrasados],
+  );
+  /** Por que a linha do job fechado e liberado não recebe PP: hoje, só o
+   *  custo AR no job já faturado. Nulo: recebe. */
+  const motivoSemPPAtrasada = (tipo: string | null | undefined): string | null =>
+    liberacaoAbertaPA && tipo === "AR" && pagamentosAtrasados?.jaFaturado ? MSG_AR_JOB_FATURADO : null;
+  /** A dica do relógio da linha: as PPs de pagamento atrasado dela (ou a
+   *  linha vermelha criada na liberação, ainda sem PP), a competência e
+   *  quem liberou. Nulo: a linha não tem pagamento atrasado. */
+  const tituloDoAtrasoDaLinha = (
+    item: { pagamento_atrasado_id?: string | null },
+    pps: PedidoCompraNaLista[],
+  ): string | null => {
+    const atrasadas = pps.filter((pp) => pp.pagamento_atrasado && pp.status !== "cancelada");
+    const daLinha = item.pagamento_atrasado_id ? (liberacoesPorId.get(item.pagamento_atrasado_id) ?? null) : null;
+    const lib = atrasadas[0]?.pagamento_atrasado ?? daLinha;
+    if (!lib) return null;
+    const quais = atrasadas.length
+      ? `${atrasadas.length === 1 ? "PP" : "PPs"} de pagamento atrasado: ${atrasadas
+          .map((pp) => `${pp.codigo} (${formatCurrency(Number(pp.valor), "BRL")})`)
+          .join(", ")}`
+      : "linha vermelha criada na liberação, ainda sem PP";
+    return `${quais} · competência ${competenciaLonga(lib.trimestre, lib.ano)} · liberado${lib.liberadoPorNome ? ` por ${lib.liberadoPorNome}` : ""} em ${formatDiaBr(lib.liberadoEm)}`;
+  };
   /** Quais colunas a grade desenha. Vai para o `colgroup`, para o piso
    *  de largura e para todos os `colSpan` de linha inteira — os três têm
    *  que sair da MESMA fonte, senão a tabela desalinha sem erro. */
@@ -1183,6 +1233,9 @@ export function JobItemRealizadoTable({
       ) {
         return null;
       }
+      // Decisão 259: no job fechado e liberado, só a linha vermelha nova
+      // abre — as que já existem não mudam (no job encerrado não há errata).
+      if (soLinhaVermelha && !errata.ehNova(rowId)) return null;
       // O nome: o da linha nova sempre; o da linha que já existia só na
       // errata (decisão 252), e não com PP que já chegou ao financeiro.
       if (coluna === "item") {
@@ -1227,6 +1280,7 @@ export function JobItemRealizadoTable({
       modoDaEdicao,
       travaDoTipoPorLinha,
       ppsDoNomePorLinha,
+      soLinhaVermelha,
     ],
   );
 
@@ -1958,11 +2012,25 @@ export function JobItemRealizadoTable({
                                   {erroDoNome.texto}
                                 </span>
                               )}
-                              {item.linha_vermelha && (
+                              {/* Decisão 259: a pastilha "só realizado" só
+                                  na edição — na leitura, o vermelho da linha
+                                  basta. Vale para toda Planilha Interna. */}
+                              {item.linha_vermelha && editando && (
                                 <span className={cn(ERRATA.tagVermelha, "flex-none")}>
                                   só realizado
                                 </span>
                               )}
+                              {(() => {
+                                // Decisão 259: o relógio vermelho da linha com
+                                // PP de pagamento atrasado (ou da linha
+                                // vermelha criada na liberação). A linha não
+                                // fica vermelha.
+                                const titulo =
+                                  soLinhaVermelha && editando && errata?.ehNova(item.id) && liberacaoAbertaPA
+                                    ? `Linha vermelha do pagamento atrasado · competência ${competenciaLonga(liberacaoAbertaPA.trimestre, liberacaoAbertaPA.ano)}`
+                                    : tituloDoAtrasoDaLinha(item, ppsDaLinha);
+                                return titulo ? <RelogioDaLinhaAtrasada titulo={titulo} /> : null;
+                              })()}
                               {item.cancelada_em && (
                                 <span
                                   title={MOTIVO_CANCELADA}
@@ -2014,11 +2082,15 @@ export function JobItemRealizadoTable({
                                 {(travaDoTipoDaLinha?.tipo === "so_com_pp"
                                   ? TIPOS_CALHA_PP
                                   : TIPOS_CUSTO
-                                ).map((t) => (
-                                  <SelectItem key={t} value={t}>
-                                    {t}
-                                  </SelectItem>
-                                ))}
+                                )
+                                  // Decisão 259: a linha vermelha nova do job
+                                  // fechado e já faturado não aceita AR.
+                                  .filter((t) => !(soLinhaVermelha && pagamentosAtrasados?.jaFaturado && t === "AR"))
+                                  .map((t) => (
+                                    <SelectItem key={t} value={t}>
+                                      {t}
+                                    </SelectItem>
+                                  ))}
                               </SelectContent>
                             </Select>
                           </td>
@@ -2260,8 +2332,9 @@ export function JobItemRealizadoTable({
                             Linha vermelha
                           </button>
                           <span className="text-[11px] text-muted-foreground">
-                            linha vermelha: sem orçado nem planejado; entra
-                            fora da errata e já recebe PP
+                            {soLinhaVermelha
+                              ? "linha vermelha do pagamento atrasado: sem orçado nem planejado; depois de salvar, gere a PP nela"
+                              : "linha vermelha: sem orçado nem planejado; entra fora da errata e já recebe PP"}
                           </span>
                         </div>
                       </td>
@@ -2450,7 +2523,9 @@ export function JobItemRealizadoTable({
                   // reescrita. O que cabe ali é cancelar (decisão 151 — a
                   // linha nova desta errata, que ainda não existe, sai).
                   if (editando) {
-                    if (!errata || !podeEditarLinhas) return null;
+                    // Decisão 259: no job fechado e liberado, a linha vermelha
+                    // nova tem o remover, como na errata; as outras, nada.
+                    if (!errata || (!podeEditarLinhas && !(soLinhaVermelha && errata.ehNova(item.id)))) return null;
                     // Cancelada numa errata anterior: não volta, e não há
                     // o que oferecer além de dizer que ela está fora.
                     if (item.cancelada_em && !errata.estaCancelada(item.id)) {
@@ -2631,6 +2706,10 @@ export function JobItemRealizadoTable({
                                     ? null
                                     : ppsOtimistas.get(realizadoId) ?? null,
                                 onAbrirPainel: abrirPainel,
+                                // Decisão 259: o AR do job fechado e já
+                                // faturado não recebe pagamento atrasado —
+                                // o "Gerar PP" fica travado, com o motivo.
+                                travadaPor: motivoSemPPAtrasada(item.tipo_custo),
                               }
                             : null
                         }
@@ -2782,7 +2861,13 @@ export function JobItemRealizadoTable({
                 prontaParaEnvioPorNome: pp.pronta_para_envio_por_nome,
                 pagaPeloAnexo: meioPeloAnexo(pp.pagamento_fora_do_cadastro?.meio),
                 cartaoCorporativo: pp.cartao_corporativo === true,
+                // Decisão 259: a marca da PP de pagamento atrasado.
+                pagamentoAtrasado: pp.pagamento_atrasado,
               }))}
+              // Decisão 259: o job fechado com os pagamentos atrasados
+              // liberados — o "Nova PP de pagamento atrasado", sem o Marcar
+              // e sem reabrir o item.
+              pagamentoAtrasado={liberacaoAbertaPA}
               aEmitir={aEmitirDoItem}
               comiteDaPP={comiteDaPP}
               totalOrcado={Number(itemAtual?.total_orcado ?? 0)}
@@ -2791,7 +2876,7 @@ export function JobItemRealizadoTable({
               statusDoJob={statusDoJob}
               pedidoDeRevisao={pedidoDeRevisao}
               onEditarAEmitir={
-                podeGerarPP
+                podeGerarPP && !motivoSemPPAtrasada(itemAtual?.tipo_custo)
                   ? (a) => {
                       setPpGeradaEditando(null);
                       setAEmitirEditando(a);
@@ -2802,7 +2887,7 @@ export function JobItemRealizadoTable({
               }
               // Decisão 173: o lápis da PP gerada abre o mesmo formulário.
               onEditarPP={
-                podeGerarPP
+                podeGerarPP && !motivoSemPPAtrasada(itemAtual?.tipo_custo)
                   ? (pp) => {
                       const completa = ppsDoItem.find((x) => x.id === pp.id);
                       if (!completa) return;
@@ -2847,7 +2932,7 @@ export function JobItemRealizadoTable({
               concluidoPorNome={concluidoPorNome}
               concluidoEmLabel={concluidoEmLabel}
               onNovaPP={
-                podeGerarPP
+                podeGerarPP && !motivoSemPPAtrasada(itemAtual?.tipo_custo)
                   ? () => {
                       // O painel some enquanto o formulário está aberto:
                       // dois drawers empilhados na direita brigariam pelo
@@ -2905,6 +2990,11 @@ export function JobItemRealizadoTable({
               ppGeradaEditando={ppGeradaEditando}
               itemConcluido={itemConcluido}
               statusDoJob={statusDoJob}
+              // Decisão 259: a PP de pagamento atrasado (job fechado e
+              // liberado) — o aviso, sem Verba, sem a pergunta do item e
+              // com a do job.
+              pagamentoAtrasado={liberacaoAbertaPA}
+              podeConcluirPPsAtrasadas={pagamentosAtrasados?.podeCriarLinha === true}
               tomadores={tomadoresDaNf}
               tomadorPorEmpresa={tomadorPorEmpresa}
               cnpjPadraoDaPP={cnpjPadraoDaPP}
@@ -3207,6 +3297,8 @@ function SublinhasDasPPs({
       quantidade: Number(pp.quantidade ?? 0),
       diasMeses: Number(pp.dias_meses ?? 0),
       valor: Number(pp.valor ?? 0),
+      // Decisão 259: a marca da PP de pagamento atrasado.
+      pagamentoAtrasado: pp.pagamento_atrasado,
     })),
     ...doSocio.map((c) => ({
       id: c.id,
@@ -3217,6 +3309,7 @@ function SublinhasDasPPs({
       quantidade: c.quantidade,
       diasMeses: c.dias_meses,
       valor: c.valor,
+      pagamentoAtrasado: null,
     })),
   ];
   return (
@@ -3249,6 +3342,7 @@ function SublinhasDasPPs({
                   {pp.situacao}
                   {pp.descricao ? ` — ${pp.descricao}` : null}
                 </span>
+                {pp.pagamentoAtrasado && <SeloDaPPAtrasada liberacao={pp.pagamentoAtrasado} className="flex-none" />}
               </div>
             </td>
             {colunas.orcado && (

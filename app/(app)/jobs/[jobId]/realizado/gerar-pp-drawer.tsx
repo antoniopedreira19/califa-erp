@@ -185,6 +185,11 @@ import {
 import { NovoFornecedorDialog } from "@/app/(app)/fornecedores/novo-fornecedor-dialog";
 import { envioDispensaNf, type MidiaSystemDoJob } from "@/lib/calculos/midia-system";
 import type { FornecedorResumo } from "@/app/(app)/fornecedores/actions";
+import type { LiberacaoPagamentosAtrasados } from "@/lib/pagamentos-atrasados";
+import {
+  FaixaDoFormularioAtrasado,
+  PerguntaConcluirPPsAtrasadas,
+} from "@/app/(app)/_pagamentos-atrasados/componentes";
 import {
   juntarFornecedores,
   useBuscaDeFornecedores,
@@ -275,6 +280,14 @@ interface Props {
   itemConcluido: boolean;
   /** O status do job: aguardando abertura e devolvido só salvam. */
   statusDoJob: string;
+  /** Decisão 259: a liberação aberta do job fechado — a PP sai como
+   *  pagamento atrasado. Troca a pergunta do item pela do job, tira a Verba
+   *  e põe o aviso no topo. Nulo na PP de sempre. */
+  pagamentoAtrasado?: LiberacaoPagamentosAtrasados | null;
+  /** Decisão 259: a pessoa conclui os pagamentos atrasados pela produção
+   *  (a pergunta "Esta é a última PP atrasada deste job?" só aparece com
+   *  ela). */
+  podeConcluirPPsAtrasadas?: boolean;
   /** Decisão 152: os CNPJs tomadores da NF e o de cada empresa emissora. */
   tomadores: TomadorDaNf[];
   tomadorPorEmpresa: Record<string, string>;
@@ -436,6 +449,8 @@ export function GerarPPDrawer({
   aEmitirEditando,
   ppGeradaEditando = null,
   statusDoJob,
+  pagamentoAtrasado = null,
+  podeConcluirPPsAtrasadas = false,
   tomadores,
   cnpjPadraoDaPP,
   midiaSystem,
@@ -644,6 +659,13 @@ export function GerarPPDrawer({
   // "Esta é a última PP deste item?" — obrigatória (decisão 052). Null é
   // "ainda não respondeu", e é o que segura o botão de gerar.
   const [ultimaPP, setUltimaPP] = React.useState<boolean | null>(null);
+  // Decisão 259: "Esta é a última PP atrasada deste job?" — na PP de
+  // pagamento atrasado, no lugar da pergunta do item (o item continua
+  // completo). Só para quem conclui os pagamentos atrasados.
+  const perguntaDoJob = pagamentoAtrasado !== null && podeConcluirPPsAtrasadas;
+  const [concluirAtrasados, setConcluirAtrasados] = React.useState<boolean | null>(null);
+  const [faltaConcluir, setFaltaConcluir] = React.useState(false);
+  const refConcluirAtrasados = React.useRef<HTMLDivElement>(null);
   const [faltaResposta, setFaltaResposta] = React.useState(false);
   /** A pergunta agora rola com o formulário: quem tenta gerar sem
    *  responder precisa ser levado até ela (17/09/2026). */
@@ -777,7 +799,21 @@ export function GerarPPDrawer({
     // rejeitada, com a resposta da primeira vez, desde 19/10/2026); a nova
     // pergunta do zero. A PP gerada em edição volta com o que o item diz
     // hoje (decisão 173).
-    setUltimaPP(aEmitirEditando?.ultima_pp_do_item ?? (ppGeradaEditando ? itemConcluido : null));
+    // Decisão 259: na PP de pagamento atrasado a pergunta do item não
+    // aparece e a resposta é sempre sim — no job encerrado, o item fica
+    // completo. A do job volta com o que foi salvo.
+    setUltimaPP(
+      pagamentoAtrasado
+        ? true
+        : (aEmitirEditando?.ultima_pp_do_item ?? (ppGeradaEditando ? itemConcluido : null)),
+    );
+    setConcluirAtrasados(
+      ppGeradaEditando
+        ? ppGeradaEditando.conclui_pagamentos_atrasados === true
+        : ((aEmitirEditando?.dados as { concluir_pagamentos_atrasados?: boolean } | undefined)
+            ?.concluir_pagamentos_atrasados ?? null),
+    );
+    setFaltaConcluir(false);
     setUploadPrefix(null);
     setAnexos([]);
     setAvisoDosAnexos(null);
@@ -1226,6 +1262,13 @@ export function GerarPPDrawer({
         return false;
       }
     }
+    // Decisão 259: a pergunta do job, obrigatória como a do item.
+    if (perguntaDoJob && concluirAtrasados === null) {
+      setFaltaConcluir(true);
+      setErro("Responda se esta é a última PP atrasada deste job.");
+      refConcluirAtrasados.current?.scrollIntoView({ block: "center" });
+      return false;
+    }
     if (ultimaPP === null) {
       setFaltaResposta(true);
       setErro("Responda se esta é a última PP deste item.");
@@ -1413,7 +1456,9 @@ export function GerarPPDrawer({
                     }
                   : {}),
               };
-    return dados;
+    // Decisão 259: a resposta "Sim, concluir PPs atrasadas" — só quando a
+    // pergunta aparece (sem ela, a edição não mexe na resposta gravada).
+    return perguntaDoJob ? { ...dados, concluir_pagamentos_atrasados: concluirAtrasados === true } : dados;
   }
 
   /** Os anexos que vão para as actions: só os que já subiram. Verba não
@@ -1790,6 +1835,9 @@ export function GerarPPDrawer({
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-col flex-1 overflow-hidden" aria-busy={salvando}>
           <div className="flex-1 space-y-4 p-6 overflow-y-auto">
+            {/* Decisão 259: a PP de pagamento atrasado, com a competência e
+                o motivo da liberação. */}
+            {pagamentoAtrasado && <FaixaDoFormularioAtrasado liberacao={pagamentoAtrasado} />}
             {/* Reemitindo uma PP rejeitada: o motivo no topo (decisão 153;
                 "Editar e Reemitir PP" desde 19/10/2026). */}
             {refaz && (
@@ -1863,6 +1911,9 @@ export function GerarPPDrawer({
               {/* O switch "Verba" e qual verba (decisão 164). Trocar de tipo
                   limpa quem recebe, como o switch fazia. */}
               <TipoDaPPField
+                // Decisão 259: a PP de pagamento atrasado nunca é verba de
+                // produção (o reembolso e o cartão continuam).
+                semVerba={pagamentoAtrasado !== null}
                 tipo={tipoVerba}
                 reembolsoTipo={reembolsoTipo}
                 cartao={cartao}
@@ -2390,7 +2441,12 @@ export function GerarPPDrawer({
                 até ela. */}
             <div
               ref={refUltimaPP}
-              className="flex scroll-mt-4 flex-col gap-2 border-t border-border pt-4"
+              // Decisão 259: na PP de pagamento atrasado a pergunta do item
+              // não aparece (a resposta é sempre sim; o item fica completo).
+              className={cn(
+                "flex scroll-mt-4 flex-col gap-2 border-t border-border pt-4",
+                pagamentoAtrasado && "hidden",
+              )}
             >
               <span className="text-xs font-medium">
                 Esta é a última PP deste item? *
@@ -2462,6 +2518,20 @@ export function GerarPPDrawer({
                   : "Enquanto houver PP por vir, a previsão de custo do item segue pelo planejado."}
               </span>
             </div>
+            {/* Decisão 259: no lugar da pergunta do item, a do job inteiro. */}
+            {perguntaDoJob && (
+              <PerguntaConcluirPPsAtrasadas
+                ref={refConcluirAtrasados}
+                valor={concluirAtrasados}
+                onChange={(v) => {
+                  setConcluirAtrasados(v);
+                  setFaltaConcluir(false);
+                  setErro(null);
+                }}
+                falta={faltaConcluir}
+                disabled={pending}
+              />
+            )}
 
           </div>
 

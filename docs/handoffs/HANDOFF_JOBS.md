@@ -6801,3 +6801,15 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - O financeiro pode faturar o job pelo **Novo faturamento**, sem o envio da produção. A trilha Faturamento da página do job mostra "Faturado pelo financeiro, sem envio da produção" (ou "Faturado parcial … o saldo fica com o financeiro") no lugar de "Enviar para faturamento", e o envio fica fechado (a trava do banco recusa).
 - No mensal e na Mídia Off, vale por mês: o mês faturado pelo financeiro sai do "A enviar"; os outros seguem pelo GP.
 - `lib/calculos/faturamento-por-mes.ts` ganhou `NotaDoFinanceiro` e `peloFinanceiro` (no envio único e no mês); `carregar-detalhe.ts` lê as notas do Novo faturamento junto com as notas das parcelas.
+
+## ⚠️ Nota de 2026-11-16 — pagamentos atrasados em job encerrado ou finalizado (decisão 259)
+
+- **Liberação pelo financeiro:** com ela aberta, o job fechado volta a aceitar PP em qualquer linha (calha e "Destrinchar realizado") e linha vermelha nova pelo "Editar planilha" (barra "Planilha em edição"; as linhas que já existem não mudam). A produção vê só o selo "Pagamentos atrasados liberados · 4T/26"; o rodapé do encerramento diz o que está liberado.
+- **Marca vermelha:** relógio no nome da linha vermelha criada na liberação, "Atrasado · 4T/26" no cartão da PP do painel do item, relógio depois do código na aba PPs.
+- **Painel do item:** "Nova PP de pagamento atrasado", sem "Marcar" e sem a confirmação de reabrir; rodapé "Job encerrado: a PP sai como pagamento atrasado…".
+- **Formulário da PP:** faixa vermelha (competência e motivo), sem a opção Verba, sem "Esta é a última PP deste item?" (vale "sim") e com a pergunta obrigatória "Esta é a última PP atrasada deste job?". O "Sim" leva a conclusão ao financeiro no envio da PP.
+- **Concluir:** "Concluir pagamentos atrasados" à direita de "Editar planilha" → "Conclusão enviada ao financeiro" e "Cancelar conclusão"; a planilha trava para a produção. Pendências que impedem: PP gerada sem envio, PP a emitir, linha vermelha da liberação sem PP.
+- **AR:** só no job ainda não faturado. No faturado, o "Gerar PP" da linha AR trava e a linha vermelha nova não oferece AR.
+- **"Só realizado":** o selo da linha vermelha aparece só na edição, em toda Planilha Interna.
+- **Tipos:** `ItemPlanilhaJob.pagamento_atrasado_id`, `PedidoCompra.pagamento_atrasado_id`/`conclui_pagamentos_atrasados`, `PedidoCompraNaLista.pagamento_atrasado`, `PPDoItem.pagamentoAtrasado` e `DadosPpLinha.travadaPor` — todos obrigatórios; quem não tem o dado manda `null`.
+- **Migration** `20261116600001_pagamentos_atrasados.sql`.

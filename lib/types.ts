@@ -4,6 +4,7 @@
  */
 
 import type { DeslocamentosDoReembolso, ReembolsoTipo } from "@/lib/calculos/reembolso";
+import type { LiberacaoPagamentosAtrasados } from "@/lib/pagamentos-atrasados";
 
 export type AppRole =
   | "administrador"
@@ -2167,6 +2168,12 @@ export interface PedidoCompra {
   urgente_justificativa: string | null;
   urgente_por: string | null;
   urgente_em: string | null;
+  /** Decisão 259: a liberação de pagamentos atrasados em que a PP nasceu
+   *  (job fechado). Posta pelo banco. Nula na PP de sempre. */
+  pagamento_atrasado_id: string | null;
+  /** Decisão 259: gerada com "Sim, concluir PPs atrasadas" — leva a
+   *  conclusão ao financeiro junto com ela. */
+  conclui_pagamentos_atrasados: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -2343,6 +2350,10 @@ export interface ItemPlanilhaJob {
   item_versao_id: string | null;
   /** Linha vermelha: orçado e planejado zerados, só recebe PP. */
   linha_vermelha: boolean;
+  /** Decisão 259: a linha vermelha criada na liberação de pagamentos
+   *  atrasados (job fechado). Nula nas outras linhas. Obrigatório: quem
+   *  monta o item manda `null` explícito. */
+  pagamento_atrasado_id: string | null;
   grupo_id: string;
   ordem: number;
   item: string;
@@ -3236,6 +3247,9 @@ export interface PedidoCompraNaLista extends PedidoCompra {
   /** Histórico de eventos da PP (decisão 136): a linha do tempo do "Ver
    *  PP". Obrigatório pelo mesmo motivo da prestação acima. */
   eventos: PPEvento[];
+  /** Decisão 259: a liberação da PP de pagamento atrasado (a competência
+   *  e o motivo). Nula na PP de sempre; obrigatória pelo mesmo motivo. */
+  pagamento_atrasado: LiberacaoPagamentosAtrasados | null;
 }
 
 /**

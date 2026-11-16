@@ -104,6 +104,8 @@ import {
 } from "@/lib/calculos/prestacao-da-verba";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { formatDataAsHoraBr, formatDiaBr } from "@/lib/formatar-data-hora";
+import { RelogioDaPPAtrasada } from "@/app/(app)/_pagamentos-atrasados/componentes";
+import type { LiberacaoPagamentosAtrasados } from "@/lib/pagamentos-atrasados";
 
 /** A tela lado a lado do Contas a Pagar, em leitura — a mesma do
  *  "Visualizar" do "Ver PP". Só carrega quando alguém clica no olho. */
@@ -134,6 +136,10 @@ interface Props {
    *  do painel do item. O PAPEL vem de `papelEnviaPP`. A errata não trava
    *  mais o envio (decisão 238). */
   statusDoJob: JobStatus;
+  /** Decisão 259: a liberação aberta do job fechado (a PP editada pela aba
+   *  sai como pagamento atrasado) e quem conclui pela produção. */
+  pagamentoAtrasadoAberto?: LiberacaoPagamentosAtrasados | null;
+  podeConcluirPPsAtrasadas?: boolean;
   /** O que o pop-up de envio precisa — o mesmo que o painel do item recebe
    *  (decisões 152 e 156). */
   tomadoresDaNf: TomadorDaNf[];
@@ -389,6 +395,8 @@ function linhaDaPPNoComite(c: PPNoComite): PedidoCompraNaLista {
     prestacao: null,
     devolucao: null,
     eventos: [],
+    // Decisão 259: a PP a emitir no Comitê ainda não tem a marca.
+    pagamento_atrasado: null,
   } as unknown as PedidoCompraNaLista;
 }
 
@@ -480,6 +488,8 @@ export function JobPPsSection({
   papelEnviaPP,
   podePrestarContas,
   statusDoJob,
+  pagamentoAtrasadoAberto = null,
+  podeConcluirPPsAtrasadas = false,
   tomadoresDaNf,
   tomadorPorEmpresa,
   empresas,
@@ -1103,7 +1113,15 @@ export function JobPPsSection({
                       className="px-3.5 py-2.5 align-middle font-mono text-[11.5px] leading-tight"
                       title={`${doComite ? "Criada" : "Emitida"} em ${formatDiaBr(pp.created_at)}${pp.emitida_por_nome ? ` por ${pp.emitida_por_nome}` : ""}`}
                     >
-                      {doComite ? <SeloPPAEmitir refaz={null} /> : pp.codigo}
+                      {/* Decisão 259: o relógio vermelho da PP de pagamento
+                          atrasado, logo depois do código — a coluna é
+                          estreita e a parcela vai embaixo. */}
+                      <span className="whitespace-nowrap">
+                        {doComite ? <SeloPPAEmitir refaz={null} /> : pp.codigo}
+                        {!doComite && pp.pagamento_atrasado && (
+                          <RelogioDaPPAtrasada liberacao={pp.pagamento_atrasado} />
+                        )}
+                      </span>
                       {total > 1 && (
                         <span className="block text-[10.5px] text-muted-foreground">
                           {indice + 1}/{total}
@@ -1749,6 +1767,8 @@ export function JobPPsSection({
             ppGeradaEditando={ppEditando}
             itemConcluido={item?.concluido ?? false}
             statusDoJob={statusDoJob}
+            pagamentoAtrasado={pagamentoAtrasadoAberto}
+            podeConcluirPPsAtrasadas={podeConcluirPPsAtrasadas}
             tomadores={tomadoresDaNf}
             tomadorPorEmpresa={tomadorPorEmpresa}
             cnpjPadraoDaPP={edicaoDaPP.cnpjPadraoDaPP}

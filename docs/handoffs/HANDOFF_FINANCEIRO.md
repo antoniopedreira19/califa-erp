@@ -9072,3 +9072,10 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Novo:** `components/ui/contagem-nos-seletores.tsx` (provider entre a lista e o cabeçalho). Os dois seletores ganharam as props opcionais `contagens` e `legenda`.
 - **Sem migration.**
 
+## ⚠️ Nota de 2026-11-16 — pagamentos atrasados em job encerrado ou finalizado (decisão 259)
+
+- **Planilha Interna do job fechado:** "Liberar pagamentos atrasados" (competência dos novos lançamentos e motivo obrigatório). Depois: selo "Pagamentos atrasados liberados" e "Concluir pagamentos atrasados" (o financeiro conclui sozinho, mesmo sem a produção). Com a conclusão da produção: "Conclusão pedida · 4T/26" e "Confirmar conclusão". Concluída, a planilha trava e o "Liberar" volta para uma liberação nova.
+- **Lista de PPs:** tag "Atrasado · 4T/26" embaixo do código, no lugar de Verba/Reembolso/Cartão; o cartão corporativo ganhou a tag "Cartão". A busca por coluna acha os dois.
+- **Tela da PP:** selo "Pagamento atrasado · 4T/2026" no cabeçalho; "Tipo da PP" (Verba, Reembolso ou Cartão corporativo) como primeiro campo do painel Dados, em toda PP que não é normal.
+- **PDF da PP:** linha "Pagamento atrasado: competência 4T/2026".
+- **Migration** `20261116600001_pagamentos_atrasados.sql` (tabela `jobs_pagamentos_atrasados`, marcas na PP e na linha, gatilhos e funções).

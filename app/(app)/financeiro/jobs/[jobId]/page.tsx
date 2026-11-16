@@ -31,6 +31,7 @@ import { listarProjetosFinanceiro } from "@/lib/data/projetos-financeiro";
 import { carregarOpcoesDoRegistro } from "@/lib/data/opcoes-do-registro";
 import { listarContasBancarias } from "@/lib/data/contas-bancarias";
 import { carregarDetalheDoJob } from "@/app/(app)/jobs/[jobId]/carregar-detalhe";
+import { pagamentosAtrasadosNaPlanilha } from "@/lib/data/pagamentos-atrasados";
 import { FichaJob } from "@/app/(app)/jobs/[jobId]/ficha-job";
 import { ErratasCard } from "@/app/(app)/jobs/[jobId]/erratas-card";
 import { AlteracoesFinanceiroCard } from "@/app/(app)/jobs/[jobId]/alteracoes-financeiro-card";
@@ -859,6 +860,17 @@ export default async function JobNoFinanceiroPage({
               papelCorrigeNf={pode(session.activeRole, "jobs.corrigir_nf_pp")}
               confirmarSaidaParaOrcamento
               edicaoDoFinanceiro={edicaoDoFinanceiro}
+              // Decisão 259: no job fechado, o financeiro libera os
+              // pagamentos atrasados e conclui (ou confirma a conclusão).
+              pagamentosAtrasados={pagamentosAtrasadosNaPlanilha({
+                pagamentos: detalhe.pagamentosAtrasados,
+                role: session.activeRole,
+                job: {
+                  competencia_trimestre: detalhe.raw.competencia_trimestre ?? null,
+                  competencia_ano: detalhe.raw.competencia_ano ?? null,
+                },
+                temAR: detalhe.itens.some((it) => it.tipo_custo === "AR" && !it.cancelada_em),
+              })}
               // Os parâmetros do job (decisão 224): com o job aberto, como o
               // "Editar orçado" — até a primeira nota (em qualquer mês, no
               // mensal) ou o encerramento. O câmbio segue até o encerramento.

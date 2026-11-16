@@ -180,6 +180,13 @@ import {
   marcarPPsConcluidasDoItem,
   reabrirItemParaNovaPP,
 } from "./actions-conclusao";
+import type { LiberacaoPagamentosAtrasados } from "@/lib/pagamentos-atrasados";
+import {
+  BotaoNovaPPAtrasada,
+  SeloDaPPAtrasada,
+  SeloDoPainelLiberado,
+  rodapeDoPainelAtrasado,
+} from "@/app/(app)/_pagamentos-atrasados/componentes";
 
 export interface PPDoItem {
   id: string;
@@ -250,11 +257,18 @@ export interface PPDoItem {
   /** Decisão 209: a PP do cartão corporativo vai sem nota. Obrigatório
    *  pelo mesmo motivo do trio. */
   cartaoCorporativo: boolean;
+  /** Decisão 259: a liberação da PP de pagamento atrasado (a marca no
+   *  cartão). Obrigatório pelo mesmo motivo do trio; nulo na PP de sempre. */
+  pagamentoAtrasado: LiberacaoPagamentosAtrasados | null;
 }
 
 interface Props {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Decisão 259: o job fechado com os pagamentos atrasados liberados (a
+   *  liberação aberta). Troca o "Nova PP para este item" pelo "Nova PP de
+   *  pagamento atrasado", tira o Marcar e a reabertura do item. */
+  pagamentoAtrasado: LiberacaoPagamentosAtrasados | null;
   itemNome: string;
   grupoNome: string;
   moeda: string;
@@ -347,6 +361,7 @@ interface Props {
 export function PainelPPsItem({
   open,
   onOpenChange,
+  pagamentoAtrasado,
   itemNome,
   grupoNome,
   moeda,
@@ -568,7 +583,9 @@ export function PainelPPsItem({
    *  para a previsão de custo. */
   function pedirNovaPP() {
     if (!onNovaPP) return;
-    if (!concluido) {
+    // Decisão 259: a PP de pagamento atrasado não reabre o item — no job
+    // encerrado, todas as pendências já foram atendidas.
+    if (!concluido || pagamentoAtrasado) {
       onNovaPP();
       return;
     }
@@ -729,6 +746,7 @@ export function PainelPPsItem({
             <p className="text-[12.5px] text-muted-foreground">
               {itemNome} · grupo {grupoNome}
             </p>
+            {pagamentoAtrasado && <SeloDoPainelLiberado liberacao={pagamentoAtrasado} />}
           </div>
           <button
             type="button"
@@ -922,6 +940,8 @@ export function PainelPPsItem({
                     prontaParaEnvioPorNome: null,
                     pagaPeloAnexo: meioPeloAnexo(a.dados.pagamento_fora_do_cadastro?.meio),
                     cartaoCorporativo: a.cartao_corporativo,
+                    // A PP a emitir ganha a marca do atraso ao ser gerada.
+                    pagamentoAtrasado: null,
                   }}
                   moeda={moeda}
                   codigo={<SeloPPAEmitir refaz={a.refaz?.codigo ?? null} />}
@@ -1344,7 +1364,9 @@ export function PainelPPsItem({
           <div className="flex flex-col gap-2.5 border-t border-border bg-muted/30 px-6 py-4">
             {/* Marcar não abre formulário e não despacha nada: só declara
                 que não sairão mais PPs deste item (decisão 052). */}
-            {!concluido && (
+            {/* Decisão 259: no job fechado e liberado não há Marcar — para
+                encerrar, todas as pendências já foram atendidas. */}
+            {!concluido && !pagamentoAtrasado && (
               <button
                 type="button"
                 onClick={marcar}
@@ -1356,15 +1378,19 @@ export function PainelPPsItem({
               </button>
             )}
             <div className={cn(lancaCustoDoSocio && "grid grid-cols-2 gap-2.5")}>
-              <button
-                type="button"
-                onClick={pedirNovaPP}
-                disabled={pending}
-                className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-[13px] font-semibold transition-colors hover:bg-muted disabled:opacity-50"
-              >
-                <FilePlus className="h-3.5 w-3.5 text-california-red" />
-                Nova PP para este item
-              </button>
+              {pagamentoAtrasado ? (
+                <BotaoNovaPPAtrasada onClick={pedirNovaPP} disabled={pending} />
+              ) : (
+                <button
+                  type="button"
+                  onClick={pedirNovaPP}
+                  disabled={pending}
+                  className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-[13px] font-semibold transition-colors hover:bg-muted disabled:opacity-50"
+                >
+                  <FilePlus className="h-3.5 w-3.5 text-california-red" />
+                  Nova PP para este item
+                </button>
+              )}
               {lancaCustoDoSocio && (
                 <button
                   type="button"
@@ -1378,7 +1404,9 @@ export function PainelPPsItem({
               )}
             </div>
             <span className="text-center text-[11px] leading-snug text-muted-foreground">
-              {lancaCustoDoSocio && !concluido
+              {pagamentoAtrasado
+                ? rodapeDoPainelAtrasado(pagamentoAtrasado)
+                : lancaCustoDoSocio && !concluido
                 ? `A PP vai ao financeiro (a California paga). O custo ${socio} só entra no realizado.`
                 : concluido
                 ? "O item está completo: gerar nova PP aqui pede confirmação e reabre o item."
@@ -1807,6 +1835,8 @@ function CartaoPP({
             {pp.codigo}
           </span>
         )}
+        {/* Decisão 259: a PP de pagamento atrasado. */}
+        {pp.pagamentoAtrasado && <SeloDaPPAtrasada liberacao={pp.pagamentoAtrasado} className="flex-none" />}
         <span className="min-w-0 flex-1 truncate text-[12.5px] font-semibold">
           {pp.fornecedorNome}
         </span>

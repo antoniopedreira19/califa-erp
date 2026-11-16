@@ -13,6 +13,13 @@ import {
 import { montarThreadChatPPs } from "@/lib/data/job-chat-pps";
 import { SELECT_EVENTOS_DA_PP, eventosDaPP } from "@/lib/data/eventos-da-pp";
 import {
+  SELECT_LIBERACAO_PAGAMENTOS_ATRASADOS,
+  jobFechado,
+  liberacaoDaLinha,
+  type LiberacaoPagamentosAtrasados,
+  type PagamentosAtrasadosDoJob,
+} from "@/lib/pagamentos-atrasados";
+import {
   SELECT_PRESTACAO_DA_VERBA,
   devolucaoDaVerba,
   prestacaoDaVerba,
@@ -207,6 +214,8 @@ export async function carregarDetalheDoJob(
     apresentacoesDoProjeto,
     custosDoSocioRes,
     socioDaEmpresaRes,
+    liberacoesRes,
+    jaFaturadoRes,
   ] = await Promise.all([
     // Os agrupamentos do JOB (decisão 162): a cópia dos da versão, com o
     // que as erratas renomearam, criaram e tiraram. O removido não aparece.
@@ -253,7 +262,11 @@ export async function carregarDetalheDoJob(
           SELECT_PRESTACAO_DA_VERBA +
           // Histórico de eventos (decisão 136): a linha do tempo do "Ver PP".
           ", " +
-          SELECT_EVENTOS_DA_PP,
+          SELECT_EVENTOS_DA_PP +
+          // Decisão 259: a liberação da PP de pagamento atrasado.
+          ", pagamento_atrasado:jobs_pagamentos_atrasados(" +
+          SELECT_LIBERACAO_PAGAMENTOS_ATRASADOS +
+          ")",
       )
       .eq("job_id", raw.id)
       .eq("tenant_id", session.activeTenant.id)
@@ -505,9 +518,32 @@ export async function carregarDetalheDoJob(
           .eq("empresa_id", raw.empresa_id)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
+    // Decisão 259: as liberações de pagamentos atrasados do job (todas: as
+    // encerradas ainda nomeiam a competência das PPs e linhas marcadas).
+    supabase
+      .from("jobs_pagamentos_atrasados")
+      .select(SELECT_LIBERACAO_PAGAMENTOS_ATRASADOS)
+      .eq("job_id", raw.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("liberado_em", { ascending: true }),
+    // O AR do job fechado só recebe pagamento atrasado sem faturamento.
+    jobFechado(raw.status)
+      ? supabase.rpc("job_ja_faturado", { p_job_id: raw.id })
+      : Promise.resolve({ data: false, error: null }),
   ]);
 
   if (custosDoSocioRes.error) console.error("[job.custos_do_socio]", custosDoSocioRes.error.message);
+  if (liberacoesRes.error) console.error("[job.pagamentos_atrasados]", liberacoesRes.error.message);
+  if (jaFaturadoRes.error) console.error("[job.job_ja_faturado]", jaFaturadoRes.error.message);
+  const liberacoesDoJob: LiberacaoPagamentosAtrasados[] = ((liberacoesRes.data ?? []) as any[]).map(liberacaoDaLinha);
+  // A não encerrada (aberta ou com a conclusão pedida pela produção).
+  const liberacaoAtual = liberacoesDoJob.find((l) => !l.encerradoEm) ?? null;
+  const liberacaoAberta = liberacaoAtual && !liberacaoAtual.conclusaoPedidaEm ? liberacaoAtual : null;
+  const pagamentosAtrasados: PagamentosAtrasadosDoJob = {
+    atual: liberacaoAtual,
+    todas: liberacoesDoJob,
+    jaFaturado: jaFaturadoRes.data === true,
+  };
   const custosDoSocio: CustoDoSocio[] = (custosDoSocioRes.data ?? []).map((c: any) => ({
     id: c.id,
     job_id: c.job_id,
@@ -611,6 +647,9 @@ export async function carregarDetalheDoJob(
     orcado_id: it.id,
     item_versao_id: it.item_versao_id ?? null,
     linha_vermelha: it.linha_vermelha === true,
+    // Decisão 259: a linha vermelha criada na liberação de pagamentos
+    // atrasados (o relógio no nome, antes mesmo de ter PP).
+    pagamento_atrasado_id: it.pagamento_atrasado_id ?? null,
     // O agrupamento do JOB (decisão 162) — o que a tela mostra. O da
     // versão (`grupo_id` no banco) é só a âncora do mês.
     grupo_id: it.job_grupo_id ?? it.grupo_id,
@@ -856,6 +895,9 @@ export async function carregarDetalheDoJob(
     quantidade: Number(pp.quantidade),
     dias_meses: Number(pp.dias_meses ?? 0),
     valor: Number(pp.valor),
+    // Decisão 259: a liberação da PP de pagamento atrasado (nula na PP de
+    // sempre).
+    pagamento_atrasado: pp.pagamento_atrasado ? liberacaoDaLinha(pp.pagamento_atrasado) : null,
     emitida_por_nome: pp.emitido?.nome ?? null,
     enviada_financeiro_por_nome: pp.enviado?.nome ?? null,
     // Decisão 160: quem deixou a PP pronta para o GP enviar.
@@ -1660,8 +1702,11 @@ export async function carregarDetalheDoJob(
   // `podeAcoesPlanilha`.
   // Gerar PP também é do produtor (decisão 136); enviar não — ver
   // `podeEnviarPP`.
+  // Decisão 259: o job encerrado ou finalizado volta a gerar PP enquanto o
+  // financeiro mantém os pagamentos atrasados liberados.
   const podeGerarPP =
-    pode(session.activeRole, "jobs.emitir_pp") && jobAceitaGerarPP(job.status);
+    pode(session.activeRole, "jobs.emitir_pp") &&
+    (jobAceitaGerarPP(job.status) || (jobFechado(job.status) && liberacaoAberta !== null));
   /**
    * O "+" e o lápis do campo Fornecedor da PP:
    *
@@ -1712,7 +1757,9 @@ export async function carregarDetalheDoJob(
   // A errata não trava mais o envio de PP (decisão 238, 05/11/2026): saíram
   // a linha alterada com a abertura em revisão (185) e a linha da errata
   // pronta (237). Fica a abertura do job.
-  const podeEnviarPP = enviaPP && jobAceitaEnvioDePP(job.status);
+  const podeEnviarPP =
+    enviaPP &&
+    (jobAceitaEnvioDePP(job.status) || (jobFechado(job.status) && liberacaoAberta !== null));
   // SAVE — o crédito entre jobs. As duas leituras vão juntas: uma em
   // série apareceria no TTFB da tela mais pesada do job.
   const clienteIdDoJob: string = raw.cliente_id ?? "";
@@ -1813,6 +1860,8 @@ export async function carregarDetalheDoJob(
     contatosCobranca,
     ppsDoJob,
     ppsPorItemId,
+    // Decisão 259: as liberações de pagamentos atrasados do job.
+    pagamentosAtrasados,
     // Decisão 236: o sócio que paga custos neste job (null fora da Ventura)
     // e os custos que ele pagou.
     socioDoJob,

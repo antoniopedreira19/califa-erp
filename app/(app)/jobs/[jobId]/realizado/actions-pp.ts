@@ -52,6 +52,7 @@ import {
   parcelasFecham,
 } from "@/lib/calculos/pps-item";
 import { aplicarConclusaoDoItem } from "./conclusao-item";
+import { competenciaDaPPAtrasada, jobFechadoLiberado } from "@/lib/data/pagamentos-atrasados";
 import {
   DOCUMENTOS_EM_CNPJS_DIFERENTES,
   cnpjPadraoDaPP,
@@ -463,6 +464,10 @@ const dadosBaseSchema = z.object({
   // em `camposDeUrgencia`, e a constraint do banco repete a regra.
   urgente: z.boolean().default(false),
   urgente_justificativa: z.string().max(1000).nullable().optional(),
+  // Decisão 259: "Sim, concluir PPs atrasadas" no formulário da PP de
+  // pagamento atrasado. A conclusão vai ao financeiro junto com a PP, no
+  // envio (gatilho `trg_pp_conclui_pagamentos_atrasados`).
+  concluir_pagamentos_atrasados: z.boolean().optional(),
   // Uma linha por parcela, sempre — PP sem parcelamento manda 1.
   parcelas: z
     .array(z.object({ data_vencimento: dataSchema, valor: z.number().positive() }))
@@ -1052,7 +1057,14 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
   //
   // Este gate serve a gerar, editar e cancelar; o envio e o reenvio
   // chamam este E o de envio, nessa ordem.
-  if (!jobAceitaGerarPP(job.status as JobStatus)) {
+  //
+  // Decisão 259: o job encerrado ou finalizado volta a aceitar PP enquanto
+  // o financeiro mantém os pagamentos atrasados liberados (a liberação
+  // aberta). O banco marca a PP com a liberação (`trg_pp_pagamento_atrasado`).
+  if (
+    !jobAceitaGerarPP(job.status as JobStatus) &&
+    !(await jobFechadoLiberado(supabase, { id: job.id, status: job.status }))
+  ) {
     await logAuditEvent({
       acao: "acao_negada",
       tenantId: session.activeTenant.id,
@@ -1067,7 +1079,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
     return {
       ok: false,
       message:
-        "Job encerrado ou cancelado não gera PP — a aba de Pedidos de Produção guarda o histórico.",
+        "Job encerrado ou cancelado não gera PP — a aba de Pedidos de Produção guarda o histórico. Pagamento atrasado, só com a liberação do financeiro.",
     };
   }
 
@@ -1498,8 +1510,10 @@ async function renderizarDocumentoDaPP(args: {
   // seus side-effects de inicialização do resto do módulo.
   const { renderPedidoCompraPDF } = await import("@/lib/pdf/pedido-compra");
   const parcelas = args.parcelas.slice().sort((a, b) => a.numero - b.numero);
+  const pagamentoAtrasado = await competenciaDoDocumentoDaPP(args.ppId, args.jobId);
 
   const buffer = await renderPedidoCompraPDF({
+    pagamentoAtrasado,
     pp: {
       codigo: args.codigo,
       servico: args.pp.servico,
@@ -1542,6 +1556,28 @@ async function renderizarDocumentoDaPP(args: {
   };
 }
 
+/** Decisão 259: a competência da PP de pagamento atrasado, para a linha
+ *  "Pagamento atrasado" do PDF. A PP já gravada diz pela marca; a prévia
+ *  (antes de a PP existir) diz pela liberação aberta do job fechado. */
+async function competenciaDoDocumentoDaPP(
+  ppId: string,
+  jobId: string,
+): Promise<{ trimestre: number; ano: number } | null> {
+  const supabase = createClient();
+  const { data: pp } = await supabase
+    .from("pedidos_compra")
+    .select("pagamento_atrasado_id")
+    .eq("id", ppId)
+    .maybeSingle();
+  if (pp) {
+    return pp.pagamento_atrasado_id
+      ? competenciaDaPPAtrasada(supabase, { pagamentoAtrasadoId: pp.pagamento_atrasado_id as string })
+      : null;
+  }
+  const { data: job } = await supabase.from("jobs").select("status").eq("id", jobId).maybeSingle();
+  return competenciaDaPPAtrasada(supabase, { jobId, jobStatus: (job?.status as string | undefined) ?? null });
+}
+
 /**
  * A porta única do ENVIO de PP ao financeiro.
  *
@@ -1568,7 +1604,12 @@ async function barrarEnvioDePP(
     status: string;
   },
 ): Promise<Err | null> {
-  if (!jobAceitaEnvioDePP(job.status as JobStatus)) {
+  // Decisão 259: no job fechado, a PP de pagamento atrasado vai ao
+  // financeiro enquanto a liberação estiver aberta.
+  if (
+    !jobAceitaEnvioDePP(job.status as JobStatus) &&
+    !(await jobFechadoLiberado(createClient(), job))
+  ) {
     await logAuditEvent({
       acao: "acao_negada",
       tenantId,
@@ -1975,6 +2016,9 @@ async function finalizarPedidoCompraImpl(
     emitida_por: session.profile.id,
     // Nasce no job. O financeiro só a vê depois do envio (02/09/2026).
     status: "gerada",
+    // Decisão 259: a marca da liberação (`pagamento_atrasado_id`) é o
+    // banco que põe; aqui vai só a resposta do formulário.
+    conclui_pagamentos_atrasados: d.concluir_pagamentos_atrasados === true,
     // A FOTO dos dados de pagamento (decisão 067). Ela sai do MESMO
     // `fornRes.data` que vai para o PDF logo abaixo — é o PDF que o
     // financeiro confere na hora de pagar, e foto e documento não podem
@@ -2365,7 +2409,10 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
   // Mesmo gate de gerar (decisão 056): quem pôde gerar a PP na
   // pré-abertura precisa poder cancelá-la lá também — senão ela ficaria
   // presa no job até a abertura, sem caminho de volta.
-  if (!jobAceitaGerarPP(job.status as JobStatus)) {
+  if (
+    !jobAceitaGerarPP(job.status as JobStatus) &&
+    !(await jobFechadoLiberado(supabase, { id: pp.job_id as string, status: job.status }))
+  ) {
     return { ok: false, message: "Job não está em estado editável." };
   }
 
@@ -3292,7 +3339,7 @@ export async function enviarPedidoCompraAoFinanceiro(
   const { data: ppRow, error: ppErr } = await supabase
     .from("pedidos_compra")
     .select(
-      "id, codigo, job_id, item_realizado_id, status, valor, verba_producao, tipo_verba, reembolso_tipo, fornecedor_id, estabelecimento_id, prazo_pagamento, urgente, created_at, pagamento_fora_do_cadastro_meio, cartao_corporativo, anexos:pedidos_compra_anexos(id)",
+      "id, codigo, job_id, item_realizado_id, status, valor, verba_producao, tipo_verba, reembolso_tipo, fornecedor_id, estabelecimento_id, prazo_pagamento, urgente, created_at, pagamento_fora_do_cadastro_meio, cartao_corporativo, pagamento_atrasado_id, conclui_pagamentos_atrasados, anexos:pedidos_compra_anexos(id)",
     )
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -3313,6 +3360,8 @@ export async function enviarPedidoCompraAoFinanceiro(
       created_at: string;
       pagamento_fora_do_cadastro_meio: string | null;
       cartao_corporativo: boolean;
+      pagamento_atrasado_id: string | null;
+      conclui_pagamentos_atrasados: boolean;
       anexos: Array<{ id: string }> | null;
     }>();
 
@@ -3539,6 +3588,31 @@ export async function enviarPedidoCompraAoFinanceiro(
       cnpj_da_pp_antes: ppRow.estabelecimento_id,
     },
   });
+
+  // Decisão 259: a PP marcada "Sim, concluir PPs atrasadas" leva a conclusão
+  // ao financeiro junto com ela (gatilho `trg_pp_conclui_pagamentos_atrasados`,
+  // só sem pendência). O envio só passa com a liberação aberta, então a
+  // conclusão pedida que aparece agora é deste envio — e entra na auditoria.
+  if (ppRow.conclui_pagamentos_atrasados && ppRow.pagamento_atrasado_id) {
+    const { data: lib } = await supabase
+      .from("jobs_pagamentos_atrasados")
+      .select("id, trimestre, ano, conclusao_pedida_em, encerrado_em")
+      .eq("id", ppRow.pagamento_atrasado_id)
+      .maybeSingle();
+    if (lib?.conclusao_pedida_em && !lib.encerrado_em) {
+      await logAuditEvent({
+        acao: "pagamentos_atrasados.conclusao_pedida",
+        tenantId: session.activeTenant.id,
+        entidadeTipo: "job",
+        entidadeId: job.id,
+        metadata: {
+          liberacao_id: lib.id,
+          competencia: `${lib.trimestre}T/${lib.ano}`,
+          pela_pp: ppRow.codigo,
+        },
+      });
+    }
+  }
 
   // Decisão 190: chegou ao financeiro pelo sistema — o PDF perde o selo.
   await trocarSeloDaPP(supabase, session.activeTenant.id, pp_id, ppRow.codigo);
@@ -3958,6 +4032,7 @@ export async function salvarPPAEmitir(
       titular_paga_pelo_cadastro: titularPessoa ? titular.pagaPeloCadastro : null,
     },
     ultima_pp_do_item: ultimaPPDoItem,
+    conclui_pagamentos_atrasados: d.concluir_pagamentos_atrasados === true,
     atualizada_por: session.profile.id,
   };
   const { error: gravarErr } = existente
@@ -5332,6 +5407,11 @@ async function editarPPGeradaImpl(
       // grava pela sessão.
       pronta_para_envio_em: null,
       editada_em: new Date().toISOString(),
+      // Decisão 259: a resposta "Sim, concluir PPs atrasadas" pode mudar na
+      // edição; só muda quando o formulário a mandou (a pergunta apareceu).
+      ...(d.concluir_pagamentos_atrasados !== undefined
+        ? { conclui_pagamentos_atrasados: d.concluir_pagamentos_atrasados === true }
+        : {}),
     })
     .eq("id", ppId)
     .eq("tenant_id", tenantId)
