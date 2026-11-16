@@ -1,7 +1,7 @@
 # 257 — A PP paga diz que está paga: "Pago <data>", a linha da prestação e o job na lista de PPs
 
 **Data:** 2026-11-15
-**Status:** aceita e implementada em 15/11/2026; lista de PPs em grade fixa em 16/11/2026 (nota no fim).
+**Status:** aceita e implementada em 15/11/2026; lista de PPs em grade fixa e PP urgente em seção própria em 16/11/2026 (notas no fim).
 **Quem decidiu:** Tiago, de 12 a 15/11/2026, escolhendo no protótipo "Verba paga no status" (telas reais com dados fictícios), depois de uma pergunta do financeiro.
 **Revê:** a [081](081-a-producao-presta-contas-da-verba-e-o-financeiro-aprova.md) na lista de PPs do Contas a Pagar — a verba paga volta a mostrar "Pago", e o andamento da prestação vai para uma linha própria —, e o selo em duas linhas da aba PPs do job ([189](189-prestacao-de-contas-da-verba-documento-a-documento.md)), que deixa de ser preciso com os nomes curtos.
 **Migration:** nenhuma.
@@ -74,3 +74,23 @@ No mesmo caminho apareceram mais três coisas: os selos da verba eram longos e a
   - A 1.440 px, só a caixa rola, e a página não.
 
 **Regra geral:** "Listas com texto livre" em `docs/09-identidade-visual-ui.md`.
+
+## ⚠️ Revisão de 2026-11-16 (2) — a PP urgente na lista: seção "Urgentes", sem etiqueta na linha
+
+**O que o Tiago viu:** a grade fixa da manhã pôs o Urgente embaixo do código, na frente do selo Verba. Com isso, o Verba saiu do lugar aprovado, logo embaixo do código. Ele pediu para reverter e perguntou se a etiqueta podia sair, ficando só um título de seção.
+
+**Protótipo:** duas opções, com urgentes em avaliação e aprovadas e nomes do tamanho dos maiores reais.
+- **A — só a seção:** escolhida.
+- **B — etiqueta ao lado do código, como antes:** descartada.
+
+**Agora:**
+- **Etiqueta:** a linha não tem mais "Urgente". O código fica sozinho na primeira linha, e o selo Verba/Reembolso logo embaixo.
+- **Seção:** "URGENTES · N" no topo, com a faixa vermelha, junta as urgentes que esperam o financeiro: **em avaliação e aprovadas**, as mesmas que levavam a etiqueta. Antes, só as em avaliação subiam, e as aprovadas urgentes ficavam no meio da lista. Elas eram 79 das 152 aprovadas em 16/11.
+- **Justificativa:** aparece ao passar o mouse no código. Inteira, ela continua no topo do dossiê da tela da PP.
+- **Coluna Código:** cai de 168 para 112 px. A sobra vai para Fornecedor e Job.
+- **Busca:** digitar "urgente" no filtro da coluna Código continua achando as urgentes.
+
+**Não muda:** a tela da PP (etiqueta Urgente no cabeçalho e justificativa no dossiê) e Títulos a Pagar (o título urgente no topo, com etiqueta).
+
+**Revê** o §6 da [077](077-o-prazo-da-pp-cai-em-janela-e-a-pp-pode-ser-urgente.md) na lista de aprovação.
+

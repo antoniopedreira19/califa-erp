@@ -9053,3 +9053,13 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Regra nova** em `docs/09-identidade-visual-ui.md` ("Listas com texto livre") e no `CLAUDE.md`: protótipo aprovado não prova a tela. Antes do push, confira com o dado real mais longo, na largura do Tiago.
 - **Sem migration.**
 
+## ⚠️ Nota de 2026-11-16 — a PP urgente na lista de PPs: seção "Urgentes", sem etiqueta (revisão da 257 e da 077)
+
+- **Lista de PPs:** a etiqueta "Urgente" saiu da linha. A seção "URGENTES · N" no topo junta as urgentes em avaliação **e aprovadas**; até aqui, só as em avaliação subiam.
+- **Justificativa:** no `title` do código.
+- **Selo Verba/Reembolso:** volta para logo embaixo do código.
+- **Coluna Código:** 168 → 112 px.
+- **Decidido** pelo Tiago num protótipo de duas opções (A, só a seção; B, etiqueta ao lado do código).
+- **Não mudam:** a tela da PP e Títulos a Pagar.
+- **Sem migration.**
+

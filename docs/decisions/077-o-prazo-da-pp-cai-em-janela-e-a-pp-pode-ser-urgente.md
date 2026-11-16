@@ -91,10 +91,13 @@ precisa ser janela e não pode estar no passado.
 
 ### 6. No financeiro (perguntas 3a e 4a)
 
-- **Lista de aprovação:** as urgentes **em avaliação** sobem para o topo,
-  com faixa vermelha na borda e a divisória "Demais PPs". Busca e filtros
-  continuam valendo para elas. A etiqueta "Urgente" aparece em avaliação e
-  aprovada.
+- **Lista de aprovação:** as urgentes **em avaliação e aprovadas** sobem
+  para a seção "Urgentes" no topo, com faixa vermelha na borda, e embaixo
+  vem a divisória "Demais PPs". Busca e filtros continuam valendo para elas.
+  A linha não tem etiqueta: a seção faz esse papel, e a justificativa
+  aparece ao passar o mouse no código. (Até 16/11/2026, só as em avaliação
+  subiam, e a etiqueta "Urgente" aparecia na linha em avaliação e aprovada;
+  ver a nota no fim desta seção.)
 - **Tela da PP:** etiqueta "Urgente" no cabeçalho e, no topo do dossiê, o
   bloco com a justificativa, quem marcou e quando.
 - **A data escolhida na aprovação continua livre** — é justamente onde a
@@ -105,6 +108,11 @@ precisa ser janela e não pode estar no passado.
 - **Vencimento original** no dossiê perdeu o amarelo — dois alertas
   disputariam o mesmo olho. Ficou cinza neutro, com o selo "✓ janela do
   dia 08/20" ou "fora das janelas".
+
+⚠️ **A urgência na lista de PPs virou seção (2026-11-16).** Decidido pelo Tiago num protótipo de duas opções; está na revisão de 16/11 da [257](257-pp-paga-diz-que-esta-paga.md).
+- **Antes:** só as urgentes em avaliação subiam para o topo, e a etiqueta "Urgente" ia na linha. Nas aprovadas, a etiqueta era o único sinal (79 das 152 aprovadas eram urgentes em 16/11).
+- **Agora:** a etiqueta saiu da linha, e a seção "Urgentes · N" no topo junta as em avaliação e as aprovadas.
+- **Não mudam:** a tela da PP e Títulos a Pagar.
 
 ### 7. "Gerar e enviar ao financeiro"
 

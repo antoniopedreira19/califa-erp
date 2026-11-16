@@ -295,9 +295,9 @@ function formatDate(iso: string | null): string {
 function ColunasDasPPs({ prestacoes }: { prestacoes: boolean }) {
   return (
     <colgroup>
-      {/* Código, com Urgente e Verba/Reembolso embaixo: os dois selos
-          juntos medem 133 px (há PP urgente de reembolso em aberto) */}
-      <col className="w-[168px]" />
+      {/* Código, com Verba/Reembolso embaixo. A urgência não tem selo na
+          linha: ela mora na seção "Urgentes" (16/11/2026). */}
+      <col className="w-[112px]" />
       {/* Valor: cabe R$ 1.387.138,56, a maior PP */}
       <col className="w-[144px]" />
       {prestacoes ? (
@@ -387,7 +387,10 @@ function SeloPrestacao() {
   );
 }
 
-/** O selo Urgente só vale enquanto a PP espera o financeiro. */
+/** A urgência só vale enquanto a PP espera o financeiro: em avaliação (a
+ *  aprovar) ou aprovada (a pagar). Essas sobem para a seção "Urgentes" no
+ *  topo da lista (decisão 257, revista em 16/11/2026; antes só as em
+ *  avaliação subiam, e as aprovadas levavam o selo na linha). */
 function urgenteVisivel(r: PPRow): boolean {
   return r.urgente && (r.status === "em_avaliacao" || r.status === "aprovada");
 }
@@ -547,7 +550,8 @@ function colunasDoModo(prestacoes: boolean): ColunaFiltravel<PPRow>[] {
       chave: "codigo",
       rotulo: "Código",
       tipo: "texto",
-      // A busca da coluna acha também pelos selos da célula.
+      // A busca da coluna acha também pelo selo da célula e pela urgência
+      // (que mora na seção "Urgentes", sem selo na linha).
       celula: (r) => ({
         ...celulaTexto(r.codigo),
         busca: [
@@ -746,15 +750,16 @@ export function PedidosCompraList({
     colunas.ordenacao !== null && COLUNAS.some((c) => c.chave === colunas.ordenacao!.coluna);
   const barraAtiva = colunas.filtrando || ordemValendo;
 
-  /** As urgentes em avaliação sobem para o topo, com faixa própria, seja
-   *  qual for a ordem do resto (decisão 077). Busca e filtros continuam
-   *  valendo para elas — os dos títulos também. Com ordem pelo título, as
-   *  urgentes se ordenam entre elas, e as demais embaixo da faixa "Demais
-   *  PPs": a urgente não desce para o meio da lista. */
-  const [urgentes, demais] = React.useMemo(() => {
-    const topo = (r: PPRow) => r.urgente && r.status === "em_avaliacao";
-    return [filtrados.filter(topo), filtrados.filter((r) => !topo(r))];
-  }, [filtrados]);
+  /** As urgentes que esperam o financeiro (em avaliação e aprovadas) sobem
+   *  para a seção "Urgentes" no topo, seja qual for a ordem do resto
+   *  (decisão 077; as aprovadas desde 16/11/2026, decisão 257). Busca e
+   *  filtros continuam valendo para elas — os dos títulos também. Com ordem
+   *  pelo título, as urgentes se ordenam entre elas, e as demais embaixo da
+   *  faixa "Demais PPs": a urgente não desce para o meio da lista. */
+  const [urgentes, demais] = React.useMemo(
+    () => [filtrados.filter(urgenteVisivel), filtrados.filter((r) => !urgenteVisivel(r))],
+    [filtrados],
+  );
 
   const regionaisOrdenadas = React.useMemo(
     () => [...regionais].filter((r) => r.ativo).sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
@@ -877,6 +882,18 @@ export function PedidosCompraList({
             )}
             {[...urgentes, ...demais].map((r, i) => (
               <React.Fragment key={r.id}>
+              {/* A seção das urgentes: o título faz o papel do selo, que
+                  saiu da linha (16/11/2026). */}
+              {i === 0 && urgentes.length > 0 && (
+                <tr className="border-b border-border bg-california-red/[0.07]">
+                  <td
+                    colSpan={11}
+                    className="border-l-[3px] border-l-california-red px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider text-california-red"
+                  >
+                    Urgentes · {urgentes.length}
+                  </td>
+                </tr>
+              )}
               {i === urgentes.length && urgentes.length > 0 && (
                 <tr className="border-b border-border bg-muted/30">
                   <td
@@ -908,31 +925,27 @@ export function PedidosCompraList({
                     i < urgentes.length && "border-l-[3px] border-l-california-red",
                   )}
                 >
-                  <span className="block whitespace-nowrap">{r.codigo}</span>
-                  {/* Decisão 257: os selos embaixo do código, para a coluna
-                      ficar estreita e a linha não passar de duas linhas — o
-                      Urgente também (16/11/2026; antes ele ia ao lado do
-                      código). No filtro de prestações a linha é a da
-                      prestação. */}
-                  {(urgenteVisivel(r) || r.verba_producao) && (
-                    <span className="mt-1 flex flex-wrap gap-1 font-sans">
-                      {urgenteVisivel(r) && (
-                        <span
-                          title={r.urgente_justificativa ?? undefined}
-                          className="rounded-md bg-california-red px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white"
-                        >
-                          Urgente
+                  {/* A justificativa da urgência ao passar o mouse no código;
+                      inteira, ela está no topo do dossiê da PP. */}
+                  <span
+                    className="block whitespace-nowrap"
+                    title={urgenteVisivel(r) ? (r.urgente_justificativa ?? undefined) : undefined}
+                  >
+                    {r.codigo}
+                  </span>
+                  {/* Decisão 257: o selo Verba/Reembolso logo embaixo do
+                      código, para a coluna ficar estreita. No filtro de
+                      prestações a linha é a da prestação. */}
+                  {r.verba_producao && (
+                    <span className="mt-1 flex font-sans">
+                      {filtro === "prestacoes" ? (
+                        <SeloPrestacao />
+                      ) : (
+                        <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                          {/* Decisão 187: o reembolso mora no campo da verba. */}
+                          {r.tipo_verba === "reembolso" ? "Reembolso" : "Verba"}
                         </span>
                       )}
-                      {r.verba_producao &&
-                        (filtro === "prestacoes" ? (
-                          <SeloPrestacao />
-                        ) : (
-                          <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
-                            {/* Decisão 187: o reembolso mora no campo da verba. */}
-                            {r.tipo_verba === "reembolso" ? "Reembolso" : "Verba"}
-                          </span>
-                        ))}
                     </span>
                   )}
                 </td>
