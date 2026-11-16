@@ -66,6 +66,9 @@ export function ColaboradorFormNovo({
   >("clt");
   const [empresaId, setEmpresaId] = React.useState<string>("");
   const [regionalId, setRegionalId] = React.useState<string>("");
+  // Hub = colaborador nasce com rateio pela empresa toda, sem regional
+  // cravada. Mesma semântica do toggle do modal "Alterar alocação".
+  const [usaRateioEmpresa, setUsaRateioEmpresa] = React.useState<boolean>(false);
   const [nivelSel, setNivelSel] = React.useState<string>(NONE_SENTINEL);
   const [liderSel, setLiderSel] = React.useState<string>(NONE_SENTINEL);
   const [cpf, setCpf] = React.useState<string>(defaults?.cpf ?? "");
@@ -89,9 +92,16 @@ export function ColaboradorFormNovo({
   }, [isPJ]);
 
   // Ao trocar de empresa, zera a regional (evita regional de outra empresa)
+  // e desliga o Hub (rateio é por empresa — mudar empresa reseta a escolha).
   React.useEffect(() => {
     setRegionalId("");
+    setUsaRateioEmpresa(false);
   }, [empresaId]);
+
+  // Ao ligar Hub, limpa a regional selecionada (regra do validador).
+  React.useEffect(() => {
+    if (usaRateioEmpresa) setRegionalId("");
+  }, [usaRateioEmpresa]);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -105,7 +115,8 @@ export function ColaboradorFormNovo({
     else formData.set("lider_id", liderSel);
     formData.set("tipo_contratacao", tipoContratacao);
     formData.set("empresa_id", empresaId);
-    formData.set("regional_id", regionalId);
+    formData.set("regional_id", usaRateioEmpresa ? "" : regionalId);
+    formData.set("usa_rateio_empresa", usaRateioEmpresa ? "true" : "false");
     formData.set("cpf", cpf);
     formData.set("cnpj", cnpj);
     formData.set("telefone", telefone);
@@ -336,8 +347,9 @@ export function ColaboradorFormNovo({
             Alocação inicial
           </h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Nasce com 100% em uma empresa e regional. Rateio entre múltiplas
-            alocações é definido na página do colaborador depois do cadastro.
+            Nasce com 100% em uma empresa — em uma regional específica ou no
+            rateio da empresa (Hub). Rateio entre múltiplas empresas é
+            definido na página do colaborador depois do cadastro.
           </p>
           <div className="mt-2 h-px bg-border" />
         </div>
@@ -368,19 +380,24 @@ export function ColaboradorFormNovo({
 
           <div className="space-y-2">
             <Label htmlFor="regional_id">
-              Regional <span className="text-california-red">*</span>
+              Regional{" "}
+              {!usaRateioEmpresa && (
+                <span className="text-california-red">*</span>
+              )}
             </Label>
             <Select
               value={regionalId}
               onValueChange={setRegionalId}
-              disabled={!empresaId}
+              disabled={!empresaId || usaRateioEmpresa}
             >
               <SelectTrigger id="regional_id">
                 <SelectValue
                   placeholder={
-                    empresaId
-                      ? "Selecione a regional"
-                      : "Selecione a empresa primeiro"
+                    usaRateioEmpresa
+                      ? "Usando rateio da empresa"
+                      : empresaId
+                        ? "Selecione a regional"
+                        : "Selecione a empresa primeiro"
                   }
                 />
               </SelectTrigger>
@@ -398,6 +415,39 @@ export function ColaboradorFormNovo({
               </p>
             ))}
           </div>
+
+          {empresaId && (
+            <div className="md:col-span-2">
+              <div className="flex items-center justify-between rounded-lg border border-border bg-muted/30 px-4 py-3">
+                <div className="pr-4">
+                  <p className="text-sm font-medium">
+                    Usar rateio da empresa (Hub)
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Quando ativo, o custo é distribuído pelo rateio anual
+                    configurado da empresa — sem regional cravada.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={usaRateioEmpresa}
+                  onClick={() => setUsaRateioEmpresa((v) => !v)}
+                  className={`inline-flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors ${
+                    usaRateioEmpresa
+                      ? "bg-california-red"
+                      : "bg-muted-foreground/30"
+                  }`}
+                >
+                  <span
+                    className={`inline-block h-5 w-5 rounded-full bg-white shadow-sm transform transition-transform ${
+                      usaRateioEmpresa ? "translate-x-5" : "translate-x-0"
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 

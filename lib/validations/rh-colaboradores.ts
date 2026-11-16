@@ -128,23 +128,33 @@ export type ColaboradorInput = z.infer<typeof colaboradorSchema>;
 
 /**
  * Schema da alocação inicial no cadastro do colaborador. Uma única
- * alocação de 100% em par (empresa, regional). Alocações adicionais e
- * rateio (< 100%) são feitos na página de detalhe.
+ * alocação de 100% em uma empresa. Duas formas:
+ *   - Regional específica: `usa_rateio_empresa=false` + `regional_id` obrigatório.
+ *   - Hub (rateio da empresa): `usa_rateio_empresa=true` + `regional_id` vazio.
+ * Rateio entre múltiplas empresas é feito na página de detalhe.
  */
-export const alocacaoInicialSchema = z.object({
-  empresa_id: z
-    .string()
-    .trim()
-    .min(1, "Selecione uma empresa."),
-  regional_id: z
-    .string()
-    .trim()
-    .min(1, "Selecione uma regional."),
-  data_inicio: z
-    .string()
-    .trim()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida."),
-});
+export const alocacaoInicialSchema = z
+  .object({
+    empresa_id: z
+      .string()
+      .trim()
+      .min(1, "Selecione uma empresa."),
+    regional_id: z.string().trim().optional().default(""),
+    usa_rateio_empresa: z.boolean().default(false),
+    data_inicio: z
+      .string()
+      .trim()
+      .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida."),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.usa_rateio_empresa && data.regional_id.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["regional_id"],
+        message: "Selecione uma regional.",
+      });
+    }
+  });
 
 /**
  * Schema da alocação vigente do colaborador (Camada 1). Novo modelo

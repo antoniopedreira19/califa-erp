@@ -86,6 +86,8 @@ export async function criarColaborador(
   const alocacaoParsed = alocacaoInicialSchema.safeParse({
     empresa_id: formData.get("empresa_id")?.toString() ?? "",
     regional_id: formData.get("regional_id")?.toString() ?? "",
+    usa_rateio_empresa:
+      formData.get("usa_rateio_empresa")?.toString() === "true",
     data_inicio: colaboradorParsed.data.data_admissao,
   });
   if (!alocacaoParsed.success) {
@@ -141,6 +143,8 @@ export async function criarColaborador(
   const service = createServiceClient();
 
   // 2) Alocação inicial vigente — usa hierarquia nova (itens) via alterarAlocacao.
+  // Se Hub: item 100% com usa_rateio_empresa=true e sem regionais.
+  // Caso contrário: item 100% com regional específica em 100%.
   const alocResult = await alterarAlocacao(colaboradorId, {
     data_mudanca: alocacaoParsed.data.data_inicio,
     motivo: "Alocação inicial (cadastro de colaborador)",
@@ -148,13 +152,15 @@ export async function criarColaborador(
       {
         empresa_id: alocacaoParsed.data.empresa_id,
         percentual_empresa: 100,
-        usa_rateio_empresa: false,
-        regionais: [
-          {
-            regional_id: alocacaoParsed.data.regional_id,
-            percentual_regional: 100,
-          },
-        ],
+        usa_rateio_empresa: alocacaoParsed.data.usa_rateio_empresa,
+        regionais: alocacaoParsed.data.usa_rateio_empresa
+          ? []
+          : [
+              {
+                regional_id: alocacaoParsed.data.regional_id,
+                percentual_regional: 100,
+              },
+            ],
       },
     ],
   });
@@ -193,7 +199,10 @@ export async function criarColaborador(
       tipo_contratacao: colaboradorParsed.data.tipo_contratacao,
       funcao: colaboradorParsed.data.funcao,
       empresa_id: alocacaoParsed.data.empresa_id,
-      regional_id: alocacaoParsed.data.regional_id,
+      regional_id: alocacaoParsed.data.usa_rateio_empresa
+        ? null
+        : alocacaoParsed.data.regional_id,
+      usa_rateio_empresa: alocacaoParsed.data.usa_rateio_empresa,
       salario_inicial: salarioParsed.data.valor,
     },
   });
