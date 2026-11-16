@@ -311,7 +311,8 @@ export default async function ConciliacaoPage({
         dataAte={dataAte}
       />
 
-      {contaId && (
+      {/* Decisão 262: na Conciliação automática, o fechamento fica na linha dos meses. */}
+      {contaId && aba !== "banco" && (
         <FaixaDoFechamento
           contaId={contaId}
           contaNome={contaAberta?.nome ?? "Conta"}

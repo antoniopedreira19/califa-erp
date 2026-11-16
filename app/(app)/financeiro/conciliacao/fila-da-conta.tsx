@@ -69,16 +69,20 @@ export interface PropsDaFila {
   importar: React.ReactNode;
   /** Até que dia a conciliação está fechada (decisão 205); nulo, aberta. */
   fechadaAte: string | null;
+  /** O fechamento inteiro: os meses fechados e o "Reabrir" na linha dos meses (decisão 262). */
+  fechamento: FechamentoDaConta;
   /** As condições do fechamento no último dia completo do extrato: o saldo
    *  do banco conferido pelo servidor, de onde parte a coluna Saldo (decisão 254). */
   condicoes: FechamentoDaConta["condicoes"];
-  /** O saldo de cada dia em aberto, pela conta do fechamento: o cadeado do
-   *  dia avisa que o saldo não bate antes do clique (decisão 254). */
+  /** O saldo de cada dia em aberto, pela conta do fechamento: o ✓ do dia e
+   *  o mês avisam que o saldo não bate (decisões 254 e 262). */
   saldosDosDias: FechamentoDaConta["saldosDosDias"];
   /** Roda uma ação do servidor com o aviso da aba e a releitura da página. */
   rodar: (acao: () => Promise<ResultadoDaAcao>, depois?: () => void) => void;
   /** Um aviso de erro na tela (o que não chega a ir ao servidor). */
   avisar: (texto: string) => void;
+  /** Um aviso verde do que deu certo fora de uma ação do servidor da aba. */
+  avisarOk: (texto: string) => void;
   pending: boolean;
   avisos: {
     erroImportacao: string | null;

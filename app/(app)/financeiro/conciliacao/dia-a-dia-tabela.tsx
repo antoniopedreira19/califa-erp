@@ -757,6 +757,7 @@ export function TabelaDeComposicoes({
   saldoBase,
   servidor,
   avisar,
+  avisarOk,
 }: {
   p: PropsDaFila;
   /** O dia aberto; nulo, todos os dias em aberto. */
@@ -766,6 +767,8 @@ export function TabelaDeComposicoes({
   saldoBase: SaldoBase | null;
   servidor: AcoesDoDia;
   avisar: (texto: string) => void;
+  /** O aviso verde do que deu certo (o "Conciliar" de uma linha, o "Conciliar tudo" sem falha). */
+  avisarOk: (texto: string) => void;
   /** Protótipo de 16/11/2026: os créditos e os débitos no topo da tabela (a opção "No topo da tabela"); nulo, não mostra. */
   totais?: { banco: { creditos: number; debitos: number }; sistema: { creditos: number; debitos: number } } | null;
 }) {
@@ -1036,7 +1039,8 @@ export function TabelaDeComposicoes({
     setResumo(false);
     const n = fila.filter((x) => resolvidas.has(x.c.r.mov.id)).length;
     const feitas = n === 1 ? "1 linha conciliada" : `${n} linhas conciliadas`;
-    avisar(falhas.length ? `${feitas}; ${falhas.length === 1 ? "1 não foi" : `${falhas.length} não foram`} (${ddmm(falhas[0].c.r.mov.data)}, ${moeda(Math.abs(falhas[0].c.r.mov.valor))}): ${falhas[0].msg}` : `${feitas} de uma vez.`);
+    if (falhas.length) avisar(`${feitas}; ${falhas.length === 1 ? "1 não foi" : `${falhas.length} não foram`} (${ddmm(falhas[0].c.r.mov.data)}, ${moeda(Math.abs(falhas[0].c.r.mov.valor))}): ${falhas[0].msg}`);
+    else avisarOk(`${feitas} de uma vez.`);
   };
 
   /** O centro de custo trocado na linha numa baixa já feita: gravado antes da conciliação da linha. */
@@ -1067,7 +1071,7 @@ export function TabelaDeComposicoes({
       if (r?.ok) {
         const fora = new Set([c.r.mov.id as string, ...(ch.tambem ? [ch.tambem] : [])]);
         setEdicoes((e) => Object.fromEntries(Object.entries(e).filter(([linha]) => !fora.has(linha))));
-        avisar(`Linha de ${ddmm(c.r.mov.data)} (${moeda(Math.abs(c.r.mov.valor))}) conciliada.`);
+        avisarOk(`Linha de ${ddmm(c.r.mov.data)} (${moeda(Math.abs(c.r.mov.valor))}) conciliada.`);
       } else avisar(r?.message ?? "Não foi possível conciliar.");
     } catch (e) {
       avisar(String((e as Error)?.message ?? e));

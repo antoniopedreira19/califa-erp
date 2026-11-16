@@ -1,8 +1,8 @@
 /**
  * A leitura do fechamento da conciliação de uma conta (decisão 205): os
  * registros (o ativo e o histórico, com quem fechou e quem reabriu) e, na
- * aba Conciliação automática, as condições do botão "Fechar a conciliação
- * até dd/mm", pela mesma função do banco que `fechar_conciliacao` confere.
+ * aba Conciliação automática, as condições do fechamento, pela mesma função
+ * do banco que `fechar_conciliacao` confere.
  * As duas leituras correm juntas.
  */
 
@@ -14,7 +14,7 @@ type Supabase = ReturnType<typeof createClient>;
 
 type RegistroCru = Pick<
   ConciliacaoFechamento,
-  "id" | "ate" | "fechado_em" | "reaberto_em" | "motivo_reabertura" | "ativo"
+  "id" | "ate" | "fechado_em" | "reaberto_em" | "motivo_reabertura" | "ativo" | "reabertura_de"
 > & {
   // Duas FKs para `profiles`: o embed diz a coluna.
   fechador: { nome: string | null } | null;
@@ -29,7 +29,7 @@ export async function carregarFechamentoDaConciliacao(
     supabase
       .from("conciliacao_fechamentos")
       .select(
-        "id, ate, fechado_em, reaberto_em, motivo_reabertura, ativo, " +
+        "id, ate, fechado_em, reaberto_em, motivo_reabertura, ativo, reabertura_de, " +
           "fechador:profiles!fechado_por(nome), reabridor:profiles!reaberto_por(nome)",
       )
       .eq("tenant_id", args.tenantId)
@@ -39,7 +39,7 @@ export async function carregarFechamentoDaConciliacao(
     args.comCondicoes
       ? supabase.rpc("condicoes_do_fechamento", { p_conta_id: args.contaId })
       : Promise.resolve({ data: null, error: null }),
-    // O saldo de cada dia em aberto (decisão 254): o cadeado avisa antes do clique.
+    // O saldo de cada dia em aberto (decisão 254): o ✓ do dia e o mês avisam o saldo que não bate.
     args.comCondicoes
       ? supabase.rpc("saldos_dos_dias_em_aberto", { p_conta_id: args.contaId })
       : Promise.resolve({ data: null, error: null }),
@@ -60,6 +60,7 @@ export async function carregarFechamentoDaConciliacao(
     reabertoPor: r.reaberto_em ? (r.reabridor?.nome ?? "—") : null,
     motivo: r.motivo_reabertura,
     ativo: r.ativo,
+    daReabertura: !!r.reabertura_de,
   }));
   const c = condicoesRes.data as CondicoesDoFechamento | null;
   return {

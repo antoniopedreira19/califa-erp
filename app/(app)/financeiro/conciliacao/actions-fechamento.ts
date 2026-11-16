@@ -1,9 +1,10 @@
 "use server";
 
 /**
- * O fechamento da conciliação (task 029, fase 4, decisão 205): fechar até o
- * último dia completo dos extratos e reabrir com motivo. As regras moram nas funções do
- * banco (`fechar_conciliacao`, `reabrir_conciliacao`) e no gatilho dos
+ * O fechamento da conciliação (task 029, fase 4, decisão 205; por mês desde a
+ * decisão 262): fechar até o fim do mês e reabrir mês a mês, com motivo. As
+ * regras moram nas funções do banco (`fechar_conciliacao`,
+ * `reabrir_mes_da_conciliacao`) e no gatilho dos
  * lançamentos, que travam qualquer caminho; aqui só a forma da entrada e as
  * mensagens.
  */
@@ -38,8 +39,8 @@ function revalidar() {
   revalidatePath("/financeiro/conciliacao");
 }
 
-/** Fecha a conciliação da conta até o dia (o último dia completo dos
- *  extratos). O banco confere as três condições de novo. */
+/** Fecha a conciliação da conta até o dia (na tela, o fim do mês: "Fechar
+ *  outubro"). O banco confere as três condições de novo. */
 export async function fecharConciliacao(contaId: string, ate: string): Promise<Resultado> {
   if (!UUID.safeParse(contaId).success || !DATA.safeParse(ate).success) return { ok: false, message: "Entrada inválida." };
   const g = await gate();
@@ -53,19 +54,27 @@ export async function fecharConciliacao(contaId: string, ate: string): Promise<R
   return { ok: true };
 }
 
-/** Reabre o período fechado da conta, com o motivo (10 caracteres ou mais). */
-export async function reabrirConciliacao(contaId: string, motivo: string): Promise<Resultado> {
+/**
+ * Reabre o mês fechado da conta (decisão 262), com o motivo (10 caracteres
+ * ou mais): o mês anterior continua fechado se já tinha sido fechado alguma
+ * vez. Devolve até quando a conta continua fechada (nulo, toda aberta).
+ */
+export async function reabrirMesDaConciliacao(
+  contaId: string,
+  motivo: string,
+): Promise<{ ok: true; continuaFechadaAte: string | null } | { ok: false; message: string }> {
   if (!UUID.safeParse(contaId).success) return { ok: false, message: "Entrada inválida." };
   const texto = typeof motivo === "string" ? motivo.trim() : "";
   if (texto.length < 10) return { ok: false, message: "Explique o motivo (pelo menos 10 caracteres)." };
   if (texto.length > 1000) return { ok: false, message: "O motivo passa de 1.000 caracteres: resuma." };
   const g = await gate();
   if (!g.ok) return g;
-  const { error } = await g.supabase.rpc("reabrir_conciliacao", { p_conta_id: contaId, p_motivo: texto });
+  const { data, error } = await g.supabase.rpc("reabrir_mes_da_conciliacao", { p_conta_id: contaId, p_motivo: texto });
   if (error) {
-    console.error("[conciliacao.reabrir]", error.message);
-    return { ok: false, message: mensagemDoBanco(error.message, "Não foi possível reabrir o período. Tente de novo.") };
+    console.error("[conciliacao.reabrir_mes]", error.message);
+    return { ok: false, message: mensagemDoBanco(error.message, "Não foi possível reabrir o mês. Tente de novo.") };
   }
   revalidar();
-  return { ok: true };
+  const ate = (data as { continua_fechada_ate?: string | null } | null)?.continua_fechada_ate ?? null;
+  return { ok: true, continuaFechadaAte: ate };
 }

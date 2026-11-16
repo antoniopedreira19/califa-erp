@@ -22,8 +22,9 @@
  *   dela; corrigir, lançar pela regra, "saiu e voltou", ignorar e desfazer
  *   são as RPCs da conciliação. "Lançar avulso" abre o formulário de
  *   criação de sempre, preenchido com a linha.
- * - O fechamento (decisão 205): "Fechar a conciliação até dd/mm", que só
- *   liga com as três condições do banco, e "Reabrir o período". Com a
+ * - O fechamento (decisão 205; por mês desde a 262): "Fechar outubro", na
+ *   linha dos meses do dia a dia, que só liga com as três condições do
+ *   banco no último dia do mês, e "Reabrir outubro", mês a mês. Com a
  *   conciliação fechada, desfazer, corrigir e cancelar com data até lá
  *   avisam antes de chamar (o banco recusa de qualquer jeito).
  * - A tela (decisão 254): a conciliação dia a dia (dia-a-dia.tsx), que tomou
@@ -725,10 +726,12 @@ export function AbaBanco({
         conciliarVarios={conciliarVarios}
         importar={<BotaoImportarExtrato onArquivo={importar} importando={importando} />}
         fechadaAte={fechamento.ativo?.ate ?? null}
+        fechamento={fechamento}
         condicoes={fechamento.condicoes}
         saldosDosDias={fechamento.saldosDosDias}
         rodar={rodar}
         avisar={(texto) => setAviso({ tom: "erro", texto })}
+        avisarOk={(texto) => setAviso({ tom: "ok", texto })}
         pending={pending}
         avisos={{ erroImportacao, falhaDoMotor, recusado, descartarRecusado: () => setRecusado(null) }}
       />

@@ -4013,6 +4013,8 @@ export interface ConciliacaoFechamento {
   reaberto_por: string | null;
   motivo_reabertura: string | null;
   ativo: boolean;
+  /** Decisão 262: o registro que nasceu do "Reabrir" do mês seguinte aponta para o registro reaberto. */
+  reabertura_de: string | null;
 }
 
 /** As condições do fechamento (`condicoes_do_fechamento`, decisão 205):
