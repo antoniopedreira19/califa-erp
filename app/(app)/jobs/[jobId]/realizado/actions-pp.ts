@@ -29,7 +29,7 @@ import { pagamentoDoTitularSchema } from "@/lib/validations/pagamento-do-titular
 import { LINK_DA_COMPRA, LINK_DA_COMPRA_MAX, PLATAFORMA_MAX } from "@/lib/validations/cartao-corporativo";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { formatCurrency } from "@/lib/utils";
-import { enviaPPNoJob, pode, type JobParaEnvioDePP } from "@/lib/permissoes";
+import { cancelaPPNoPapel, enviaPPNoJob, pode, type JobParaEnvioDePP } from "@/lib/permissoes";
 import {
   DOCUMENTO_TIPOS,
   DOCUMENTO_TIPOS_FISCAIS,
@@ -2427,10 +2427,14 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
 
   // Decisão 136: qualquer GP (e o administrador) cancela — antes era só o
   // GP responsável do job. O produtor gera PP mas não a envia ao
-  // financeiro; por isso cancela só a que ainda não foi enviada. Com a
+  // financeiro; por isso não cancela a que está em avaliação. Com a
   // chave do GP (decisão 174), o Produtor Responsável cancela como o GP.
-  const podeCancelar =
-    enviaPPNoJob(session.activeRole, session.profile.id, job) || pp.status === "gerada";
+  // Desde 16/11/2026 o produtor cancela também a rejeitada: ela voltou
+  // para a produção e, até alguém cancelar, segue no realizado do item.
+  const podeCancelar = cancelaPPNoPapel(
+    pp.status as PPStatus,
+    enviaPPNoJob(session.activeRole, session.profile.id, job),
+  );
   if (!podeCancelar) {
     await logAuditEvent({
       acao: "acao_negada",
@@ -2439,13 +2443,13 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
       entidadeId: pp_id,
       metadata: {
         acao_tentada: "pedido_compra.cancelada",
-        motivo: "produtor_so_cancela_pp_nao_enviada",
+        motivo: "produtor_nao_cancela_pp_em_avaliacao",
         status_atual: pp.status,
       },
     });
     return {
       ok: false,
-      message: "O produtor só cancela PP que ainda não foi enviada ao financeiro. Peça a um GP.",
+      message: "PP em avaliação no financeiro só o GP cancela. Peça a um GP.",
     };
   }
 
@@ -4574,11 +4578,12 @@ export async function cancelarERefazerPP(
     };
   }
 
+  // Os gates de gerar PP (`jobs.emitir_pp`): reemitir não manda nada ao
+  // financeiro, só devolve a PP a emitir. Até 16/11/2026 era só de quem
+  // envia (decisão 136); agora o produtor e o freelancer também reemitem,
+  // geram e deixam a PP pronta para o GP enviar (decisão 160).
   const gate = await checarGatesRealizado(linhaPP.item_realizado_id);
   if (!gate.ok) return gate;
-  // A rejeitada já esteve no financeiro: quem a refaz é quem envia (decisão 136).
-  const barrado = await barrarEnvioPeloPapel(gate.session, ppId, gate.job);
-  if (barrado) return barrado;
 
   // "Esta é a última PP deste item?" volta respondida como da primeira vez
   // (Tiago, 19/10/2026): a resposta da PP a emitir que gerou a rejeitada.

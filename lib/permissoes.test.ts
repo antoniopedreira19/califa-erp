@@ -28,6 +28,7 @@ import {
   recursos,
   PermissaoNegadaError,
   enviaPPNoJob,
+  cancelaPPNoPapel,
   corrigeNfNoJob,
   type Recurso,
 } from "./permissoes";
@@ -522,6 +523,24 @@ test("Equipe e a chave do envio de PP pelo Produtor Responsável (decisão 174)"
   assert.equal(corrigeNfNoJob("financeiro", outro, semChave), true);
   assert.equal(corrigeNfNoJob("produtor", produtor, semChave), false);
   assert.equal(corrigeNfNoJob("produtor", produtor, comChave), true);
+});
+
+test("Quem cancela a PP em cada situação (revisão de 16/11/2026 das 136 e 174)", () => {
+  // Quem envia (GP, administrador, produtor com a chave): até a em avaliação.
+  assert.equal(cancelaPPNoPapel("gerada", true), true);
+  assert.equal(cancelaPPNoPapel("em_avaliacao", true), true);
+  assert.equal(cancelaPPNoPapel("rejeitada", true), true);
+  // Quem só gera (produtor, freelancer): a gerada e a rejeitada, que voltou
+  // para a produção. A em avaliação está com o financeiro.
+  assert.equal(cancelaPPNoPapel("gerada", false), true);
+  assert.equal(cancelaPPNoPapel("rejeitada", false), true);
+  assert.equal(cancelaPPNoPapel("em_avaliacao", false), false);
+  // Aprovada e paga ninguém cancela pela produção.
+  for (const enviaPP of [true, false]) {
+    assert.equal(cancelaPPNoPapel("aprovada", enviaPP), false);
+    assert.equal(cancelaPPNoPapel("pago", enviaPP), false);
+    assert.equal(cancelaPPNoPapel("cancelada", enviaPP), false);
+  }
 });
 
 test("Trocar o GP e o Produtor Responsáveis do job aberto (decisão 176)", () => {

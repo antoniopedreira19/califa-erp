@@ -33,10 +33,10 @@ import {
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn, formatCurrency } from "@/lib/utils";
+import { cancelaPPNoPapel } from "@/lib/permissoes";
 import {
   nomeDeQuemRecebeAVerba,
   nomeDoCartaoCorporativo,
-  podeCancelarPP,
   ppStatusLabel,
   rotuloDaVerbaMinusculo,
   situacaoVerbaLabel,
@@ -1408,10 +1408,9 @@ export function JobPPsSection({
             const prestar =
               podePrestarContas.includes(pp.id) &&
               (producaoEditaPrestacao(pp) || midiaAguardaProducao(situacaoMidiaDaPP(pp, midiaSystem)));
-            const cancelar =
-              editable &&
-              podeCancelarPP(pp.status) &&
-              (papelEnviaPP || pp.status === "gerada");
+            // A em avaliação só quem envia; a gerada e a rejeitada, também o
+            // produtor (revisão de 16/11/2026 da 136).
+            const cancelar = editable && cancelaPPNoPapel(pp.status, papelEnviaPP);
             // O envio é do GP (decisão 136), em toda PP gerada. Até
             // 22/10/2026 só aparecia com arquivo anexado (decisão 160 §4);
             // agora a nota entra no pop-up, como no painel do item (decisão
@@ -1564,9 +1563,11 @@ export function JobPPsSection({
                 </Tooltip>
               </>
             );
-            // A rejeitada volta como PP a emitir (decisão 153): é envio ao
-            // financeiro, então segue `podeEnviar`, como o reenvio.
-            const refazerEl = podeEnviar && pp.status === "rejeitada" && (
+            // A rejeitada volta como PP a emitir (decisão 153). Reemitir não
+            // manda nada ao financeiro: desde 16/11/2026 segue `editable`
+            // (gerar PP), e o produtor também reemite e deixa a PP pronta
+            // para o GP enviar. Até ali seguia `podeEnviar`.
+            const refazerEl = editable && pp.status === "rejeitada" && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <button
@@ -1698,8 +1699,10 @@ export function JobPPsSection({
         valorPlanejado={ppVendo ? (planejadoPorItem[ppVendo.item_realizado_id] ?? 0) : 0}
         emPPsEmitidas={ppVendo ? emPPsDoItem(ppVendo.item_realizado_id) : 0}
         tomadores={tomadoresDaNf}
-        // O produtor cancela só a PP ainda não enviada (decisão 136).
-        podeCancelar={editable && (papelEnviaPP || ppVendo?.status === "gerada")}
+        // A PP em avaliação só quem envia cancela (`cancelaPPNoPapel`,
+        // revisão de 16/11/2026 da 136). Aprovada e paga ficam com o botão
+        // apagado e o motivo, pela regra da própria gaveta.
+        podeCancelar={editable && (papelEnviaPP || ppVendo?.status !== "em_avaliacao")}
         onMensagem={setToast}
       />
 

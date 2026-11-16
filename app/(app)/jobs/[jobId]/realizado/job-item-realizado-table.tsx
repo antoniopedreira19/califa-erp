@@ -2899,7 +2899,6 @@ export function JobItemRealizadoTable({
                   : null
               }
               onRefeita={(id) => setEditarQuandoChegar(id)}
-              podeRefazer={papelEnviaPP}
               // Decisão 160: sem o papel, o envio vira "Deixar pronta para envio".
               papelEnviaPP={papelEnviaPP}
               nomeDoFornecedor={(id) => (id ? nomeDoFornecedor(fornecedores, id) : "—")}
@@ -3066,9 +3065,12 @@ export function JobItemRealizadoTable({
               // Cancelar daqui segue o mesmo gate de gerar e enviar: o
               // servidor confere de novo, mas o botão não aparece para
               // quem só lê o job.
-              // O produtor cancela só a PP ainda não enviada (decisão 136).
+              // A PP em avaliação só quem envia cancela; a gerada e a
+              // rejeitada, também o produtor (`cancelaPPNoPapel`, revisão
+              // de 16/11/2026 da 136). Aprovada e paga ficam com o botão
+              // apagado e o motivo, pela regra da própria gaveta.
               podeCancelar={
-                podeGerarPP && (papelEnviaPP || ppVendo?.status === "gerada")
+                podeGerarPP && (papelEnviaPP || ppVendo?.status !== "em_avaliacao")
               }
               onMensagem={setToast}
             />
