@@ -1,14 +1,14 @@
 import { notFound, redirect } from "next/navigation";
-import { Users, Briefcase, DollarSign } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { buscarAlocacaoVigente } from "@/lib/alocacao/montar-snapshot";
-import { tipoContratacaoLabel } from "@/lib/types";
 import type {
   Colaborador,
   ColaboradorAlocacao,
+  ColaboradorFeriasPeriodo,
   ColaboradorSalario,
   Empresa,
+  FeriasPeriodoStatus,
   Nivel,
 } from "@/lib/types";
 import { CardDados } from "./card-dados";
@@ -22,6 +22,15 @@ import { CardDadosBancarios } from "./card-dados-bancarios";
 import { CardNfColaborador } from "./_components/card-nf-colaborador";
 import { CardAcesso } from "./card-acesso";
 import { BannerPendencias } from "./banner-pendencias";
+import { HeroColaborador } from "./_components/hero-colaborador";
+import { AbasPerfil } from "./_components/abas-perfil";
+import {
+  CardFerias,
+  type FeriasPeriodoResumo,
+} from "./_components/card-ferias";
+import { CardFolha, type FolhaRecente } from "./_components/card-folha";
+import { CardRescisao } from "./_components/card-rescisao";
+import { CardDocumentos } from "./_components/card-documentos";
 import { carregarAcessoColaborador } from "@/lib/auth/acesso-colaborador";
 import { createServiceClient } from "@/lib/supabase/server";
 import type { AppRole } from "@/lib/types";
@@ -62,6 +71,8 @@ export default async function ColaboradorDetalhePage({
     folhasAbertasPjRes,
     nfsExistentesRes,
     historico13Res,
+    periodosFeriasRes,
+    folhasRecentesRes,
   ] = await Promise.all([
     supabase
       .from("colaboradores")
@@ -72,13 +83,6 @@ export default async function ColaboradorDetalhePage({
     supabase
       .from("colaboradores_alocacoes")
       .select(
-        // regional:regionais precisa desambiguar o FK — colaboradores_alocacoes
-        // tem 2 FKs pra regionais: a simples `regional_id` e uma composta
-        // (regional_id, empresa_id) que garante que a regional pertence à
-        // empresa. Sem o `!nome_da_fk` o PostgREST não sabe qual usar e
-        // devolve o embed como null/erro silencioso — o que fazia a página
-        // do detalhe achar que não havia alocação e disparava a pendência
-        // crítica "Alocação vigente" mesmo com alocação real no banco.
         "*, empresa:empresas(id, nome_fantasia), regional:regionais!colaboradores_alocacoes_regional_id_fkey(id, nome)",
       )
       .eq("colaborador_id", params.id)
@@ -114,17 +118,11 @@ export default async function ColaboradorDetalhePage({
       .select("empresa_id, percentual, regional:regionais(id, nome)")
       .eq("tenant_id", session.activeTenant.id)
       .eq("ano_vigencia", anoRateio),
-    // Membros ativos do tenant pro Combobox de líder direto no drawer.
-    // Não usa embed `profile:profiles(...)` porque não há FK direta entre
-    // tenant_members.user_id e profiles.id — ambos referenciam auth.users,
-    // relação transitiva que o PostgREST não segue. Trazemos os user_ids
-    // aqui e resolvemos os nomes na próxima query.
     supabase
       .from("tenant_members")
       .select("user_id")
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo"),
-    // NF do mês vigente deste colaborador (para o card)
     supabase
       .from("colaboradores_nf_anexos")
       .select("id, arquivo_nome, uploaded_at")
@@ -133,7 +131,6 @@ export default async function ColaboradorDetalhePage({
       .eq("competencia_ano", anoNfVigente)
       .eq("competencia_mes", mesNfVigente)
       .maybeSingle(),
-    // Folhas PJ abertas deste colaborador (para o backlog)
     supabase
       .from("folhas_pagamento")
       .select("competencia_ano, competencia_mes")
@@ -141,13 +138,11 @@ export default async function ColaboradorDetalhePage({
       .eq("colaborador_id", params.id)
       .eq("origem", "california")
       .in("status", ["rascunho", "enviada", "aprovada", "pendente_correcao"]),
-    // NFs já anexadas (qualquer competência) deste colaborador
     supabase
       .from("colaboradores_nf_anexos")
       .select("competencia_ano, competencia_mes")
       .eq("tenant_id", session.activeTenant.id)
       .eq("colaborador_id", params.id),
-    // Histórico de 13º (Parte 5): linhas de todas as folhas de 13º do colaborador
     supabase
       .from("decimo_terceiro_linhas")
       .select(
@@ -156,6 +151,26 @@ export default async function ColaboradorDetalhePage({
       )
       .eq("tenant_id", session.activeTenant.id)
       .eq("colaborador_id", params.id),
+    // Períodos aquisitivos de férias — base pro CardFerias.
+    supabase
+      .from("colaboradores_ferias_periodos")
+      .select(
+        "id, numero, aquisitivo_inicio, aquisitivo_fim, concessivo_fim, dias_direito, status",
+      )
+      .eq("colaborador_id", params.id)
+      .eq("tenant_id", session.activeTenant.id)
+      .order("numero", { ascending: true }),
+    // Últimas folhas de pagamento do colaborador (todas as origens).
+    supabase
+      .from("folhas_pagamento")
+      .select(
+        "id, competencia_ano, competencia_mes, tipo, status, salario_base",
+      )
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("colaborador_id", params.id)
+      .order("competencia_ano", { ascending: false })
+      .order("competencia_mes", { ascending: false })
+      .limit(8),
   ]);
 
   if (!colabRes.data) {
@@ -172,15 +187,12 @@ export default async function ColaboradorDetalhePage({
     regional: { id: string; nome: string } | null;
   })[];
 
-  // Snapshot multi-empresa da alocação vigente — alimenta o CardAlocacoes
-  // com o novo display hierárquico (N empresas + regionais por item).
   const snapshotAlocacaoVigente = await buscarAlocacaoVigente(
     supabase,
     colab.id,
     session.activeTenant.id,
   );
 
-  // Backlog de NFs: folhas PJ abertas anteriores ao mês vigente sem NF.
   const nfsExistentesChaves = new Set(
     (nfsExistentesRes.data ?? []).map(
       (n) => `${n.competencia_ano}-${n.competencia_mes}`,
@@ -196,8 +208,6 @@ export default async function ColaboradorDetalhePage({
     })
     .map((f) => ({ ano: f.competencia_ano, mes: f.competencia_mes }));
 
-  // Agrega rateios por empresa pra passar ao card de alocação. Só entram as
-  // regionais com % > 0 no ano corrente (tabela não guarda 0%).
   const rateiosDoAno = (() => {
     const mapa = new Map<
       string,
@@ -223,7 +233,6 @@ export default async function ColaboradorDetalhePage({
 
   const salarios = (salariosRes.data ?? []) as ColaboradorSalario[];
 
-  // Histórico de 13º — ordenar por ano desc
   type Historico13Raw = {
     avos: number;
     total_bruto: string;
@@ -252,6 +261,66 @@ export default async function ColaboradorDetalhePage({
     })
     .filter((x): x is HistoricoDecimoTerceiro => x !== null)
     .sort((a, b) => b.ano - a.ano);
+
+  // Períodos de férias → resumo com dias restantes até concessivo_fim.
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  type PeriodoRaw = Pick<
+    ColaboradorFeriasPeriodo,
+    | "id"
+    | "numero"
+    | "aquisitivo_inicio"
+    | "aquisitivo_fim"
+    | "concessivo_fim"
+    | "dias_direito"
+    | "status"
+  >;
+  const periodosFerias: FeriasPeriodoResumo[] = (
+    (periodosFeriasRes.data ?? []) as PeriodoRaw[]
+  ).map((p) => {
+    const fim = new Date(p.concessivo_fim + "T00:00:00");
+    const diasRestantes = Math.max(
+      0,
+      Math.floor((fim.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24)),
+    );
+    return {
+      id: p.id,
+      numero: p.numero,
+      aquisitivo_inicio: p.aquisitivo_inicio,
+      aquisitivo_fim: p.aquisitivo_fim,
+      concessivo_fim: p.concessivo_fim,
+      status: p.status,
+      dias_restantes: diasRestantes,
+    };
+  });
+
+  // Saldo = dias_direito dos períodos "apto" ou "em_alerta" (simplificado;
+  // o módulo de férias usa o cálculo completo com lançamentos. Aqui é só uma
+  // sinalização rápida pra visão do colaborador).
+  const STATUS_SALDO: FeriasPeriodoStatus[] = ["apto", "em_alerta"];
+  const diasDisponiveis = (
+    (periodosFeriasRes.data ?? []) as PeriodoRaw[]
+  )
+    .filter((p) => STATUS_SALDO.includes(p.status))
+    .reduce((acc, p) => acc + (p.dias_direito ?? 0), 0);
+
+  const folhasRecentes: FolhaRecente[] = (
+    (folhasRecentesRes.data ?? []) as {
+      id: string;
+      competencia_ano: number;
+      competencia_mes: number;
+      tipo: string;
+      status: string;
+      salario_base: string | number;
+    }[]
+  ).map((f) => ({
+    id: f.id,
+    competencia_ano: f.competencia_ano,
+    competencia_mes: f.competencia_mes,
+    tipo: f.tipo,
+    status: f.status,
+    salario_base: Number(f.salario_base),
+  }));
 
   const empresas = (empresasRes.data ?? []) as Pick<
     Empresa,
@@ -307,11 +376,6 @@ export default async function ColaboradorDetalhePage({
   });
   const pendenciasPorCard = separarPendenciasPorCard(pendencias);
 
-  // Dados de acesso ao sistema (card CardAcesso).
-  // 3 queries via service client — tenant_members e profiles não têm FK direta
-  // entre si (as duas apontam pra auth.users), então PostgREST não resolve
-  // embed e precisamos buscar o nome do profile numa query separada.
-  // Só carrega se o colaborador já tem user_id vinculado.
   let acesso = null;
   let roleAtual: AppRole | null = null;
   let profileNome: string | null = null;
@@ -337,104 +401,94 @@ export default async function ColaboradorDetalhePage({
     profileNome = (profileRes.data?.nome as string | null | undefined) ?? null;
   }
 
+  // Empresa/regional vigentes pro Hero (primeira alocação sem data_fim).
+  const alocacaoVigente = alocacoes.find((a) => a.data_fim === null) ?? null;
+  const empresaPrincipal = alocacaoVigente?.empresa?.nome_fantasia ?? null;
+  const regionalPrincipal = alocacaoVigente?.regional?.nome ?? null;
+
   return (
     <div className="space-y-6 max-w-7xl mx-auto">
-      <div>
-        <BotaoVoltar reserva="/rh/colaboradores" />
-        <header className="mt-3">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <div className="flex items-center gap-3 flex-wrap">
-                <h1 className="text-3xl font-bold tracking-tight">
-                  {colab.nome}
-                </h1>
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium ${
-                    colab.status === "ativo"
-                      ? "bg-emerald-50 text-emerald-700"
-                      : "bg-muted text-muted-foreground"
-                  }`}
-                >
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      colab.status === "ativo"
-                        ? "bg-emerald-500"
-                        : "bg-muted-foreground"
-                    }`}
-                  />
-                  {colab.status === "ativo" ? "Ativo" : "Inativo"}
-                </span>
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {colab.funcao}
-                {colab.nivel ? ` · ${colab.nivel.codigo}` : ""} ·{" "}
-                {tipoContratacaoLabel(colab.tipo_contratacao)}
-              </p>
-            </div>
-          </div>
-        </header>
-      </div>
+      <BotaoVoltar reserva="/rh/colaboradores" />
+
+      <HeroColaborador
+        colaborador={colab}
+        empresaPrincipal={empresaPrincipal}
+        regionalPrincipal={regionalPrincipal}
+      />
 
       <BannerPendencias pendencias={pendencias} />
 
-      <div className="grid gap-4">
-        <CardDados
-          colaborador={colab}
-          empresas={empresas}
-          regionais={regionais}
-          niveis={niveis}
-          lideres={lideres}
-          pendencia={pendenciasPorCard.dados}
-        />
-
-        <CardAcesso
-          colaborador={{
-            id: colab.id,
-            nome: colab.nome,
-            email: colab.email,
-            user_id: colab.user_id,
-          }}
-          acesso={acesso}
-          roleAtual={roleAtual}
-          profileNome={profileNome}
-        />
-
-        <CardDadosBancarios
-          colaborador={colab}
-          pendencia={pendenciasPorCard.bancario}
-        />
-
-        <CardNfColaborador
-          colaboradorId={colab.id}
-          tipoContratacao={colab.tipo_contratacao}
-          nfVigente={nfVigenteRes.data ?? null}
-          backlog={backlogNfPendente}
-          anoVigente={anoNfVigente}
-          mesVigente={mesNfVigente}
-        />
-
-        <div className="grid gap-4 lg:grid-cols-2">
-          <CardAlocacoes
-            colaboradorId={colab.id}
-            alocacoes={alocacoes}
-            empresas={empresas}
-            regionais={regionais}
-            rateiosDoAno={rateiosDoAno}
-            anoRateio={anoRateio}
-            pendencia={pendenciasPorCard.alocacao}
-            snapshotVigente={snapshotAlocacaoVigente}
+      <AbasPerfil
+        dados={
+          <div className="grid gap-4">
+            <CardDados
+              colaborador={colab}
+              empresas={empresas}
+              regionais={regionais}
+              niveis={niveis}
+              lideres={lideres}
+              pendencia={pendenciasPorCard.dados}
+            />
+            <CardDadosBancarios
+              colaborador={colab}
+              pendencia={pendenciasPorCard.bancario}
+            />
+            <CardAlocacoes
+              colaboradorId={colab.id}
+              alocacoes={alocacoes}
+              empresas={empresas}
+              regionais={regionais}
+              rateiosDoAno={rateiosDoAno}
+              anoRateio={anoRateio}
+              pendencia={pendenciasPorCard.alocacao}
+              snapshotVigente={snapshotAlocacaoVigente}
+            />
+          </div>
+        }
+        acesso={
+          <CardAcesso
+            colaborador={{
+              id: colab.id,
+              nome: colab.nome,
+              email: colab.email,
+              user_id: colab.user_id,
+            }}
+            acesso={acesso}
+            roleAtual={roleAtual}
+            profileNome={profileNome}
           />
-          <CardSalarios
-            colaboradorId={colab.id}
-            tipoContratacao={colab.tipo_contratacao}
-            salarios={salarios}
-            isAdmin={isAdmin}
-            pendencia={pendenciasPorCard.salario}
-          />
-        </div>
-
-        <CardDecimoTerceiro historico={historicoDecimoTerceiro} />
-      </div>
+        }
+        documentos={<CardDocumentos tipoContratacao={colab.tipo_contratacao} />}
+        financeiro={
+          <div className="grid gap-4">
+            <CardSalarios
+              colaboradorId={colab.id}
+              tipoContratacao={colab.tipo_contratacao}
+              salarios={salarios}
+              isAdmin={isAdmin}
+              pendencia={pendenciasPorCard.salario}
+            />
+            <div className="grid gap-4 lg:grid-cols-2">
+              <CardFerias
+                colaboradorId={colab.id}
+                periodos={periodosFerias}
+                diasDisponiveis={diasDisponiveis}
+              />
+              <CardFolha folhas={folhasRecentes} />
+            </div>
+            <CardDecimoTerceiro historico={historicoDecimoTerceiro} />
+            <CardNfColaborador
+              colaboradorId={colab.id}
+              tipoContratacao={colab.tipo_contratacao}
+              nfVigente={nfVigenteRes.data ?? null}
+              backlog={backlogNfPendente}
+              anoVigente={anoNfVigente}
+              mesVigente={mesNfVigente}
+            />
+            <CardRescisao dataEncerramento={colab.data_encerramento} />
+          </div>
+        }
+      />
     </div>
   );
 }
