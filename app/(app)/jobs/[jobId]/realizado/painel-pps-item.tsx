@@ -51,6 +51,11 @@
  *    PP do zero; o pop-up agora começa pelo que fica (dados e anexos).
  *    No mesmo dia virou "Editar e Reemitir PP", com o botão de confirmar
  *    vermelho (pedidos do Tiago).
+ *  - 16/11/2026 (revisão das 136 e 174): a PP rejeitada voltou para a
+ *    produção, e o produtor e o freelancer passam a cancelá-la e a
+ *    reemiti-la — depois geram a PP nova e a deixam pronta para o GP
+ *    enviar. A em avaliação segue só com quem envia: para eles o "Cancelar
+ *    PP" fica apagado, com o motivo (`cancelaPPNoPapel`).
  */
 
 import * as React from "react";
@@ -116,9 +121,9 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { cn, formatCurrency } from "@/lib/utils";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { PPStatusChip } from "../pps/pp-status-chip";
+import { cancelaPPNoPapel } from "@/lib/permissoes";
 import {
   nomeDoCartaoCorporativo,
-  podeCancelarPP,
   type AnexoDaPPNaLista,
   type DevolucaoDaVerba,
   type PPAEmitir,
@@ -330,11 +335,9 @@ interface Props {
   onEditarPP: ((pp: PPDoItem) => void) | null;
   /** "Cancelar e refazer" devolveu esta PP a emitir: o formulário abre nela. */
   onRefeita: (aEmitirId: string) => void;
-  /** Quem refaz a rejeitada é quem envia (decisão 136). */
-  podeRefazer: boolean;
   /** O papel envia ao financeiro (`jobs.enviar_pp`, decisão 136). Sem ele —
    *  produtor e freelancer —, o botão do envio vira "Deixar pronta para
-   *  envio" (08/10/2026). */
+   *  envio" (08/10/2026), e a PP em avaliação não se cancela. */
   papelEnviaPP: boolean;
   /** Nomes para os cartões e os pop-ups da PP a emitir. */
   nomeDoFornecedor: (id: string | null) => string;
@@ -389,7 +392,6 @@ export function PainelPPsItem({
   onEditarAEmitir,
   onEditarPP,
   onRefeita,
-  podeRefazer,
   papelEnviaPP,
   nomeDoFornecedor,
   nomeDoResponsavel,
@@ -1212,7 +1214,7 @@ export function PainelPPsItem({
                 Já no financeiro
               </span>
               {enviadas.map((pp) => {
-                const cancelavel = podeCancelarPP(pp.status);
+                const cancelavel = cancelaPPNoPapel(pp.status, papelEnviaPP);
                 return (
                   <CartaoPP
                     key={pp.id}
@@ -1277,11 +1279,12 @@ export function PainelPPsItem({
                             </BotaoIcone>
                           )}
                         {/* Cancelar segue a regra do servidor
-                            (`podeCancelarPP`): em avaliação e rejeitada
+                            (`cancelaPPNoPapel`): em avaliação e rejeitada
                             ainda voltam atrás; aprovada já é título a
-                            pagar e paga precisaria de estorno. Nesses
-                            dois o botão fica apagado com o motivo, em vez
-                            de sumir — some parece falta de permissão. */}
+                            pagar e paga precisaria de estorno. A em
+                            avaliação só quem envia cancela (16/11/2026).
+                            Nesses casos o botão fica apagado com o
+                            motivo, em vez de sumir. */}
                         {podeAgir && (
                           <BotaoIcone
                             titulo={
@@ -1315,7 +1318,7 @@ export function PainelPPsItem({
                               <span className="text-[11px] font-semibold leading-snug text-red-700">
                                 Motivo da rejeição: {pp.motivoRejeicao ?? "—"}
                               </span>
-                              {podeAgir && podeRefazer && (
+                              {podeAgir && (
                                 <button
                                   type="button"
                                   onClick={() => setRefazendo(pp)}
@@ -1632,7 +1635,14 @@ export function PainelPPsItem({
             <>
               <strong className="text-foreground">{cancelando?.codigo}</strong>{" "}
               será cancelada. O PDF ganha o selo de cancelada e fica no histórico, com os anexos.
-              {cancelando && cancelando.status !== "gerada" && (
+              {cancelando && cancelando.status === "rejeitada" && (
+                <>
+                  {" "}
+                  Ela foi rejeitada pelo financeiro e ainda conta no
+                  realizado do item: cancelada, deixa de contar.
+                </>
+              )}
+              {cancelando && cancelando.status === "em_avaliacao" && (
                 <>
                   {" "}
                   Ela já está no financeiro: cancelar a tira da fila de
@@ -1675,6 +1685,8 @@ function motivoSemCancelar(status: PPStatus): string {
       return "PP já paga — cancelar exigiria estorno pelo financeiro.";
     case "cancelada":
       return "PP já está cancelada.";
+    case "em_avaliacao":
+      return "PP em avaliação no financeiro: só o GP cancela.";
     default:
       return "Esta PP não pode mais ser cancelada.";
   }

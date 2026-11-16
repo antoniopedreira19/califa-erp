@@ -2,7 +2,7 @@
 
 **Data:** 2026-10-01
 **Decidido por:** Tiago
-**Status:** aceita — entregue em 01/10/2026, em quatro partes (ver §6); revista em 06/10/2026: o freelancer também gera PP (ver §7)
+**Status:** aceita — entregue em 01/10/2026, em quatro partes (ver §6); revista em 06/10/2026: o freelancer também gera PP (ver §7); revista em 16/11/2026: o produtor e o freelancer cancelam e reemitem a PP rejeitada (ver a revisão no fim)
 **Protótipo aprovado:** artifact "Autoria no financeiro" (30/09 e 01/10/2026)
 
 ---
@@ -36,7 +36,8 @@ Respostas do Tiago às perguntas do protótipo:
 | Planilha do job: errata, BV, confirmar BV, concluir PPs | Administrador ou o GP responsável do job | Administrador ou **qualquer GP** |
 | Gerar, editar e cancelar PP ainda não enviada | Administrador ou o GP responsável | Administrador, **qualquer GP ou o produtor** (e o freelancer desde 06/10/2026, §7) |
 | Enviar e reenviar PP ao financeiro | Administrador ou o GP responsável | Administrador ou **qualquer GP** (recurso novo `jobs.enviar_pp`) |
-| Cancelar PP já enviada (em avaliação ou rejeitada) | Administrador ou o GP responsável | Administrador ou **qualquer GP** |
+| Cancelar PP em avaliação | Administrador ou o GP responsável | Administrador ou **qualquer GP** |
+| Cancelar e reemitir PP rejeitada | Administrador ou o GP responsável | Administrador ou **qualquer GP**; desde 16/11/2026, também o produtor e o freelancer (revisão no fim) |
 | Prestar contas da verba | Responsável pela verba, GP responsável do job ou administrador | Responsável pela verba, **qualquer GP** ou administrador |
 
 - **Front** (`app/(app)/jobs/[jobId]/carregar-detalhe.ts`): `quemPodeMexer`
@@ -51,8 +52,9 @@ Respostas do Tiago às perguntas do protótipo:
   `jobs.emitir_pp` no lugar do dono — o que também fecha a porta das três
   actions que não chamavam `checarPermissao` (prefixo de anexos, envio,
   edição de PP gerada). Envio e reenvio chamam `barrarEnvioPeloPapel`
-  (`jobs.enviar_pp`). `cancelarPedidoCompra` aceita o produtor só com a PP
-  em `gerada`.
+  (`jobs.enviar_pp`). `cancelarPedidoCompra` aceitava o produtor só com a
+  PP em `gerada`; desde 16/11/2026, também na `rejeitada`
+  (`cancelaPPNoPapel`, revisão no fim).
 - **Banco:** `enviar_prestacao_verba` troca "GP responsável do job" por
   "qualquer GP" (migration `20261001400001`).
 - **Não mudou:** orçamento, envio do job para abertura, save, encerramento
@@ -335,7 +337,7 @@ nesse ponto assim como o produtor.**
 | Gerar PP | Não | Sim, nos jobs dos projetos em que está na Equipe |
 | Editar e cancelar a PP ainda não enviada (`gerada`) | Não | Sim, como o produtor |
 | Enviar e reenviar PP ao financeiro | Não | Não (`jobs.enviar_pp` segue com GP e administrador) |
-| Cancelar PP já enviada | Não | Não |
+| Cancelar PP já enviada | Não | Não; desde 16/11/2026, a rejeitada sim, como o produtor (revisão no fim) |
 
 - **Código:** só a matriz mudou: o freelancer entrou em
   `jobs.emitir_pp` e `jobs.cancelar_pp`. Tela e servidor já liam esses
@@ -381,3 +383,56 @@ nesse ponto assim como o produtor.**
   [174](174-equipe-do-job-e-envio-de-pp-pelo-produtor.md).
 - O autor do envio continua gravado pelo gatilho: o financeiro vê o nome do
   produtor quando foi ele quem enviou.
+
+## ⚠️ Revisão (2026-11-16) — o produtor e o freelancer cancelam e reemitem a PP rejeitada
+
+**O caso.** Uma linha de adicional teve a PP rejeitada pelo financeiro
+(PP-01083, motivo "será realocado em outro job"). A produção precisava
+cancelar a linha pela errata, e não conseguia: a PP rejeitada continua no
+realizado do item (só o cancelamento a tira, regra de 11/09/2026), o
+"Cancelar" da errata trava em linha com PP não cancelada (decisão 238), e o
+produtor não podia cancelar a PP — o "Cancelar PP" aparecia no painel, mas o
+servidor recusava com "O produtor só cancela PP que ainda não foi enviada".
+
+**A regra (Tiago, 16/11/2026):** a PP rejeitada voltou para a produção, então
+o produtor também a cancela. Só a PP **em avaliação** fica com quem envia (GP,
+administrador e o Produtor Responsável com a chave da 174). Respostas às duas
+perguntas levadas:
+
+1. O freelancer segue o produtor: cancela a gerada e a rejeitada.
+2. O produtor também usa o "Editar e Reemitir PP" da rejeitada, gera a PP
+   nova e a deixa pronta para o GP enviar (decisão 160). O envio continua do
+   GP.
+
+| Situação da PP | Quem envia (GP, administrador, produtor com a chave) | Produtor e freelancer |
+|---|---|---|
+| Gerada | Cancela | Cancela |
+| Rejeitada | Cancela e reemite | **Cancela e reemite** (até 16/11/2026, não) |
+| Em avaliação | Cancela | Não: o botão fica apagado com "PP em avaliação no financeiro: só o GP cancela." |
+| Aprovada, paga | Não (é do financeiro) | Não |
+
+- **Código:** `cancelaPPNoPapel(status, enviaPP)` em `lib/permissoes.ts`,
+  com teste em `lib/permissoes.test.ts`. Usam a função o
+  `cancelarPedidoCompra` (servidor, por onde passam também os cancelamentos
+  do pedido de cancelamento do job e do envio para abertura), o "Já no
+  financeiro" do painel do item, a gaveta "Ver formulário" da planilha e a
+  aba Pedidos de Produção. O `cancelarERefazerPP` deixou de chamar
+  `barrarEnvioPeloPapel`: fica com os gates de gerar PP
+  (`checarGatesRealizado`, `jobs.emitir_pp`), porque reemitir não manda
+  nada ao financeiro. Na tela, o "Editar e Reemitir PP" segue quem gera PP
+  (o `podeRefazer` do painel saiu; na aba de PPs, `editable` no lugar de
+  `podeEnviar`).
+- **Pop-up de cancelar no painel:** na rejeitada diz que ela ainda conta no
+  realizado do item e, cancelada, deixa de contar. Na em avaliação, o texto
+  de antes.
+- **Banco:** nenhuma migration. A permissão `jobs.cancelar_pp` e a RLS de
+  `pedidos_compra` já deixavam o produtor e o freelancer gravar.
+- **Testado no Sandbox (16/11/2026), logado como `produtor@sandbox.local`
+  no TES-1001/26:** a PP-00111 (rejeitada) foi reemitida pela aba de PPs,
+  gerada pelo painel do item como PP-00955 ("Substitui a PP-00111") e
+  deixada pronta para envio pelo produtor. A NF 603 deixou de aparecer
+  como "também cobre outra PP", porque a PP-00111 saiu cancelada. A
+  PP-00080, rejeitada pelo administrador para o teste, foi cancelada pelo
+  produtor no painel do item, e o realizado do item foi a R$ 0,00. Na PP em
+  avaliação, o "Cancelar PP" do produtor ficou apagado com o motivo, e a aba
+  de PPs não mostrou o ícone.

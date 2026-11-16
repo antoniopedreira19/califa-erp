@@ -16,7 +16,8 @@
  * Ver spec: docs/superpowers/specs/2026-09-03-permissoes-e-papeis-design.md.
  */
 
-import type { AppRole } from "./types";
+import type { AppRole, PPStatus } from "./types";
+import { podeCancelarPP } from "./types";
 
 /**
  * Cada chave e um "recurso.acao" (ex: "orcamentos.aprovar"). O valor e
@@ -372,6 +373,19 @@ export function produtorComAChave(profileId: string, job: JobParaEnvioDePP): boo
  */
 export function enviaPPNoJob(role: AppRole, profileId: string, job: JobParaEnvioDePP): boolean {
   return pode(role, "jobs.enviar_pp") || produtorComAChave(profileId, job);
+}
+
+/**
+ * Cancela esta PP, pelo papel de quem está logado (revisão de 16/11/2026
+ * das decisões 136 e 174). Quem gera PP sem enviar — o produtor e o
+ * freelancer — cancela a que está com a produção: a gerada e a rejeitada
+ * pelo financeiro. A em avaliação, só quem envia (`enviaPP`, o resultado de
+ * `enviaPPNoJob`). Aprovada e paga ninguém cancela pela produção
+ * (`podeCancelarPP`). Até 16/11/2026 o produtor cancelava só a gerada, e a
+ * rejeitada ficava presa no realizado do item até um GP cancelar.
+ */
+export function cancelaPPNoPapel(status: PPStatus, enviaPP: boolean): boolean {
+  return podeCancelarPP(status) && (enviaPP || status !== "em_avaliacao");
 }
 
 /** Corrige a NF da PP em avaliação: o papel (`jobs.corrigir_nf_pp`) ou o

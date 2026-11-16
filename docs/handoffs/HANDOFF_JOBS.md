@@ -6813,3 +6813,10 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - **"Só realizado":** o selo da linha vermelha aparece só na edição, em toda Planilha Interna.
 - **Tipos:** `ItemPlanilhaJob.pagamento_atrasado_id`, `PedidoCompra.pagamento_atrasado_id`/`conclui_pagamentos_atrasados`, `PedidoCompraNaLista.pagamento_atrasado`, `PPDoItem.pagamentoAtrasado` e `DadosPpLinha.travadaPor` — todos obrigatórios; quem não tem o dado manda `null`.
 - **Migration** `20261116600001_pagamentos_atrasados.sql`.
+
+## ⚠️ Nota de 2026-11-16 — o produtor cancela e reemite a PP rejeitada (revisão das 136 e 153)
+
+- **Regra:** a PP rejeitada pelo financeiro se cancela e se reemite também pelo produtor e pelo freelancer; a em avaliação segue só com quem envia (GP, administrador, produtor com a chave da 174). Motivo: a rejeitada continua no realizado do item até ser cancelada, e a linha não saía pela errata sem um GP.
+- **Painel do item ("Já no financeiro"):** "Cancelar PP" habilitado na rejeitada para o produtor; na em avaliação, apagado com "PP em avaliação no financeiro: só o GP cancela." O pop-up de cancelar a rejeitada diz que ela ainda conta no realizado. "Editar e Reemitir PP" aparece para quem gera PP; a PP nova sai como PP a emitir, o produtor gera e usa o "Deixar pronta para envio" (decisão 160).
+- **Aba PPs e gaveta "Ver formulário":** o mesmo cancelar; o ícone de reemitir segue `editable` (gerar PP) em vez de `podeEnviar`.
+- **Código:** `cancelaPPNoPapel` em `lib/permissoes.ts` (com teste); `cancelarPedidoCompra` e `cancelarERefazerPP` em `realizado/actions-pp.ts`. Sem migration.

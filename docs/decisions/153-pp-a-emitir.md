@@ -73,8 +73,10 @@ PP a emitir  ->  PP gerada  ->  enviada ao financeiro
 
 - Salvar, editar, excluir e gerar a PP a emitir: quem gera PP (GP,
   produtor, freelancer e administrador — decisão 136, §7).
-- Enviar e "Cancelar e refazer": quem envia PP (GP e administrador). O
-  servidor confere nos dois casos.
+- Enviar: quem envia PP (GP e administrador). "Cancelar e refazer" (hoje
+  "Editar e Reemitir PP") também era só de quem envia; desde 16/11/2026 é
+  de quem gera PP, porque reemitir não manda nada ao financeiro (revisão no
+  fim). O servidor confere nos dois casos.
 
 ## Banco
 
@@ -240,3 +242,11 @@ versão" e "Reabrir". "Editar" ficou de fora porque já é o lápis da PP gerada
   já marcada (PP-00258, enviada de volta ao financeiro). Protótipo com a tela
   real:
   https://claude.ai/artifact/BTHu9DZLTmsc18xzwyPp2r
+
+## ⚠️ Revisão de 16/11/2026 — o produtor também reemite a rejeitada
+
+- O "Editar e Reemitir PP" deixou de ser só de quem envia: o produtor e o
+  freelancer também reemitem, geram a PP nova e a deixam pronta para o GP
+  enviar (decisão 160). O envio continua do GP. Junto, eles passam a
+  cancelar a PP rejeitada. A regra e o teste estão na revisão de 16/11/2026
+  da [136](136-qualquer-gp-age-e-o-autor-fica-registrado.md).
