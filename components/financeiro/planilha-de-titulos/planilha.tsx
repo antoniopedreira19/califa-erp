@@ -856,9 +856,27 @@ const COR_DO_STATUS: Record<LinhaDaPlanilha["status"], string> = {
 };
 
 export function SeloDoStatus({ l }: { l: LinhaDaPlanilha }) {
-  // Verba paga: o status é o da prestação (decisão 081).
+  // Decisão 257: o que está pago diz o dia, embaixo do selo — a verba
+  // também, embaixo do selo da prestação (decisão 081), para não parecer que
+  // ainda não saiu da conta.
+  const pagoEm = l.pagoEm ? (
+    <span className="whitespace-nowrap text-[11px] text-muted-foreground">Pago {dataBR(l.pagoEm)}</span>
+  ) : null;
   if (l.situacaoDaVerba) {
-    return <SituacaoVerbaChip situacao={l.situacaoDaVerba} className="whitespace-normal text-center leading-tight" />;
+    return (
+      <span className="inline-flex flex-col items-center gap-1">
+        <SituacaoVerbaChip situacao={l.situacaoDaVerba} className="whitespace-normal text-center leading-tight" />
+        {pagoEm}
+      </span>
+    );
+  }
+  if (l.status === "pago" && pagoEm) {
+    return (
+      <span className="inline-flex flex-col items-center gap-1">
+        <span className={cn(BASE_DO_SELO, COR_DO_STATUS.pago)}>{ROTULO_DO_STATUS.pago}</span>
+        {pagoEm}
+      </span>
+    );
   }
   return (
     <span

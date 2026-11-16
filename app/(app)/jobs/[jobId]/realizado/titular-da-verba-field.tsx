@@ -118,11 +118,15 @@ export function TipoDaPPField({
   onChange,
   onCartao,
   disabled,
+  semVerba = false,
 }: {
   tipo: TipoVerba | null;
   reembolsoTipo: ReembolsoTipo | null;
   /** Decisão 209: a PP é do cartão corporativo (com `tipo` nulo). */
   cartao: boolean;
+  /** Decisão 259: a PP de pagamento atrasado nunca é verba de produção —
+   *  a opção "Verba" não aparece (o reembolso e o cartão continuam). */
+  semVerba?: boolean;
   /** Sair do cartão é escolher outro tipo: `onChange` avisa o pai. */
   onChange: (tipo: TipoVerba | null, reembolsoTipo: ReembolsoTipo | null) => void;
   onCartao: () => void;
@@ -131,12 +135,14 @@ export function TipoDaPPField({
   const reembolso = tipo === "reembolso";
   const verba = tipo !== null && !reembolso;
   const atual = cartao ? "cartao" : reembolso ? "reembolso" : verba ? "verba" : "normal";
-  const opcoes: Array<["normal" | "verba" | "reembolso" | "cartao", string]> = [
-    ["normal", "Normal"],
-    ["verba", "Verba"],
-    ["reembolso", "Reembolso"],
-    ["cartao", ROTULO_CARTAO_CORPORATIVO],
-  ];
+  const opcoes: Array<["normal" | "verba" | "reembolso" | "cartao", string]> = (
+    [
+      ["normal", "Normal"],
+      ["verba", "Verba"],
+      ["reembolso", "Reembolso"],
+      ["cartao", ROTULO_CARTAO_CORPORATIVO],
+    ] as Array<["normal" | "verba" | "reembolso" | "cartao", string]>
+  ).filter(([v]) => !(semVerba && v === "verba"));
   return (
     <div role="radiogroup" aria-label="Tipo da PP" className="flex flex-col gap-1">
       {opcoes.map(([v, rotulo]) => (

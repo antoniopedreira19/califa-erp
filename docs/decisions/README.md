@@ -270,6 +270,11 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 253 | [Reverter a aprovação no Contas a Pagar: PP, desembolso e folha](253-reverter-aprovacao-no-contas-a-pagar.md) | 2026-11-11 |
 | 254 | [A conciliação dia a dia: a linha do banco com os lançamentos dela, e a correspondência só no mesmo dia](254-conciliacao-dia-a-dia.md) | 2026-11-11 |
 | 255 | [Fornecedor por busca no servidor, e o cadastro completo para a PP sair](255-fornecedor-por-busca-e-cadastro-completo-para-a-pp.md) | 2026-11-12 |
+| 256 | ["+ Faturamento": o Novo faturamento, o Faturar unificado e os impostos da nota](256-novo-faturamento-e-faturar-unificado.md) | 2026-11-15 |
+| 257 | [A PP paga diz que está paga: "Pago <data>", a linha da prestação e o job na lista de PPs](257-pp-paga-diz-que-esta-paga.md) | 2026-11-15 |
+| 258 | [Quantas PPs em cada regional e empresa, nos seletores da lista de PPs](258-quantas-pps-em-cada-regional-e-empresa.md) | 2026-11-16 |
+| 259 | [Pagamentos atrasados em job encerrado ou finalizado: o financeiro libera, a produção lança e a planilha volta a travar](259-pagamentos-atrasados-em-job-encerrado.md) | 2026-11-16 |
+| 260 | [O Faturar "em pé", a lista do Faturamento pela situação e o recebimento antes da NF no Recebimento avulso](260-faturar-em-pe-e-lista-do-faturamento.md) | 2026-11-16 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -282,4 +287,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 256**. (A 240 está em uso por outra frente, ainda sem arquivo neste índice.) (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 261**. (A 240 está em uso por outra frente, ainda sem arquivo neste índice.) (091 e 092 existem na pasta e ainda não estão nesta tabela.)

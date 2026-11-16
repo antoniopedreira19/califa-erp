@@ -138,6 +138,7 @@ const notaDeSaida = (id: string, emissao: string) => ({
   numero_nf: id.toUpperCase(),
   data_emissao: emissao,
   valor_total: "10000.00",
+  valor_deducoes: "0.00",
   estabelecimento_id: "ssa",
   fiscal_cnae_id: "cnae",
   emitido_em: `${emissao}T12:00:00-03:00`,

@@ -77,6 +77,9 @@ export interface NotaSaidaFiscal {
   /** Quando a nota entrou no sistema: antes disso ela não existe para o cálculo. */
   conhecida_em: string;
   valor: number;
+  /** Decisão 256: o repasse (custo AR) que sai da base do ISS. PIS, COFINS,
+   *  IRPJ e CSLL ficam sobre o total (Tiago, 15/11/2026). */
+  deducoes?: number;
   /** Os jobs que a nota cobre, com a parte de cada um (é o peso no rateio). */
   jobs: Array<JobDoFato & { valor: number }>;
 }
@@ -346,6 +349,9 @@ const PARAMETROS_PADRAO: Record<ChaveDoParametro, number> = {
   credito_cofins: 7.6,
   darf_minimo: 10,
 };
+
+/** Decisão 256: a base do ISS da nota — o total menos as deduções (o repasse). */
+const baseDoIss = (n: NotaSaidaFiscal) => r2(Math.max(0, n.valor - Math.max(0, n.deducoes ?? 0)));
 
 /**
  * O parâmetro vigente na data. Datas usadas: o fim do período para as
@@ -762,20 +768,22 @@ function guiaIss(
   for (const n of notas) {
     const c = ctx.cnae(n);
     const aliquota = c.aliquota_iss ?? 0;
-    base += n.valor;
+    // Decisão 256: as deduções (o repasse) saem só da base do ISS.
+    const baseIss = baseDoIss(n);
+    base += baseIss;
     // A nota registrada num mês depois da emissão (retroativa) diz quando entrou.
     const registrada = mesDe(n.conhecida_em) > mesDe(n.emissao) ? ` · registrada em ${dataBr(n.conhecida_em)}` : "";
     memoria.push({
       grupo: "debito",
       rotulo: comJobs(`NF ${n.numero}`, n),
-      detalhe: `${codigoDoCnae(c)}${registrada}`,
-      base: n.valor,
+      detalhe: `${codigoDoCnae(c)}${registrada}${baseIss < n.valor ? ` · deduções ${formatBRL(r2(n.valor - baseIss))}` : ""}`,
+      base: baseIss,
       aliquota,
-      valor: r2((n.valor * aliquota) / 100),
+      valor: r2((baseIss * aliquota) / 100),
       ...jobDaNota(n),
       nota_id: n.id,
     });
-    pesos.push(...pesosDaNota(n, n.valor));
+    pesos.push(...pesosDaNota(n, baseIss));
     for (const r of ctx.recebimentosDaNota(n.id)) {
       const iss = r.retido.ISS;
       if (!iss || dia(r.data) > limiteRetido || dia(r.data) > ctx.asOf) continue;
@@ -1085,7 +1093,7 @@ function guiasIrpjCsll(ctx: Contexto, pj: string, t: string): Guia[] {
     for (const n of notas) {
       const c = ctx.cnae(n);
       receita += n.valor;
-      iss += (n.valor * (c.aliquota_iss ?? 0)) / 100;
+      iss += (baseDoIss(n) * (c.aliquota_iss ?? 0)) / 100;
       pis += (n.valor * c.aliquota_pis) / 100;
       cofins += (n.valor * c.aliquota_cofins) / 100;
       pesos.push(...pesosDaNota(n, n.valor));

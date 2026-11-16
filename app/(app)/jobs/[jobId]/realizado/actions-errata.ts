@@ -17,6 +17,7 @@ import {
   mesesEnviadosDoJob,
 } from "@/lib/data/envio-faturamento";
 import { mesesDoTrimestre, nomeDoMes, trimestreDe } from "@/lib/calculos/meses-trimestre";
+import { jobFechadoLiberado } from "@/lib/data/pagamentos-atrasados";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import {
   calcularEfeitoDaMudanca,
@@ -980,7 +981,15 @@ async function gravarLinhasVermelhas(
     .eq("tenant_id", tenantId)
     .maybeSingle();
   if (!job) return { ok: false, message: "Job não encontrado." };
-  if (!jobAceitaAcoesPlanilha(job.status as JobStatus)) {
+  // Decisão 259: no job encerrado ou finalizado, a linha vermelha nova entra
+  // enquanto o financeiro mantém os pagamentos atrasados liberados. O banco
+  // marca a linha com a liberação e recusa o AR no job já faturado
+  // (`trg_linha_pagamento_atrasado`).
+  const liberadoParaAtrasados = await jobFechadoLiberado(supabase, {
+    id: jobId,
+    status: job.status as string,
+  });
+  if (!jobAceitaAcoesPlanilha(job.status as JobStatus) && !liberadoParaAtrasados) {
     await logAuditEvent({
       acao: "acao_negada",
       tenantId,
@@ -1019,7 +1028,12 @@ async function gravarLinhasVermelhas(
 
   const modelo = (job as { versao?: { orcamento?: { categoria?: { modelo_planilha?: string } } } })
     .versao?.orcamento?.categoria?.modelo_planilha;
-  if (modelo === "mensal") {
+  // Decisão 259: o pagamento atrasado não passa pela trava do faturamento
+  // enviado — o job fechado já foi faturado, e a linha vermelha nova é
+  // justamente o custo que apareceu depois. Só o AR fica de fora (banco).
+  if (liberadoParaAtrasados) {
+    // segue para a gravação
+  } else if (modelo === "mensal") {
     let enviados: Set<string>;
     try {
       enviados = await mesesEnviadosDoJob(supabase, jobId, tenantId);

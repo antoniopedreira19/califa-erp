@@ -9,7 +9,8 @@ import { listarConversasPPs } from "@/lib/data/chat-pps-conversas";
 import { COLUNAS_DE_PAGAMENTO } from "@/lib/data/foto-pagamento-da-pp";
 import { carregarFiscalDaAprovacaoPP } from "@/lib/fiscal/aprovacao-da-pp";
 import { ChatPPsProvider } from "./chat/chat-pps-provider";
-import { PedidosCompraList, type PPRow } from "./pedidos-compra-list";
+import { PedidosCompraList, type PPRow, type PPParaContagem } from "./pedidos-compra-list";
+import { ContagemNosSeletoresProvider } from "@/components/ui/contagem-nos-seletores";
 import { ContasPagarTabs } from "./contas-pagar-tabs";
 import { lerTab } from "./contas-pagar-tab-url";
 import { TitulosPagarList } from "./titulos-pagar-list";
@@ -60,6 +61,7 @@ import type {
 } from "@/lib/types";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { todasAsLinhas } from "@/lib/supabase/todas-as-linhas";
+import { faturamentoPorJob } from "@/lib/data/faturamento-por-job";
 
 export const dynamic = "force-dynamic";
 
@@ -89,6 +91,11 @@ export default async function PedidosCompraFinanceiroPage({
   const activeEmpresasEfetivas =
     empresaFiltroIds.length > 0
       ? session.empresas.filter((e) => empresaFiltroIds.includes(e.id))
+      : [];
+  /** As empresas do seletor que a página não carrega (as não marcadas). */
+  const empresasDeFora =
+    empresaFiltroIds.length > 0
+      ? session.empresasVisiveis.filter((e) => !empresaFiltroIds.includes(e.id)).map((e) => e.id)
       : [];
 
   if (
@@ -142,8 +149,13 @@ export default async function PedidosCompraFinanceiroPage({
     ultimasRetencoesRes,
     retencoesDaAprovacaoRes,
     faturasNaBaixa,
+    faturamentoDosJobs,
+    ppsDeOutrasEmpresasRes,
   ] = await Promise.all([
-    (() => {
+    // Página a página (15/11/2026): o PostgREST corta em 1.000 linhas sem
+    // aviso, e com 1.045 PPs enviadas as 45 mais antigas sumiam da lista —
+    // e os títulos delas, de Títulos a Pagar. Ver `todasAsLinhas`.
+    todasAsLinhas((de, ate) => {
       let q = supabase
         .from("pedidos_compra")
         .select(SELECT_PP_DO_FINANCEIRO)
@@ -157,8 +169,8 @@ export default async function PedidosCompraFinanceiroPage({
         // ser enviada.
         .not("enviada_financeiro_em", "is", null);
       if (empresaFiltroIds.length > 0) q = q.in("empresa_id", empresaFiltroIds);
-      return q.order("created_at", { ascending: false });
-    })(),
+      return q.order("created_at", { ascending: false }).order("id").range(de, ate);
+    }),
     supabase
       .from("contas_bancarias")
       .select("*")
@@ -210,22 +222,33 @@ export default async function PedidosCompraFinanceiroPage({
     // As baixas registradas (decisão 125: parcela de PP e avulsa podem ter
     // várias), com conta, centro de custo e impostos retidos — o popup do
     // olho e o "falta R$ X" da linha. Da mais antiga para a mais nova: a
-    // última de cada documento é a que a linha paga mostra.
-    supabase
-      .from("lancamentos_financeiros")
-      .select(SELECT_BAIXA_A_PAGAR)
-      .eq("tenant_id", session.activeTenant.id)
-      .in("origem", ORIGENS_DA_BAIXA_A_PAGAR)
-      .order("data_movimento", { ascending: true })
-      .order("created_at", { ascending: true }),
+    // última de cada documento é a que a linha paga mostra. Página a página
+    // (decisão 255, 15/11/2026): as baixas crescem com as PPs, e a que
+    // ficasse depois da milésima deixaria o título pago como "a pagar".
+    todasAsLinhas((de, ate) =>
+      supabase
+        .from("lancamentos_financeiros")
+        .select(SELECT_BAIXA_A_PAGAR)
+        .eq("tenant_id", session.activeTenant.id)
+        .in("origem", ORIGENS_DA_BAIXA_A_PAGAR)
+        .order("data_movimento", { ascending: true })
+        .order("created_at", { ascending: true })
+        .order("id")
+        .range(de, ate),
+    ),
     // Estornos das baixas (decisão 120): o popup do olho lista, e a linha
-    // mostra "estornado R$ X".
-    supabase
-      .from("lancamentos_financeiros")
-      .select(SELECT_ESTORNO_DE_BAIXA)
-      .eq("tenant_id", session.activeTenant.id)
-      .in("origem", ORIGENS_DO_ESTORNO_A_PAGAR)
-      .not("estorno_de_lancamento_id", "is", null),
+    // mostra "estornado R$ X". Página a página, pelo mesmo motivo.
+    todasAsLinhas((de, ate) =>
+      supabase
+        .from("lancamentos_financeiros")
+        .select(SELECT_ESTORNO_DE_BAIXA)
+        .eq("tenant_id", session.activeTenant.id)
+        .in("origem", ORIGENS_DO_ESTORNO_A_PAGAR)
+        .not("estorno_de_lancamento_id", "is", null)
+        .order("created_at")
+        .order("id")
+        .range(de, ate),
+    ),
     // Empresas ativas (dropdown do drawer)
     supabase
       .from("empresas")
@@ -364,11 +387,18 @@ export default async function PedidosCompraFinanceiroPage({
           .order("competencia_fechamento", { ascending: true })
       : Promise.resolve({ data: null, error: null }),
     // CNAB: títulos a pagar (saída) via vw_a_pagar — pra o Dialog de remessa.
-    supabase
-      .from("vw_a_pagar")
-      .select("origem_tipo, origem_id, descricao, valor, fornecedor_id, colaborador_id")
-      .eq("tenant_id", session.activeTenant.id)
-      .eq("natureza", "saida"),
+    // Página a página (decisão 255, 15/11/2026): o título depois do milésimo
+    // sumiria da remessa sem aviso. `origem_tipo` + `origem_id` é a chave.
+    todasAsLinhas((de, ate) =>
+      supabase
+        .from("vw_a_pagar")
+        .select("origem_tipo, origem_id, descricao, valor, fornecedor_id, colaborador_id")
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("natureza", "saida")
+        .order("origem_tipo")
+        .order("origem_id")
+        .range(de, ate),
+    ),
     // Colaboradores como o financeiro enxerga (decisão 132): nome,
     // contratação e pagamento, pelo RPC — serve à aba de folha e ao
     // diálogo da remessa. Inclui inativos: a última folha de quem saiu
@@ -399,6 +429,32 @@ export default async function PedidosCompraFinanceiroPage({
     // As faturas recentes dos cartões, para o campo Fatura da baixa no
     // cartão (decisão 197).
     carregarFaturasNaBaixa(supabase, session.activeTenant.id, hojeEmSaoPauloIso()),
+    // Decisão 257: onde o job de cada PP está na esteira do faturamento — a
+    // mesma leitura de Visualizar Jobs. Leituras rasas do tenant inteiro, no
+    // mesmo `Promise.all` (pelos jobs das PPs seria uma rodada a mais). Se
+    // falhar, a coluna mostra "—" e a tela abre.
+    faturamentoPorJob(session.activeTenant.id, hojeEmSaoPauloIso()).catch((e: Error) => {
+      console.error("[financeiro.pp.faturamento_do_job]", e.message);
+      return null;
+    }),
+    // O seletor de empresas mostra quantas PPs cada empresa tem no chip
+    // escolhido (16/11/2026). A página só carrega as PPs das empresas
+    // marcadas; das outras, só o que a contagem precisa (status, regional e
+    // a prestação em avaliação), com os mesmos filtros da lista. Com todas
+    // marcadas, nada a ler.
+    empresasDeFora.length === 0
+      ? Promise.resolve({ data: [] as unknown[], error: null })
+      : todasAsLinhas((de, ate) =>
+          supabase
+            .from("pedidos_compra")
+            .select("id, empresa_id, status, job:jobs(regional_id), prestacao:pp_verba_prestacoes!pp_verba_prestacoes_pedido_compra_id_fkey(status)")
+            .eq("tenant_id", session.activeTenant.id)
+            .neq("status", "gerada")
+            .not("enviada_financeiro_em", "is", null)
+            .in("empresa_id", empresasDeFora)
+            .order("id")
+            .range(de, ate),
+        ),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
@@ -412,12 +468,37 @@ export default async function PedidosCompraFinanceiroPage({
   if (desembolsosRes.error) console.error("[financeiro.desembolsos.list]", desembolsosRes.error.message);
   if (desembolsosTitulosRes.error) console.error("[financeiro.desembolsos_titulos.list]", desembolsosTitulosRes.error.message);
   if (devolucoesRes.error) console.error("[financeiro.devolucoes.list]", devolucoesRes.error.message);
+  if (ppsDeOutrasEmpresasRes.error) console.error("[financeiro.pp.contagem_outras_empresas]", ppsDeOutrasEmpresasRes.error.message);
 
 
   // As PPs na forma da tela. O mapeamento (com o asterisco da decisão 067)
   // mora em `dados-dos-titulos.ts` desde 02/10/2026, junto com a montagem
   // dos títulos, que parte dele.
-  const rows: PPRow[] = mapearPPsDoFinanceiro(data, fornecedoresRes.data);
+  // Decisão 257: o faturamento do job entra aqui, só na lista de PPs. Job
+  // que não aparece na esteira não tem entrada e é "Aguardando envio" (a
+  // regra escrita em `faturamentoPorJob`).
+  // As PPs das empresas não marcadas, só para as contagens do seletor.
+  const um = <T,>(x: T | T[] | null | undefined): T | null => (Array.isArray(x) ? (x[0] ?? null) : (x ?? null));
+  const ppsDeOutrasEmpresas: PPParaContagem[] = (
+    (ppsDeOutrasEmpresasRes.data ?? []) as Array<{
+      empresa_id: string;
+      status: PPParaContagem["status"];
+      job: { regional_id: string | null } | Array<{ regional_id: string | null }> | null;
+      prestacao: { status: string } | Array<{ status: string }> | null;
+    }>
+  ).map((r) => ({
+    empresa_id: r.empresa_id,
+    status: r.status,
+    regional_id: um(r.job)?.regional_id ?? null,
+    prestacao_em_avaliacao: um(r.prestacao)?.status === "em_avaliacao",
+  }));
+
+  const rows: PPRow[] = mapearPPsDoFinanceiro(data, fornecedoresRes.data).map((r) => ({
+    ...r,
+    job_faturamento: faturamentoDosJobs
+      ? (faturamentoDosJobs.get(r.job_id)?.situacao ?? "aguardando_envio")
+      : null,
+  }));
 
   // As PPs em avaliação com NF anexada abrem as seções novas da aprovação
   // (módulo fiscal). O que elas leem — cadastro de impostos e última
@@ -880,6 +961,9 @@ export default async function PedidosCompraFinanceiroPage({
   const [fiscalDaAprovacao, extrasProntos] = await Promise.all([fiscalDaAprovacaoPromise, extrasDaPlanilha]);
 
   return (
+    // O provider liga a lista de PPs ao seletor de empresas do cabeçalho:
+    // quantas PPs do chip escolhido cada empresa tem (16/11/2026).
+    <ContagemNosSeletoresProvider>
     <div className="space-y-8">
       <BotaoVoltar reserva="/financeiro" />
       <PageHeader
@@ -906,6 +990,7 @@ export default async function PedidosCompraFinanceiroPage({
               tipos={tiposRes.data ?? []}
               subtipos={subtiposRes.data ?? []}
               fiscal={fiscalDaAprovacao}
+              ppsDeOutrasEmpresas={ppsDeOutrasEmpresas}
             />
           }
           ppsPendentesCount={ppsPendentesCountRes.count ?? 0}
@@ -989,5 +1074,6 @@ export default async function PedidosCompraFinanceiroPage({
         />
       </ChatPPsProvider>
     </div>
+    </ContagemNosSeletoresProvider>
   );
 }

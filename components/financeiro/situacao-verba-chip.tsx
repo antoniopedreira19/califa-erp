@@ -1,11 +1,12 @@
 import { cn } from "@/lib/utils";
 import { situacaoVerbaLabel, type SituacaoVerba } from "@/lib/types";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 /**
- * O chip da situação da verba depois de paga (decisão 081) — o mesmo na aba
- * de PPs do job, na aprovação e em Títulos a Pagar. "Aguardando prestação"
- * leva borda tracejada: é a única situação em que alguém deve algo e ainda
- * não fez nada.
+ * O chip da situação da verba depois de paga (decisão 081) — o mesmo na lista
+ * de PPs e em Títulos a Pagar, na aba de PPs do job, no painel do item e na
+ * tela da PP. "A prestar" leva borda tracejada: é a única situação em que
+ * alguém deve algo e ainda não fez nada.
  */
 const CORES: Record<SituacaoVerba, string> = {
   aguardando_prestacao: "border-dashed border-amber-400 bg-amber-50 text-amber-800",
@@ -15,51 +16,53 @@ const CORES: Record<SituacaoVerba, string> = {
   concluida: "border-emerald-200 bg-emerald-50 text-emerald-700",
 };
 
-/** O rótulo longo em duas linhas equilibradas (null = cabe numa só). */
-function emDuasLinhas(rotulo: string): [string, string] | null {
-  const palavras = rotulo.split(" ");
-  if (rotulo.length <= 14 || palavras.length < 2) return null;
-  let melhor: [string, string] | null = null;
-  for (let i = 1; i < palavras.length; i++) {
-    const par: [string, string] = [palavras.slice(0, i).join(" "), palavras.slice(i).join(" ")];
-    if (!melhor || Math.max(par[0].length, par[1].length) < Math.max(melhor[0].length, melhor[1].length)) {
-      melhor = par;
-    }
-  }
-  return melhor;
-}
+/**
+ * Decisão 257: o chip mostra o nome curto, para a coluna de Status não
+ * alargar a tabela; o nome inteiro (`situacaoVerbaLabel`) fica no filtro da
+ * coluna e aparece ao passar o mouse, com o que ele quer dizer. "A devolver"
+ * é o nome que a planilha de Títulos a Pagar já dá ao título da devolução.
+ */
+const CURTO: Record<SituacaoVerba, { rotulo: string; dica: string }> = {
+  aguardando_prestacao: {
+    rotulo: "A prestar",
+    dica: "a produção ainda não enviou a prestação de contas da verba.",
+  },
+  prestacao_em_avaliacao: {
+    rotulo: "Prestação",
+    dica: "a produção enviou a prestação; falta o financeiro aprovar.",
+  },
+  prestacao_reprovada: {
+    rotulo: "Reprovada",
+    dica: "a prestação voltou para a produção corrigir e reenviar.",
+  },
+  devolucao_pendente: {
+    rotulo: "A devolver",
+    dica: "a prestação foi aprovada e sobrou saldo da verba; falta a baixa da devolução.",
+  },
+  concluida: {
+    rotulo: "Concluída",
+    dica: "a prestação foi aprovada, e a sobra (se houve) já foi devolvida.",
+  },
+};
 
-export function SituacaoVerbaChip({
-  situacao,
-  className,
-  duasLinhas = false,
-}: {
-  situacao: SituacaoVerba;
-  className?: string;
-  /** Coluna estreita (Status da aba de PPs, decisão 189): o rótulo longo
-   *  sai em duas linhas fixas e equilibradas, e a caixa abraça a linha
-   *  maior — antes ele quebrava onde a coluna mandasse, e a caixa ocupava a
-   *  célula inteira. */
-  duasLinhas?: boolean;
-}) {
-  const linhas = duasLinhas ? emDuasLinhas(situacaoVerbaLabel(situacao)) : null;
+export function SituacaoVerbaChip({ situacao, className }: { situacao: SituacaoVerba; className?: string }) {
+  const { rotulo, dica } = CURTO[situacao];
   return (
-    <span
-      className={cn(
-        "inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
-        CORES[situacao],
-        className,
-        linhas && "flex-col items-start gap-0 py-1 leading-[1.25]",
-      )}
-    >
-      {linhas ? (
-        <>
-          <span className="whitespace-nowrap">{linhas[0]}</span>
-          <span className="whitespace-nowrap">{linhas[1]}</span>
-        </>
-      ) : (
-        situacaoVerbaLabel(situacao)
-      )}
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          className={cn(
+            "inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+            CORES[situacao],
+            className,
+          )}
+        >
+          {rotulo}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-[280px]">
+        <strong className="font-semibold">{situacaoVerbaLabel(situacao)}:</strong> {dica}
+      </TooltipContent>
+    </Tooltip>
   );
 }

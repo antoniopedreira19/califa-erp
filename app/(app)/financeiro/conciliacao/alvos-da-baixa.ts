@@ -179,6 +179,10 @@ export function alvoDaBaixaAReceber(
         dataInicial: hoje,
         // Módulo fiscal: a nota do título, para o bloco "No fiscal" da baixa.
         notaId: baixando.faturamento_id,
+        // Decisão 256: a retenção informada no Faturar desta nota.
+        retencaoDaNota: baixando.retencao_da_nota
+          ? { numeroNf: baixando.fat_numero_nf, aliquotas: baixando.retencao_da_nota }
+          : null,
       }
     : {
         chave: baixando.id,
@@ -213,6 +217,7 @@ export function alvoDaBaixaAReceber(
         dataInicial: baixando.origem === "rendimento" ? baixando.data_previsao_recebimento : hoje,
         // Sem nota: a baixa não tem o bloco "No fiscal".
         notaId: null,
+        retencaoDaNota: null,
       };
 }
 

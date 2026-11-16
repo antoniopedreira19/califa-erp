@@ -83,6 +83,13 @@ import {
 } from "./job-item-realizado-table";
 import { JobTotaisCard } from "./job-totais-card";
 import { AlterarOrcadoButton } from "./alterar-orcado-button";
+import { jobFechado, type PagamentosAtrasadosNaPlanilha } from "@/lib/pagamentos-atrasados";
+import {
+  BarraPagamentosAtrasados,
+  BotaoConcluirPagamentosAtrasados,
+  PagamentosAtrasadosNoFinanceiro,
+  SeloPagamentosAtrasadosNaProducao,
+} from "@/app/(app)/_pagamentos-atrasados/componentes";
 import { EditarOrcadoButton } from "./editar-orcado-button";
 import { EdicaoFinanceiroBarra } from "./edicao-financeiro-barra";
 import {
@@ -367,6 +374,10 @@ interface Props {
    *  produção e onde ninguém edita. Obrigatória pelo mesmo motivo de
    *  `interno`. */
   edicaoDoFinanceiro: EdicaoDoFinanceiro | null;
+  /** Decisão 259: os pagamentos atrasados do job fechado — a liberação do
+   *  financeiro e o que ela permite na planilha. Nulo fora da página do job
+   *  (abertura). */
+  pagamentosAtrasados?: PagamentosAtrasadosNaPlanilha | null;
   /** A linha de parâmetros do job, embaixo do rótulo da planilha (decisão
    *  224). Nas telas do financeiro e, desde a decisão 233, na da produção,
    *  que os muda pela errata; `null` na conferência em leitura. Obrigatória
@@ -667,6 +678,7 @@ function PlanilhaDoJob({
   interno,
   confirmarSaidaParaOrcamento,
   edicaoDoFinanceiro,
+  pagamentosAtrasados = null,
   parametrosDoJob,
   aberturaDoJob,
   resultadoInicial,
@@ -701,6 +713,17 @@ function PlanilhaDoJob({
   // (revisão de 14/10/2026). Tipo, linha nova e a trava de PP ficam com a
   // tabela (`modoDaEdicao`).
   const modoFinanceiro = edicaoDoFinanceiro !== null;
+  // Decisão 259: os pagamentos atrasados do job fechado. Na produção, com a
+  // liberação aberta, o "Editar planilha" volta só para linha vermelha nova
+  // (`modoAtrasado`): as linhas que já existem não abrem.
+  const jobFechadoPA = jobFechado(job.status);
+  const liberacaoAtual = jobFechadoPA ? (pagamentosAtrasados?.atual ?? null) : null;
+  const liberacaoAberta =
+    liberacaoAtual && !liberacaoAtual.conclusaoPedidaEm ? liberacaoAtual : null;
+  const [atrasadoAtivo, setAtrasadoAtivo] = React.useState(false);
+  const podeAbrirAtrasado =
+    !modoFinanceiro && liberacaoAberta !== null && pagamentosAtrasados?.podeCriarLinha === true;
+  const modoAtrasado = podeAbrirAtrasado && atrasadoAtivo;
   const planejadoNaFila = modoFinanceiro && job.status === "aguardando_abertura";
   const rascunho = useRascunhoErrata(itens, interno, grupos);
   const errata = React.useMemo(
@@ -1178,6 +1201,8 @@ function PlanilhaDoJob({
       return;
     }
     errata.descartar();
+    // Decisão 259: no job fechado e liberado, salvar fecha a edição.
+    setAtrasadoAtivo(false);
     router.refresh();
   }
 
@@ -1824,13 +1849,15 @@ function PlanilhaDoJob({
           linhasDaRevisao={linhasDaRevisao}
           seloDaLinha={historico?.antiga?.selo}
           errata={
-            (modoFinanceiro ? podeEditarOrcado : podeErrata) && !mesFechado
+            modoAtrasado || ((modoFinanceiro ? podeEditarOrcado : podeErrata) && !mesFechado)
               ? errata
               : undefined
           }
           modoDaEdicao={modoFinanceiro ? "financeiro" : "errata"}
           mesDoTrecho={mesId}
-          podeEditarLinhas={!modoFinanceiro}
+          podeEditarLinhas={!modoFinanceiro && !modoAtrasado}
+          soLinhaVermelha={modoAtrasado}
+          pagamentosAtrasados={pagamentosAtrasados}
           orcadoVisivel={orcadoVisivel}
           rentabPlanejadaVisivel={rentabPlanejada}
           rentabRealizadaVisivel={rentabRealizada}
@@ -1914,6 +1941,10 @@ function PlanilhaDoJob({
   if (midia) {
     const enviados = faturamentoMensal.filter((m) => m.envio !== null).length;
     const comFaturamento = faturamentoMensal.filter((m) => m.faturamento > 0.004).length;
+    // Decisão 256: o mês do Novo faturamento fecha sem envio da produção.
+    const peloFinanceiro = faturamentoMensal.filter((m) => m.envio === null && m.peloFinanceiro).length;
+    const textoPeloFinanceiro =
+      peloFinanceiro > 0 ? ` · ${peloFinanceiro} faturado${peloFinanceiro === 1 ? "" : "s"} pelo financeiro` : "";
     return (
       <div className="flex flex-col gap-4">
       {linhaDeParametros}
@@ -1959,8 +1990,8 @@ function PlanilhaDoJob({
           job.status === "aguardando_abertura" || job.status === "rejeitado_financeiro"
             ? "Job aguardando abertura"
             : enviados === 0
-              ? "Nenhum mês enviado"
-              : `${enviados} de ${comFaturamento} ${comFaturamento === 1 ? "mês enviado" : "meses enviados"}`
+              ? `Nenhum mês enviado${textoPeloFinanceiro}`
+              : `${enviados} de ${comFaturamento} ${comFaturamento === 1 ? "mês enviado" : "meses enviados"}${textoPeloFinanceiro}`
         }
       />
       </div>
@@ -2183,6 +2214,39 @@ function PlanilhaDoJob({
               }}
             />
           )}
+          {/* Decisão 259: na produção, o job fechado e liberado mostra o
+              selo com a competência; o "Editar planilha" de sempre volta só
+              para linha vermelha nova; à direita dele, o "Concluir
+              pagamentos atrasados". */}
+          {!modoFinanceiro && liberacaoAtual && (
+            <SeloPagamentosAtrasadosNaProducao
+              jobId={job.id}
+              liberacao={liberacaoAtual}
+              podeConcluir={pagamentosAtrasados?.podeCriarLinha === true}
+            />
+          )}
+          {podeAbrirAtrasado && (
+            <AlterarOrcadoButton
+              ativo={errata.ativo && modoAtrasado}
+              travadoPor={null}
+              rotuloDaPronta={null}
+              onAlternar={() => {
+                if (errata.ativo) {
+                  errata.descartar();
+                  setAtrasadoAtivo(false);
+                  return;
+                }
+                setOrcadoVisivel(true);
+                setErroErrata(null);
+                setAtrasadoAtivo(true);
+                errata.ligar(null);
+              }}
+            />
+          )}
+          {!modoFinanceiro &&
+            liberacaoAberta &&
+            pagamentosAtrasados?.podeCriarLinha === true &&
+            !errata.ativo && <BotaoConcluirPagamentosAtrasados jobId={job.id} liberacao={liberacaoAberta} />}
           {/* O "Editar orçado" do financeiro (decisão 115), no mesmo lugar
               em que a produção tem o "Realizar errata". */}
           {modoFinanceiro && (
@@ -2199,10 +2263,25 @@ function PlanilhaDoJob({
               }}
             />
           )}
+          {/* Decisão 259: no financeiro, o job fechado tem "Liberar
+              pagamentos atrasados" (ou o selo e o concluir), depois do
+              "Editar planilha" travado. */}
+          {modoFinanceiro && jobFechadoPA && pagamentosAtrasados?.podeLiberar && (
+            <PagamentosAtrasadosNoFinanceiro
+              jobId={job.id}
+              liberacao={liberacaoAtual}
+              competencias={pagamentosAtrasados.competencias}
+              competenciaPadrao={pagamentosAtrasados.competenciaPadrao}
+              competenciaDoJob={pagamentosAtrasados.competenciaDoJob}
+              avisoAR={pagamentosAtrasados.temAR && pagamentosAtrasados.jaFaturado}
+            />
+          )}
           {/* Segue a GERAÇÃO, e não a errata: "todas as PPs deste item já
               foram geradas" é afirmação sobre gerar, e o formulário de PP
-              já faz a mesma pergunta na pré-abertura (decisão 056). */}
-          {podeGerarPP && (
+              já faz a mesma pergunta na pré-abertura (decisão 056).
+              Decisão 259: no job fechado não volta — para encerrar, todas
+              as pendências já foram atendidas. */}
+          {podeGerarPP && !jobFechadoPA && (
             <ConcluirPPsButton
               jobId={job.id}
               itensEmAberto={itensEmAberto}
@@ -2454,7 +2533,27 @@ function PlanilhaDoJob({
         />
       )}
 
-      {errata.ativo && !modoFinanceiro && (
+      {/* Decisão 259: a barra do "Editar planilha" no job fechado e
+          liberado — só linha vermelha nova, sem errata. */}
+      {errata.ativo && modoAtrasado && liberacaoAberta && (
+        <BarraPagamentosAtrasados
+          liberacao={liberacaoAberta}
+          linhas={errata.vermelhasForaDaErrata.length}
+          faltaNomear={errata.faltaNomear}
+          salvando={salvando}
+          erro={erroErrata}
+          semAR={pagamentosAtrasados?.jaFaturado === true}
+          onDescartar={() => {
+            errata.descartar();
+            setAtrasadoAtivo(false);
+          }}
+          onDesfazer={errata.desfazer}
+          podeDesfazer={errata.podeDesfazer}
+          onSalvar={() => void salvarSoVermelhas()}
+        />
+      )}
+
+      {errata.ativo && !modoFinanceiro && !modoAtrasado && (
         <ErrataBarra
           resumo={resumoDaErrata}
           soOrganizacao={

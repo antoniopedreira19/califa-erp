@@ -8996,3 +8996,102 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 
 - O cadastro de fornecedores passou de 3 mil com a carga da planilha de 12/11. As telas que leem a lista inteira (Contas a Pagar, Conciliação — títulos e remessa —, Contas a Receber, desembolso, conta avulsa e recorrência) leem página a página (`lib/supabase/todas-as-linhas.ts`); antes o PostgREST cortava em 1.000 sem aviso, e a PP de um fornecedor depois do milésimo perderia nome e conta no financeiro.
 - O campo de fornecedor (conta avulsa, recorrência e desembolso) busca no servidor enquanto se digita, como o da PP.
+
+## ⚠️ Nota de 2026-11-15 — a recorrência da planilha assume o item de vez (revisão da decisão 235)
+
+- **O erro:** a `vw_fluxo_caixa` só tirava a previsão da planilha enquanto a recorrência estava ativa e dentro da `data_fim`. As duas recorrências de R$ 75 mil pararam sozinhas depois do título de dezembro, e a previsão delas voltou: novembro e dezembro contavam R$ 150 mil a mais cada um.
+- **Agora:** basta a recorrência ter `previsao_chave` (mesma empresa, mesmo Tipo e competência a partir do trimestre em que ela nasceu). Pausada, encerrada ou excluída com títulos, a previsão continua fora. Só volta se a recorrência for apagada de vez, e isso só acontece com a que nunca gerou título.
+- **Conferido:** saíram 4 previsões, R$ 300 mil no total, e nada mais mudou.
+- **Na tela:** pausar não cancela o título que já nasceu.
+- **Migration:** `20261115800001`.
+
+## ⚠️ Nota de 2026-11-15 — a PP paga diz que está paga, e a lista de PPs ganha o job e a linha da prestação (decisão 257, revê a 081)
+
+- **"Pago <data>":** toda PP paga e todo título pago mostram o dia embaixo do selo ("Pago 03/11/2026"), na lista de PPs e em Títulos a Pagar. Em Títulos a Pagar, a verba mostra o selo da prestação com a data embaixo.
+- **Selo da verba com nome curto:** A prestar · Prestação · Reprovada · A devolver · Concluída. O nome inteiro fica no filtro da coluna Status e na dica.
+- **Lista de PPs, a linha da prestação:** a verba paga fica "Pago", e a prestação vira outra linha da mesma PP, logo embaixo, a partir do envio pela produção — uma só por PP (reprovada e reenviada, volta a "Prestação"). Valor = comprovado e sobra; Enviada por = quem enviou; Status = Prestação, Reprovada (dia), A devolver (dia previsto), **Devolvido** (dia, selo novo) ou Concluída (dia da aprovação). No filtro Prestação de Contas, a própria linha é a da prestação.
+- **Lista de PPs, colunas:** Código, Valor, Parcela, Fornecedor, Prazo original, Enviada por, Job, **Abertura do job**, **Faturamento**, Status e o ícone da planilha; a Emissão saiu. O Faturamento é a esteira de Visualizar Jobs (`faturamentoPorJob`), lida no mesmo `Promise.all` da página. O ícone abre a Planilha Interna do job no pop-up de leitura da abertura, com a linha da PP na borda vermelha.
+- **Atenção:** em 15/11 nenhum job com PP está faturado pelo sistema (1 nota emitida no tenant, sem job) — a coluna só mostra Faturado quando as notas forem emitidas por ele.
+- **Sem migration.**
+
+## ⚠️ Nota de 2026-11-15 — a lista de PPs sem o corte de 1.000 (amplia a decisão 255)
+
+- A lista de PPs do Contas a Pagar parava nas 1.000 mais recentes: com 1.045 enviadas, as 45 mais antigas (08/09 a 05/10) e os títulos delas sumiam da lista e de Títulos a Pagar, sem aviso.
+- Ela, a aba Títulos da Conciliação e a remessa agora leem as PPs página a página (`todasAsLinhas`, ordem por `created_at` e `id`).
+- No mesmo dia, antes do limite: as baixas, os estornos e a `vw_a_pagar` (335, 0 e 398) também leem página a página, no Contas a Pagar, na aba Títulos da Conciliação e na remessa — uma baixa depois da milésima deixaria o título pago como "a pagar".
+
+## ⚠️ Nota de 2026-11-15 — "+ Faturamento": o Novo faturamento e o Faturar unificado (decisão 256, revê a 184 e a 130)
+
+- **"+ Faturamento"** no lugar de "Faturamento avulso": **Novo faturamento** (o financeiro fatura o job com o valor negociado, no lugar do envio da produção) ou **Faturamento avulso** (como antes).
+- **Novo faturamento:** fecha o envio da produção mesmo abaixo do previsto; o resto fica como linha de saldo na fila, que abre o Novo faturamento com o saldo. Job com envio do GP esperando nota trava e leva ao Faturar do envio. No mensal e na Mídia Off, a nota leva o mês e fecha só o envio dele. No job que gera save, a nota sai dividida (job e save, o save limitado ao previsto). NF cancelada reabre o envio; o job finalizado volta a encerrado.
+- **Um Faturar só**, pop-up centralizado no molde do envio, para envio, Novo faturamento e avulso. **Impostos desta nota** desde a abertura, zerados; as **deduções** (repasse, custo AR) saem só da base do ISS, com a sugestão proporcional à nota e a conta à vista; **CBS e IBS** sobre o líquido, gravados na nota (parâmetros `cbs` e `ibs` no cadastro de impostos). **Retenções do cliente** no Faturar; a baixa e a conciliação abrem com elas.
+- **Recebimento antes da NF** registrado na conciliação ("Novo lançamento"), escolhendo o job: com envio, vai para a nota do envio; sem envio, fica preso ao job, e o Faturar associa. A fila só mostra.
+- **Faturamento Agrupado** só de um cliente, com a barra fixa no rodapé.
+- **Apuração:** a guia de ISS usa a base sem as deduções; PIS, COFINS, IRPJ e CSLL seguem sobre o total.
+- **Migration:** `20261115900001_novo_faturamento.sql` (colunas e funções; duas regras mais largas, autorizadas).
+
+## ⚠️ Nota de 2026-11-15 — o rateio de regional fecha no centavo (fluxo de caixa)
+
+- **O erro:** a `vw_fluxo_caixa` arredondava cada pedaço do rateio de regional sozinho. A baixa da AV-00026 (R$ 4.069,86, SP 30 / NE 25 / RJ 25 / NO 20) saía como 4.069,87 no fluxo de 03/11 da Santander, um centavo acima do extrato. No previsto, 24 avulsas de recorrência e 170 ocorrências futuras tinham ±0,01.
+- **Regra (Tiago, 15/11):** cada pedaço continua arredondado ao centavo, e a diferença fica com a regional de **maior percentual**; no empate, a primeira em ordem alfabética. Vale para o realizado (lançamento, incluindo a parte em save) e para o previsto (avulsa, parcela de desembolso, título e recorrência). A SP da AV-00026 ficou com 1.220,95.
+- **Na tela:** o card "Rateio de regional" da avulsa e da recorrência usa a mesma regra (`lib/calculos/rateio-regional.ts`). Antes, ele jogava a diferença na última linha, numa ordem que o banco não garante: mostrava NO 813,96 enquanto o fluxo mostrava 813,97.
+- **Conferido:** todo lançamento realizado soma, na view, o próprio valor (a migration confere isso antes de terminar). Mudaram 195 linhas, todas em 1 centavo, e nenhuma ganhou ou perdeu linha. A conciliação de 03/11 da Santander fecha com diferença zero. No Sandbox, a AV-00006 (R$ 4.069,86, mesmo rateio, criada pela tela) mostra o mesmo valor por regional no card e na view.
+- **Fora:** fatura de cartão e folha previstas (somam por regional antes de arredondar) e as views de DRE e rentabilidade.
+- **Migration:** `20261115950001`.
+
+## ⚠️ Nota de 2026-11-16 — a lista de PPs em grade fixa (revisão da decisão 257)
+
+- **O erro:** a lista de PPs publicada em 15/11 manteve a largura automática do protótipo. Com os nomes reais, a tabela foi a 1.887 px numa caixa de 1.615 px com `overflow-hidden`:
+  - Faturamento, Status e o ícone da planilha sumiam;
+  - as linhas tinham até quatro linhas de texto.
+- **Agora:**
+  - `table-fixed` + `colgroup` (`ColunasDasPPs`), com Fornecedor e Job dividindo o que sobra.
+  - Teto de duas linhas: Fornecedor e Job com `TruncateTooltip linhas={2}`, e o nome de quem enviou numa linha.
+  - Urgente embaixo do código, junto do selo Verba/Reembolso.
+  - Caixa `relative overflow-x-auto`, com mínimo de 1.520 px.
+- **`TruncateTooltip`:** ganhou `children`, para o conteúdo com formatação (o código do job em mono); o cartão segue mostrando o `text`.
+- **Regra nova** em `docs/09-identidade-visual-ui.md` ("Listas com texto livre") e no `CLAUDE.md`: protótipo aprovado não prova a tela. Antes do push, confira com o dado real mais longo, na largura do Tiago.
+- **Sem migration.**
+
+## ⚠️ Nota de 2026-11-16 — a PP urgente na lista de PPs: seção "Urgentes", sem etiqueta (revisão da 257 e da 077)
+
+- **Lista de PPs:** a etiqueta "Urgente" saiu da linha. A seção "URGENTES · N" no topo junta as urgentes em avaliação **e aprovadas**; até aqui, só as em avaliação subiam.
+- **Justificativa:** no `title` do código.
+- **Selo Verba/Reembolso:** volta para logo embaixo do código.
+- **Coluna Código:** 168 → 112 px.
+- **Decidido** pelo Tiago num protótipo de duas opções (A, só a seção; B, etiqueta ao lado do código).
+- **Não mudam:** a tela da PP e Títulos a Pagar.
+- **Sem migration.**
+
+## ⚠️ Nota de 2026-11-16 — quantas PPs em cada regional e empresa (decisão 258)
+
+- **Seletor de regionais da aba PPs:** ao lado de cada regional, quantas PPs ela tem no chip escolhido. Em cima, o que o número conta ("PPs em avaliação"…).
+- **Seletor de empresas do cabeçalho:** o mesmo por empresa, só com a aba PPs à vista.
+- **Regra:** a mesma do número do chip, sem a busca. Cada seletor ignora a própria seleção; o de empresa respeita as regionais marcadas.
+- **Empresas não marcadas:** uma leitura leve no mesmo `Promise.all` traz só empresa, status, regional e prestação em avaliação. Não roda quando todas estão marcadas.
+- **Novo:** `components/ui/contagem-nos-seletores.tsx` (provider entre a lista e o cabeçalho). Os dois seletores ganharam as props opcionais `contagens` e `legenda`.
+- **Sem migration.**
+
+## ⚠️ Nota de 2026-11-16 — pagamentos atrasados em job encerrado ou finalizado (decisão 259)
+
+- **Planilha Interna do job fechado:** "Liberar pagamentos atrasados" (competência dos novos lançamentos e motivo obrigatório). Depois: selo "Pagamentos atrasados liberados" e "Concluir pagamentos atrasados" (o financeiro conclui sozinho, mesmo sem a produção). Com a conclusão da produção: "Conclusão pedida · 4T/26" e "Confirmar conclusão". Concluída, a planilha trava e o "Liberar" volta para uma liberação nova.
+- **Lista de PPs:** tag "Atrasado · 4T/26" embaixo do código, no lugar de Verba/Reembolso/Cartão; o cartão corporativo ganhou a tag "Cartão". A busca por coluna acha os dois.
+- **Tela da PP:** selo "Pagamento atrasado · 4T/2026" no cabeçalho; "Tipo da PP" (Verba, Reembolso ou Cartão corporativo) como primeiro campo do painel Dados, em toda PP que não é normal.
+- **PDF da PP:** linha "Pagamento atrasado: competência 4T/2026".
+- **Migration** `20261116600001_pagamentos_atrasados.sql` (tabela `jobs_pagamentos_atrasados`, marcas na PP e na linha, gatilhos e funções).
+
+## ⚠️ Nota de 2026-11-16 — o Faturar "em pé", a lista do Faturamento pela situação e o recebimento antes da NF no Recebimento avulso (decisão 260, revê a 256)
+
+- **Faturar:**
+  - 1.080 px (860 px com o PDF), Nota fiscal em duas colunas, campos de 36 px;
+  - as deduções na linha do emissor: (−) Deduções · = Base do ISS · ISS, com "Usar o custo AR" e a conta no ⓘ;
+  - o quadro "Impostos desta nota" com 360 px, só com os números e o resto no ⓘ.
+- **Lista da aba Faturamento:**
+  - grade fixa, com no máximo duas alturas por linha e o texto cortado inteiro ao passar o mouse;
+  - colunas Job (código, origem ou nº da NF, mês e o nome do financeiro), Cliente, Empresa, Valor, Já faturado, A faturar, Parcela, Vencimento, Enviado por, Situação e Planilha Interna; sem Descrição e sem Ação.
+- **Chips:** A faturar · Faturados · A receber · Recebidos · Inadimplentes · Todos. O recebido em parte vira mais de uma linha (`situacao-da-nota.ts`); em Todos, os pedaços da nota vêm juntos.
+- **Filtro de CNPJ emissor** no lugar do filtro de Cliente.
+- **Nome do job no financeiro:** sempre o que o financeiro deu (decisão 243), na lista, nas notas, no Faturar e no recebimento antes da NF.
+- **Recebimento antes da NF:** é o primeiro cartão do Recebimento avulso, com os campos logo abaixo do job. O item da conciliação abre o mesmo cartão.
+- **Pendência (D16):** registrar o recebimento antes da NF direto da linha do extrato, na conciliação bancária, como o "Lançar avulso". Fica para um segundo momento.
+- **Sem migration.**

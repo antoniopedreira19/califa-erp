@@ -49,6 +49,16 @@ function diaSeguinteBr(iso: string): string {
  *  pendências de encerramento (vazia = liberado). `null` nos outros. */
 function detalheDoMes(m: MesDeFaturamento, moeda: string, encerra: string[] | null): string {
   const envio = m.envio;
+  // Decisão 256: o mês que o financeiro faturou pelo Novo faturamento.
+  if (!envio && m.peloFinanceiro) {
+    const nf = m.notas.map((n) => n.numero).filter(Boolean).join(", ");
+    return m.situacao === "faturado"
+      ? `Faturado pelo financeiro, sem envio da produção · NF ${nf} · ${formatCurrency(m.faturado, moeda)}.`
+      : `Faturado pelo financeiro, sem envio da produção · NF ${nf} · ${formatCurrency(m.faturado, moeda)} de ${formatCurrency(
+          m.faturamento,
+          moeda,
+        )}; o saldo fica com o financeiro.`;
+  }
   if (!envio) {
     if (m.situacao === "em_veiculacao" && m.ultimaVeiculacao) {
       return `A veiculação de ${nomeDoMes(m.mes)} vai até ${dataBr(m.ultimaVeiculacao)}: o envio libera em ${diaSeguinteBr(m.ultimaVeiculacao)}.`;
@@ -128,6 +138,7 @@ export function BarraFaturamentoMensal({
   );
 
   const enviados = meses.filter((m) => m.envio !== null);
+  const pelaNotaDoFinanceiro = meses.filter((m) => m.envio === null && m.peloFinanceiro).length;
   const total = meses.reduce((s, m) => s + m.faturamento, 0);
   const somaEnviada = enviados.reduce(
     (s, m) => s + (m.envio?.valor_faturado ?? 0),
@@ -231,8 +242,11 @@ export function BarraFaturamentoMensal({
             <p className="text-xs text-muted-foreground">
               <strong className="text-foreground">Faturamento por mês</strong> ·{" "}
               {enviados.length} de {meses.length}{" "}
-              {meses.length === 1 ? "mês enviado" : "meses enviados"} · faturamento
-              previsto{" "}
+              {meses.length === 1 ? "mês enviado" : "meses enviados"}
+              {/* Decisão 256: o mês do Novo faturamento fecha sem envio. */}
+              {pelaNotaDoFinanceiro > 0 &&
+                ` · ${pelaNotaDoFinanceiro} faturado${pelaNotaDoFinanceiro === 1 ? "" : "s"} pelo financeiro`}{" "}
+              · faturamento previsto{" "}
               <span className="font-mono font-semibold text-foreground">
                 {formatCurrency(total, moeda)}
               </span>
@@ -300,14 +314,31 @@ export function BarraFaturamentoMensal({
         }
       >
         {meses.map((m) => (
-          <span key={m.mesId} className="inline-flex items-center gap-1 text-[11px]">
+          <span
+            key={m.mesId}
+            className="inline-flex items-center gap-1 text-[11px]"
+            title={m.peloFinanceiro ? "Faturado pelo financeiro, sem envio da produção" : undefined}
+          >
             <span className="font-semibold text-muted-foreground">
               {nomeDoMes(m.mes).slice(0, 1).toUpperCase() + nomeDoMes(m.mes).slice(1, 3)}
             </span>
             <ChipSituacao situacao={m.situacao} curto />
           </span>
         ))}
-        <TextoTrilha>{bloqueio ?? resumo}</TextoTrilha>
+        <TextoTrilha>
+          {bloqueio ?? resumo}
+          {!bloqueio && meses.some((m) => m.peloFinanceiro) && (
+            <span>
+              {" "}
+              {listaPtBr(
+                meses
+                  .filter((m) => m.peloFinanceiro)
+                  .map((m) => nomeDoMes(m.mes).charAt(0).toUpperCase() + nomeDoMes(m.mes).slice(1)),
+              )}{" "}
+              faturado pelo financeiro, sem envio.
+            </span>
+          )}
+        </TextoTrilha>
       </TrilhaBarra>
 
       {trilhaEncerramento}

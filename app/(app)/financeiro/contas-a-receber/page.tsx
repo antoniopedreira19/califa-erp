@@ -13,7 +13,8 @@ import {
   type FaturadoRow,
   type NotaDoLote,
 } from "./faturamento-list";
-import { TitulosList } from "./titulos-list";
+import { TitulosList, type TituloRow } from "./titulos-list";
+import { recebimentoDaNota } from "./situacao-da-nota";
 import type { CnpjsDoCliente, InfoJob, JobDoFaturar } from "./faturar-drawer";
 import {
   contatosDeCobrancaPorJob,
@@ -24,7 +25,9 @@ import type {
   PlanoContaTipo,
   PlanoContaSubtipo,
 } from "@/lib/types";
-import { chaveDaLinhaDaFila, chaveDoRecebidoAntes, chaveInfoDoEnvio } from "./chave-info";
+import { nomeDoJobNoFinanceiro } from "@/lib/types";
+import { chaveDaLinhaDaFila, chaveInfoDoEnvio } from "./chave-info";
+import { SELECT_RECEBIDO_ANTES, recebidosAntesPorChave } from "./dados-do-recebido-antes";
 import type { CambioDoJob, RecebidoAntesDaNf } from "./recebimento-antes-nf-dialog";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { SELECT_ESTORNO_DE_BAIXA } from "@/lib/data/estornos-de-baixa";
@@ -48,6 +51,7 @@ import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { carregarExtrasDaPlanilha } from "@/lib/data/planilha-de-titulos";
 import { idsDaPlanilha } from "../conciliacao/linhas-da-aba";
 import { todasAsLinhas } from "@/lib/supabase/todas-as-linhas";
+import { lerMesesDoNovoFaturamento } from "./meses-do-novo-faturamento";
 
 export const dynamic = "force-dynamic";
 
@@ -101,7 +105,7 @@ export default async function ContasReceberPage({
       .select(`
         id, numero_nf, data_emissao, valor_total, descricao, cnae, anexo_nf_path,
         cnpj_tomador, estabelecimento_id, fiscal_cnae_id,
-        empresa_id, origem_tipo, cliente_id, fornecedor_id,
+        empresa_id, origem_tipo, cliente_id, fornecedor_id, faturado_pelo_financeiro, mes_novo_faturamento,
         plano_conta_tipo_id, plano_conta_subtipo_id,
         itens:faturamento_itens(id, origem_tipo, origem_id, envio_parcela_id, valor),
         rateio:faturamentos_regionais(percentual, regional:regionais(nome))
@@ -109,20 +113,14 @@ export default async function ContasReceberPage({
       .eq("tenant_id", tenantId)
       .eq("status", "emitido")
       .order("data_emissao", { ascending: false }),
-    (() => {
-      // Filtro de aterrissagem da home
-      let q = supabase
-        .from("titulos_receber")
-        .select(SELECT_TITULO_A_RECEBER)
-        .eq("tenant_id", tenantId)
-        .order("data_vencimento", { ascending: true });
-      if (searchParams?.filtro === "vencidas") {
-        q = q
-          .lt("data_previsao_recebimento", hoje)
-          .is("pago_em", null);
-      }
-      return q;
-    })(),
+    // Todos os títulos: a situação de cada nota emitida na aba Faturamento
+    // sai deles (decisão 260). O atalho "vencidas" da Home corta só a aba
+    // Títulos a Receber, na montagem (`apenasVencidas`).
+    supabase
+      .from("titulos_receber")
+      .select(SELECT_TITULO_A_RECEBER)
+      .eq("tenant_id", tenantId)
+      .order("data_vencimento", { ascending: true }),
     // As baixas dos títulos das notas (decisão 125: pode haver várias por
     // título), com conta, centro de custo e impostos retidos — o popup do
     // olho e o "falta R$ X" da linha.
@@ -243,15 +241,7 @@ export default async function ContasReceberPage({
     // da linha da aba Faturamento e a parcela 1 travada do Faturar.
     supabase
       .from("recebimentos_antes_nf")
-      .select(`
-        id, envio_nota_id, item_bv_id, valor, data, created_at,
-        moeda, valor_moeda, cotacao, iof, tarifa, variacao_cambial,
-        conta:contas_bancarias(nome, banco),
-        lancamento:lancamentos_financeiros(
-          tipo:plano_contas_tipos(codigo, nome),
-          subtipo:plano_contas_subtipos(nome)
-        )
-      `)
+      .select(SELECT_RECEBIDO_ANTES)
       .eq("tenant_id", tenantId)
       .eq("status", "aguardando")
       .order("data", { ascending: true })
@@ -273,7 +263,7 @@ export default async function ContasReceberPage({
       // Decisão 229: o modelo da planilha e a moeda e a cotação de compra
       // da versão aprovada — o job internacional recebe pelo câmbio fechado.
       .select(
-        "id, codigo, nome, status, empresa_id, regional_id, cliente_id, " +
+        "id, codigo, nome, nome_financeiro, status, empresa_id, regional_id, cliente_id, faturamento_previsto, faturamento_save_previsto, " +
           "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), " +
           "versao:versoes_orcamento!versao_orcamento_aprovada_id(moeda_estrangeira, cambio_compra)",
       )
@@ -313,11 +303,22 @@ export default async function ContasReceberPage({
     id: string;
     codigo: string;
     nome: string;
+    nome_financeiro: string | null;
   }>;
 
   const nomeCliente = new Map(clientesList.map((c) => [c.id, c.nome]));
   const nomeFornecedor = new Map(fornecedoresList.map((f) => [f.id, f.nome]));
   const jobPorId = new Map(jobsList.map((j) => [j.id, j]));
+  // Decisão 260 (regra do Tiago, 16/11/2026): no financeiro, o nome do job é
+  // sempre o que o financeiro deu na abertura (decisão 243), nunca o da
+  // produção. A fila (`vw_faturamento_pendente`) e o cadastro trazem o da
+  // produção em `nome`.
+  const nomeDoJob = new Map<string, string>();
+  for (const j of [
+    ...jobsList,
+    ...((jobsDoFaturarRes.data ?? []) as unknown as Array<{ id: string; nome: string; nome_financeiro: string | null }>),
+  ])
+    nomeDoJob.set(j.id, nomeDoJobNoFinanceiro(j));
   const regionaisList = (regionaisRes.data ?? []) as Array<{
     id: string;
     nome: string;
@@ -462,7 +463,10 @@ export default async function ContasReceberPage({
       mes_referencia: (r.mes_referencia as string | null) ?? null,
       empresa_id: (r.empresa_id as string | null) ?? "",
       codigo: (r.codigo as string | null) ?? null,
-      descricao: r.descricao as string,
+      // O nome do financeiro na linha de job; no BV, o item ("BV — ...").
+      descricao:
+        (r.origem_tipo === "job" ? nomeDoJob.get(((r.job_id ?? r.origem_id) as string) ?? "") : undefined) ??
+        (r.descricao as string),
       cliente_id: clienteId,
       fornecedor_id: fornecedorId,
       contraparte_nome:
@@ -496,53 +500,13 @@ export default async function ContasReceberPage({
       // Decisão 188: a nota do envio em lote de que esta parte é. Nula no
       // envio de um job só e no BV.
       lote: r.envio_nota_id ? (notaDoLotePorEnvioNota.get(r.envio_nota_id as string) ?? null) : null,
+      saldo_do_novo_faturamento: false,
     };
   });
 
-  // O recebido antes da NF, pela chave da linha da fila (nota ou BV).
-  const recebidosAntes: Record<string, RecebidoAntesDaNf[]> = {};
-  for (const r of (recebidosAntesRes.data ?? []) as unknown as Array<{
-    id: string;
-    envio_nota_id: string | null;
-    item_bv_id: string | null;
-    valor: string | number;
-    data: string;
-    moeda: string | null;
-    valor_moeda: string | number | null;
-    cotacao: string | number | null;
-    iof: string | number | null;
-    tarifa: string | number | null;
-    variacao_cambial: string | number | null;
-    conta: { nome: string; banco: string } | null;
-    lancamento: {
-      tipo: { codigo: string; nome: string } | null;
-      subtipo: { nome: string } | null;
-    } | null;
-  }>) {
-    const chave = chaveDoRecebidoAntes(r.envio_nota_id, r.item_bv_id);
-    if (!chave) continue;
-    (recebidosAntes[chave] ??= []).push({
-      id: r.id,
-      data: r.data,
-      valor: Number(r.valor),
-      contaNome: r.conta ? `${r.conta.nome} · ${r.conta.banco}` : "—",
-      centroNome: r.lancamento?.tipo
-        ? `${r.lancamento.tipo.codigo} · ${r.lancamento.tipo.nome}`
-        : "—",
-      subtipoNome: r.lancamento?.subtipo?.nome ?? "—",
-      // O câmbio fechado do internacional (decisão 229).
-      cambio: r.moeda
-        ? {
-            moeda: r.moeda,
-            valorMoeda: Number(r.valor_moeda ?? 0),
-            cotacao: Number(r.cotacao ?? 0),
-            iof: Number(r.iof ?? 0),
-            tarifa: Number(r.tarifa ?? 0),
-            variacao: Number(r.variacao_cambial ?? 0),
-          }
-        : null,
-    });
-  }
+  // O recebido antes da NF, pela chave da linha da fila (nota, BV ou, desde
+  // a decisão 256, o job sem envio).
+  const recebidosAntes: Record<string, RecebidoAntesDaNf[]> = recebidosAntesPorChave(recebidosAntesRes.data);
 
   // --- Aba Faturamento: notas já emitidas ---------------------------------
 
@@ -563,6 +527,8 @@ export default async function ContasReceberPage({
     fornecedor_id: string | null;
     plano_conta_tipo_id: string | null;
     plano_conta_subtipo_id: string | null;
+    faturado_pelo_financeiro: boolean | null;
+    mes_novo_faturamento: string | null;
     rateio: Array<{ percentual: string | number; regional: { nome: string } | null }>;
     itens: Array<{
       id: string;
@@ -620,6 +586,39 @@ export default async function ContasReceberPage({
     ((nomesAutoresRes.data ?? []) as Array<{ id: string; nome: string | null }>).map((p) => [p.id, p.nome ?? "—"]),
   );
 
+  // --- Títulos -------------------------------------------------------------
+  // Nota, recebimento avulso, rendimento e transferência, por vencimento.
+  // A montagem mora em `dados-dos-titulos.ts` desde 02/10/2026: a aba
+  // Títulos da conciliação monta os mesmos títulos com ela. Vem antes das
+  // notas emitidas: a situação de recebimento de cada nota sai dos títulos
+  // dela, todos (decisão 260); o atalho "vencidas" da Home corta só a aba
+  // Títulos a Receber.
+  const entradaDosTitulos = {
+    titulos: titulosRes.data,
+    parcelasPorNota,
+    baixas: baixasRes.data,
+    estornos: estornosRes.data,
+    avulsas: avulsasReceberRes.data,
+    baixasAvulsas: baixasAvulsasRes.data,
+    transferencias: transferenciasRes.data,
+    contas: contasRes.data ?? [],
+    clientes: clientesList,
+    fornecedores: fornecedoresList,
+    jobs: jobsList,
+    apenasVencidas: false,
+    hoje,
+  };
+  const todosOsTitulos = montarTitulosAReceber(entradaDosTitulos);
+  const linhasTitulos =
+    searchParams?.filtro === "vencidas"
+      ? montarTitulosAReceber({ ...entradaDosTitulos, apenasVencidas: true })
+      : todosOsTitulos;
+  const titulosPorNota = new Map<string, TituloRow[]>();
+  for (const t of todosOsTitulos) {
+    if (t.origem !== "nf") continue;
+    titulosPorNota.set(t.faturamento_id, [...(titulosPorNota.get(t.faturamento_id) ?? []), t]);
+  }
+
   const faturados: FaturadoRow[] = faturadosBrutos.map((f) => {
     const parc = parcelasPorNota.get(f.id);
     return {
@@ -646,6 +645,9 @@ export default async function ContasReceberPage({
         }))
         .sort((a, b) => b.percentual - a.percentual),
       cnae: f.cnae,
+      pelo_financeiro: f.faturado_pelo_financeiro === true,
+      // Decisão 260: a situação de recebimento e os pedaços da nota.
+      recebimento: recebimentoDaNota(titulosPorNota.get(f.id) ?? [], hoje, Number(f.valor_total)),
       cnpj_tomador: f.cnpj_tomador,
       estabelecimento_id: f.estabelecimento_id ?? null,
       fiscal_cnae_id: f.fiscal_cnae_id ?? null,
@@ -695,7 +697,9 @@ export default async function ContasReceberPage({
           descricao:
             i.origem_tipo === "save"
               ? "Saldo em save — crédito do cliente"
-              : (job?.nome ?? f.descricao),
+              : i.origem_id && nomeDoJob.has(i.origem_id)
+                ? (nomeDoJob.get(i.origem_id) as string)
+                : f.descricao,
           valor: Number(i.valor),
         };
       }),
@@ -705,25 +709,6 @@ export default async function ContasReceberPage({
   // --- Aba Títulos a Receber ----------------------------------------------
 
   const ultimasRetencoes = mapearUltimasRetencoes(ultimasRetencoesRes.data);
-
-  // Nota, recebimento avulso, rendimento e transferência, por vencimento.
-  // A montagem mora em `dados-dos-titulos.ts` desde 02/10/2026: a aba
-  // Títulos da conciliação monta os mesmos títulos com ela.
-  const linhasTitulos = montarTitulosAReceber({
-    titulos: titulosRes.data,
-    parcelasPorNota,
-    baixas: baixasRes.data,
-    estornos: estornosRes.data,
-    avulsas: avulsasReceberRes.data,
-    baixasAvulsas: baixasAvulsasRes.data,
-    transferencias: transferenciasRes.data,
-    contas: contasRes.data ?? [],
-    clientes: clientesList,
-    fornecedores: fornecedoresList,
-    jobs: jobsList,
-    apenasVencidas: searchParams?.filtro === "vencidas",
-    hoje,
-  });
   // A planilha de títulos (decisão 195): regional e centro da nota, lidos
   // à parte, só dos títulos que a lista tem.
   const extrasDaPlanilha = await carregarExtrasDaPlanilha(
@@ -778,26 +763,154 @@ export default async function ContasReceberPage({
 
   // Decisão 184: empresa (gerencial), regional e cliente de cada job — a
   // nota de job sai neles, e a avulsa referente a um job também.
-  const jobsDoFaturar: JobDoFaturar[] = (
-    (jobsDoFaturarRes.data ?? []) as unknown as Array<{
-      id: string;
-      codigo: string | null;
-      nome: string;
-      status: string;
-      empresa_id: string | null;
-      regional_id: string | null;
-      cliente_id: string | null;
-      orcamento: { categoria: { modelo_planilha: string } | null } | null;
-      versao: { moeda_estrangeira: string | null; cambio_compra: string | number | null } | null;
-    }>
-  ).map((j) => ({
+  // Decisão 256 (Novo faturamento): o que o envio do GP ainda espera de
+  // nota, por job, e o que as notas de job emitidas já faturaram dele (pelo
+  // envio ou pelo financeiro) — o resumo da linha do job no Faturar.
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  type JobDaLista = {
+    id: string;
+    codigo: string | null;
+    nome: string;
+    nome_financeiro: string | null;
+    status: string;
+    empresa_id: string | null;
+    regional_id: string | null;
+    cliente_id: string | null;
+    faturamento_previsto: string | number | null;
+    faturamento_save_previsto: string | number | null;
+    orcamento: { categoria: { modelo_planilha: string } | null } | null;
+    versao: { moeda_estrangeira: string | null; cambio_compra: string | number | null } | null;
+  };
+  const jobsDaLista = (jobsDoFaturarRes.data ?? []) as unknown as JobDaLista[];
+  const ehMensal = (j: JobDaLista) =>
+    j.orcamento?.categoria?.modelo_planilha === "mensal" || j.orcamento?.categoria?.modelo_planilha === "midia_off";
+
+  const aFaturarNoEnvio = new Map<string, number>();
+  for (const r of pendentes) {
+    if (r.origem_tipo !== "job") continue;
+    const jobId = r.job_id ?? r.origem_id;
+    aFaturarNoEnvio.set(jobId, (aFaturarNoEnvio.get(jobId) ?? 0) + r.saldo);
+  }
+  const jaFaturadoDoJob = new Map<string, number>();
+  const jaFaturadoSave = new Map<string, number>();
+  for (const f of faturadosBrutos)
+    for (const i of f.itens) {
+      if ((i.origem_tipo !== "job" && i.origem_tipo !== "save") || !i.origem_id) continue;
+      jaFaturadoDoJob.set(i.origem_id, (jaFaturadoDoJob.get(i.origem_id) ?? 0) + Number(i.valor));
+      if (i.origem_tipo === "save") jaFaturadoSave.set(i.origem_id, (jaFaturadoSave.get(i.origem_id) ?? 0) + Number(i.valor));
+    }
+
+  // Os jobs com Novo faturamento: o job inteiro (envio fechado) ou os meses.
+  const jobDaNota = (f: FaturamentoBruto) =>
+    f.itens.find((i) => (i.origem_tipo === "job" || i.origem_tipo === "save") && i.origem_id)?.origem_id ?? null;
+  const novoNoJob = new Set<string>();
+  const novoPorMes = new Set<string>();
+  for (const f of faturadosBrutos) {
+    if (f.faturado_pelo_financeiro !== true) continue;
+    const jobId = jobDaNota(f);
+    if (!jobId) continue;
+    if (f.mes_novo_faturamento) novoPorMes.add(jobId);
+    else novoNoJob.add(jobId);
+  }
+
+  // O custo AR (repasse) de cada job — a sugestão das deduções no Faturar —
+  // e os meses dos jobs mensais que já têm Novo faturamento por mês (a linha
+  // do saldo do mês). Os meses dos outros jobs mensais o Faturar lê quando
+  // o job é escolhido (`carregarMesesDoNovoFaturamento`).
+  const idsDosJobs = jobsDaLista.map((j) => j.id);
+  const [arRes, mesesDosJobs] = await Promise.all([
+    idsDosJobs.length
+      ? supabase
+          .from("jobs_itens_orcado")
+          .select("job_id, total_orcado")
+          .eq("tenant_id", tenantId)
+          .eq("tipo_custo", "AR")
+          .in("job_id", idsDosJobs)
+      : Promise.resolve({ data: [] as Array<{ job_id: string; total_orcado: number | string | null }>, error: null }),
+    Promise.all(
+      [...novoPorMes].map(async (id) => [id, await lerMesesDoNovoFaturamento(supabase, tenantId, id)] as const),
+    ),
+  ]);
+  if (arRes.error) console.error("[contas-a-receber.repasse_ar]", arRes.error.message);
+  const repasseDoJob = new Map<string, number>();
+  for (const l of (arRes.data ?? []) as Array<{ job_id: string; total_orcado: number | string | null }>)
+    repasseDoJob.set(l.job_id, (repasseDoJob.get(l.job_id) ?? 0) + Number(l.total_orcado ?? 0));
+
+  // A linha do saldo do Novo faturamento: o job faturado pelo financeiro
+  // abaixo do previsto fica com o resto na fila. O envio da produção está
+  // fechado; o Faturar desta linha abre o Novo faturamento com o saldo.
+  const cnpjDoCliente = new Map(
+    ((clientesRes.data ?? []) as Array<{ id: string; cnpj: string | null }>).map((c) => [
+      c.id,
+      (c.cnpj ?? "").replace(/\D/g, "") || null,
+    ]),
+  );
+  const linhaDoSaldo = (j: JobDaLista, mes: string | null, previsto: number, faturado: number): FaturamentoPendenteRow => {
+    const saldo = r2(previsto - faturado);
+    return {
+      origem_tipo: "job",
+      origem_id: j.id,
+      job_id: j.id,
+      envio_parcela_id: null,
+      mes_referencia: mes,
+      empresa_id: j.empresa_id ?? "",
+      codigo: j.codigo,
+      descricao: nomeDoJobNoFinanceiro(j),
+      cliente_id: j.cliente_id,
+      fornecedor_id: null,
+      contraparte_nome: nomeCliente.get(j.cliente_id ?? "") ?? "—",
+      valor_previsto: previsto,
+      valor_ja_faturado: faturado,
+      saldo,
+      saldo_job: saldo,
+      saldo_proprio: saldo,
+      saldo_save: 0,
+      parcela_numero: 1,
+      parcela_total: 1,
+      data_prevista: null,
+      envio_nota_id: null,
+      nota_ordem: null,
+      nota_total: null,
+      cnpj_tomador: cnpjDoCliente.get(j.cliente_id ?? "") ?? null,
+      tomador_exterior: false,
+      cnae_sugerido: null,
+      descritivo_nota: null,
+      autor_nome: null,
+      autor_em: null,
+      lote: null,
+      variacao_cambial: 0,
+      saldo_do_novo_faturamento: true,
+    };
+  };
+  const mesesPorJob = new Map(mesesDosJobs.map(([id, meses]) => [id, meses ?? []]));
+  for (const j of jobsDaLista) {
+    if (novoNoJob.has(j.id) && !aFaturarNoEnvio.has(j.id) && !ehMensal(j)) {
+      const previsto = r2(Number(j.faturamento_previsto ?? 0));
+      const faturado = r2(jaFaturadoDoJob.get(j.id) ?? 0);
+      if (previsto - faturado > 0.05) pendentes.push(linhaDoSaldo(j, null, previsto, faturado));
+    }
+    // No mensal, o saldo é do mês faturado pelo financeiro abaixo do previsto dele.
+    for (const m of mesesPorJob.get(j.id) ?? []) {
+      if (m.pelo_financeiro <= 0.004 || m.tem_envio || m.faturamento - m.ja_faturado <= 0.05) continue;
+      pendentes.push(linhaDoSaldo(j, m.mes, m.faturamento, m.ja_faturado));
+    }
+  }
+
+  const jobsDoFaturar: JobDoFaturar[] = jobsDaLista.map((j) => ({
     id: j.id,
     codigo: j.codigo ?? "",
-    nome: j.nome,
+    nome: nomeDoJobNoFinanceiro(j),
     encerrado: j.status === "encerrado" || j.status === "finalizado",
     empresa_id: j.empresa_id,
     regional_id: j.regional_id,
     cliente_id: j.cliente_id ?? null,
+    a_faturar_no_envio: r2(aFaturarNoEnvio.get(j.id) ?? 0),
+    faturamento_previsto: r2(Number(j.faturamento_previsto ?? 0)),
+    ja_faturado: r2(jaFaturadoDoJob.get(j.id) ?? 0),
+    save_previsto: r2(Number(j.faturamento_save_previsto ?? 0)),
+    ja_faturado_save: r2(jaFaturadoSave.get(j.id) ?? 0),
+    repasse_ar: r2(repasseDoJob.get(j.id) ?? 0),
+    mensal: ehMensal(j),
   }));
 
   // Decisão 229: o job internacional recebe pelo câmbio fechado, com a
@@ -880,6 +993,7 @@ export default async function ContasReceberPage({
             jobs={jobsDoFaturar}
             cnpjsPorCliente={cnpjsPorCliente}
             honorariosPorCliente={honorariosPorCliente}
+            ultimasRetencoes={mapearUltimasRetencoes(ultimasRetencoesRes.data)}
           />
         }
         // As linhas da fila, não as parcelas: a nota do lote é uma linha só.

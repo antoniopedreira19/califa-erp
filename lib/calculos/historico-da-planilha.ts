@@ -250,6 +250,8 @@ function paraLinha(o: {
     orcado_id: o.id,
     item_versao_id: o.item_versao_id,
     linha_vermelha: o.linha_vermelha === true,
+    // O histórico não mostra a marca do pagamento atrasado.
+    pagamento_atrasado_id: null,
     grupo_id: o.grupo_id,
     ordem: num(o.ordem),
     item: o.item,

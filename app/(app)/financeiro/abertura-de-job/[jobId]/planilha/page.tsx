@@ -196,6 +196,8 @@ export default async function PlanilhaDaAberturaPage({
     orcado_id: it.id,
     item_versao_id: it.item_versao_id ?? null,
     linha_vermelha: it.linha_vermelha === true,
+    // A abertura vem antes do encerramento: não há pagamento atrasado.
+    pagamento_atrasado_id: null,
     // O agrupamento do job (decisão 162), o mesmo da aba do job.
     grupo_id: it.job_grupo_id ?? it.grupo_id,
     ordem: Number(it.ordem ?? 0),

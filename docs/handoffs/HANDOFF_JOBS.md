@@ -6721,7 +6721,7 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
   acompanha os filtros.
 - Filtros num controle só, na ordem do caminho da PP (Todas │ Comitê ›
   Gerada › Em avaliação › Pago │ Prestar contas · Rejeitado · Cancelada),
-  todos com o número; ← → trocam. "Pronta para envio" deixou de ser filtro
+  todos com o número; ← → trocam. "Pronta para envio" deixou de ser filtro (voltou em 15/11, nota abaixo)
   (a marca na linha ficou vermelha); "Aguardando prestação" virou "Prestar
   contas".
 - O cartão do painel do item diz "Em avaliação no Comitê" no lugar de
@@ -6781,3 +6781,35 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - A trava da PP ficou maior: e-mail e telefone sempre (PF e PJ), conta ou PIX quando o pagamento é "Cadastro do fornecedor", e regime e CNAE na PJ. Mesma mensagem e mesmo lápis da 166; a lista troca ao trocar o pagamento. Conferida em `gerarPPDaPPAEmitir` e em `editarPPGerada`.
 - A leitura da NF pela IA procura o CNPJ do emissor no cadastro quando ele não está entre os fornecedores da tela.
 - Testada no Sandbox (TES-1038/26, como GP): busca por nome e por CNPJ com pontuação, a mensagem da PF e da PJ, a conta saindo da lista com boleto, e o lápis completando o cadastro e liberando o "Gerar PP". Os dois fornecedores de teste ("FORNECEDOR 901/902 EXEMPLO") foram gravados no Sandbox como a carga grava (só nome e documento).
+
+## ⚠️ Nota de 2026-11-15 — "Pronta para envio" volta como filtro (revisão da decisão 242)
+
+- A aba PPs ganha de volta o filtro "Pronta para envio", logo depois da
+  Gerada: Comitê › Gerada › Pronta para envio › Em avaliação › Pago. Vale a
+  marca do produtor (`pronta_para_envio_em`, decisão 160). A Gerada segue
+  contando as prontas.
+
+
+## ⚠️ Nota de 2026-11-15 — "Pago <data>" e o selo curto da verba na aba PPs e no painel do item (decisão 257)
+
+- **Aba PPs do job:** a PP paga (e a verba) mostra o dia do pagamento embaixo do selo — o da parcela, na PP parcelada.
+- **Painel do item:** o mesmo no cartão da PP, em "Já no financeiro". O `PPDoItem` ganhou `pagoEm` (obrigatório; a PP a emitir manda `null`).
+- **Selo da verba:** A prestar · Prestação · Reprovada · A devolver · Concluída, com o nome inteiro na dica. O selo em duas linhas da coluna estreita deixou de ser preciso (a prop `duasLinhas` saiu).
+
+## ⚠️ Nota de 2026-11-15 — o job faturado pelo financeiro (decisão 256)
+
+- O financeiro pode faturar o job pelo **Novo faturamento**, sem o envio da produção. A trilha Faturamento da página do job mostra "Faturado pelo financeiro, sem envio da produção" (ou "Faturado parcial … o saldo fica com o financeiro") no lugar de "Enviar para faturamento", e o envio fica fechado (a trava do banco recusa).
+- No mensal e na Mídia Off, vale por mês: o mês faturado pelo financeiro sai do "A enviar"; os outros seguem pelo GP.
+- `lib/calculos/faturamento-por-mes.ts` ganhou `NotaDoFinanceiro` e `peloFinanceiro` (no envio único e no mês); `carregar-detalhe.ts` lê as notas do Novo faturamento junto com as notas das parcelas.
+
+## ⚠️ Nota de 2026-11-16 — pagamentos atrasados em job encerrado ou finalizado (decisão 259)
+
+- **Liberação pelo financeiro:** com ela aberta, o job fechado volta a aceitar PP em qualquer linha (calha e "Destrinchar realizado") e linha vermelha nova pelo "Editar planilha" (barra "Planilha em edição"; as linhas que já existem não mudam). A produção vê só o selo "Pagamentos atrasados liberados · 4T/26"; o rodapé do encerramento diz o que está liberado.
+- **Marca vermelha:** relógio no nome da linha vermelha criada na liberação, "Atrasado · 4T/26" no cartão da PP do painel do item, relógio depois do código na aba PPs.
+- **Painel do item:** "Nova PP de pagamento atrasado", sem "Marcar" e sem a confirmação de reabrir; rodapé "Job encerrado: a PP sai como pagamento atrasado…".
+- **Formulário da PP:** faixa vermelha (competência e motivo), sem a opção Verba, sem "Esta é a última PP deste item?" (vale "sim") e com a pergunta obrigatória "Esta é a última PP atrasada deste job?". O "Sim" leva a conclusão ao financeiro no envio da PP.
+- **Concluir:** "Concluir pagamentos atrasados" à direita de "Editar planilha" → "Conclusão enviada ao financeiro" e "Cancelar conclusão"; a planilha trava para a produção. Pendências que impedem: PP gerada sem envio, PP a emitir, linha vermelha da liberação sem PP.
+- **AR:** só no job ainda não faturado. No faturado, o "Gerar PP" da linha AR trava e a linha vermelha nova não oferece AR.
+- **"Só realizado":** o selo da linha vermelha aparece só na edição, em toda Planilha Interna.
+- **Tipos:** `ItemPlanilhaJob.pagamento_atrasado_id`, `PedidoCompra.pagamento_atrasado_id`/`conclui_pagamentos_atrasados`, `PedidoCompraNaLista.pagamento_atrasado`, `PPDoItem.pagamentoAtrasado` e `DadosPpLinha.travadaPor` — todos obrigatórios; quem não tem o dado manda `null`.
+- **Migration** `20261116600001_pagamentos_atrasados.sql`.

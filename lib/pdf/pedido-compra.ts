@@ -268,6 +268,9 @@ interface Dados {
     data_vencimento: string;
     valor: number;
   }>;
+  /** Decisão 259: a PP de pagamento atrasado (job fechado, liberação do
+   *  financeiro) e a competência dela. Nulo na PP de sempre. */
+  pagamentoAtrasado?: { trimestre: number; ano: number } | null;
 }
 
 /** Decisão 190: por que a PP não vale para pagamento. `em` é o instante do
@@ -496,6 +499,22 @@ export async function renderPedidoCompraPDF(dados: Dados): Promise<Buffer> {
               // paga (a empresa emissora, a do documento).
               ...(dados.empresaGerencial ? [lv("Empresa gerencial", dados.empresaGerencial)] : []),
               ...(dados.regional ? [lv("Regional", dados.regional)] : []),
+              // Decisão 259: a PP de pagamento atrasado diz a competência.
+              ...(dados.pagamentoAtrasado
+                ? [
+                    {
+                      text: [
+                        { text: "Pagamento atrasado: ", bold: true },
+                        {
+                          text: `competência ${dados.pagamentoAtrasado.trimestre}T/${dados.pagamentoAtrasado.ano}`,
+                          bold: false,
+                        },
+                      ],
+                      fontSize: 8,
+                      color: "#b91c1c",
+                    } as Content,
+                  ]
+                : []),
             ],
           },
         ],

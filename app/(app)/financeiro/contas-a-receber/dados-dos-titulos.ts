@@ -19,7 +19,12 @@ import {
   totalBaixado,
 } from "@/lib/data/baixas-do-documento";
 import type { createClient } from "@/lib/supabase/server";
-import { nomeDoJobNoFinanceiro, type ContaBancaria, type TituloReceberStatus } from "@/lib/types";
+import {
+  nomeDoJobNoFinanceiro,
+  type ContaBancaria,
+  type RetencaoPrevista,
+  type TituloReceberStatus,
+} from "@/lib/types";
 import type { TituloRow } from "./titulos-list";
 import { formatarCnpj } from "@/lib/fiscal/cadastro";
 
@@ -35,7 +40,7 @@ export const SELECT_TITULO_A_RECEBER = `
           inadimplente_desde, pago_em, empresa_id, faturamento_id,
           faturamento:faturamentos!inner(
             id, numero_nf, data_emissao, descricao, status, origem_tipo,
-            cliente_id, fornecedor_id,
+            cliente_id, fornecedor_id, retencoes_previstas,
             cliente:clientes(id, nome_fantasia, razao_social),
             fornecedor:fornecedores(id, nome, razao_social),
             itens:faturamento_itens(origem_tipo, origem_id, envio_parcela_id, valor),
@@ -235,6 +240,7 @@ export function montarTitulosAReceber(e: {
       descricao: string;
       status: "emitido" | "cancelado";
       origem_tipo: "job" | "bv" | "avulso";
+      retencoes_previstas: RetencaoPrevista[] | null;
       cliente_id: string | null;
       fornecedor_id: string | null;
       cliente: { nome_fantasia: string | null; razao_social: string | null } | null;
@@ -248,7 +254,15 @@ export function montarTitulosAReceber(e: {
         valor: string | number;
       }>;
     };
-  }>).map((r) => {
+  }>)
+    // O atalho "vencidas" da Home (antes na consulta, decisão 260): a nota
+    // que passou da previsão sem ser recebida.
+    .filter(
+      (r) =>
+        !e.apenasVencidas ||
+        (r.data_previsao_recebimento !== null && r.data_previsao_recebimento < e.hoje && r.pago_em === null),
+    )
+    .map((r) => {
     const baixas = baixasPorTitulo.get(r.id) ?? [];
     const itens = r.faturamento.itens ?? [];
     // Um job por vez, na ordem em que aparece nos itens. O Set é o que
@@ -302,6 +316,11 @@ export function montarTitulosAReceber(e: {
           ],
       jobs: jobsDaNota.map((j) => ({ job_id: j.id, codigo: j.codigo })),
       inadimplente_desde: r.inadimplente_desde ?? null,
+      // Decisão 256: as alíquotas que o Faturar já informou (a baixa abre com elas).
+      retencao_da_nota:
+        (r.faturamento.retencoes_previstas ?? []).length > 0
+          ? Object.fromEntries((r.faturamento.retencoes_previstas ?? []).map((x) => [x.imposto, Number(x.aliquota)]))
+          : null,
       baixas,
       baixado: totalBaixado(baixas),
       // Quem paga a nota: o cliente, ou o fornecedor na nota de BV.
@@ -377,6 +396,7 @@ export function montarTitulosAReceber(e: {
       jobs_cobertos: [a.descricao],
       jobs: [],
       inadimplente_desde: null,
+      retencao_da_nota: null,
       baixas,
       baixado: totalBaixado(baixas),
       parte_id: a.cliente_id ?? a.fornecedor_id ?? null,
@@ -436,6 +456,7 @@ export function montarTitulosAReceber(e: {
         jobs_cobertos: [descricao],
         jobs: [],
         inadimplente_desde: null,
+        retencao_da_nota: null,
         // Uma baixa só, sem lançamento único (duas pernas): o popup cancela
         // pela transferência.
         baixas:

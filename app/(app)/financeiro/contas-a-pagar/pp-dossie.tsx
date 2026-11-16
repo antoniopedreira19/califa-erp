@@ -93,6 +93,8 @@ import {
   rotuloDoEventoPP,
 } from "@/lib/data/eventos-da-pp";
 import { formatDiaHoraCurtoBr } from "@/lib/formatar-data-hora";
+import { rotuloDoTipoDaPP } from "@/lib/pagamentos-atrasados";
+import { SeloDoTipoDaPP } from "@/app/(app)/_pagamentos-atrasados/componentes";
 import { formatDataEHoraBr } from "@/lib/formatar-data-hora";
 
 function formatDate(iso: string | null): string {
@@ -239,6 +241,14 @@ export function PPDossie({
           )}
 
           <Estados pp={pp} somenteLeitura={somenteLeitura} />
+
+          {/* Decisão 259: o tipo da PP, como o primeiro campo — explica o
+              campo de baixo (quem recebe). A PP normal não leva o campo. */}
+          {rotuloDoTipoDaPP(pp) && (
+            <Grupo rotulo="Tipo da PP">
+              <SeloDoTipoDaPP rotulo={rotuloDoTipoDaPP(pp)!} />
+            </Grupo>
+          )}
 
           {/* Decisão 209: o cartão corporativo não tem fornecedor — a
               plataforma e o link de onde o financeiro faz a compra. */}

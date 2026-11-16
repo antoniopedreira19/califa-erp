@@ -36,13 +36,26 @@ function PlanilhaCarregada({
   codigo,
   destacarItens,
   linhasDaRevisao,
+  rolarAte,
 }: {
   jobId: string;
   codigo: string;
   destacarItens: string[];
   linhasDaRevisao: string[];
+  rolarAte: string | null;
 }) {
   const [estado, setEstado] = React.useState<Estado>({ tipo: "carregando" });
+  const caixa = React.useRef<HTMLDivElement>(null);
+
+  // Decisão 257: a linha pedida fica à vista quando a planilha abre — como a
+  // da PP em decisão no Comitê (decisão 223), pelo `data-calha` da linha.
+  React.useEffect(() => {
+    if (estado.tipo !== "pronta" || !rolarAte) return;
+    const t = setTimeout(() => {
+      caixa.current?.querySelector(`tr[data-calha="i:${rolarAte}"]`)?.scrollIntoView({ block: "center" });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [estado.tipo, rolarAte]);
 
   React.useEffect(() => {
     let vivo = true;
@@ -71,12 +84,14 @@ function PlanilhaCarregada({
     return <p className="px-1 py-10 text-sm text-muted-foreground">{estado.message}</p>;
   }
   return (
-    <JobRealizadoSection
-      {...estado.props}
-      destacarItens={destacarItens}
-      linhasDaRevisao={linhasDaRevisao}
-      resultadoInicial="planejada"
-    />
+    <div ref={caixa}>
+      <JobRealizadoSection
+        {...estado.props}
+        destacarItens={destacarItens}
+        linhasDaRevisao={linhasDaRevisao}
+        resultadoInicial="planejada"
+      />
+    </div>
   );
 }
 
@@ -90,6 +105,7 @@ export function PopUpDaPlanilha({
   descricao,
   destacarItens = SEM_DESTAQUE,
   linhasDaRevisao = SEM_DESTAQUE,
+  rolarAte = null,
 }: {
   aberto: boolean;
   onOpenChange: (aberto: boolean) => void;
@@ -102,8 +118,12 @@ export function PopUpDaPlanilha({
   destacarItens?: string[];
   /** As linhas que uma errata ainda não revisada mudou, com a borda
    *  vermelha (revisão da decisão 185, 19/10/2026) — na planilha do
-   *  próprio job, quando a abertura está em revisão. */
+   *  próprio job, quando a abertura está em revisão. Decisão 257: também a
+   *  linha de onde veio a PP, aberta pela lista de PPs do Contas a Pagar. */
   linhasDaRevisao?: string[];
+  /** Decisão 257: a linha (`jobs_itens_orcado.id`) que fica à vista quando
+   *  a planilha abre. Sem ela, a planilha abre no topo, como sempre. */
+  rolarAte?: string | null;
 }) {
   return (
     <Dialog open={aberto} onOpenChange={onOpenChange}>
@@ -118,6 +138,7 @@ export function PopUpDaPlanilha({
             codigo={codigo}
             destacarItens={destacarItens}
             linhasDaRevisao={linhasDaRevisao}
+            rolarAte={rolarAte}
           />
         )}
       </DialogContent>

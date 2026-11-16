@@ -10,8 +10,22 @@
  * de saldo); a tela junta as parcelas de uma nota numa linha só, e o
  * Faturar emite a nota inteira, total ou parcialmente.
  *
- * As notas já emitidas continuam aqui, em verde — clicar em `NF <número>`
- * reabre o mesmo formulário em modo somente leitura.
+ * As notas já emitidas continuam aqui, em verde — clicar na linha reabre o
+ * mesmo formulário em modo somente leitura.
+ *
+ * Decisão 260 (16/11/2026, protótipo "Faturar em pé" aprovado pelo Tiago):
+ * - a lista em grade fixa, como a de PPs: cada linha tem no máximo duas
+ *   alturas, e o texto que não cabe abre inteiro ao passar o mouse;
+ * - Job (código, origem, mês e, embaixo, o nome do job dado pelo
+ *   financeiro), Cliente, Empresa, Valor, Já faturado, A faturar, Parcela,
+ *   Vencimento, Enviado por, Situação e o ícone da Planilha Interna; sem as
+ *   colunas Descrição e Ação (o clique na linha faz o que o botão fazia, e o
+ *   número da NF foi para o selo da coluna Job);
+ * - os chips A faturar · Faturados · A receber · Recebidos · Inadimplentes ·
+ *   Todos, com a contagem. O que foi recebido em parte vira mais de uma
+ *   linha (`situacao-da-nota.ts`); em Todos, as linhas da mesma nota vêm
+ *   juntas, ligadas por um tracejado;
+ * - o filtro pelo CNPJ emissor no lugar do filtro de Cliente.
  *
  * Duas regras do protótipo moram nesta tela:
  *
@@ -23,14 +37,19 @@
  * 2. **BV nunca entra em NF agrupada**, porque a contraparte dele é o
  *    fornecedor. O checkbox da linha fica desabilitado.
  *
- * Recebimento antes da NF (decisão 130): a linha da nota do envio e a do
- * BV ganham o botão de registrar o que o cliente já pagou, e o selo com o
- * que foi recebido. Na emissão, o recebido vira a parcela 1 da nota.
+ * Recebimento antes da NF (decisão 130): registrado no Recebimento avulso
+ * (decisão 260; antes, na conciliação, decisão 256), aparece aqui como uma
+ * linha em Recebidos, logo abaixo da linha a faturar. Na emissão, o recebido
+ * vira a parcela 1 da nota.
  */
 
 import * as React from "react";
+import { createPortal } from "react-dom";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   AlertCircle,
+  Briefcase,
+  ReceiptText,
   Building2,
   Check,
   ChevronDown,
@@ -42,12 +61,20 @@ import {
   Layers,
   Plus,
   Search,
+  Sheet,
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { PopUpDaPlanilha } from "@/app/(app)/financeiro/abertura-de-job/[jobId]/planilha-em-leitura";
+import type { ParteDaNota, RecebimentoDaNota, SituacaoDaNota } from "./situacao-da-nota";
 import { cn, formatCnpj } from "@/lib/utils";
 import type { ContaBancaria, PlanoContaTipo, PlanoContaSubtipo } from "@/lib/types";
 import type { FiscalDoFaturar } from "@/lib/fiscal/faturar";
+import { sugestaoDoCnpj } from "@/lib/fiscal/faturar";
+import { formatarCnpj } from "@/lib/fiscal/cadastro";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   FaturarDrawer,
   type CnpjsDoCliente,
@@ -62,20 +89,15 @@ import {
   type InfoFaturamento,
 } from "@/components/financeiro/info-faturamento-modal";
 import { rotuloMes } from "@/lib/calculos/meses-trimestre";
-import { chaveDaLinhaDaFila, chaveDoRecebidoAntes, chaveInfoDoEnvio } from "./chave-info";
+import { chaveDaLinhaDaFila, chaveDoRecebidoAntes, chaveDoRecebidoDoJob, chaveInfoDoEnvio } from "./chave-info";
 import {
   RecebidosAntesNfDialog,
-  RecebimentoAntesNfDialog,
   somaDosRecebidos,
   type AlvoDoRecebidoAntes,
   type CambioDoJob,
   type RecebidoAntesDaNf,
 } from "./recebimento-antes-nf-dialog";
-import {
-  cancelarRecebimentoAntesNf,
-  registrarRecebimentoAntesNf,
-  registrarRecebimentoCambio,
-} from "./actions-recebimento-antes-nf";
+import { cancelarRecebimentoAntesNf } from "./actions-recebimento-antes-nf";
 import {
   BarraDosFiltrosDeColuna,
   celulaData,
@@ -148,6 +170,10 @@ export interface FaturamentoPendenteRow {
   /** Decisão 229: a variação cambial do câmbio fechado da nota (+ ganho,
    *  − perda), já somada a `saldo`. Zero fora do internacional. */
   variacao_cambial: number;
+  /** Decisão 256: a linha do saldo do Novo faturamento — o job faturado pelo
+   *  financeiro abaixo do previsto (no mensal, o mês). Sem envio: o Faturar
+   *  dela abre o Novo faturamento com o saldo. */
+  saldo_do_novo_faturamento: boolean;
 }
 
 /**
@@ -226,6 +252,11 @@ export interface FaturadoRow {
   /** Quem mandou o que a nota cobre (decisão 136): quem enviou cada job
    *  para faturamento, ou confirmou cada BV. Vazio no avulso. */
   autores: Array<{ codigo: string; nome: string; em: string | null; bv: boolean }>;
+  /** Decisão 256: nota de job que o financeiro faturou sem o envio da produção. */
+  pelo_financeiro: boolean;
+  /** Decisão 260: a situação de recebimento e os pedaços da nota, pelos
+   *  títulos dela (`situacao-da-nota.ts`). Obrigatório: a página calcula. */
+  recebimento: RecebimentoDaNota;
   itens: Array<{
     // `save` só aparece no ITEM: é a fatia da nota que virou crédito do
     // cliente em vez de faturamento deste job.
@@ -349,7 +380,9 @@ function agruparPorNota(rows: FaturamentoPendenteRow[]): LinhaDaFila[] {
  * ou um BV) ou uma nota já emitida, em verde. As duas populações usam as
  * MESMAS colunas: o filtro de um título vale para as duas de uma vez.
  */
-type LinhaDaTabela = { tipo: "pendente"; l: LinhaDaFila } | { tipo: "faturado"; f: FaturadoRow };
+type LinhaDaTabela =
+  | { tipo: "pendente"; l: LinhaDaFila; parte?: "recebido" }
+  | { tipo: "faturado"; f: FaturadoRow; parte?: ParteDaNota };
 
 /** O selo da coluna Origem. */
 function origemDaLinha(x: LinhaDaTabela): string {
@@ -378,29 +411,30 @@ function descricaoDaLinha(x: LinhaDaTabela): string {
 
 const COLUNAS: ColunaFiltravel<LinhaDaTabela>[] = [
   {
+    // Decisão 260: Job e Descrição numa coluna só. O filtro é pelo
+    // código e pelo nome do job (o do financeiro, decisão 243); a busca da
+    // coluna acha também pela origem, pelo mês do mensal e por quem mandou.
     chave: "origem",
-    rotulo: "Origem",
-    tipo: "texto",
-    // Job, BV e Faturado: a lista na ordem da tela (pendentes antes).
-    celula: (x) => ({ ...celulaTexto(origemDaLinha(x)), ordemNaLista: ORDEM_DA_ORIGEM.indexOf(origemDaLinha(x)) }),
-  },
-  {
-    // Filtra pela descrição; a busca da coluna acha também pelo código do
-    // job, pelo mês do job mensal e por quem mandou.
-    chave: "descricao",
-    rotulo: "Job / descrição",
+    rotulo: "Job",
     tipo: "texto",
     celula: (x) => {
-      const texto = descricaoDaLinha(x);
+      const nome = descricaoDaLinha(x);
+      const codigo =
+        x.tipo === "pendente"
+          ? x.l.p.lote
+            ? jobsDaLinha(x.l).map((j) => j.codigo ?? "").join(", ")
+            : (x.l.p.codigo ?? "")
+          : [...new Set(x.f.itens.map((i) => i.codigo))].join(", ");
       const extra =
         x.tipo === "pendente"
           ? [
-              ...jobsDaLinha(x.l).map((j) => j.codigo ?? ""),
+              origemDaLinha(x),
               x.l.p.mes_referencia ? rotuloMes(x.l.p.mes_referencia) : "",
               x.l.p.autor_nome ?? "",
               x.l.p.lote?.tomador_nome ?? "",
             ]
-          : [...x.f.itens.map((i) => i.codigo), ...x.f.autores.map((a) => a.nome)];
+          : [`NF ${x.f.numero_nf}`, ...x.f.autores.map((a) => a.nome)];
+      const texto = [codigo, nome].filter(Boolean).join(" · ");
       return { ...celulaTexto(texto), busca: [texto, ...extra].join(" ") };
     },
   },
@@ -434,27 +468,29 @@ const COLUNAS: ColunaFiltravel<LinhaDaTabela>[] = [
   {
     // A nota emitida não tem saldo (a célula mostra "—"): vale zero.
     chave: "saldo",
-    rotulo: "Saldo a faturar",
+    rotulo: "A faturar",
     tipo: "valor",
     faixa: true,
     alinhar: "right",
     celula: (x) => celulaValor(x.tipo === "pendente" ? x.l.saldo : 0, formatMoney),
   },
   {
-    // "1/2" é a nota 1 de 2 do envio; na nota emitida, "3x" são as parcelas.
+    // Decisão 260: "Parcela" (pedido do Tiago, no singular), com o mesmo sentido nas duas
+    // linhas — quantas parcelas a nota tem. Antes, "Nota" era a posição da
+    // nota no envio (1/2) na linha a faturar e as parcelas (3x, ou 1/1) na
+    // emitida. A posição no envio fica na busca e embaixo, na célula.
     chave: "nota",
-    rotulo: "Nota",
+    rotulo: "Parcela",
     tipo: "texto",
     celula: (x) => {
       if (x.tipo === "faturado") {
-        const t = x.f.qtd_parcelas > 1 ? `${x.f.qtd_parcelas}x` : "1/1";
-        return { ...celulaTexto(t), ordem: 1000 + x.f.qtd_parcelas };
+        return { ...celulaTexto(`${x.f.qtd_parcelas}x`), ordem: x.f.qtd_parcelas * 100 };
       }
       // Na nota do lote, a posição é a da nota no lote (decisão 188).
       const ordem = x.l.p.lote?.ordem ?? x.l.p.nota_ordem ?? 1;
       const total = x.l.p.lote?.total ?? x.l.p.nota_total ?? 1;
-      const venc = x.l.vencimentos > 1 ? ` ${x.l.vencimentos} venc.` : "";
-      return { ...celulaTexto(`${ordem}/${total}`), ordem: total * 10 + ordem, busca: `${ordem}/${total}${venc}` };
+      const n = Math.max(1, x.l.vencimentos);
+      return { ...celulaTexto(`${n}x`), ordem: n * 100 + total * 10 + ordem, busca: `${n}x nota ${ordem}/${total}` };
     },
   },
   {
@@ -465,16 +501,20 @@ const COLUNAS: ColunaFiltravel<LinhaDaTabela>[] = [
     celula: (x) => celulaData(x.tipo === "pendente" ? x.l.primeiroVencimento : x.f.primeiro_vencimento),
   },
   {
-    // O botão da linha: "Faturar" na nota a faturar, "NF <número>" na
-    // emitida — é o único lugar da linha com o número da nota.
-    chave: "acao",
-    rotulo: "Ação",
+    // Decisão 260: quem enviou (ou confirmou o BV); o Novo faturamento é do financeiro.
+    chave: "enviadoPor",
+    rotulo: "Enviado por",
     tipo: "texto",
-    alinhar: "right",
     celula: (x) => {
-      if (x.tipo === "pendente") return { ...celulaTexto("Faturar"), ordem: -1 };
-      const n = Number(x.f.numero_nf.replace(/\D/g, ""));
-      return { ...celulaTexto(`NF ${x.f.numero_nf}`), ordem: Number.isFinite(n) ? n : 0 };
+      const nome =
+        x.tipo === "pendente"
+          ? x.l.p.saldo_do_novo_faturamento
+            ? "Financeiro"
+            : (x.l.p.autor_nome ?? "—")
+          : x.f.pelo_financeiro
+            ? "Financeiro"
+            : (x.f.autores[0]?.nome ?? "—");
+      return celulaTexto(nome);
     },
   },
 ];
@@ -538,7 +578,8 @@ export function FaturamentoList({
   jobs,
   cnpjsPorCliente,
   honorariosPorCliente,
-}: Props) {
+  ultimasRetencoes,
+}: Props & { ultimasRetencoes: Record<string, { referencia: string; data: string; aliquotas: Record<string, number> }> }) {
   const router = useRouter();
   const [drawer, setDrawer] = React.useState<DrawerState | null>(null);
   const [modoSelecao, setModoSelecao] = React.useState(false);
@@ -550,11 +591,9 @@ export function FaturamentoList({
   // seriam dezenas de nomes empilhados antes da busca (Tiago, 31/08/2026).
   const [cliBusca, setCliBusca] = React.useState("");
   const [cliAberto, setCliAberto] = React.useState(false);
-  // Tudo / A faturar / Faturados. As duas listas convivem na mesma tabela
-  // desde sempre; agora dá para ver uma de cada vez.
-  const [filtroFat, setFiltroFat] = React.useState<
-    "todos" | "pendentes" | "faturados"
-  >("todos");
+  // Decisão 260: a situação, em chips com a contagem, como a
+  // lista de PPs. Abre no que espera o financeiro: A faturar.
+  const [filtroSit, setFiltroSit] = React.useState<FiltroSituacao>("a_faturar");
   const [busca, setBusca] = React.useState("");
   // O aviso do canto. `apuracao` é a segunda linha do aviso da NF emitida
   // (módulo fiscal): em que Apuração os impostos dela entraram.
@@ -562,12 +601,9 @@ export function FaturamentoList({
     null,
   );
   const [info, setInfo] = React.useState<InfoFaturamento | null>(null);
-  // Recebimento antes da NF (decisão 130): o registro abre pela linha; o
-  // selo abre a lista, pela chave — depois do cancelamento a lista se
-  // refaz com o que sobrou.
-  const [registrarAntes, setRegistrarAntes] = React.useState<AlvoDoRecebidoAntes | null>(
-    null,
-  );
+  // Recebimento antes da NF (decisão 130): o selo da linha abre a lista,
+  // pela chave — depois do cancelamento a lista se refaz com o que sobrou.
+  // Decisão 256: o registro saiu da fila; é feito na conciliação.
   const [verAntes, setVerAntes] = React.useState<string | null>(null);
   const [erroAntes, setErroAntes] = React.useState<string | null>(null);
   const [pendingAntes, startAntes] = React.useTransition();
@@ -721,6 +757,24 @@ export function FaturamentoList({
     // A nota do lote ainda não aceita: o recebido antes da NF se prende a
     // UMA nota de job, e a do lote é de vários (decisão 188, pendente).
     if (p.lote) return null;
+    // Decisão 256: a linha do saldo do Novo faturamento mostra o recebido
+    // preso ao job (registrado na conciliação).
+    if (p.saldo_do_novo_faturamento) {
+      const chaveJob = chaveDoRecebidoDoJob(p.origem_id);
+      return {
+        chave: chaveJob,
+        envioNotaId: null,
+        itemBvId: null,
+        jobId: p.origem_id,
+        titulo: [p.codigo, p.descricao].filter(Boolean).join(" · "),
+        contraparte: p.contraparte_nome,
+        ehBv: false,
+        notaRotulo: "Novo faturamento",
+        saldo: linha.saldo,
+        recebidos: recebidosAntes[chaveJob] ?? [],
+        cambio: null,
+      };
+    }
     const chave = chaveAntes(p);
     if (!chave) return null;
     const vencimentos = linha.parcelas.length;
@@ -728,6 +782,7 @@ export function FaturamentoList({
       chave,
       envioNotaId: p.envio_nota_id,
       itemBvId: p.origem_tipo === "bv" ? p.origem_id : null,
+      jobId: null,
       titulo:
         [p.codigo, p.descricao].filter(Boolean).join(" · ") +
         (p.mes_referencia ? ` · ${rotuloMes(p.mes_referencia)}` : ""),
@@ -745,6 +800,17 @@ export function FaturamentoList({
   }
 
   const todasAsLinhas = React.useMemo(() => agruparPorNota(pendentes), [pendentes]);
+  const [menuFaturar, setMenuFaturar] = React.useState(false);
+
+  /** Fecha o formulário e abre o Faturar da linha do envio do job. */
+  function faturarPeloEnvio(jobId: string) {
+    const linha = todasAsLinhas.find(
+      (l) => l.p.origem_tipo === "job" && jobsDaLinha(l).some((x) => x.origem_id === jobId),
+    );
+    if (!linha) return;
+    setDrawer(null);
+    setTimeout(() => setDrawer({ modo: "origem", linhas: linha.parcelas }), 0);
+  }
   const alvoVerAntes = (() => {
     if (!verAntes) return null;
     const linha = todasAsLinhas.find((l) => chaveAntes(l.p) === verAntes);
@@ -763,28 +829,109 @@ export function FaturamentoList({
 
   const q = busca.trim().toLowerCase();
 
+  // Decisão 260: o CNPJ emissor de cada linha. A nota emitida diz por qual
+  // saiu; a que falta faturar usa o que o Faturar já traz escolhido (Hitlab
+  // com a Hitlab; senão o último usado para o CNPJ do cliente).
+  const [cnpjsFiltro, setCnpjsFiltro] = React.useState<string[]>([]);
+  const cnpjDaPendente = React.useCallback(
+    (p: FaturamentoPendenteRow) =>
+      sugestaoDoCnpj(fiscal, {
+        cnpj_tomador: p.cnpj_tomador,
+        empresa_id: p.empresa_id,
+        contraparte_nome: p.contraparte_nome,
+      }).estabelecimentoId ?? SEM_CNPJ,
+    [fiscal],
+  );
+  const cnpjDaFaturada = (f: FaturadoRow) => f.estabelecimento_id ?? SEM_CNPJ;
+  /** Os CNPJs ativos do cadastro (e os inativos que ainda têm nota), com
+   *  quantas linhas cada um tem. */
+  const opcoesDeCnpj = React.useMemo(() => {
+    const n = new Map<string, number>();
+    for (const l of agruparPorNota(pendentes)) {
+      const id = cnpjDaPendente(l.p);
+      n.set(id, (n.get(id) ?? 0) + 1);
+    }
+    for (const f of faturados) {
+      const id = f.estabelecimento_id ?? SEM_CNPJ;
+      n.set(id, (n.get(id) ?? 0) + 1);
+    }
+    const lista = fiscal.cadastro.estabelecimentos
+      .filter((e) => (e.ativo && e.cnpj) || n.has(e.id))
+      .sort((a, b) => a.ordem - b.ordem)
+      .map((e) => ({ id: e.id, nome: e.nome, cnpj: e.cnpj, n: n.get(e.id) ?? 0 }));
+    return lista;
+  }, [pendentes, faturados, fiscal, cnpjDaPendente]);
+  /** Nada marcado, ou tudo marcado, é "Todos os CNPJs": aí passa também a
+   *  linha que ainda não tem CNPJ. */
+  const todosOsCnpjs = cnpjsFiltro.length === 0 || cnpjsFiltro.length >= opcoesDeCnpj.length;
+  const passaNoCnpj = React.useCallback(
+    (id: string) => todosOsCnpjs || cnpjsFiltro.includes(id),
+    [todosOsCnpjs, cnpjsFiltro],
+  );
+
+  /** A situação da nota inteira (a linha do chip "Faturados") e os pedaços
+   *  (as linhas dos outros chips): a página monta, pelos títulos de cada
+   *  nota (decisão 260). */
+  const situacaoPorNota = React.useMemo(
+    () => new Map(faturados.map((f) => [f.faturamento_id, f.recebimento])),
+    [faturados],
+  );
+  const partesPorNota = React.useMemo(
+    () => new Map(faturados.map((f) => [f.faturamento_id, f.recebimento.partes])),
+    [faturados],
+  );
+  /** O recebido antes da NF de uma linha a faturar (decisão 130). */
+  // A mesma chave de `alvoDoRecebido`: a nota do lote não aceita; o saldo
+  // do Novo faturamento usa o recebido preso ao job (decisão 256).
+  const recebidoAntesDaLinha = React.useCallback(
+    (l: LinhaDaFila) => {
+      if (l.p.lote) return 0;
+      const chave = l.p.saldo_do_novo_faturamento ? chaveDoRecebidoDoJob(l.p.origem_id) : chaveAntes(l.p);
+      return chave ? somaDosRecebidos(recebidosAntes[chave] ?? []) : 0;
+    },
+    [recebidosAntes],
+  );
+
+  /** O número de cada chip. O CNPJ recorta antes da contagem (como a
+   *  regional na lista de PPs); a busca, não. "A faturar" conta linhas, não
+   *  parcelas: a nota do lote é uma só. */
+  const contagemDasSituacoes = React.useMemo(() => {
+    const c: Record<FiltroSituacao, number> = { a_faturar: 0, faturados: 0, a_receber: 0, recebidos: 0, inadimplentes: 0, todos: 0 };
+    const linhas = agruparPorNota(pendentes.filter((p) => passaNoCnpj(cnpjDaPendente(p))));
+    const comRecebido = linhas.filter((l) => recebidoAntesDaLinha(l) > 0.004).length;
+    c.a_faturar = linhas.length;
+    c.recebidos += comRecebido;
+    let pedacos = 0;
+    for (const f of faturados) {
+      if (!passaNoCnpj(cnpjDaFaturada(f))) continue;
+      c.faturados++;
+      const partes = partesPorNota.get(f.faturamento_id) ?? [];
+      for (const parte of partes) c[FILTRO_DA_PARTE[parte.tipo]]++;
+      pedacos += partes.length;
+    }
+    // "Todos" conta as linhas que mostra: cada pedaço é uma.
+    c.todos = linhas.length + comRecebido + pedacos;
+    return c;
+  }, [pendentes, faturados, passaNoCnpj, cnpjDaPendente, partesPorNota, recebidoAntesDaLinha]);
+
   const pendentesDoTopo = React.useMemo(
     () =>
       pendentes.filter((p) => {
-        if (filtroFat === "faturados") return false;
-        if (filtroContraparte !== "todos" && rotuloContraparte(p) !== filtroContraparte) {
-          return false;
-        }
+        if (filtroSit !== "a_faturar" && filtroSit !== "todos" && filtroSit !== "recebidos") return false;
+        if (!passaNoCnpj(cnpjDaPendente(p))) return false;
         if (!q) return true;
         return `${p.codigo ?? ""} ${p.descricao} ${p.contraparte_nome}`
           .toLowerCase()
           .includes(q);
       }),
-    [pendentes, filtroContraparte, filtroFat, q],
+    [pendentes, passaNoCnpj, cnpjDaPendente, filtroSit, q],
   );
 
   const faturadosDoTopo = React.useMemo(
     () =>
       faturados.filter((f) => {
-        if (filtroFat === "pendentes") return false;
-        if (filtroContraparte !== "todos" && f.contraparte_nome !== filtroContraparte) {
-          return false;
-        }
+        if (filtroSit === "a_faturar") return false;
+        if (!passaNoCnpj(cnpjDaFaturada(f))) return false;
         if (!q) return true;
         return `${f.numero_nf} ${f.contraparte_nome} ${f.descricao} ${f.itens
           .map((i) => i.codigo)
@@ -792,27 +939,41 @@ export function FaturamentoList({
           .toLowerCase()
           .includes(q);
       }),
-    [faturados, filtroContraparte, filtroFat, q],
+    [faturados, passaNoCnpj, filtroSit, q],
   );
 
   // Uma linha por nota do envio (decisão 123); o BV segue sozinho.
   const linhasDoTopo = React.useMemo(() => agruparPorNota(pendentesDoTopo), [pendentesDoTopo]);
 
   /** As notas a faturar e as emitidas numa lista só, depois dos filtros de
-   *  CIMA (cliente, Tudo/A faturar/Faturados e busca): os filtros dos
+   *  CIMA (CNPJ, situação e busca): os filtros dos
    *  títulos vêm depois e valem para as duas. */
-  const doTopo = React.useMemo<LinhaDaTabela[]>(
-    () => [
-      ...linhasDoTopo.map((l) => ({ tipo: "pendente" as const, l })),
-      ...faturadosDoTopo.map((f) => ({ tipo: "faturado" as const, f })),
-    ],
-    [linhasDoTopo, faturadosDoTopo],
-  );
+  const doTopo = React.useMemo<LinhaDaTabela[]>(() => {
+    const out: LinhaDaTabela[] = [];
+    for (const l of linhasDoTopo) {
+      const recebido = recebidoAntesDaLinha(l) > 0.004;
+      if (filtroSit === "a_faturar" || filtroSit === "todos") out.push({ tipo: "pendente", l });
+      if (recebido && (filtroSit === "recebidos" || filtroSit === "todos")) out.push({ tipo: "pendente", l, parte: "recebido" });
+    }
+    for (const f of faturadosDoTopo) {
+      if (filtroSit === "faturados") {
+        out.push({ tipo: "faturado", f });
+        continue;
+      }
+      for (const parte of partesPorNota.get(f.faturamento_id) ?? []) {
+        if (filtroSit === "todos" || FILTRO_DA_PARTE[parte.tipo] === filtroSit) out.push({ tipo: "faturado", f, parte });
+      }
+    }
+    return out;
+  }, [linhasDoTopo, faturadosDoTopo, filtroSit, partesPorNota, recebidoAntesDaLinha]);
   const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "contas-a-receber-faturamento" });
+  // Decisão 260: a Planilha Interna do job, pelo ícone da linha (como na lista de PPs).
+  const [planilhaDe, setPlanilhaDe] = React.useState<{ jobId: string; codigo: string; nome: string } | null>(null);
+  const nomeDaEmpresa = (id: string | null | undefined) => empresas.find((e) => e.id === id)?.nome ?? "—";
   // A separação continua: as notas a faturar em cima, as emitidas (verdes)
   // embaixo. Com ordem pelo título, cada uma das duas vem naquela ordem.
   const linhasVisiveis = React.useMemo(
-    () => colunas.visiveis.flatMap((x) => (x.tipo === "pendente" ? [x.l] : [])),
+    () => colunas.visiveis.flatMap((x) => (x.tipo === "pendente" && !x.parte ? [x.l] : [])),
     [colunas.visiveis],
   );
   const faturadosVisiveis = React.useMemo(
@@ -873,8 +1034,25 @@ export function FaturamentoList({
   );
   const totalSelecionado = selecionados.reduce((s, p) => s + p.saldo, 0);
 
+  // O agrupado junta notas de UM cliente (pedido do Tiago, 15/11/2026): marcada
+  // a primeira linha, só as linhas do mesmo cliente continuam disponíveis — em
+  // vez de deixar marcar tudo e só acusar o erro no fim.
+  const clienteDe = (p: FaturamentoPendenteRow) => p.cliente_id ?? p.fornecedor_id ?? p.contraparte_nome;
+  const clienteDaSelecao = selecionados.length > 0 ? clienteDe(selecionados[0]) : null;
+  /** Por que a linha não entra no agrupado agora; nulo quando entra. */
+  const foraDoAgrupado = (l: LinhaDaFila): string | null => {
+    if (l.p.origem_tipo === "bv") return "BV é faturado individualmente";
+    if (l.p.saldo_do_novo_faturamento === true) return "O saldo do Novo faturamento sai pelo Novo faturamento";
+    if (clienteDaSelecao && clienteDe(l.p) !== clienteDaSelecao)
+      return `Outro cliente: o agrupado junta só notas de ${selecionados[0].contraparte_nome}`;
+    return null;
+  };
   // BV não é agrupável — o checkbox nem aparece habilitado.
-  const agrupaveis = linhasVisiveis.filter((l) => l.p.origem_tipo === "job");
+  const agrupaveis = linhasVisiveis.filter((l) => foraDoAgrupado(l) === null);
+  // "Marcar todos" só quando a lista à vista é de um cliente só (ou já há um
+  // cliente na seleção): nunca junta clientes diferentes.
+  const clientesAgrupaveis = new Set(agrupaveis.map((l) => clienteDe(l.p)));
+  const podeMarcarTodos = agrupaveis.length > 0 && clientesAgrupaveis.size === 1;
   const todosMarcados =
     agrupaveis.length > 0 && agrupaveis.every((l) => sel[l.chave]);
 
@@ -897,6 +1075,7 @@ export function FaturamentoList({
       setSel({});
       return;
     }
+    if (!podeMarcarTodos) return;
     const proximo: Record<string, boolean> = {};
     for (const l of agrupaveis) proximo[l.chave] = true;
     setSel(proximo);
@@ -947,134 +1126,185 @@ export function FaturamentoList({
     setDrawer({ modo: "origem", linhas: selecionados });
   }
 
-  return (
-    <div className="space-y-4">
-      {/* Chips de cliente + busca + ações */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2.5">
-          {/* Combobox de cliente. A barra de chips não escala: com o cadastro
-              real seriam dezenas de nomes empilhados antes da busca. Mostra
-              os 5 primeiros e manda digitar para refinar. */}
-          <div className="relative w-[290px]">
-            <div
-              className={cn(
-                "flex h-[34px] items-center gap-2 rounded-lg border bg-white px-3 transition-colors",
-                cliAberto || filtroContraparte !== "todos"
-                  ? "border-california-red/40"
-                  : "border-border",
-              )}
-            >
-              <Building2 className="h-3.5 w-3.5 flex-none text-muted-foreground" />
-              <input
-                type="text"
-                value={cliAberto ? cliBusca : rotuloClienteAtivo}
-                onChange={(e) => setCliBusca(e.target.value)}
-                onFocus={() => {
-                  setCliAberto(true);
-                  setCliBusca("");
-                }}
-                onBlur={() => {
-                  // Timeout para o clique na opção acontecer antes do blur
-                  // fechar a lista — sem isso a seleção nunca chega.
-                  window.setTimeout(() => setCliAberto(false), 120);
-                }}
-                placeholder="Cliente — digite para filtrar"
-                className="min-w-0 flex-1 border-0 bg-transparent text-[12.5px] font-medium outline-none"
-              />
-              {filtroContraparte !== "todos" && (
-                <button
-                  type="button"
-                  title="Limpar filtro de cliente"
+  /** A linha da nota emitida: a nota inteira (chip "Faturados") ou um
+   *  pedaço dela. `junta`: a próxima linha é da mesma nota. */
+  const linhaFaturada = (f: FaturadoRow, parte: ParteDaNota | undefined, junta: boolean) => {
+              const codigos = [...new Set(f.itens.map((i) => i.codigo))];
+              const descricao = [...new Set(f.itens.map((i) => i.descricao.split(" — ")[0]))].join(" + ");
+              const jobUnico = f.jobs_cobertos.length === 1 ? f.jobs_cobertos[0] : null;
+              const autor = f.autores[0] ?? null;
+              return (
+                <tr
+                  key={`${f.faturamento_id}:${parte?.tipo ?? "nota"}`}
                   onClick={() => {
-                    setFiltroContraparte("todos");
-                    setCliBusca("");
+                    if (modoSelecao) return;
+                    setDrawer({ modo: "leitura", nota: f });
                   }}
-                  className="flex-none text-muted-foreground transition-colors hover:text-california-red"
+                  className={cn(
+                    "border-b border-border bg-emerald-50/35 transition-colors last:border-0",
+                    junta && "border-dashed",
+                    modoSelecao ? "opacity-55" : "cursor-pointer hover:bg-emerald-50/70",
+                  )}
                 >
-                  <X className="h-3.5 w-3.5" />
-                </button>
-              )}
-              <ChevronDown className="h-3.5 w-3.5 flex-none text-muted-foreground" />
-            </div>
-            {cliAberto && (
-              <div className="absolute left-0 right-0 top-[38px] z-40 overflow-hidden rounded-xl border border-border bg-white shadow-elevated">
-                {cliOpcoes.map((c) => (
-                  <button
-                    key={c.chave}
-                    type="button"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      setFiltroContraparte(c.chave);
-                      setCliBusca("");
-                      setCliAberto(false);
-                    }}
-                    className={cn(
-                      "flex w-full items-center gap-2 px-3 py-2.5 text-left text-[12.5px] font-medium transition-colors hover:bg-muted/60",
-                      filtroContraparte === c.chave &&
-                        "bg-california-red/[0.07] text-california-red",
-                    )}
-                  >
-                    <span className="min-w-0 flex-1 truncate">{c.rotulo}</span>
-                    <span className="font-mono text-[11px] font-semibold tabular-nums text-muted-foreground">
-                      {c.n}
+                  {modoSelecao && (
+                    <td className="py-2.5 pl-4">
+                      <span
+                        title="Faturamento já emitido"
+                        className="flex h-[19px] w-[19px] cursor-not-allowed items-center justify-center rounded-md border border-border bg-muted"
+                      />
+                    </td>
+                  )}
+                  <td className="px-3 py-2.5">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span className="truncate font-mono text-xs font-bold text-emerald-700" title={codigos.join(", ")}>
+                        {codigos.length > 1 ? `${codigos.length} jobs` : (codigos[0] || "Avulsa")}
+                      </span>
+                      {/* Sem a coluna Ação (decisão 260), o número da nota mora no selo. */}
+                      <span
+                        title="Nota emitida: clique na linha para ver o formulário e a NF"
+                        className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wide text-emerald-700"
+                      >
+                        NF {f.numero_nf}
+                      </span>
                     </span>
-                  </button>
-                ))}
-                {clientesOcultos > 0 && (
-                  <div className="border-t border-border px-3 py-2 text-[11px] text-muted-foreground">
-                    + {clientesOcultos} cliente{clientesOcultos > 1 ? "s" : ""} —
-                    continue digitando para refinar
-                  </div>
-                )}
-                {cliOpcoes.length === 1 && cliBusca.trim() !== "" && (
-                  <div className="px-3 py-3 text-xs text-muted-foreground">
-                    Nenhum cliente encontrado.
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+                    <TruncateTooltip as="span" className="mt-1 block font-semibold" text={descricao} />
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <TruncateTooltip as="span" className="block text-[12.5px]" text={f.contraparte_nome} />
+                    {f.cnpj_tomador && (
+                      <span className="mt-0.5 block font-mono text-[11px] text-muted-foreground">{formatCnpj(f.cnpj_tomador)}</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-[12.5px] text-muted-foreground">
+                    <TruncateTooltip linhas={2} text={nomeDaEmpresa(f.empresa_id)} />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-muted-foreground">
+                    {formatMoney(f.valor_total)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-muted-foreground/80">
+                    {formatMoney(f.valor_total)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-right text-muted-foreground">—</td>
+                  <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
+                    {f.qtd_parcelas}x
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-muted-foreground">
+                    {formatDate(f.primeiro_vencimento)}
+                  </td>
+                  <td className="px-3 py-2.5" title={f.pelo_financeiro ? "Faturado pelo financeiro, sem envio da produção" : autor ? (autor.bv ? "BV confirmado por" : "Enviado por") : undefined}>
+                    {f.pelo_financeiro ? (
+                      <>
+                        <span className="block text-[13px] font-medium text-foreground">Financeiro</span>
+                        <span className="mt-0.5 block text-[12px] text-muted-foreground">Novo faturamento</span>
+                      </>
+                    ) : autor ? (
+                      <>
+                        <TruncateTooltip as="span" className="block text-[13px] font-medium text-foreground" text={autor.nome} />
+                        <span className="mt-0.5 block whitespace-nowrap text-[12px] text-muted-foreground">
+                          {autor.em ? formatDataHoraCurta(autor.em) : ""}
+                          {f.autores.length > 1 ? ` · +${f.autores.length - 1}` : ""}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5">
+                    {(() => {
+                      if (parte) {
+                        const selo = SELO_DA_PARTE[parte.tipo];
+                        return (
+                          <span className="flex flex-col items-start gap-1" title={parte.dica}>
+                            <span className={cn(BASE_DO_SELO, selo.cor)}>{selo.rotulo}</span>
+                            <span className="whitespace-nowrap text-[11.5px] text-muted-foreground">{formatMoney(parte.valor)}</span>
+                          </span>
+                        );
+                      }
+                      const sit = situacaoPorNota.get(f.faturamento_id);
+                      const selo = sit ? SELO_DA_SITUACAO[sit.situacao] : null;
+                      return (
+                        <span className="flex flex-col items-start gap-1">
+                          {selo && (
+                            <span className={cn("whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide", selo.cor)}>
+                              {selo.rotulo}
+                            </span>
+                          )}
+                          <span className="whitespace-nowrap text-[11.5px] text-muted-foreground">
+                            {sit?.detalhe ?? `Emitida ${formatDate(f.data_emissao)}`}
+                          </span>
+                        </span>
+                      );
+                    })()}
+                  </td>
+                  <td className="px-1 py-2.5 text-center">
+                    {jobUnico && (
+                      <BotaoPlanilha
+                        onClick={() =>
+                          setPlanilhaDe({ jobId: jobUnico.job_id, codigo: jobUnico.codigo, nome: descricao })
+                        }
+                      />
+                    )}
+                  </td>
+                  <td className="relative w-0 p-0">
+                    <BotaoInfo
+                      className="absolute left-3 top-1/2 h-[30px] w-[30px] -translate-y-1/2 shadow-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setInfo(infoDaNota(f));
+                      }}
+                    />
+                  </td>
+                </tr>
+              );
+  };
 
-          {/* O que já saiu em nota continua na mesma tabela, em verde. Este
-              filtro é o que permite olhar uma coisa de cada vez. */}
-          <div className="flex items-center rounded-lg border border-border bg-muted p-[3px]">
-            {(
-              [
-                { chave: "todos", rotulo: "Tudo" },
-                { chave: "pendentes", rotulo: "A faturar" },
-                { chave: "faturados", rotulo: "Faturados" },
-              ] as const
-            ).map((c) => (
+  return (
+    <div className={cn("space-y-4", modoSelecao && "pb-28")}>
+      {/* Decisão 260: os chips da situação à esquerda, como na
+          lista de PPs; cliente, busca e as ações à direita. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {FILTROS_DE_SITUACAO.map((f) => {
+            const ativo = filtroSit === f.chave;
+            return (
               <button
-                key={c.chave}
+                key={f.chave}
                 type="button"
-                onClick={() => setFiltroFat(c.chave)}
+                onClick={() => setFiltroSit(f.chave)}
                 className={cn(
-                  "whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
-                  filtroFat === c.chave
-                    ? "bg-white text-california-red shadow-sm"
-                    : "text-muted-foreground hover:text-foreground",
+                  "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
+                  ativo
+                    ? "border-california-red bg-california-red text-white"
+                    : "border-border bg-white text-muted-foreground hover:border-california-red/50",
                 )}
               >
-                {c.rotulo}
+                {f.rotulo}
+                <span className={cn("tabular-nums", ativo ? "text-white/85" : "text-muted-foreground/70")}>
+                  {contagemDasSituacoes[f.chave]}
+                </span>
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
-        <div className="flex flex-wrap items-center gap-2.5">
+        <div className="ml-auto flex flex-wrap items-center gap-2.5">
+          {/* Decisão 260: o cliente se filtra pela busca e pelo título da
+              coluna; aqui, o CNPJ que emite a nota (comentário do Tiago). */}
+          <FiltroDeCnpj opcoes={opcoesDeCnpj} selecionados={cnpjsFiltro} onChange={setCnpjsFiltro} />
+
           <div className="relative">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
             <input
               type="text"
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
-              placeholder="Buscar por job, cliente ou descrição"
-              className="w-[270px] rounded-lg border border-border bg-white py-1.5 pl-8 pr-3 text-xs focus:border-california-red/40 focus:outline-none"
+              placeholder="Buscar job, cliente ou descrição"
+              className="w-[250px] rounded-lg border border-border bg-white py-1.5 pl-8 pr-3 text-xs focus:border-california-red/40 focus:outline-none"
             />
           </div>
           <button
             type="button"
             onClick={() => {
+              if (!modoSelecao && filtroSit !== "a_faturar" && filtroSit !== "todos") setFiltroSit("a_faturar");
               setModoSelecao((v) => !v);
               setSel({});
               limparErro();
@@ -1089,14 +1319,38 @@ export function FaturamentoList({
             <Layers className="h-3.5 w-3.5" />
             {modoSelecao ? "Sair do agrupamento" : "Faturamento Agrupado"}
           </button>
-          <button
-            type="button"
-            onClick={() => setDrawer({ modo: "avulso" })}
-            className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-california-red px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-california-red-hover"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Faturamento avulso
-          </button>
+          <Popover open={menuFaturar} onOpenChange={setMenuFaturar}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-california-red px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-california-red-hover"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Faturamento
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-[200px] p-1.5">
+              {(
+                [
+                  ["adicional", "Novo faturamento", Briefcase],
+                  ["avulso", "Faturamento avulso", ReceiptText],
+                ] as const
+              ).map(([modo, rotulo, Icone]) => (
+                <button
+                  key={modo}
+                  type="button"
+                  onClick={() => {
+                    setMenuFaturar(false);
+                    setDrawer({ modo });
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-[13px] font-semibold text-foreground transition-colors hover:bg-muted"
+                >
+                  <Icone className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  {rotulo}
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
@@ -1140,93 +1394,161 @@ export function FaturamentoList({
           com um `mr-`, e a pílula mora numa célula de largura ZERO: assim
           a calha nunca alarga a tabela (`app/(app)/_planilha/calha.tsx`). */}
       <div className="overflow-x-auto pb-1.5">
-      <div className="mr-[46px] box-border w-max min-w-[calc(100%-46px)] rounded-2xl border border-border bg-card shadow-soft">
-        <table className="w-full min-w-[1120px] text-sm">
+      <div className="mr-[46px] box-border min-w-[calc(100%-46px)] rounded-2xl border border-border bg-card shadow-soft">
+        {/* Decisão 260: a grade fixa da lista de PPs (decisão 257).
+            Linhas de até duas alturas; quem enviou ganhou coluna; Empresa,
+            Situação e o ícone da Planilha Interna entraram. */}
+        <table className="w-full min-w-[1500px] table-fixed text-[13px]">
+          <colgroup>
+            {modoSelecao && <col className="w-[38px]" />}
+            {/* Job: o código e a origem; embaixo, o nome do financeiro */}
+            <col className="w-[300px]" />
+            {/* Cliente fica com o que sobra */}
+            <col />
+            {/* Empresa (gerencial): de onde sai a nota */}
+            <col className="w-[108px]" />
+            {/* Valor, Já faturado e A faturar: cabem R$ 9.999.999,99 (a produção
+                tem job de R$ 4,7 milhões); a linha do câmbio pede 136 px. */}
+            <col className="w-[124px]" />
+            <col className="w-[124px]" />
+            <col className="w-[136px]" />
+            {/* Parcela (o título com o funil pede 100 px) */}
+            <col className="w-[100px]" />
+            {/* Vencimento (o título com o funil pede 116 px) */}
+            <col className="w-[116px]" />
+            {/* Enviado por */}
+            <col className="w-[136px]" />
+            {/* Situação */}
+            <col className="w-[168px]" />
+            {/* Planilha Interna */}
+            <col className="w-[40px]" />
+            {/* A calha do `i` */}
+            <col className="w-0" />
+          </colgroup>
           <thead>
             <tr className="border-b border-border bg-muted/30 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
               {modoSelecao && (
-                <th className="w-[38px] py-3 pl-4">
+                <th className="py-2.5 pl-4">
                   <button
                     type="button"
                     onClick={alternarTodos}
-                    title="Selecionar todos os visíveis"
+                    disabled={!podeMarcarTodos && !todosMarcados}
+                    title={
+                      podeMarcarTodos || todosMarcados
+                        ? `Selecionar todos os visíveis de ${
+                            selecionados[0]?.contraparte_nome ?? agrupaveis[0]?.p.contraparte_nome ?? "um cliente"
+                          }`
+                        : "Marque um job, ou filtre um cliente: o agrupado junta notas de um cliente só"
+                    }
                     className={cn(
                       "flex h-[19px] w-[19px] items-center justify-center rounded-md border transition-colors",
                       todosMarcados
                         ? "border-california-red bg-california-red text-white"
-                        : "border-border bg-white text-transparent",
+                        : podeMarcarTodos
+                          ? "border-border bg-white text-transparent"
+                          : "cursor-not-allowed border-border bg-muted text-transparent",
                     )}
                   >
                     <Check className="h-3 w-3" />
                   </button>
                 </th>
               )}
-              <th className="w-[70px] px-4 py-3 font-semibold">{colunas.titulo("origem")}</th>
-              <th className="min-w-[300px] px-4 py-3 font-semibold">{colunas.titulo("descricao")}</th>
-              <th className="min-w-[150px] px-4 py-3 font-semibold">{colunas.titulo("cliente")}</th>
-              <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("valor")}</th>
-              <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("jaFaturado")}</th>
-              <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("saldo")}</th>
-              <th className="w-[72px] px-3 py-3 font-semibold">{colunas.titulo("nota")}</th>
-              <th className="w-[110px] px-4 py-3 font-semibold">{colunas.titulo("vencimento")}</th>
-              <th className="w-[150px] px-4 py-3 text-right font-semibold">{colunas.titulo("acao")}</th>
-              {/* A calha não é coluna: largura zero, e o botão sai do frame. */}
-              <th className="w-0 p-0" />
+              <th className="px-3 py-2.5 font-semibold">{colunas.titulo("origem")}</th>
+              <th className="px-3 py-2.5 font-semibold">{colunas.titulo("cliente")}</th>
+              <th className="px-3 py-2.5 font-semibold">Empresa</th>
+              <th className="px-3 py-2.5 text-right font-semibold">{colunas.titulo("valor")}</th>
+              <th className="px-3 py-2.5 text-right font-semibold">{colunas.titulo("jaFaturado")}</th>
+              <th className="px-3 py-2.5 text-right font-semibold">{colunas.titulo("saldo")}</th>
+              <th className="px-3 py-2.5 font-semibold">{colunas.titulo("nota")}</th>
+              <th className="px-3 py-2.5 font-semibold">{colunas.titulo("vencimento")}</th>
+              <th className="px-3 py-2.5 font-semibold">{colunas.titulo("enviadoPor")}</th>
+              <th className="px-3 py-2.5 font-semibold">Situação</th>
+              <th className="px-1 py-2.5">
+                <span className="sr-only">Planilha Interna</span>
+              </th>
+              <th className="p-0" />
             </tr>
           </thead>
           <tbody>
             {doTopo.length === 0 && (
               <tr>
-                <td
-                  colSpan={modoSelecao ? 10 : 9}
-                  className="px-4 py-12 text-center text-sm text-muted-foreground"
-                >
-                  Nada aguardando faturamento com esses filtros.
+                <td colSpan={modoSelecao ? 13 : 12} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                  {filtroSit === "a_faturar"
+                    ? "Nada aguardando faturamento com esses filtros."
+                    : "Nenhuma nota nesta situação com esses filtros."}
                 </td>
               </tr>
             )}
-            {/* Vazio por causa dos títulos: a tabela fica, com os títulos,
-                para desfazer. */}
             {doTopo.length > 0 && colunas.visiveis.length === 0 && (
               <tr>
-                <td
-                  colSpan={modoSelecao ? 10 : 9}
-                  className="px-4 py-12 text-center text-sm text-muted-foreground"
-                >
+                <td colSpan={modoSelecao ? 13 : 12} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   Nenhuma nota com esse filtro.
                 </td>
               </tr>
             )}
 
-            {linhasVisiveis.map((linha) => {
+            {colunas.visiveis.map((x, i) => {
+              const proxima = colunas.visiveis[i + 1];
+              if (x.tipo !== "pendente") {
+                return linhaFaturada(x.f, x.parte, proxima?.tipo === "faturado" && proxima.f.faturamento_id === x.f.faturamento_id);
+              }
+              const linha = x.l;
+              // O recebido antes da NF é uma linha própria, logo abaixo da
+              // linha a faturar, em "Recebidos" e em "Todos".
+              const parteRecebida = x.parte === "recebido";
+              const junta = proxima?.tipo === "pendente" && proxima.l.chave === linha.chave;
               const p = linha.p;
               const k = linha.chave;
-              const marcado = !!sel[k];
-              const agrupavel = p.origem_tipo === "job";
+              const marcado = !parteRecebida && !!sel[k];
+              const saldoNovo = p.saldo_do_novo_faturamento === true;
+              const abrirLinha = () =>
+                saldoNovo
+                  ? setDrawer({ modo: "adicional", jobInicial: p.origem_id, valorInicial: linha.saldo, mesInicial: p.mes_referencia ?? undefined })
+                  : setDrawer({ modo: "origem", linhas: linha.parcelas });
+              const motivoFora = foraDoAgrupado(linha);
+              const agrupavel = motivoFora === null && !parteRecebida;
               const alvoAntes = alvoDoRecebido(linha);
               const recebidoAntes = alvoAntes ? somaDosRecebidos(alvoAntes.recebidos) : 0;
-              const cabeRecebido = alvoAntes !== null && linha.saldo - recebidoAntes > 0.004;
+              const jobsDaNota = jobsDaLinha(linha);
+              const descricao = p.lote ? jobsDaNota.map((j) => j.descricao).join(" + ") : p.descricao;
+              const jobDaLinha = p.lote ? null : (p.job_id ?? (p.origem_tipo === "job" ? p.origem_id : null));
+              const variacao = linha.parcelas.reduce((t, x) => t + x.variacao_cambial, 0);
+              const parcial = !saldoNovo && linha.jaFaturado > 0.004;
+              const quem = saldoNovo
+                ? { rotulo: "Novo faturamento", nome: "Financeiro", em: null as string | null }
+                : p.autor_nome
+                  ? {
+                      rotulo: p.origem_tipo === "bv" ? "BV confirmado por" : p.lote ? "Enviado em lote por" : "Enviado por",
+                      nome: p.autor_nome,
+                      em: p.autor_em,
+                    }
+                  : null;
               return (
                 <tr
-                  key={k}
+                  key={parteRecebida ? `${k}:recebido` : k}
                   onClick={() => {
-                    // No agrupamento o clique marca a linha; fora dele, abre
-                    // o formulário. Espelha o protótipo `clicarLinha`.
                     if (modoSelecao) {
                       if (agrupavel) alternarLinha(linha);
                       return;
                     }
                     limparErro();
-                    setDrawer({ modo: "origem", linhas: linha.parcelas });
+                    if (parteRecebida && alvoAntes) {
+                      setErroAntes(null);
+                      setVerAntes(alvoAntes.chave);
+                      return;
+                    }
+                    abrirLinha();
                   }}
                   className={cn(
                     "cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-accent/40",
+                    junta && "border-dashed",
+                    parteRecebida && "bg-emerald-50/35",
                     marcado && "bg-california-red/[0.05]",
                     modoSelecao && !agrupavel && "cursor-not-allowed opacity-55",
                   )}
                 >
                   {modoSelecao && (
-                    <td className="py-3 pl-4">
+                    <td className="py-2.5 pl-4">
                       <button
                         type="button"
                         disabled={!agrupavel}
@@ -1234,9 +1556,7 @@ export function FaturamentoList({
                           e.stopPropagation();
                           alternarLinha(linha);
                         }}
-                        title={
-                          agrupavel ? "Incluir nesta NF" : "BV é faturado individualmente"
-                        }
+                        title={agrupavel ? "Incluir nesta NF" : parteRecebida ? "Já recebido: a linha a faturar é a de cima" : (motivoFora ?? "")}
                         className={cn(
                           "flex h-[19px] w-[19px] items-center justify-center rounded-md border transition-colors",
                           marcado
@@ -1250,47 +1570,112 @@ export function FaturamentoList({
                       </button>
                     </td>
                   )}
-                  <td className="px-4 py-3">
-                    <ChipOrigem tipo={p.lote ? "lote" : p.origem_tipo} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-col gap-0.5">
-                      {/* A nota do lote junta os jobs, como a nota emitida de
-                          vários jobs: os nomes com "+", os códigos embaixo.
-                          Com largura máxima: a tabela é `w-max`, e os nomes
-                          de 4 jobs numa linha só empurravam a coluna Ação
-                          para fora da tela. */}
-                      <span className={cn("font-semibold", p.lote && "line-clamp-2 max-w-[440px]")}>
-                        {p.lote ? jobsDaLinha(linha).map((j) => j.descricao).join(" + ") : p.descricao}
+                  {/* Job: o código, a origem e o mês do mensal; embaixo, o nome
+                      do job dado pelo financeiro (decisão 243). */}
+                  <td className="px-3 py-2.5">
+                    <span className="flex min-w-0 items-center gap-1.5">
+                      <span
+                        className="truncate font-mono text-xs font-bold text-california-red"
+                        title={p.lote ? jobsDaNota.map((j) => j.codigo).join(", ") : (p.codigo ?? undefined)}
+                      >
+                        {p.lote ? `${jobsDaNota.length} jobs` : (p.codigo ?? "—")}
                       </span>
-                      {p.codigo && (
-                        <span className="font-mono text-[11px] text-muted-foreground">
-                          {p.lote
-                            ? jobsDaLinha(linha)
-                                .map((j) => j.codigo)
-                                .join(", ")
-                            : p.codigo}
-                        </span>
-                      )}
+                      <span className="shrink-0">
+                        <ChipOrigem tipo={p.lote ? "lote" : p.origem_tipo} />
+                      </span>
                       {p.mes_referencia && (
-                        <span className="text-[11px] font-semibold text-muted-foreground">
-                          {rotuloMes(p.mes_referencia)}
+                        <span className="shrink-0 whitespace-nowrap text-[11px] font-semibold text-muted-foreground">
+                          {mesCurto(p.mes_referencia)}
                         </span>
                       )}
-                      {/* Quem mandou (decisão 136): quem enviou o job para
-                          faturamento, ou quem confirmou o BV. */}
-                      {p.autor_nome && (
-                        <span className="text-[11px] text-muted-foreground">
-                          {p.origem_tipo === "bv"
-                            ? "BV confirmado por"
-                            : p.lote
-                              ? "Enviado em lote por"
-                              : "Enviado por"}{" "}
-                          <span className="font-semibold text-foreground">{p.autor_nome}</span>
-                          {p.autor_em ? ` · ${formatDataHoraCurta(p.autor_em)}` : ""}
+                    </span>
+                    <TruncateTooltip as="span" className="mt-1 block font-semibold" text={descricao} />
+                  </td>
+                  <td className="px-3 py-2.5">
+                    <TruncateTooltip as="span" className="block text-[12.5px]" text={p.contraparte_nome} />
+                    {p.cnpj_tomador && (
+                      <span className="mt-0.5 block font-mono text-[11px] text-muted-foreground">
+                        {formatCnpj(p.cnpj_tomador)}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 text-[12.5px] text-muted-foreground">
+                    <TruncateTooltip linhas={2} text={nomeDaEmpresa(p.empresa_id)} />
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-muted-foreground">
+                    {formatMoney(linha.valor)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-right tabular-nums text-muted-foreground/80">
+                    {formatMoney(linha.jaFaturado)}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 text-right">
+                    <span
+                      className="block font-bold tabular-nums"
+                      title={
+                        p.lote
+                          ? `${jobsDaNota.length} jobs nesta nota`
+                          : p.mes_referencia
+                            ? "Total do mês"
+                            : "Total do job"
+                      }
+                    >
+                      {parteRecebida ? "—" : formatMoney(linha.saldo)}
+                    </span>
+                    {Math.abs(variacao) >= 0.005 && (
+                      <span
+                        title={`Variação cambial ${variacao > 0 ? "+" : ""}${formatMoney(variacao)}`}
+                        className={cn(
+                          "block truncate text-[10.5px] font-semibold",
+                          variacao < 0 ? "text-california-red" : "text-emerald-700",
+                        )}
+                      >
+                        câmbio {variacao > 0 ? "+" : ""}
+                        {formatMoney(variacao)}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2.5 font-mono text-xs text-muted-foreground">
+                    <span className="block">{Math.max(1, linha.vencimentos)}x</span>
+                    {(p.lote?.total ?? p.nota_total ?? 1) > 1 && (
+                      <span
+                        className="block whitespace-nowrap font-sans text-[10.5px]"
+                        title={p.lote ? "A posição desta nota no lote" : "A posição desta nota no envio"}
+                      >
+                        nota {p.lote?.ordem ?? p.nota_ordem ?? 1}/{p.lote?.total ?? p.nota_total ?? 1}
+                      </span>
+                    )}
+                  </td>
+                  <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-muted-foreground">
+                    <span className="block">{formatDate(linha.primeiroVencimento)}</span>
+                    {linha.vencimentos > 1 && (
+                      <span className="block font-sans text-[10.5px]">até {formatDate(linha.ultimoVencimento)}</span>
+                    )}
+                  </td>
+                  {/* Quem enviou, como na lista de PPs: o nome e, embaixo, quando. */}
+                  <td className="px-3 py-2.5" title={quem ? quem.rotulo : undefined}>
+                    {quem ? (
+                      <>
+                        <TruncateTooltip as="span" className="block text-[13px] font-medium text-foreground" text={quem.nome} />
+                        <span className="mt-0.5 block whitespace-nowrap text-[12px] text-muted-foreground">
+                          {quem.em ? formatDataHoraCurta(quem.em) : quem.rotulo}
                         </span>
-                      )}
-                      {alvoAntes && recebidoAntes > 0 && (
+                      </>
+                    ) : (
+                      <span className="text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  {/* O que pede atenção: recebido antes, parcial, saldo do Novo. */}
+                  <td className="px-3 py-2.5">
+                    {parteRecebida ? (
+                      <span className="flex flex-col items-start gap-1" title="Recebido antes da NF">
+                        <span className={cn(BASE_DO_SELO, SELO_DA_PARTE.recebido.cor)}>Recebido</span>
+                        <span className="whitespace-nowrap text-[11.5px] text-muted-foreground">
+                          {formatMoney(recebidoAntes)} antes da NF
+                        </span>
+                      </span>
+                    ) : (
+                    <div className="flex flex-col items-start gap-1">
+                      {alvoAntes && recebidoAntes > 0 && filtroSit !== "todos" && (
                         <button
                           type="button"
                           title="Ver o recebimento antes da NF"
@@ -1299,130 +1684,40 @@ export function FaturamentoList({
                             setErroAntes(null);
                             setVerAntes(alvoAntes.chave);
                           }}
-                          className="mt-0.5 inline-flex w-fit items-center gap-1.5 whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 transition-colors hover:border-amber-400"
+                          className="inline-flex max-w-full items-center gap-1 truncate whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800 transition-colors hover:border-amber-400"
                         >
-                          <HandCoins className="h-3 w-3" />
-                          Recebido antes da NF · {formatMoney(recebidoAntes)}
+                          <HandCoins className="h-3 w-3 shrink-0" />
+                          Recebido {formatMoney(recebidoAntes).replace("R$", "").trim()}
                         </button>
                       )}
-                    </div>
-                  </td>
-                  {/* Só o nome. O contato de cobrança mudou para o botão `i`
-                      em 31/08/2026: dentro da célula ele empurrava a linha
-                      para três alturas e mostrava só nome e e-mail. */}
-                  <td className="px-4 py-3 text-xs text-muted-foreground">
-                    <div className="flex flex-col gap-0.5">
-                      <span>{p.contraparte_nome}</span>
-                      {/* O tomador que a produção escreveu no lote (decisão
-                          188), quando não é o próprio cliente. */}
-                      {p.lote &&
-                        p.lote.tomador_nome.trim().toLowerCase() !== p.contraparte_nome.trim().toLowerCase() && (
-                        <span className="text-[11px] font-medium text-foreground">
-                          {p.lote.tomador_nome}
+                      {saldoNovo && (
+                        <span className="whitespace-nowrap rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-blue-700">
+                          Saldo do Novo
                         </span>
                       )}
-                      {/* O CNPJ para o qual a nota sai (decisão 123): pode
-                          não ser o do cadastro do cliente. */}
-                      {p.cnpj_tomador && (
-                        <span className="font-mono text-[11px]">
-                          {formatCnpj(p.cnpj_tomador)}
+                      {parcial && (
+                        <span className="whitespace-nowrap rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-800">
+                          Parcial
                         </span>
                       )}
-                    </div>
-                  </td>
-                  {/* A quebra job × save saiu daqui em 31/08/2026 e foi para
-                      o botão `i`: disputava espaço com o número que a coluna
-                      existe para mostrar (decisão 033). */}
-                  <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-muted-foreground">
-                    {formatMoney(linha.valor)}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-muted-foreground/80">
-                    {formatMoney(linha.jaFaturado)}
-                  </td>
-                  <td className="whitespace-nowrap px-4 py-3 text-right">
-                    <div className="flex flex-col items-end gap-0.5">
-                      <span className="font-bold tabular-nums">
-                        {formatMoney(linha.saldo)}
-                      </span>
-                      <span className="text-[10.5px] text-muted-foreground">
-                        {p.lote
-                          ? `${jobsDaLinha(linha).length} ${jobsDaLinha(linha).length > 1 ? "jobs" : "job"} nesta nota`
-                          : (p.nota_total ?? 1) > 1
-                            ? `de ${formatMoney(p.saldo_job)} ${p.mes_referencia ? "no mês" : "no job"}`
-                            : p.mes_referencia
-                              ? "total do mês"
-                              : "total do job"}
-                      </span>
-                      {(() => {
-                        // Decisão 229: a nota fecha pelo convertido.
-                        const variacao = linha.parcelas.reduce((t, x) => t + x.variacao_cambial, 0);
-                        if (Math.abs(variacao) < 0.005) return null;
-                        return (
-                          <span
-                            className={cn(
-                              "text-[10.5px] font-semibold",
-                              variacao < 0 ? "text-california-red" : "text-emerald-700",
-                            )}
-                          >
-                            variação cambial {variacao > 0 ? "+" : ""}
-                            {formatMoney(variacao)}
-                          </span>
-                        );
-                      })()}
-                    </div>
-                  </td>
-                  <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
-                    <div className="flex flex-col gap-0.5">
-                      <span>
-                        {p.lote?.ordem ?? p.nota_ordem ?? 1}/{p.lote?.total ?? p.nota_total ?? 1}
-                      </span>
-                      {linha.vencimentos > 1 && (
-                        <span className="font-sans text-[10.5px]">
-                          {linha.vencimentos} venc.
-                        </span>
+                      {!(alvoAntes && recebidoAntes > 0 && filtroSit !== "todos") && !saldoNovo && !parcial && (
+                        <span className="text-muted-foreground">—</span>
                       )}
                     </div>
+                    )}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-muted-foreground">
-                    <div className="flex flex-col gap-0.5">
-                      <span>{formatDate(linha.primeiroVencimento)}</span>
-                      {linha.vencimentos > 1 && (
-                        <span className="font-sans text-[10.5px]">
-                          até {formatDate(linha.ultimoVencimento)}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      {cabeRecebido && !modoSelecao && (
-                        <button
-                          type="button"
-                          title="Registrar recebimento antes da NF"
-                          aria-label="Registrar recebimento antes da NF"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setErroAntes(null);
-                            setRegistrarAntes(alvoAntes);
-                          }}
-                          className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:border-amber-400 hover:text-amber-700"
-                        >
-                          <HandCoins className="h-3.5 w-3.5" />
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          limparErro();
-                          setDrawer({ modo: "origem", linhas: linha.parcelas });
-                        }}
-                        className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-white px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors hover:border-california-red hover:text-california-red"
-                      >
-                        <FileText className="h-3.5 w-3.5" />
-                        Faturar
-                      </button>
-                    </div>
+                  <td className="px-1 py-2.5 text-center">
+                    {jobDaLinha && (
+                      <BotaoPlanilha
+                        onClick={() =>
+                          setPlanilhaDe({
+                            jobId: jobDaLinha,
+                            codigo: p.codigo ?? "",
+                            nome: p.descricao,
+                          })
+                        }
+                      />
+                    )}
                   </td>
                   <td className="relative w-0 p-0">
                     <BotaoInfo
@@ -1437,113 +1732,22 @@ export function FaturamentoList({
               );
             })}
 
-            {faturadosVisiveis.map((f) => (
-              <tr
-                key={f.faturamento_id}
-                onClick={() => {
-                  // Nota já emitida abre o mesmo formulário em leitura — o
-                  // agrupamento não a seleciona, porque só serve para faturar.
-                  if (modoSelecao) return;
-                  setDrawer({ modo: "leitura", nota: f });
-                }}
-                className={cn(
-                  "border-b border-border bg-emerald-50/35 transition-colors last:border-0",
-                  modoSelecao ? "opacity-55" : "cursor-pointer hover:bg-emerald-50/70",
-                )}
-              >
-                {modoSelecao && (
-                  <td className="py-3 pl-4">
-                    <span
-                      title="Faturamento já emitido"
-                      className="flex h-[19px] w-[19px] cursor-not-allowed items-center justify-center rounded-md border border-border bg-muted"
-                    />
-                  </td>
-                )}
-                <td className="px-4 py-3">
-                  <span className="inline-flex items-center whitespace-nowrap rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-700">
-                    Faturado
-                  </span>
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex flex-col gap-0.5">
-                    {/* Sem repetir, pela mesma razão do código logo abaixo: a
-                        NF 900123 tem DOIS itens do mesmo job (faturamento
-                        parcial em duas vezes) e saía como "Teste Alterações
-                        Job 3 + Teste Alterações Job 3". O item de save tem
-                        descrição própria e continua somando — ali o "+" diz
-                        algo (31/08/2026). */}
-                    <span className="font-semibold">
-                      {[
-                        ...new Set(
-                          f.itens.map((i) => i.descricao.split(" — ")[0]),
-                        ),
-                      ].join(" + ")}
-                    </span>
-                    <span className="font-mono text-[11px] text-muted-foreground">
-                      {/* Sem repetir: a nota com save tem DOIS itens do mesmo
-                          job (o próprio e o saldo em save), e listar o
-                          código duas vezes lê como erro. */}
-                      {[...new Set(f.itens.map((i) => i.codigo))].join(", ")}
-                    </span>
-                    {/* Quem mandou (decisão 136). Com mais de um job, o
-                        código antes do nome. */}
-                    {f.autores.map((a) => (
-                      <span key={`${a.bv}:${a.codigo}:${a.nome}`} className="text-[11px] text-muted-foreground">
-                        {f.autores.length > 1 && a.codigo ? `${a.codigo} · ` : ""}
-                        {a.bv ? "BV confirmado por" : "Enviado por"}{" "}
-                        <span className="font-semibold text-foreground">{a.nome}</span>
-                        {a.em ? ` · ${formatDataHoraCurta(a.em)}` : ""}
-                      </span>
-                    ))}
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-xs text-muted-foreground">
-                  {f.contraparte_nome}
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-muted-foreground">
-                  {formatMoney(f.valor_total)}
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-muted-foreground/80">
-                  {formatMoney(f.valor_total)}
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 text-right text-muted-foreground">
-                  —
-                </td>
-                <td className="px-3 py-3 font-mono text-xs text-muted-foreground">
-                  {f.qtd_parcelas > 1 ? `${f.qtd_parcelas}x` : "1/1"}
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 font-mono text-xs text-muted-foreground">
-                  {formatDate(f.primeiro_vencimento)}
-                </td>
-                <td className="px-4 py-3 text-right">
-                  <button
-                    type="button"
-                    title="Ver formulário e NF anexada"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setDrawer({ modo: "leitura", nota: f });
-                    }}
-                    className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1.5 font-mono text-[11.5px] font-bold text-emerald-700 transition-colors hover:bg-emerald-100"
-                  >
-                    <FileCheck2 className="h-3.5 w-3.5" />
-                    NF {f.numero_nf}
-                  </button>
-                </td>
-                <td className="relative w-0 p-0">
-                  <BotaoInfo
-                    className="absolute left-3 top-1/2 h-[30px] w-[30px] -translate-y-1/2 shadow-sm"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setInfo(infoDaNota(f));
-                    }}
-                  />
-                </td>
-              </tr>
-            ))}
           </tbody>
         </table>
       </div>
       </div>
+
+      {planilhaDe && (
+        <PopUpDaPlanilha
+          aberto
+          onOpenChange={(a) => {
+            if (!a) setPlanilhaDe(null);
+          }}
+          jobId={planilhaDe.jobId}
+          codigo={planilhaDe.codigo}
+          descricao={planilhaDe.nome}
+        />
+      )}
 
       <p className="flex items-start gap-2 text-xs text-muted-foreground text-pretty">
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -1568,8 +1772,18 @@ export function FaturamentoList({
           O fundo branco opaco é obrigatório: o tom vermelho de 4% que a
           barra tinha é transparente demais e a tabela apareceria por baixo
           dela ao rolar. A tinta vermelha vem numa camada interna. */}
-      {modoSelecao && (
-        <div className="sticky bottom-0 z-20 -mx-1 overflow-hidden rounded-t-2xl border border-b-0 border-california-red/35 bg-white/95 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur">
+      {/* A barra do agrupado fica FIXA no rodapé da tela enquanto o modo está
+          ligado (pedido do Tiago, 15/11/2026): o "Faturar selecionados" à vista
+          em qualquer ponto da lista, e não só no fim dela. Fora da barra lateral
+          (76 px) e na largura do conteúdo; a lista ganha folga embaixo. */}
+      {modoSelecao &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 md:left-[76px]">
+            <div className="pointer-events-auto mx-auto max-w-[1680px] px-5 md:px-8">
+              <div
+                className="overflow-hidden rounded-t-2xl border border-b-0 border-california-red/35 bg-white/95 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur"
+              >
           {/* O erro fica ACIMA da linha de ações: numa barra de rodapé quem
               encosta na borda de baixo tem de ser o botão. */}
           {erroTitulo && (
@@ -1635,7 +1849,11 @@ export function FaturamentoList({
             </div>
           </div>
         </div>
-      )}
+      
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {drawer && (
         <FaturarDrawer
@@ -1660,54 +1878,10 @@ export function FaturamentoList({
           jobs={jobs}
           cnpjsPorCliente={cnpjsPorCliente}
           honorariosPorCliente={honorariosPorCliente}
+          onFaturarPeloEnvio={faturarPeloEnvio}
+          ultimasRetencoes={ultimasRetencoes}
         />
       )}
-
-      <RecebimentoAntesNfDialog
-        alvo={registrarAntes}
-        onOpenChange={(aberto) => {
-          if (!aberto && !pendingAntes) {
-            setRegistrarAntes(null);
-            setErroAntes(null);
-          }
-        }}
-        contas={contas}
-        tipos={tipos}
-        subtipos={subtipos}
-        pending={pendingAntes}
-        erro={erroAntes}
-        onConfirm={(dados, cambio) => {
-          const alvo = registrarAntes;
-          if (!alvo) return;
-          setErroAntes(null);
-          startAntes(async () => {
-            // O internacional registra o câmbio fechado (decisão 229).
-            const res = cambio
-              ? await registrarRecebimentoCambio({
-                  envio_nota_id: alvo.envioNotaId,
-                  ...dados,
-                  ...cambio,
-                })
-              : await registrarRecebimentoAntesNf({
-                  envio_nota_id: alvo.envioNotaId,
-                  item_bv_id: alvo.itemBvId,
-                  ...dados,
-                });
-            if (!res.ok) {
-              setErroAntes(res.message);
-              return;
-            }
-            setRegistrarAntes(null);
-            setToast({
-              texto:
-                `${formatMoney(dados.valor)} recebidos antes da NF em ${alvo.titulo}. ` +
-                "Na emissão da nota, o valor entra como a parcela 1, já recebida.",
-              apuracao: null,
-            });
-            router.refresh();
-          });
-        }}
-      />
 
       <RecebidosAntesNfDialog
         alvo={alvoVerAntes}
@@ -1793,6 +1967,159 @@ function ChipOrigem({ tipo }: { tipo: "job" | "bv" | "lote" }) {
       {tipo === "lote" && <Layers className="h-2.5 w-2.5" />}
       {tipo === "bv" ? "BV" : tipo === "lote" ? "Lote" : "Job"}
     </span>
+  );
+}
+
+/** Decisão 260: os chips de cima, como os da lista de PPs, na ordem que o
+ *  Tiago pediu. O que foi recebido em parte vira mais de uma
+ *  linha: a parte recebida em "Recebidos", o resto em "A receber" (ou em
+ *  "Inadimplentes", se venceu), ou em "A faturar" no recebido antes da NF.
+ *  Em "Todos" as linhas da mesma nota (ou do mesmo job) vêm juntas. */
+type FiltroSituacao = "a_faturar" | "faturados" | "a_receber" | "recebidos" | "inadimplentes" | "todos";
+
+const FILTROS_DE_SITUACAO: Array<{ chave: FiltroSituacao; rotulo: string }> = [
+  { chave: "a_faturar", rotulo: "A faturar" },
+  { chave: "faturados", rotulo: "Faturados" },
+  { chave: "a_receber", rotulo: "A receber" },
+  { chave: "recebidos", rotulo: "Recebidos" },
+  { chave: "inadimplentes", rotulo: "Inadimplentes" },
+  { chave: "todos", rotulo: "Todos" },
+];
+
+const FILTRO_DA_PARTE: Record<ParteDaNota["tipo"], FiltroSituacao> = {
+  recebido: "recebidos",
+  inadimplente: "inadimplentes",
+  a_receber: "a_receber",
+};
+
+const BASE_DO_SELO = "whitespace-nowrap rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide";
+const SELO_DA_PARTE: Record<ParteDaNota["tipo"], { rotulo: string; cor: string }> = {
+  recebido: { rotulo: "Recebido", cor: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+  inadimplente: { rotulo: "Inadimplente", cor: "border-red-200 bg-red-50 text-[#b3323c]" },
+  a_receber: { rotulo: "A receber", cor: "border-amber-200 bg-[#fffbeb] text-[#92400e]" },
+};
+
+/** As cores são as da planilha de títulos (Em aberto, Inadimplente,
+ *  Parcial, Recebido). "Recebida em parte" porque o "Parcial" desta lista
+ *  já é o da nota faturada em parte. */
+const SELO_DA_SITUACAO: Record<SituacaoDaNota, { rotulo: string; cor: string }> = {
+  a_receber: { rotulo: "A receber", cor: "border-amber-200 bg-[#fffbeb] text-[#92400e]" },
+  inadimplente: { rotulo: "Inadimplente", cor: "border-red-200 bg-red-50 text-[#b3323c]" },
+  parcial: { rotulo: "Recebida em parte", cor: "border-sky-200 bg-sky-50 text-sky-700" },
+  recebida: { rotulo: "Recebida", cor: "border-emerald-200 bg-emerald-50 text-emerald-700" },
+};
+
+/** A marca das linhas sem CNPJ emissor (a faturar sem sugestão; notas de
+ *  antes do módulo fiscal). Não vira opção do filtro (Tiago, 16/11/2026: a
+ *  nota precisa de CNPJ emissor): essas linhas só aparecem em "Todos". */
+const SEM_CNPJ = "__sem_cnpj";
+
+/** Decisão 260 (comentário do Tiago no protótipo): o filtro pelo CNPJ que
+ *  emite a nota, no desenho do filtro de regionais da lista de PPs. Vazio =
+ *  todos. Vale a cada clique, sem "Aplicar". */
+function FiltroDeCnpj({
+  opcoes,
+  selecionados,
+  onChange,
+}: {
+  opcoes: Array<{ id: string; nome: string; cnpj: string | null; n: number }>;
+  selecionados: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const [aberto, setAberto] = React.useState(false);
+  const todos = selecionados.length === 0 || selecionados.length === opcoes.length;
+  const rotulo = todos
+    ? "Todos os CNPJs"
+    : selecionados.length === 1
+      ? (opcoes.find((o) => o.id === selecionados[0])?.nome ?? "1 CNPJ")
+      : `${selecionados.length} CNPJs`;
+  return (
+    <Popover open={aberto} onOpenChange={setAberto}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          aria-label="Filtrar pelo CNPJ emissor"
+          className={cn(
+            "flex h-[34px] w-[230px] items-center gap-2 rounded-lg border bg-white px-3 text-left transition-colors",
+            todos ? "border-border" : "border-california-red/40",
+          )}
+        >
+          <Building2 className="h-3.5 w-3.5 flex-none text-muted-foreground" />
+          <span className="min-w-0 flex-1 truncate text-[12.5px] font-medium">{rotulo}</span>
+          <ChevronDown className="h-3.5 w-3.5 flex-none text-muted-foreground" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-[300px] p-2">
+        <div className="flex items-center gap-2 border-b border-border pb-2">
+          <button
+            type="button"
+            onClick={() => onChange([])}
+            className="flex-1 rounded-md py-1.5 text-xs font-medium transition-colors hover:bg-accent"
+          >
+            Marcar todos
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange([])}
+            className="flex-1 rounded-md py-1.5 text-xs font-medium transition-colors hover:bg-accent"
+          >
+            Limpar
+          </button>
+        </div>
+        <div className="max-h-80 space-y-0.5 overflow-y-auto pt-2">
+          {opcoes.map((o) => (
+            <label
+              key={o.id}
+              className="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-accent"
+            >
+              <Checkbox
+                checked={selecionados.includes(o.id)}
+                onCheckedChange={(estado) =>
+                  onChange(estado === true ? [...selecionados, o.id] : selecionados.filter((x) => x !== o.id))
+                }
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-medium">{o.nome}</span>
+                {o.cnpj && (
+                  <span className="block font-mono text-[11px] text-muted-foreground">{formatarCnpj(o.cnpj)}</span>
+                )}
+              </span>
+              <span className="font-mono text-[11px] font-semibold tabular-nums text-muted-foreground">{o.n}</span>
+            </label>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+const MESES_CURTOS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+/** "Out/26": o mês do job mensal, embaixo do código. */
+function mesCurto(iso: string): string {
+  const [a, m] = iso.slice(0, 7).split("-");
+  return `${MESES_CURTOS[Number(m) - 1] ?? m}/${a.slice(2)}`;
+}
+
+/** O ícone da Planilha Interna do job (o mesmo da lista de PPs). */
+function BotaoPlanilha({ onClick }: { onClick: () => void }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label="Ver a Planilha Interna do job"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+          }}
+          onKeyDown={(e) => e.stopPropagation()}
+          className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <Sheet className="h-4 w-4" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>Ver a Planilha Interna do job</TooltipContent>
+    </Tooltip>
   );
 }
 

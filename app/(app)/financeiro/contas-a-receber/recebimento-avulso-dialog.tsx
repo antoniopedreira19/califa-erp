@@ -18,6 +18,14 @@
  *   (tipo Investimento). Empresa e rateio (D3 b), centro de custo fixo, um
  *   por conta e por mês.
  *
+ * - **Recebimento antes da NF** (decisão 260, pedido do Tiago) — o cliente
+ *   pagou antes de a nota sair. Escolhe-se o job (ou o BV) e, logo abaixo,
+ *   os campos de sempre do recebimento antes da NF (decisões 130, 229 e
+ *   256): data, conta, valor, centro de custo e, no internacional, o câmbio
+ *   (valor na moeda, cotação, IOF e tarifa).
+ *   Saiu da aba Faturamento e do item à parte da conciliação: é um tipo do
+ *   mesmo formulário de entrada de dinheiro.
+ *
  * O rodapé segue o lançamento avulso de Títulos a Pagar (resposta do Tiago
  * de 28/09, que o protótipo v4 não mostra): **Criar** lança o título em
  * aberto, com a data prevista; **Criar e dar baixa** cria e abre a baixa em
@@ -33,8 +41,10 @@ import {
   ArrowRight,
   Banknote,
   CalendarPlus,
+  HandCoins,
   Handshake,
   Info,
+  Loader2,
   Plus,
   TrendingUp,
 } from "lucide-react";
@@ -69,8 +79,16 @@ import {
   criarTransferenciaEntreContas,
   saldoDaContaNoDia,
 } from "./actions-recebimento-avulso";
+import { CamposDoRecebimentoAntesNf, type CambioPayload, type RecebidoAntesPayload } from "./recebimento-antes-nf-dialog";
+import {
+  carregarAlvosDoRecebimentoAntesNf,
+  registrarRecebimentoAntesNf,
+  registrarRecebimentoAntesNfDoJob,
+  registrarRecebimentoCambio,
+  type AlvoDaConciliacao,
+} from "./actions-recebimento-antes-nf";
 
-export type TipoDoRecebimentoAvulso = "recebimento_avulso" | "transferencia" | "rendimento" | "mutuo";
+export type TipoDoRecebimentoAvulso = "recebimento_avulso" | "antes_da_nf" | "transferencia" | "rendimento" | "mutuo";
 
 /** Um rendimento já lançado: a tela avisa antes de o banco recusar o
  *  segundo da mesma conta no mesmo mês. */
@@ -88,6 +106,14 @@ const TIPOS: Array<{
   rotulo: string;
   sub: string;
 }> = [
+  // Decisão 260 (pedido do Tiago): o recebimento antes da NF é o primeiro
+  // cartão, antes do recebimento avulso.
+  {
+    chave: "antes_da_nf",
+    icone: HandCoins,
+    rotulo: "Recebimento antes da NF",
+    sub: "O cliente pagou antes de a nota sair",
+  },
   {
     chave: "recebimento_avulso",
     icone: ArrowDownLeft,
@@ -119,6 +145,8 @@ const EXPLICA: Record<TipoDoRecebimentoAvulso, string> = {
     "Reembolso, devolução de fornecedor, juros ou qualquer entrada que não passa por nota fiscal. Entra em Títulos a Receber sem job: a receita fica nas regionais do rateio.",
   transferencia:
     "Não é receita nem despesa: fica fora do DRE e do fluxo de caixa consolidado. Aparece no extrato das duas contas, e cancelar desfaz as duas linhas juntas. Não pede empresa: a conta já diz de qual CNPJ é o dinheiro.",
+  antes_da_nf:
+    "Com envio do GP esperando nota, o recebimento vai para a nota do envio; sem envio, fica preso ao job, e o Novo faturamento associa à nota. Quando a nota sai, ele vira a parcela 1 dela, já recebida.",
   mutuo: "Dinheiro que muda de dono entre empresas: fica abaixo do Lucro líquido.",
   rendimento:
     "O valor líquido (depois do IR e do IOF), que é o que de fato entrou na aplicação. Entra como Receita Financeira, um lançamento por conta e por mês.",
@@ -260,6 +288,56 @@ export function RecebimentoAvulsoDialog({
    *  abertura e a cada troca de tipo: eles montam de novo, vazios. */
   const [geracao, setGeracao] = React.useState(0);
   const [mutuoInicial, setMutuoInicial] = React.useState<InicialDoMutuo | undefined>(undefined);
+  // Antes da NF: o job (ou o BV) escolhido aqui; embaixo, os campos de
+  // sempre do recebimento antes da NF.
+  const [alvos, setAlvos] = React.useState<AlvoDaConciliacao[] | null>(null);
+  const [erroAlvos, setErroAlvos] = React.useState<string | null>(null);
+  const [escolhido, setEscolhido] = React.useState<string | null>(null);
+  const [erroAntes, setErroAntes] = React.useState<string | null>(null);
+  const [pendingAntes, startAntes] = React.useTransition();
+  const escolha = alvos?.find((a) => a.chave === escolhido) ?? null;
+
+  function registrarAntes(dados: RecebidoAntesPayload, cambio: CambioPayload | null) {
+    const a = escolha;
+    if (!a) return;
+    setErroAntes(null);
+    startAntes(async () => {
+      const res = a.jobId
+        ? await registrarRecebimentoAntesNfDoJob({ job_id: a.jobId, ...dados })
+        : cambio
+          ? await registrarRecebimentoCambio({ envio_nota_id: a.envioNotaId, ...dados, ...cambio })
+          : await registrarRecebimentoAntesNf({ envio_nota_id: a.envioNotaId, item_bv_id: a.itemBvId, ...dados });
+      if (!res.ok) {
+        setErroAntes(res.message);
+        return;
+      }
+      onCriado(
+        "",
+        false,
+        a.jobId
+          ? `${formatCurrency(dados.valor, "BRL")} recebidos antes da NF em ${a.titulo}, presos ao job: o Novo faturamento associa à nota.`
+          : `${formatCurrency(dados.valor, "BRL")} recebidos antes da NF em ${a.titulo}. Na emissão da nota, o valor entra como a parcela 1, já recebida.`,
+      );
+    });
+  }
+
+  // Os jobs que esperam nota se leem ao escolher o cartão: mudam com o dia.
+  React.useEffect(() => {
+    if (!open || tipo !== "antes_da_nf") return;
+    let vivo = true;
+    setAlvos(null);
+    setErroAlvos(null);
+    carregarAlvosDoRecebimentoAntesNf()
+      .then((r) => {
+        if (!vivo) return;
+        if (r.ok) setAlvos(r.alvos);
+        else setErroAlvos(r.message);
+      })
+      .catch(() => vivo && setErroAlvos("Não foi possível abrir os jobs. Tente de novo."));
+    return () => {
+      vivo = false;
+    };
+  }, [open, tipo]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -286,6 +364,8 @@ export function RecebimentoAvulsoDialog({
 
   function limpar() {
     setErro(null);
+    setEscolhido(null);
+    setErroAntes(null);
     setMutuoInicial(undefined);
     setCentavos("");
     setDescricao("");
@@ -497,8 +577,9 @@ export function RecebimentoAvulsoDialog({
   const tipoRendimento = tipos.find((t) => t.codigo === "10");
 
   return (
+    <>
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[780px]">
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-[860px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Plus className="h-5 w-5 text-california-red" />
@@ -506,7 +587,7 @@ export function RecebimentoAvulsoDialog({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="grid grid-cols-4 gap-2">
+        <div className="grid grid-cols-5 gap-2">
           {TIPOS.map((t) => {
             const Icone = t.icone;
             const ativo = tipo === t.chave;
@@ -563,6 +644,51 @@ export function RecebimentoAvulsoDialog({
         )}
 
         <div className="space-y-3">
+          {tipo === "antes_da_nf" && (
+            <>
+              <Campo rotulo="Job ou BV" obrigatorio>
+                {alvos === null && !erroAlvos ? (
+                  <div className="flex h-11 items-center gap-2 rounded-lg border border-border px-3 text-[13px] text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Lendo os jobs que esperam nota…
+                  </div>
+                ) : (
+                  <Combobox
+                    items={(alvos ?? []).map((a) => ({
+                      value: a.chave,
+                      label: a.rotulo,
+                      descricao: a.descricao,
+                      busca: a.busca,
+                    }))}
+                    value={escolhido}
+                    onChange={(v) => setEscolhido(v ?? null)}
+                    placeholder="Selecione o job ou o BV"
+                    buscaPlaceholder="Escreva o código, o nome ou o cliente"
+                    className={COMBOBOX_COMO_SELECT}
+                  />
+                )}
+              </Campo>
+              {escolha && (
+                <CamposDoRecebimentoAntesNf
+                  key={escolha.chave}
+                  alvo={escolha}
+                  contas={contas}
+                  tipos={tipos}
+                  subtipos={subtipos}
+                  pending={pendingAntes}
+                  erro={erroAntes}
+                  onCancelar={() => onOpenChange(false)}
+                  onConfirm={registrarAntes}
+                />
+              )}
+              {erroAlvos && (
+                <div className="flex items-start gap-2 rounded-lg border border-california-red/40 bg-california-red/5 p-3 text-sm text-california-red">
+                  <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+                  <span>{erroAlvos}</span>
+                </div>
+              )}
+            </>
+          )}
           {tipo === "recebimento_avulso" && (
             <>
               <div className="grid grid-cols-2 gap-3">
@@ -967,12 +1093,36 @@ export function RecebimentoAvulsoDialog({
             </>
           )}
 
+          {!(tipo === "antes_da_nf" && escolha) && (
           <div className="flex items-start gap-2 rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-700" />
             <span>{ehNotas ? "Nota de sócio paga à empresa. Não abate o saldo de mútuo." : EXPLICA[tipo]}</span>
           </div>
+          )}
         </div>
 
+        {tipo === "antes_da_nf" ? (
+          escolha ? null : (
+            <div className="flex items-center justify-end gap-2 border-t border-border pt-4">
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                className="rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled
+                title="Escolha o job ou o BV"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                <HandCoins className="h-4 w-4" />
+                Registrar recebimento
+              </button>
+            </div>
+          )
+        ) : (
         <div className="space-y-2 border-t border-border pt-4">
           <p className="text-[11px] text-muted-foreground text-pretty">
             <strong className="font-semibold text-foreground">Criar</strong> lança o título
@@ -1011,10 +1161,13 @@ export function RecebimentoAvulsoDialog({
             </button>
           </div>
         </div>
+        )}
         </>
         )}
       </DialogContent>
     </Dialog>
+
+    </>
   );
 }
 

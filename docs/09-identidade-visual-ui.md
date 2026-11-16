@@ -309,6 +309,32 @@ Fonte única da pílula (as duas formas, e a largura da calha): `app/(app)/_plan
 
 **Botão com texto não mora em coluna estreita** (17/10/2026). Em `table-fixed`, o que não cabe na coluna transborda por cima da vizinha sem aviso. O "Cancelar e refazer" da PP rejeitada (138px) vivia na coluna do olho (45 a 61px) e cobria o selo "Rejeitado" inteiro a 1440. Ação de linha vai para a trilha fora da tabela, como ícone com dica quando cabe nos lugares que a linha já não usa: a rejeitada não envia nem edita, então formulário, "Cancelar e refazer" e cancelar ocupam os 99px de sempre, sem alargar a trilha. Ver a nota de 17/10/2026 em `docs/handoffs/HANDOFF_JOBS.md`.
 
+## Listas com texto livre: grade fixa e teto de duas linhas
+
+**Regra (16/11/2026).** Lista com texto livre (fornecedor, job, cliente, pessoa) nasce em grade fixa: `table-fixed` + `colgroup`.
+- **Larguras:** as colunas de texto ficam sem largura e dividem o que sobra. Data, valor, selo e ícone ganham largura medida.
+- **Teto de duas linhas:** o texto livre quebra em até duas linhas, e o resto abre no cartão (`TruncateTooltip linhas={2}`; com `children` quando precisa de formatação, como o código do job em mono). Nome de pessoa e selo ficam numa linha só.
+- **A caixa da tabela** é `relative overflow-x-auto`, com `min-w` na tabela: numa janela estreita, a lista rola de lado. **Nunca `overflow-hidden`**, que corta as últimas colunas sem aviso e sem rolagem. O `relative` prende na caixa o rótulo `sr-only` do cabeçalho; sem ele, esse rótulo dá rolagem lateral à página inteira.
+
+**Como medir:**
+- Meça pela maior string **real**, não pela do exemplo. Antes de fixar as larguras, busque no banco:
+  - o maior valor de cada coluna (`max(length(nome))`, a maior PP);
+  - as combinações de selo que existem de verdade (há PP urgente de reembolso em aberto: os dois selos juntos medem 133 px).
+- Confira na largura do Tiago: 1.616 px de conteúdo (janela de 1838×1040, Chrome a 80%).
+- Calibre sem editar e recarregar: aplique o `colgroup` por JS na tela publicada e conte as células com `scrollWidth > clientWidth`.
+
+**Protótipo aprovado não prova a tela.**
+- O protótipo roda com dado fictício e curto: o que coube lá pode não caber com o dado real.
+- Copiar a marcação do protótipo copia também a largura automática dele.
+- Antes do push, a implementação se compara com o protótipo **com o dado real mais longo**, na largura do Tiago: todas as colunas à vista, e nenhuma linha passando do teto.
+
+**Case studies:**
+- **Listas de jobs e de orçamentos (05 e 07/10/2026, decisão 036):** `whitespace-nowrap` em largura automática levava a tabela a ~2.200 px.
+- **Lista de PPs do Contas a Pagar (16/11/2026, decisão 257):**
+  - O protótipo aprovado tinha nomes de ~30 caracteres e cabia em 1.614 px.
+  - A implementação manteve a largura automática. Com os nomes reais (fornecedor até 72 caracteres, job até 54, quem enviou até 43 em `nowrap`), a tabela foi a 1.887 px numa caixa de 1.615 px com `overflow-hidden`.
+  - Resultado: Faturamento, Status e o ícone sumiam, e cada linha tinha até quatro linhas de texto.
+
 ## Header padrão da página
 
 Toda página do app (`app/(app)/**`) começa com um `<header>` que tem sempre 3 elementos: **kicker** (ou breadcrumb) → **ícone + título** → **descrição**. O ícone fica num quadrado arredondado com fundo `bg-california-red/10` — dá reconhecimento visual imediato à seção, matching a sidebar.

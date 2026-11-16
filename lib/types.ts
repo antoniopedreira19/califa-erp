@@ -4,6 +4,7 @@
  */
 
 import type { DeslocamentosDoReembolso, ReembolsoTipo } from "@/lib/calculos/reembolso";
+import type { LiberacaoPagamentosAtrasados } from "@/lib/pagamentos-atrasados";
 
 export type AppRole =
   | "administrador"
@@ -2167,6 +2168,12 @@ export interface PedidoCompra {
   urgente_justificativa: string | null;
   urgente_por: string | null;
   urgente_em: string | null;
+  /** Decisão 259: a liberação de pagamentos atrasados em que a PP nasceu
+   *  (job fechado). Posta pelo banco. Nula na PP de sempre. */
+  pagamento_atrasado_id: string | null;
+  /** Decisão 259: gerada com "Sim, concluir PPs atrasadas" — leva a
+   *  conclusão ao financeiro junto com ela. */
+  conclui_pagamentos_atrasados: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -2343,6 +2350,10 @@ export interface ItemPlanilhaJob {
   item_versao_id: string | null;
   /** Linha vermelha: orçado e planejado zerados, só recebe PP. */
   linha_vermelha: boolean;
+  /** Decisão 259: a linha vermelha criada na liberação de pagamentos
+   *  atrasados (job fechado). Nula nas outras linhas. Obrigatório: quem
+   *  monta o item manda `null` explícito. */
+  pagamento_atrasado_id: string | null;
   grupo_id: string;
   ordem: number;
   item: string;
@@ -3236,6 +3247,9 @@ export interface PedidoCompraNaLista extends PedidoCompra {
   /** Histórico de eventos da PP (decisão 136): a linha do tempo do "Ver
    *  PP". Obrigatório pelo mesmo motivo da prestação acima. */
   eventos: PPEvento[];
+  /** Decisão 259: a liberação da PP de pagamento atrasado (a competência
+   *  e o motivo). Nula na PP de sempre; obrigatória pelo mesmo motivo. */
+  pagamento_atrasado: LiberacaoPagamentosAtrasados | null;
 }
 
 /**
@@ -4302,6 +4316,26 @@ export interface Faturamento {
   /** Decisão 184: o job a que a nota AVULSA se refere (empresa, regional e
    *  cliente são os dele). Não consome saldo de faturamento do job. */
   job_referencia_id: string | null;
+  /** Decisão 256: nota do Novo faturamento — o financeiro faturou o job sem
+   *  o envio da produção (fecha o envio, mesmo abaixo do previsto). */
+  faturado_pelo_financeiro: boolean;
+  /** Decisão 256: o mês (dia 1) que o Novo faturamento fatura no job mensal
+   *  e na Mídia Off; nulo nos outros. */
+  mes_novo_faturamento: string | null;
+  /** Decisão 256: o previsto do mês no dia da nota (fecha o mês no envio). */
+  previsto_do_mes: number | null;
+  /** Decisão 256: o repasse (custo AR) que sai da base do ISS. */
+  valor_deducoes: number;
+  /** Decisão 256: as alíquotas que o cliente retém na fonte, informadas no
+   *  Faturar; a baixa abre com elas. */
+  retencoes_previstas: RetencaoPrevista[];
+  /** Decisão 256: CBS e IBS (reforma tributária, fase de teste), sobre o
+   *  líquido (total − ISS − PIS − COFINS); registro, sem guia. Nulos nas
+   *  notas anteriores. */
+  aliquota_cbs: number | null;
+  valor_cbs: number | null;
+  aliquota_ibs: number | null;
+  valor_ibs: number | null;
   /** Módulo fiscal (02/10/2026): o CNPJ emissor e o CNAE escolhidos na
    *  lista do cadastro de impostos. Nulos nas notas anteriores. */
   estabelecimento_id: string | null;
@@ -4589,6 +4623,15 @@ export type TipoEntradaAvulsa = "recebimento_avulso" | "rendimento";
 
 /** Os impostos que podem ser retidos na fonte numa baixa (sem INSS, D6 1a). */
 export type ImpostoRetido = "ISS" | "PIS" | "COFINS" | "CSLL" | "IRRF";
+
+/** Decisão 256: a retenção que o cliente faz, informada no Faturar
+ *  (`faturamentos.retencoes_previstas`). O valor se refaz: o ISS sobre a
+ *  base de cálculo (o total menos as deduções), os federais sobre o total. */
+export interface RetencaoPrevista {
+  imposto: ImpostoRetido;
+  /** Em %. */
+  aliquota: number;
+}
 
 /** Uma linha de `baixas_retencoes`: o imposto retido numa baixa. */
 export interface RetencaoDaBaixa {

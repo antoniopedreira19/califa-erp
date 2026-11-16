@@ -1,5 +1,6 @@
 import { MapPin } from "lucide-react";
 import { formatCurrency } from "@/lib/utils";
+import { valoresDoRateio } from "@/lib/calculos/rateio-regional";
 
 interface RateioItem {
   regional_id: string;
@@ -19,17 +20,16 @@ function formatPct(n: number): string {
 export function RateioCard({ rateio, valorTotal, regionaisPorId }: Props) {
   if (rateio.length === 0) return null;
 
-  // Última linha "pega a sobra" pra render em R$
-  const valores: number[] = rateio.map((r, idx) => {
-    if (idx < rateio.length - 1) {
-      return Number(((valorTotal * r.percentual) / 100).toFixed(2));
-    }
-    // Última linha: pega a sobra
-    const somaAnteriores = rateio
-      .slice(0, -1)
-      .reduce((s, x) => s + Number(((valorTotal * x.percentual) / 100).toFixed(2)), 0);
-    return Number((valorTotal - somaAnteriores).toFixed(2));
-  });
+  // A diferença do arredondamento fica com a regional de maior percentual
+  // (no empate, a primeira em ordem alfabética), a mesma regra do fluxo de
+  // caixa. Antes ia para a última linha, numa ordem que o banco não garante.
+  const valores = valoresDoRateio(
+    rateio.map((r) => ({
+      percentual: r.percentual,
+      nome: regionaisPorId.get(r.regional_id)?.nome,
+    })),
+    valorTotal,
+  );
 
   return (
     <div className="rounded-xl border border-border bg-card p-4">

@@ -47,6 +47,9 @@ interface Props {
   jobId: string;
   jobCodigo: string;
   status: JobStatus;
+  /** Decisão 259: o job fechado tem pagamentos atrasados liberados pelo
+   *  financeiro (a liberação aberta) — o rodapé diz isso. */
+  pagamentosAtrasadosLiberados: boolean;
   /** Tela do orçamento de origem, na versão aprovada. É lá que o envio à
    *  abertura se revisa e se cancela (decisão 057). */
   orcamentoHref: string;
@@ -239,6 +242,7 @@ export function BarraAcoesJob({
   jobId,
   jobCodigo,
   status,
+  pagamentosAtrasadosLiberados,
   orcamentoHref,
   podeEnviarFaturamento,
   aberturaEmRevisao = false,
@@ -315,6 +319,7 @@ export function BarraAcoesJob({
       saves={saves}
       aberturaEmRevisao={aberturaEmRevisao}
       junto={encerraComOUltimoMes}
+      pagamentosAtrasados={pagamentosAtrasadosLiberados}
     />
   );
 
@@ -428,13 +433,58 @@ function TrilhaFaturamentoUnico({
   moeda: string;
 }) {
   const [verEnvio, setVerEnvio] = React.useState(false);
-  const situacao = faturamento?.situacao ?? "a_enviar";
+  // Decisão 256: o job que o financeiro faturou pelo Novo faturamento, sem envio.
+  const peloFinanceiro = faturamento?.peloFinanceiro ?? null;
   const envio = faturamento?.envio ?? null;
+  const situacao = faturamento?.situacao ?? "a_enviar";
 
   let texto: React.ReactNode;
   let acoes: React.ReactNode = null;
 
-  if (!envio) {
+  if (!envio && peloFinanceiro) {
+    const ultima =
+      peloFinanceiro.notas
+        .map((n) => n.dataEmissao)
+        .filter((d): d is string => Boolean(d))
+        .sort()
+        .at(-1) ?? null;
+    texto = (
+      <span>
+        Faturado pelo financeiro, sem envio da produção ·{" "}
+        {peloFinanceiro.notas.length === 1 ? (
+          <>
+            NF <strong className={MONO}>{peloFinanceiro.notas[0].numero}</strong>
+          </>
+        ) : (
+          `${peloFinanceiro.notas.length} notas fiscais`
+        )}{" "}
+        · <strong className={FORTE}>{formatCurrency(peloFinanceiro.total, moeda)}</strong>
+        {!peloFinanceiro.coberto && (
+          <>
+            {" "}
+            de <strong className={FORTE}>{formatCurrency(faturamentoPrevisto, moeda)}</strong>
+          </>
+        )}{" "}
+        em nota emitida
+        {ultima ? (
+          <>
+            {" "}
+            em <strong className={MONO}>{dataBr(ultima)}</strong>
+          </>
+        ) : null}
+        .
+        {!peloFinanceiro.coberto && (
+          <>
+            {" "}
+            O saldo de{" "}
+            <strong className={FORTE}>{formatCurrency(Math.max(0, faturamentoPrevisto - peloFinanceiro.total), moeda)}</strong>{" "}
+            fica com o financeiro.
+          </>
+        )}{" "}
+        Não há o que enviar para faturamento.
+      </span>
+    );
+  } else if (!envio) {
     if (situacao === "sem_faturamento") {
       texto = pagoSoPorSave
         ? "Pago com saldo em save de outro job: a nota já saiu lá, e não há o que enviar."
@@ -579,10 +629,13 @@ function TrilhaEncerramento({
   saves,
   aberturaEmRevisao,
   junto,
+  pagamentosAtrasados,
 }: {
   jobId: string;
   jobCodigo: string;
   status: JobStatus;
+  /** Decisão 259: o financeiro liberou os pagamentos atrasados. */
+  pagamentosAtrasados: boolean;
   fechamento: FechamentoDoJob;
   totais: TotaisDoFechamento;
   podeEncerrar: boolean;
@@ -596,6 +649,11 @@ function TrilhaEncerramento({
 }) {
   const [aberto, setAberto] = React.useState(false);
   const encerrado = status === "encerrado" || status === "finalizado";
+  // Decisão 259: com os pagamentos atrasados liberados, o job fechado volta
+  // a aceitar PP e linha vermelha nova.
+  const naoAceita = pagamentosAtrasados
+    ? "Não aceita errata nem BV. Pagamentos atrasados liberados pelo financeiro: PP em qualquer linha e linha vermelha nova."
+    : "Não aceita edição, PP nem BV.";
 
   if (encerrado) {
     return (
@@ -615,11 +673,11 @@ function TrilhaEncerramento({
                 <strong className={MONO}>
                   {new Date(fechamento.encerradoEm).toLocaleDateString("pt-BR")}
                 </strong>
-                {fechamento.encerradoPorNome ? ` por ${fechamento.encerradoPorNome}` : ""}.
-                Não aceita edição, PP nem BV.
+                {fechamento.encerradoPorNome ? ` por ${fechamento.encerradoPorNome}` : ""}.{" "}
+                {naoAceita}
               </>
             ) : (
-              "Job encerrado — é histórico. Não aceita edição, PP nem BV."
+              `Job encerrado — é histórico. ${naoAceita}`
             )}
           </TextoTrilha>
         </TrilhaBarra>

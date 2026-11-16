@@ -75,7 +75,7 @@ const ITENS: Array<
   {
     chave: "antes_da_nf",
     rotulo: "Recebimento antes da NF",
-    ajuda: "O cliente pagou antes de a nota sair: na aba Faturamento",
+    ajuda: "O cliente pagou antes de a nota sair: escolha o job ou o BV",
     icone: HandCoins,
     cor: "text-emerald-700",
   },
@@ -105,6 +105,9 @@ const ITENS: Array<
 
 const TIPO_DO_RECEBIMENTO: Partial<Record<Formulario, TipoDoRecebimentoAvulso>> = {
   recebimento_avulso: "recebimento_avulso",
+  // Decisão 260: o recebimento antes da NF é um tipo do mesmo formulário; o
+  // item abre direto no cartão dele.
+  antes_da_nf: "antes_da_nf",
   rendimento: "rendimento",
   transferencia: "transferencia",
   mutuo: "mutuo",
@@ -137,12 +140,9 @@ export function MenuNovoLancamento({
 
   function escolher(f: Formulario) {
     setMenuAberto(false);
-    if (f === "antes_da_nf") {
-      // O recebimento antes da NF nasce de um job na aba Faturamento de
-      // Contas a Receber, onde estão o envio e o cliente.
-      router.push("/financeiro/contas-a-receber");
-      return;
-    }
+    // Decisão 256: o recebimento antes da NF se registra aqui, escolhendo o
+    // job (ou o BV) — saiu da aba Faturamento de Contas a Receber. Desde a
+    // 260, pelo cartão dele no formulário de Recebimento avulso.
     setFormulario(f);
   }
 
@@ -175,11 +175,11 @@ export function MenuNovoLancamento({
               <button
                 key={item.chave}
                 type="button"
-                disabled={item.chave !== "antes_da_nf" && !dados}
+                disabled={!dados}
                 onClick={() => escolher(item.chave)}
                 className="flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted disabled:cursor-wait disabled:opacity-60"
               >
-                {carregando && item.chave !== "antes_da_nf" ? (
+                {carregando ? (
                   <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
                 ) : (
                   <item.icone className={cn("mt-0.5 h-4 w-4 shrink-0", item.cor ?? "text-muted-foreground")} />

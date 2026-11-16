@@ -104,6 +104,8 @@ import {
 } from "@/lib/calculos/prestacao-da-verba";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
 import { formatDataAsHoraBr, formatDiaBr } from "@/lib/formatar-data-hora";
+import { RelogioDaPPAtrasada } from "@/app/(app)/_pagamentos-atrasados/componentes";
+import type { LiberacaoPagamentosAtrasados } from "@/lib/pagamentos-atrasados";
 
 /** A tela lado a lado do Contas a Pagar, em leitura — a mesma do
  *  "Visualizar" do "Ver PP". Só carrega quando alguém clica no olho. */
@@ -134,6 +136,10 @@ interface Props {
    *  do painel do item. O PAPEL vem de `papelEnviaPP`. A errata não trava
    *  mais o envio (decisão 238). */
   statusDoJob: JobStatus;
+  /** Decisão 259: a liberação aberta do job fechado (a PP editada pela aba
+   *  sai como pagamento atrasado) e quem conclui pela produção. */
+  pagamentoAtrasadoAberto?: LiberacaoPagamentosAtrasados | null;
+  podeConcluirPPsAtrasadas?: boolean;
   /** O que o pop-up de envio precisa — o mesmo que o painel do item recebe
    *  (decisões 152 e 156). */
   tomadoresDaNf: TomadorDaNf[];
@@ -192,7 +198,7 @@ export interface EdicaoDaPPNaAba {
 
 /** "aguardando_prestacao" junta verba sem prestação e prestação reprovada:
  *  nos dois casos a próxima ação é da produção (decisão 081, 4a). */
-type Filtro = "todas" | PPStatus | "aguardando_prestacao" | "comite";
+type Filtro = "todas" | PPStatus | "aguardando_prestacao" | "pronta_para_envio" | "comite";
 
 /**
  * As colunas que filtram e ordenam pelo título, como no Excel (pedido do
@@ -220,9 +226,11 @@ interface LinhaPP {
 const CHIPS: Array<{ key: Filtro; label: string }> = [
   { key: "todas", label: "Todas" },
   { key: "comite", label: "Comitê" },
-  // Decisão 242: "Pronta para envio" é uma Gerada — sai dos filtros e
-  // fica só a marca na linha, embaixo do selo.
   { key: "gerada", label: "Gerada" },
+  // Decisão 242 (revisão de 15/11/2026): a Gerada que o produtor deixou
+  // pronta — documentos conferidos no pop-up do envio, falta só o GP
+  // enviar. Recorte dentro da Gerada, que segue contando as prontas.
+  { key: "pronta_para_envio", label: "Pronta para envio" },
   { key: "em_avaliacao", label: "Em avaliação" },
   { key: "pago", label: "Pago" },
   // Decisão 242: o nome da ação que a produção faz.
@@ -269,6 +277,13 @@ function formatarData(iso: string | null): string {
   if (!iso) return "—";
   const [y, m, d] = iso.slice(0, 10).split("-");
   return `${d}/${m}/${y}`;
+}
+
+/** Decisão 257: o dia do pagamento, embaixo do selo da PP paga e da verba
+ *  (o da parcela, na PP parcelada). */
+function PagoEm({ iso }: { iso: string | null }) {
+  if (!iso) return null;
+  return <span className="whitespace-nowrap text-[10.5px] text-muted-foreground">Pago {formatarData(iso)}</span>;
 }
 
 /**
@@ -380,6 +395,8 @@ function linhaDaPPNoComite(c: PPNoComite): PedidoCompraNaLista {
     prestacao: null,
     devolucao: null,
     eventos: [],
+    // Decisão 259: a PP a emitir no Comitê ainda não tem a marca.
+    pagamento_atrasado: null,
   } as unknown as PedidoCompraNaLista;
 }
 
@@ -471,6 +488,8 @@ export function JobPPsSection({
   papelEnviaPP,
   podePrestarContas,
   statusDoJob,
+  pagamentoAtrasadoAberto = null,
+  podeConcluirPPsAtrasadas = false,
   tomadoresDaNf,
   tomadorPorEmpresa,
   empresas,
@@ -596,6 +615,7 @@ export function JobPPsSection({
     const aguardaProducao =
       verbaAguardaProducao(situacaoDaVerba(pp)) || midiaAguardaProducao(situacaoMidiaDaPP(pp, midiaSystem));
     if (f === "aguardando_prestacao") return aguardaProducao;
+    if (f === "pronta_para_envio") return prontaParaEnvio(pp);
     return pp.status === f;
   }
   const quantas = (f: Filtro) => linhasDaTabela.filter((pp) => passaNoFiltro(pp, f)).length;
@@ -1093,7 +1113,15 @@ export function JobPPsSection({
                       className="px-3.5 py-2.5 align-middle font-mono text-[11.5px] leading-tight"
                       title={`${doComite ? "Criada" : "Emitida"} em ${formatDiaBr(pp.created_at)}${pp.emitida_por_nome ? ` por ${pp.emitida_por_nome}` : ""}`}
                     >
-                      {doComite ? <SeloPPAEmitir refaz={null} /> : pp.codigo}
+                      {/* Decisão 259: o relógio vermelho da PP de pagamento
+                          atrasado, logo depois do código — a coluna é
+                          estreita e a parcela vai embaixo. */}
+                      <span className="whitespace-nowrap">
+                        {doComite ? <SeloPPAEmitir refaz={null} /> : pp.codigo}
+                        {!doComite && pp.pagamento_atrasado && (
+                          <RelogioDaPPAtrasada liberacao={pp.pagamento_atrasado} />
+                        )}
+                      </span>
                       {total > 1 && (
                         <span className="block text-[10.5px] text-muted-foreground">
                           {indice + 1}/{total}
@@ -1232,18 +1260,20 @@ export function JobPPsSection({
                       {formatCurrency(valorLinha, "BRL")}
                     </td>
                     <td className="px-3.5 py-2.5 align-middle">
-                      {/* Verba paga: o chip diz onde a prestação está (081).
-                          O selo quebra linha dentro da coluna em vez de
-                          passar por baixo do olho (16/10/2026): os da verba
-                          medem até 170 px, e a coluna tem de 106 a 118 úteis a
-                          1440 px. Numa linha só ele segue igual à pílula. */}
+                      {/* Verba paga: o chip diz onde a prestação está (081),
+                          com o nome curto (decisão 257). O que está pago diz
+                          o dia, embaixo do selo — a verba também (257). */}
                       {doComite ? (
                         <SeloDoComite pedido={doComite.pedido} acimaDoAprovado={doComite.acimaDoAprovado} className={SELO_QUE_QUEBRA} />
                       ) : situacao ? (
-                        <SituacaoVerbaChip situacao={situacao} className={SELO_QUE_QUEBRA} duasLinhas />
+                        <div className="flex flex-col items-start gap-1">
+                          <SituacaoVerbaChip situacao={situacao} className={SELO_QUE_QUEBRA} />
+                          <PagoEm iso={parcela ? parcela.pago_em : pp.pago_em} />
+                        </div>
                       ) : (
                         <div className="flex flex-col items-start gap-1">
                           <PPStatusChip status={pp.status} className={SELO_QUE_QUEBRA} />
+                          {pp.status === "pago" && <PagoEm iso={parcela ? parcela.pago_em : pp.pago_em} />}
                           {/* Decisão 216: foi sem NF na auditoria da Mídia
                               System, e onde a prestação da nota está. */}
                           <MarcaMidiaNaPP situacao={situacaoMidiaDaPP(pp, midiaSystem)} />
@@ -1737,6 +1767,8 @@ export function JobPPsSection({
             ppGeradaEditando={ppEditando}
             itemConcluido={item?.concluido ?? false}
             statusDoJob={statusDoJob}
+            pagamentoAtrasado={pagamentoAtrasadoAberto}
+            podeConcluirPPsAtrasadas={podeConcluirPPsAtrasadas}
             tomadores={tomadoresDaNf}
             tomadorPorEmpresa={tomadorPorEmpresa}
             cnpjPadraoDaPP={edicaoDaPP.cnpjPadraoDaPP}
@@ -2053,10 +2085,11 @@ function AcoesDoComite({ c, trava, pending, onCancelarEnvio, onEditar, onGerar, 
 
 
 /* ---- A barra de filtros (decisão 242) ----
- * Os filtros na ordem do caminho da PP — Comitê, Gerada, Em avaliação,
- * Pago — e depois os desvios: Prestar contas, Rejeitado, Cancelada.
- * Todo filtro com o número de PPs (a Pronta para envio é uma Gerada). */
-const FLUXO: Filtro[] = ["comite", "gerada", "em_avaliacao", "pago"];
+ * Os filtros na ordem do caminho da PP — Comitê, Gerada, Pronta para envio,
+ * Em avaliação, Pago — e depois os desvios: Prestar contas, Rejeitado, Cancelada.
+ * Todo filtro com o número de PPs. A Pronta para envio é um recorte da
+ * Gerada (a marca do produtor) e vem logo depois dela. */
+const FLUXO: Filtro[] = ["comite", "gerada", "pronta_para_envio", "em_avaliacao", "pago"];
 const DESVIOS: Filtro[] = ["aguardando_prestacao", "rejeitada", "cancelada"];
 
 interface ItemDoFiltro {

@@ -121,6 +121,12 @@ export interface BaixaRecebimentoAlvo {
    * em silêncio (CLAUDE.md).
    */
   notaId: string | null;
+  /**
+   * Decisão 256: a retenção que o Faturar informou nesta nota (as alíquotas).
+   * Sem linha do banco com retenção, a baixa abre com ela, editável. `null`
+   * sem retenção prevista e fora de nota. Obrigatório no tipo (CLAUDE.md).
+   */
+  retencaoDaNota: { numeroNf: string; aliquotas: Partial<Record<ImpostoRetido, number>> } | null;
 }
 
 /** A linha do extrato do banco que abriu a baixa (decisão 200). */
@@ -247,9 +253,16 @@ function FormularioDaBaixa({
   );
   const [tipoId, setTipoId] = React.useState(alvo.tipoInicialId ?? "");
   const [subtipoId, setSubtipoId] = React.useState(alvo.subtipoInicialId ?? "");
+  // Decisão 256: sem a retenção da linha do banco, a que o Faturar informou.
+  const retencaoDaNota = alvo.retencaoDaNota;
   const retencaoDaLinha = React.useMemo<RetencaoDaAprovacao | null>(
-    () => (linhaDoBanco?.retencao ? { data: null, aliquotas: linhaDoBanco.retencao, remessa: null } : null),
-    [linhaDoBanco?.retencao],
+    () =>
+      linhaDoBanco?.retencao
+        ? { data: null, aliquotas: linhaDoBanco.retencao, remessa: null }
+        : retencaoDaNota
+          ? { data: null, aliquotas: retencaoDaNota.aliquotas, remessa: null }
+          : null,
+    [linhaDoBanco?.retencao, retencaoDaNota],
   );
   const v = useValorDaBaixa(alvo.aberto, alvo.ultimaRetencao, retencaoDaLinha, linhaDoBanco?.parcial ?? null);
   // Só concilia quando o que entra na conta bate com a linha do banco.
@@ -322,6 +335,18 @@ function FormularioDaBaixa({
 
   return (
     <>
+      {!linhaDoBanco?.retencao && retencaoDaNota && (
+        <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-900">
+          <Landmark className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            A retenção foi informada no faturamento da NF {retencaoDaNota.numeroNf}: a baixa abre com ela (
+            {Object.entries(retencaoDaNota.aliquotas)
+              .map(([k, v]) => `${k} ${Number(v).toLocaleString("pt-BR", { maximumFractionDigits: 4 })}%`)
+              .join(" · ")}
+            ), editável.
+          </span>
+        </div>
+      )}
       {linhaDoBanco && (
         <div className="flex gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-xs leading-relaxed text-emerald-900">
           <Landmark className="mt-0.5 h-3.5 w-3.5 shrink-0" />

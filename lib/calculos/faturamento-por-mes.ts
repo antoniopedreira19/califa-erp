@@ -190,7 +190,19 @@ export interface NotaDoMes {
   valor: number;
 }
 
+/** Decisão 256: uma nota do Novo faturamento do job (o financeiro faturou
+ *  sem o envio da produção). `mes` é o mês que ela fatura no mensal. */
+export interface NotaDoFinanceiro {
+  numero: string;
+  dataEmissao: string;
+  valor: number;
+  mes: string | null;
+}
+
 export interface MesDeFaturamento extends FaturamentoDoMes {
+  /** Decisão 256: o financeiro faturou o mês pelo Novo faturamento, sem o
+   *  envio da produção — o envio do mês está fechado. */
+  peloFinanceiro: boolean;
   envio: EnvioDoJobComParcelas | null;
   /** Quanto das parcelas do envio já saiu em nota emitida. */
   faturado: number;
@@ -224,6 +236,7 @@ export function montarFaturamentoMensal({
   envios,
   itensDeNota,
   midia = null,
+  notasDoFinanceiro = [],
 }: {
   meses: MesDoJob[];
   grupos: GrupoComMes[];
@@ -232,6 +245,8 @@ export function montarFaturamentoMensal({
   percentualImposto: number;
   envios: EnvioDoJobComParcelas[];
   itensDeNota: ItemDeNotaDaParcela[];
+  /** Decisão 256: as notas do Novo faturamento do job, cada uma com o mês. */
+  notasDoFinanceiro?: NotaDoFinanceiro[];
   /** Mídia Off (decisão 167): a conta da mídia, o dia de hoje e as datas
    *  de veiculação das linhas (as mesmas `itens`, pelo id). */
   midia?: {
@@ -270,13 +285,28 @@ export function montarFaturamentoMensal({
             .filter((d): d is NonNullable<typeof d> => d !== undefined),
         )
       : null;
+    // Decisão 256: o mês que o financeiro faturou pelo Novo faturamento,
+    // sem envio: o envio do mês fecha, mesmo abaixo do previsto.
+    const doFinanceiro = envio ? [] : notasDoFinanceiro.filter((n) => n.mes === m.mes);
+    if (doFinanceiro.length > 0) {
+      const total = centavos(doFinanceiro.reduce((t, n) => t + n.valor, 0));
+      return {
+        ...m,
+        envio,
+        faturado: total,
+        notas: doFinanceiro.map((n) => ({ numero: n.numero, dataEmissao: n.dataEmissao, valor: n.valor })),
+        situacao: total >= m.faturamento - 0.05 ? "faturado" : "faturado_parcial",
+        ultimaVeiculacao,
+        peloFinanceiro: true,
+      };
+    }
     const situacao: SituacaoDoMes =
       !envio && m.faturamento <= 0
         ? "sem_faturamento"
         : !envio && midia && mesEmVeiculacao(m.mes, ultimaVeiculacao, midia.hoje)
           ? "em_veiculacao"
           : situacaoDoMes(envio, faturado);
-    return { ...m, envio, faturado, notas, situacao, ultimaVeiculacao };
+    return { ...m, envio, faturado, notas, situacao, ultimaVeiculacao, peloFinanceiro: false };
   });
 }
 
@@ -325,6 +355,10 @@ export interface FaturamentoDoEnvioUnico {
    *  O envio fecha por `envio.valor_faturado + variacaoCambial`. Zero fora
    *  do internacional. */
   variacaoCambial: number;
+  /** Decisão 256: o job que o financeiro faturou pelo Novo faturamento,
+   *  sem envio — o envio está fechado, mesmo abaixo do previsto. Nulo com
+   *  envio e sem nota do financeiro. */
+  peloFinanceiro: { notas: NotaDoMes[]; total: number; coberto: boolean } | null;
 }
 
 export function montarFaturamentoDoEnvioUnico({
@@ -332,16 +366,36 @@ export function montarFaturamentoDoEnvioUnico({
   itensDeNota,
   semFaturamento,
   variacaoCambial,
+  notasDoFinanceiro = [],
+  faturamentoPrevisto = 0,
 }: {
   envio: EnvioDoJobComParcelas | null;
   itensDeNota: ItemDeNotaDaParcela[];
+  /** Decisão 256: as notas do Novo faturamento do job, e o previsto dele. */
+  notasDoFinanceiro?: NotaDoFinanceiro[];
+  faturamentoPrevisto?: number;
   /** Nada a faturar: faturamento previsto zero, como o job pago só por
    *  save (decisão 028 §11). */
   semFaturamento: boolean;
   variacaoCambial: number;
 }): FaturamentoDoEnvioUnico {
+  // Decisão 256: sem envio, o Novo faturamento fecha o envio do job.
+  const doFinanceiro = envio ? [] : notasDoFinanceiro.filter((n) => n.mes === null);
+  if (doFinanceiro.length > 0) {
+    const total = centavos(doFinanceiro.reduce((t, n) => t + n.valor, 0));
+    const notas = doFinanceiro.map((n) => ({ numero: n.numero, dataEmissao: n.dataEmissao, valor: n.valor }));
+    const coberto = total >= faturamentoPrevisto - 0.05;
+    return {
+      envio,
+      faturado: total,
+      notas,
+      situacao: coberto ? "faturado" : "faturado_parcial",
+      variacaoCambial,
+      peloFinanceiro: { notas, total, coberto },
+    };
+  }
   const { faturado, notas } = notasDoEnvio(envio, itensDeNota);
   const situacao: SituacaoDoMes =
     !envio && semFaturamento ? "sem_faturamento" : situacaoDoMes(envio, faturado, variacaoCambial);
-  return { envio, faturado, notas, situacao, variacaoCambial };
+  return { envio, faturado, notas, situacao, variacaoCambial, peloFinanceiro: null };
 }

@@ -706,6 +706,8 @@ export function useRascunhoErrata(
         item_versao_id: null,
         linha_vermelha: n.vermelha,
         grupo_id: n.grupoId,
+        // A marca do pagamento atrasado (decisão 259) é do banco, ao gravar.
+        pagamento_atrasado_id: null,
         // Depois de todas as salvas do grupo — a ordem real é decidida no
         // servidor, aqui só importa cair no fim da lista.
         ordem: 10_000 + indice,

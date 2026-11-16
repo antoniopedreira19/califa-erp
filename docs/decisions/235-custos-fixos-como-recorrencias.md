@@ -1,10 +1,10 @@
 # 235 — Os custos fixos como recorrências no Contas a Pagar
 
 **Data:** 2026-11-03
-**Status:** aceita e implementada em 03/11/2026. As 133 recorrências estão gravadas.
+**Status:** aceita e implementada em 03/11/2026. As 133 recorrências estão gravadas. Revista em 15/11/2026: a recorrência assume o item de vez (D8).
 **Quem decidiu:** Tiago, em 03/11/2026. Ele aceitou os três pontos de partida ("Estou de acordo com os 3 pontos citados"), escolheu as quatro recomendações da proposta e respondeu "Sim, implementar".
 **Complementa:** a [232](232-previsoes-da-planilha-no-sistema.md), na regra D8: quando um módulo assume a sua parte, a previsão daquele tipo sai do fluxo.
-**Migration:** `20261103800001` (aditiva).
+**Migrations:** `20261103800001` (aditiva) e `20261115800001` (revisão da D8).
 
 ## O problema
 
@@ -23,7 +23,7 @@ A planilha tem 4 abas, DP e CF da California e da Go Crazy. A aba DP é a folha,
 | D5 | Dia | Mensal, nas janelas do sistema (08 e 20). A planilha pôs dia 9 em novembro porque 08/11/2026 é domingo. Uma linha fica no dia 4 e outra no dia 10, como estão na planilha |
 | D6 | Fornecedor | Nasce sem fornecedor. Só 3 dos 73 estão no cadastro, e a planilha não traz CPF/CNPJ nem banco. A descrição leva "descrição · fornecedor" da planilha. Quem cadastrar o fornecedor liga depois na recorrência. Sem fornecedor, não sai por remessa |
 | D7 | Forma de pagamento | Boleto nas 33 linhas com Doc. "Boleto". Nas outras, vazia |
-| D8 | Previsão da planilha | Sai do fluxo "pelo item". A recorrência guarda `previsao_chave` (md5 de fornecedor e descrição normalizados). A previsão sai quando há recorrência ativa da mesma empresa e do mesmo Tipo com a mesma chave, e a competência da previsão é do trimestre em que a recorrência nasceu ou depois. As contas de outubro (3T) com data em novembro continuam. Pausar a recorrência ou passar da `data_fim` devolve a previsão |
+| D8 | Previsão da planilha | Sai do fluxo "pelo item". A recorrência guarda `previsao_chave` (md5 de fornecedor e descrição normalizados). A previsão sai quando há recorrência da mesma empresa e do mesmo Tipo com a mesma chave, e a competência da previsão é do trimestre em que a recorrência nasceu ou depois. As contas de outubro (3T) com data em novembro continuam. **Revista em 15/11:** pausar a recorrência ou passar da `data_fim` não devolve a previsão (abaixo) |
 | D9 | Títulos de novembro | Nascem na hora: a recorrência vira título 30 dias antes (decisão de 15/09/2026) |
 | D10 | Como gravar | Pela ação da tela (`criarContaRecorrente`), com validação e auditoria, a partir de um pacote local. Nunca por migration, porque o repositório é público e as descrições têm nomes. A chave entra depois, por `update` do id |
 
@@ -35,6 +35,16 @@ A planilha tem 4 abas, DP e CF da California e da Go Crazy. A aba DP é a folha,
 - **Fluxo de caixa:** as previsões da planilha passaram de 2.433 (R$ 96.335.662,64) para 2.062 (R$ 95.214.581,24). Saíram, de CF, DA e DM do 4T: novembro 123 (R$ 422.467,41), dezembro 127 (R$ 429.502,32) e janeiro 121 (R$ 269.111,67). Ficaram as contas de outubro (3T) com data em novembro, 25 previsões (R$ 31.371,23), e as de CF, DA e DM que não estão na relação. Pela recorrência entram R$ 454.963,62 por mês: o título em novembro e a previsão calculada depois, com uma linha por regional do rateio.
 - **Tela:** a aba Recorrências mostra 133 e os Títulos a Pagar passaram de 94 para 227.
 - **Desempenho:** `count(*)` da `vw_fluxo_caixa` em 256 ms. A busca da recorrência custa cerca de 0,004 ms por previsão.
+
+## Revisão de 15/11/2026: a recorrência assume o item de vez
+
+**O erro:** a regra de 03/11 só escondia a previsão enquanto a recorrência estava ativa e dentro da `data_fim`. As duas recorrências de R$ 75.000,00 geraram o título de dezembro, passaram da data de fim e pararam sozinhas. A previsão da planilha do mesmo item voltou ao fluxo, e novembro e dezembro mostravam R$ 150.000,00 a mais cada um, porque o título e a previsão eram o mesmo custo.
+
+**A regra nova** (Tiago, 15/11: "Sim, corrigir"): a recorrência que veio da planilha assume o item de vez. A previsão não volta com a recorrência pausada, encerrada pela data de fim ou excluída depois de ter gerado título (a exclusão, nesse caso, só a marca como parada). Volta só se a recorrência for apagada de vez, e isso só acontece com a que nunca gerou título.
+
+**Conferido:** saíram do fluxo exatamente as 4 previsões do item (novembro e dezembro, California e CCH, R$ 300.000,00 no total). As previsões da planilha foram de 2.158 (R$ 107.448.425,63) para 2.154 (R$ 107.148.425,63). A view manteve só `SELECT` para `authenticated`.
+
+**Na tela:** pausar não cancela o título que já nasceu. Para parar um custo, pause a recorrência e cancele o título futuro que já existe.
 
 ## O que fica para depois
 

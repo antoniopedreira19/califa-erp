@@ -81,6 +81,9 @@ export interface AlvoDoRecebidoAntes {
   chave: string;
   envioNotaId: string | null;
   itemBvId: string | null;
+  /** Decisão 256: o job sem envio — o recebimento fica preso a ele, para o
+   *  Novo faturamento associar à nota. Nulo na nota do envio e no BV. */
+  jobId: string | null;
   /** "TES-1013/26 · Nome do job". */
   titulo: string;
   /** O cliente, ou o fornecedor no BV. */
@@ -209,6 +212,58 @@ export function RecebimentoAntesNfDialog({
         ) : null}
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * Decisão 260 (pedido do Tiago): os mesmos campos, dentro do cartão
+ * "Recebimento antes da NF" do formulário de Recebimento avulso — sem a
+ * segunda janela. O internacional segue com o câmbio (decisão 229).
+ */
+export function CamposDoRecebimentoAntesNf({
+  alvo,
+  contas,
+  tipos,
+  subtipos,
+  pending,
+  erro,
+  onCancelar,
+  onConfirm,
+}: {
+  alvo: AlvoDoRecebidoAntes;
+  contas: ContaBancaria[];
+  tipos: PlanoContaTipo[];
+  subtipos: PlanoContaSubtipo[];
+  pending: boolean;
+  erro: string | null;
+  onCancelar: () => void;
+  onConfirm: (payload: RecebidoAntesPayload, cambio: CambioPayload | null) => void;
+}) {
+  return alvo.cambio ? (
+    <FormularioDoCambio
+      key={alvo.chave}
+      alvo={alvo}
+      cambio={alvo.cambio}
+      contas={contas}
+      tipos={tipos}
+      subtipos={subtipos}
+      pending={pending}
+      erro={erro}
+      onCancelar={onCancelar}
+      onConfirm={onConfirm}
+    />
+  ) : (
+    <FormularioDoRecebido
+      key={alvo.chave}
+      alvo={alvo}
+      contas={contas}
+      tipos={tipos}
+      subtipos={subtipos}
+      pending={pending}
+      erro={erro}
+      onCancelar={onCancelar}
+      onConfirm={(payload) => onConfirm(payload, null)}
+    />
   );
 }
 
@@ -422,13 +477,23 @@ function FormularioDoRecebido({
 
         <div className="flex items-start gap-2 rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
           <HandCoins className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700" />
-          <span>
-            O dinheiro entra no extrato agora, e {alvo.ehBv ? "o BV" : "a nota"} continua
-            na aba Faturamento com o valor recebido marcado na linha. Quando a NF for
-            emitida, este valor entra como a{" "}
-            <strong className="font-semibold text-foreground">parcela 1, já recebida</strong>,
-            com esta data. Nada entra de novo na conta.
-          </span>
+          {alvo.jobId ? (
+            // Decisão 256: o job sem envio — o recebimento fica preso a ele.
+            <span>
+              O dinheiro entra no extrato agora e fica preso ao job. No Novo faturamento, associado à
+              nota, este valor entra como a{" "}
+              <strong className="font-semibold text-foreground">parcela 1, já recebida</strong>, com
+              esta data. Nada entra de novo na conta.
+            </span>
+          ) : (
+            <span>
+              O dinheiro entra no extrato agora, e {alvo.ehBv ? "o BV" : "a nota"} continua
+              na aba Faturamento com o valor recebido marcado na linha. Quando a NF for
+              emitida, este valor entra como a{" "}
+              <strong className="font-semibold text-foreground">parcela 1, já recebida</strong>,
+              com esta data. Nada entra de novo na conta.
+            </span>
+          )}
         </div>
       </div>
 

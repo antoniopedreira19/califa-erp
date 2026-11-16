@@ -175,6 +175,18 @@ export function linhasDeParametro(nomesNoPresumido: string): LinhaDeParametro[] 
       valor: (v) => moeda(v.darf_minimo),
       observacao: () => "Abaixo disso, o valor acumula para o mês seguinte.",
     },
+    {
+      // Decisão 256: CBS e IBS da fase de teste, registrados em cada nota.
+      id: "reforma",
+      rotulo: "CBS e IBS (reforma tributária)",
+      campos: [
+        { chave: "cbs", rotulo: "CBS (%)", formato: "pct" },
+        { chave: "ibs", rotulo: "IBS (%)", formato: "pct" },
+      ],
+      valor: (v) => `CBS ${pct(v.cbs)} · IBS ${pct(v.ibs)}`,
+      observacao: () =>
+        "Sobre o líquido da nota (total − ISS − PIS − COFINS). Fase de teste: ficam registrados na nota, sem guia.",
+    },
   ];
 }
 

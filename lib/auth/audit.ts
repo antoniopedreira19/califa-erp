@@ -241,6 +241,12 @@ export type AuditAction =
   // da barra. Um evento só, com a lista dos itens no metadata: são N
   // linhas mudando de uma vez, e o que interessa reconstituir é o lote.
   | "item_realizado.pps_concluidas_em_lote"
+  // Decisão 259: os pagamentos atrasados do job fechado. O financeiro
+  // libera; a produção conclui (ou desiste); o financeiro conclui.
+  | "pagamentos_atrasados.liberados"
+  | "pagamentos_atrasados.conclusao_pedida"
+  | "pagamentos_atrasados.conclusao_cancelada"
+  | "pagamentos_atrasados.concluidos"
   | "pedido_compra.emitida"
   // 02/09/2026: gerar deixou de enviar. `gerada` é a criação, `editada` a
   // correção enquanto ainda não foi enviada, `enviada_financeiro` o envio.
