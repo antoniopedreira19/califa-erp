@@ -4934,7 +4934,181 @@ export interface Colaborador {
    *  recebe acesso ao sistema (role colaborador). Adicionado em
    *  2026-10-02 pelo subsistema de Férias (S1). */
   user_id: string | null;
+
+  // ---- Dados complementares (wizard de boas-vindas, 16/11/2026) ----
+  /** Apelido / nome social. Mostrado na UI quando preenchido. */
+  nome_preferido: string | null;
+  /** Cidade de origem (≠ endereço residencial). */
+  cidade_origem: string | null;
+  estado_civil: EstadoCivil | null;
+  /** Flag; dados dos filhos continuam em `dependentes`. */
+  possui_filhos: boolean | null;
+  vegetariano: boolean | null;
+  restricao_alimentar: string | null;
+  emergencia_nome: string | null;
+  emergencia_parentesco: string | null;
+  emergencia_telefone: string | null;
+  hobbies: string | null;
+  curiosidade: string | null;
+  tamanho_camiseta: TamanhoCamiseta | null;
+  etnia: Etnia | null;
+  genero_identidade: GeneroIdentidade | null;
+  orientacao_sexual: OrientacaoSexual | null;
+  pcd: PcdOpcao | null;
+  /** Texto livre quando pcd='sim'. */
+  pcd_descricao: string | null;
+  observacao_saude: string | null;
+  /** Path do arquivo de foto no bucket `colaboradores-documentos`.
+   *  Atalho — a linha também existe em `colaboradores_documentos`. */
+  foto_path: string | null;
+  /** Timestamp de quando o colaborador completou o perfil pela primeira
+   *  vez via wizard. Enquanto NULL, o modal aparece em toda sessão
+   *  nova. */
+  perfil_completado_em: string | null;
+
   created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export type EstadoCivil =
+  | "solteiro"
+  | "casado"
+  | "uniao_estavel"
+  | "divorciado"
+  | "viuvo"
+  | "separado";
+
+export function estadoCivilLabel(e: EstadoCivil): string {
+  switch (e) {
+    case "solteiro":      return "Solteiro(a)";
+    case "casado":        return "Casado(a)";
+    case "uniao_estavel": return "União estável";
+    case "divorciado":    return "Divorciado(a)";
+    case "viuvo":         return "Viúvo(a)";
+    case "separado":      return "Separado(a)";
+  }
+}
+
+export type TamanhoCamiseta = "pp" | "p" | "m" | "g" | "gg" | "xg" | "xxg";
+
+export function tamanhoCamisetaLabel(t: TamanhoCamiseta): string {
+  return t.toUpperCase();
+}
+
+export type Etnia =
+  | "branca"
+  | "preta"
+  | "parda"
+  | "amarela"
+  | "indigena"
+  | "prefiro_nao_informar";
+
+export function etniaLabel(e: Etnia): string {
+  switch (e) {
+    case "branca":               return "Branca";
+    case "preta":                return "Preta";
+    case "parda":                return "Parda";
+    case "amarela":              return "Amarela";
+    case "indigena":             return "Indígena";
+    case "prefiro_nao_informar": return "Prefiro não informar";
+  }
+}
+
+export type GeneroIdentidade =
+  | "mulher_cis"
+  | "mulher_trans"
+  | "homem_cis"
+  | "homem_trans"
+  | "nao_binario"
+  | "outro"
+  | "prefiro_nao_informar";
+
+export function generoIdentidadeLabel(g: GeneroIdentidade): string {
+  switch (g) {
+    case "mulher_cis":           return "Mulher cisgênero";
+    case "mulher_trans":         return "Mulher transgênero";
+    case "homem_cis":            return "Homem cisgênero";
+    case "homem_trans":          return "Homem transgênero";
+    case "nao_binario":          return "Não-binário";
+    case "outro":                return "Outro";
+    case "prefiro_nao_informar": return "Prefiro não informar";
+  }
+}
+
+export type OrientacaoSexual =
+  | "heterossexual"
+  | "homossexual"
+  | "bissexual"
+  | "assexual"
+  | "pansexual"
+  | "outro"
+  | "prefiro_nao_informar";
+
+export function orientacaoSexualLabel(o: OrientacaoSexual): string {
+  switch (o) {
+    case "heterossexual":        return "Heterossexual";
+    case "homossexual":          return "Homossexual";
+    case "bissexual":            return "Bissexual";
+    case "assexual":             return "Assexual";
+    case "pansexual":            return "Pansexual";
+    case "outro":                return "Outro";
+    case "prefiro_nao_informar": return "Prefiro não informar";
+  }
+}
+
+export type PcdOpcao = "nao" | "sim" | "prefiro_nao_informar";
+
+export function pcdOpcaoLabel(p: PcdOpcao): string {
+  switch (p) {
+    case "nao":                  return "Não";
+    case "sim":                  return "Sim";
+    case "prefiro_nao_informar": return "Prefiro não informar";
+  }
+}
+
+export type ColaboradorDocumentoTipo =
+  | "foto"
+  | "cnpj"
+  | "ccmei"
+  | "rg_cnh"
+  | "cpf"
+  | "comprovante_residencia"
+  | "pis"
+  | "ctps"
+  | "titulo_eleitor"
+  | "outro";
+
+export function colaboradorDocumentoTipoLabel(t: ColaboradorDocumentoTipo): string {
+  switch (t) {
+    case "foto":                   return "Foto";
+    case "cnpj":                   return "Cartão CNPJ";
+    case "ccmei":                  return "CCMEI";
+    case "rg_cnh":                 return "RG ou CNH";
+    case "cpf":                    return "CPF";
+    case "comprovante_residencia": return "Comprovante de residência";
+    case "pis":                    return "PIS";
+    case "ctps":                   return "Carteira de Trabalho";
+    case "titulo_eleitor":         return "Título de eleitor";
+    case "outro":                  return "Outro";
+  }
+}
+
+/** Documento pessoal anexado pelo colaborador (RG, CPF, CNPJ, CCMEI,
+ *  comprovante, PIS, CTPS, título, foto). Metadado aqui, arquivo no
+ *  bucket `colaboradores-documentos`. Vários por tipo (RG frente+verso,
+ *  CTPS multi-página). */
+export interface ColaboradorDocumento {
+  id: string;
+  tenant_id: string;
+  colaborador_id: string;
+  tipo: ColaboradorDocumentoTipo;
+  arquivo_path: string;
+  arquivo_nome: string;
+  arquivo_tamanho_bytes: number | null;
+  mime_type: string | null;
+  uploaded_by: string | null;
+  uploaded_at: string;
   created_at: string;
   updated_at: string;
 }
