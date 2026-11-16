@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { Search } from "lucide-react";
+import { Search, Sheet } from "lucide-react";
+import dynamic from "next/dynamic";
 import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
@@ -32,6 +33,8 @@ import { ppStatusLabel, nomeContraparteBRPP, situacaoDaVerba, situacaoVerbaLabel
 import type { DocumentoTipo, TipoVerba, TitularDaVerbaTipo } from "@/lib/types";
 import type { DeslocamentosDoReembolso, ReembolsoTipo } from "@/lib/calculos/reembolso";
 import { SituacaoVerbaChip } from "@/components/financeiro/situacao-verba-chip";
+import type { SituacaoFaturamento } from "@/lib/calculos/esteira-faturamento";
+import { SITUACAO_META } from "@/app/(app)/financeiro/abertura-de-job/situacao-faturamento";
 import type { FiscalDaAprovacaoPP } from "@/lib/fiscal/aprovacao-da-pp";
 import type { NotasFiscaisDaLinhaPP, RegimeDoFornecedorDaPP } from "@/lib/fiscal/nf-da-pp";
 import { PPTela } from "./pp-tela";
@@ -50,6 +53,14 @@ import {
   type ColunaFiltravel,
 } from "@/components/ui/filtro-de-coluna";
 import { formatDiaBr } from "@/lib/formatar-data-hora";
+
+/** Decisão 257: a Planilha Interna do job em leitura, com a linha da PP em
+ *  destaque — o mesmo pop-up da abertura. Carregado só quando abre: a
+ *  planilha é pesada e esta lista não precisa dela para montar. */
+const PopUpDaPlanilha = dynamic(
+  () => import("@/app/(app)/financeiro/abertura-de-job/[jobId]/planilha-em-leitura").then((m) => m.PopUpDaPlanilha),
+  { ssr: false },
+);
 
 export interface PPRow {
   id: string;
@@ -124,6 +135,16 @@ export interface PPRow {
   /** GP responsável do job — referência nos pop-ups de aprovação
    *  (decisão 136). Obrigatório pelo mesmo motivo do histórico. */
   job_responsavel_nome: string | null;
+  /** Decisão 257: o dia em que o financeiro abriu o job (coluna Abertura do
+   *  job). Obrigatório pelo mesmo motivo do histórico. */
+  job_aberto_em: string | null;
+  /** Decisão 257: onde o job está na esteira do faturamento — a mesma
+   *  leitura de Visualizar Jobs (`faturamentoPorJob`). Só a página de Contas
+   *  a Pagar lê; quem monta a linha sem ela manda null. */
+  job_faturamento: SituacaoFaturamento | null;
+  /** Decisão 257: a linha da planilha (`jobs_itens_orcado.id`) de onde veio
+   *  a PP — a que o pop-up da Planilha Interna destaca. */
+  item_orcado_id: string | null;
   regional_id: string | null;
   projeto_codigo: string | null;
   projeto_nome: string | null;
@@ -282,6 +303,133 @@ function QuemEnviou({ envio }: { envio: EnvioDaPP | null }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Decisão 257: o faturamento do job e a linha da prestação
+// ---------------------------------------------------------------------------
+
+/** A ordem da esteira do faturamento, para o funil da coluna. */
+const ORDEM_DO_FATURAMENTO: SituacaoFaturamento[] = [
+  "aguardando_envio",
+  "enviado",
+  "faturado",
+  "inadimplente",
+  "liquidado",
+  "sem_faturamento",
+];
+
+/** O selo da esteira do faturamento — o mesmo de Visualizar Jobs. */
+function SeloDoFaturamento({ s }: { s: SituacaoFaturamento | null }) {
+  if (!s) return <span className="text-muted-foreground">—</span>;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center whitespace-nowrap rounded-full border px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider",
+        SITUACAO_META[s].classes,
+      )}
+    >
+      {SITUACAO_META[s].rotulo}
+    </span>
+  );
+}
+
+/** O selo "Prestação" embaixo do código, no lugar do "Verba". */
+function SeloPrestacao() {
+  return (
+    <span className="rounded-md bg-sky-100 px-1.5 py-0.5 font-sans text-[10px] font-medium text-sky-800">Prestação</span>
+  );
+}
+
+/** A linha da prestação existe quando a produção ENVIA a prestação ao
+ *  financeiro — o envio exige a verba paga, e o rascunho é da produção. É
+ *  sempre UMA linha: o banco tem uma prestação por PP
+ *  (`uniq_prestacao_por_pp`) e uma devolução por prestação; reprovada e
+ *  reenviada, a mesma linha volta para "Prestação", e o histórico fica na
+ *  tela da PP. */
+function temLinhaDaPrestacao(r: PPRow): boolean {
+  return situacaoDaVerba(r) !== null && !!r.prestacao && r.prestacao.status !== "rascunho";
+}
+
+/** O andamento da prestação, com a data do momento embaixo. A sobra já
+ *  devolvida ganha selo próprio, "Devolvido" — antes ela se confundia com a
+ *  "Concluída" sem sobra. */
+function StatusDaPrestacao({ r }: { r: PPRow }) {
+  const s = situacaoDaVerba(r);
+  if (!s) return null;
+  const pr = r.prestacao;
+  const devolvida = s === "concluida" && Number(pr?.valor_devolvido ?? 0) > 0 && !!r.devolucao?.pago_em;
+  const data = (texto: string, iso: string | null | undefined) =>
+    iso ? <span className="whitespace-nowrap text-xs text-muted-foreground">{texto} {formatDate(iso)}</span> : null;
+  return (
+    <div className="flex flex-col items-start gap-1">
+      {devolvida ? (
+        <Badge className="whitespace-nowrap border border-emerald-200 bg-emerald-50 text-emerald-700">Devolvido</Badge>
+      ) : (
+        <SituacaoVerbaChip situacao={s} />
+      )}
+      {s === "prestacao_reprovada" && data("Reprovada", pr?.reprovada_em)}
+      {s === "devolucao_pendente" && data("Previsto", r.devolucao?.data_pagamento)}
+      {devolvida && data("Devolvido", r.devolucao?.pago_em)}
+      {s === "concluida" && !devolvida && data("Aprovada", pr?.aprovada_em)}
+    </div>
+  );
+}
+
+/** A linha da prestação, logo embaixo da linha da PP (que fica "Pago").
+ *  Valor = o comprovado, com a sobra embaixo; Enviada por = quem enviou a
+ *  prestação; Status = o andamento. As colunas que repetiriam a linha de
+ *  cima ficam vazias. Clicar abre a mesma tela da PP, que mostra os
+ *  comprovantes. */
+function LinhaDaPrestacao({ r, onAbrir }: { r: PPRow; onAbrir: () => void }) {
+  const pr = r.prestacao;
+  const sobra = Number(pr?.valor_devolvido ?? 0);
+  return (
+    <tr
+      role="button"
+      tabIndex={0}
+      onClick={onAbrir}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onAbrir();
+        }
+      }}
+      className="cursor-pointer border-b border-border bg-muted/25 transition-colors last:border-0 hover:bg-accent/40 focus-visible:bg-accent/40 focus-visible:outline-none"
+    >
+      <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs font-bold text-california-red/70">
+        <span>{r.codigo}</span>
+        <span className="mt-1 flex">
+          <SeloPrestacao />
+        </span>
+      </td>
+      <td className="px-4 py-2.5 text-right tabular-nums" title="Comprovado na prestação">
+        {pr ? (
+          <>
+            <span className="font-semibold">{formatMoney(Number(pr.valor_gasto))}</span>
+            {sobra > 0 && (
+              <span className="block whitespace-nowrap text-xs text-muted-foreground">sobra {formatMoney(sobra)}</span>
+            )}
+          </>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
+      <td className="px-4 py-2.5" />
+      <td className="px-4 py-2.5" />
+      <td className="px-4 py-2.5" />
+      <td className="px-4 py-2.5">
+        <QuemEnviou envio={ultimoEnvioDaPrestacao(r.eventos)} />
+      </td>
+      <td className="px-4 py-2.5" />
+      <td className="px-4 py-2.5" />
+      <td className="px-4 py-2.5" />
+      <td className="px-4 py-2.5">
+        <StatusDaPrestacao r={r} />
+      </td>
+      <td className="px-2 py-2.5" />
+    </tr>
+  );
+}
+
 function formatMoney(n: number): string {
   return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
@@ -378,14 +526,24 @@ function colunasDoModo(prestacoes: boolean): ColunaFiltravel<PPRow>[] {
       tipo: "texto",
       celula: (r) => ({ ...celulaTexto(`${r.job_codigo} ${r.job_nome}`.trim()), ordem: r.job_codigo }),
     },
-    prestacoes
-      ? {
-          chave: "prestacao_enviada",
-          rotulo: "Enviada em",
-          tipo: "data",
-          celula: (r) => celulaData(r.prestacao?.enviada_em ?? null),
-        }
-      : { chave: "emissao", rotulo: "Emissão", tipo: "data", celula: (r) => celulaData(r.created_at) },
+    // Decisão 257: a abertura e o faturamento do job, cada um na sua coluna.
+    {
+      chave: "job_aberto_em",
+      rotulo: "Abertura do job",
+      tipo: "data",
+      celula: (r) => celulaData(r.job_aberto_em),
+    },
+    {
+      chave: "job_faturamento",
+      rotulo: "Faturamento",
+      tipo: "texto",
+      celula: (r) => ({
+        ...celulaTexto(r.job_faturamento ? SITUACAO_META[r.job_faturamento].rotulo : null),
+        ordemNaLista: r.job_faturamento ? ORDEM_DO_FATURAMENTO.indexOf(r.job_faturamento) : -1,
+      }),
+    },
+    // Decisão 257: a Emissão saiu da lista (e o "Enviada em" da prestação,
+    // cuja data já está em Enviada por).
     {
       // Filtra por quem enviou; ordena por quando (o último envio).
       chave: "enviada_por",
@@ -474,6 +632,8 @@ export function PedidosCompraList({
   const [regionaisFiltro, setRegionaisFiltro] = React.useState<string[]>([]);
   const [busca, setBusca] = React.useState("");
   const [ppSelecionada, setPpSelecionada] = React.useState<PPRow | null>(null);
+  /** Decisão 257: a PP cuja linha abre na Planilha Interna do job. */
+  const [planilhaDe, setPlanilhaDe] = React.useState<PPRow | null>(null);
 
   // Regional recorta o universo ANTES das contagens de status, senão os
   // chips mostram números que não batem com o que o usuário vê na tabela.
@@ -616,25 +776,26 @@ export function PedidosCompraList({
           <thead>
             <tr className="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wider text-muted-foreground">
               <th className="px-4 py-3 font-semibold">{colunas.titulo("codigo")}</th>
+              {/* Decisão 257: Valor, Parcela, Fornecedor, Prazo original,
+                  Enviada por, Job, Abertura do job, Faturamento e Status; a
+                  Emissão saiu. No filtro de prestações (decisão 081), o
+                  Comprovado e o Saldo ficam juntos, depois do Valor. */}
+              <th className="px-4 py-3 font-semibold text-right">{colunas.titulo("valor")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo(prestacoes ? "gasto" : "parcela")}</th>
+              {prestacoes && <th className="px-4 py-3 font-semibold">{colunas.titulo("saldo")}</th>}
               <th className="px-4 py-3 font-semibold">{colunas.titulo("fornecedor")}</th>
-              <th className="px-4 py-3 font-semibold">{colunas.titulo("job")}</th>
-              {/* No filtro de prestações as colunas contam a prestação:
-                  quando chegou, a verba, o gasto e o saldo (decisão 081). */}
-              <th className="px-4 py-3 font-semibold">
-                {colunas.titulo(prestacoes ? "prestacao_enviada" : "emissao")}
-              </th>
+              {!prestacoes && <th className="px-4 py-3 font-semibold">{colunas.titulo("prazo")}</th>}
               {/* Decisão 136: qualquer GP envia, então o financeiro vê
                   quem enviou — e, no reenvio, quem mandou de volta. No
-                  filtro de prestações, quem enviou a prestação. */}
+                  filtro de prestações, quem enviou a prestação (e quando). */}
               <th className="px-4 py-3 font-semibold">{colunas.titulo("enviada_por")}</th>
-              <th className="px-4 py-3 font-semibold text-right">{colunas.titulo("valor")}</th>
-              <th className="px-4 py-3 font-semibold">
-                {colunas.titulo(prestacoes ? "gasto" : "prazo")}
-              </th>
-              <th className="px-4 py-3 font-semibold">
-                {colunas.titulo(prestacoes ? "saldo" : "parcela")}
-              </th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("job")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("job_aberto_em")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("job_faturamento")}</th>
               <th className="px-4 py-3 font-semibold">{colunas.titulo("status")}</th>
+              <th className="w-10 px-2 py-3">
+                <span className="sr-only">Planilha Interna</span>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -642,14 +803,14 @@ export function PedidosCompraList({
                 títulos, para desfazer. */}
             {doTopo.length > 0 && filtrados.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={11} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   Nenhum Pedido de Produção com esse filtro.
                 </td>
               </tr>
             )}
             {doTopo.length === 0 && (
               <tr>
-                <td colSpan={9} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={11} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   {rows.length === 0
                     ? "Nenhum Pedido de Produção emitido ainda."
                     : "Nenhum Pedido de Produção encontrado com esses filtros."}
@@ -661,7 +822,7 @@ export function PedidosCompraList({
               {i === urgentes.length && urgentes.length > 0 && (
                 <tr className="border-b border-border bg-muted/30">
                   <td
-                    colSpan={9}
+                    colSpan={11}
                     className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
                   >
                     Demais PPs
@@ -698,13 +859,49 @@ export function PedidosCompraList({
                       Urgente
                     </span>
                   )}
+                  {/* Decisão 257: o selo da verba embaixo do código, para a
+                      coluna ficar estreita. No filtro de prestações a linha é
+                      a da prestação. */}
                   {r.verba_producao && (
-                    <span className="ml-2 rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
-                      {/* Decisão 187: o reembolso mora no campo da verba. */}
-                      {r.tipo_verba === "reembolso" ? "Reembolso" : "Verba"}
+                    <span className="mt-1 flex">
+                      {filtro === "prestacoes" ? (
+                        <SeloPrestacao />
+                      ) : (
+                        <span className="rounded-md bg-amber-100 px-1.5 py-0.5 font-sans text-[10px] font-medium text-amber-800">
+                          {/* Decisão 187: o reembolso mora no campo da verba. */}
+                          {r.tipo_verba === "reembolso" ? "Reembolso" : "Verba"}
+                        </span>
+                      )}
                     </span>
                   )}
                 </td>
+                <td className="px-4 py-3 text-right tabular-nums font-semibold">
+                  {formatMoney(r.valor)}
+                </td>
+                {/* No filtro de prestações: o Comprovado e o Saldo, juntos. */}
+                {filtro === "prestacoes" ? (
+                  <>
+                    <td className="px-4 py-3">
+                      <span className="font-mono text-xs font-semibold text-foreground">
+                        {formatMoney(r.prestacao?.valor_gasto ?? 0)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="font-mono text-xs font-semibold text-teal-700">
+                        {formatMoney(r.prestacao?.valor_devolvido ?? 0)}
+                      </span>
+                    </td>
+                  </>
+                ) : (
+                  // Parcela: a PP parcelada aparece como "1/3" — quantas
+                  // vezes o financeiro vai pagar. Cada parcela vira uma linha
+                  // própria na aba "Títulos a Pagar".
+                  <td className="px-4 py-3">
+                    <span className="rounded-md border border-border bg-muted px-2 py-0.5 font-mono text-xs font-semibold">
+                      1/{Math.max(r.parcelas.length, 1)}
+                    </span>
+                  </td>
+                )}
                 <td className="px-4 py-3">
                   {nomeContraparteBRPP({ verba_producao: r.verba_producao, tipo_verba: r.tipo_verba, verba_titular_nome: r.responsavel_nome, fornecedor: r.fornecedor_nome ? { nome: r.fornecedor_nome } : null, responsavel: r.responsavel_nome ? { nome: r.responsavel_nome } : null })}
                   {/* Asterisco da decisão 067. Aqui ele importa mais que na
@@ -731,13 +928,9 @@ export function PedidosCompraList({
                     </Tooltip>
                   )}
                 </td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  <span className="font-mono text-xs">{r.job_codigo}</span>{" "}
-                  <span>{r.job_nome}</span>
-                </td>
-                <td className="px-4 py-3 text-muted-foreground">
-                  {formatDiaBr(filtro === "prestacoes" ? (r.prestacao?.enviada_em ?? null) : r.created_at)}
-                </td>
+                {filtro !== "prestacoes" && (
+                  <td className="px-4 py-3 text-muted-foreground">{formatDate(r.prazo_pagamento)}</td>
+                )}
                 <td className="px-4 py-3">
                   <QuemEnviou
                     envio={
@@ -747,42 +940,63 @@ export function PedidosCompraList({
                     }
                   />
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums font-semibold">
-                  {formatMoney(r.valor)}
-                </td>
                 <td className="px-4 py-3 text-muted-foreground">
-                  {filtro === "prestacoes" ? (
-                    <span className="font-mono text-xs font-semibold text-foreground">
-                      {formatMoney(r.prestacao?.valor_gasto ?? 0)}
-                    </span>
-                  ) : (
-                    formatDate(r.prazo_pagamento)
-                  )}
+                  <span className="font-mono text-xs">{r.job_codigo}</span>{" "}
+                  <span>{r.job_nome}</span>
                 </td>
-                {/* Parcela: a PP parcelada aparece como "1/3" — quantas vezes
-                    o financeiro vai pagar. Cada parcela vira uma linha
-                    própria na aba "Títulos a Pagar". */}
+                <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{formatDiaBr(r.job_aberto_em)}</td>
                 <td className="px-4 py-3">
-                  {filtro === "prestacoes" ? (
-                    <span className="font-mono text-xs font-semibold text-teal-700">
-                      {formatMoney(r.prestacao?.valor_devolvido ?? 0)}
-                    </span>
-                  ) : (
-                    <span className="rounded-md border border-border bg-muted px-2 py-0.5 font-mono text-xs font-semibold">
-                      1/{Math.max(r.parcelas.length, 1)}
-                    </span>
-                  )}
+                  <SeloDoFaturamento s={r.job_faturamento} />
                 </td>
                 <td className="px-4 py-3">
-                  {situacaoDaVerba(r) ? (
+                  {/* Decisão 257: a PP paga — verba inclusive — fica "Pago",
+                      com o dia embaixo; o andamento da prestação mora na
+                      linha de baixo. No filtro de prestações a linha é a
+                      prestação. */}
+                  {filtro === "prestacoes" && situacaoDaVerba(r) ? (
                     <SituacaoVerbaChip situacao={situacaoDaVerba(r)!} />
+                  ) : r.status === "pago" ? (
+                    <div className="flex flex-col items-start gap-1">
+                      <Badge className={cn("whitespace-nowrap border", statusBadgeClasses(r.status))}>
+                        {ppStatusLabel(r.status)}
+                      </Badge>
+                      {r.pago_em && (
+                        <span className="whitespace-nowrap text-xs text-muted-foreground">Pago {formatDate(r.pago_em)}</span>
+                      )}
+                    </div>
                   ) : (
                     <Badge className={cn("whitespace-nowrap border", statusBadgeClasses(r.status))}>
                       {ppStatusLabel(r.status)}
                     </Badge>
                   )}
                 </td>
+                {/* Decisão 257: a linha da PP na Planilha Interna do job, num
+                    pop-up (o ícone do protótipo de Suprimentos). */}
+                <td className="px-2 py-3 text-right">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        aria-label={`Ver a linha da ${r.codigo} na Planilha Interna`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPlanilhaDe(r);
+                        }}
+                        onKeyDown={(e) => e.stopPropagation()}
+                        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      >
+                        <Sheet className="h-4 w-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent>Ver a linha na Planilha Interna</TooltipContent>
+                  </Tooltip>
+                </td>
               </tr>
+              {/* Decisão 257: a prestação de contas é outra linha da mesma PP,
+                  logo embaixo. */}
+              {filtro !== "prestacoes" && temLinhaDaPrestacao(r) && (
+                <LinhaDaPrestacao r={r} onAbrir={() => setPpSelecionada(r)} />
+              )}
               </React.Fragment>
             ))}
           </tbody>
@@ -805,6 +1019,26 @@ export function PedidosCompraList({
         subtipos={subtipos}
         fiscal={fiscal}
       />
+
+      {/* Decisão 257: a Planilha Interna do job, com a linha da PP na borda
+          vermelha (a da revisão da abertura) e rolada até ela. */}
+      {planilhaDe && (
+        <PopUpDaPlanilha
+          aberto
+          onOpenChange={(v) => {
+            if (!v) setPlanilhaDe(null);
+          }}
+          jobId={planilhaDe.job_id}
+          codigo={planilhaDe.job_codigo}
+          descricao={
+            planilhaDe.item_orcado_id
+              ? `A linha de onde veio a ${planilhaDe.codigo} está com a borda vermelha.`
+              : `A ${planilhaDe.codigo} não está ligada a uma linha da planilha.`
+          }
+          linhasDaRevisao={planilhaDe.item_orcado_id ? [planilhaDe.item_orcado_id] : []}
+          rolarAte={planilhaDe.item_orcado_id}
+        />
+      )}
     </div>
   );
 }

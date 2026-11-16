@@ -2762,6 +2762,8 @@ export function JobItemRealizadoTable({
                 reembolsoTipo: pp.tipo_verba === "reembolso" ? (pp.reembolso_tipo ?? "despesas") : null,
                 temAnexo: (pp.anexos ?? []).length > 0,
                 situacaoVerba: situacaoDaVerba(pp),
+                // Decisão 257: o dia do pagamento, embaixo do selo.
+                pagoEm: pp.status === "pago" ? (pp.pago_em ?? null) : null,
                 prestacao: pp.prestacao,
                 devolucao: pp.devolucao,
                 podePrestarContas: ppsQuePossoPrestarContas.includes(pp.id),

@@ -60,6 +60,7 @@ import type {
 } from "@/lib/types";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { todasAsLinhas } from "@/lib/supabase/todas-as-linhas";
+import { faturamentoPorJob } from "@/lib/data/faturamento-por-job";
 
 export const dynamic = "force-dynamic";
 
@@ -142,6 +143,7 @@ export default async function PedidosCompraFinanceiroPage({
     ultimasRetencoesRes,
     retencoesDaAprovacaoRes,
     faturasNaBaixa,
+    faturamentoDosJobs,
   ] = await Promise.all([
     (() => {
       let q = supabase
@@ -399,6 +401,14 @@ export default async function PedidosCompraFinanceiroPage({
     // As faturas recentes dos cartões, para o campo Fatura da baixa no
     // cartão (decisão 197).
     carregarFaturasNaBaixa(supabase, session.activeTenant.id, hojeEmSaoPauloIso()),
+    // Decisão 257: onde o job de cada PP está na esteira do faturamento — a
+    // mesma leitura de Visualizar Jobs. Leituras rasas do tenant inteiro, no
+    // mesmo `Promise.all` (pelos jobs das PPs seria uma rodada a mais). Se
+    // falhar, a coluna mostra "—" e a tela abre.
+    faturamentoPorJob(session.activeTenant.id, hojeEmSaoPauloIso()).catch((e: Error) => {
+      console.error("[financeiro.pp.faturamento_do_job]", e.message);
+      return null;
+    }),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
@@ -417,7 +427,15 @@ export default async function PedidosCompraFinanceiroPage({
   // As PPs na forma da tela. O mapeamento (com o asterisco da decisão 067)
   // mora em `dados-dos-titulos.ts` desde 02/10/2026, junto com a montagem
   // dos títulos, que parte dele.
-  const rows: PPRow[] = mapearPPsDoFinanceiro(data, fornecedoresRes.data);
+  // Decisão 257: o faturamento do job entra aqui, só na lista de PPs. Job
+  // que não aparece na esteira não tem entrada e é "Aguardando envio" (a
+  // regra escrita em `faturamentoPorJob`).
+  const rows: PPRow[] = mapearPPsDoFinanceiro(data, fornecedoresRes.data).map((r) => ({
+    ...r,
+    job_faturamento: faturamentoDosJobs
+      ? (faturamentoDosJobs.get(r.job_id)?.situacao ?? "aguardando_envio")
+      : null,
+  }));
 
   // As PPs em avaliação com NF anexada abrem as seções novas da aprovação
   // (módulo fiscal). O que elas leem — cadastro de impostos e última

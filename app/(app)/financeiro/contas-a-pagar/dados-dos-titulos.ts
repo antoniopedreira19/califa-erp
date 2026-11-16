@@ -97,10 +97,11 @@ export const SELECT_PP_DO_FINANCEIRO = `
         enviada_por_profile:profiles!enviada_financeiro_por(nome),
         urgente_por_profile:profiles!urgente_por(nome),
         job:jobs(
-          id, codigo, nome, nome_financeiro, regional_id,
+          id, codigo, nome, nome_financeiro, regional_id, data_abertura_financeiro,
           responsavel:profiles!responsavel_id(nome),
           cliente_id, cliente:clientes!jobs_cliente_id_fkey(nome_fantasia), projeto:projetos(codigo, nome)
         ),
+        item_realizado:jobs_itens_realizado(job_item_orcado_id),
         ${SELECT_PRESTACAO_DA_VERBA},
         ${SELECT_EVENTOS_DA_PP},
         ${SELECT_ANEXOS_COM_NOTA},
@@ -296,6 +297,7 @@ export function mapearPPsDoFinanceiro(
       codigo: string;
       nome: string;
       regional_id: string | null;
+      data_abertura_financeiro: string | null;
       responsavel: { nome: string } | null;
       cliente: { nome_fantasia: string } | null;
       projeto: {
@@ -303,6 +305,7 @@ export function mapearPPsDoFinanceiro(
         nome: string;
       } | null;
     } | null;
+    item_realizado: { job_item_orcado_id: string | null } | null;
     anexos: Array<AnexoComNotaDoBanco & { arquivo_tamanho_bytes: number }>;
     parcelas: Array<{
       id: string;
@@ -386,6 +389,12 @@ export function mapearPPsDoFinanceiro(
     // Decisão 136: o GP responsável do job vai como referência nos pop-ups
     // de aprovação — quem age é quem enviou, e qualquer GP envia.
     job_responsavel_nome: r.job?.responsavel?.nome ?? null,
+    // Decisão 257: a abertura do job e a linha da planilha de onde veio a
+    // PP, para a lista de PPs. O faturamento do job é lido à parte, só pela
+    // página de Contas a Pagar (`faturamentoPorJob`); aqui vai nulo.
+    job_aberto_em: r.job?.data_abertura_financeiro ?? null,
+    job_faturamento: null,
+    item_orcado_id: r.item_realizado?.job_item_orcado_id ?? null,
     projeto_codigo: r.job?.projeto?.codigo ?? null,
     projeto_nome: r.job?.projeto?.nome ?? null,
     cliente_nome: r.job?.cliente?.nome_fantasia ?? null,

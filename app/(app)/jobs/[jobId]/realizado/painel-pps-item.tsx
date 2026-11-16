@@ -205,6 +205,10 @@ export interface PPDoItem {
   temAnexo: boolean;
   /** Onde a verba está depois de paga (decisão 081). */
   situacaoVerba: SituacaoVerba | null;
+  /** Decisão 257: o dia do pagamento, embaixo do selo da PP paga e da
+   *  verba. Obrigatório pelo mesmo motivo do trio; a PP ainda não paga — e a
+   *  PP a emitir — manda null. */
+  pagoEm: string | null;
   /** Decisão 189: a prestação também se faz daqui, pelo cartão da verba.
    *  O cartão mostra o que já foi salvo e o que já está com o financeiro.
    *  Obrigatórios pelo mesmo motivo do trio; fora da verba, null. */
@@ -899,6 +903,7 @@ export function PainelPPsItem({
                       a.tipo_verba === "reembolso" ? (a.dados.reembolso_tipo ?? "despesas") : null,
                     temAnexo: a.anexos.length > 0,
                     situacaoVerba: null,
+                    pagoEm: null,
                     prestacao: null,
                     devolucao: null,
                     podePrestarContas: false,
@@ -1194,8 +1199,21 @@ export function PainelPPsItem({
                     pp={pp}
                     moeda={moeda}
                     direita={
-                      pp.situacaoVerba ? (
-                        <SituacaoVerbaChip situacao={pp.situacaoVerba} />
+                      // Decisão 257: o que está pago diz o dia, embaixo do
+                      // selo — a verba também, embaixo do da prestação.
+                      pp.situacaoVerba || (pp.status === "pago" && pp.pagoEm) ? (
+                        <span className="inline-flex flex-col items-end gap-1">
+                          {pp.situacaoVerba ? (
+                            <SituacaoVerbaChip situacao={pp.situacaoVerba} />
+                          ) : (
+                            <PPStatusChip status={pp.status} />
+                          )}
+                          {pp.pagoEm && (
+                            <span className="whitespace-nowrap text-[10.5px] text-muted-foreground">
+                              Pago {isoParaBr(pp.pagoEm)}
+                            </span>
+                          )}
+                        </span>
                       ) : (
                         <PPStatusChip status={pp.status} />
                       )

@@ -273,6 +273,13 @@ function formatarData(iso: string | null): string {
   return `${d}/${m}/${y}`;
 }
 
+/** Decisão 257: o dia do pagamento, embaixo do selo da PP paga e da verba
+ *  (o da parcela, na PP parcelada). */
+function PagoEm({ iso }: { iso: string | null }) {
+  if (!iso) return null;
+  return <span className="whitespace-nowrap text-[10.5px] text-muted-foreground">Pago {formatarData(iso)}</span>;
+}
+
 /**
  * A coluna "Dt. Pagamento" (decisão 112, 28/09/2026), que substituiu o
  * "Prazo" (os dias entre a emissão e o vencimento).
@@ -1235,18 +1242,20 @@ export function JobPPsSection({
                       {formatCurrency(valorLinha, "BRL")}
                     </td>
                     <td className="px-3.5 py-2.5 align-middle">
-                      {/* Verba paga: o chip diz onde a prestação está (081).
-                          O selo quebra linha dentro da coluna em vez de
-                          passar por baixo do olho (16/10/2026): os da verba
-                          medem até 170 px, e a coluna tem de 106 a 118 úteis a
-                          1440 px. Numa linha só ele segue igual à pílula. */}
+                      {/* Verba paga: o chip diz onde a prestação está (081),
+                          com o nome curto (decisão 257). O que está pago diz
+                          o dia, embaixo do selo — a verba também (257). */}
                       {doComite ? (
                         <SeloDoComite pedido={doComite.pedido} acimaDoAprovado={doComite.acimaDoAprovado} className={SELO_QUE_QUEBRA} />
                       ) : situacao ? (
-                        <SituacaoVerbaChip situacao={situacao} className={SELO_QUE_QUEBRA} duasLinhas />
+                        <div className="flex flex-col items-start gap-1">
+                          <SituacaoVerbaChip situacao={situacao} className={SELO_QUE_QUEBRA} />
+                          <PagoEm iso={parcela ? parcela.pago_em : pp.pago_em} />
+                        </div>
                       ) : (
                         <div className="flex flex-col items-start gap-1">
                           <PPStatusChip status={pp.status} className={SELO_QUE_QUEBRA} />
+                          {pp.status === "pago" && <PagoEm iso={parcela ? parcela.pago_em : pp.pago_em} />}
                           {/* Decisão 216: foi sem NF na auditoria da Mídia
                               System, e onde a prestação da nota está. */}
                           <MarcaMidiaNaPP situacao={situacaoMidiaDaPP(pp, midiaSystem)} />

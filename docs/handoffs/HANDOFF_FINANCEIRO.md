@@ -9004,3 +9004,12 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Conferido:** saíram 4 previsões, R$ 300 mil no total, e nada mais mudou.
 - **Na tela:** pausar não cancela o título que já nasceu.
 - **Migration:** `20261115800001`.
+
+## ⚠️ Nota de 2026-11-15 — a PP paga diz que está paga, e a lista de PPs ganha o job e a linha da prestação (decisão 257, revê a 081)
+
+- **"Pago <data>":** toda PP paga e todo título pago mostram o dia embaixo do selo ("Pago 03/11/2026"), na lista de PPs e em Títulos a Pagar. Em Títulos a Pagar, a verba mostra o selo da prestação com a data embaixo.
+- **Selo da verba com nome curto:** A prestar · Prestação · Reprovada · A devolver · Concluída. O nome inteiro fica no filtro da coluna Status e na dica.
+- **Lista de PPs, a linha da prestação:** a verba paga fica "Pago", e a prestação vira outra linha da mesma PP, logo embaixo, a partir do envio pela produção — uma só por PP (reprovada e reenviada, volta a "Prestação"). Valor = comprovado e sobra; Enviada por = quem enviou; Status = Prestação, Reprovada (dia), A devolver (dia previsto), **Devolvido** (dia, selo novo) ou Concluída (dia da aprovação). No filtro Prestação de Contas, a própria linha é a da prestação.
+- **Lista de PPs, colunas:** Código, Valor, Parcela, Fornecedor, Prazo original, Enviada por, Job, **Abertura do job**, **Faturamento**, Status e o ícone da planilha; a Emissão saiu. O Faturamento é a esteira de Visualizar Jobs (`faturamentoPorJob`), lida no mesmo `Promise.all` da página. O ícone abre a Planilha Interna do job no pop-up de leitura da abertura, com a linha da PP na borda vermelha.
+- **Atenção:** em 15/11 nenhum job com PP está faturado pelo sistema (1 nota emitida no tenant, sem job) — a coluna só mostra Faturado quando as notas forem emitidas por ele.
+- **Sem migration.**

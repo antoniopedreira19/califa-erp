@@ -6789,3 +6789,9 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
   marca do produtor (`pronta_para_envio_em`, decisão 160). A Gerada segue
   contando as prontas.
 
+
+## ⚠️ Nota de 2026-11-15 — "Pago <data>" e o selo curto da verba na aba PPs e no painel do item (decisão 257)
+
+- **Aba PPs do job:** a PP paga (e a verba) mostra o dia do pagamento embaixo do selo — o da parcela, na PP parcelada.
+- **Painel do item:** o mesmo no cartão da PP, em "Já no financeiro". O `PPDoItem` ganhou `pagoEm` (obrigatório; a PP a emitir manda `null`).
+- **Selo da verba:** A prestar · Prestação · Reprovada · A devolver · Concluída, com o nome inteiro na dica. O selo em duas linhas da coluna estreita deixou de ser preciso (a prop `duasLinhas` saiu).
