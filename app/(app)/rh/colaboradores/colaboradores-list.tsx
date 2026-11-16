@@ -10,6 +10,7 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
+  BadgeCheck,
   CheckCircle2,
   Circle,
 } from "lucide-react";
@@ -53,6 +54,10 @@ export type ColaboradorRow = {
   pendencia_total: number;
   pendencia_criticas: CampoCritico[];
   pendencia_parciais: CampoParcial[];
+  /** Tem login no sistema (user_id != null). */
+  tem_acesso: boolean;
+  /** Já preencheu o wizard de boas-vindas. */
+  perfil_completado: boolean;
 };
 
 export type EmpresaOpcao = { id: string; nome: string };
@@ -366,52 +371,39 @@ export function ColaboradoresList({
                       >
                         {c.nome}
                       </Link>
-                      {c.pendencia_nivel === "critica" && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span
-                              className="inline-flex items-center gap-1 rounded-full bg-california-red/10 px-2 py-0.5 text-[10px] font-medium text-california-red cursor-help"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <AlertCircle className="h-3 w-3" />
-                              Pendência
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent
-                            side="bottom"
-                            align="start"
-                            className="max-w-[280px] p-0"
-                          >
-                            <PendenciaTooltipConteudo
-                              criticas={c.pendencia_criticas}
-                              parciais={c.pendencia_parciais}
-                            />
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
-                      {c.pendencia_nivel === "parcial" && (
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <span
-                              className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800 cursor-help"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <Circle className="h-3 w-3" />
-                              Incompleto
-                            </span>
-                          </TooltipTrigger>
-                          <TooltipContent
-                            side="bottom"
-                            align="start"
-                            className="max-w-[280px] p-0"
-                          >
-                            <PendenciaTooltipConteudo
-                              criticas={c.pendencia_criticas}
-                              parciais={c.pendencia_parciais}
-                            />
-                          </TooltipContent>
-                        </Tooltip>
-                      )}
+                      {c.tem_acesso &&
+                        c.tipo_contratacao !== "socio" &&
+                        (c.perfil_completado ? (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span
+                                className="inline-flex items-center text-sky-600 cursor-help"
+                                onClick={(e) => e.stopPropagation()}
+                                aria-label="Formulário preenchido"
+                              >
+                                <BadgeCheck className="h-4 w-4 fill-sky-100" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" align="start">
+                              Formulário preenchido
+                            </TooltipContent>
+                          </Tooltip>
+                        ) : (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <span
+                                className="inline-flex items-center text-california-red cursor-help"
+                                onClick={(e) => e.stopPropagation()}
+                                aria-label="Formulário pendente"
+                              >
+                                <AlertCircle className="h-4 w-4" />
+                              </span>
+                            </TooltipTrigger>
+                            <TooltipContent side="bottom" align="start">
+                              Formulário pendente
+                            </TooltipContent>
+                          </Tooltip>
+                        ))}
                       {c.status === "inativo" && (
                         <span className="text-xs text-muted-foreground">
                           (inativo)

@@ -96,7 +96,7 @@ export default async function ColaboradoresPage() {
     supabase
       .from("colaboradores")
       .select(
-        "id, nome, tipo_contratacao, funcao, status, data_admissao, data_encerramento, cpf, cnpj, email, telefone, nivel_id, data_nascimento, area, banco_codigo, agencia, conta, conta_dv, tipo_conta, pix_chave, nivel:niveis(id, codigo)",
+        "id, nome, tipo_contratacao, funcao, status, data_admissao, data_encerramento, cpf, cnpj, email, telefone, nivel_id, data_nascimento, area, banco_codigo, agencia, conta, conta_dv, tipo_conta, pix_chave, user_id, perfil_completado_em, nivel:niveis(id, codigo)",
       )
       .eq("tenant_id", session.activeTenant.id)
       .order("nome", { ascending: true }),
@@ -341,6 +341,8 @@ export default async function ColaboradoresPage() {
         pendencia_total: pendencia.total,
         pendencia_criticas: pendencia.criticas,
         pendencia_parciais: pendencia.parciais,
+        tem_acesso: !!c.user_id,
+        perfil_completado: !!c.perfil_completado_em,
       };
     },
   );
