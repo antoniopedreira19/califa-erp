@@ -20,6 +20,7 @@ import { CardBeneficios } from "./card-beneficios";
 import { QuadroNf } from "./_components/quadro-nf";
 import { CardDocumentos } from "./card-documentos";
 import { CardMinhasFerias } from "./card-minhas-ferias";
+import { BotaoEditarPerfilCompleto } from "./botao-editar-perfil-completo";
 import type { NfPendenteQuadro } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -241,6 +242,19 @@ export default async function PerfilPage() {
           />
           <CardBeneficios resumo={resumoBeneficios} />
           <CardDocumentos />
+          {colab.tipo_contratacao !== "socio" && (
+            <div className="rounded-2xl border border-border bg-white p-5 shadow-soft">
+              <h3 className="text-xs font-bold uppercase tracking-[0.08em] text-foreground mb-3">
+                Perfil completo
+              </h3>
+              <p className="text-[11px] text-muted-foreground mb-3">
+                {colab.perfil_completado_em
+                  ? "Seus dados pessoais, documentos e preferências."
+                  : "Você ainda não completou seu perfil — abra pra terminar."}
+              </p>
+              <BotaoEditarPerfilCompleto />
+            </div>
+          )}
         </div>
       </div>
     </div>
