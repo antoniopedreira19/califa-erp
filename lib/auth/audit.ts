@@ -401,6 +401,11 @@ export type AuditAction =
   | "colaborador.salario_mudou"
   | "colaborador.salario_corrigido"
   | "colaborador.dados_bancarios_editados"
+  // Vínculos trabalhistas (subsistema 70-vinculos-colaborador). Trocas
+  // de modalidade (CLT ↔ PJ), encerramento formal, reingresso.
+  | "colaborador.vinculo_criado"
+  | "colaborador.vinculo_encerrado"
+  | "colaborador.vinculo_editado"
   // Vínculo colaborador ↔ usuário (task 010, 2026-10-03)
   | "colaborador.convite_enviado"
   | "colaborador.vinculado_a_usuario"

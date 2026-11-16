@@ -5727,6 +5727,39 @@ export interface ColaboradorFeriasLancamento {
   updated_at: string;
 }
 
+/** Motivo de encerramento de um vínculo trabalhista (CLT → PJ, demissão, etc.).
+ *  Spec: docs/modulos/rh/70-vinculos-colaborador.md §5.1 */
+export type VinculoMotivoEncerramento =
+  | "rescisao_clt_para_novo_vinculo"
+  | "demissao"
+  | "pedido_demissao"
+  | "fim_de_contrato"
+  | "outro";
+
+/** Vínculo trabalhista de um colaborador. Um colaborador pode ter N vínculos
+ *  ao longo do tempo. Ex: alguém admitido CLT em 2024 que vira PJ em 2025 tem
+ *  2 vínculos (CLT encerrado + PJ ativo).
+ *  A **data base de contagem de férias** é `data_inicio` do vínculo ativo
+ *  (função `fn_data_base_ferias`). Spec: docs/modulos/rh/70-vinculos-colaborador.md */
+export interface ColaboradorVinculo {
+  id: string;
+  tenant_id: string;
+  colaborador_id: string;
+  tipo_contratacao: TipoContratacao;
+  data_inicio: string;
+  /** Null = vínculo ativo. */
+  data_fim: string | null;
+  /** Só preenchido quando data_fim is not null. */
+  motivo_encerramento: VinculoMotivoEncerramento | null;
+  /** FK auto-referencial pro vínculo que originou este (típico em viradas de
+   *  modalidade, onde o PJ ativo aponta pro CLT anterior encerrado). */
+  vinculo_anterior_id: string | null;
+  observacao: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 
 // ---------- 13º Salário · Parte 1 (fundação, 21/10/2026) ----------
 // Folha anual de 13º com snapshot do cadastro e campos calculados.
