@@ -164,7 +164,7 @@ export default async function ColaboradorDetalhePage({
     supabase
       .from("folhas_pagamento")
       .select(
-        "id, competencia_ano, competencia_mes, tipo, status, salario_base",
+        "id, competencia_ano, competencia_mes, tipo, status, salario_base, origem",
       )
       .eq("tenant_id", session.activeTenant.id)
       .eq("colaborador_id", params.id)
@@ -312,6 +312,7 @@ export default async function ColaboradorDetalhePage({
       tipo: string;
       status: string;
       salario_base: string | number;
+      origem: "california" | "contabilidade";
     }[]
   ).map((f) => ({
     id: f.id,
@@ -320,6 +321,7 @@ export default async function ColaboradorDetalhePage({
     tipo: f.tipo,
     status: f.status,
     salario_base: Number(f.salario_base),
+    origem: f.origem,
   }));
 
   const empresas = (empresasRes.data ?? []) as Pick<

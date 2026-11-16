@@ -60,7 +60,13 @@ export interface FolhaRecente {
   tipo: string;
   status: string;
   salario_base: number;
+  origem: "california" | "contabilidade";
 }
+
+const ORIGEM_LABEL: Record<FolhaRecente["origem"], string> = {
+  california: "California (RPA)",
+  contabilidade: "Contabilidade (CLT)",
+};
 
 interface Props {
   folhas: FolhaRecente[];
@@ -114,9 +120,14 @@ export function CardFolha({ folhas }: Props) {
                       {MESES[f.competencia_mes - 1]}/{f.competencia_ano}
                     </span>
                   </p>
-                  <p className="text-[11px] text-muted-foreground tabular-nums">
-                    {brl.format(f.salario_base)}
-                  </p>
+                  <div className="flex items-center gap-2 flex-wrap mt-0.5">
+                    <span className="text-[11px] text-muted-foreground tabular-nums">
+                      {brl.format(f.salario_base)}
+                    </span>
+                    <span className="inline-flex items-center rounded-full bg-muted px-1.5 py-0 text-[10px] font-medium text-muted-foreground uppercase tracking-wider">
+                      {ORIGEM_LABEL[f.origem]}
+                    </span>
+                  </div>
                 </div>
                 <span
                   className={cn(
