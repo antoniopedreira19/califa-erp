@@ -13,23 +13,25 @@ import type {
 export function documentosObrigatorios(
   tipo: TipoContratacao,
 ): ColaboradorDocumentoTipo[] {
+  // `rg_cnh` cobre identificação pessoal — RG, CNH ou CPF, qualquer um
+  // basta (decisão 16/11/2026). O tipo `cpf` do enum continua
+  // disponível pra quem quiser anexar separadamente, só não é obrigatório.
   switch (tipo) {
     case "pj":
-      return ["cnpj", "rg_cnh", "cpf"];
+      return ["cnpj", "rg_cnh"];
     case "mei":
-      return ["cnpj", "ccmei", "rg_cnh", "cpf"];
+      return ["cnpj", "ccmei", "rg_cnh"];
     case "clt":
     case "clt_recibo":
       return [
         "rg_cnh",
-        "cpf",
         "comprovante_residencia",
         "pis",
         "ctps",
         "titulo_eleitor",
       ];
     case "estagio":
-      return ["rg_cnh", "cpf", "comprovante_residencia", "ctps"];
+      return ["rg_cnh", "comprovante_residencia", "ctps"];
     case "socio":
       return [];
   }

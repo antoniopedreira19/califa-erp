@@ -646,24 +646,17 @@ function Passo3DocsContato({
         </div>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Campo label="Anexo: RG ou CNH" descricao="PDF, JPG, PNG ou HEIC — até 10 MB. Frente e verso podem ir em arquivos separados.">
-          <UploadFolder
-            tipo="rg_cnh"
-            documentos={documentos}
-            uploadDoc={uploadDoc}
-            removerDoc={removerDoc}
-          />
-        </Campo>
-        <Campo label="Anexo: CPF">
-          <UploadFolder
-            tipo="cpf"
-            documentos={documentos}
-            uploadDoc={uploadDoc}
-            removerDoc={removerDoc}
-          />
-        </Campo>
-      </div>
+      <Campo
+        label="Anexo: documento de identificação (RG, CNH ou CPF)"
+        descricao="Basta um deles. PDF, JPG, PNG ou HEIC — até 10 MB. Frente e verso podem ir em arquivos separados."
+      >
+        <UploadFolder
+          tipo="rg_cnh"
+          documentos={documentos}
+          uploadDoc={uploadDoc}
+          removerDoc={removerDoc}
+        />
+      </Campo>
     </div>
   );
 }

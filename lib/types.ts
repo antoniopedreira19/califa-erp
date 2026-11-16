@@ -5099,7 +5099,7 @@ export function colaboradorDocumentoTipoLabel(t: ColaboradorDocumentoTipo): stri
     case "foto":                   return "Foto";
     case "cnpj":                   return "Cartão CNPJ";
     case "ccmei":                  return "CCMEI";
-    case "rg_cnh":                 return "RG ou CNH";
+    case "rg_cnh":                 return "RG, CNH ou CPF";
     case "cpf":                    return "CPF";
     case "comprovante_residencia": return "Comprovante de residência";
     case "pis":                    return "PIS";
