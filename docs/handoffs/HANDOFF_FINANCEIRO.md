@@ -9038,3 +9038,18 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Conferido:** todo lançamento realizado soma, na view, o próprio valor (a migration confere isso antes de terminar). Mudaram 195 linhas, todas em 1 centavo, e nenhuma ganhou ou perdeu linha. A conciliação de 03/11 da Santander fecha com diferença zero. No Sandbox, a AV-00006 (R$ 4.069,86, mesmo rateio, criada pela tela) mostra o mesmo valor por regional no card e na view.
 - **Fora:** fatura de cartão e folha previstas (somam por regional antes de arredondar) e as views de DRE e rentabilidade.
 - **Migration:** `20261115950001`.
+
+## ⚠️ Nota de 2026-11-16 — a lista de PPs em grade fixa (revisão da decisão 257)
+
+- **O erro:** a lista de PPs publicada em 15/11 manteve a largura automática do protótipo. Com os nomes reais, a tabela foi a 1.887 px numa caixa de 1.615 px com `overflow-hidden`:
+  - Faturamento, Status e o ícone da planilha sumiam;
+  - as linhas tinham até quatro linhas de texto.
+- **Agora:**
+  - `table-fixed` + `colgroup` (`ColunasDasPPs`), com Fornecedor e Job dividindo o que sobra.
+  - Teto de duas linhas: Fornecedor e Job com `TruncateTooltip linhas={2}`, e o nome de quem enviou numa linha.
+  - Urgente embaixo do código, junto do selo Verba/Reembolso.
+  - Caixa `relative overflow-x-auto`, com mínimo de 1.520 px.
+- **`TruncateTooltip`:** ganhou `children`, para o conteúdo com formatação (o código do job em mono); o cartão segue mostrando o `text`.
+- **Regra nova** em `docs/09-identidade-visual-ui.md` ("Listas com texto livre") e no `CLAUDE.md`: protótipo aprovado não prova a tela. Antes do push, confira com o dado real mais longo, na largura do Tiago.
+- **Sem migration.**
+

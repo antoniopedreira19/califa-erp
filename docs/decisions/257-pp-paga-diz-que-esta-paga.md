@@ -1,7 +1,7 @@
 # 257 — A PP paga diz que está paga: "Pago <data>", a linha da prestação e o job na lista de PPs
 
 **Data:** 2026-11-15
-**Status:** aceita e implementada em 15/11/2026.
+**Status:** aceita e implementada em 15/11/2026; lista de PPs em grade fixa em 16/11/2026 (nota no fim).
 **Quem decidiu:** Tiago, de 12 a 15/11/2026, escolhendo no protótipo "Verba paga no status" (telas reais com dados fictícios), depois de uma pergunta do financeiro.
 **Revê:** a [081](081-a-producao-presta-contas-da-verba-e-o-financeiro-aprova.md) na lista de PPs do Contas a Pagar — a verba paga volta a mostrar "Pago", e o andamento da prestação vai para uma linha própria —, e o selo em duas linhas da aba PPs do job ([189](189-prestacao-de-contas-da-verba-documento-a-documento.md)), que deixa de ser preciso com os nomes curtos.
 **Migration:** nenhuma.
@@ -43,3 +43,34 @@ No mesmo caminho apareceram mais três coisas: os selos da verba eram longos e a
 - A linha da prestação existe só na lista de PPs do Contas a Pagar. Títulos a Pagar, a aba PPs do job e o painel do item seguem com o selo da prestação e o "Pago <data>" embaixo.
 - O cabeçalho da tela da PP mostra "Concluída" na verba cuja sobra já foi devolvida: o selo recebe só a situação.
 - No filtro da coluna Status, "Aguardando prestação" traz as verbas pagas que ainda não têm a linha da prestação (a linha delas mostra "Pago").
+
+## ⚠️ Revisão de 2026-11-16 — a lista de PPs em grade fixa, como no protótipo
+
+**O que o Tiago viu:** a lista publicada não batia com o protótipo.
+- Faturamento ficava cortado, e Status e o ícone da planilha não apareciam.
+- Cada linha passava de duas linhas de texto.
+
+**Causa:**
+- O protótipo rodou com dados fictícios e curtos, e coube.
+- A implementação copiou a marcação dele, com largura automática.
+- Com os textos reais em `nowrap` (fornecedor de até 72 caracteres, job de até 54, quem enviou de até 43), a tabela foi a 1.887 px.
+- A caixa tinha 1.615 px e `overflow-hidden`, que cortava o fim sem rolagem.
+
+**Agora:**
+- **Grade fixa** (`table-fixed` + `colgroup`): Código 168, Valor 144, Parcela 92, Fornecedor (o que sobra), Prazo original 108, Enviada por 160, Job (o que sobra), Abertura do job 108, Faturamento 168, Status 152 e ícone 44.
+- **Filtro Prestação de Contas:** Comprovado 132 e Saldo 124 no lugar de Parcela e Prazo original.
+- **Na largura do Tiago** (1.616 px de conteúdo), Fornecedor e Job ficam com 234 px cada.
+- **Teto de duas linhas:**
+  - Fornecedor e Job quebram em até duas linhas, e o resto abre no cartão.
+  - O nome de quem enviou fica numa linha só.
+  - O **Urgente** desceu para baixo do código, ao lado do selo Verba/Reembolso. Os dois juntos medem 133 px, e há 10 PPs urgentes de reembolso em aberto.
+- **Janela mais estreita:** a lista rola de lado dentro da caixa (`overflow-x-auto`, mínimo de 1.520 px), e nenhuma coluna some.
+
+**Conferido:**
+- **Na tela publicada, sem gravar nada:** as larguras novas foram aplicadas por JS às 498 PPs em avaliação. Nenhum valor, data ou selo transbordou; transbordavam só os textos que agora quebram ou cortam.
+- **No servidor local, com o Sandbox:**
+  - A 1.838 px, a tabela tem 1.614 px, e as linhas, de 67 a 73 px.
+  - Com textos do tamanho dos maiores reais, nada transbordou e nenhuma linha passou de duas.
+  - A 1.440 px, só a caixa rola, e a página não.
+
+**Regra geral:** "Listas com texto livre" em `docs/09-identidade-visual-ui.md`.

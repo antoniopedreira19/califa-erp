@@ -53,6 +53,7 @@ import {
   type ColunaFiltravel,
 } from "@/components/ui/filtro-de-coluna";
 import { formatDiaBr } from "@/lib/formatar-data-hora";
+import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 
 /** Decisão 257: a Planilha Interna do job em leitura, com a linha da PP em
  *  destaque — o mesmo pop-up da abertura. Carregado só quando abre: a
@@ -283,15 +284,62 @@ function formatDate(iso: string | null): string {
   return `${d}/${m}/${y}`;
 }
 
-/** Nome, selo de reenvio e, embaixo, data e hora do último envio. */
+/** A grade da lista (decisão 257, revista em 16/11/2026). Larguras fixas,
+ *  medidas com o texto real mais longo na largura de conteúdo do Tiago
+ *  (1.616 px). Fornecedor e Job ficam sem largura e dividem o que sobra; o
+ *  texto deles quebra em até duas linhas, e o resto abre no cartão. Com a
+ *  largura automática, a tabela foi a 1.887 px numa caixa de 1.615 px e
+ *  Faturamento, Status e o ícone saíam da tela. A ordem segue a do
+ *  cabeçalho: no filtro de prestações, Comprovado e Saldo entram no lugar
+ *  de Parcela e Prazo original, logo depois do Valor. */
+function ColunasDasPPs({ prestacoes }: { prestacoes: boolean }) {
+  return (
+    <colgroup>
+      {/* Código, com Urgente e Verba/Reembolso embaixo: os dois selos
+          juntos medem 133 px (há PP urgente de reembolso em aberto) */}
+      <col className="w-[168px]" />
+      {/* Valor: cabe R$ 1.387.138,56, a maior PP */}
+      <col className="w-[144px]" />
+      {prestacoes ? (
+        <>
+          {/* Comprovado e Saldo */}
+          <col className="w-[132px]" />
+          <col className="w-[124px]" />
+        </>
+      ) : (
+        // Parcela
+        <col className="w-[92px]" />
+      )}
+      {/* Fornecedor: divide o que sobra com o Job */}
+      <col />
+      {/* Prazo original */}
+      {!prestacoes && <col className="w-[108px]" />}
+      {/* Enviada por */}
+      <col className="w-[160px]" />
+      {/* Job */}
+      <col />
+      {/* Abertura do job */}
+      <col className="w-[108px]" />
+      {/* Faturamento */}
+      <col className="w-[168px]" />
+      {/* Status */}
+      <col className="w-[152px]" />
+      {/* Ícone da Planilha Interna */}
+      <col className="w-[44px]" />
+    </colgroup>
+  );
+}
+
+/** Nome, selo de reenvio e, embaixo, data e hora do último envio. O nome
+ *  fica numa linha só: o que não cabe abre no cartão. */
 function QuemEnviou({ envio }: { envio: EnvioDaPP | null }) {
   if (!envio) return <span className="text-muted-foreground">—</span>;
   return (
     <>
-      <div className="flex items-center gap-1.5 text-[13px] font-medium text-foreground">
-        <span className="whitespace-nowrap">{envio.por_nome ?? "—"}</span>
+      <div className="flex min-w-0 items-center gap-1.5 text-[13px] font-medium text-foreground">
+        <TruncateTooltip as="span" text={envio.por_nome ?? "—"} className="min-w-0" />
         {envio.reenviada && (
-          <span className="rounded-md border border-california-red/30 bg-california-red/5 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-california-red">
+          <span className="shrink-0 rounded-md border border-california-red/30 bg-california-red/5 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-california-red">
             Reenviada
           </span>
         )}
@@ -337,6 +385,11 @@ function SeloPrestacao() {
   return (
     <span className="rounded-md bg-sky-100 px-1.5 py-0.5 font-sans text-[10px] font-medium text-sky-800">Prestação</span>
   );
+}
+
+/** O selo Urgente só vale enquanto a PP espera o financeiro. */
+function urgenteVisivel(r: PPRow): boolean {
+  return r.urgente && (r.status === "em_avaliacao" || r.status === "aprovada");
 }
 
 /** A linha da prestação existe quando a produção ENVIA a prestação ao
@@ -401,7 +454,7 @@ function LinhaDaPrestacao({ r, onAbrir }: { r: PPRow; onAbrir: () => void }) {
           <SeloPrestacao />
         </span>
       </td>
-      <td className="px-4 py-2.5 text-right tabular-nums" title="Comprovado na prestação">
+      <td className="whitespace-nowrap px-4 py-2.5 text-right tabular-nums" title="Comprovado na prestação">
         {pr ? (
           <>
             <span className="font-semibold">{formatMoney(Number(pr.valor_gasto))}</span>
@@ -499,7 +552,7 @@ function colunasDoModo(prestacoes: boolean): ColunaFiltravel<PPRow>[] {
         ...celulaTexto(r.codigo),
         busca: [
           r.codigo,
-          r.urgente && (r.status === "em_avaliacao" || r.status === "aprovada") ? "Urgente" : "",
+          urgenteVisivel(r) ? "Urgente" : "",
           r.verba_producao ? (r.tipo_verba === "reembolso" ? "Reembolso" : "Verba") : "",
         ].join(" "),
       }),
@@ -771,8 +824,13 @@ export function PedidosCompraList({
         />
       )}
 
-      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
-        <table className="w-full text-sm">
+      {/* Grade fixa (16/11/2026): numa janela mais estreita que a do
+          Tiago, a lista rola de lado dentro da caixa, e nenhuma coluna some.
+          O `relative` prende na caixa o rótulo `sr-only` do cabeçalho, que
+          é absoluto: sem ele, a página inteira ganhava rolagem lateral. */}
+      <div className="relative overflow-x-auto rounded-2xl border border-border bg-card shadow-soft">
+        <table className="w-full min-w-[1520px] table-fixed text-sm">
+          <ColunasDasPPs prestacoes={prestacoes} />
           <thead>
             <tr className="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wider text-muted-foreground">
               <th className="px-4 py-3 font-semibold">{colunas.titulo("codigo")}</th>
@@ -846,47 +904,50 @@ export function PedidosCompraList({
               >
                 <td
                   className={cn(
-                    "whitespace-nowrap px-4 py-3 font-mono text-xs font-bold text-california-red",
+                    "px-4 py-3 font-mono text-xs font-bold text-california-red",
                     i < urgentes.length && "border-l-[3px] border-l-california-red",
                   )}
                 >
-                  <span>{r.codigo}</span>
-                  {r.urgente && (r.status === "em_avaliacao" || r.status === "aprovada") && (
-                    <span
-                      title={r.urgente_justificativa ?? undefined}
-                      className="ml-2 rounded-md bg-california-red px-1.5 py-0.5 font-sans text-[10px] font-bold uppercase tracking-wider text-white"
-                    >
-                      Urgente
-                    </span>
-                  )}
-                  {/* Decisão 257: o selo da verba embaixo do código, para a
-                      coluna ficar estreita. No filtro de prestações a linha é
-                      a da prestação. */}
-                  {r.verba_producao && (
-                    <span className="mt-1 flex">
-                      {filtro === "prestacoes" ? (
-                        <SeloPrestacao />
-                      ) : (
-                        <span className="rounded-md bg-amber-100 px-1.5 py-0.5 font-sans text-[10px] font-medium text-amber-800">
-                          {/* Decisão 187: o reembolso mora no campo da verba. */}
-                          {r.tipo_verba === "reembolso" ? "Reembolso" : "Verba"}
+                  <span className="block whitespace-nowrap">{r.codigo}</span>
+                  {/* Decisão 257: os selos embaixo do código, para a coluna
+                      ficar estreita e a linha não passar de duas linhas — o
+                      Urgente também (16/11/2026; antes ele ia ao lado do
+                      código). No filtro de prestações a linha é a da
+                      prestação. */}
+                  {(urgenteVisivel(r) || r.verba_producao) && (
+                    <span className="mt-1 flex flex-wrap gap-1 font-sans">
+                      {urgenteVisivel(r) && (
+                        <span
+                          title={r.urgente_justificativa ?? undefined}
+                          className="rounded-md bg-california-red px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white"
+                        >
+                          Urgente
                         </span>
                       )}
+                      {r.verba_producao &&
+                        (filtro === "prestacoes" ? (
+                          <SeloPrestacao />
+                        ) : (
+                          <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-medium text-amber-800">
+                            {/* Decisão 187: o reembolso mora no campo da verba. */}
+                            {r.tipo_verba === "reembolso" ? "Reembolso" : "Verba"}
+                          </span>
+                        ))}
                     </span>
                   )}
                 </td>
-                <td className="px-4 py-3 text-right tabular-nums font-semibold">
+                <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums font-semibold">
                   {formatMoney(r.valor)}
                 </td>
                 {/* No filtro de prestações: o Comprovado e o Saldo, juntos. */}
                 {filtro === "prestacoes" ? (
                   <>
-                    <td className="px-4 py-3">
+                    <td className="whitespace-nowrap px-4 py-3">
                       <span className="font-mono text-xs font-semibold text-foreground">
                         {formatMoney(r.prestacao?.valor_gasto ?? 0)}
                       </span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="whitespace-nowrap px-4 py-3">
                       <span className="font-mono text-xs font-semibold text-teal-700">
                         {formatMoney(r.prestacao?.valor_devolvido ?? 0)}
                       </span>
@@ -903,7 +964,13 @@ export function PedidosCompraList({
                   </td>
                 )}
                 <td className="px-4 py-3">
-                  {nomeContraparteBRPP({ verba_producao: r.verba_producao, tipo_verba: r.tipo_verba, verba_titular_nome: r.responsavel_nome, fornecedor: r.fornecedor_nome ? { nome: r.fornecedor_nome } : null, responsavel: r.responsavel_nome ? { nome: r.responsavel_nome } : null })}
+                  <div className="flex min-w-0 items-start">
+                  {/* Até duas linhas; o nome inteiro abre no cartão. */}
+                  <TruncateTooltip
+                    linhas={2}
+                    className="min-w-0"
+                    text={nomeContraparteBRPP({ verba_producao: r.verba_producao, tipo_verba: r.tipo_verba, verba_titular_nome: r.responsavel_nome, fornecedor: r.fornecedor_nome ? { nome: r.fornecedor_nome } : null, responsavel: r.responsavel_nome ? { nome: r.responsavel_nome } : null })}
+                  />
                   {/* Asterisco da decisão 067. Aqui ele importa mais que na
                       aba de títulos: é nesta tela que a PP é aprovada, e
                       aprovar é o passo em que dá tempo de conferir a conta
@@ -913,7 +980,7 @@ export function PedidosCompraList({
                       <TooltipTrigger asChild>
                         <span
                           tabIndex={0}
-                          className="ml-1 cursor-help font-bold text-amber-600"
+                          className="ml-1 shrink-0 cursor-help font-bold text-amber-600"
                           aria-label="O cadastro do fornecedor mudou depois desta PP"
                         >
                           *
@@ -927,9 +994,10 @@ export function PedidosCompraList({
                       </TooltipContent>
                     </Tooltip>
                   )}
+                  </div>
                 </td>
                 {filtro !== "prestacoes" && (
-                  <td className="px-4 py-3 text-muted-foreground">{formatDate(r.prazo_pagamento)}</td>
+                  <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{formatDate(r.prazo_pagamento)}</td>
                 )}
                 <td className="px-4 py-3">
                   <QuemEnviou
@@ -941,8 +1009,10 @@ export function PedidosCompraList({
                   />
                 </td>
                 <td className="px-4 py-3 text-muted-foreground">
-                  <span className="font-mono text-xs">{r.job_codigo}</span>{" "}
-                  <span>{r.job_nome}</span>
+                  {/* Código e nome em até duas linhas; o resto abre no cartão. */}
+                  <TruncateTooltip linhas={2} text={`${r.job_codigo} ${r.job_nome}`.trim()}>
+                    <span className="font-mono text-xs">{r.job_codigo}</span> {r.job_nome}
+                  </TruncateTooltip>
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{formatDiaBr(r.job_aberto_em)}</td>
                 <td className="px-4 py-3">

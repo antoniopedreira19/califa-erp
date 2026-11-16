@@ -15,6 +15,9 @@ interface Props {
    *  texto fica numa linha só. O cartão com o texto inteiro abre nos dois
    *  casos, e só quando houve corte. */
   linhas?: 2 | 3;
+  /** Conteúdo com formatação no lugar do texto (ex.: o código do job em
+   *  fonte mono antes do nome). O cartão continua mostrando o `text`. */
+  children?: React.ReactNode;
 }
 
 // Classe inteira por valor: o Tailwind não enxerga `line-clamp-${n}`.
@@ -26,6 +29,7 @@ export function TruncateTooltip({
   maxWidth = 360,
   as: Component = "div",
   linhas,
+  children,
 }: Props) {
   const ref = React.useRef<HTMLElement>(null);
   const [pos, setPos] = React.useState<
@@ -71,7 +75,7 @@ export function TruncateTooltip({
         onMouseEnter={abrir}
         onMouseLeave={fechar}
       >
-        {text}
+        {children ?? text}
       </Component>
       {pos && typeof document !== "undefined"
         ? createPortal(

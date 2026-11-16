@@ -97,6 +97,17 @@ Regressões de performance já custaram 2 iterações completas ao projeto — a
 
 As mesmas cores estavam repetidas em 8 arquivos e já haviam divergido entre si; a visão agregada de jobs ficou 1 semana com as colunas dos Totais desalinhadas das da planilha por usar largura automática. `docs/09-identidade-visual-ui.md` tem os case studies.
 
+## Listas: grade fixa e dado real (regra transversal)
+
+**Lista com texto livre (fornecedor, job, cliente, pessoa) nasce em `table-fixed` + `colgroup`.**
+- **Teto de duas linhas:** o texto livre quebra em até duas linhas (`TruncateTooltip linhas={2}`), e o resto abre no cartão.
+- **Caixa:** `relative overflow-x-auto`, nunca `overflow-hidden`.
+- **Larguras:** medidas pela maior string **real** do banco, na largura do Tiago (1.616 px de conteúdo).
+
+**Protótipo aprovado não prova a tela implementada.** Ele roda com dado fictício e curto. Antes do push, compare a implementação com o protótipo usando o dado real mais longo.
+
+Em 16/11/2026, a lista de PPs saiu igual ao protótipo no código e diferente na tela: Faturamento, Status e o ícone sumiam, e as linhas tinham até quatro linhas de texto. Ver "Listas com texto livre" em `docs/09-identidade-visual-ui.md`.
+
 ## DRE de pessoal e benefícios (regra transversal)
 
 **Toda query de DRE que toca Despesa com Pessoal ou Benefícios DEVE consumir `vw_dre_despesa_pessoal_ajustada_mensal`**, nunca `contas_avulsas` direto.
