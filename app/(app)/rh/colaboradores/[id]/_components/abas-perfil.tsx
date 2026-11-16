@@ -20,9 +20,9 @@ interface Aba {
 
 const ABAS: Aba[] = [
   { key: "dados", label: "Dados pessoais", icon: UserCircle },
-  { key: "acesso", label: "Acesso ao sistema", icon: KeyRound },
   { key: "documentos", label: "Documentos", icon: FolderOpen },
   { key: "financeiro", label: "Financeiro", icon: Wallet },
+  { key: "acesso", label: "Acesso ao sistema", icon: KeyRound },
 ];
 
 interface Props {

@@ -1,5 +1,6 @@
 "use client";
 
+import * as React from "react";
 import { Building2, MapPin, Percent } from "lucide-react";
 import type { AlocacaoVigenteSnapshot } from "@/lib/types";
 
@@ -7,6 +8,8 @@ type Props = {
   snapshot: AlocacaoVigenteSnapshot | null;
   permitirAlterar: boolean;
   onAlterar?: () => void;
+  /** Selo de status (ex: SeloPendencia) exibido ao lado do título. */
+  selo?: React.ReactNode;
 };
 
 /**
@@ -18,7 +21,12 @@ type Props = {
  * alterarAlocacaoLegacy) enquanto Task 6 não migra o editor. Este card
  * só exibe — o chamador injeta `onAlterar` que abre o modal antigo.
  */
-export function CardAlocacao({ snapshot, permitirAlterar, onAlterar }: Props) {
+export function CardAlocacao({
+  snapshot,
+  permitirAlterar,
+  onAlterar,
+  selo,
+}: Props) {
   const pacote = snapshot?.pacote ?? null;
   const itens = snapshot?.itens ?? [];
 
@@ -34,7 +42,10 @@ export function CardAlocacao({ snapshot, permitirAlterar, onAlterar }: Props) {
             <Building2 className="h-4 w-4 text-california-red" />
           </div>
           <div>
-            <h2 className="text-lg font-semibold">Alocação</h2>
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold">Alocação</h2>
+              {selo}
+            </div>
             <p className="text-xs text-muted-foreground">
               {multiEmpresa
                 ? "Multi-empresa — distribuição vigente"

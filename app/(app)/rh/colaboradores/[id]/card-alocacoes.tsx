@@ -171,17 +171,13 @@ export function CardAlocacoes({
   // e usa o ModalAlterarAlocacao (multi-empresa) em vez do form legado.
   if (snapshotVigente !== undefined) {
     return (
-      <div>
+      <>
         <CardAlocacao
           snapshot={snapshotVigente ?? null}
           permitirAlterar
           onAlterar={() => setOpen(true)}
+          selo={pendencia ? <SeloPendencia nivel={pendencia} /> : null}
         />
-        {pendencia && (
-          <div className="mt-1">
-            <SeloPendencia nivel={pendencia} />
-          </div>
-        )}
         <ModalAlterarAlocacao
           open={open}
           onOpenChange={setOpen}
@@ -191,7 +187,7 @@ export function CardAlocacoes({
           regionaisPorEmpresa={regionaisPorEmpresa}
           onSucesso={() => router.refresh()}
         />
-      </div>
+      </>
     );
   }
 
