@@ -4,6 +4,7 @@ import * as React from "react";
 import { Check, Square, Upload, Send } from "lucide-react";
 import { ImportarFolhaModal } from "./importar-folha-modal";
 import { BotaoGerarFolhaPj } from "./botao-gerar-folha-pj";
+import { BotaoAtualizarFolhaPj } from "./botao-atualizar-folha-pj";
 import { BotaoAplicarBeneficios } from "./botao-aplicar-beneficios";
 import { BotaoDesaplicarBeneficios } from "./botao-desaplicar-beneficios";
 import { ModalEnviarFinanceiro } from "./modal-enviar-financeiro";
@@ -111,8 +112,12 @@ export function ChecklistCompetencia(props: ChecklistCompetenciaProps) {
               : "Nenhuma linha gerada ainda"
           }
           acao={
-            !temPj && props.podeEditar ? (
-              <BotaoGerarFolhaPj ano={props.ano} mes={props.mes} />
+            props.podeEditar ? (
+              !temPj ? (
+                <BotaoGerarFolhaPj ano={props.ano} mes={props.mes} />
+              ) : (
+                <BotaoAtualizarFolhaPj ano={props.ano} mes={props.mes} />
+              )
             ) : null
           }
         />

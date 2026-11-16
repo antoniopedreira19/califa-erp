@@ -258,6 +258,145 @@ export async function editarLinhaFolhaRh(
 }
 
 /**
+ * Re-sincroniza o salario_base das linhas PJ em rascunho desta competência
+ * com o salário vigente de cada colaborador (tabela colaboradores_salarios).
+ *
+ * Caso de uso: o RH reajusta o salário de alguém em colaboradores_salarios
+ * depois que a folha do mês já foi gerada. A folha congela o valor antigo.
+ * Esse botão "repuxa" os valores atuais pra evitar edição linha a linha.
+ *
+ * Respeita CLT+Recibo: a linha da folha PJ guarda só a parte do recibo
+ * (= salario_vigente.valor_recibo quando preenchido, senão metade do valor).
+ *
+ * Só mexe em status 'rascunho' — linhas já enviadas/aprovadas/pagas são
+ * imutáveis por desenho.
+ */
+export async function ressincronizarSalariosPj(input: {
+  ano: number;
+  mes: number;
+}): Promise<
+  ActionResult<{
+    atualizadas: number;
+    inalteradas: number;
+    puladas_sem_vigente: string[];
+  }>
+> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "rh.folhas.editar_rh");
+  if (!gate.ok) return gate;
+
+  const parsed = gerarFolhaSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: "Competência inválida." };
+  }
+  const { ano, mes } = parsed.data;
+
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const { data: linhas, error: lerr } = await supabase
+    .from("folhas_pagamento")
+    .select(
+      "id, salario_base, colaborador_id, colaborador:colaboradores(nome, tipo_contratacao)",
+    )
+    .eq("tenant_id", tenantId)
+    .eq("competencia_ano", ano)
+    .eq("competencia_mes", mes)
+    .eq("tipo", "salario")
+    .eq("origem", "california")
+    .eq("status", "rascunho");
+  if (lerr) {
+    console.error("[folha.ressync]", lerr.message);
+    return { ok: false, message: "Falha ao listar linhas." };
+  }
+
+  const colabIds = (linhas ?? []).map((l) => l.colaborador_id);
+  if (colabIds.length === 0) {
+    return {
+      ok: true,
+      atualizadas: 0,
+      inalteradas: 0,
+      puladas_sem_vigente: [],
+    };
+  }
+
+  const { data: vigentes, error: verr } = await supabase
+    .from("colaboradores_salarios")
+    .select("colaborador_id, valor, valor_recibo")
+    .in("colaborador_id", colabIds)
+    .is("data_fim", null);
+  if (verr) {
+    console.error("[folha.ressync.vigentes]", verr.message);
+    return { ok: false, message: "Falha ao buscar salários vigentes." };
+  }
+  const vigentePorColab = new Map<
+    string,
+    { valor: number; valor_recibo: number | null }
+  >();
+  for (const v of vigentes ?? []) {
+    vigentePorColab.set(v.colaborador_id, {
+      valor: Number(v.valor),
+      valor_recibo: v.valor_recibo != null ? Number(v.valor_recibo) : null,
+    });
+  }
+
+  let atualizadas = 0;
+  let inalteradas = 0;
+  const puladas_sem_vigente: string[] = [];
+
+  for (const linha of linhas ?? []) {
+    const colab = linha.colaborador as unknown as {
+      nome: string;
+      tipo_contratacao: string;
+    } | null;
+    const vig = vigentePorColab.get(linha.colaborador_id);
+    if (!vig) {
+      if (colab?.nome) puladas_sem_vigente.push(colab.nome);
+      continue;
+    }
+    const alvo =
+      colab?.tipo_contratacao === "clt_recibo"
+        ? vig.valor - (vig.valor_recibo ?? vig.valor / 2)
+        : vig.valor;
+    const atual = Number(linha.salario_base);
+    if (alvo === atual) {
+      inalteradas += 1;
+      continue;
+    }
+    const { error: uerr } = await supabase
+      .from("folhas_pagamento")
+      .update({ salario_base: alvo.toFixed(2) })
+      .eq("id", linha.id);
+    if (uerr) {
+      console.error("[folha.ressync.update]", linha.id, uerr.message);
+      continue;
+    }
+    atualizadas += 1;
+  }
+
+  if (atualizadas > 0) {
+    await logAuditEvent({
+      acao: "folha.pj.ressincronizada",
+      tenantId,
+      entidadeTipo: "folha",
+      entidadeId: `${ano}-${String(mes).padStart(2, "0")}`,
+      metadata: {
+        ano,
+        mes,
+        atualizadas,
+        inalteradas,
+        puladas_sem_vigente,
+      },
+    });
+  }
+
+  const chaveCompetencia = `${ano}-${String(mes).padStart(2, "0")}`;
+  revalidatePath("/rh/folhas");
+  revalidatePath(`/rh/folhas/${chaveCompetencia}`);
+  return { ok: true, atualizadas, inalteradas, puladas_sem_vigente };
+}
+
+/**
  * Envia uma linha de folha do RH para o financeiro. Muda status de
  * rascunho|pendente_correcao → enviada. Limpa motivo_pendencia se
  * estava em pendente_correcao.

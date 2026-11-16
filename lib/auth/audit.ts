@@ -424,6 +424,8 @@ export type AuditAction =
   // Fluxo CLT via PDF da contabilidade (folha-dois-fluxos, 2026-10-06)
   | "folha.importada"
   | "folha_competencia.enviada"
+  // Resync de salário PJ a partir do vigente (2026-11-16)
+  | "folha.pj.ressincronizada"
   // NF por colaborador PJ (folha-anexo-nf, 2026-10-07)
   | "colaborador.nf_anexada"
   | "colaborador.nf_removida"
