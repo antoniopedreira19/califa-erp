@@ -940,6 +940,16 @@ const aprovacao = (chave: string, data: string, valor: number, extra: Partial<Ap
 });
 
 describe("casos de borda", () => {
+  test("decisão 256: as deduções (repasse) saem só da base do ISS; PIS fica sobre o total", () => {
+    const n = { ...notaDeTeste({ id: "n1", emissao: "2026-10-10", valor: 100000, jobs: [{ ...J.j1101, valor: 100000 }] }), deducoes: 20000 };
+    const guias = calcularApuracao(CAD, { ...SEM_FATOS, notas: [n] }, "2026-11-04", []);
+    const iss = guiaDe(guias, "iss|ca-ssa|2026-10");
+    assert.equal(iss.apurado, 1600); // 2% de 80 mil
+    assert.equal(iss.memoria[0].base, 80000);
+    assert.match(semNbsp(iss.memoria[0].detalhe ?? ""), /deduções R\$ 20\.000,00/);
+    assert.equal(guiaDe(guias, "pis|california|2026-10").apurado, 1650); // 1,65% de 100 mil
+  });
+
   test("nota com dois jobs: o rateio divide pela parte de cada job, também no regime de caixa", () => {
     const n = notaDeTeste({ id: "n1", emissao: "2026-10-10", valor: 100000, jobs: [{ ...J.j1101, valor: 60000 }, { ...J.j1109, valor: 40000 }] });
     const h = notaDeTeste({

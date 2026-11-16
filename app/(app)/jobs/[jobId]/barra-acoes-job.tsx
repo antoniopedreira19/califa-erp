@@ -428,13 +428,58 @@ function TrilhaFaturamentoUnico({
   moeda: string;
 }) {
   const [verEnvio, setVerEnvio] = React.useState(false);
-  const situacao = faturamento?.situacao ?? "a_enviar";
+  // Decisão 256: o job que o financeiro faturou pelo Novo faturamento, sem envio.
+  const peloFinanceiro = faturamento?.peloFinanceiro ?? null;
   const envio = faturamento?.envio ?? null;
+  const situacao = faturamento?.situacao ?? "a_enviar";
 
   let texto: React.ReactNode;
   let acoes: React.ReactNode = null;
 
-  if (!envio) {
+  if (!envio && peloFinanceiro) {
+    const ultima =
+      peloFinanceiro.notas
+        .map((n) => n.dataEmissao)
+        .filter((d): d is string => Boolean(d))
+        .sort()
+        .at(-1) ?? null;
+    texto = (
+      <span>
+        Faturado pelo financeiro, sem envio da produção ·{" "}
+        {peloFinanceiro.notas.length === 1 ? (
+          <>
+            NF <strong className={MONO}>{peloFinanceiro.notas[0].numero}</strong>
+          </>
+        ) : (
+          `${peloFinanceiro.notas.length} notas fiscais`
+        )}{" "}
+        · <strong className={FORTE}>{formatCurrency(peloFinanceiro.total, moeda)}</strong>
+        {!peloFinanceiro.coberto && (
+          <>
+            {" "}
+            de <strong className={FORTE}>{formatCurrency(faturamentoPrevisto, moeda)}</strong>
+          </>
+        )}{" "}
+        em nota emitida
+        {ultima ? (
+          <>
+            {" "}
+            em <strong className={MONO}>{dataBr(ultima)}</strong>
+          </>
+        ) : null}
+        .
+        {!peloFinanceiro.coberto && (
+          <>
+            {" "}
+            O saldo de{" "}
+            <strong className={FORTE}>{formatCurrency(Math.max(0, faturamentoPrevisto - peloFinanceiro.total), moeda)}</strong>{" "}
+            fica com o financeiro.
+          </>
+        )}{" "}
+        Não há o que enviar para faturamento.
+      </span>
+    );
+  } else if (!envio) {
     if (situacao === "sem_faturamento") {
       texto = pagoSoPorSave
         ? "Pago com saldo em save de outro job: a nota já saiu lá, e não há o que enviar."

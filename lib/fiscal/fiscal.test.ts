@@ -7,6 +7,8 @@ import assert from "node:assert/strict";
 import { ajustarVencimento, vencimentoNoMesSeguinte, type FeriadoDoVencimento } from "./datas";
 import {
   impostosDaNota,
+  impostosDaNotaComDeducoes,
+  reformaDaNota,
   retencoesPadrao,
   situacaoDoCredito,
   valoresRetidos,
@@ -97,4 +99,22 @@ test("crédito de PIS/COFINS: gera cheio, retirado e presumido (decisão 146: o 
   assert.equal(situacaoDoCredito({ ...base, regimeDoTomador: "lucro_presumido" }).gera, false);
   // Sem a emissão, o texto fala do mês da emissão.
   assert.match(situacaoDoCredito({ ...base, emissao: null }).motivo, /nota no 12\.08 no mês da emissão/);
+});
+
+test("decisão 256: a dedução (repasse) sai só da base do ISS; PIS e COFINS sobre o total", () => {
+  const r = impostosDaNotaComDeducoes(SALVADOR, PUBLICIDADE, 100000, 20000, "2026-11-11", FERIADOS);
+  assert.equal(r.baseIss, 80000);
+  assert.equal(r.impostos.find((i) => i.imposto === "ISS")!.valor, 1600); // 2% de 80 mil
+  assert.equal(r.impostos.find((i) => i.imposto === "PIS")!.valor, 1650); // 1,65% de 100 mil
+  assert.equal(r.impostos.find((i) => i.imposto === "COFINS")!.valor, 7600); // 7,6% de 100 mil
+  assert.equal(r.total, 10850);
+  // Dedução maior que o total: a base do ISS para em zero.
+  assert.equal(impostosDaNotaComDeducoes(SALVADOR, PUBLICIDADE, 1000, 5000, "2026-11-11", FERIADOS).baseIss, 0);
+});
+
+test("decisão 256: CBS e IBS sobre o líquido (total − ISS − PIS − COFINS), como a planilha", () => {
+  const r = reformaDaNota(100000, { iss: 1600, pis: 1650, cofins: 7600 }, { cbs: 0.9, ibs: 0.1 });
+  assert.equal(r.liquido, 89150);
+  assert.equal(r.cbs, 802.35);
+  assert.equal(r.ibs, 89.15);
 });

@@ -70,6 +70,7 @@ import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
 import {
   montarFaturamentoDoEnvioUnico,
   montarFaturamentoMensal,
+  type NotaDoFinanceiro,
   type EnvioDoJobComParcelas,
   type FaturamentoDoEnvioUnico,
   type ItemDeNotaDaParcela,
@@ -1451,7 +1452,9 @@ export async function carregarDetalheDoJob(
   const idsParcelas = envios.flatMap((e) => e.parcelas.map((par) => par.id));
   // Decisão 229: a variação cambial do câmbio fechado, junto (a do envio
   // único é a soma das notas dele).
-  const [notasDasParcelasRes, variacoesPorNota] = await Promise.all([
+  // Decisão 256: as notas do Novo faturamento do job (o financeiro faturou
+  // sem o envio da produção): fecham o envio (no mensal, o mês).
+  const [notasDasParcelasRes, variacoesPorNota, notasDoFinanceiroRes] = await Promise.all([
     idsParcelas.length > 0
       ? supabase
           .from("faturamento_itens")
@@ -1465,7 +1468,30 @@ export async function carregarDetalheDoJob(
     envios.length > 0 && !faturaPorMes
       ? variacoesCambiaisDoJob(supabase, session.activeTenant.id, jobId)
       : Promise.resolve(new Map<string, number>()),
+    supabase
+      .from("faturamentos")
+      .select("numero_nf, data_emissao, valor_total, mes_novo_faturamento, itens:faturamento_itens!inner(origem_id)")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("status", "emitido")
+      .eq("faturado_pelo_financeiro", true)
+      .eq("itens.origem_id", jobId),
   ]);
+  if (notasDoFinanceiroRes.error) {
+    console.error("[job.notas-do-financeiro]", notasDoFinanceiroRes.error.message);
+  }
+  const notasDoFinanceiro: NotaDoFinanceiro[] = (
+    (notasDoFinanceiroRes.data ?? []) as unknown as Array<{
+      numero_nf: string;
+      data_emissao: string;
+      valor_total: number | string;
+      mes_novo_faturamento: string | null;
+    }>
+  ).map((n) => ({
+    numero: n.numero_nf,
+    dataEmissao: n.data_emissao,
+    valor: Number(n.valor_total),
+    mes: n.mes_novo_faturamento,
+  }));
   if (notasDasParcelasRes.error) {
     console.error("[job.notas-das-parcelas]", notasDasParcelasRes.error.message);
   }
@@ -1478,6 +1504,7 @@ export async function carregarDetalheDoJob(
         percentualImposto: Number(versaoAprovada.percentual_imposto),
         envios: enviosMensais,
         itensDeNota: (notasDasParcelasRes.data ?? []) as unknown as ItemDeNotaDaParcela[],
+        notasDoFinanceiro,
         // Mídia Off (decisão 167): a conta da mídia, e o mês só libera
         // depois da última veiculação dele (as datas vêm da cópia do job).
         midia: paramsMidia
@@ -1495,7 +1522,7 @@ export async function carregarDetalheDoJob(
     : [];
   const todosOsMesesEnviados =
     faturamentoMensal.length > 0 &&
-    faturamentoMensal.every((m) => m.envio !== null || m.situacao === "sem_faturamento");
+    faturamentoMensal.every((m) => m.envio !== null || m.peloFinanceiro || m.situacao === "sem_faturamento");
 
   // O faturamento do job que não é mensal: o envio único, as notas e a
   // situação — a trilha "Faturamento" da barra e o "Ver envio" (decisão 087).
@@ -1506,6 +1533,8 @@ export async function carregarDetalheDoJob(
           envio: envioFaturamento,
           itensDeNota: (notasDasParcelasRes.data ?? []) as unknown as ItemDeNotaDaParcela[],
           semFaturamento: totaisJob.faturamentoPrevisto <= 0.004,
+          notasDoFinanceiro,
+          faturamentoPrevisto: totaisJob.faturamentoPrevisto,
           variacaoCambial:
             Math.round([...variacoesPorNota.values()].reduce((t, v) => t + v, 0) * 100) / 100,
         });

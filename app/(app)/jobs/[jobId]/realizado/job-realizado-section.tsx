@@ -1914,6 +1914,10 @@ function PlanilhaDoJob({
   if (midia) {
     const enviados = faturamentoMensal.filter((m) => m.envio !== null).length;
     const comFaturamento = faturamentoMensal.filter((m) => m.faturamento > 0.004).length;
+    // Decisão 256: o mês do Novo faturamento fecha sem envio da produção.
+    const peloFinanceiro = faturamentoMensal.filter((m) => m.envio === null && m.peloFinanceiro).length;
+    const textoPeloFinanceiro =
+      peloFinanceiro > 0 ? ` · ${peloFinanceiro} faturado${peloFinanceiro === 1 ? "" : "s"} pelo financeiro` : "";
     return (
       <div className="flex flex-col gap-4">
       {linhaDeParametros}
@@ -1959,8 +1963,8 @@ function PlanilhaDoJob({
           job.status === "aguardando_abertura" || job.status === "rejeitado_financeiro"
             ? "Job aguardando abertura"
             : enviados === 0
-              ? "Nenhum mês enviado"
-              : `${enviados} de ${comFaturamento} ${comFaturamento === 1 ? "mês enviado" : "meses enviados"}`
+              ? `Nenhum mês enviado${textoPeloFinanceiro}`
+              : `${enviados} de ${comFaturamento} ${comFaturamento === 1 ? "mês enviado" : "meses enviados"}${textoPeloFinanceiro}`
         }
       />
       </div>

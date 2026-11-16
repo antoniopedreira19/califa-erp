@@ -38,6 +38,7 @@ import {
   CornerDownLeft,
   FileCheck2,
   FileText,
+  HandCoins,
   Layers,
   Lock,
   Paperclip,
@@ -76,14 +77,16 @@ import {
 } from "@/components/financeiro/info-faturamento-modal";
 import type { ContatoCobranca } from "@/lib/data/contatos-cobranca";
 import type { PlanoContaTipo, PlanoContaSubtipo, RateioLinhaInput } from "@/lib/types";
+import { IMPOSTOS_RETIDOS, type ImpostoRetido } from "@/lib/types";
 import { RateioRegionalEditor } from "../contas-a-pagar/rateio-regional-editor";
-import { emitirFaturamento, uploadNfPdf, uploadPoPdf } from "./actions";
+import { carregarMesesDoNovoFaturamento, emitirFaturamento, uploadNfPdf, uploadPoPdf } from "./actions";
 import type { FaturamentoPendenteRow, FaturadoRow } from "./faturamento-list";
-import { chaveDoRecebidoAntes, chaveInfoDoEnvio } from "./chave-info";
+import { chaveDoRecebidoAntes, chaveDoRecebidoDoJob, chaveInfoDoEnvio } from "./chave-info";
+import type { MesDoNovoFaturamento } from "./meses-do-novo-faturamento";
 import { somaDosRecebidos, type RecebidoAntesDaNf } from "./recebimento-antes-nf-dialog";
 import type { AnexoDaPo } from "@/components/envio/anexos-da-po";
 import { rotuloMes } from "@/lib/calculos/meses-trimestre";
-import { cnaesVigentes, estabelecimentoDoCalculo, feriadosDoCalculo } from "@/lib/fiscal/cadastro";
+import { aliquotasDaReforma, cnaesVigentes, estabelecimentoDoCalculo, feriadosDoCalculo } from "@/lib/fiscal/cadastro";
 import { codigoDoCnae, rotuloDoCnae } from "@/lib/fiscal/calculos";
 import {
   avisoDaApuracao,
@@ -93,12 +96,14 @@ import {
   sugestaoDoCnpj,
   type FiscalDoFaturar,
 } from "@/lib/fiscal/faturar";
-import { ImpostosDestaNota, ImpostosDestaNotaVazio } from "./impostos-desta-nota";
+import { ImpostosDestaNota } from "./impostos-desta-nota";
 import { NotaEmitidaDrawer } from "./nota-emitida-drawer";
 
 export type DrawerState =
   | { modo: "origem"; linhas: FaturamentoPendenteRow[] }
-  | { modo: "avulso" }
+  | { modo: "avulso"; jobInicial?: string }
+  /** Decisão 256: o financeiro fatura o job direto, no lugar do envio da produção. */
+  | { modo: "adicional"; jobInicial?: string; valorInicial?: number; mesInicial?: string }
   | { modo: "leitura"; nota: FaturadoRow };
 
 /** O que o botão `i` mostra sobre um job. */
@@ -124,6 +129,21 @@ export interface JobDoFaturar {
   empresa_id: string | null;
   regional_id: string | null;
   cliente_id: string | null;
+  /** O que o GP enviou para faturamento e ainda espera nota. */
+  a_faturar_no_envio: number;
+  faturamento_previsto: number;
+  /** Notas de job emitidas (pelo envio ou pelo financeiro). */
+  ja_faturado: number;
+  /** Quanto do faturamento previsto é saldo em save (crédito do cliente). */
+  save_previsto: number;
+  /** Quanto das notas emitidas já foi item de save. */
+  ja_faturado_save: number;
+  /** O custo AR (repasse) do job: passa pela California e não é base de imposto. */
+  repasse_ar: number;
+  /** Job mensal (Fee, Always On) e Mídia Off: o Novo faturamento fatura um
+   *  mês, e os meses se leem quando o job é escolhido
+   *  (`carregarMesesDoNovoFaturamento`). */
+  mensal: boolean;
 }
 
 /** Os CNPJs de um cliente: o do cadastro e os já usados em nota ou envio. */
@@ -166,6 +186,10 @@ interface Props {
   /** Decisão 247: os honorários padrão de cada cliente, de onde nascem os
    *  honorários do save avulso. */
   honorariosPorCliente: Record<string, number>;
+  /** Fecha o formulário e abre o Faturar da linha do envio deste job. */
+  onFaturarPeloEnvio: (jobId: string) => void;
+  /** Decisão 256: a última retenção de cada cliente (a mesma da baixa). */
+  ultimasRetencoes: Record<string, { referencia: string; data: string; aliquotas: Record<string, number> }>;
 }
 
 export function FaturarDrawer(props: Props) {
@@ -465,11 +489,16 @@ function FormularioDeFaturar({
   jobs,
   cnpjsPorCliente,
   honorariosPorCliente,
+  onFaturarPeloEnvio,
+  ultimasRetencoes,
 }: Props & { state: Exclude<DrawerState, { modo: "leitura" }> }) {
   const router = useRouter();
   const cad = fiscal.cadastro;
 
-  const avulso = state.modo === "avulso";
+  // O novo faturamento usa o formulário da avulsa referente a um job,
+  // sem a escolha do vínculo e sem centro de custo: a nota é do job.
+  const adicional = state.modo === "adicional";
+  const avulso = state.modo === "avulso" || adicional;
   const linhas = state.modo === "origem" ? state.linhas : [];
   const primeira = linhas[0] ?? null;
   // Decisão 188: a nota do envio em lote, quando todas as linhas são dela. É
@@ -494,9 +523,11 @@ function FormularioDeFaturar({
   // ---- Avulsa: cliente e job ------------------------------------------------
   // Decisão 247: "Save avulso" é a avulsa sem job cujo valor vira crédito
   // do cliente, consumido depois nos jobs dele.
-  const [vinculo, setVinculo] = React.useState<"job" | "save" | "sem_job">("job");
+  const [vinculoEscolhido, setVinculo] = React.useState<"job" | "save" | "sem_job">("job");
+  const vinculo = adicional ? ("job" as const) : vinculoEscolhido;
   const ehSave = avulso && vinculo === "save";
-  const [jobRefId, setJobRefId] = React.useState("");
+  const [jobRefId, setJobRefId] = React.useState(state.modo !== "origem" ? (state.jobInicial ?? "") : "");
+  const [mesEscolhido, setMesEscolhido] = React.useState(state.modo === "adicional" ? (state.mesInicial ?? "") : "");
   const jobRef = avulso && vinculo === "job" ? (jobPorId.get(jobRefId) ?? null) : null;
   const [clienteSemJob, setClienteSemJob] = React.useState("");
   // A PO da avulsa (decisão 234): opcional, número e arquivos.
@@ -564,7 +595,7 @@ function FormularioDeFaturar({
   const cnpjDaNota = exterior ? "" : cnpjTomador;
 
   // ---- Valor e classificação (avulsa) ---------------------------------------
-  const [avValor, setAvValor] = React.useState(0);
+  const [avValor, setAvValor] = React.useState(state.modo === "adicional" ? (state.valorInicial ?? 0) : 0);
   const [avTipoId, setAvTipoId] = React.useState("");
   const [avSubtipoId, setAvSubtipoId] = React.useState("");
   // O save avulso sai sempre em 01 · Receita · Save (decisão 247), e o
@@ -660,8 +691,27 @@ function FormularioDeFaturar({
   const volta = Math.max(saldoTotal - totalNf, 0);
   const diverge = !avulso && volta > 0.01;
 
-  // Recebido antes da NF (decisão 130): vira a parcela 1, travada.
-  const recebidosDaNf = avulso ? [] : recebidosDasLinhas(itensAtivos, recebidosAntes);
+  // Recebido antes da NF (decisão 130): vira a parcela 1, travada. O da
+  // nota do envio (ou do BV) entra sozinho. Decisão 256: o recebimento preso
+  // só ao job (registrado na conciliação) aparece para associar; só os
+  // associados entram na nota. O Faturar não registra recebimento.
+  const idsDosJobsDaNota = adicional
+    ? jobRef
+      ? [jobRef.id]
+      : []
+    : avulso
+      ? []
+      : [...new Set(itensAtivos.filter((l) => l.origem_tipo === "job").map((l) => l.job_id ?? l.origem_id))];
+  const recebidosDoJob = idsDosJobsDaNota.flatMap((id) => recebidosAntes[chaveDoRecebidoDoJob(id)] ?? []);
+  const [associados, setAssociados] = React.useState<Set<string>>(new Set());
+  const recebidosAssociados = recebidosDoJob.filter((r) => associados.has(r.id));
+  const recebidosDaNf = adicional
+    ? recebidosAssociados
+    : avulso
+      ? []
+      : [...recebidosDasLinhas(itensAtivos, recebidosAntes), ...recebidosAssociados].sort((a, b) =>
+          a.data.localeCompare(b.data),
+        );
   const antesTotal = somaDosRecebidos(recebidosDaNf);
   const temAntes = antesTotal > 0;
   const antesData = recebidosDaNf[0]?.data ?? "";
@@ -900,10 +950,106 @@ function FormularioDeFaturar({
     setErro(null);
   }
 
+  // ---- Deduções (repasse) e formato -------------------------------------------
+  const [deducoes, setDeducoes] = React.useState(0);
+  // Os jobs desta nota: o da avulsa / do Novo faturamento, ou os das linhas.
+  const jobsDaNota = (() => {
+    if (avulso) return jobRef ? [jobRef] : [];
+    if (ehBv) return [];
+    const ids = [...new Set(itensAtivos.map((l) => l.job_id ?? l.origem_id))];
+    return ids.map((id) => jobPorId.get(id)).filter((j): j is JobDoFaturar => Boolean(j));
+  })();
+  // Decisão 256: a sugestão é o custo AR de cada job na proporção desta
+  // nota (o valor dela sobre o previsto do job), com a conta à vista. O
+  // avulso não fatura o job e não tem sugestão.
+  const repasseDaNota = (avulso && !adicional ? [] : jobsDaNota)
+    .filter((j) => j.repasse_ar > 0.004)
+    .map((j) => {
+      const valorDoJob = adicional
+        ? avValor
+        : itensAtivos
+            .filter((l) => (l.job_id ?? l.origem_id) === j.id)
+            .reduce((t, l) => t + (valores[l.envio_parcela_id ?? l.origem_id] ?? 0), 0);
+      const proporcao = j.faturamento_previsto > 0.004 ? Math.min(1, Math.max(0, valorDoJob / j.faturamento_previsto)) : 1;
+      return { job: j, valorDoJob: centavos(valorDoJob), proporcao, sugerido: centavos(j.repasse_ar * proporcao) };
+    });
+  const repasseSugerido = centavos(repasseDaNota.reduce((t, x) => t + x.sugerido, 0));
+
+  // ---- Retenções do cliente na fonte (proposta) ---------------------------------
+  // Quando já se sabe como o cliente retém, a nota leva as alíquotas: as
+  // parcelas mostram o líquido, e a baixa e a conciliação já abrem com elas.
+  const [retem, setRetem] = React.useState(false);
+  const [aliqRet, setAliqRet] = React.useState<Partial<Record<ImpostoRetido, string>>>({});
+  const numeroDe = (t: string | undefined) => {
+    const n = Number(String(t ?? "").replace(",", ".").trim());
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  };
+  // Decisão 256: IRRF, PIS, COFINS e CSLL retidos sobre o valor total da nota,
+  // como a baixa já faz; o ISS retido, sobre a base de cálculo (o total menos
+  // o repasse), como no emissor da NFS-e.
+  const baseRetencoes = centavos(Math.max(0, totalNf - deducoes));
+  const retencoesDaNota = retem
+    ? IMPOSTOS_RETIDOS.map(({ imposto }) => {
+        const base = imposto === "ISS" ? baseRetencoes : centavos(totalNf);
+        return {
+          imposto,
+          aliquota: numeroDe(aliqRet[imposto]),
+          base,
+          valor: centavos((base * numeroDe(aliqRet[imposto])) / 100),
+        };
+      }).filter((r) => r.aliquota > 0)
+    : [];
+  const totalRetido = centavos(retencoesDaNota.reduce((t, r) => t + r.valor, 0));
+  const fatorLiquido = totalNf > 0 ? Math.max(0, 1 - totalRetido / totalNf) : 1;
+
+  // ---- Novo faturamento: o envio do GP e o resumo do job ---------------
+  // Job mensal: tudo vale para o MÊS escolhido. Os meses se leem quando o
+  // job é escolhido (a página não lê os de todos os jobs mensais).
+  const [mesesPorJob, setMesesPorJob] = React.useState<Record<string, MesDoNovoFaturamento[] | "erro">>({});
+  const mensal = Boolean(adicional && jobRef?.mensal);
+  const idDoJobMensal = mensal && jobRef ? jobRef.id : null;
+  const mesesCarregados = idDoJobMensal ? mesesPorJob[idDoJobMensal] : undefined;
+  React.useEffect(() => {
+    if (!idDoJobMensal || mesesCarregados !== undefined) return;
+    let vivo = true;
+    carregarMesesDoNovoFaturamento(idDoJobMensal)
+      .then((r) => {
+        if (vivo) setMesesPorJob((m) => ({ ...m, [idDoJobMensal]: r.ok ? r.meses : "erro" }));
+      })
+      .catch(() => {
+        if (vivo) setMesesPorJob((m) => ({ ...m, [idDoJobMensal]: "erro" }));
+      });
+    return () => {
+      vivo = false;
+    };
+  }, [idDoJobMensal, mesesCarregados]);
+  const mesesDoJob = Array.isArray(mesesCarregados) ? mesesCarregados : [];
+  const mesSel = mensal ? (mesesDoJob.find((m) => m.mes === mesEscolhido) ?? null) : null;
+  const envioDoJob = mensal ? (mesSel?.a_faturar_no_envio ?? 0) : (jobRef?.a_faturar_no_envio ?? 0);
+  const temEnvioPendente = Boolean(adicional && jobRef && envioDoJob > 0.004);
+  const previstoDoResumo = mensal ? (mesSel?.faturamento ?? 0) : (jobRef?.faturamento_previsto ?? 0);
+  const jaFaturadoDoResumo = mensal ? (mesSel?.ja_faturado ?? 0) : (jobRef?.ja_faturado ?? 0);
+  const faltaFaturarDoJob = jobRef ? centavos(previstoDoResumo - jaFaturadoDoResumo) : 0;
+  // O job que gera save: a nota cobre primeiro o faturamento do job, e o que
+  // passar disso é saldo em save (como no Faturar do envio, decisão 028).
+  const saldoProprioDoJob = jobRef
+    ? centavos(
+        jobRef.faturamento_previsto - jobRef.save_previsto - (jobRef.ja_faturado - jobRef.ja_faturado_save),
+      )
+    : 0;
+  // O save fica no que está previsto em save: o que passar do previsto é do job.
+  const saveRestante = jobRef ? Math.max(0, centavos(jobRef.save_previsto - jobRef.ja_faturado_save)) : 0;
+  const parteDaNota = (() => {
+    const p = repartirEmJobESave(avValor, Math.max(0, saldoProprioDoJob));
+    const save = Math.min(p.save, saveRestante);
+    return { job: centavos(avValor - save), save };
+  })();
+
   // ---- O que falta --------------------------------------------------------------
   const somaRateio = rateio.reduce((s, l) => s + l.percentual, 0);
   const pendencias: Array<{ rotulo: string; ok: boolean }> = [
-    ...(avulso && vinculo === "job" ? [{ rotulo: "Job de referência", ok: Boolean(jobRef) }] : []),
+    ...(avulso && vinculo === "job" ? [{ rotulo: adicional ? "Job" : "Job de referência", ok: Boolean(jobRef) }] : []),
+    ...(mensal ? [{ rotulo: "Mês", ok: Boolean(mesSel) }] : []),
     ...(ehSave
       ? [
           { rotulo: "Cliente", ok: Boolean(clienteSemJob) },
@@ -925,7 +1071,7 @@ function FormularioDeFaturar({
       : []),
     ...(!ehBv ? [{ rotulo: "CNPJ do tomador", ok: exterior || isValidCnpj(cnpjTomador) }] : []),
     ...(avulso ? [{ rotulo: "Valor da NF", ok: avValor > 0 }] : []),
-    ...(avulso && !ehSave ? [{ rotulo: "Centro de custo", ok: Boolean(avTipoId && avSubtipoId) }] : []),
+    ...(avulso && !ehSave && !adicional ? [{ rotulo: "Centro de custo", ok: Boolean(avTipoId && avSubtipoId) }] : []),
     { rotulo: "CNPJ emissor", ok: Boolean(estabEscolhido) },
     { rotulo: "Nº NF", ok: Boolean(numeroNf.trim()) },
     { rotulo: "Emissão", ok: Boolean(dataEmissao) },
@@ -938,6 +1084,22 @@ function FormularioDeFaturar({
   function handleFaturar() {
     setErro(null);
     if (emitidaComAviso) return;
+    if (retem && retencoesDaNota.length === 0) {
+      setErro("Informe a alíquota de ao menos um imposto retido, ou escolha Sem retenção.");
+      return;
+    }
+    if (deducoes > totalNf + 0.004) {
+      setErro("As deduções passam do valor total da nota.");
+      return;
+    }
+    if (temEnvioPendente && jobRef) {
+      setErro(
+        mesSel
+          ? `${rotuloMes(mesSel.mes)} do ${jobRef.codigo} tem envio do GP esperando nota: fature pelo envio.`
+          : `O ${jobRef.codigo} tem envio do GP esperando nota: fature pelo envio.`,
+      );
+      return;
+    }
 
     const faltando = pendencias.filter((p) => !p.ok);
     if (faltando.length > 0) {
@@ -971,7 +1133,16 @@ function FormularioDeFaturar({
     }
     if (!estabEscolhido || !cnaeEscolhido || !anexoPath) return;
 
-    const itens = avulso
+    const itens = adicional
+      ? [
+          ...(parteDaNota.job > 0.004 || parteDaNota.save <= 0.004
+            ? [{ origem_tipo: "job" as const, origem_id: jobRef?.id ?? null, envio_parcela_id: null, valor: parteDaNota.save > 0.004 ? parteDaNota.job : totalNf }]
+            : []),
+          ...(parteDaNota.save > 0.004
+            ? [{ origem_tipo: "save" as const, origem_id: jobRef?.id ?? null, envio_parcela_id: null, valor: parteDaNota.save }]
+            : []),
+        ]
+      : avulso
       ? [{ origem_tipo: "avulso" as const, origem_id: null, envio_parcela_id: null, valor: totalNf }]
       : itensAtivos.flatMap((l) => {
           const valor = valores[l.envio_parcela_id ?? l.origem_id] ?? 0;
@@ -1014,8 +1185,8 @@ function FormularioDeFaturar({
     startTransition(async () => {
       const res = await emitirFaturamento({
         empresa_id: empresaId,
-        origem_tipo: avulso ? "avulso" : origemTipo,
-        origem_id: avulso ? null : (itensAtivos[0]?.origem_id ?? null),
+        origem_tipo: adicional ? "job" : avulso ? "avulso" : origemTipo,
+        origem_id: adicional ? (jobRef?.id ?? null) : avulso ? null : (itensAtivos[0]?.origem_id ?? null),
         cliente_id: avulso ? clienteId : ehBv ? null : (primeira?.cliente_id ?? null),
         fornecedor_id: ehBv ? (primeira?.fornecedor_id ?? null) : null,
         numero_nf: numeroNf.trim(),
@@ -1028,9 +1199,17 @@ function FormularioDeFaturar({
         estabelecimento_id: estabEscolhido.id,
         fiscal_cnae_id: cnaeEscolhido.id,
         anexo_nf_path: anexoPath,
-        plano_conta_tipo_id: avulso ? (ehSave ? (tipoReceita?.id ?? null) : avTipoId) : null,
-        plano_conta_subtipo_id: avulso ? (ehSave ? (subtipoSave?.id ?? null) : avSubtipoId) : null,
-        rateio: rateioDaNota,
+        plano_conta_tipo_id: avulso && !adicional ? (ehSave ? (tipoReceita?.id ?? null) : avTipoId) : null,
+        plano_conta_subtipo_id: avulso && !adicional ? (ehSave ? (subtipoSave?.id ?? null) : avSubtipoId) : null,
+        rateio: adicional ? [] : rateioDaNota,
+        // Decisão 256: a nota de job que o financeiro faturou sem o envio da produção.
+        faturado_pelo_financeiro: adicional,
+        recebidos_associados: recebidosAssociados.map((r) => r.id),
+        // Decisão 256: o repasse que não entra na base dos impostos (vai ao fiscal).
+        valor_deducoes: centavos(deducoes),
+        // Decisão 256: as retenções do cliente já sabidas — vão aos títulos.
+        retencoes_previstas: retencoesDaNota.map((r) => ({ imposto: r.imposto, aliquota: r.aliquota })),
+        mes_referencia: mesSel?.mes ?? null,
         itens,
         // A parcela 1 é o recebido antes da NF, quando houver.
         parcelas: [...(temAntes ? [{ valor: antesTotal, data_vencimento: antesData }] : []), ...parcelas].map(
@@ -1038,12 +1217,12 @@ function FormularioDeFaturar({
         ),
         cnpj_tomador: ehBv || exterior ? null : cnpjTomador,
         tomador_exterior: !ehBv && exterior,
-        job_referencia_id: jobRef?.id ?? null,
+        job_referencia_id: adicional ? null : (jobRef?.id ?? null),
         save_avulso: ehSave
           ? { nome: nomeSave.trim(), percentual_honorarios: pctSave, percentual_imposto: Number(impSave) }
           : null,
         pos: (avulso
-          ? [{ job_id: null, mes: null, numero: numeroPo, arquivos: poArquivos }]
+          ? [{ job_id: adicional ? (jobRef?.id ?? null) : null, mes: null, numero: numeroPo, arquivos: poArquivos }]
           : jobsDaPo.map((j) => ({ job_id: j.jobId, mes: j.mes, ...(poDosJobs[j.chave] ?? { numero: "", arquivos: [] }) }))
         ).map((po) => ({
           job_id: po.job_id,
@@ -1065,7 +1244,11 @@ function FormularioDeFaturar({
       }
 
       const parciais = itensAtivos.filter((l) => (valores[l.envio_parcela_id ?? l.origem_id] ?? 0) < l.saldo - 0.01);
-      const detalhe = avulso
+      const detalhe = adicional
+        ? ` · Novo faturamento do ${jobRef?.codigo ?? "job"}${mesSel ? ` (${rotuloMes(mesSel.mes)})` : ""}${
+            ficaNoJob > 0.004 ? ` · saldo de ${formatMoney(ficaNoJob)} fica com o financeiro` : ""
+          }`
+        : avulso
         ? ehSave
           ? ` · save avulso “${nomeSave.trim()}” de ${clienteNome}, crédito de ${formatMoney(creditoSave)}`
           : ` · avulso para ${clienteNome}${jobRef ? ` · ${jobRef.codigo}` : ""}`
@@ -1093,7 +1276,9 @@ function FormularioDeFaturar({
   }
 
   // ---- Textos -----------------------------------------------------------------
-  const titulo = avulso
+  const titulo = adicional
+    ? "Novo faturamento"
+    : avulso
     ? "Faturamento avulso"
     : loteDaNota
       ? loteDaNota.total > 1
@@ -1102,12 +1287,16 @@ function FormularioDeFaturar({
       : notasAtivas > 1
         ? "Faturamento agrupado"
         : `Faturar ${primeira?.codigo ?? primeira?.descricao ?? ""}`;
-  const subtitulo = avulso
+  const subtitulo = adicional
+    ? "O financeiro fatura o job direto, com o valor negociado, no lugar do envio da produção."
+    : avulso
     ? "Nota fiscal que não consome saldo de faturamento de job."
     : loteDaNota
       ? "A nota que a produção montou no envio em lote, com a parte de cada job; o valor por job pode ser total ou parcial."
       : "Uma única nota fiscal; o valor por job pode ser total ou parcial.";
-  const rodape = ehSave
+  const rodape = adicional
+    ? `Ao faturar, esta nota fatura o ${jobRef?.codigo ?? "job"} no lugar do envio da produção: ele fica Faturado, e o GP não precisa enviar para faturamento o que esta nota cobre.`
+    : ehSave
     ? "Ao faturar, as parcelas desta NF entram em Títulos a Receber e o crédito vira save avulso do cliente, para consumir nos jobs dele."
     : avulso
     ? `Ao faturar, as parcelas desta NF entram em Títulos a Receber como faturamento avulso${
@@ -1204,8 +1393,249 @@ function FormularioDeFaturar({
     </div>
   );
 
-  const blocoClienteEJob = avulso ? (
-    <div className="space-y-3.5">
+  // Decisão 256: o Novo faturamento usa o mesmo bloco "Jobs nesta NF"
+  // do Faturar do envio. Muda só o que não existe sem envio: o job é
+  // escolhido (não vem do envio), o valor é digitado na linha (o GP não
+  // mandou valor) e a linha mostra previsto, já faturado e a faturar.
+  const ficaNoJob = centavos(faltaFaturarDoJob - avValor);
+  const parcialNovo = avValor > 0.004 && ficaNoJob > 0.004;
+  const acimaDoPrevisto = ficaNoJob < -0.004;
+  const blocoJobDoNovo = (
+    <div className="space-y-3">
+      <div className="grid grid-cols-2 items-end gap-x-5 gap-y-3.5">
+        <Campo rotulo="Job" obrigatorio>
+          <Combobox
+            items={jobs.map((j) => ({
+              value: j.id,
+              label: `${j.codigo} · ${j.nome}`,
+              descricao: `${j.a_faturar_no_envio > 0.004 ? `Envio do GP esperando nota: ${formatMoney(j.a_faturar_no_envio)} · ` : ""}${nomeDoCliente(j.cliente_id)} · ${nomeDaEmpresa(j.empresa_id)} · ${nomeDaRegional(j.regional_id)}${
+                j.encerrado ? " · encerrado" : ""
+              }`,
+              busca: `${j.codigo} ${j.nome} ${nomeDoCliente(j.cliente_id)}`,
+            }))}
+            value={jobRefId || null}
+            onChange={(v) => {
+              setJobRefId(v ?? "");
+              setMesEscolhido("");
+              setAssociados(new Set());
+              setErro(null);
+            }}
+            placeholder="Selecione o job que esta nota fatura"
+            buscaPlaceholder="Escreva o código, o nome ou o cliente"
+            className={COMBOBOX_COMO_SELECT}
+          />
+        </Campo>
+        {jobRef && mensal && (
+          <div>
+            <Campo rotulo="Mês" obrigatorio>
+              <Select value={mesEscolhido} onValueChange={(v) => { setMesEscolhido(v); setErro(null); }}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione o mês que esta nota fatura" />
+                </SelectTrigger>
+                <SelectContent>
+                  {mesesDoJob.map((m) => {
+                    const falta = centavos(m.faturamento - m.ja_faturado);
+                    const situacao =
+                      m.a_faturar_no_envio > 0.004
+                        ? "envio do GP esperando nota"
+                        : m.tem_envio
+                          ? "faturado pelo envio"
+                          : falta <= 0.05
+                            ? "faturado"
+                            : m.ja_faturado > 0.004
+                              ? `saldo de ${formatMoney(falta)}`
+                              : "sem envio";
+                    return (
+                      <SelectItem key={m.mes} value={m.mes}>
+                        {rotuloMes(m.mes)} · {formatMoney(m.faturamento)} · {situacao}
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </Campo>
+          </div>
+        )}
+      </div>
+      {jobRef && temEnvioPendente && (
+        <div
+         
+          className="flex items-center gap-3 rounded-lg border border-california-red/35 bg-california-red/[0.06] px-3.5 py-2.5 text-[12.5px] text-california-red"
+        >
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold">
+              O GP enviou {formatMoney(envioDoJob)} do {jobRef.codigo}
+              {mesSel ? ` (${rotuloMes(mesSel.mes)})` : ""} para faturamento, ainda sem nota.
+            </p>
+            <p>A nota deste job sai pelo Faturar do envio.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onFaturarPeloEnvio(jobRef.id)}
+            className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg bg-emerald-700 px-3 py-1.5 text-[12.5px] font-semibold text-white transition-colors hover:bg-emerald-800"
+          >
+            <FileCheck2 className="h-3.5 w-3.5" />
+            Faturar pelo envio
+          </button>
+        </div>
+      )}
+      {jobRef && (!mensal || mesSel) && !temEnvioPendente && (
+        <div>
+        <div className="overflow-hidden rounded-xl border border-border">
+          <div className="flex items-center gap-3 px-3.5 py-3">
+            <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+              <div className="flex min-w-0 items-center gap-2">
+                <span className="truncate text-[13px] font-semibold">{jobRef.nome}</span>
+                {parcialNovo && (
+                  <span className="shrink-0 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-amber-800">
+                    Parcial
+                  </span>
+                )}
+                {acimaDoPrevisto && (
+                  <span className="shrink-0 rounded-full border border-california-red/30 bg-california-red/[0.06] px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-california-red">
+                    Acima do previsto
+                  </span>
+                )}
+                {parteDaNota.save > 0.004 && (
+                  <span className="shrink-0 rounded-full border border-[#c9c6bf] bg-[#f3f2ee] px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wide text-[#5f5d57]">
+                    Save
+                  </span>
+                )}
+              </div>
+              {parteDaNota.save > 0.004 && (
+                <span className="text-[11px] text-[#5f5d57]">
+                  {parteDaNota.job > 0.004 ? (
+                    <>
+                      {formatMoney(parteDaNota.job)} do job · <strong>{formatMoney(parteDaNota.save)}</strong> em saldo de save
+                    </>
+                  ) : (
+                    <>
+                      <strong>{formatMoney(parteDaNota.save)}</strong> inteiros em saldo de save
+                    </>
+                  )}
+                </span>
+              )}
+              <span className="font-mono text-[11px] text-muted-foreground">
+                {jobRef.codigo}
+                {mesSel ? ` · ${rotuloMes(mesSel.mes)}` : ""} · previsto {formatMoney(previstoDoResumo)} · já faturado{" "}
+                {formatMoney(jaFaturadoDoResumo)} · a faturar {formatMoney(Math.max(0, faltaFaturarDoJob))}
+              </span>
+              {parcialNovo && (
+                <span className="inline-flex items-center gap-1.5 self-start text-[11px] font-semibold text-blue-700">
+                  <CornerDownLeft className="h-3 w-3" />
+                  {formatMoney(ficaNoJob)} fica como saldo na aba Faturamento
+                </span>
+              )}
+            </div>
+            <div className="flex shrink-0 flex-col items-end gap-1.5">
+              <span className="text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground">Faturar agora</span>
+              <div className="w-[148px]">
+                <MoneyInput
+                  id="av-valor"
+                  value={avValor}
+                  onValueChange={(v) => {
+                    setAvValor(v);
+                    setErro(null);
+                  }}
+                />
+              </div>
+              {faltaFaturarDoJob > 0.004 && Math.abs(avValor - faltaFaturarDoJob) > 0.004 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAvValor(faltaFaturarDoJob);
+                    setErro(null);
+                  }}
+                  className="rounded-md border border-border bg-white px-2 py-1 text-[10.5px] font-semibold text-muted-foreground transition-colors hover:border-california-red/40 hover:text-foreground"
+                >
+                  Tudo o que falta
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-3 border-t border-border bg-muted/50 px-3.5 py-3">
+            <span className="text-xs font-semibold text-muted-foreground">Valor total da NF</span>
+            <span className="ml-auto font-mono text-[17px] font-bold tabular-nums">{formatMoney(avValor)}</span>
+          </div>
+        </div>
+        </div>
+      )}
+      {jobRef && !temEnvioPendente && parcialNovo && (
+        <div className="flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs text-blue-700">
+          <CornerDownLeft className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>
+            Faturando {formatMoney(avValor)} de {formatMoney(faltaFaturarDoJob)} — o saldo de{" "}
+            <strong className="font-bold">{formatMoney(ficaNoJob)}</strong> fica na aba{" "}
+            <strong className="font-bold">Faturamento</strong> como saldo do Novo faturamento. O envio da produção
+            {mesSel ? " deste mês" : ""} fecha com esta nota.
+          </span>
+        </div>
+      )}
+      {jobRef && (
+        <FaixaDoJob
+          itens={[
+            { rotulo: "Cliente", valor: nomeDoCliente(jobRef.cliente_id) },
+            { rotulo: "Empresa (gerencial)", valor: nomeDaEmpresa(jobRef.empresa_id) },
+            { rotulo: "Regional", valor: nomeDaRegional(jobRef.regional_id) },
+          ]}
+        />
+      )}
+      {jobRef && (
+        <div className="grid grid-cols-2 items-start gap-x-5 gap-y-3.5">
+          {campoCnpjTomador}
+          <CamposDaPo numero={numeroPo} onNumero={setNumeroPo} arquivos={poArquivos} onArquivos={setPoArquivos} disabled={pending} />
+        </div>
+      )}
+    </div>
+  );
+
+  // Decisão 256: o avulso no mesmo molde do Faturar do envio. Em cima,
+  // de onde a nota vem (job, cliente); no meio, a caixa com a linha e o
+  // valor; embaixo, só o que o avulso exige (centro de custo, rateio de
+  // regional ou o cálculo do save).
+  const temQuemNoAvulso = vinculo === "job" ? Boolean(jobRef) : Boolean(clienteSemJob);
+  const tituloDaLinhaAvulsa =
+    vinculo === "job"
+      ? (jobRef?.nome ?? "")
+      : vinculo === "save"
+        ? nomeSave.trim() || "Save avulso"
+        : `Faturamento avulso · ${nomeDoCliente(clienteSemJob || null)}`;
+  const detalheDaLinhaAvulsa =
+    vinculo === "job"
+      ? `${jobRef?.codigo ?? ""} · avulsa: não conta no faturamento do job`
+      : vinculo === "save"
+        ? `crédito do cliente ${avValor > 0 ? formatMoney(creditoSave) : "—"} · a NF sem imposto e sem honorários`
+        : `sem job · ${empresaSemJob ? nomeDaEmpresa(empresaSemJob) : "escolha a empresa"} · receita nas regionais do rateio`;
+  const campoCentroDeCusto = (
+    <Campo rotulo="Centro de custo" obrigatorio>
+      <div className="grid grid-cols-2 gap-2">
+        <Combobox
+          items={tipos.filter((t) => t.ativo).map((t) => ({ value: t.id, label: `${t.codigo} · ${t.nome}` }))}
+          value={avTipoId || null}
+          onChange={(v) => {
+            const novo = v ?? "";
+            setAvTipoId(novo);
+            setAvSubtipoId((atual) => (subtipos.find((s) => s.id === atual)?.tipo_id === novo ? atual : ""));
+          }}
+          placeholder="Tipo..."
+          buscaPlaceholder="Escreva o código ou o nome"
+          className={COMBOBOX_COMO_SELECT}
+        />
+        <Combobox
+          items={subtiposDoTipo.map((s) => ({ value: s.id, label: s.nome }))}
+          value={avSubtipoId || null}
+          onChange={(v) => setAvSubtipoId(v ?? "")}
+          disabled={!avTipoId}
+          placeholder={avTipoId ? "Subtipo..." : "Escolha o tipo"}
+          buscaPlaceholder="Escreva o nome do subtipo"
+          className={COMBOBOX_COMO_SELECT}
+        />
+      </div>
+    </Campo>
+  );
+  const blocoAvulso = (
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
         <Segmentado<"job" | "save" | "sem_job">
           valor={vinculo}
@@ -1221,7 +1651,7 @@ function FormularioDeFaturar({
         />
         <span className="text-[11.5px] text-muted-foreground">
           {vinculo === "job"
-            ? "Cliente, empresa e regional vêm do job."
+            ? "Cliente, empresa e regional vêm do job; a nota não conta no faturamento dele."
             : vinculo === "save"
               ? "Vira crédito do cliente, consumido nos jobs dele."
               : "Receita que não é de job."}
@@ -1229,7 +1659,7 @@ function FormularioDeFaturar({
       </div>
 
       {vinculo === "job" ? (
-        <>
+        <div className="grid grid-cols-2 items-end gap-x-5">
           <Campo rotulo="Job" obrigatorio>
             <Combobox
               items={jobs.map((j) => ({
@@ -1250,93 +1680,187 @@ function FormularioDeFaturar({
               className={COMBOBOX_COMO_SELECT}
             />
           </Campo>
-          {jobRef && (
-            <FaixaDoJob
-              itens={[
-                { rotulo: "Cliente", valor: nomeDoCliente(jobRef.cliente_id) },
-                { rotulo: "Empresa (gerencial)", valor: nomeDaEmpresa(jobRef.empresa_id) },
-                { rotulo: "Regional", valor: nomeDaRegional(jobRef.regional_id) },
-              ]}
-            />
-          )}
-        </>
+        </div>
       ) : (
-        <>
-          <div className="grid grid-cols-2 gap-3.5">
-            <Campo rotulo="Cliente" obrigatorio>
-              <Combobox
-                items={clientes.map((c) => ({ value: c.id, label: c.nome }))}
-                value={clienteSemJob || null}
-                onChange={(v) => setClienteSemJob(v ?? "")}
-                placeholder="Selecione o cliente"
-                buscaPlaceholder="Escreva o nome do cliente"
-                className={COMBOBOX_COMO_SELECT}
+        <div className={cn("grid items-end gap-x-5 gap-y-3.5", vinculo === "save" ? "grid-cols-3" : "grid-cols-2")}>
+          <Campo rotulo="Cliente" obrigatorio>
+            <Combobox
+              items={clientes.map((c) => ({ value: c.id, label: c.nome }))}
+              value={clienteSemJob || null}
+              onChange={(v) => setClienteSemJob(v ?? "")}
+              placeholder="Selecione o cliente"
+              buscaPlaceholder="Escreva o nome do cliente"
+              className={COMBOBOX_COMO_SELECT}
+            />
+          </Campo>
+          <Campo rotulo="Empresa (gerencial)" obrigatorio>
+            <Select value={empresaSemJob} onValueChange={setEmpresaSemJob}>
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione a empresa" />
+              </SelectTrigger>
+              <SelectContent>
+                {empresas.map((e) => (
+                  <SelectItem key={e.id} value={e.id}>
+                    {e.nome}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Campo>
+          {vinculo === "save" && (
+            <Campo
+              rotulo="Nome do save"
+              obrigatorio
+              htmlFor="av-nome-save"
+            >
+              <Input
+                id="av-nome-save"
+                value={nomeSave}
+                onChange={(e) => setNomeSave(e.target.value)}
+                placeholder="Ex.: Verba PDV 2027"
+                maxLength={120}
+                disabled={pending}
               />
             </Campo>
-            <Campo rotulo="Empresa (gerencial)" obrigatorio>
-              <Select value={empresaSemJob} onValueChange={setEmpresaSemJob}>
+          )}
+        </div>
+      )}
+
+      {temQuemNoAvulso && (
+        <div>
+          <div className="overflow-hidden rounded-xl border border-border">
+            <div className="flex items-center gap-3 px-3.5 py-3">
+              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="truncate text-[13px] font-semibold">{tituloDaLinhaAvulsa}</span>
+                  <span
+                    className={cn(
+                      "shrink-0 rounded-full border px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-wide",
+                      vinculo === "save"
+                        ? "border-[#c9c6bf] bg-[#f3f2ee] text-[#5f5d57]"
+                        : "border-border bg-muted text-muted-foreground",
+                    )}
+                  >
+                    {vinculo === "save" ? "Save avulso" : "Avulso"}
+                  </span>
+                </div>
+                <span className="font-mono text-[11px] text-muted-foreground">{detalheDaLinhaAvulsa}</span>
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1.5">
+                <span className="text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground">Faturar agora</span>
+                <div className="w-[148px]">
+                  <MoneyInput
+                    id="av-valor"
+                    value={avValor}
+                    onValueChange={(v) => {
+                      setAvValor(v);
+                      setErro(null);
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 border-t border-border bg-muted/50 px-3.5 py-3">
+              <span className="text-xs font-semibold text-muted-foreground">Valor total da NF</span>
+              <span className="ml-auto font-mono text-[17px] font-bold tabular-nums">{formatMoney(avValor)}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* O que só o avulso pede, embaixo da caixa (no envio, a faixa do job). */}
+      {vinculo === "job" && jobRef && (
+        <FaixaDoJob
+          itens={[
+            { rotulo: "Cliente", valor: nomeDoCliente(jobRef.cliente_id) },
+            { rotulo: "Empresa (gerencial)", valor: nomeDaEmpresa(jobRef.empresa_id) },
+            { rotulo: "Regional", valor: nomeDaRegional(jobRef.regional_id) },
+          ]}
+        />
+      )}
+      {vinculo === "save" && clienteSemJob && (
+        <>
+          <div className="grid grid-cols-4 items-end gap-x-5 gap-y-3.5">
+            <Campo rotulo="Honorários (%)" obrigatorio htmlFor="av-hon-save">
+              <div className="relative">
+                <Input
+                  id="av-hon-save"
+                  inputMode="decimal"
+                  value={honSave}
+                  onChange={(e) => setHonSave(e.target.value)}
+                  className={cn("pr-8", honSave.trim() !== "" && !honSaveOk && "border-california-red")}
+                  disabled={pending}
+                />
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground">
+                  %
+                </span>
+              </div>
+            </Campo>
+            <Campo rotulo="Imposto (%)" obrigatorio>
+              <Select value={impSave} onValueChange={setImpSave} disabled={pending}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione a empresa" />
+                  <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent>
-                  {empresas.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>
-                      {e.nome}
+                  {ALIQUOTAS_IMPOSTO.map((a) => (
+                    <SelectItem key={a} value={String(a)}>
+                      {String(a).replace(".", ",")}%
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </Campo>
-          </div>
-          {vinculo === "save" ? (
-            <>
-              <Campo
-                rotulo="Nome do save"
-                obrigatorio
-                htmlFor="av-nome-save"
-                ajuda="Como o save aparece no Contas a Receber e na planilha dos jobs que consumirem."
-              >
-                <Input
-                  id="av-nome-save"
-                  value={nomeSave}
-                  onChange={(e) => setNomeSave(e.target.value)}
-                  placeholder="Ex.: Verba PDV 2027"
-                  maxLength={120}
-                  disabled={pending}
-                />
+            {(
+              [
+                ["Centro de custo", tipoReceita ? `${tipoReceita.codigo} · ${tipoReceita.nome}` : "01 · Receita"],
+                ["Subtipo", subtipoSave?.nome ?? "Save"],
+              ] as const
+            ).map(([rotulo, texto]) => (
+              <Campo key={rotulo} rotulo={rotulo} obrigatorio>
+                <div className="flex h-11 items-center justify-between rounded-lg border border-border bg-muted/50 px-3 text-[13px] text-foreground">
+                  {texto}
+                  <Lock className="h-3.5 w-3.5 text-muted-foreground" />
+                </div>
               </Campo>
-              {clienteSemJob && (
-                <FaixaDoJob
-                  itens={[
-                    { rotulo: "Save de", valor: nomeDoCliente(clienteSemJob) },
-                    { rotulo: "Valor do crédito", valor: avValor > 0 ? formatMoney(creditoSave) : "O principal da NF" },
-                    { rotulo: "Regional", valor: "A do job que consumir" },
-                  ]}
-                />
-              )}
-            </>
-          ) : empresaSemJob ? (
-            <RateioRegionalEditor linhas={rateio} onChange={setRateio} regionais={regionaisDaEmpresa} disabled={pending} />
-          ) : (
-            <div className="space-y-1.5">
-              <Label>
-                Rateio de regional <span className="text-california-red">*</span>
-              </Label>
-              <p className="rounded-lg border border-dashed border-border bg-muted/50 px-3 py-2.5 text-[12.5px] text-muted-foreground">
-                Escolha a empresa (gerencial) para ver as regionais dela.
-              </p>
-            </div>
-          )}
+            ))}
+          </div>
+          <FaixaDoJob
+            itens={[
+              { rotulo: "Save de", valor: nomeDoCliente(clienteSemJob) },
+              { rotulo: "Valor do crédito", valor: avValor > 0 ? formatMoney(creditoSave) : "O principal da NF" },
+              { rotulo: "Regional", valor: "A do job que consumir" },
+            ]}
+          />
         </>
       )}
-
-      {(jobRef || (vinculo !== "job" && clienteSemJob)) && (
-        <CamposDaPo numero={numeroPo} onNumero={setNumeroPo} arquivos={poArquivos} onArquivos={setPoArquivos} disabled={pending} />
+      {vinculo !== "save" && temQuemNoAvulso && (
+        <div className="grid grid-cols-2 items-start gap-x-5">{campoCentroDeCusto}</div>
       )}
+      {vinculo === "sem_job" &&
+        clienteSemJob &&
+        (empresaSemJob ? (
+          <RateioRegionalEditor linhas={rateio} onChange={setRateio} regionais={regionaisDaEmpresa} disabled={pending} />
+        ) : (
+          <div className="space-y-1.5">
+            <Label>
+              Rateio de regional <span className="text-california-red">*</span>
+            </Label>
+            <p className="rounded-lg border border-dashed border-border bg-muted/50 px-3 py-2.5 text-[12.5px] text-muted-foreground">
+              Escolha a empresa (gerencial) para ver as regionais dela.
+            </p>
+          </div>
+        ))}
 
-      {clienteId && campoCnpjTomador}
+      {temQuemNoAvulso && (
+        <div className="grid grid-cols-2 items-start gap-x-5 gap-y-3.5">
+          {clienteId ? campoCnpjTomador : <div />}
+          <CamposDaPo numero={numeroPo} onNumero={setNumeroPo} arquivos={poArquivos} onArquivos={setPoArquivos} disabled={pending} />
+        </div>
+      )}
     </div>
-  ) : (
+  );
+
+  const blocoClienteEJob = adicional ? blocoJobDoNovo : avulso ? blocoAvulso : (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
         <div className="ml-auto">
@@ -1495,129 +2019,29 @@ function FormularioDeFaturar({
           { rotulo: "Regional", valor: nomeDaRegional(jobDaOrigem?.regional_id ?? null) },
         ]}
       />
-      {jobsDaPo.map((j) => (
-        <div key={j.chave} className="space-y-1.5">
-          {jobsDaPo.length > 1 && <p className="font-mono text-[11px] font-semibold text-muted-foreground">{j.rotulo}</p>}
-          <CamposDaPo
-            numero={poDosJobs[j.chave]?.numero ?? ""}
-            onNumero={(v) => mudarPo(j.chave, { numero: v })}
-            arquivos={poDosJobs[j.chave]?.arquivos ?? []}
-            onArquivos={(a) => mudarPo(j.chave, { arquivos: a })}
-            disabled={pending}
-          />
-        </div>
-      ))}
-      {!ehBv && campoCnpjTomador}
-    </div>
-  );
-
-  const campoValorDaNf = (
-    <Campo rotulo="Valor total da NF" obrigatorio htmlFor="av-valor">
-      <MoneyInput
-        id="av-valor"
-        value={avValor}
-        onValueChange={(v) => {
-          setAvValor(v);
-          setErro(null);
-        }}
-      />
-    </Campo>
-  );
-
-  // Save avulso (decisão 247): valor da NF | honorários e imposto; abaixo, o
-  // crédito do cliente ao lado do centro de custo e do subtipo, travados.
-  const blocoValor = !avulso ? null : ehSave ? (
-    <div className="space-y-3.5">
-      <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)] gap-3.5">
-        {campoValorDaNf}
-        <div className="grid grid-cols-2 gap-2">
-          <Campo rotulo="Honorários (%)" obrigatorio htmlFor="av-hon-save">
-            <div className="relative">
-              <Input
-                id="av-hon-save"
-                inputMode="decimal"
-                value={honSave}
-                onChange={(e) => setHonSave(e.target.value)}
-                className={cn("pr-8", honSave.trim() !== "" && !honSaveOk && "border-california-red")}
+      {/* O CNPJ do tomador ao lado da PO (de cada job, um embaixo do outro). */}
+      <div className="grid grid-cols-2 items-start gap-x-5 gap-y-3.5">
+        {!ehBv ? campoCnpjTomador : <div />}
+        <div className="space-y-3.5">
+          {jobsDaPo.map((j) => (
+            <div key={j.chave} className="space-y-1.5">
+              {jobsDaPo.length > 1 && <p className="font-mono text-[11px] font-semibold text-muted-foreground">{j.rotulo}</p>}
+              <CamposDaPo
+                numero={poDosJobs[j.chave]?.numero ?? ""}
+                onNumero={(v) => mudarPo(j.chave, { numero: v })}
+                arquivos={poDosJobs[j.chave]?.arquivos ?? []}
+                onArquivos={(a) => mudarPo(j.chave, { arquivos: a })}
                 disabled={pending}
               />
-              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-muted-foreground">
-                %
-              </span>
             </div>
-          </Campo>
-          <Campo rotulo="Imposto (%)" obrigatorio>
-            <Select value={impSave} onValueChange={setImpSave} disabled={pending}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione" />
-              </SelectTrigger>
-              <SelectContent>
-                {ALIQUOTAS_IMPOSTO.map((a) => (
-                  <SelectItem key={a} value={String(a)}>
-                    {String(a).replace(".", ",")}%
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Campo>
-        </div>
-      </div>
-      <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)] items-start gap-3.5">
-        <Campo rotulo="Crédito do cliente" ajuda="A NF sem imposto e sem honorários.">
-          <div className="flex h-11 items-center rounded-lg border border-border bg-muted/50 px-3 font-mono text-[13px] font-semibold text-foreground">
-            {avValor > 0 ? formatMoney(creditoSave) : "—"}
-          </div>
-        </Campo>
-        <div className="grid grid-cols-2 gap-2">
-          {(
-            [
-              ["Centro de custo", tipoReceita ? `${tipoReceita.codigo} · ${tipoReceita.nome}` : "01 · Receita"],
-              ["Subtipo", subtipoSave?.nome ?? "Save"],
-            ] as const
-          ).map(([rotulo, texto]) => (
-            <Campo key={rotulo} rotulo={rotulo} obrigatorio>
-              <div className="flex h-11 items-center justify-between rounded-lg border border-border bg-muted/50 px-3 text-[13px] text-foreground">
-                {texto}
-                <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-              </div>
-            </Campo>
           ))}
         </div>
       </div>
     </div>
-  ) : (
-    <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)] gap-3.5">
-      {campoValorDaNf}
-      <Campo rotulo="Centro de custo" obrigatorio>
-        <div className="grid grid-cols-2 gap-2">
-          <Combobox
-            items={tipos.filter((t) => t.ativo).map((t) => ({ value: t.id, label: `${t.codigo} · ${t.nome}` }))}
-            value={avTipoId || null}
-            onChange={(v) => {
-              const novo = v ?? "";
-              setAvTipoId(novo);
-              setAvSubtipoId((atual) => (subtipos.find((s) => s.id === atual)?.tipo_id === novo ? atual : ""));
-            }}
-            placeholder="Tipo..."
-            buscaPlaceholder="Escreva o código ou o nome"
-            className={COMBOBOX_COMO_SELECT}
-          />
-          <Combobox
-            items={subtiposDoTipo.map((s) => ({ value: s.id, label: s.nome }))}
-            value={avSubtipoId || null}
-            onChange={(v) => setAvSubtipoId(v ?? "")}
-            disabled={!avTipoId}
-            placeholder={avTipoId ? "Subtipo..." : "Escolha o tipo"}
-            buscaPlaceholder="Escreva o nome do subtipo"
-            className={COMBOBOX_COMO_SELECT}
-          />
-        </div>
-      </Campo>
-    </div>
   );
 
-  const blocoNota = (
-    <div className="space-y-3.5">
+  // Os campos da nota, um a um: o drawer e o pop-up os arrumam diferente.
+  const campoEstab = (
       <Campo rotulo="CNPJ emissor" obrigatorio ajuda={!estabTocado ? sugestao.ajuda : null}>
         <Select
           value={estabEscolhido?.id ?? ""}
@@ -1639,7 +2063,8 @@ function FormularioDeFaturar({
           </SelectContent>
         </Select>
       </Campo>
-      <div className="grid grid-cols-2 gap-3.5">
+  );
+  const campoNumero = (
         <Campo rotulo="Nº NF" obrigatorio htmlFor="numero-nf" ajuda="Numeração de cada CNPJ.">
           <Input
             id="numero-nf"
@@ -1649,6 +2074,8 @@ function FormularioDeFaturar({
             className="font-mono"
           />
         </Campo>
+  );
+  const campoEmissao = (
         <Campo rotulo="Emissão" obrigatorio>
           <DatePicker
             name="data_emissao"
@@ -1656,7 +2083,8 @@ function FormularioDeFaturar({
             onDateChange={(d) => setDataEmissao(d ? format(d, "yyyy-MM-dd") : "")}
           />
         </Campo>
-      </div>
+  );
+  const campoCnae = (
       <Campo
         rotulo="CNAE a ser utilizado"
         obrigatorio
@@ -1688,6 +2116,8 @@ function FormularioDeFaturar({
           className={COMBOBOX_COMO_SELECT}
         />
       </Campo>
+  );
+  const campoDescricao = (
       <Campo
         rotulo="Descrição da NF"
         obrigatorio
@@ -1706,33 +2136,191 @@ function FormularioDeFaturar({
       >
         <textarea
           id="descricao-nf"
-          rows={2}
+          rows={4}
           value={descricao}
           onChange={(e) => setDescricao(e.target.value)}
           maxLength={2000}
           placeholder="Ex: Serviços prestados em agosto/2026"
-          className="w-full resize-none rounded-lg border border-border px-3 py-2.5 text-[13px] focus:border-california-red/40 focus:outline-none"
+          className="w-full resize-y rounded-lg border border-border bg-white px-3 py-2.5 text-[13px] leading-relaxed focus:border-california-red/40 focus:outline-none"
         />
       </Campo>
-    </div>
   );
 
-  // Os impostos que esta nota gera, só leitura. Aparecem com CNPJ, CNAE,
-  // valor e data preenchidos; antes disso, a caixa que diz onde vão estar.
-  const blocoImpostos =
-    estabEscolhido && estabDoCalculo && cnaeEscolhido && totalNf > 0 && dataEmissao ? (
-      <ImpostosDestaNota
-        estab={estabDoCalculo}
-        nomeDaPJ={fiscal.nomeDaPJ[estabEscolhido.empresa_contabil_id] || estabEscolhido.nome}
-        cnae={cnaeEscolhido}
-        valor={centavos(totalNf)}
-        emissao={dataEmissao}
-        feriados={feriadosDoCalculo(cad)}
-        diaPisCofins={diaDoPisCofins(cad, dataEmissao)}
-      />
-    ) : (
-      <ImpostosDestaNotaVazio />
+  // Os impostos que esta nota gera, só leitura. Decisão 256: o quadro
+  // aparece desde a abertura, zerado, e se acerta à medida que o CNPJ
+  // emissor, o CNAE, a emissão e o valor são preenchidos.
+  const faltamNosImpostos = [
+    !estabEscolhido && "CNPJ emissor",
+    !cnaeEscolhido && "CNAE",
+    !dataEmissao && "emissão",
+    !(totalNf > 0) && "valor",
+  ].filter((x): x is string => Boolean(x));
+  const blocoImpostos = (
+    <ImpostosDestaNota
+      estab={estabEscolhido && estabDoCalculo ? estabDoCalculo : null}
+      nomeDaPJ={estabEscolhido ? fiscal.nomeDaPJ[estabEscolhido.empresa_contabil_id] || estabEscolhido.nome : null}
+      cnae={cnaeEscolhido ?? null}
+      valor={centavos(Math.max(0, totalNf))}
+      emissao={dataEmissao || null}
+      feriados={feriadosDoCalculo(cad)}
+      diaPisCofins={dataEmissao ? diaDoPisCofins(cad, dataEmissao) : 25}
+      deducoes={centavos(Math.min(deducoes, Math.max(0, totalNf)))}
+      retencoes={retencoesDaNota}
+      aliquotasReforma={aliquotasDaReforma(cad, dataDasListas)}
+      faltam={faltamNosImpostos}
+    />
+  );
+
+  // Decisão 256: o valor das deduções, como no emissor da NFS-e. Sugere o
+  // custo AR (repasse) dos jobs da nota; quem fatura confirma ou ajusta.
+  const pctDaNota = (v: number) => `${(v * 100).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
+  const campoDeducoes = (
+    <Campo
+      rotulo="Valor das deduções (repasse)"
+      htmlFor="nf-deducoes"
+      ajuda="O que sai da base do ISS: o repasse (custo AR) que só passa pela California. PIS e COFINS ficam sobre o total."
+    >
+      <div className="space-y-1.5">
+        <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)] items-center gap-3.5">
+          <MoneyInput
+            id="nf-deducoes"
+            value={deducoes}
+            onValueChange={(v) => {
+              setDeducoes(v);
+              setErro(null);
+            }}
+          />
+          {repasseSugerido > 0.004 ? (
+            <button
+              type="button"
+              onClick={() => {
+                setDeducoes(centavos(Math.min(repasseSugerido, totalNf)));
+                setErro(null);
+              }}
+              className="justify-self-start rounded-lg border border-border bg-white px-3 py-1.5 text-[12px] font-semibold text-foreground transition-colors hover:border-california-red hover:text-california-red"
+            >
+              Usar {formatMoney(repasseSugerido)}
+            </button>
+          ) : jobsDaNota.length > 0 && !(avulso && !adicional) ? (
+            <span className="text-[12px] text-muted-foreground">
+              {jobsDaNota.length > 1 ? "Os jobs desta nota não têm" : "Este job não tem"} custo AR (repasse).
+            </span>
+          ) : null}
+        </div>
+        {/* De onde vem o número: o AR inteiro do job e a parte desta nota. */}
+        {repasseDaNota.map((x) => (
+          <p key={x.job.id} className="text-[11.5px] leading-snug text-muted-foreground">
+            <span className="font-mono text-foreground">{x.job.codigo}</span>: custo AR{" "}
+            <strong className="font-semibold text-foreground">{formatMoney(x.job.repasse_ar)}</strong> ×{" "}
+            {pctDaNota(x.proporcao)} (esta nota, {formatMoney(x.valorDoJob)} de {formatMoney(x.job.faturamento_previsto)}{" "}
+            previstos) = <strong className="font-semibold text-foreground">{formatMoney(x.sugerido)}</strong>
+          </p>
+        ))}
+      </div>
+    </Campo>
+  );
+
+  // Decisão 256: as retenções do cliente na fonte, quando já se sabe.
+  const ultimaDoCliente = clienteId ? (ultimasRetencoes[clienteId] ?? null) : null;
+  const aplicarAliquotas = (al: Partial<Record<ImpostoRetido, number>>) => {
+    setRetem(true);
+    setAliqRet(
+      Object.fromEntries(
+        IMPOSTOS_RETIDOS.map(({ imposto }) => [imposto, al[imposto] ? String(al[imposto]).replace(".", ",") : ""]),
+      ),
     );
+    setErro(null);
+  };
+  const pctBr = (v: number) => `${v.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}%`;
+  const blocoRetencoes = (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <Segmentado<"nao" | "sim">
+          valor={retem ? "sim" : "nao"}
+          opcoes={[
+            ["nao", "Sem retenção"],
+            ["sim", "O cliente retém"],
+          ]}
+          onChange={(v) => {
+            setRetem(v === "sim");
+            setErro(null);
+          }}
+        />
+        <span className="text-[11.5px] text-muted-foreground">
+          {retem
+            ? "As alíquotas vão para o título: a baixa e a conciliação já abrem com elas."
+            : "Se ainda não se sabe, a retenção continua sendo informada na baixa."}
+        </span>
+      </div>
+      {retem && (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            {ultimaDoCliente && Object.keys(ultimaDoCliente.aliquotas).length > 0 && (
+              <button
+                type="button"
+                onClick={() => aplicarAliquotas(ultimaDoCliente.aliquotas as Partial<Record<ImpostoRetido, number>>)}
+                className="rounded-lg border border-border bg-white px-2.5 py-1 text-[11.5px] font-semibold transition-colors hover:border-california-red hover:text-california-red"
+              >
+                Como na {ultimaDoCliente.referencia} ·{" "}
+                {Object.entries(ultimaDoCliente.aliquotas)
+                  .map(([k, v]) => `${k} ${pctBr(Number(v))}`)
+                  .join(" · ")}
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => aplicarAliquotas({ PIS: 0.65, COFINS: 3, CSLL: 1, IRRF: 1.5, ISS: numeroDe(aliqRet.ISS) || undefined })}
+              className="rounded-lg border border-border bg-white px-2.5 py-1 text-[11.5px] font-semibold transition-colors hover:border-california-red hover:text-california-red"
+            >
+              PIS/COFINS/CSLL 4,65% + IRRF 1,5%
+            </button>
+            {cnaeEscolhido?.aliquota_iss != null && (
+              <button
+                type="button"
+                onClick={() => setAliqRet((a) => ({ ...a, ISS: String(cnaeEscolhido.aliquota_iss).replace(".", ",") }))}
+                className="rounded-lg border border-border bg-white px-2.5 py-1 text-[11.5px] font-semibold transition-colors hover:border-california-red hover:text-california-red"
+              >
+                ISS retido · {pctBr(Number(cnaeEscolhido.aliquota_iss))} do CNAE
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-5 gap-3">
+            {IMPOSTOS_RETIDOS.map(({ imposto, dica }) => {
+              const valor = retencoesDaNota.find((r) => r.imposto === imposto)?.valor ?? 0;
+              return (
+                <div key={imposto} className="min-w-0 space-y-1">
+                  <Label htmlFor={`ret-${imposto}`} title={dica} className="text-[12px]">
+                    {imposto}
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      id={`ret-${imposto}`}
+                      inputMode="decimal"
+                      value={aliqRet[imposto] ?? ""}
+                      onChange={(e) => setAliqRet((a) => ({ ...a, [imposto]: e.target.value }))}
+                      placeholder="0"
+                      className="pr-7 font-mono"
+                    />
+                    <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[12px] text-muted-foreground">%</span>
+                  </div>
+                  <p className="font-mono text-[11.5px] tabular-nums text-muted-foreground">{formatMoney(valor)}</p>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex flex-wrap items-baseline justify-between gap-2 rounded-lg border border-border bg-muted/40 px-3.5 py-2 text-[12.5px]">
+            <span className="text-muted-foreground">
+              IRRF, PIS, COFINS e CSLL sobre o total da nota; ISS sobre a base de cálculo
+            </span>
+            <span>
+              Retido pelo cliente <strong className="font-mono">{formatMoney(totalRetido)}</strong> · Líquido a receber{" "}
+              <strong className="font-mono">{formatMoney(centavos(totalNf - totalRetido))}</strong>
+            </span>
+          </div>
+        </>
+      )}
+    </div>
+  );
 
   // O anexo é uma área de arrastar dentro do formulário; anexada, a nota
   // abre à esquerda e o drawer vira o lado a lado.
@@ -1798,6 +2386,52 @@ function FormularioDeFaturar({
   );
 
   const blocoParcelas = (
+    <div className="space-y-3">
+    {recebidosDoJob.length > 0 && (
+      <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 px-3.5 py-3">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <HandCoins className="h-4 w-4 shrink-0 text-amber-600" />
+          <span className="text-[12.5px] font-semibold text-foreground">
+            {jobRef && adicional ? `Recebimentos do ${jobRef.codigo} ainda sem nota` : "Recebimentos do job ainda sem nota"}
+          </span>
+          <span className="basis-full pl-6 text-[11.5px] text-muted-foreground">
+            Já registrados e conciliados. Associado a esta nota, o recebimento vira a parcela 1, quitada.
+          </span>
+        </div>
+        {recebidosDoJob.map((r) => {
+          const associado = associados.has(r.id);
+          return (
+            <div key={r.id} className="flex items-center gap-3 rounded-lg border border-border bg-white px-3 py-2 text-[12.5px]">
+              <span className="font-mono text-[11.5px]">{formatarData(r.data)}</span>
+              <span className="min-w-0 flex-1 truncate text-muted-foreground">
+                {r.contaNome} · {r.subtipoNome || r.centroNome}
+              </span>
+              <span className="font-mono font-semibold tabular-nums">{formatMoney(r.valor)}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setAssociados((a) => {
+                    const n = new Set(a);
+                    if (n.has(r.id)) n.delete(r.id);
+                    else n.add(r.id);
+                    return n;
+                  });
+                  setErro(null);
+                }}
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border px-3 py-1.5 text-[12px] font-semibold transition-colors",
+                  associado
+                    ? "border-emerald-300 bg-emerald-50 text-emerald-800 hover:border-california-red/40 hover:text-california-red"
+                    : "border-border bg-white hover:border-amber-400 hover:text-amber-700",
+                )}
+              >
+                {associado ? "Associado · desfazer" : "Associar a esta nota"}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    )}
     <div className="space-y-3 rounded-xl border border-border bg-muted/30 px-4 py-3.5">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-[11.5px] text-muted-foreground">Cada parcela vira um título em Títulos a Receber.</span>
@@ -1849,7 +2483,13 @@ function FormularioDeFaturar({
           </div>
         )}
         {parcelas.map((p, i) => (
-          <div key={i} className="grid grid-cols-[22px_1fr_1fr_30px] items-center gap-2">
+          <div
+            key={i}
+            className={cn(
+              "grid items-center gap-2",
+              totalRetido > 0.004 ? "grid-cols-[22px_1fr_1fr_150px_30px]" : "grid-cols-[22px_1fr_1fr_30px]",
+            )}
+          >
             <span className="text-center font-mono text-[11.5px] text-muted-foreground">{i + 1 + (temAntes ? 1 : 0)}</span>
             <MoneyInput
               value={p.valor}
@@ -1870,6 +2510,11 @@ function FormularioDeFaturar({
                 )
               }
             />
+            {totalRetido > 0.004 && (
+              <span className="text-right text-[11.5px] text-muted-foreground" title="O que deve entrar no banco, depois das retenções">
+                líquido <span className="font-mono font-semibold text-foreground">{formatMoney(centavos(p.valor * fatorLiquido))}</span>
+              </span>
+            )}
             <button
               type="button"
               // Com a parcela 1 travada, a última editável pode sair.
@@ -1901,11 +2546,12 @@ function FormularioDeFaturar({
         </span>
       </div>
     </div>
+    </div>
   );
 
   const n = (() => {
     let i = 0;
-    return { cliente: ++i, valor: avulso ? ++i : 0, nota: ++i, recebimento: ++i };
+    return { cliente: ++i, valor: 0, nota: ++i, retencoes: ++i, recebimento: ++i };
   })();
   const comNota = Boolean(anexoUrl);
 
@@ -1922,10 +2568,13 @@ function FormularioDeFaturar({
           <DialogPrimitive.Content
             onOpenAutoFocus={(e) => e.preventDefault()}
             className={cn(
-              "fixed inset-y-0 right-0 z-50 flex h-full max-w-full outline-none",
-              "transition-[width,padding,background-color] duration-300 ease-out",
-              "data-[state=open]:animate-in data-[state=open]:slide-in-from-right data-[state=open]:duration-300",
-              comNota ? "w-full gap-3 bg-[#181818]/[0.94] p-5" : "w-[700px]",
+              // Decisão 256: o Faturar é um pop-up centralizado, com os
+              // impostos numa coluna fixa à direita; com o PDF, a nota abre
+              // à esquerda.
+              "fixed left-1/2 top-1/2 z-50 flex max-w-full -translate-x-1/2 -translate-y-1/2 outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
+              comNota
+                ? "h-[94%] w-[96%] gap-3 rounded-2xl bg-[#181818]/[0.94] p-5"
+                : "h-[92%] w-[1560px] max-w-[96%]",
             )}
           >
             {comNota && anexoUrl && (
@@ -1961,8 +2610,10 @@ function FormularioDeFaturar({
             )}
             <div
               className={cn(
-                "flex min-h-0 w-[700px] max-w-full shrink-0 flex-col bg-card",
-                comNota ? "overflow-hidden rounded-2xl" : "border-l border-border shadow-elevated",
+                "flex min-h-0 max-w-full shrink-0 flex-col bg-card",
+                comNota ? "w-[1180px]" : "w-full",
+                "overflow-hidden rounded-2xl",
+                !comNota && "border border-border shadow-elevated",
                 comNota && soANota && "hidden",
               )}
             >
@@ -2009,23 +2660,36 @@ function FormularioDeFaturar({
                   </div>
                 )}
               </DialogHeader>
-              <div className="min-h-0 flex-1 divide-y divide-border overflow-y-auto px-6 [&>*]:py-5">
-                <Secao n={n.cliente} titulo={avulso ? "Cliente e job" : "Jobs nesta NF"}>
+              <div className="flex min-h-0 flex-1">
+              <div
+                className="min-h-0 min-w-0 flex-1 divide-y divide-border overflow-y-auto px-6 [&>*]:py-5"
+              >
+                <Secao n={n.cliente} titulo="O que esta nota cobre">
                   {blocoClienteEJob}
                 </Secao>
-                {avulso && (
-                  <Secao n={n.valor} titulo="Valor e classificação">
-                    {blocoValor}
-                  </Secao>
-                )}
                 <Secao n={n.nota} titulo="Nota fiscal">
-                  {blocoNota}
-                  {blocoImpostos}
+                  <div className="grid grid-cols-4 items-start gap-x-5 gap-y-3.5">
+                    <div className="col-span-2">{campoEstab}</div>
+                    {campoNumero}
+                    {campoEmissao}
+                    <div className="col-span-2">{campoCnae}</div>
+                    <div className="col-span-2">{campoDeducoes}</div>
+                    <div className="col-span-4">{campoDescricao}</div>
+                  </div>
                   {campoAnexo}
+                </Secao>
+                <Secao n={n.retencoes} titulo="Retenções do cliente">
+                  {blocoRetencoes}
                 </Secao>
                 <Secao n={n.recebimento} titulo="Parcelas do recebimento">
                   {blocoParcelas}
                 </Secao>
+              </div>
+              {/* Os impostos ficam à vista ao lado do formulário, e mudam
+                  enquanto o valor, as deduções e o CNAE mudam. */}
+              <aside className="w-[460px] shrink-0 overflow-y-auto border-l border-border bg-muted/20 p-5">
+                {blocoImpostos}
+              </aside>
               </div>
               <div className="flex flex-col gap-2.5 border-t border-border px-6 py-3.5">
                 {erro && (

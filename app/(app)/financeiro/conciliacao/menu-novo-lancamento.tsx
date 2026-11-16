@@ -33,6 +33,7 @@ import { ContaAvulsaDrawer } from "../contas-a-pagar/conta-avulsa-drawer";
 import { ContaRecorrenteDrawer } from "../contas-a-pagar/conta-recorrente-drawer";
 import { RecebimentoAvulsoDialog, type TipoDoRecebimentoAvulso } from "../contas-a-receber/recebimento-avulso-dialog";
 import { AvulsoDialog } from "../fiscal/impostos/dialogos";
+import { RecebimentoAntesNfNaConciliacao } from "./recebimento-antes-nf-na-conciliacao";
 import { carregarDadosDoNovoLancamento, type DadosDoNovoLancamento } from "./actions-novo-lancamento";
 
 type Formulario =
@@ -75,7 +76,7 @@ const ITENS: Array<
   {
     chave: "antes_da_nf",
     rotulo: "Recebimento antes da NF",
-    ajuda: "O cliente pagou antes de a nota sair: na aba Faturamento",
+    ajuda: "O cliente pagou antes de a nota sair: escolha o job ou o BV",
     icone: HandCoins,
     cor: "text-emerald-700",
   },
@@ -137,12 +138,8 @@ export function MenuNovoLancamento({
 
   function escolher(f: Formulario) {
     setMenuAberto(false);
-    if (f === "antes_da_nf") {
-      // O recebimento antes da NF nasce de um job na aba Faturamento de
-      // Contas a Receber, onde estão o envio e o cliente.
-      router.push("/financeiro/contas-a-receber");
-      return;
-    }
+    // Decisão 256: o recebimento antes da NF se registra aqui, escolhendo o
+    // job (ou o BV) — saiu da aba Faturamento de Contas a Receber.
     setFormulario(f);
   }
 
@@ -175,11 +172,11 @@ export function MenuNovoLancamento({
               <button
                 key={item.chave}
                 type="button"
-                disabled={item.chave !== "antes_da_nf" && !dados}
+                disabled={!dados}
                 onClick={() => escolher(item.chave)}
                 className="flex w-full items-start gap-2.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-muted disabled:cursor-wait disabled:opacity-60"
               >
-                {carregando && item.chave !== "antes_da_nf" ? (
+                {carregando ? (
                   <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
                 ) : (
                   <item.icone className={cn("mt-0.5 h-4 w-4 shrink-0", item.cor ?? "text-muted-foreground")} />
@@ -234,6 +231,18 @@ export function MenuNovoLancamento({
               }}
             />
           )}
+          <RecebimentoAntesNfNaConciliacao
+            aberto={formulario === "antes_da_nf"}
+            onFechar={fechar}
+            contas={dados.contas}
+            tipos={dados.tipos}
+            subtipos={dados.subtipos}
+            onRegistrado={(mensagem) => {
+              fechar();
+              onCriado(mensagem, null);
+              router.refresh();
+            }}
+          />
           <RecebimentoAvulsoDialog
             open={formulario !== null && TIPO_DO_RECEBIMENTO[formulario] !== undefined}
             onOpenChange={(o) => !o && fechar()}

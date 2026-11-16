@@ -9019,3 +9019,13 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - A lista de PPs do Contas a Pagar parava nas 1.000 mais recentes: com 1.045 enviadas, as 45 mais antigas (08/09 a 05/10) e os títulos delas sumiam da lista e de Títulos a Pagar, sem aviso.
 - Ela, a aba Títulos da Conciliação e a remessa agora leem as PPs página a página (`todasAsLinhas`, ordem por `created_at` e `id`).
 - As outras leituras da página estão abaixo de 1.000 (baixas 335, `vw_a_pagar` 387); as duas crescem com as PPs e são as próximas a passar.
+
+## ⚠️ Nota de 2026-11-15 — "+ Faturamento": o Novo faturamento e o Faturar unificado (decisão 256, revê a 184 e a 130)
+
+- **"+ Faturamento"** no lugar de "Faturamento avulso": **Novo faturamento** (o financeiro fatura o job com o valor negociado, no lugar do envio da produção) ou **Faturamento avulso** (como antes).
+- **Novo faturamento:** fecha o envio da produção mesmo abaixo do previsto; o resto fica como linha de saldo na fila, que abre o Novo faturamento com o saldo. Job com envio do GP esperando nota trava e leva ao Faturar do envio. No mensal e na Mídia Off, a nota leva o mês e fecha só o envio dele. No job que gera save, a nota sai dividida (job e save, o save limitado ao previsto). NF cancelada reabre o envio; o job finalizado volta a encerrado.
+- **Um Faturar só**, pop-up centralizado no molde do envio, para envio, Novo faturamento e avulso. **Impostos desta nota** desde a abertura, zerados; as **deduções** (repasse, custo AR) saem só da base do ISS, com a sugestão proporcional à nota e a conta à vista; **CBS e IBS** sobre o líquido, gravados na nota (parâmetros `cbs` e `ibs` no cadastro de impostos). **Retenções do cliente** no Faturar; a baixa e a conciliação abrem com elas.
+- **Recebimento antes da NF** registrado na conciliação ("Novo lançamento"), escolhendo o job: com envio, vai para a nota do envio; sem envio, fica preso ao job, e o Faturar associa. A fila só mostra.
+- **Faturamento Agrupado** só de um cliente, com a barra fixa no rodapé.
+- **Apuração:** a guia de ISS usa a base sem as deduções; PIS, COFINS, IRPJ e CSLL seguem sobre o total.
+- **Migration:** `20261115900001_novo_faturamento.sql` (colunas e funções; duas regras mais largas, autorizadas).

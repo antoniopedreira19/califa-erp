@@ -113,6 +113,11 @@ export function NotaEmitidaDrawer({ nota, onClose, empresas, infoPorJob, fiscal 
               Somente leitura · emitida em {formatarData(nota.data_emissao)} para {nota.contraparte_nome}
               {cnpjTexto}.
             </p>
+            {nota.pelo_financeiro && (
+              <p className="text-xs font-medium text-foreground">
+                Novo faturamento: faturada pelo financeiro, sem envio da produção.
+              </p>
+            )}
           </DialogHeader>
 
           <div className="flex-1 space-y-4 overflow-y-auto p-6">
@@ -308,7 +313,9 @@ export function NotaEmitidaDrawer({ nota, onClose, empresas, infoPorJob, fiscal 
 
           <div className="flex flex-col gap-2.5 border-t border-border px-6 py-3.5">
             <p className="text-[11.5px] text-muted-foreground text-pretty">
-              NF já emitida — os jobs receberam a baixa do valor faturado e as parcelas estão em Títulos a Receber.
+              {nota.pelo_financeiro
+                ? "NF já emitida pelo Novo faturamento — o job recebeu a baixa do valor faturado, sem envio da produção, e as parcelas estão em Títulos a Receber."
+                : "NF já emitida — os jobs receberam a baixa do valor faturado e as parcelas estão em Títulos a Receber."}
             </p>
             <div className="flex items-center justify-end gap-2.5">
               <button

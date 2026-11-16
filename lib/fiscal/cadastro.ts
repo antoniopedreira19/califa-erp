@@ -139,6 +139,18 @@ export function parametrosDeRetencao(cad: CadastroFiscal, data: string = hojeEmS
   };
 }
 
+/** Decisão 256: as alíquotas de CBS e IBS da fase de teste de 2026, se
+ *  faltar a linha no cadastro de impostos (parâmetros `cbs` e `ibs`). */
+export const ALIQUOTAS_DA_REFORMA_PADRAO = { cbs: 0.9, ibs: 0.1 } as const;
+
+/** Decisão 256: as alíquotas de CBS e IBS vigentes na emissão da nota. */
+export function aliquotasDaReforma(cad: CadastroFiscal, data: string): { cbs: number; ibs: number } {
+  return {
+    cbs: parametroVigente(cad, "cbs", data)?.valor ?? ALIQUOTAS_DA_REFORMA_PADRAO.cbs,
+    ibs: parametroVigente(cad, "ibs", data)?.valor ?? ALIQUOTAS_DA_REFORMA_PADRAO.ibs,
+  };
+}
+
 export function cnaeDoCalculo(c: FiscalCnae): CnaeDoCalculo {
   return {
     id: c.id,

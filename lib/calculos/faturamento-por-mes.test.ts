@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   dataDeRecebimentoDoMes,
   faturamentoPorMes,
+  montarFaturamentoDoEnvioUnico,
   montarFaturamentoMensal,
 } from "./faturamento-por-mes";
 import { calcularTotaisVersao } from "./versao-totais";
@@ -140,4 +141,63 @@ test("situação de cada mês: a enviar, na fila, parcial, faturado e sem fatura
   assert.equal(faturado[0].situacao, "faturado");
   assert.equal(faturado[0].faturado, out);
   assert.equal(faturado[1].situacao, "a_enviar");
+});
+
+test("decisão 256: o mês faturado pelo financeiro fecha o envio do mês, mesmo abaixo do previsto", () => {
+  const base = {
+    meses,
+    grupos,
+    itens: [
+      { grupo_id: "g-out", tipo_custo: "B" as const, total_orcado: 12000 },
+      { grupo_id: "g-nov", tipo_custo: "B" as const, total_orcado: 12000 },
+    ],
+    percentualHonorarios: 12,
+    percentualImposto: 19.53,
+    envios: [],
+    itensDeNota: [],
+  };
+  const previstoDeOutubro = montarFaturamentoMensal(base).find((m) => m.mes === "2026-10-01")!.faturamento;
+  const r = montarFaturamentoMensal({
+    ...base,
+    notasDoFinanceiro: [{ numero: "2017", dataEmissao: "2026-11-05", valor: 5000, mes: "2026-10-01" }],
+  });
+  const outubro = r.find((m) => m.mes === "2026-10-01")!;
+  assert.equal(outubro.peloFinanceiro, true);
+  assert.equal(outubro.situacao, "faturado_parcial");
+  assert.equal(outubro.faturado, 5000);
+  assert.equal(outubro.notas[0].numero, "2017");
+  const novembro = r.find((m) => m.mes === "2026-11-01")!;
+  assert.equal(novembro.peloFinanceiro, false);
+  assert.equal(novembro.situacao, "a_enviar");
+  const cheio = montarFaturamentoMensal({
+    ...base,
+    notasDoFinanceiro: [{ numero: "2018", dataEmissao: "2026-11-05", valor: previstoDeOutubro, mes: "2026-10-01" }],
+  });
+  assert.equal(cheio.find((m) => m.mes === "2026-10-01")!.situacao, "faturado");
+});
+
+test("decisão 256: o Novo faturamento fecha o envio único, e o parcial deixa o saldo com o financeiro", () => {
+  const nota = { numero: "2016", dataEmissao: "2026-11-15", valor: 120000, mes: null };
+  const parcial = montarFaturamentoDoEnvioUnico({
+    envio: null,
+    itensDeNota: [],
+    semFaturamento: false,
+    variacaoCambial: 0,
+    notasDoFinanceiro: [nota],
+    faturamentoPrevisto: 171724.78,
+  });
+  assert.equal(parcial.situacao, "faturado_parcial");
+  assert.deepEqual(parcial.peloFinanceiro, {
+    notas: [{ numero: "2016", dataEmissao: "2026-11-15", valor: 120000 }],
+    total: 120000,
+    coberto: false,
+  });
+  const semNota = montarFaturamentoDoEnvioUnico({
+    envio: null,
+    itensDeNota: [],
+    semFaturamento: false,
+    variacaoCambial: 0,
+  });
+  assert.equal(semNota.situacao, "a_enviar");
+  assert.equal(semNota.peloFinanceiro, null);
 });

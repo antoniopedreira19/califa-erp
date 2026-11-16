@@ -123,6 +123,48 @@ export function impostosDaNota(
   };
 }
 
+/**
+ * Decisão 256: os impostos da nota de saída com as deduções (o repasse,
+ * custo AR). As deduções saem só da base do ISS, como no emissor da NFS-e;
+ * PIS e COFINS ficam sobre o total (Tiago, 15/11/2026: o portal só
+ * destrincha o ISS; até a contabilidade confirmar).
+ */
+export function impostosDaNotaComDeducoes(
+  estab: EstabelecimentoDoCalculo,
+  cnae: CnaeDoCalculo,
+  valor: number,
+  deducoes: number,
+  emissao: string,
+  feriados: readonly FeriadoDoVencimento[],
+  diaPisCofins = 25,
+): ImpostosDaNota & { baseIss: number } {
+  const baseIss = r2(Math.max(0, valor - Math.max(0, deducoes)));
+  const total = impostosDaNota(estab, cnae, valor, emissao, feriados, diaPisCofins);
+  const doIss = impostosDaNota(estab, cnae, baseIss, emissao, feriados, diaPisCofins);
+  const impostos = total.impostos.map((i) =>
+    i.imposto === "ISS" ? (doIss.impostos.find((x) => x.imposto === "ISS") ?? i) : i,
+  );
+  return { ...total, impostos, total: r2(impostos.reduce((s, i) => s + i.valor, 0)), baseIss };
+}
+
+/**
+ * Decisão 256: CBS e IBS da reforma tributária (fase de teste de 2026) sobre
+ * o líquido da nota — o total menos ISS, PIS e COFINS, como na planilha do
+ * financeiro. Registro na nota, sem guia.
+ */
+export function reformaDaNota(
+  total: number,
+  impostos: { iss: number; pis: number; cofins: number },
+  aliquotas: { cbs: number; ibs: number },
+): { liquido: number; cbs: number; ibs: number } {
+  const liquido = r2(total - impostos.iss - impostos.pis - impostos.cofins);
+  return {
+    liquido,
+    cbs: r2((liquido * aliquotas.cbs) / 100),
+    ibs: r2((liquido * aliquotas.ibs) / 100),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Retenções na fonte da PP (decididas na aprovação; a baixa chega com elas)
 // ---------------------------------------------------------------------------

@@ -59,6 +59,7 @@ import type { ContatoCobranca } from "@/lib/data/contatos-cobranca";
 import type { InfoJob } from "./faturar-drawer";
 import type {
   ContaBancaria,
+  ImpostoRetido,
   PlanoContaTipo,
   PlanoContaSubtipo,
   TipoEntradaAvulsa,
@@ -132,6 +133,9 @@ export interface TituloRow {
   /** Dia em que passou do vencimento sem ser recebido. Registro histórico:
    *  sobrevive à baixa. A pastilha da tela NÃO depende dele. */
   inadimplente_desde: string | null;
+  /** Decisão 256: as alíquotas que o Faturar informou que o cliente retém
+   *  (a baixa abre com elas). Nulo sem retenção prevista e fora de nota. */
+  retencao_da_nota: Partial<Record<ImpostoRetido, number>> | null;
   /**
    * As baixas vivas, da mais antiga para a mais nova (decisão 125: pode
    * haver várias). Cada uma traz conta, centro de custo, impostos retidos e
@@ -512,6 +516,10 @@ export function TitulosList({
           dataInicial: hoje,
           // Módulo fiscal: a nota do título, para o bloco "No fiscal" da baixa.
           notaId: baixando.faturamento_id,
+          // Decisão 256: a retenção informada no Faturar desta nota.
+          retencaoDaNota: baixando.retencao_da_nota
+            ? { numeroNf: baixando.fat_numero_nf, aliquotas: baixando.retencao_da_nota }
+            : null,
         }
       : {
           chave: baixando.id,
@@ -546,6 +554,7 @@ export function TitulosList({
           dataInicial: baixando.origem === "rendimento" ? baixando.data_previsao_recebimento : hoje,
           // Sem nota: a baixa não tem o bloco "No fiscal".
           notaId: null,
+          retencaoDaNota: null,
         }
     : null;
 

@@ -98,6 +98,7 @@ interface NotaDoBanco {
   numero_nf: string;
   data_emissao: string;
   valor_total: number | string;
+  valor_deducoes: number | string | null;
   estabelecimento_id: string;
   fiscal_cnae_id: string;
   emitido_em: string | null;
@@ -185,7 +186,7 @@ export async function carregarFatosFiscais(supabase: SupabaseClient, tenantId: s
     supabase
       .from("faturamentos")
       .select(
-        "id, numero_nf, data_emissao, valor_total, estabelecimento_id, fiscal_cnae_id, emitido_em, empresa_id, descricao, " +
+        "id, numero_nf, data_emissao, valor_total, valor_deducoes, estabelecimento_id, fiscal_cnae_id, emitido_em, empresa_id, descricao, " +
           "empresa:empresas(nome_fantasia, razao_social), itens:faturamento_itens(origem_tipo, origem_id, valor)",
       )
       .eq("tenant_id", tenantId)
@@ -336,6 +337,7 @@ export function montarFatos(e: {
       emissao: n.data_emissao,
       conhecida_em: diaEmSaoPaulo(n.emitido_em, n.data_emissao),
       valor,
+      deducoes: Number(n.valor_deducoes ?? 0),
       jobs,
     };
   });

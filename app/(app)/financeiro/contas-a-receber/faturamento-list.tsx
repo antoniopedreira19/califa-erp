@@ -29,8 +29,12 @@
  */
 
 import * as React from "react";
+import { createPortal } from "react-dom";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   AlertCircle,
+  Briefcase,
+  ReceiptText,
   Building2,
   Check,
   ChevronDown,
@@ -62,20 +66,15 @@ import {
   type InfoFaturamento,
 } from "@/components/financeiro/info-faturamento-modal";
 import { rotuloMes } from "@/lib/calculos/meses-trimestre";
-import { chaveDaLinhaDaFila, chaveDoRecebidoAntes, chaveInfoDoEnvio } from "./chave-info";
+import { chaveDaLinhaDaFila, chaveDoRecebidoAntes, chaveDoRecebidoDoJob, chaveInfoDoEnvio } from "./chave-info";
 import {
   RecebidosAntesNfDialog,
-  RecebimentoAntesNfDialog,
   somaDosRecebidos,
   type AlvoDoRecebidoAntes,
   type CambioDoJob,
   type RecebidoAntesDaNf,
 } from "./recebimento-antes-nf-dialog";
-import {
-  cancelarRecebimentoAntesNf,
-  registrarRecebimentoAntesNf,
-  registrarRecebimentoCambio,
-} from "./actions-recebimento-antes-nf";
+import { cancelarRecebimentoAntesNf } from "./actions-recebimento-antes-nf";
 import {
   BarraDosFiltrosDeColuna,
   celulaData,
@@ -148,6 +147,10 @@ export interface FaturamentoPendenteRow {
   /** Decisão 229: a variação cambial do câmbio fechado da nota (+ ganho,
    *  − perda), já somada a `saldo`. Zero fora do internacional. */
   variacao_cambial: number;
+  /** Decisão 256: a linha do saldo do Novo faturamento — o job faturado pelo
+   *  financeiro abaixo do previsto (no mensal, o mês). Sem envio: o Faturar
+   *  dela abre o Novo faturamento com o saldo. */
+  saldo_do_novo_faturamento: boolean;
 }
 
 /**
@@ -226,6 +229,8 @@ export interface FaturadoRow {
   /** Quem mandou o que a nota cobre (decisão 136): quem enviou cada job
    *  para faturamento, ou confirmou cada BV. Vazio no avulso. */
   autores: Array<{ codigo: string; nome: string; em: string | null; bv: boolean }>;
+  /** Decisão 256: nota de job que o financeiro faturou sem o envio da produção. */
+  pelo_financeiro: boolean;
   itens: Array<{
     // `save` só aparece no ITEM: é a fatia da nota que virou crédito do
     // cliente em vez de faturamento deste job.
@@ -538,7 +543,8 @@ export function FaturamentoList({
   jobs,
   cnpjsPorCliente,
   honorariosPorCliente,
-}: Props) {
+  ultimasRetencoes,
+}: Props & { ultimasRetencoes: Record<string, { referencia: string; data: string; aliquotas: Record<string, number> }> }) {
   const router = useRouter();
   const [drawer, setDrawer] = React.useState<DrawerState | null>(null);
   const [modoSelecao, setModoSelecao] = React.useState(false);
@@ -562,12 +568,9 @@ export function FaturamentoList({
     null,
   );
   const [info, setInfo] = React.useState<InfoFaturamento | null>(null);
-  // Recebimento antes da NF (decisão 130): o registro abre pela linha; o
-  // selo abre a lista, pela chave — depois do cancelamento a lista se
-  // refaz com o que sobrou.
-  const [registrarAntes, setRegistrarAntes] = React.useState<AlvoDoRecebidoAntes | null>(
-    null,
-  );
+  // Recebimento antes da NF (decisão 130): o selo da linha abre a lista,
+  // pela chave — depois do cancelamento a lista se refaz com o que sobrou.
+  // Decisão 256: o registro saiu da fila; é feito na conciliação.
   const [verAntes, setVerAntes] = React.useState<string | null>(null);
   const [erroAntes, setErroAntes] = React.useState<string | null>(null);
   const [pendingAntes, startAntes] = React.useTransition();
@@ -721,6 +724,24 @@ export function FaturamentoList({
     // A nota do lote ainda não aceita: o recebido antes da NF se prende a
     // UMA nota de job, e a do lote é de vários (decisão 188, pendente).
     if (p.lote) return null;
+    // Decisão 256: a linha do saldo do Novo faturamento mostra o recebido
+    // preso ao job (registrado na conciliação).
+    if (p.saldo_do_novo_faturamento) {
+      const chaveJob = chaveDoRecebidoDoJob(p.origem_id);
+      return {
+        chave: chaveJob,
+        envioNotaId: null,
+        itemBvId: null,
+        jobId: p.origem_id,
+        titulo: [p.codigo, p.descricao].filter(Boolean).join(" · "),
+        contraparte: p.contraparte_nome,
+        ehBv: false,
+        notaRotulo: "Novo faturamento",
+        saldo: linha.saldo,
+        recebidos: recebidosAntes[chaveJob] ?? [],
+        cambio: null,
+      };
+    }
     const chave = chaveAntes(p);
     if (!chave) return null;
     const vencimentos = linha.parcelas.length;
@@ -728,6 +749,7 @@ export function FaturamentoList({
       chave,
       envioNotaId: p.envio_nota_id,
       itemBvId: p.origem_tipo === "bv" ? p.origem_id : null,
+      jobId: null,
       titulo:
         [p.codigo, p.descricao].filter(Boolean).join(" · ") +
         (p.mes_referencia ? ` · ${rotuloMes(p.mes_referencia)}` : ""),
@@ -745,6 +767,17 @@ export function FaturamentoList({
   }
 
   const todasAsLinhas = React.useMemo(() => agruparPorNota(pendentes), [pendentes]);
+  const [menuFaturar, setMenuFaturar] = React.useState(false);
+
+  /** Fecha o formulário e abre o Faturar da linha do envio do job. */
+  function faturarPeloEnvio(jobId: string) {
+    const linha = todasAsLinhas.find(
+      (l) => l.p.origem_tipo === "job" && jobsDaLinha(l).some((x) => x.origem_id === jobId),
+    );
+    if (!linha) return;
+    setDrawer(null);
+    setTimeout(() => setDrawer({ modo: "origem", linhas: linha.parcelas }), 0);
+  }
   const alvoVerAntes = (() => {
     if (!verAntes) return null;
     const linha = todasAsLinhas.find((l) => chaveAntes(l.p) === verAntes);
@@ -873,8 +906,25 @@ export function FaturamentoList({
   );
   const totalSelecionado = selecionados.reduce((s, p) => s + p.saldo, 0);
 
+  // O agrupado junta notas de UM cliente (pedido do Tiago, 15/11/2026): marcada
+  // a primeira linha, só as linhas do mesmo cliente continuam disponíveis — em
+  // vez de deixar marcar tudo e só acusar o erro no fim.
+  const clienteDe = (p: FaturamentoPendenteRow) => p.cliente_id ?? p.fornecedor_id ?? p.contraparte_nome;
+  const clienteDaSelecao = selecionados.length > 0 ? clienteDe(selecionados[0]) : null;
+  /** Por que a linha não entra no agrupado agora; nulo quando entra. */
+  const foraDoAgrupado = (l: LinhaDaFila): string | null => {
+    if (l.p.origem_tipo === "bv") return "BV é faturado individualmente";
+    if (l.p.saldo_do_novo_faturamento === true) return "O saldo do Novo faturamento sai pelo Novo faturamento";
+    if (clienteDaSelecao && clienteDe(l.p) !== clienteDaSelecao)
+      return `Outro cliente: o agrupado junta só notas de ${selecionados[0].contraparte_nome}`;
+    return null;
+  };
   // BV não é agrupável — o checkbox nem aparece habilitado.
-  const agrupaveis = linhasVisiveis.filter((l) => l.p.origem_tipo === "job");
+  const agrupaveis = linhasVisiveis.filter((l) => foraDoAgrupado(l) === null);
+  // "Marcar todos" só quando a lista à vista é de um cliente só (ou já há um
+  // cliente na seleção): nunca junta clientes diferentes.
+  const clientesAgrupaveis = new Set(agrupaveis.map((l) => clienteDe(l.p)));
+  const podeMarcarTodos = agrupaveis.length > 0 && clientesAgrupaveis.size === 1;
   const todosMarcados =
     agrupaveis.length > 0 && agrupaveis.every((l) => sel[l.chave]);
 
@@ -897,6 +947,7 @@ export function FaturamentoList({
       setSel({});
       return;
     }
+    if (!podeMarcarTodos) return;
     const proximo: Record<string, boolean> = {};
     for (const l of agrupaveis) proximo[l.chave] = true;
     setSel(proximo);
@@ -948,7 +999,7 @@ export function FaturamentoList({
   }
 
   return (
-    <div className="space-y-4">
+    <div className={cn("space-y-4", modoSelecao && "pb-28")}>
       {/* Chips de cliente + busca + ações */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2.5">
@@ -1089,14 +1140,38 @@ export function FaturamentoList({
             <Layers className="h-3.5 w-3.5" />
             {modoSelecao ? "Sair do agrupamento" : "Faturamento Agrupado"}
           </button>
-          <button
-            type="button"
-            onClick={() => setDrawer({ modo: "avulso" })}
-            className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-california-red px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-california-red-hover"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Faturamento avulso
-          </button>
+          <Popover open={menuFaturar} onOpenChange={setMenuFaturar}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-california-red px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-california-red-hover"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Faturamento
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" className="w-[200px] p-1.5">
+              {(
+                [
+                  ["adicional", "Novo faturamento", Briefcase],
+                  ["avulso", "Faturamento avulso", ReceiptText],
+                ] as const
+              ).map(([modo, rotulo, Icone]) => (
+                <button
+                  key={modo}
+                  type="button"
+                  onClick={() => {
+                    setMenuFaturar(false);
+                    setDrawer({ modo });
+                  }}
+                  className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-[13px] font-semibold text-foreground transition-colors hover:bg-muted"
+                >
+                  <Icone className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  {rotulo}
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>
         </div>
       </div>
 
@@ -1149,12 +1224,21 @@ export function FaturamentoList({
                   <button
                     type="button"
                     onClick={alternarTodos}
-                    title="Selecionar todos os visíveis"
+                    disabled={!podeMarcarTodos && !todosMarcados}
+                    title={
+                      podeMarcarTodos || todosMarcados
+                        ? `Selecionar todos os visíveis de ${
+                            selecionados[0]?.contraparte_nome ?? agrupaveis[0]?.p.contraparte_nome ?? "um cliente"
+                          }`
+                        : "Marque um job, ou filtre um cliente: o agrupado junta notas de um cliente só"
+                    }
                     className={cn(
                       "flex h-[19px] w-[19px] items-center justify-center rounded-md border transition-colors",
                       todosMarcados
                         ? "border-california-red bg-california-red text-white"
-                        : "border-border bg-white text-transparent",
+                        : podeMarcarTodos
+                          ? "border-border bg-white text-transparent"
+                          : "cursor-not-allowed border-border bg-muted text-transparent",
                     )}
                   >
                     <Check className="h-3 w-3" />
@@ -1202,10 +1286,17 @@ export function FaturamentoList({
               const p = linha.p;
               const k = linha.chave;
               const marcado = !!sel[k];
-              const agrupavel = p.origem_tipo === "job";
+              // Decisão 256: o saldo do Novo faturamento (sem envio) fatura pelo
+              // Novo faturamento, com o valor que falta.
+              const saldoNovo = p.saldo_do_novo_faturamento === true;
+              const abrirLinha = () =>
+                saldoNovo
+                  ? setDrawer({ modo: "adicional", jobInicial: p.origem_id, valorInicial: linha.saldo, mesInicial: p.mes_referencia ?? undefined })
+                  : setDrawer({ modo: "origem", linhas: linha.parcelas });
+              const motivoFora = foraDoAgrupado(linha);
+              const agrupavel = motivoFora === null;
               const alvoAntes = alvoDoRecebido(linha);
               const recebidoAntes = alvoAntes ? somaDosRecebidos(alvoAntes.recebidos) : 0;
-              const cabeRecebido = alvoAntes !== null && linha.saldo - recebidoAntes > 0.004;
               return (
                 <tr
                   key={k}
@@ -1217,7 +1308,7 @@ export function FaturamentoList({
                       return;
                     }
                     limparErro();
-                    setDrawer({ modo: "origem", linhas: linha.parcelas });
+                    abrirLinha();
                   }}
                   className={cn(
                     "cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-accent/40",
@@ -1234,9 +1325,7 @@ export function FaturamentoList({
                           e.stopPropagation();
                           alternarLinha(linha);
                         }}
-                        title={
-                          agrupavel ? "Incluir nesta NF" : "BV é faturado individualmente"
-                        }
+                        title={agrupavel ? "Incluir nesta NF" : (motivoFora ?? "")}
                         className={cn(
                           "flex h-[19px] w-[19px] items-center justify-center rounded-md border transition-colors",
                           marcado
@@ -1275,6 +1364,11 @@ export function FaturamentoList({
                       {p.mes_referencia && (
                         <span className="text-[11px] font-semibold text-muted-foreground">
                           {rotuloMes(p.mes_referencia)}
+                        </span>
+                      )}
+                      {saldoNovo && (
+                        <span className="text-[11px] text-muted-foreground">
+                          Saldo do Novo faturamento · sem envio da produção
                         </span>
                       )}
                       {/* Quem mandou (decisão 136): quem enviou o job para
@@ -1395,27 +1489,12 @@ export function FaturamentoList({
                   </td>
                   <td className="px-4 py-3 text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      {cabeRecebido && !modoSelecao && (
-                        <button
-                          type="button"
-                          title="Registrar recebimento antes da NF"
-                          aria-label="Registrar recebimento antes da NF"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setErroAntes(null);
-                            setRegistrarAntes(alvoAntes);
-                          }}
-                          className="inline-flex h-[30px] w-[30px] items-center justify-center rounded-md border border-border bg-white text-muted-foreground transition-colors hover:border-amber-400 hover:text-amber-700"
-                        >
-                          <HandCoins className="h-3.5 w-3.5" />
-                        </button>
-                      )}
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           limparErro();
-                          setDrawer({ modo: "origem", linhas: linha.parcelas });
+                          abrirLinha();
                         }}
                         className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-white px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors hover:border-california-red hover:text-california-red"
                       >
@@ -1487,6 +1566,11 @@ export function FaturamentoList({
                     </span>
                     {/* Quem mandou (decisão 136). Com mais de um job, o
                         código antes do nome. */}
+                    {f.pelo_financeiro && (
+                      <span className="text-[11px] text-muted-foreground">
+                        Faturado pelo financeiro, sem envio da produção
+                      </span>
+                    )}
                     {f.autores.map((a) => (
                       <span key={`${a.bv}:${a.codigo}:${a.nome}`} className="text-[11px] text-muted-foreground">
                         {f.autores.length > 1 && a.codigo ? `${a.codigo} · ` : ""}
@@ -1568,8 +1652,18 @@ export function FaturamentoList({
           O fundo branco opaco é obrigatório: o tom vermelho de 4% que a
           barra tinha é transparente demais e a tabela apareceria por baixo
           dela ao rolar. A tinta vermelha vem numa camada interna. */}
-      {modoSelecao && (
-        <div className="sticky bottom-0 z-20 -mx-1 overflow-hidden rounded-t-2xl border border-b-0 border-california-red/35 bg-white/95 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur">
+      {/* A barra do agrupado fica FIXA no rodapé da tela enquanto o modo está
+          ligado (pedido do Tiago, 15/11/2026): o "Faturar selecionados" à vista
+          em qualquer ponto da lista, e não só no fim dela. Fora da barra lateral
+          (76 px) e na largura do conteúdo; a lista ganha folga embaixo. */}
+      {modoSelecao &&
+        typeof document !== "undefined" &&
+        createPortal(
+          <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 md:left-[76px]">
+            <div className="pointer-events-auto mx-auto max-w-[1680px] px-5 md:px-8">
+              <div
+                className="overflow-hidden rounded-t-2xl border border-b-0 border-california-red/35 bg-white/95 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur"
+              >
           {/* O erro fica ACIMA da linha de ações: numa barra de rodapé quem
               encosta na borda de baixo tem de ser o botão. */}
           {erroTitulo && (
@@ -1635,7 +1729,11 @@ export function FaturamentoList({
             </div>
           </div>
         </div>
-      )}
+      
+            </div>
+          </div>,
+          document.body,
+        )}
 
       {drawer && (
         <FaturarDrawer
@@ -1660,54 +1758,10 @@ export function FaturamentoList({
           jobs={jobs}
           cnpjsPorCliente={cnpjsPorCliente}
           honorariosPorCliente={honorariosPorCliente}
+          onFaturarPeloEnvio={faturarPeloEnvio}
+          ultimasRetencoes={ultimasRetencoes}
         />
       )}
-
-      <RecebimentoAntesNfDialog
-        alvo={registrarAntes}
-        onOpenChange={(aberto) => {
-          if (!aberto && !pendingAntes) {
-            setRegistrarAntes(null);
-            setErroAntes(null);
-          }
-        }}
-        contas={contas}
-        tipos={tipos}
-        subtipos={subtipos}
-        pending={pendingAntes}
-        erro={erroAntes}
-        onConfirm={(dados, cambio) => {
-          const alvo = registrarAntes;
-          if (!alvo) return;
-          setErroAntes(null);
-          startAntes(async () => {
-            // O internacional registra o câmbio fechado (decisão 229).
-            const res = cambio
-              ? await registrarRecebimentoCambio({
-                  envio_nota_id: alvo.envioNotaId,
-                  ...dados,
-                  ...cambio,
-                })
-              : await registrarRecebimentoAntesNf({
-                  envio_nota_id: alvo.envioNotaId,
-                  item_bv_id: alvo.itemBvId,
-                  ...dados,
-                });
-            if (!res.ok) {
-              setErroAntes(res.message);
-              return;
-            }
-            setRegistrarAntes(null);
-            setToast({
-              texto:
-                `${formatMoney(dados.valor)} recebidos antes da NF em ${alvo.titulo}. ` +
-                "Na emissão da nota, o valor entra como a parcela 1, já recebida.",
-              apuracao: null,
-            });
-            router.refresh();
-          });
-        }}
-      />
 
       <RecebidosAntesNfDialog
         alvo={alvoVerAntes}

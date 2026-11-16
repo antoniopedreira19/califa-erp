@@ -2,21 +2,30 @@
  * Bloco "Impostos desta nota" do Faturar (módulo fiscal, entrega 1 —
  * 02/10/2026; protótipo aprovado pelo Tiago). Só leitura: os impostos que a
  * nota gera, com alíquota, valor e vencimento, refeitos a cada troca de
- * CNPJ emissor, CNAE, valor ou data de emissão (`impostosDaNota`).
+ * CNPJ emissor, CNAE, valor, deduções ou data de emissão.
  *
  * Lucro Real (California e GoCrazy): ISS, PIS e COFINS nascem na emissão.
  * Lucro Presumido pelo caixa (Hitlab): só o ISS nasce na emissão; PIS,
  * COFINS, IRPJ e CSLL nascem no recebimento.
+ *
+ * Decisão 256 (15/11/2026):
+ * - o quadro aparece desde a abertura do Faturar, zerado, e diz o que falta;
+ * - as deduções (o repasse, custo AR) saem só da base do ISS — PIS e COFINS
+ *   ficam sobre o total (o portal da NFS-e só destrincha o ISS);
+ * - CBS e IBS (reforma tributária, fase de teste) sobre o líquido (total −
+ *   ISS − PIS − COFINS), com as alíquotas do cadastro: registro, sem guia;
+ * - as retenções que o cliente faz, quando o Faturar já as sabe.
  */
 import { Landmark } from "lucide-react";
 import type { FiscalCnae } from "@/lib/types";
 import { cnaeDoCalculo } from "@/lib/fiscal/cadastro";
 import {
   codigoDoCnae,
-  impostosDaNota,
+  impostosDaNotaComDeducoes,
+  reformaDaNota,
   type EstabelecimentoDoCalculo,
 } from "@/lib/fiscal/calculos";
-import { dataBr, type FeriadoDoVencimento, type Vencimento } from "@/lib/fiscal/datas";
+import { dataBr, mesDe, nomeDoMes, r2, type FeriadoDoVencimento, type Vencimento } from "@/lib/fiscal/datas";
 import { mesesDasCotas, textoDoRegime, textoDoTrimestre } from "@/lib/fiscal/faturar";
 
 const moeda = (v: number) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
@@ -24,10 +33,20 @@ const pct = (v: number) => `${v.toLocaleString("pt-BR", { maximumFractionDigits:
 const emDiaNaoUtil = (regra: EstabelecimentoDoCalculo["iss_regra"]) =>
   `em dia não útil, ${regra === "prorroga" ? "prorroga" : "antecipa"}`;
 
+/** Uma retenção que o cliente faz na fonte, já com base e valor. */
+export interface RetencaoDaNota {
+  imposto: string;
+  aliquota: number;
+  base: number;
+  valor: number;
+}
+
 interface LinhaDoImposto {
   imposto: string;
   como: string;
+  /** "" enquanto o quadro não tem como calcular; "—" sem alíquota no CNAE. */
   aliquota: string;
+  base: number;
   valor: number;
   vence: Vencimento | null;
   regra: string;
@@ -41,55 +60,105 @@ export function ImpostosDestaNota({
   emissao,
   feriados,
   diaPisCofins,
+  deducoes,
+  retencoes,
+  aliquotasReforma,
+  faltam,
 }: {
-  /** O CNPJ emissor com o regime da PJ na data (`estabelecimentoDoCalculo`). */
-  estab: EstabelecimentoDoCalculo;
-  /** Nome curto da PJ do CNPJ ("California"). */
-  nomeDaPJ: string;
-  cnae: FiscalCnae;
+  /** O CNPJ emissor com o regime da PJ na data (`estabelecimentoDoCalculo`);
+   *  nulo enquanto não escolhido. */
+  estab: EstabelecimentoDoCalculo | null;
+  /** Nome curto da PJ do CNPJ ("California"); nulo sem CNPJ emissor. */
+  nomeDaPJ: string | null;
+  cnae: FiscalCnae | null;
   valor: number;
-  emissao: string;
+  emissao: string | null;
   feriados: readonly FeriadoDoVencimento[];
   diaPisCofins: number;
+  /** O repasse (custo AR) que sai da base do ISS. */
+  deducoes: number;
+  /** As retenções do cliente na fonte, quando o Faturar já as sabe. */
+  retencoes: RetencaoDaNota[];
+  /** As alíquotas de CBS e IBS vigentes na emissão (cadastro de impostos). */
+  aliquotasReforma: { cbs: number; ibs: number };
+  /** O que ainda falta no formulário para calcular os impostos. */
+  faltam: string[];
 }) {
-  const imp = impostosDaNota(estab, cnaeDoCalculo(cnae), valor, emissao, feriados, diaPisCofins);
-  const real = estab.regime === "lucro_real";
+  const baseIss = r2(Math.max(0, valor - deducoes));
+  const completo = Boolean(estab && cnae && emissao) && valor > 0;
+  const imp =
+    completo && estab && cnae && emissao
+      ? impostosDaNotaComDeducoes(estab, cnaeDoCalculo(cnae), valor, deducoes, emissao, feriados, diaPisCofins)
+      : null;
+  const nomeDaCompetencia = imp?.nomeDaCompetencia ?? (emissao ? nomeDoMes(mesDe(emissao)) : null);
+  const valorDe = (nome: string) => imp?.impostos.find((i) => i.imposto === nome)?.valor ?? 0;
+  const reforma = imp
+    ? reformaDaNota(valor, { iss: valorDe("ISS"), pis: valorDe("PIS"), cofins: valorDe("COFINS") }, aliquotasReforma)
+    : { liquido: 0, cbs: 0, ibs: 0 };
+  const retido = (nome: string) => retencoes.find((r) => r.imposto === nome)?.valor ?? 0;
+  const totalRetido = r2(retencoes.reduce((t, r) => t + r.valor, 0));
+  const issDaGuia = r2(Math.max(0, valorDe("ISS") - retido("ISS")));
+  const federaisRetidos = retencoes.filter((r) => r.imposto !== "ISS");
+  const real = estab?.regime === "lucro_real";
   // PIS/COFINS reduzidos do CNAE (o subitem 12.08) no Lucro Real. Na PJ do
   // presumido tudo é cumulativo pelo regime, e o aviso não se aplica.
-  const reduzido = real && cnae.cumulativo;
-  const iss = imp.impostos.find((i) => i.imposto === "ISS");
-  const linhas: LinhaDoImposto[] = [
-    iss
-      ? {
-          imposto: "ISS",
-          como: `Guia municipal de ${estab.municipio}`,
-          aliquota: pct(iss.aliquota),
-          valor: iss.valor,
-          vence: iss.vencimento,
-          regra: `dia ${estab.iss_dia} do mês seguinte · ${emDiaNaoUtil(estab.iss_regra)}`,
-        }
-      : {
-          imposto: "ISS",
-          como: "Sem alíquota de ISS para este CNAE",
-          aliquota: "—",
-          valor: 0,
-          vence: null,
-          regra: "",
-        },
-    // Pelo caixa, PIS e COFINS só nascem no recebimento: ficam no aviso.
-    ...(imp.pelaCaixa
-      ? []
-      : imp.impostos
-          .filter((i) => i.imposto !== "ISS")
-          .map((i) => ({
-            imposto: i.imposto,
-            como: `DARF da ${nomeDaPJ} pela matriz`,
-            aliquota: pct(i.aliquota),
-            valor: i.valor,
-            vence: i.vencimento,
-            regra: `dia ${diaPisCofins} do mês seguinte · ${emDiaNaoUtil("antecipa")}`,
-          }))),
-  ];
+  const reduzido = real && Boolean(cnae?.cumulativo);
+
+  const linhas: LinhaDoImposto[] = !imp
+    ? (["ISS", "PIS", "COFINS"] as const).map((nome) => ({
+        imposto: nome,
+        como:
+          nome === "ISS"
+            ? estab
+              ? `Guia municipal de ${estab.municipio}`
+              : "Guia municipal do CNPJ emissor"
+            : nomeDaPJ
+              ? `DARF da ${nomeDaPJ} pela matriz`
+              : "DARF da PJ do CNPJ emissor",
+        aliquota: "",
+        base: nome === "ISS" ? baseIss : valor,
+        valor: 0,
+        vence: null,
+        regra: "",
+      }))
+    : [
+        (() => {
+          const iss = imp.impostos.find((i) => i.imposto === "ISS");
+          return iss && estab
+            ? {
+                imposto: "ISS",
+                como: `Guia municipal de ${estab.municipio}`,
+                aliquota: pct(iss.aliquota),
+                base: imp.baseIss,
+                valor: iss.valor,
+                vence: iss.vencimento,
+                regra: `dia ${estab.iss_dia} do mês seguinte · ${emDiaNaoUtil(estab.iss_regra)}`,
+              }
+            : {
+                imposto: "ISS",
+                como: "Sem alíquota de ISS para este CNAE",
+                aliquota: "—",
+                base: imp.baseIss,
+                valor: 0,
+                vence: null,
+                regra: "",
+              };
+        })(),
+        // Pelo caixa, PIS e COFINS só nascem no recebimento: ficam no aviso.
+        ...(imp.pelaCaixa
+          ? []
+          : imp.impostos
+              .filter((i) => i.imposto !== "ISS")
+              .map((i) => ({
+                imposto: i.imposto,
+                como: `DARF da ${nomeDaPJ} pela matriz`,
+                aliquota: pct(i.aliquota),
+                base: valor,
+                valor: i.valor,
+                vence: i.vencimento,
+                regra: `dia ${diaPisCofins} do mês seguinte · ${emDiaNaoUtil("antecipa")}`,
+              }))),
+      ];
 
   return (
     <div className="rounded-xl border border-border bg-muted/30 p-4">
@@ -99,51 +168,125 @@ export function ImpostosDestaNota({
           Impostos desta nota
         </span>
         <span className="ml-auto text-[11.5px] text-muted-foreground">
-          {nomeDaPJ} · {textoDoRegime(estab.regime, estab.regime_caixa)}
+          Competência <strong className="font-semibold text-foreground">{nomeDaCompetencia ?? "—"}</strong>
+          {estab && (
+            <>
+              {" "}
+              · {nomeDaPJ} · {textoDoRegime(estab.regime, estab.regime_caixa)}
+            </>
+          )}
         </span>
       </div>
-      <table className="w-full table-fixed text-[12.5px]">
-        <colgroup>
-          <col className="w-[36%]" />
-          <col className="w-[13%]" />
-          <col className="w-[19%]" />
-          <col className="w-[32%]" />
-        </colgroup>
-        <thead>
-          <tr className="border-b border-border text-left text-[10px] uppercase tracking-wider text-muted-foreground">
-            <th className="pb-1.5 font-bold">Imposto</th>
-            <th className="pb-1.5 text-right font-bold">Alíquota</th>
-            <th className="pb-1.5 text-right font-bold">Valor</th>
-            <th className="pb-1.5 pl-4 font-bold">Vence</th>
-          </tr>
-        </thead>
-        <tbody>
-          {linhas.map((l) => (
-            <tr key={l.imposto} className="border-b border-border/60 align-top last:border-0">
-              <td className="py-2 pr-2">
-                <span className="font-semibold">{l.imposto}</span>
-                <span className="block text-[11px] leading-snug text-muted-foreground">{l.como}</span>
-              </td>
-              <td className="py-2 text-right font-mono tabular-nums">{l.aliquota}</td>
-              <td className="py-2 text-right font-mono font-semibold tabular-nums">{moeda(l.valor)}</td>
-              <td className="py-2 pl-4">
-                {l.vence ? (
-                  <>
-                    <span className="font-mono tabular-nums">{dataBr(l.vence.data)}</span>
-                    <span className="block text-[11px] leading-snug text-muted-foreground">
-                      {l.vence.motivo ?? l.regra}
-                    </span>
-                  </>
-                ) : (
-                  <span className="text-muted-foreground">—</span>
-                )}
-              </td>
-            </tr>
+      {/* A conta do emissor da NFS-e: o total menos as deduções é a base do ISS. */}
+      <div className="mb-3 grid grid-cols-3 overflow-hidden rounded-lg border border-border bg-white text-[12px]">
+        {(
+          [
+            ["Valor total da nota", valor, ""],
+            ["(−) Deduções (repasse)", deducoes, ""],
+            ["= Base de cálculo do ISS", baseIss, "font-bold"],
+          ] as const
+        ).map(([rotulo, v, peso], i) => (
+          <div key={rotulo} className={i > 0 ? "border-l border-border px-3 py-2" : "px-3 py-2"}>
+            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{rotulo}</p>
+            <p className={`font-mono tabular-nums text-foreground ${peso}`}>{moeda(v)}</p>
+          </div>
+        ))}
+      </div>
+      <div className="divide-y divide-border/60 text-[12.5px]">
+        {linhas.map((l) => (
+          <div key={l.imposto} className="py-2">
+            <div className="flex items-baseline gap-2">
+              <span className="w-14 shrink-0 font-semibold">{l.imposto}</span>
+              <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-muted-foreground">
+                {l.aliquota === "—"
+                  ? "sem alíquota"
+                  : `${moeda(l.base)} × ${l.aliquota === "" ? "—" : l.aliquota}`}
+              </span>
+              <span className="shrink-0 font-mono font-semibold tabular-nums">{moeda(l.valor)}</span>
+            </div>
+            <p className="mt-0.5 pl-16 text-[11px] leading-snug text-muted-foreground">
+              {l.como}
+              {l.vence ? (
+                <>
+                  {" "}
+                  · vence <span className="font-mono text-foreground">{dataBr(l.vence.data)}</span> (
+                  {l.vence.motivo ?? l.regra})
+                </>
+              ) : null}
+            </p>
+          </div>
+        ))}
+      </div>
+      {!completo && faltam.length > 0 && (
+        <p className="mt-1 rounded-lg border border-dashed border-border bg-white px-3 py-2 text-[11.5px] text-muted-foreground">
+          Os impostos se calculam quando estiverem preenchidos:{" "}
+          <span className="font-semibold text-foreground">{faltam.join(" · ")}</span>.
+        </p>
+      )}
+      <div className="mt-2 flex items-baseline justify-between border-t border-border pt-2 text-[12px]">
+        <span className="text-muted-foreground">Valor líquido (total − ISS − PIS − COFINS)</span>
+        <span className="font-mono font-semibold tabular-nums">{moeda(reforma.liquido)}</span>
+      </div>
+      <div className="mt-2.5 rounded-lg border border-dashed border-border bg-white px-3 py-2">
+        <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          Reforma tributária · registro, ainda não vigente
+        </p>
+        {(
+          [
+            ["CBS", aliquotasReforma.cbs, reforma.cbs],
+            ["IBS", aliquotasReforma.ibs, reforma.ibs],
+          ] as const
+        ).map(([nome, aliq, v]) => (
+          <div key={nome} className="flex items-baseline gap-2 text-[12.5px]">
+            <span className="w-12 font-semibold">{nome}</span>
+            <span className="flex-1 font-mono text-[11.5px] text-muted-foreground">
+              {moeda(reforma.liquido)} × {pct(aliq)}
+            </span>
+            <span className="font-mono font-semibold tabular-nums">{moeda(v)}</span>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2.5 rounded-lg bg-white px-3 py-2 text-[12px] leading-relaxed text-foreground">
+        <span className="font-semibold">Vai para o módulo fiscal</span> · Apuração de {nomeDaCompetencia ?? "—"}:{" "}
+        {!imp || !estab
+          ? "ISS R$ 0,00 · PIS R$ 0,00 · COFINS R$ 0,00"
+          : [
+              retido("ISS") > 0.004
+                ? `ISS ${moeda(issDaGuia)} (${estab.municipio}; ${moeda(retido("ISS"))} retidos pelo cliente, que recolhe)`
+                : `ISS ${moeda(valorDe("ISS"))} (${estab.municipio})`,
+              ...(imp.pelaCaixa ? [] : [`PIS ${moeda(valorDe("PIS"))}`, `COFINS ${moeda(valorDe("COFINS"))}`]),
+            ].join(" · ")}
+        {imp?.pelaCaixa ? " · PIS e COFINS no recebimento" : ""}. CBS e IBS ficam registrados na nota, sem guia.
+        {federaisRetidos.length > 0 && (
+          <>
+            {" "}
+            Retenções sofridas ({federaisRetidos.map((r) => `${r.imposto} ${moeda(r.valor)}`).join(" · ")}) ficam
+            registradas para abater na apuração.
+          </>
+        )}
+      </p>
+      {totalRetido > 0.004 && (
+        <div className="mt-2.5 rounded-lg border border-border bg-white px-3 py-2 text-[12px]">
+          <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+            Retido pelo cliente na fonte
+          </p>
+          {retencoes.map((r) => (
+            <div key={r.imposto} className="flex items-baseline gap-2">
+              <span className="w-14 font-semibold">{r.imposto}</span>
+              <span className="flex-1 font-mono text-[11.5px] text-muted-foreground">
+                {moeda(r.base)} × {pct(r.aliquota)}
+              </span>
+              <span className="font-mono tabular-nums">{moeda(r.valor)}</span>
+            </div>
           ))}
-        </tbody>
-      </table>
+          <div className="mt-1 flex items-baseline justify-between border-t border-border pt-1">
+            <span className="text-muted-foreground">Líquido a receber</span>
+            <span className="font-mono font-semibold tabular-nums">{moeda(r2(valor - totalRetido))}</span>
+          </div>
+        </div>
+      )}
       <div className="mt-2.5 space-y-1.5 border-t border-border pt-2.5 text-[12px] leading-relaxed text-muted-foreground">
-        {real && (
+        {real && emissao && (
           <p>
             <span className="font-semibold text-foreground">IRPJ e CSLL:</span> a nota entra no lucro
             bruto do {textoDoTrimestre(emissao)}; cotas em {mesesDasCotas(emissao)}.
@@ -152,32 +295,16 @@ export function ImpostosDestaNota({
         {real && !reduzido && (
           <p>Os créditos de PIS/COFINS sobre os custos do job entram pelo mês da NF de cada fornecedor.</p>
         )}
-        {reduzido && (
+        {reduzido && cnae && (
           <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
             {cnae.subitem ? `Subitem ${cnae.subitem}` : `CNAE ${codigoDoCnae(cnae)}`}: PIS{" "}
             {pct(cnae.aliquota_pis)} e COFINS {pct(cnae.aliquota_cofins)}, sem crédito sobre os
             custos. Se custos deste job já deram crédito, ele é estornado na apuração de{" "}
-            {imp.nomeDaCompetencia}.
+            {nomeDaCompetencia}.
           </p>
         )}
-        {imp.pelaCaixa && (
-          <p>PIS, COFINS, IRPJ e CSLL nascem quando o cliente pagar (regime de caixa).</p>
-        )}
+        {imp?.pelaCaixa && <p>PIS, COFINS, IRPJ e CSLL nascem quando o cliente pagar (regime de caixa).</p>}
       </div>
-    </div>
-  );
-}
-
-/** A caixa tracejada que fica no lugar do bloco até o formulário ter o que ele precisa. */
-export function ImpostosDestaNotaVazio() {
-  return (
-    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-dashed border-border bg-muted/20 px-4 py-3 text-[12px] text-muted-foreground">
-      <Landmark className="h-3.5 w-3.5 shrink-0" />
-      <span className="text-[11px] font-bold uppercase tracking-wider">Impostos desta nota</span>
-      <span className="basis-full text-pretty">
-        Aparecem aqui quando o CNPJ emissor, o CNAE, o valor e a data de emissão estiverem
-        preenchidos.
-      </span>
     </div>
   );
 }

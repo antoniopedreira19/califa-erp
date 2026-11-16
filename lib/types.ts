@@ -4302,6 +4302,26 @@ export interface Faturamento {
   /** Decisão 184: o job a que a nota AVULSA se refere (empresa, regional e
    *  cliente são os dele). Não consome saldo de faturamento do job. */
   job_referencia_id: string | null;
+  /** Decisão 256: nota do Novo faturamento — o financeiro faturou o job sem
+   *  o envio da produção (fecha o envio, mesmo abaixo do previsto). */
+  faturado_pelo_financeiro: boolean;
+  /** Decisão 256: o mês (dia 1) que o Novo faturamento fatura no job mensal
+   *  e na Mídia Off; nulo nos outros. */
+  mes_novo_faturamento: string | null;
+  /** Decisão 256: o previsto do mês no dia da nota (fecha o mês no envio). */
+  previsto_do_mes: number | null;
+  /** Decisão 256: o repasse (custo AR) que sai da base do ISS. */
+  valor_deducoes: number;
+  /** Decisão 256: as alíquotas que o cliente retém na fonte, informadas no
+   *  Faturar; a baixa abre com elas. */
+  retencoes_previstas: RetencaoPrevista[];
+  /** Decisão 256: CBS e IBS (reforma tributária, fase de teste), sobre o
+   *  líquido (total − ISS − PIS − COFINS); registro, sem guia. Nulos nas
+   *  notas anteriores. */
+  aliquota_cbs: number | null;
+  valor_cbs: number | null;
+  aliquota_ibs: number | null;
+  valor_ibs: number | null;
   /** Módulo fiscal (02/10/2026): o CNPJ emissor e o CNAE escolhidos na
    *  lista do cadastro de impostos. Nulos nas notas anteriores. */
   estabelecimento_id: string | null;
@@ -4589,6 +4609,15 @@ export type TipoEntradaAvulsa = "recebimento_avulso" | "rendimento";
 
 /** Os impostos que podem ser retidos na fonte numa baixa (sem INSS, D6 1a). */
 export type ImpostoRetido = "ISS" | "PIS" | "COFINS" | "CSLL" | "IRRF";
+
+/** Decisão 256: a retenção que o cliente faz, informada no Faturar
+ *  (`faturamentos.retencoes_previstas`). O valor se refaz: o ISS sobre a
+ *  base de cálculo (o total menos as deduções), os federais sobre o total. */
+export interface RetencaoPrevista {
+  imposto: ImpostoRetido;
+  /** Em %. */
+  aliquota: number;
+}
 
 /** Uma linha de `baixas_retencoes`: o imposto retido numa baixa. */
 export interface RetencaoDaBaixa {

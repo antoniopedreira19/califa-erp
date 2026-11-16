@@ -8,7 +8,9 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { PRIMEIRA_COMPETENCIA } from "@/lib/fiscal/apuracao";
-import { codigoDoCnae } from "@/lib/fiscal/calculos";
+import { codigoDoCnae, reformaDaNota } from "@/lib/fiscal/calculos";
+import { ALIQUOTAS_DA_REFORMA_PADRAO } from "@/lib/fiscal/cadastro";
+import { lerMesesDoNovoFaturamento, type MesDoNovoFaturamento } from "./meses-do-novo-faturamento";
 import { guiasDaEmissaoParaConferir, type ApuracaoDaEmissao } from "@/lib/fiscal/faturar";
 
 type Ok<T extends object = object> = { ok: true } & T;
@@ -125,6 +127,21 @@ export async function urlAnexoNf(path: string): Promise<Result<{ url: string }>>
 }
 
 // ---------------------------------------------------------------------------
+// Decisão 256: os meses do job mensal para o Novo faturamento
+// ---------------------------------------------------------------------------
+
+export async function carregarMesesDoNovoFaturamento(
+  jobId: string,
+): Promise<Result<{ meses: MesDoNovoFaturamento[] }>> {
+  if (!z.string().uuid().safeParse(jobId).success) return { ok: false, message: "Job inválido." };
+  const gate = await checarGateFinanceiro(jobId, "job", "faturamento.meses_lidos");
+  if (!gate.ok) return gate;
+  const meses = await lerMesesDoNovoFaturamento(gate.supabase, gate.session.activeTenant.id, jobId);
+  if (!meses) return { ok: false, message: "Não foi possível ler os meses do job. Tente de novo." };
+  return { ok: true, meses };
+}
+
+// ---------------------------------------------------------------------------
 // Emitir Faturamento
 // ---------------------------------------------------------------------------
 
@@ -223,6 +240,28 @@ const emitirSchema = z.object({
     })
     .nullable()
     .default(null),
+  // Decisão 256: o Novo faturamento — o financeiro fatura o job no lugar do
+  // envio da produção (no mensal, um mês).
+  faturado_pelo_financeiro: z.boolean().default(false),
+  mes_referencia: z
+    .string()
+    .regex(/^\d{4}-\d{2}-01$/, "Mês inválido.")
+    .nullable()
+    .default(null),
+  // Decisão 256: o repasse (custo AR) que sai da base do ISS.
+  valor_deducoes: z.number().min(0, "As deduções não podem ser negativas.").default(0),
+  // Decisão 256: as alíquotas que o cliente retém, quando já se sabe.
+  retencoes_previstas: z
+    .array(
+      z.object({
+        imposto: z.enum(["ISS", "PIS", "COFINS", "CSLL", "IRRF"]),
+        aliquota: z.number().gt(0, "Informe a alíquota retida.").lt(100, "A alíquota retida vai até 99,99%."),
+      }),
+    )
+    .max(5)
+    .default([]),
+  // Decisão 256: os recebimentos presos ao job que entram na nota.
+  recebidos_associados: z.array(z.string().uuid()).max(50).default([]),
 });
 
 /** Hoje no fuso da casa (o servidor roda em UTC): o mesmo dia da aba Apuração. */
@@ -340,11 +379,31 @@ export async function emitirFaturamento(
     };
   }
 
+  // Decisão 256: o Novo faturamento cobre um job só, sem parcela do envio; a
+  // nota de envio e a avulsa não levam mês.
+  if (d.faturado_pelo_financeiro) {
+    if (d.origem_tipo !== "job" || d.itens.some((i) => i.envio_parcela_id || (i.origem_tipo !== "job" && i.origem_tipo !== "save"))) {
+      return { ok: false, message: "O Novo faturamento é uma nota do job, sem parcela do envio da produção." };
+    }
+    if (new Set(d.itens.map((i) => i.origem_id)).size !== 1) {
+      return { ok: false, message: "O Novo faturamento cobre um job só." };
+    }
+  } else if (d.mes_referencia) {
+    return { ok: false, message: "Só o Novo faturamento leva o mês." };
+  }
+  if (d.valor_deducoes > d.valor_total + 0.004) {
+    return { ok: false, message: "As deduções não podem passar do valor total da nota." };
+  }
+  if (new Set(d.retencoes_previstas.map((r) => r.imposto)).size !== d.retencoes_previstas.length) {
+    return { ok: false, message: "Cada imposto aparece uma vez nas retenções." };
+  }
+
   // Módulo fiscal: o CNPJ emissor ativo, e o CNAE dele, ativo e vigente na
   // data de emissão — conferidos ANTES de emitir, porque o registro fiscal
   // é uma segunda chamada e a nota emitida não volta atrás se ela recusar.
   // O texto `cnae` da nota sai do cadastro, e não do que o navegador mandou.
-  const [estabRes, cnaeRes] = await Promise.all([
+  const jobDoNovo = d.faturado_pelo_financeiro ? (d.itens[0]?.origem_id ?? null) : null;
+  const [estabRes, cnaeRes, reformaRes, mesesDoNovo] = await Promise.all([
     supabase
       .from("fiscal_estabelecimentos")
       .select("id, ativo, empresa_contabil_id")
@@ -353,7 +412,10 @@ export async function emitirFaturamento(
       .maybeSingle<{ id: string; ativo: boolean; empresa_contabil_id: string }>(),
     supabase
       .from("fiscal_cnaes")
-      .select("id, estabelecimento_id, codigo, subitem, cumulativo, ativo, vigencia_inicio, vigencia_fim")
+      .select(
+        "id, estabelecimento_id, codigo, subitem, cumulativo, ativo, vigencia_inicio, vigencia_fim, " +
+          "aliquota_iss, aliquota_pis, aliquota_cofins",
+      )
       .eq("id", d.fiscal_cnae_id)
       .eq("tenant_id", session.activeTenant.id)
       .maybeSingle<{
@@ -365,7 +427,22 @@ export async function emitirFaturamento(
         ativo: boolean;
         vigencia_inicio: string;
         vigencia_fim: string | null;
+        aliquota_iss: number | string | null;
+        aliquota_pis: number | string;
+        aliquota_cofins: number | string;
       }>(),
+    // Decisão 256: as alíquotas de CBS e IBS vigentes na emissão (cadastro
+    // de impostos); sem linha, as da fase de teste.
+    supabase
+      .from("fiscal_parametros")
+      .select("chave, valor, vigencia_inicio")
+      .eq("tenant_id", session.activeTenant.id)
+      .in("chave", ["cbs", "ibs"])
+      .lte("vigencia_inicio", d.data_emissao)
+      .order("vigencia_inicio", { ascending: false }),
+    // Decisão 256: no job mensal, o previsto do mês que o Novo faturamento
+    // fecha — e a conferência de que o job fatura por mês.
+    jobDoNovo ? lerMesesDoNovoFaturamento(supabase, session.activeTenant.id, jobDoNovo) : Promise.resolve(null),
   ]);
   if (estabRes.error || cnaeRes.error) {
     return {
@@ -388,6 +465,46 @@ export async function emitirFaturamento(
     return { ok: false, message: "O CNAE escolhido não está vigente na data de emissão." };
   }
   const cnaeTexto = codigoDoCnae(cnaeDaLista);
+
+  // Decisão 256: no mensal, o Novo faturamento leva o mês e o previsto dele.
+  let previstoDoMes: number | null = null;
+  if (d.faturado_pelo_financeiro) {
+    if (mesesDoNovo && !d.mes_referencia) {
+      return { ok: false, message: "Escolha o mês que esta nota fatura." };
+    }
+    if (!mesesDoNovo && d.mes_referencia) {
+      return { ok: false, message: "Este job não fatura por mês." };
+    }
+    if (mesesDoNovo && d.mes_referencia) {
+      const mes = mesesDoNovo.find((m) => m.mes === d.mes_referencia);
+      if (!mes) return { ok: false, message: "Este mês não é do job." };
+      previstoDoMes = mes.faturamento;
+    }
+  }
+
+  // Decisão 256: CBS e IBS (reforma tributária, fase de teste) sobre o
+  // líquido da nota — o total menos ISS (sobre a base, sem as deduções),
+  // PIS e COFINS (sobre o total). Registro na nota, sem guia.
+  if (reformaRes.error) {
+    console.error("[faturamento.aliquotas_da_reforma]", reformaRes.error.message);
+  }
+  const aliquotaVigente = (chave: "cbs" | "ibs") =>
+    Number(
+      ((reformaRes.data ?? []) as Array<{ chave: string; valor: number | string }>).find((p) => p.chave === chave)?.valor ??
+        ALIQUOTAS_DA_REFORMA_PADRAO[chave],
+    );
+  const aliquotasReforma = { cbs: aliquotaVigente("cbs"), ibs: aliquotaVigente("ibs") };
+  const centavos = (v: number) => Math.round(v * 100) / 100;
+  const baseIss = centavos(Math.max(0, d.valor_total - d.valor_deducoes));
+  const reforma = reformaDaNota(
+    d.valor_total,
+    {
+      iss: centavos((baseIss * Number(cnaeDaLista.aliquota_iss ?? 0)) / 100),
+      pis: centavos((d.valor_total * Number(cnaeDaLista.aliquota_pis)) / 100),
+      cofins: centavos((d.valor_total * Number(cnaeDaLista.aliquota_cofins)) / 100),
+    },
+    aliquotasReforma,
+  );
 
   const payload = {
     tenant_id: session.activeTenant.id,
@@ -413,6 +530,17 @@ export async function emitirFaturamento(
     cnpj_tomador: d.origem_tipo === "bv" || d.tomador_exterior ? null : cnpjTomador,
     tomador_exterior: d.origem_tipo !== "bv" && d.tomador_exterior,
     job_referencia_id: d.origem_tipo === "avulso" ? d.job_referencia_id : null,
+    // Decisão 256.
+    faturado_pelo_financeiro: d.faturado_pelo_financeiro,
+    mes_referencia: d.faturado_pelo_financeiro ? d.mes_referencia : null,
+    previsto_do_mes: previstoDoMes,
+    valor_deducoes: centavos(d.valor_deducoes),
+    retencoes_previstas: d.retencoes_previstas,
+    recebidos_associados: d.recebidos_associados,
+    aliquota_cbs: aliquotasReforma.cbs,
+    valor_cbs: reforma.cbs,
+    aliquota_ibs: aliquotasReforma.ibs,
+    valor_ibs: reforma.ibs,
   };
   // O save avulso nasce com a nota, numa transação só (decisão 247).
   const { data: fatId, error } = d.save_avulso
@@ -495,6 +623,14 @@ export async function emitirFaturamento(
         qtd_anexos_po: pos.reduce((s, p) => s + p.anexos.length, 0),
         ...(d.save_avulso ? { save_avulso: d.save_avulso } : {}),
         ...(erroPo ? { erro_po: erroPo } : {}),
+        // Decisão 256.
+        faturado_pelo_financeiro: d.faturado_pelo_financeiro,
+        mes_referencia: d.mes_referencia,
+        valor_deducoes: d.valor_deducoes,
+        retencoes_previstas: d.retencoes_previstas,
+        recebidos_associados: d.recebidos_associados,
+        valor_cbs: reforma.cbs,
+        valor_ibs: reforma.ibs,
       },
     }),
   ]);
