@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Palmtree, ArrowRight } from "lucide-react";
+import { Palmtree, ArrowRight, Clock } from "lucide-react";
 import { cn, formatDate } from "@/lib/utils";
 import type { FeriasPeriodoStatus } from "@/lib/types";
 
@@ -54,6 +54,12 @@ const STATUS_STYLE: Record<
   },
 };
 
+const STATUS_ATIVOS: FeriasPeriodoStatus[] = ["apto", "em_alerta", "vencido"];
+const STATUS_HISTORICO: FeriasPeriodoStatus[] = [
+  "regularizado",
+  "pago_rescisao",
+];
+
 interface Props {
   colaboradorId: string;
   periodos: FeriasPeriodoResumo[];
@@ -65,7 +71,14 @@ export function CardFerias({
   periodos,
   diasDisponiveis,
 }: Props) {
-  const temPeriodos = periodos.length > 0;
+  const ativos = periodos
+    .filter((p) => STATUS_ATIVOS.includes(p.status))
+    .sort((a, b) => a.numero - b.numero);
+  const historicos = periodos
+    .filter((p) => STATUS_HISTORICO.includes(p.status))
+    .sort((a, b) => b.numero - a.numero);
+
+  const temAlgumaCoisa = ativos.length > 0 || historicos.length > 0;
 
   return (
     <div className="rounded-2xl border border-border bg-white p-5 shadow-soft">
@@ -87,9 +100,10 @@ export function CardFerias({
         </Link>
       </div>
 
-      {!temPeriodos ? (
+      {!temAlgumaCoisa ? (
         <p className="text-sm text-muted-foreground">
-          Nenhum período aquisitivo gerado. Verifique a data de admissão.
+          Nenhum período aquisitivo ativo. Novos períodos aparecem quando o
+          colaborador completa 1 ano de admissão.
         </p>
       ) : (
         <>
@@ -105,48 +119,117 @@ export function CardFerias({
             </span>
           </div>
 
-          <ul className="space-y-2">
-            {periodos.map((p) => {
-              const style = STATUS_STYLE[p.status];
-              return (
-                <li
-                  key={p.id}
-                  className="flex items-center justify-between gap-3 rounded-lg border border-border bg-background px-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">
-                      Aquisitivo #{p.numero}
-                    </p>
-                    <p className="text-[11px] text-muted-foreground tabular-nums">
-                      {formatDate(p.aquisitivo_inicio)} →{" "}
-                      {formatDate(p.aquisitivo_fim)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    {(p.status === "apto" || p.status === "em_alerta") &&
-                      p.dias_restantes >= 0 && (
-                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold tabular-nums">
-                          {p.dias_restantes}d p/ vencer
-                        </span>
-                      )}
-                    <span
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold",
-                        style.chip,
-                      )}
-                    >
-                      <span
-                        className={cn("h-1.5 w-1.5 rounded-full", style.dot)}
-                      />
-                      {style.label}
-                    </span>
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          {ativos.length > 0 && (
+            <ul className="space-y-2 mb-4">
+              {ativos.map((p) => (
+                <AquisitivoAtivo key={p.id} periodo={p} />
+              ))}
+            </ul>
+          )}
+
+          {historicos.length > 0 && (
+            <div>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold mb-2">
+                Histórico
+              </p>
+              <ul className="space-y-1.5">
+                {historicos.map((p) => (
+                  <AquisitivoHistorico key={p.id} periodo={p} />
+                ))}
+              </ul>
+            </div>
+          )}
         </>
       )}
     </div>
+  );
+}
+
+function AquisitivoAtivo({ periodo: p }: { periodo: FeriasPeriodoResumo }) {
+  const style = STATUS_STYLE[p.status];
+  const vencido = p.status === "vencido";
+  return (
+    <li
+      className={cn(
+        "rounded-xl border-2 px-4 py-3",
+        vencido
+          ? "border-red-300 bg-red-50/60"
+          : "border-california-red/40 bg-california-red/5",
+      )}
+    >
+      <div className="flex items-start justify-between gap-3 flex-wrap">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-white",
+                vencido ? "bg-red-500" : "bg-california-red",
+              )}
+            >
+              <span className="h-1.5 w-1.5 rounded-full bg-white" />
+              {vencido ? "Vencido" : "Atual"}
+            </span>
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-semibold",
+                style.chip,
+              )}
+            >
+              <span className={cn("h-1.5 w-1.5 rounded-full", style.dot)} />
+              {style.label}
+            </span>
+          </div>
+          <p className="text-sm font-semibold text-foreground">
+            Aquisitivo #{p.numero}
+          </p>
+          <p className="text-[11px] text-muted-foreground tabular-nums">
+            {formatDate(p.aquisitivo_inicio)} → {formatDate(p.aquisitivo_fim)}
+          </p>
+        </div>
+        {!vencido && p.dias_restantes >= 0 && (
+          <div className="text-right shrink-0">
+            <div className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+              <Clock className="h-3 w-3" />
+              Vence em
+            </div>
+            <p className="text-sm font-bold tabular-nums text-foreground">
+              {p.dias_restantes}{" "}
+              <span className="text-xs font-normal text-muted-foreground">
+                dia{p.dias_restantes === 1 ? "" : "s"}
+              </span>
+            </p>
+          </div>
+        )}
+      </div>
+    </li>
+  );
+}
+
+function AquisitivoHistorico({
+  periodo: p,
+}: {
+  periodo: FeriasPeriodoResumo;
+}) {
+  const style = STATUS_STYLE[p.status];
+  return (
+    <li className="flex items-center justify-between gap-3 rounded-lg bg-muted/30 px-3 py-1.5">
+      <div className="min-w-0 flex items-baseline gap-2 flex-wrap">
+        <span className="text-xs font-medium text-foreground">
+          Aquisitivo #{p.numero}
+        </span>
+        <span className="text-[11px] text-muted-foreground tabular-nums">
+          {formatDate(p.aquisitivo_inicio)} → {formatDate(p.aquisitivo_fim)}
+        </span>
+      </div>
+      <span
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-semibold shrink-0",
+          style.chip,
+        )}
+      >
+        <span className={cn("h-1.5 w-1.5 rounded-full", style.dot)} />
+        {style.label}
+      </span>
+    </li>
   );
 }
