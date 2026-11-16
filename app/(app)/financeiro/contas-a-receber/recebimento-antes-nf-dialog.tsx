@@ -215,6 +215,58 @@ export function RecebimentoAntesNfDialog({
   );
 }
 
+/**
+ * Decisão 260 (pedido do Tiago): os mesmos campos, dentro do cartão
+ * "Recebimento antes da NF" do formulário de Recebimento avulso — sem a
+ * segunda janela. O internacional segue com o câmbio (decisão 229).
+ */
+export function CamposDoRecebimentoAntesNf({
+  alvo,
+  contas,
+  tipos,
+  subtipos,
+  pending,
+  erro,
+  onCancelar,
+  onConfirm,
+}: {
+  alvo: AlvoDoRecebidoAntes;
+  contas: ContaBancaria[];
+  tipos: PlanoContaTipo[];
+  subtipos: PlanoContaSubtipo[];
+  pending: boolean;
+  erro: string | null;
+  onCancelar: () => void;
+  onConfirm: (payload: RecebidoAntesPayload, cambio: CambioPayload | null) => void;
+}) {
+  return alvo.cambio ? (
+    <FormularioDoCambio
+      key={alvo.chave}
+      alvo={alvo}
+      cambio={alvo.cambio}
+      contas={contas}
+      tipos={tipos}
+      subtipos={subtipos}
+      pending={pending}
+      erro={erro}
+      onCancelar={onCancelar}
+      onConfirm={onConfirm}
+    />
+  ) : (
+    <FormularioDoRecebido
+      key={alvo.chave}
+      alvo={alvo}
+      contas={contas}
+      tipos={tipos}
+      subtipos={subtipos}
+      pending={pending}
+      erro={erro}
+      onCancelar={onCancelar}
+      onConfirm={(payload) => onConfirm(payload, null)}
+    />
+  );
+}
+
 function FormularioDoRecebido({
   alvo,
   contas,

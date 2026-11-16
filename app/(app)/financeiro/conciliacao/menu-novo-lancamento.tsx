@@ -33,7 +33,6 @@ import { ContaAvulsaDrawer } from "../contas-a-pagar/conta-avulsa-drawer";
 import { ContaRecorrenteDrawer } from "../contas-a-pagar/conta-recorrente-drawer";
 import { RecebimentoAvulsoDialog, type TipoDoRecebimentoAvulso } from "../contas-a-receber/recebimento-avulso-dialog";
 import { AvulsoDialog } from "../fiscal/impostos/dialogos";
-import { RecebimentoAntesNfNaConciliacao } from "./recebimento-antes-nf-na-conciliacao";
 import { carregarDadosDoNovoLancamento, type DadosDoNovoLancamento } from "./actions-novo-lancamento";
 
 type Formulario =
@@ -106,6 +105,9 @@ const ITENS: Array<
 
 const TIPO_DO_RECEBIMENTO: Partial<Record<Formulario, TipoDoRecebimentoAvulso>> = {
   recebimento_avulso: "recebimento_avulso",
+  // Decisão 260: o recebimento antes da NF é um tipo do mesmo formulário; o
+  // item abre direto no cartão dele.
+  antes_da_nf: "antes_da_nf",
   rendimento: "rendimento",
   transferencia: "transferencia",
   mutuo: "mutuo",
@@ -139,7 +141,8 @@ export function MenuNovoLancamento({
   function escolher(f: Formulario) {
     setMenuAberto(false);
     // Decisão 256: o recebimento antes da NF se registra aqui, escolhendo o
-    // job (ou o BV) — saiu da aba Faturamento de Contas a Receber.
+    // job (ou o BV) — saiu da aba Faturamento de Contas a Receber. Desde a
+    // 260, pelo cartão dele no formulário de Recebimento avulso.
     setFormulario(f);
   }
 
@@ -231,18 +234,6 @@ export function MenuNovoLancamento({
               }}
             />
           )}
-          <RecebimentoAntesNfNaConciliacao
-            aberto={formulario === "antes_da_nf"}
-            onFechar={fechar}
-            contas={dados.contas}
-            tipos={dados.tipos}
-            subtipos={dados.subtipos}
-            onRegistrado={(mensagem) => {
-              fechar();
-              onCriado(mensagem, null);
-              router.refresh();
-            }}
-          />
           <RecebimentoAvulsoDialog
             open={formulario !== null && TIPO_DO_RECEBIMENTO[formulario] !== undefined}
             onOpenChange={(o) => !o && fechar()}

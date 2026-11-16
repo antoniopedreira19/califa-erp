@@ -254,7 +254,15 @@ export function montarTitulosAReceber(e: {
         valor: string | number;
       }>;
     };
-  }>).map((r) => {
+  }>)
+    // O atalho "vencidas" da Home (antes na consulta, decisão 260): a nota
+    // que passou da previsão sem ser recebida.
+    .filter(
+      (r) =>
+        !e.apenasVencidas ||
+        (r.data_previsao_recebimento !== null && r.data_previsao_recebimento < e.hoje && r.pago_em === null),
+    )
+    .map((r) => {
     const baixas = baixasPorTitulo.get(r.id) ?? [];
     const itens = r.faturamento.itens ?? [];
     // Um job por vez, na ordem em que aparece nos itens. O Set é o que

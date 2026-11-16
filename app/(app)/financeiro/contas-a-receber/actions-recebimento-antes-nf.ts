@@ -11,7 +11,8 @@
  * Decisão 256: o registro saiu da aba Faturamento e está na conciliação
  * ("Novo lançamento" › "Recebimento antes da NF"), escolhendo o job: com
  * envio do GP esperando nota, vai para a nota do envio; sem envio, fica preso
- * ao job, e o Novo faturamento associa à nota.
+ * ao job, e o Novo faturamento associa à nota. Decisão 260: é o primeiro
+ * cartão do formulário de Recebimento avulso (Contas a Receber e conciliação).
  *
  * As regras moram nas duas funções do banco (saldo, papel, conta, centro
  * de custo, auditoria); aqui fica o schema e a tradução do erro.
@@ -23,6 +24,7 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { rotuloMes } from "@/lib/calculos/meses-trimestre";
+import { nomeDoJobNoFinanceiro } from "@/lib/types";
 import { chaveDoRecebidoAntes, chaveDoRecebidoDoJob } from "./chave-info";
 import { SELECT_RECEBIDO_ANTES, recebidosAntesPorChave } from "./dados-do-recebido-antes";
 import type { AlvoDoRecebidoAntes, CambioDoJob } from "./recebimento-antes-nf-dialog";
@@ -270,7 +272,7 @@ export async function carregarAlvosDoRecebimentoAntesNf(): Promise<
     supabase
       .from("jobs")
       .select(
-        "id, codigo, nome, cliente_id, faturamento_previsto, " +
+        "id, codigo, nome, nome_financeiro, cliente_id, faturamento_previsto, " +
           "orcamento:orcamentos(categoria:categorias_dominio!categoria_id(modelo_planilha)), " +
           "versao:versoes_orcamento!versao_orcamento_aprovada_id(moeda_estrangeira, cambio_compra)",
       )
@@ -308,6 +310,7 @@ export async function carregarAlvosDoRecebimentoAntesNf(): Promise<
     id: string;
     codigo: string | null;
     nome: string;
+    nome_financeiro: string | null;
     cliente_id: string | null;
     faturamento_previsto: number | string | null;
     orcamento: { categoria: { modelo_planilha: string } | null } | null;
@@ -317,6 +320,9 @@ export async function carregarAlvosDoRecebimentoAntesNf(): Promise<
   const jobs = (jobsRes.data ?? []) as unknown as Job[];
   const recebidos = recebidosAntesPorChave(recebidosRes.data as unknown[] | null);
   const jobsComEnvio = new Set(pendentes.filter((p) => p.origem_tipo === "job").map((p) => p.job_id ?? p.origem_id));
+  // Decisão 260: o nome do job é o que o financeiro deu (decisão 243); a
+  // fila traz o da produção.
+  const nomeDoJob = new Map(jobs.map((j) => [j.id, nomeDoJobNoFinanceiro(j)]));
   const jobsSemEnvio = jobs.filter((j) => !jobsComEnvio.has(j.id) && Number(j.faturamento_previsto ?? 0) > 0.004);
   const idsNotas = [...new Set(pendentes.map((p) => p.envio_nota_id).filter((id): id is string => Boolean(id)))];
   const idsClientes = [...new Set([...pendentes, ...jobsSemEnvio].map((x) => x.cliente_id).filter((id): id is string => Boolean(id)))];
@@ -388,7 +394,9 @@ export async function carregarAlvosDoRecebimentoAntesNf(): Promise<
     const chave = chaveDoRecebidoAntes(notaId, null);
     if (!chave) continue;
     const saldo = r2(linhas.reduce((t, l) => t + Number(l.saldo), 0));
-    const titulo = [p.codigo, p.descricao].filter(Boolean).join(" · ") + (p.mes_referencia ? ` · ${rotuloMes(p.mes_referencia)}` : "");
+    const titulo =
+      [p.codigo, nomeDoJob.get(p.job_id ?? p.origem_id) ?? p.descricao].filter(Boolean).join(" · ") +
+      (p.mes_referencia ? ` · ${rotuloMes(p.mes_referencia)}` : "");
     const contraparte = nomeCliente.get(p.cliente_id ?? "") ?? "—";
     alvos.push({
       chave,
@@ -438,7 +446,7 @@ export async function carregarAlvosDoRecebimentoAntesNf(): Promise<
     const falta = r2(Number(j.faturamento_previsto ?? 0) - (faturado.get(j.id) ?? 0));
     if (falta <= 0.004) continue;
     const chave = chaveDoRecebidoDoJob(j.id);
-    const titulo = [j.codigo, j.nome].filter(Boolean).join(" · ");
+    const titulo = [j.codigo, nomeDoJobNoFinanceiro(j)].filter(Boolean).join(" · ");
     const contraparte = nomeCliente.get(j.cliente_id ?? "") ?? "—";
     alvos.push({
       chave,

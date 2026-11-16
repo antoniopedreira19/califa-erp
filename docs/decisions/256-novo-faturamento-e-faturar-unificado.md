@@ -1,7 +1,7 @@
 # 256 — "+ Faturamento": o Novo faturamento, o Faturar unificado e os impostos da nota
 
 **Data:** 2026-11-15
-**Status:** aceita e implementada em 15/11/2026.
+**Status:** aceita e implementada em 15/11/2026. Revista pela [260](260-faturar-em-pe-e-lista-do-faturamento.md) em 16/11/2026: o Faturar com 1.080 px, as deduções na linha do emissor, o quadro de impostos enxuto e o recebimento antes da NF no Recebimento avulso.
 **Quem decidiu:** Tiago, de 12 a 15/11/2026, pelo protótipo interativo "Avulsa com job" (versões 1 a 13) e pelas respostas às perguntas de 15/11.
 **Revê:** a [184](184-faturar-drawer-que-abre-a-nota-e-cnpj-do-tomador.md) (o botão "Faturamento avulso" vira "+ Faturamento"), a [130](130-recebimento-antes-da-nf.md) (o registro do recebimento antes da NF sai da fila e vai para a conciliação) e a [094](094-em-faturamento-e-o-finalizado-vale-pelo-envio.md) (o envio da produção também fecha pela nota do financeiro).
 

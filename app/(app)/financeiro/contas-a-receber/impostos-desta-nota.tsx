@@ -16,7 +16,9 @@
  *   ISS − PIS − COFINS), com as alíquotas do cadastro: registro, sem guia;
  * - as retenções que o cliente faz, quando o Faturar já as sabe.
  */
-import { Landmark } from "lucide-react";
+import * as React from "react";
+import { Info, Landmark } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { FiscalCnae } from "@/lib/types";
 import { cnaeDoCalculo } from "@/lib/fiscal/cadastro";
 import {
@@ -160,151 +162,162 @@ export function ImpostosDestaNota({
               }))),
       ];
 
+  const textoDoVaiProFiscal = !imp || !estab
+    ? "ISS R$ 0,00 · PIS R$ 0,00 · COFINS R$ 0,00"
+    : [
+        retido("ISS") > 0.004
+          ? `ISS ${moeda(issDaGuia)} (${estab.municipio}; ${moeda(retido("ISS"))} retidos pelo cliente, que recolhe)`
+          : `ISS ${moeda(valorDe("ISS"))} (${estab.municipio})`,
+        ...(imp.pelaCaixa ? [] : [`PIS ${moeda(valorDe("PIS"))}`, `COFINS ${moeda(valorDe("COFINS"))}`]),
+      ].join(" · ") + (imp.pelaCaixa ? " · PIS e COFINS no recebimento" : "");
+
+  // Decisão 260: o quadro só com os números; as contas, as guias e as
+  // explicações ficam no ⓘ, ao passar o mouse.
   return (
     <div className="rounded-xl border border-border bg-muted/30 p-4">
-      <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+      <div className="mb-2 flex items-center gap-2">
         <Landmark className="h-3.5 w-3.5 shrink-0 text-california-red" />
-        <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-          Impostos desta nota
-        </span>
-        <span className="ml-auto text-[11.5px] text-muted-foreground">
-          Competência <strong className="font-semibold text-foreground">{nomeDaCompetencia ?? "—"}</strong>
+        <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Impostos desta nota</span>
+        <span className="ml-auto text-[11.5px] font-semibold text-foreground">{nomeDaCompetencia ?? "—"}</span>
+        <Dica>
+          <p>Competência {nomeDaCompetencia ?? "—"}: o mês da emissão.</p>
           {estab && (
-            <>
-              {" "}
-              · {nomeDaPJ} · {textoDoRegime(estab.regime, estab.regime_caixa)}
-            </>
+            <p>
+              {nomeDaPJ} · {textoDoRegime(estab.regime, estab.regime_caixa)}
+            </p>
           )}
-        </span>
+        </Dica>
       </div>
-      {/* A conta do emissor da NFS-e: o total menos as deduções é a base do ISS. */}
-      <div className="mb-3 grid grid-cols-3 overflow-hidden rounded-lg border border-border bg-white text-[12px]">
+      {/* A conta do emissor: o total menos as deduções é a base do ISS. */}
+      <div className="mb-2 divide-y divide-border overflow-hidden rounded-lg border border-border bg-white text-[12px]">
         {(
           [
             ["Valor total da nota", valor, ""],
             ["(−) Deduções (repasse)", deducoes, ""],
-            ["= Base de cálculo do ISS", baseIss, "font-bold"],
+            ["= Base do ISS", baseIss, "font-bold"],
           ] as const
-        ).map(([rotulo, v, peso], i) => (
-          <div key={rotulo} className={i > 0 ? "border-l border-border px-3 py-2" : "px-3 py-2"}>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{rotulo}</p>
-            <p className={`font-mono tabular-nums text-foreground ${peso}`}>{moeda(v)}</p>
+        ).map(([rotulo, v, peso]) => (
+          <div key={rotulo} className="flex items-baseline justify-between gap-3 px-3 py-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{rotulo}</span>
+            <span className={`font-mono tabular-nums text-foreground ${peso}`}>{moeda(v)}</span>
           </div>
         ))}
       </div>
       <div className="divide-y divide-border/60 text-[12.5px]">
         {linhas.map((l) => (
-          <div key={l.imposto} className="py-2">
-            <div className="flex items-baseline gap-2">
-              <span className="w-14 shrink-0 font-semibold">{l.imposto}</span>
-              <span className="min-w-0 flex-1 truncate font-mono text-[11.5px] text-muted-foreground">
-                {l.aliquota === "—"
-                  ? "sem alíquota"
-                  : `${moeda(l.base)} × ${l.aliquota === "" ? "—" : l.aliquota}`}
-              </span>
-              <span className="shrink-0 font-mono font-semibold tabular-nums">{moeda(l.valor)}</span>
-            </div>
-            <p className="mt-0.5 pl-16 text-[11px] leading-snug text-muted-foreground">
-              {l.como}
-              {l.vence ? (
-                <>
-                  {" "}
-                  · vence <span className="font-mono text-foreground">{dataBr(l.vence.data)}</span> (
-                  {l.vence.motivo ?? l.regra})
-                </>
-              ) : null}
-            </p>
+          <div key={l.imposto} className="flex items-center gap-2 py-1.5">
+            <span className="w-14 shrink-0 font-semibold">{l.imposto}</span>
+            <span className="min-w-0 flex-1 truncate text-[11.5px] text-muted-foreground">
+              {[l.aliquota && l.aliquota !== "—" ? l.aliquota : null, l.vence ? `vence ${dataBr(l.vence.data).slice(0, 5)}` : null]
+                .filter(Boolean)
+                .join(" · ")}
+            </span>
+            <span className="shrink-0 font-mono font-semibold tabular-nums">{moeda(l.valor)}</span>
+            <Dica>
+              <p>{l.aliquota === "—" ? "Sem alíquota" : `${moeda(l.base)} × ${l.aliquota === "" ? "—" : l.aliquota}`}</p>
+              <p>
+                {l.como}
+                {l.vence ? ` · vence ${dataBr(l.vence.data)} (${l.vence.motivo ?? l.regra})` : ""}
+              </p>
+            </Dica>
           </div>
         ))}
       </div>
       {!completo && faltam.length > 0 && (
-        <p className="mt-1 rounded-lg border border-dashed border-border bg-white px-3 py-2 text-[11.5px] text-muted-foreground">
-          Os impostos se calculam quando estiverem preenchidos:{" "}
-          <span className="font-semibold text-foreground">{faltam.join(" · ")}</span>.
+        <p className="mt-1 text-[11.5px] text-muted-foreground">
+          Falta: <span className="font-semibold text-foreground">{faltam.join(" · ")}</span>
         </p>
       )}
-      <div className="mt-2 flex items-baseline justify-between border-t border-border pt-2 text-[12px]">
-        <span className="text-muted-foreground">Valor líquido (total − ISS − PIS − COFINS)</span>
-        <span className="font-mono font-semibold tabular-nums">{moeda(reforma.liquido)}</span>
-      </div>
-      <div className="mt-2.5 rounded-lg border border-dashed border-border bg-white px-3 py-2">
-        <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-          Reforma tributária · registro, ainda não vigente
-        </p>
-        {(
-          [
-            ["CBS", aliquotasReforma.cbs, reforma.cbs],
-            ["IBS", aliquotasReforma.ibs, reforma.ibs],
-          ] as const
-        ).map(([nome, aliq, v]) => (
-          <div key={nome} className="flex items-baseline gap-2 text-[12.5px]">
-            <span className="w-12 font-semibold">{nome}</span>
-            <span className="flex-1 font-mono text-[11.5px] text-muted-foreground">
-              {moeda(reforma.liquido)} × {pct(aliq)}
-            </span>
-            <span className="font-mono font-semibold tabular-nums">{moeda(v)}</span>
-          </div>
-        ))}
-      </div>
-      <p className="mt-2.5 rounded-lg bg-white px-3 py-2 text-[12px] leading-relaxed text-foreground">
-        <span className="font-semibold">Vai para o módulo fiscal</span> · Apuração de {nomeDaCompetencia ?? "—"}:{" "}
-        {!imp || !estab
-          ? "ISS R$ 0,00 · PIS R$ 0,00 · COFINS R$ 0,00"
-          : [
-              retido("ISS") > 0.004
-                ? `ISS ${moeda(issDaGuia)} (${estab.municipio}; ${moeda(retido("ISS"))} retidos pelo cliente, que recolhe)`
-                : `ISS ${moeda(valorDe("ISS"))} (${estab.municipio})`,
-              ...(imp.pelaCaixa ? [] : [`PIS ${moeda(valorDe("PIS"))}`, `COFINS ${moeda(valorDe("COFINS"))}`]),
-            ].join(" · ")}
-        {imp?.pelaCaixa ? " · PIS e COFINS no recebimento" : ""}. CBS e IBS ficam registrados na nota, sem guia.
-        {federaisRetidos.length > 0 && (
+      <div className="mt-1.5 space-y-1 border-t border-border pt-2 text-[12px]">
+        <div className="flex items-center gap-1.5">
+          <span className="text-muted-foreground">Valor líquido</span>
+          <Dica>
+            <p>Total − ISS − PIS − COFINS. É a base de CBS e IBS.</p>
+          </Dica>
+          <span className="ml-auto font-mono font-semibold tabular-nums">{moeda(reforma.liquido)}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-muted-foreground">CBS {pct(aliquotasReforma.cbs)}</span>
+          <Dica>
+            <p>Reforma tributária, ainda não vigente: CBS e IBS ficam registrados na nota, sem guia.</p>
+            <p>
+              CBS {moeda(reforma.liquido)} × {pct(aliquotasReforma.cbs)} = {moeda(reforma.cbs)} · IBS {moeda(reforma.liquido)} ×{" "}
+              {pct(aliquotasReforma.ibs)} = {moeda(reforma.ibs)}
+            </p>
+          </Dica>
+          <span className="ml-auto font-mono tabular-nums">{moeda(reforma.cbs)}</span>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-muted-foreground">IBS {pct(aliquotasReforma.ibs)}</span>
+          <span className="ml-auto font-mono tabular-nums">{moeda(reforma.ibs)}</span>
+        </div>
+        {totalRetido > 0.004 && (
           <>
-            {" "}
-            Retenções sofridas ({federaisRetidos.map((r) => `${r.imposto} ${moeda(r.valor)}`).join(" · ")}) ficam
-            registradas para abater na apuração.
+            <div className="flex items-center gap-1.5">
+              <span className="text-muted-foreground">Retido pelo cliente</span>
+              <Dica>
+                {retencoes.map((r) => (
+                  <p key={r.imposto}>
+                    {r.imposto}: {moeda(r.base)} × {pct(r.aliquota)} = {moeda(r.valor)}
+                  </p>
+                ))}
+              </Dica>
+              <span className="ml-auto font-mono tabular-nums">{moeda(totalRetido)}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-muted-foreground">Líquido a receber</span>
+              <span className="ml-auto font-mono font-semibold tabular-nums">{moeda(r2(valor - totalRetido))}</span>
+            </div>
           </>
         )}
-      </p>
-      {totalRetido > 0.004 && (
-        <div className="mt-2.5 rounded-lg border border-border bg-white px-3 py-2 text-[12px]">
-          <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-            Retido pelo cliente na fonte
-          </p>
-          {retencoes.map((r) => (
-            <div key={r.imposto} className="flex items-baseline gap-2">
-              <span className="w-14 font-semibold">{r.imposto}</span>
-              <span className="flex-1 font-mono text-[11.5px] text-muted-foreground">
-                {moeda(r.base)} × {pct(r.aliquota)}
-              </span>
-              <span className="font-mono tabular-nums">{moeda(r.valor)}</span>
-            </div>
-          ))}
-          <div className="mt-1 flex items-baseline justify-between border-t border-border pt-1">
-            <span className="text-muted-foreground">Líquido a receber</span>
-            <span className="font-mono font-semibold tabular-nums">{moeda(r2(valor - totalRetido))}</span>
-          </div>
+      </div>
+      {reduzido && cnae && (
+        <div className="mt-2 flex items-center gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-1.5 text-[12px] text-amber-900">
+          <span>PIS e COFINS reduzidos, sem crédito</span>
+          <Dica>
+            <p>
+              {cnae.subitem ? `Subitem ${cnae.subitem}` : `CNAE ${codigoDoCnae(cnae)}`}: PIS {pct(cnae.aliquota_pis)} e COFINS{" "}
+              {pct(cnae.aliquota_cofins)}, sem crédito sobre os custos. Se custos deste job já deram crédito, ele é estornado na
+              apuração de {nomeDaCompetencia}.
+            </p>
+          </Dica>
         </div>
       )}
-      <div className="mt-2.5 space-y-1.5 border-t border-border pt-2.5 text-[12px] leading-relaxed text-muted-foreground">
-        {real && emissao && (
-          <p>
-            <span className="font-semibold text-foreground">IRPJ e CSLL:</span> a nota entra no lucro
-            bruto do {textoDoTrimestre(emissao)}; cotas em {mesesDasCotas(emissao)}.
-          </p>
-        )}
-        {real && !reduzido && (
-          <p>Os créditos de PIS/COFINS sobre os custos do job entram pelo mês da NF de cada fornecedor.</p>
-        )}
-        {reduzido && cnae && (
-          <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-amber-900">
-            {cnae.subitem ? `Subitem ${cnae.subitem}` : `CNAE ${codigoDoCnae(cnae)}`}: PIS{" "}
-            {pct(cnae.aliquota_pis)} e COFINS {pct(cnae.aliquota_cofins)}, sem crédito sobre os
-            custos. Se custos deste job já deram crédito, ele é estornado na apuração de{" "}
-            {nomeDaCompetencia}.
-          </p>
-        )}
-        {imp?.pelaCaixa && <p>PIS, COFINS, IRPJ e CSLL nascem quando o cliente pagar (regime de caixa).</p>}
+      <div className="mt-2 flex items-center gap-1.5 border-t border-border pt-2 text-[12px] text-muted-foreground">
+        <span>Vai para a Apuração de {nomeDaCompetencia ?? "—"}</span>
+        <Dica>
+          <p>{textoDoVaiProFiscal}. CBS e IBS ficam registrados na nota, sem guia.</p>
+          {federaisRetidos.length > 0 && (
+            <p>
+              Retenções sofridas ({federaisRetidos.map((r) => `${r.imposto} ${moeda(r.valor)}`).join(" · ")}) ficam registradas para
+              abater na apuração.
+            </p>
+          )}
+          {real && emissao && (
+            <p>
+              IRPJ e CSLL: a nota entra no lucro bruto do {textoDoTrimestre(emissao)}; cotas em {mesesDasCotas(emissao)}.
+            </p>
+          )}
+          {real && !reduzido && <p>Os créditos de PIS/COFINS sobre os custos do job entram pelo mês da NF de cada fornecedor.</p>}
+          {imp?.pelaCaixa && <p>PIS, COFINS, IRPJ e CSLL nascem quando o cliente pagar (regime de caixa).</p>}
+        </Dica>
       </div>
     </div>
+  );
+}
+
+/** O ⓘ com o texto longo, ao passar o mouse (decisão 260). */
+function Dica({ children }: { children: React.ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" aria-label="Mais informações" className="inline-flex shrink-0 text-muted-foreground hover:text-foreground">
+          <Info className="h-3.5 w-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="left" className="max-w-[320px] space-y-1 text-[11.5px] leading-snug">
+        {children}
+      </TooltipContent>
+    </Tooltip>
   );
 }

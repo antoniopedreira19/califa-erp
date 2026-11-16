@@ -9079,3 +9079,19 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 - **Tela da PP:** selo "Pagamento atrasado · 4T/2026" no cabeçalho; "Tipo da PP" (Verba, Reembolso ou Cartão corporativo) como primeiro campo do painel Dados, em toda PP que não é normal.
 - **PDF da PP:** linha "Pagamento atrasado: competência 4T/2026".
 - **Migration** `20261116600001_pagamentos_atrasados.sql` (tabela `jobs_pagamentos_atrasados`, marcas na PP e na linha, gatilhos e funções).
+
+## ⚠️ Nota de 2026-11-16 — o Faturar "em pé", a lista do Faturamento pela situação e o recebimento antes da NF no Recebimento avulso (decisão 260, revê a 256)
+
+- **Faturar:**
+  - 1.080 px (860 px com o PDF), Nota fiscal em duas colunas, campos de 36 px;
+  - as deduções na linha do emissor: (−) Deduções · = Base do ISS · ISS, com "Usar o custo AR" e a conta no ⓘ;
+  - o quadro "Impostos desta nota" com 360 px, só com os números e o resto no ⓘ.
+- **Lista da aba Faturamento:**
+  - grade fixa, com no máximo duas alturas por linha e o texto cortado inteiro ao passar o mouse;
+  - colunas Job (código, origem ou nº da NF, mês e o nome do financeiro), Cliente, Empresa, Valor, Já faturado, A faturar, Parcela, Vencimento, Enviado por, Situação e Planilha Interna; sem Descrição e sem Ação.
+- **Chips:** A faturar · Faturados · A receber · Recebidos · Inadimplentes · Todos. O recebido em parte vira mais de uma linha (`situacao-da-nota.ts`); em Todos, os pedaços da nota vêm juntos.
+- **Filtro de CNPJ emissor** no lugar do filtro de Cliente.
+- **Nome do job no financeiro:** sempre o que o financeiro deu (decisão 243), na lista, nas notas, no Faturar e no recebimento antes da NF.
+- **Recebimento antes da NF:** é o primeiro cartão do Recebimento avulso, com os campos logo abaixo do job. O item da conciliação abre o mesmo cartão.
+- **Pendência (D16):** registrar o recebimento antes da NF direto da linha do extrato, na conciliação bancária, como o "Lançar avulso". Fica para um segundo momento.
+- **Sem migration.**

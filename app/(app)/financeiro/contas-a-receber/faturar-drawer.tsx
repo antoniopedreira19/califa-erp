@@ -39,6 +39,7 @@ import {
   FileCheck2,
   FileText,
   HandCoins,
+  Info,
   Layers,
   Lock,
   Paperclip,
@@ -86,7 +87,7 @@ import type { MesDoNovoFaturamento } from "./meses-do-novo-faturamento";
 import { somaDosRecebidos, type RecebidoAntesDaNf } from "./recebimento-antes-nf-dialog";
 import type { AnexoDaPo } from "@/components/envio/anexos-da-po";
 import { rotuloMes } from "@/lib/calculos/meses-trimestre";
-import { aliquotasDaReforma, cnaesVigentes, estabelecimentoDoCalculo, feriadosDoCalculo } from "@/lib/fiscal/cadastro";
+import { aliquotasDaReforma, cnaeDoCalculo, cnaesVigentes, estabelecimentoDoCalculo, feriadosDoCalculo } from "@/lib/fiscal/cadastro";
 import { codigoDoCnae, rotuloDoCnae } from "@/lib/fiscal/calculos";
 import {
   avisoDaApuracao,
@@ -1554,7 +1555,7 @@ function FormularioDeFaturar({
               )}
             </div>
           </div>
-          <div className="flex items-center gap-3 border-t border-border bg-muted/50 px-3.5 py-3">
+                    <div className="flex items-center gap-3 border-t border-border bg-muted/50 px-3.5 py-3">
             <span className="text-xs font-semibold text-muted-foreground">Valor total da NF</span>
             <span className="ml-auto font-mono text-[17px] font-bold tabular-nums">{formatMoney(avValor)}</span>
           </div>
@@ -1582,7 +1583,7 @@ function FormularioDeFaturar({
         />
       )}
       {jobRef && (
-        <div className="grid grid-cols-2 items-start gap-x-5 gap-y-3.5">
+        <div className="grid grid-cols-1 items-start gap-y-3">
           {campoCnpjTomador}
           <CamposDaPo numero={numeroPo} onNumero={setNumeroPo} arquivos={poArquivos} onArquivos={setPoArquivos} disabled={pending} />
         </div>
@@ -1760,7 +1761,7 @@ function FormularioDeFaturar({
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-3 border-t border-border bg-muted/50 px-3.5 py-3">
+                        <div className="flex items-center gap-3 border-t border-border bg-muted/50 px-3.5 py-3">
               <span className="text-xs font-semibold text-muted-foreground">Valor total da NF</span>
               <span className="ml-auto font-mono text-[17px] font-bold tabular-nums">{formatMoney(avValor)}</span>
             </div>
@@ -1780,7 +1781,7 @@ function FormularioDeFaturar({
       )}
       {vinculo === "save" && clienteSemJob && (
         <>
-          <div className="grid grid-cols-4 items-end gap-x-5 gap-y-3.5">
+          <div className="grid grid-cols-2 items-end gap-x-4 gap-y-3">
             <Campo rotulo="Honorários (%)" obrigatorio htmlFor="av-hon-save">
               <div className="relative">
                 <Input
@@ -1852,8 +1853,8 @@ function FormularioDeFaturar({
         ))}
 
       {temQuemNoAvulso && (
-        <div className="grid grid-cols-2 items-start gap-x-5 gap-y-3.5">
-          {clienteId ? campoCnpjTomador : <div />}
+        <div className="grid grid-cols-1 items-start gap-y-3">
+          {clienteId && campoCnpjTomador}
           <CamposDaPo numero={numeroPo} onNumero={setNumeroPo} arquivos={poArquivos} onArquivos={setPoArquivos} disabled={pending} />
         </div>
       )}
@@ -1997,7 +1998,7 @@ function FormularioDeFaturar({
             </div>
           );
         })}
-        <div className="flex items-center gap-3 border-t border-border bg-muted/50 px-3.5 py-3">
+                <div className="flex items-center gap-3 border-t border-border bg-muted/50 px-3.5 py-3">
           <span className="text-xs font-semibold text-muted-foreground">Valor total da NF</span>
           <span className="ml-auto font-mono text-[17px] font-bold tabular-nums">{formatMoney(totalNf)}</span>
         </div>
@@ -2020,8 +2021,8 @@ function FormularioDeFaturar({
         ]}
       />
       {/* O CNPJ do tomador ao lado da PO (de cada job, um embaixo do outro). */}
-      <div className="grid grid-cols-2 items-start gap-x-5 gap-y-3.5">
-        {!ehBv ? campoCnpjTomador : <div />}
+      <div className="grid grid-cols-1 items-start gap-y-3">
+        {!ehBv && campoCnpjTomador}
         <div className="space-y-3.5">
           {jobsDaPo.map((j) => (
             <div key={j.chave} className="space-y-1.5">
@@ -2177,57 +2178,85 @@ function FormularioDeFaturar({
   // O botão preenche o que cabe na nota: a dedução nunca passa do total.
   const deducaoSugerida = centavos(Math.min(repasseSugerido, totalNf));
   const deducaoLimitada = repasseSugerido > totalNf + 0.004 && totalNf > 0.004;
-  const campoDeducoes = (
-    <Campo
-      rotulo="Valor das deduções (repasse)"
-      htmlFor="nf-deducoes"
-      ajuda="O que sai da base do ISS: o repasse (custo AR) que só passa pela California. PIS e COFINS ficam sobre o total."
+  const deducoesDaNota = centavos(Math.min(deducoes, Math.max(0, totalNf)));
+  const baseDoIss = centavos(Math.max(0, totalNf - deducoesDaNota));
+  const aliqIss = cnaeEscolhido ? Number(cnaeDoCalculo(cnaeEscolhido).aliquota_iss ?? 0) : null;
+  const valorDoIss = aliqIss !== null ? centavos((baseDoIss * aliqIss) / 100) : null;
+  const entradaDeducoes = (
+    <MoneyInput
+      id="nf-deducoes"
+      value={deducoes}
+      onValueChange={(v) => {
+        setDeducoes(v);
+        setErro(null);
+      }}
+    />
+  );
+  const valorTravado = (texto: string, forte?: boolean) => (
+    <div
+      className={cn(
+        "flex h-9 items-center justify-end rounded-lg border border-border bg-muted/50 px-3 font-mono text-[13px] tabular-nums",
+        forte && "font-bold",
+      )}
     >
-      <div className="space-y-1.5">
-        <div className="grid grid-cols-[minmax(0,0.9fr)_minmax(0,1.6fr)] items-center gap-3.5">
-          <MoneyInput
-            id="nf-deducoes"
-            value={deducoes}
-            onValueChange={(v) => {
-              setDeducoes(v);
+      {texto}
+    </div>
+  );
+
+  // Decisão 260 (opção A do protótipo): só a dedução, a base e o ISS, lado a
+  // lado como no portal emissor. A conta do custo AR fica no ⓘ, ao lado do
+  // "Usar o custo AR".
+  const contaDoRepasseEmTexto = [
+    ...repasseDaNota.map(
+      (x) =>
+        `${x.job.codigo}: custo AR ${formatMoney(x.job.repasse_ar)} × ${pctDaNota(x.proporcao)} (esta nota, ${formatMoney(
+          x.valorDoJob,
+        )} de ${formatMoney(x.job.faturamento_previsto)} previstos) = ${formatMoney(x.sugerido)}`,
+    ),
+    ...(deducaoLimitada ? [`Limitado ao valor desta nota (${formatMoney(totalNf)}).`] : []),
+  ];
+  const blocoValoresNfse = (
+    <div className="space-y-1.5">
+      <div className="grid grid-cols-3 items-end gap-x-4">
+        <Campo rotulo="(−) Deduções (repasse)" htmlFor="nf-deducoes">
+          {entradaDeducoes}
+        </Campo>
+        <Campo rotulo="= Base do ISS">{valorTravado(formatMoney(baseDoIss), true)}</Campo>
+        <Campo
+          rotulo={
+            aliqIss !== null ? `ISS (${aliqIss.toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%)` : "ISS"
+          }
+        >
+          {valorTravado(valorDoIss !== null ? formatMoney(valorDoIss) : "—", true)}
+        </Campo>
+      </div>
+      {deducaoSugerida > 0.004 && (
+        <div className="flex items-center gap-1.5 text-[12px]">
+          <button
+            type="button"
+            onClick={() => {
+              setDeducoes(deducaoSugerida);
               setErro(null);
             }}
-          />
-          {deducaoSugerida > 0.004 ? (
-            <button
-              type="button"
-              onClick={() => {
-                setDeducoes(deducaoSugerida);
-                setErro(null);
-              }}
-              className="justify-self-start rounded-lg border border-border bg-white px-3 py-1.5 text-[12px] font-semibold text-foreground transition-colors hover:border-california-red hover:text-california-red"
-            >
-              Usar {formatMoney(deducaoSugerida)}
-            </button>
-          ) : jobsDaNota.length > 0 && !(avulso && !adicional) ? (
-            <span className="text-[12px] text-muted-foreground">
-              {jobsDaNota.length > 1 ? "Os jobs desta nota não têm" : "Este job não tem"} custo AR (repasse).
-            </span>
-          ) : null}
+            className="font-semibold text-california-red underline-offset-2 hover:underline"
+          >
+            Usar o custo AR: {formatMoney(deducaoSugerida)}
+          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button type="button" aria-label="De onde vem o valor" className="text-muted-foreground hover:text-foreground">
+                <Info className="h-3.5 w-3.5" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-[340px] space-y-1 text-[11.5px] leading-snug">
+              {contaDoRepasseEmTexto.map((t) => (
+                <p key={t}>{t}</p>
+              ))}
+            </TooltipContent>
+          </Tooltip>
         </div>
-        {/* De onde vem o número: o AR inteiro do job e a parte desta nota. */}
-        {repasseDaNota.map((x) => (
-          <p key={x.job.id} className="text-[11.5px] leading-snug text-muted-foreground">
-            <span className="font-mono text-foreground">{x.job.codigo}</span>: custo AR{" "}
-            <strong className="font-semibold text-foreground">{formatMoney(x.job.repasse_ar)}</strong> ×{" "}
-            {pctDaNota(x.proporcao)} (esta nota, {formatMoney(x.valorDoJob)} de {formatMoney(x.job.faturamento_previsto)}{" "}
-            previstos) = <strong className="font-semibold text-foreground">{formatMoney(x.sugerido)}</strong>
-          </p>
-        ))}
-        {/* O custo AR maior que o faturamento (dado de planilha fora do
-            comum) daria dedução acima da nota, que o servidor recusa. */}
-        {deducaoLimitada && (
-          <p className="text-[11.5px] leading-snug text-amber-800">
-            Limitado ao valor desta nota ({formatMoney(totalNf)}): a dedução não passa do total.
-          </p>
-        )}
-      </div>
-    </Campo>
+      )}
+    </div>
   );
 
   // Decisão 256: as retenções do cliente na fonte, quando já se sabe.
@@ -2584,7 +2613,7 @@ function FormularioDeFaturar({
               "fixed left-1/2 top-1/2 z-50 flex max-w-full -translate-x-1/2 -translate-y-1/2 outline-none data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95",
               comNota
                 ? "h-[94%] w-[96%] gap-3 rounded-2xl bg-[#181818]/[0.94] p-5"
-                : "h-[92%] w-[1560px] max-w-[96%]",
+                : "h-[92%] w-[1080px] max-w-[96%]",
             )}
           >
             {comNota && anexoUrl && (
@@ -2621,13 +2650,13 @@ function FormularioDeFaturar({
             <div
               className={cn(
                 "flex min-h-0 max-w-full shrink-0 flex-col bg-card",
-                comNota ? "w-[1180px]" : "w-full",
+                comNota ? "w-[860px]" : "w-full",
                 "overflow-hidden rounded-2xl",
                 !comNota && "border border-border shadow-elevated",
                 comNota && soANota && "hidden",
               )}
             >
-              <DialogHeader className="border-b border-border px-6 pb-4 pt-6">
+              <DialogHeader className="border-b border-border px-5 pb-3.5 pt-5">
                 <DialogTitle className="flex flex-wrap items-center gap-2.5">
                   <FileText className="h-4.5 w-4.5 shrink-0 text-california-red" />
                   {titulo}
@@ -2672,19 +2701,24 @@ function FormularioDeFaturar({
               </DialogHeader>
               <div className="flex min-h-0 flex-1">
               <div
-                className="min-h-0 min-w-0 flex-1 divide-y divide-border overflow-y-auto px-6 [&>*]:py-5"
+                className={cn(
+                  "min-h-0 min-w-0 flex-1 divide-y divide-border overflow-y-auto px-5 [&>*]:py-4",
+                  // Decisão 260 ("em pé"): os campos baixam de 44 para 36 px, o
+                  // texto de 14 para 13 px e os rótulos para 12,5 px.
+                  "[&_.h-11]:h-9 [&_.h-10]:h-9 [&_.text-sm]:text-[13px] [&_label.text-sm]:text-[12.5px] [&_.min-h-\[80px\]]:min-h-[64px]",
+                )}
               >
                 <Secao n={n.cliente} titulo="O que esta nota cobre">
                   {blocoClienteEJob}
                 </Secao>
                 <Secao n={n.nota} titulo="Nota fiscal">
-                  <div className="grid grid-cols-4 items-start gap-x-5 gap-y-3.5">
+                  <div className="grid grid-cols-2 items-start gap-x-4 gap-y-3">
                     <div className="col-span-2">{campoEstab}</div>
                     {campoNumero}
                     {campoEmissao}
                     <div className="col-span-2">{campoCnae}</div>
-                    <div className="col-span-2">{campoDeducoes}</div>
-                    <div className="col-span-4">{campoDescricao}</div>
+                    <div className="col-span-2">{blocoValoresNfse}</div>
+                    <div className="col-span-2">{campoDescricao}</div>
                   </div>
                   {campoAnexo}
                 </Secao>
@@ -2697,11 +2731,16 @@ function FormularioDeFaturar({
               </div>
               {/* Os impostos ficam à vista ao lado do formulário, e mudam
                   enquanto o valor, as deduções e o CNAE mudam. */}
-              <aside className="w-[460px] shrink-0 overflow-y-auto border-l border-border bg-muted/20 p-5">
+              <aside
+                className={cn(
+                  "w-[360px] shrink-0 overflow-y-auto border-l border-border bg-muted/20 p-4",
+                  "[&_.text-\[13px\]]:text-[12px] [&_.text-\[12\.5px\]]:text-[11.5px] [&_.text-\[12px\]]:text-[11px] [&_.text-\[11\.5px\]]:text-[10.5px] [&_.text-sm]:text-[13px]",
+                )}
+              >
                 {blocoImpostos}
               </aside>
               </div>
-              <div className="flex flex-col gap-2.5 border-t border-border px-6 py-3.5">
+              <div className="flex flex-col gap-2 border-t border-border px-5 py-3">
                 {erro && (
                   <div className="flex items-start gap-2 rounded-lg border border-california-red/35 bg-california-red/[0.06] px-3 py-2.5 text-[12.5px] text-california-red">
                     <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
