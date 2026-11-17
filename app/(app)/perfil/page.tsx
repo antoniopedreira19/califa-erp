@@ -1,8 +1,6 @@
 import { requireSession } from "@/lib/auth/session";
 import { createClient, createServiceClient } from "@/lib/supabase/server";
-import { buscarAlocacaoVigente } from "@/lib/alocacao/montar-snapshot";
 import type {
-  AlocacaoVigenteSnapshot,
   Colaborador,
   ColaboradorDocumento,
   ColaboradorFeriasPeriodo,
@@ -16,7 +14,6 @@ import { HeroPerfil } from "./hero-perfil";
 import { CardDadosPessoais } from "./card-dados-pessoais";
 import { CardDadosBancarios } from "./card-dados-bancarios";
 import { CardAcessoUsuario } from "./card-acesso-usuario";
-import { CardAlocacaoAtual } from "./card-alocacao-atual";
 import { CardBeneficios } from "./card-beneficios";
 import { QuadroNf } from "./_components/quadro-nf";
 import { CardDocumentos } from "./card-documentos";
@@ -25,26 +22,6 @@ import { BotaoEditarPerfilCompleto } from "./botao-editar-perfil-completo";
 import type { NfPendenteQuadro } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
-
-/** Resume a alocação vigente numa string curta pra exibir no card. */
-function resumirAlocacao(
-  snapshot: AlocacaoVigenteSnapshot | null,
-): string | null {
-  if (!snapshot || snapshot.itens.length === 0) return null;
-
-  const primeiro = snapshot.itens[0];
-  const empresa = primeiro.empresa_nome || "Empresa";
-
-  if (snapshot.itens.length === 1) {
-    const regs = primeiro.regionais;
-    if (regs.length === 0) return empresa;
-    if (regs.length === 1) return `${empresa} · ${regs[0].regional_nome}`;
-    return `${empresa} · ${regs.length} regionais`;
-  }
-
-  const restantes = snapshot.itens.length - 1;
-  return `${empresa} + ${restantes} ${restantes === 1 ? "empresa" : "empresas"}`;
-}
 
 export default async function PerfilPage() {
   const session = await requireSession();
@@ -118,7 +95,6 @@ export default async function PerfilPage() {
   const [
     { data: periodosData },
     { data: lancamentosData },
-    snapshotAlocacao,
     membershipRes,
     resumoBeneficios,
     { data: linhasNfData },
@@ -138,7 +114,6 @@ export default async function PerfilPage() {
           .select("*")
           .eq("colaborador_id", colab.id)
           .order("data_inicio", { ascending: false }),
-    buscarAlocacaoVigente(supabase, colab.id, session.activeTenant.id),
     service
       .from("tenant_members")
       .select("role, status")
@@ -181,9 +156,6 @@ export default async function PerfilPage() {
   const roleReal = membership?.role ?? (session.activeRole as AppRole);
   const statusMembership = membership?.status ?? "ativo";
 
-  const empresaPrincipal =
-    snapshotAlocacao?.itens[0]?.empresa_nome ?? null;
-
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
       <HeroPerfil
@@ -193,7 +165,6 @@ export default async function PerfilPage() {
         tipoContratacao={colab.tipo_contratacao}
         funcao={colab.funcao}
         dataAdmissao={colab.data_admissao}
-        empresaPrincipal={empresaPrincipal}
         colaboradorEditavel={{
           telefone: colab.telefone,
           email_pessoal: colab.email_pessoal,
@@ -225,7 +196,7 @@ export default async function PerfilPage() {
             colaboradorId={colab.id}
             tipoContratacao={colab.tipo_contratacao}
             linhas={linhasQuadro}
-            alocacaoResumo={resumirAlocacao(snapshotAlocacao)}
+            alocacaoResumo={null}
           />
           {!ehSocio && (
             <CardMinhasFerias
@@ -242,12 +213,6 @@ export default async function PerfilPage() {
             role={roleReal}
             statusMembership={statusMembership}
             lastSignIn={acesso?.last_sign_in_at ?? null}
-          />
-          <CardAlocacaoAtual
-            snapshot={snapshotAlocacao}
-            liderNome={colab.lider?.nome ?? null}
-            area={colab.area}
-            nivel={colab.nivel}
           />
           <CardBeneficios resumo={resumoBeneficios} />
           {colab.tipo_contratacao !== "socio" && (

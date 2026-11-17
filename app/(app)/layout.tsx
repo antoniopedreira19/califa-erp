@@ -20,9 +20,14 @@ export default async function AppLayout({
   // Qualquer rota ≠ /perfil redireciona pra lá. Fluxo: colaborador recebe
   // acesso via convite com role inicial colaborador (ver docs/modulos/rh/
   // 25-ferias.md §9).
+  //
+  // Fail-closed: se o header x-pathname vier vazio (middleware falhou em
+  // setar), tratamos como rota desconhecida e redirecionamos pra /perfil.
+  // Melhor bloquear acesso legítimo do que vazar página sensível por
+  // ausência de header.
   if (session.activeRole === "colaborador") {
     const pathname = headers().get("x-pathname") ?? "";
-    if (pathname && pathname !== "/perfil" && !pathname.startsWith("/perfil/")) {
+    if (!pathname.startsWith("/perfil")) {
       redirect("/perfil");
     }
 

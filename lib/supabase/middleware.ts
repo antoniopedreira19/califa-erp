@@ -23,7 +23,17 @@ export async function updateSession(request: NextRequest) {
     path.startsWith("/form/freelancer-solicitacao/") ||
     path.startsWith("/api/public/freelancer-solicitacao/");
 
-  let supabaseResponse = NextResponse.next({ request });
+  // Expõe o pathname atual pros layouts/server components (Next 14 não
+  // tem forma oficial de ler pathname no server fora do middleware).
+  // Precisa ser setado em REQUEST headers (não response) pra chegar via
+  // `headers()` dentro dos server components. Usado pelo
+  // app/(app)/layout.tsx para redirecionar colaborador pra /perfil.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", path);
+
+  let supabaseResponse = NextResponse.next({
+    request: { headers: requestHeaders },
+  });
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -37,7 +47,9 @@ export async function updateSession(request: NextRequest) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value),
           );
-          supabaseResponse = NextResponse.next({ request });
+          supabaseResponse = NextResponse.next({
+            request: { headers: requestHeaders },
+          });
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options),
           );
@@ -65,11 +77,6 @@ export async function updateSession(request: NextRequest) {
     url.pathname = "/home";
     return NextResponse.redirect(url);
   }
-
-  // Expõe o pathname atual pros layouts/server components (Next 14 não
-  // tem forma oficial de ler pathname no server fora do middleware).
-  // Usado pelo app/(app)/layout.tsx pra decidir redirect da role colaborador.
-  supabaseResponse.headers.set("x-pathname", path);
 
   return supabaseResponse;
 }
