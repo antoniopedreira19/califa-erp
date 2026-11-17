@@ -40,6 +40,8 @@ Controlar o ciclo completo do 13º no ERP, do cálculo inicial em janeiro (com o
 | **Snapshot** | Cópia dos dados do colaborador no momento da criação da folha. Imutável até rodar "Recalcular folha". |
 | **Híbrido** | Colaborador `tipo_contratacao=clt_recibo` com `valor_recibo > 0`. Cálculo divide em parte CLT + parte PJ. |
 | **Adiantamento** | Valor pago ao colaborador durante o ano por conta do 13º. Abate automaticamente da 1ª parcela. |
+| **Adiantamento integral** | Variante do adiantamento que quita o 13º inteiro de uma vez. Marcado com `integral = true`. O colaborador **não participa** da folha do ano (sai da lista de linhas). Útil pra quem acerta o 13º cheio antes do fechamento. |
+| **Adiantamento legado** | Lançamento pré-ERP, sem folha de pagamento vinculada (`folha_pagamento_id IS NULL` + 0 folhas via FK reversa). Aparece como "Pago" na lista, invisível pro financeiro, não cobra NF. Resultado de migrations de backfill que removem as folhas pra pagamentos feitos antes do sistema entrar em vigor. |
 
 ## 4. Elegibilidade
 
@@ -185,11 +187,17 @@ Uma linha por adiantamento. Vínculo pelo **ano** (não pela folha — adiantame
 | `data` | date | Data do pagamento |
 | `valor` | numeric | > 0 |
 | `obs` | text | NULL |
-| `conta_avulsa_id` | uuid | FK `contas_avulsas` (SET NULL) — lançamento gerado automático via service client |
+| `integral` | boolean | **default false**. `true` = adiantamento quita o 13º inteiro; colaborador sai da folha do ano. Ou colaborador tem **um** integral OU tem N parciais — nunca mistura. |
+| `folha_pagamento_id` | uuid | FK `folhas_pagamento` (SET NULL). Aponta pra **primeira** folha gerada (parte CLT no híbrido, folha única nos demais). Pros legados fica NULL. |
+| `conta_avulsa_id` | uuid | FK `contas_avulsas` (SET NULL) — campo legado, não é mais preenchido pelos novos lançamentos (foi substituído pelo fluxo via `folhas_pagamento`). |
 
 ### Integração com `folhas_pagamento`
 
-Enum `folha_tipo` ganhou `decimo_terceiro_1a_parcela` e `decimo_terceiro_2a_parcela`. Quando o RH clica "Fechar 1ª parcela", **uma linha em `folhas_pagamento` por colaborador** é criada com:
+Enum `folha_tipo` cobre três variantes do 13º: `decimo_terceiro_1a_parcela`, `decimo_terceiro_2a_parcela` e `decimo_terceiro_adiantamento`.
+
+**Parcelas 1ª/2ª** (fechamento pelo RH):
+
+Quando o RH clica "Fechar 1ª parcela", **uma linha em `folhas_pagamento` por colaborador** é criada com:
 - `tipo` = `decimo_terceiro_1a_parcela` (ou `_2a_parcela`)
 - `status` = `enviada` (já vai pro financeiro aprovar)
 - `competencia_ano` = ano da folha, `competencia_mes` = 11 (1ª) ou 12 (2ª)
@@ -197,7 +205,41 @@ Enum `folha_tipo` ganhou `decimo_terceiro_1a_parcela` e `decimo_terceiro_2a_parc
 - `decimo_terceiro_linha_id` = FK pra linha de origem
 - `data_pagamento_prevista` = `{ano}-11-30` ou `{ano}-12-20`
 
-A tab `/financeiro/contas-a-pagar?tab=folhas` passa a mostrar essas linhas junto com as mensais. Financeiro aprova via o mesmo fluxo existente — a aprovação chama `criar_conta_avulsa` com plano `Despesa com Pessoal → 13° Salário` (código 004), não "Serviços de Terceiros". A trava de NF (PJ/MEI/CLT_recibo precisa anexar NF da competência) já cobre o 13º sem código novo.
+Pro **híbrido** (`clt_recibo`), cada parcela gera **duas folhas** separadas via `montarFolhasParcela`:
+- Parte CLT → origem `contabilidade`, sem desconto na UI do financeiro (desconto sai no líquido da 2ª).
+- Parte PJ → origem `california`, exige NF do colaborador antes da aprovação.
+
+**Adiantamentos** (lançamento ao longo do ano):
+
+Quando o RH lança um adiantamento (`lancarAdiantamentoDecimoTerceiro`), `montarFolhasAdiantamento` monta:
+- PJ/MEI → 1 folha origem `california`, valor cheio.
+- CLT puro → 1 folha origem `contabilidade`, valor cheio.
+- **Híbrido (`clt_recibo`) → 2 folhas** proporcionais ao salário:
+  - `parte_clt = round2(valor × (salario − valor_recibo) / salario)` → origem `contabilidade`.
+  - `parte_pj  = valor − parte_clt` (PJ absorve o resíduo de centavo) → origem `california`.
+  - Se `valor_recibo = 0`, cai pra 1 folha CLT só.
+
+Todas as folhas são inseridas com `status = enviada`, `tipo = decimo_terceiro_adiantamento`, `competencia_ano = ano`, `competencia_mes = 12`, `decimo_terceiro_adiantamento_id = <id>` (FK reversa). O `folha_pagamento_id` do adiantamento aponta pra **primeira** (CLT quando existe). A UI combina as 2 folhas via FK reversa (`folhas_pagamento.decimo_terceiro_adiantamento_id`) quando precisa mostrar as partes individualmente.
+
+**NF por parte do híbrido**: `actions-folhas.ts:exigeNf` já separa — só folha `origem = california` de `pj/mei/clt_recibo` exige NF antes de aprovar. Resultado prático pro adiantamento híbrido:
+- Parte CLT (contabilidade) → **financeiro aprova direto**, sem NF.
+- Parte PJ (california) → **aguarda NF** do colaborador no `/perfil`; só aprova depois.
+
+A view `vw_nf_pendentes_colaborador` já filtra `origem = california`, então o colaborador vê **uma única NF pendente** com o valor da parte PJ (não o total do adiantamento).
+
+A tab `/financeiro/contas-a-pagar?tab=folhas` mostra todas essas linhas junto com as mensais. Pro híbrido com split, aparecem **2 linhas** (parte CLT + parte PJ, rotulada "(parte PJ)"). A aprovação chama `criar_conta_avulsa` com plano `Despesa com Pessoal → 13° Salário` (código 004).
+
+**Exclusão de adiantamento** (`excluirAdiantamentoDecimoTerceiro`):
+- Busca TODAS as folhas vinculadas via FK reversa.
+- Bloqueia se qualquer folha está `aprovada` ou `paga`.
+- Bloqueia se tem NF anexada.
+- Senão deleta todas as folhas (em `IN (ids)`) e depois o adiantamento.
+
+**Recalc do abatimento** (`recalcularLinhaDeAdiantamento`):
+- Se colaborador tem **qualquer** adiantamento `integral = true` no ano → deleta a linha do 13º dele (sai da folha).
+- Senão soma o `total_adiantado` e recalcula primeira_parcela/segundas.
+
+**Backfill de legados**: pagamentos de 13º feitos antes do ERP são marcados como "Pago" via migrations que deletam as folhas vinculadas (`folha_pagamento_id` vira NULL por `ON DELETE SET NULL`). O adiantamento fica no banco (histórico preservado) mas some do contas-a-pagar e do fluxo de NF.
 
 ## 7. Fluxo end-to-end
 
@@ -210,10 +252,11 @@ A tab `/financeiro/contas-a-pagar?tab=folhas` passa a mostrar essas linhas junto
 │    calcula avos/parcelas/descontos)                     │
 │                                                         │
 │   Durante o ano:                                        │
-│     Adiantamentos (ex.: R$ 500 em março)                │
-│     ↓ cria conta_avulsa aprovada automática             │
-│     ↓ atualiza total_adiantado da linha                 │
-│     ↓ recalcula 1ª parcela da linha                     │
+│     Adiantamentos (1ª parcela OU integral)              │
+│     ↓ cria N folhas_pagamento (1 ou 2 pro híbrido)      │
+│     ↓ status=enviada, tipo=decimo_terceiro_adiantamento │
+│     ↓ se integral: deleta linha do colaborador na folha │
+│     ↓ se parcial: soma total_adiantado e recalcula 1ª   │
 │                                                         │
 │   Nov/dez:                                              │
 │     Recalcular folha  →  rebusca salário + valor_recibo │
@@ -276,7 +319,44 @@ Página de detalhe. Elementos:
 
 ### `/rh/decimo-terceiro/[ano]/adiantamentos`
 
-Sub-rota com listagem dos adiantamentos do ano + KPIs (total adiantado, nº lançamentos). Dialog "Novo adiantamento" pede colaborador, data, valor, obs. Salvar cria `decimo_terceiro_adiantamentos` + `contas_avulsas` via service client (RH não aprova avulsa diretamente, mas 13º é responsabilidade do RH).
+Sub-rota com listagem dos adiantamentos do ano + KPIs (total adiantado, nº lançamentos).
+
+**Lista**
+- **Searchbar** (nome, função ou observação) + **filtro por status** (Todos, Pago, Pago — integral, Aguardando NF, Aguardando aprovação, Aprovado — a pagar).
+- **Ordenação clicável** no cabeçalho de Data e Valor (ArrowUpDown/Up/Down).
+- **Colunas**: Data | Colaborador | Tipo (CLT/Híbrido/PJ/MEI, badge colorido) | Valor | Observação | Status | ações.
+- **Linha expansível** pra híbrido com split (chevron no início). Expandir mostra 2 linhas filhas:
+  - **Parte CLT (sem desconto)** → origem Contabilidade, valor proporcional, status próprio (não pede NF).
+  - **Parte PJ (recibo)** → origem California, valor proporcional, status próprio (pede NF).
+- Pros híbridos **legados** (sem folhas vinculadas), o split é calculado em runtime pelo salário vigente — chevron aparece mesmo sem folhas.
+
+**Status derivado** (`derivarStatusAdiantamento`):
+
+| Condição | Label | Variante |
+|---|---|---|
+| sem folha vinculada + `integral=false` | "Pago" | cinza |
+| sem folha vinculada + `integral=true` | "Pago — integral" | cinza com ring |
+| folha `paga` | "Pago" | cinza |
+| folha `aprovada` | "Aprovado — a pagar" | verde |
+| folha `enviada` + sem NF + tipo PJ/MEI/clt_recibo | "Aguardando NF" | amber |
+| folha `enviada` + NF anexada (ou CLT puro) | "Aguardando aprovação" | azul |
+
+Pro híbrido com 2 folhas, a label principal usa o status **pior** (enviada < pendente_correcao < aprovada < paga) — reflete o estado que ainda precisa de ação. Na linha expandida cada parte mostra seu status próprio (CLT puro nunca aparece como "Aguardando NF").
+
+**Dialog "Novo adiantamento"**
+
+Fluxo: escolhe o colaborador → sistema busca o 13º bruto esperado (`calcularTreizeBrutoEsperado`) → mostra dois **radios** lado a lado com os valores calculados:
+
+- **Primeira parcela do 13º** = `round2(bruto / 2)`. Vira adiantamento parcial (`integral = false`). Abate da 1ª parcela na folha quando for calculada.
+- **Valor integral do 13º** = `bruto` cheio. Vira adiantamento integral (`integral = true`). Colaborador sai da folha do ano.
+
+Campos: colaborador (select), data (date), observação (textarea opcional). **Não** tem campo de valor livre — o cálculo é sempre automático pelos radios.
+
+Validações cruzadas no `lancarAdiantamentoDecimoTerceiro`:
+- Bloqueia novo lançamento se já existe integral no ano pro colaborador.
+- Bloqueia lançar integral se já existem parciais.
+
+Ao salvar: cria `decimo_terceiro_adiantamentos` + 1 ou 2 folhas de pagamento em bulk (ver "Integração com `folhas_pagamento`"). Não cria `contas_avulsas` diretamente — a avulsa é gerada pelo financeiro quando aprova a folha.
 
 ### `/rh/colaboradores/[id]` — card 13º
 
@@ -291,7 +371,9 @@ Card "13º Salário" lista os anos em que o colaborador recebeu. Cada linha: ano
 | Reajuste salarial no ano | Badge "reajuste" amarelo. Retroativo é override manual (RH ajusta `salario_editado` pro salário médio ponderado e escreve na obs). Cálculo automático de retroativo (igual às abas "Retroativo - Reajuste" da planilha original) fica pra pass futura. |
 | Desligamento no ano | Sai da folha (filtro). 13º proporcional pago na Rescisão. Se o desligamento aconteceu depois da folha criada, "Recalcular folha" deleta a linha. |
 | Afastamento > 15 dias | Sem tabela de afastamentos no sistema; RH edita `avos_editado` manualmente + escreve obs. |
-| Híbrido CLT_recibo | Breakdown automático quando `valor_recibo` está preenchido. Chevron de expand mostra parte CLT + parte PJ. |
+| Híbrido CLT_recibo | Breakdown automático quando `valor_recibo` está preenchido. Chevron de expand mostra parte CLT + parte PJ. Adiantamentos novos geram 2 folhas separadas (CLT em contabilidade, PJ em california); parte CLT aprovável direto, parte PJ aguarda NF. |
+| Adiantamento integral | Checkbox "Valor integral" no dialog. Lança 1 adiantamento com `integral = true`, valor = 13º bruto cheio. Colaborador é **removido da folha** do ano automaticamente (ou na criação, via filtro em `criarFolhaDecimoTerceiro`, ou depois via `recalcularLinhaDeAdiantamento`). Uma vez integral, não aceita mais lançamentos no ano (nem parcial nem integral). |
+| Adiantamento legado | Lançamento pré-ERP. Representado por `folha_pagamento_id IS NULL` + 0 folhas via FK reversa. Aparece "Pago" na lista, invisível pro financeiro, não cobra NF. Resultado da migration de backfill que deleta a folha vinculada — o adiantamento fica no banco por histórico mas some do fluxo ativo. |
 | Folha de ano com N dependentes IR | Dependentes assumidos como 0 (não há campo no cadastro). RH ajusta via `salario_editado` se precisar — próxima pass pode adicionar coluna `dependentes_ir` no colaborador. |
 
 ## 10. Permissões
@@ -333,6 +415,18 @@ Ver ADRs:
 20261021000004_decimo_terceiro_hibrido_e_folha_fk.sql
 20261021000005_decimo_terceiro_adiantamentos.sql
 20261021000006_decimo_terceiro_flag_reajuste.sql
+20261028110001_13_nf_fundacao_schema.sql
+20261028110002_13_nf_atualizar_views.sql
+20261116900003_adiantamentos_13_2026_legado.sql          -- backfill legado lote 1 (17 rows)
+20261117400001_adiantamento_13_2026_restante_legado.sql  -- backfill legado lote 2 (1 row)
+20261117500001_adiantamento_13_integral.sql              -- coluna `integral` em adiantamentos
+20261117500002_backfill_adiantamentos_13_integrais_e_correcoes.sql
+                                                          -- 4 integrais + 2 correcoes de valor
+20261117500003_re_delete_linhas_integrais_recriadas_pelo_recalc.sql
+                                                          -- fix: recalcularFolha respeita integral
+20261117500004_adiantamentos_13_2026_legado_lote_3.sql   -- 3 adiantamentos novos virados legado
+20261117500005_adiantamentos_13_2026_legado_lote_4.sql   -- 2 adiantamentos novos virados legado
+20261117500006_adiantamento_13_2026_legado_lote_5.sql    -- 1 adiantamento híbrido virado legado
 ```
 
 ## 14. Fora de escopo (próximas iterações)
@@ -342,3 +436,27 @@ Ver ADRs:
 - Tabela de afastamentos (hoje override manual).
 - Suporte a `dependentes_ir` por colaborador no cálculo IRRF.
 - Automação do status `concluida` baseado no estado das `folhas_pagamento` originadas (hoje a folha fica em `fechada_parcial_2` até intervenção manual).
+- Edição retroativa do split híbrido: hoje o `salario_base` das 2 folhas é fixado no momento do lançamento. Se o `valor_recibo` do colaborador muda depois, o split não acompanha — teria que excluir e recriar o adiantamento.
+
+## 15. Histórico recente (2026-11-17)
+
+Sessão longa cobrindo refinamento do fluxo de adiantamento. Commits em `main` nessa ordem:
+
+| Commit | O que entregou |
+|---|---|
+| `1224e227` | Coluna `integral` em `decimo_terceiro_adiantamentos` + tipo TS |
+| `dabb5895` | `criarFolhaDecimoTerceiro` exclui integrais; `recalcularLinhaDeAdiantamento` deleta linha quando integral chega depois |
+| `6c56a284` | Action `calcularTreizeBrutoEsperado` pro autofill do dialog |
+| `dc9a08ff` | Checkbox "Pagamento integral" + autofill readonly + validações cruzadas (depois substituído pelos radios) |
+| `3d441884` | Lista sem coluna "Lançado", "Antigo" → "Pago", novo badge "Pago — integral" |
+| `324201e2` | Backfill 2026: 4 integrais marcados + correção de valores |
+| `6bac8e7a` | `recalcularFolhaDecimoTerceiro` respeita adiantamento integral em 2 frentes (update e inclusão de faltantes) |
+| `228dff88` | Lista ganha searchbar + filtro de status + ordenação por data/valor |
+| `bb28cb9b` | Parser de valor BR robusto (aceita ponto como milhar) |
+| `f7b46e0c` | Coluna "Tipo" na lista de adiantamentos com badge por contratação |
+| `4cc867d4` | Dialog de novo adiantamento usa radio "1ª parcela" ou "Integral" (substitui o checkbox) |
+| `bd6cc792` | Entrega 1 do split híbrido: 2 folhas separadas + linha expansível + status combinado |
+| `369451c8` | Expande híbrido legado também, calculando split do salário vigente em runtime |
+| `dc4cd31a` | Entrega 2: NF da parte PJ exigida no people-list, CLT aprovável direto, status individual por parte |
+
+Mais 5 migrations de backfill de legado (`20261117500004–6` + duas anteriores de outubro/novembro).
