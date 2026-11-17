@@ -81,6 +81,13 @@ Na carga de 01/11:
   - Nenhuma previsão estava ligada nem vencida em 03/11, então o realizado e a rolagem ainda não passaram por dado real.
 - **Ficam como estão (Tiago, 03/11/2026):** 12 saídas "Salário" do Tipo CO em novembro (R$ 85.418,75) continuam no fluxo, porque a regra tira só o Tipo DP; 6 delas (R$ 43.723,55) têm o valor exato de uma linha da folha do sistema no mesmo mês. Junto com o imposto dos jobs do 4T, se resolvem quando os jobs forem lançados no sistema: "Não vamos mexer nesses casos de 4t por agora. Serão incluidos quando seus respectivos jobs forem lançados no sistema".
 
+## Revisão de 15/11/2026: trocar a versão com linhas já ligadas ao banco
+
+- **O problema:** ao carregar uma versão nova das previsões, a linha ligada ao banco herdava a ligação só pela impressão digital. Quando a planilha mudava a data, o texto ou o fornecedor daquela linha, ela era movida para a carga nova e batia no número da linha da planilha (`aba`, `linha`), que se repete entre versões. Em 11/11 a carga falhou duas vezes e 31 conciliações foram desfeitas e refeitas à mão.
+- **Agora:** depois da digital, a ligação passa pelo conteúdo: a linha nova da mesma conta, mesmo valor e mesmo fornecedor (as 8 primeiras letras, sem acento, caixa e pontuação), até 31 dias da linha do banco, a mais próxima e com o nome igual por inteiro antes. A que ainda fica sem herdeira passa à carga nova num número livre a partir de 10.000.000, para a conciliação não se perder.
+- **Migrations:** `20261115850001` e `20261115850002` (a segunda afrouxa a comparação do fornecedor, no mesmo dia). Renumeradas em 16/11: no banco desde 15/11; o número 20261115800001 era o da recorrência, no main.
+- **Conferido** na carga da planilha de 15/11 na produção: das 381 linhas ligadas, 360 herdaram pela digital, 12 pelo conteúdo e 9 ficaram mantidas com a primeira versão; com a segunda, recarregado o mesmo pacote, 372 pela digital, 9 pelo conteúdo e nenhuma mantida, sem nenhuma duplicada.
+
 ## O que fica para depois
 
 - O registro de quem atrasou (como o `inadimplente_desde` do título a receber) e a lista das previsões vencidas e não pagas: entram com a fase da interface, quando o faturamento assumir os recebimentos.
