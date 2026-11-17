@@ -58,7 +58,7 @@ export function ReenviarConviteButton({ userId }: { userId: string }) {
         ) : (
           <>
             <Send className="h-3.5 w-3.5" />
-            Reenviar convite
+            Reenviar
           </>
         )}
       </button>
