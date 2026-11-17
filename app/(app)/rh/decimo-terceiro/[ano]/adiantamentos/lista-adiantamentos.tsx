@@ -109,6 +109,20 @@ function formatarData(iso: string): string {
   return `${d}/${m}/${a}`;
 }
 
+const TIPO_LABEL: Record<string, string> = {
+  clt: "CLT",
+  clt_recibo: "Híbrido",
+  pj: "PJ",
+  mei: "MEI",
+};
+
+const TIPO_CLASSE: Record<string, string> = {
+  clt: "bg-zinc-100 text-zinc-700",
+  clt_recibo: "bg-violet-50 text-violet-700",
+  pj: "bg-sky-50 text-sky-700",
+  mei: "bg-sky-50 text-sky-700",
+};
+
 /**
  * Parse de valor BR robusto. Aceita:
  *  - "1250" → 1250
@@ -320,6 +334,7 @@ export function ListaAdiantamentos({
                   />
                 </th>
                 <th className="px-4 py-3 text-left font-medium">Colaborador</th>
+                <th className="px-4 py-3 text-left font-medium">Tipo</th>
                 <th className="px-4 py-3 text-right font-medium">
                   <HeaderOrdenavel
                     label="Valor"
@@ -356,6 +371,19 @@ export function ListaAdiantamentos({
                       <div className="text-xs text-muted-foreground">
                         {a.colaborador_funcao}
                       </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {a.colaborador_tipo ? (
+                        <span
+                          className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${
+                            TIPO_CLASSE[a.colaborador_tipo] ?? "bg-zinc-100 text-zinc-500"
+                          }`}
+                        >
+                          {TIPO_LABEL[a.colaborador_tipo] ?? a.colaborador_tipo.toUpperCase()}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums font-semibold text-california-red">
                       {brl.format(a.valor)}
