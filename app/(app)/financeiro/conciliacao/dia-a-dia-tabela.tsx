@@ -33,11 +33,14 @@
  *   custo fixo (pela chave da recorrência, decisão 235) não é oferecida: no
  *   lugar dela vem o título;
  * - Só no sistema em dois grupos: as baixas sem linha (travam o mês) e os
- *   previstos (não travam).
+ *   previstos (não travam);
+ * - no ⋯ da linha de entrada, "Recebimento antes da NF" (D11): a data, o
+ *   valor e a conta vêm da linha; o banco grava e concilia de uma vez, e o
+ *   Desfazer da linha cancela o recebimento.
  */
 
 import * as React from "react";
-import { ArrowDown, Check, CheckCheck, ChevronDown, ChevronRight, CircleSlash, FilePlus2, Link2, ListChecks, Loader2, MoreHorizontal, Pencil, Plus, RotateCcw, Save, Search, Undo2, Wand2, X } from "lucide-react";
+import { AlertCircle, ArrowDown, Check, CheckCheck, ChevronDown, ChevronRight, CircleSlash, FilePlus2, HandCoins, Link2, ListChecks, Loader2, MoreHorizontal, Pencil, Plus, RotateCcw, Save, Search, Undo2, Wand2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -52,12 +55,15 @@ import { itemDoLote, type ResultadoDaLinha } from "./motor-da-conta";
 import { EditarDataPagamentoDialog } from "../contas-a-pagar/editar-data-pagamento-dialog";
 import { EditarPrevisaoDialog } from "../contas-a-receber/editar-previsao-dialog";
 import { naOrdemDoExtrato, saldosDoExtrato, type SaldoBase } from "@/lib/conciliacao/dia-a-dia";
+import { donosDaPlanilha as donosPelaRegra } from "@/lib/conciliacao/planilha-de-titulo";
 import type { EntradaDaBaixaEmLote } from "@/lib/financeiro/baixa-em-lote";
 import type { LancamentoSemLinha } from "./banco-dados";
 import { correcaoDaBaixaCabe, RETENCOES_COMUNS, retencaoQueExplica, type TituloDoMotor } from "@/lib/conciliacao/motor";
 import type { Linha } from "./linhas-da-aba";
 import { Combobox, COMBOBOX_COMO_SELECT } from "@/components/ui/combobox";
 import { carregarDadosDoNovoLancamento } from "./actions-novo-lancamento";
+import { carregarAlvosDoRecebimentoAntesNf, type AlvoDaConciliacao } from "../contas-a-receber/actions-recebimento-antes-nf";
+import { somaDosRecebidos } from "../contas-a-receber/recebimento-antes-nf-dialog";
 import {
   baixarEConciliar as acaoBaixarEConciliar,
   conciliarLinha as acaoConciliarLinha,
@@ -69,6 +75,7 @@ import {
 import {
   conciliarMisto as acaoConciliarMisto,
   corrigirValorDoTituloEBaixar,
+  registrarRecebimentoAntesNfPelaLinha,
   salvarAcertoDaLinha,
   salvarCentroDaConciliacao,
   trocarCentroDasPrevisoes,
@@ -216,25 +223,20 @@ interface Sugestao {
   /** O título sugerido tem uma linha da planilha, que não é oferecida ("da PP-00818", "do título “…”"). */
   daPlanilha: string | null;
 }
-const normalizar = (s: string | null | undefined) =>
-  (s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 /** A linha da planilha já reconhecida como de um título não volta a ser
  *  oferecida depois que o título é baixado (no sistema, a regra da recorrência
  *  da decisão 235 tira a previsão do fluxo de vez; a da PP, pelo código). */
 const PLANILHA_DE_TITULO = new Set<string>();
-/** A linha da planilha que é de um título do sistema: o título dela. */
+/** A linha da planilha que é de um título do sistema: o título dela. A regra
+ *  (código da PP, chave do custo fixo e, desde 17/11/2026, a PP aberta pelo
+ *  valor e pelo titular) mora em `lib/conciliacao/planilha-de-titulo.ts`. */
 function donosDaPlanilha(itens: Candidato[]): Map<string, string> {
-  const m = new Map<string, string>();
+  const planilha = itens.filter((x): x is Extract<Candidato, { k: "planilha" }> => x.k === "planilha");
   const titulos = itens.filter((x): x is Extract<Candidato, { k: "titulo" }> => x.k === "titulo");
-  for (const x of itens) {
-    if (x.k !== "planilha") continue;
-    const codigo = x.descricao.match(/PP-\d{5}/)?.[0];
-    const t = codigo
-      ? titulos.find((t) => t.t.ref.includes(codigo) || t.descricao.includes(codigo))
-      : titulos.find((t) => !!normalizar(x.quem) && normalizar(t.quem) === normalizar(x.quem) && normalizar(t.descricao) === normalizar(x.descricao));
-    if (t) m.set(x.id, t.id);
-  }
-  return m;
+  return donosPelaRegra(
+    planilha.map((x) => ({ id: x.id, data: x.data, valor: x.valor, descricao: x.descricao, quem: x.quem })),
+    titulos.map((t) => ({ id: t.id, data: t.data, valor: t.valor, descricao: t.descricao, quem: t.quem, origem: String(t.t.origem), ref: t.t.ref })),
+  );
 }
 interface Comp {
   r: ResultadoDaLinha;
@@ -757,6 +759,7 @@ export function TabelaDeComposicoes({
   saldoBase,
   servidor,
   avisar,
+  avisarOk,
 }: {
   p: PropsDaFila;
   /** O dia aberto; nulo, todos os dias em aberto. */
@@ -766,6 +769,8 @@ export function TabelaDeComposicoes({
   saldoBase: SaldoBase | null;
   servidor: AcoesDoDia;
   avisar: (texto: string) => void;
+  /** O aviso verde do que deu certo (o "Conciliar" de uma linha, o "Conciliar tudo" sem falha). */
+  avisarOk: (texto: string) => void;
   /** Protótipo de 16/11/2026: os créditos e os débitos no topo da tabela (a opção "No topo da tabela"); nulo, não mostra. */
   totais?: { banco: { creditos: number; debitos: number }; sistema: { creditos: number; debitos: number } } | null;
 }) {
@@ -896,6 +901,8 @@ export function TabelaDeComposicoes({
   // O lançamento escolhido está em outra linha do banco: antes de mover, a
   // confirmação mostra de onde sai e para onde vai (pedido do Tiago, 10/11/2026).
   const [movendo, setMovendo] = React.useState<{ destino: Comp; id: string; trocarDe: string | null } | null>(null);
+  /** A linha de entrada com o "Recebimento antes da NF" aberto (decisão 262, D11). */
+  const [recebidoAntes, setRecebidoAntes] = React.useState<Comp | null>(null);
   // O plano de contas para o centro de custo na linha (16/11/2026), lido uma vez.
   const [plano, setPlano] = React.useState<PlanoDeContas | null>(null);
   React.useEffect(() => {
@@ -1036,7 +1043,8 @@ export function TabelaDeComposicoes({
     setResumo(false);
     const n = fila.filter((x) => resolvidas.has(x.c.r.mov.id)).length;
     const feitas = n === 1 ? "1 linha conciliada" : `${n} linhas conciliadas`;
-    avisar(falhas.length ? `${feitas}; ${falhas.length === 1 ? "1 não foi" : `${falhas.length} não foram`} (${ddmm(falhas[0].c.r.mov.data)}, ${moeda(Math.abs(falhas[0].c.r.mov.valor))}): ${falhas[0].msg}` : `${feitas} de uma vez.`);
+    if (falhas.length) avisar(`${feitas}; ${falhas.length === 1 ? "1 não foi" : `${falhas.length} não foram`} (${ddmm(falhas[0].c.r.mov.data)}, ${moeda(Math.abs(falhas[0].c.r.mov.valor))}): ${falhas[0].msg}`);
+    else avisarOk(`${feitas} de uma vez.`);
   };
 
   /** O centro de custo trocado na linha numa baixa já feita: gravado antes da conciliação da linha. */
@@ -1067,7 +1075,7 @@ export function TabelaDeComposicoes({
       if (r?.ok) {
         const fora = new Set([c.r.mov.id as string, ...(ch.tambem ? [ch.tambem] : [])]);
         setEdicoes((e) => Object.fromEntries(Object.entries(e).filter(([linha]) => !fora.has(linha))));
-        avisar(`Linha de ${ddmm(c.r.mov.data)} (${moeda(Math.abs(c.r.mov.valor))}) conciliada.`);
+        avisarOk(`Linha de ${ddmm(c.r.mov.data)} (${moeda(Math.abs(c.r.mov.valor))}) conciliada.`);
       } else avisar(r?.message ?? "Não foi possível conciliar.");
     } catch (e) {
       avisar(String((e as Error)?.message ?? e));
@@ -1232,6 +1240,7 @@ export function TabelaDeComposicoes({
       gravando={!!gravando}
       onUsar={() => usar(c)}
       onDispensar={() => editar(c, [])}
+      onRecebidoAntes={() => setRecebidoAntes(c)}
       pedeABaixa={semUmClique.has(c.r.mov.id)}
       motivoDoCompletar={semUmClique.has(c.r.mov.id) ? motivoDoCompletar(c) : null}
       onCentro={(id, centro) => editarCentro(c, id, centro)}
@@ -1426,6 +1435,21 @@ export function TabelaDeComposicoes({
           andamento={andamento}
           onFechar={() => !andamento && setResumo(false)}
           onConfirmar={conciliarTudo}
+        />
+      )}
+
+      {recebidoAntes && (
+        <RecebidoAntesDaLinha
+          c={recebidoAntes}
+          conta={p.banco.conta}
+          plano={plano}
+          onFechar={() => setRecebidoAntes(null)}
+          onFeito={(mensagem) => {
+            const id = recebidoAntes.r.mov.id as string;
+            setEdicoes((e) => Object.fromEntries(Object.entries(e).filter(([linha]) => linha !== id)));
+            setRecebidoAntes(null);
+            avisarOk(mensagem);
+          }}
         />
       )}
 
@@ -2336,6 +2360,203 @@ function CelulasDaSugestao({ c, p, dataDoBanco, onAbrir, dispensar, campo }: { c
   );
 }
 
+/**
+ * O recebimento antes da NF pela linha do banco (decisão 262, D11; pendência
+ * D16 da decisão 260). O mesmo registro da decisão 256 (a nota do envio
+ * esperando nota, o job sem envio ou o BV), com a data, o valor e a conta da
+ * linha; o banco grava e concilia a linha na mesma transação. O internacional
+ * fica no Recebimento avulso, que pede a cotação, o IOF e a tarifa.
+ */
+function RecebidoAntesDaLinha({
+  c,
+  conta,
+  plano,
+  onFechar,
+  onFeito,
+}: {
+  c: Comp;
+  conta: { nome: string; banco: string };
+  /** O plano de contas da tabela (o diálogo fica fora do provedor dela). */
+  plano: PlanoDeContas | null;
+  onFechar: () => void;
+  onFeito: (mensagem: string) => void;
+}) {
+  const [alvos, setAlvos] = React.useState<AlvoDaConciliacao[] | null>(null);
+  const [erroCarga, setErroCarga] = React.useState<string | null>(null);
+  const [escolhido, setEscolhido] = React.useState<string | null>(null);
+  const [tipoId, setTipoId] = React.useState<string | null>(null);
+  const [subtipoId, setSubtipoId] = React.useState<string | null>(null);
+  const [erro, setErro] = React.useState<string | null>(null);
+  const [gravando, setGravando] = React.useState(false);
+  React.useEffect(() => {
+    let vivo = true;
+    carregarAlvosDoRecebimentoAntesNf()
+      .then((r) => {
+        if (!vivo) return;
+        if (r.ok) setAlvos(r.alvos);
+        else setErroCarga(r.message);
+      })
+      .catch(() => vivo && setErroCarga("Não foi possível abrir os jobs. Tente de novo."));
+    return () => {
+      vivo = false;
+    };
+  }, []);
+
+  const mov = c.r.mov;
+  const valor = Math.abs(mov.valor);
+  const escolha = alvos?.find((a) => a.chave === escolhido) ?? null;
+  const limite = escolha ? Math.max(0, r2(escolha.saldo - somaDosRecebidos(escolha.recebidos))) : 0;
+  const passa = !!escolha && valor > limite + 0.004;
+  const tipos = plano?.tipos ?? [];
+  const subtipos = (plano?.subtipos ?? []).filter((s) => s.tipo_id === tipoId);
+
+  const gravar = async () => {
+    setErro(null);
+    if (!escolha) return setErro("Escolha o job ou o BV.");
+    if (escolha.cambio) return setErro("Recebimento internacional: registre pelo Recebimento avulso, que pede a cotação, o IOF e a tarifa do câmbio.");
+    if (passa) return setErro(`O valor da linha passa do saldo a faturar ${escolha.ehBv ? "do BV" : escolha.jobId ? "do job" : "da nota"} (${moeda(limite)}).`);
+    if (!tipoId || !subtipoId) return setErro("Selecione o centro de custo do recebimento.");
+    setGravando(true);
+    try {
+      const r = await registrarRecebimentoAntesNfPelaLinha({
+        linhaId: mov.id as string,
+        envioNotaId: escolha.envioNotaId,
+        itemBvId: escolha.itemBvId,
+        jobId: escolha.jobId,
+        tipoId,
+        subtipoId,
+      });
+      if (!r.ok) return setErro(r.message);
+      onFeito(r.mensagem ?? "Recebimento antes da NF registrado e conciliado com a linha.");
+    } catch (e) {
+      setErro(String((e as Error)?.message ?? e));
+    } finally {
+      setGravando(false);
+    }
+  };
+
+  return (
+    <Dialog open onOpenChange={(o) => !o && !gravando && onFechar()}>
+      <DialogContent className="sm:max-w-[600px]">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <HandCoins className="h-5 w-5 text-amber-700" />
+            Recebimento antes da NF
+          </DialogTitle>
+          <DialogDescription>
+            O cliente pagou antes de a nota sair. A data, o valor e a conta vêm desta linha do banco: escolha o job (ou o BV) e o centro de custo. A linha
+            fica conciliada com o recebimento.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-1.5 rounded-xl border border-border bg-muted/50 p-4 text-[13px]">
+          <span className="text-muted-foreground">Data</span>
+          <span className="font-mono">
+            {ddmm(mov.data)}/{mov.data.slice(0, 4)}
+          </span>
+          <span className="text-muted-foreground">Valor</span>
+          <span className="font-mono font-bold text-emerald-700">{moeda(valor)}</span>
+          <span className="text-muted-foreground">Conta</span>
+          <span>
+            {conta.nome}
+            {conta.banco ? ` · ${conta.banco}` : ""}
+          </span>
+          <span className="text-muted-foreground">No banco</span>
+          <span className="truncate font-mono text-[12px]" title={mov.historico}>
+            {mov.historico}
+          </span>
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-semibold">
+            Job ou BV <span className="text-california-red">*</span>
+          </label>
+          {alvos === null && !erroCarga ? (
+            <div className="flex h-11 items-center gap-2 rounded-lg border border-border px-3 text-[13px] text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Lendo os jobs que esperam nota…
+            </div>
+          ) : (
+            <Combobox
+              items={(alvos ?? []).map((a) => ({ value: a.chave, label: a.rotulo, descricao: a.descricao, busca: a.busca }))}
+              value={escolhido}
+              onChange={(v) => {
+                setEscolhido(v ?? null);
+                setErro(null);
+              }}
+              placeholder="Selecione o job ou o BV"
+              buscaPlaceholder="Escreva o código, o nome ou o cliente"
+              className={COMBOBOX_COMO_SELECT}
+            />
+          )}
+          {escolha && (
+            <p className={cn("text-[12px]", passa || escolha.cambio ? "font-semibold text-california-red" : "text-muted-foreground")}>
+              {escolha.cambio
+                ? "Recebimento internacional: o câmbio pede a cotação, o IOF e a tarifa, que esta linha não tem. Registre pelo Recebimento avulso."
+                : passa
+                  ? `O valor da linha (${moeda(valor)}) passa do saldo a faturar ${escolha.ehBv ? "do BV" : escolha.jobId ? "do job" : "da nota"} (${moeda(limite)}).`
+                  : escolha.jobId
+                    ? `Sem envio: o recebimento fica preso ao job, e o Novo faturamento associa à nota. Falta faturar ${moeda(limite)}.`
+                    : escolha.ehBv
+                      ? `BV de ${escolha.contraparte}: ${moeda(limite)} a faturar.`
+                      : `Vai para a ${escolha.notaRotulo} do envio do GP, com saldo de ${moeda(limite)}. Na emissão da nota, entra como a parcela 1, já recebida.`}
+            </p>
+          )}
+        </div>
+        <div className="space-y-1.5">
+          <label className="text-sm font-semibold">
+            Centro de custo do recebimento <span className="text-california-red">*</span>
+          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <Combobox
+              items={tipos.map((t) => ({ value: t.id, label: `${t.codigo} · ${t.nome}` }))}
+              value={tipoId}
+              onChange={(v) => {
+                setTipoId(v ?? null);
+                setSubtipoId(null);
+                setErro(null);
+              }}
+              placeholder="Tipo..."
+              buscaPlaceholder="Buscar o tipo"
+              className={COMBOBOX_COMO_SELECT}
+            />
+            <Combobox
+              items={subtipos.map((t) => ({ value: t.id, label: `${t.codigo} · ${t.nome}` }))}
+              value={subtipoId}
+              onChange={(v) => {
+                setSubtipoId(v ?? null);
+                setErro(null);
+              }}
+              placeholder={tipoId ? "Subtipo..." : "Escolha o tipo primeiro"}
+              buscaPlaceholder="Buscar o subtipo"
+              disabled={!tipoId}
+              className={COMBOBOX_COMO_SELECT}
+            />
+          </div>
+        </div>
+        {(erro || erroCarga) && (
+          <div className="flex items-start gap-2 rounded-lg border border-california-red/35 bg-california-red/[0.06] px-3 py-2.5 text-[12.5px] text-california-red">
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>{erro ?? erroCarga}</span>
+          </div>
+        )}
+        <DialogFooter>
+          <button type="button" onClick={onFechar} disabled={gravando} className="inline-flex h-9 items-center rounded-lg border border-border bg-white px-3 text-sm font-semibold hover:bg-muted disabled:opacity-50">
+            Cancelar
+          </button>
+          <button
+            type="button"
+            onClick={gravar}
+            disabled={gravando || !escolha}
+            className="inline-flex h-9 items-center gap-2 rounded-lg bg-california-red px-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+          >
+            {gravando && <Loader2 className="h-4 w-4 animate-spin" />}
+            Registrar e conciliar
+          </button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** A Ação da linha: "Usar" a sugestão (opção A); "Completar" a linha que pede a
  *  baixa completa. A acertada não tem botão: vai no "Conciliar tudo". */
 function AcaoDaLinha({ c, onUsar, pedeABaixa, motivo, onCompletar, onConciliarUma, ocupado }: { c: Comp; onUsar: () => void; pedeABaixa: boolean; motivo: string | null; onCompletar: () => void; onConciliarUma: () => void; ocupado: boolean }) {
@@ -2406,6 +2627,7 @@ function LinhaDoBanco({
   gravando,
   onUsar,
   onDispensar,
+  onRecebidoAntes,
   pedeABaixa,
   motivoDoCompletar,
   onCentro,
@@ -2430,6 +2652,8 @@ function LinhaDoBanco({
   onUsar: () => void;
   /** A linha fica vazia, sem a sugestão (o ⋯ a traz de volta). */
   onDispensar: () => void;
+  /** O "Recebimento antes da NF" do ⋯ da linha de entrada (decisão 262, D11). */
+  onRecebidoAntes: () => void;
   /** Acertada, mas não vai no "Conciliar tudo": pede a baixa completa (centro de custo, retenção, mútuo). */
   pedeABaixa: boolean;
   /** Por que pede (a dica do "Completar"). */
@@ -2461,6 +2685,8 @@ function LinhaDoBanco({
   const menu: AcaoDescrita[] = [
     // 16/11/2026 (Tiago): sem o texto embaixo do nome; o nome se explica.
     { rotulo: "Lançar avulso", icone: FilePlus2, onClick: () => p.acoes.lancarAvulso(r) },
+    // Decisão 262, D11: o recebimento antes da NF direto da linha de entrada.
+    ...(r.mov.valor > 0 ? [{ rotulo: "Recebimento antes da NF", icone: HandCoins, onClick: onRecebidoAntes }] : []),
     { rotulo: "Criar uma regra para este histórico", icone: Wand2, onClick: () => p.acoes.criarRegra(r) },
     ...(c.editada ? [{ rotulo: "Desfazer o acerto desta linha", dica: "A linha volta a ficar sem lançamento, com a sugestão do sistema.", icone: RotateCcw, onClick: onDesfazerEdicao }] : []),
     { rotulo: "Ignorar esta linha", icone: CircleSlash, onClick: () => p.acoes.ignorar(r), perigo: true },

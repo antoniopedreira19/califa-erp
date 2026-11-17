@@ -1,11 +1,12 @@
 /**
  * As contas da conciliação dia a dia (decisão 254), sem tela e sem banco:
- * a ordem do extrato, o saldo do banco depois de cada linha e os dias da
- * conta com o que falta em cada um.
+ * a ordem do extrato, o saldo do banco depois de cada linha, os dias da
+ * conta e os meses (decisão 262) com o que falta em cada um.
  */
 
 import { formatBRL } from "@/lib/format";
 import type { SaldoDoDiaEmAberto } from "@/lib/types";
+import { fimDoMesDe, nomeDoMes } from "./fechamento";
 
 /** A ordem do extrato: o dia e, dentro dele, a ordem em que o banco mandou. */
 export const naOrdemDoExtrato = (
@@ -110,14 +111,52 @@ export function avisoDoSaldo(saldos: SaldoDoDia[], data: string): string | null 
   return `O saldo de ${data.slice(8, 10)}/${data.slice(5, 7)} não bate: banco ${formatBRL(s.saldo_banco)}, sistema ${formatBRL(s.saldo_sistema)} (diferença de ${formatBRL(Math.abs(s.diferenca))}).`;
 }
 
-/** Por que o dia ainda não fecha; nulo, pode fechar. O saldo vem por último: primeiro as pendências. */
-export function motivoDeNaoFechar(dias: DiaDaConta[], data: string, saldos: SaldoDoDia[]): string | null {
-  const dia = dias.find((d) => d.data === data);
-  if (!dia || dia.estado === "fechado") return null;
-  if (dia.estado === "andamento") return "O extrato deste dia ainda não está completo: o arquivo foi gerado no próprio dia.";
+/** Um mês com dia em aberto, na linha dos meses (decisão 262): o que falta para fechar. */
+export interface MesDaConta {
+  /** "2026-10". */
+  mes: string;
+  /** O último dia do mês: o "Fechar outubro" fecha até ele. */
+  fim: string;
+  dias: DiaDaConta[];
+  /** O que falta para o mês fechar; vazio, pode fechar. */
+  faltas: string[];
+}
+
+/**
+ * Os meses com dia em aberto, em ordem, com o que falta em cada um (decisão
+ * 262): as mesmas condições do fechamento, olhadas no último dia do mês. Os
+ * meses fecham em ordem; o saldo vem por último, depois das pendências.
+ */
+export function mesesDaConta(dias: DiaDaConta[], saldos: SaldoDoDia[], completoAte: string | null): MesDaConta[] {
   const ddmm = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
-  const anteriores = dias.filter((d) => d.data < data && d.estado !== "fechado" && d.pendentes > 0);
-  if (anteriores.length) return `Resolva antes ${anteriores.map((d) => ddmm(d.data)).join(", ")}: a conta fecha um dia depois do outro.`;
-  if (dia.pendentes > 0) return `${dia.pendentes === 1 ? "Falta 1 item" : `Faltam ${dia.pendentes} itens`} para fechar este dia.`;
-  return avisoDoSaldo(saldos, data);
+  const por = new Map<string, DiaDaConta[]>();
+  for (const d of dias) if (d.estado !== "fechado") por.set(d.data.slice(0, 7), [...(por.get(d.data.slice(0, 7)) ?? []), d]);
+  const meses: MesDaConta[] = [];
+  for (const [mes, ds] of [...por.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+    const fim = fimDoMesDe(ds[0].data);
+    const faltas: string[] = [];
+    const anterior = meses[meses.length - 1];
+    if (anterior) faltas.push(`Feche ${nomeDoMes(anterior.fim)} antes: os meses fecham em ordem.`);
+    const comPendencia = ds.filter((d) => d.pendentes > 0);
+    const itens = comPendencia.reduce((t, d) => t + d.pendentes, 0);
+    if (comPendencia.length)
+      faltas.push(
+        `${itens === 1 ? "Falta 1 item" : `Faltam ${itens} itens`} em ${comPendencia.length === 1 ? "1 dia" : `${comPendencia.length} dias`} (${comPendencia
+          .slice(0, 6)
+          .map((d) => ddmm(d.data))
+          .join(", ")}${comPendencia.length > 6 ? "…" : ""}).`,
+      );
+    if (!completoAte || completoAte < fim)
+      faltas.push(
+        completoAte
+          ? `O extrato importado vai até ${ddmm(completoAte)}: o mês fecha quando o extrato chegar a ${ddmm(fim)}.`
+          : "Importe o extrato do banco do mês inteiro.",
+      );
+    if (!faltas.length) {
+      const saldo = avisoDoSaldo(saldos, ds[ds.length - 1].data);
+      if (saldo) faltas.push(saldo);
+    }
+    meses.push({ mes, fim, dias: ds, faltas });
+  }
+  return meses;
 }

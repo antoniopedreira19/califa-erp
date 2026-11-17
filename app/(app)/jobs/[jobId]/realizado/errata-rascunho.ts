@@ -1091,6 +1091,9 @@ export function useRascunhoErrata(
         }),
         cancelamentos: canceladas,
         estrutura: estruturaDoPayload(),
+        // Decisão 219: os meses novos também não moram aqui — a seção da
+        // planilha os põe por cima (`mesesNovosDoPayload`).
+        meses_novos: [],
         // Decisão 233: os parâmetros do job não moram no rascunho das
         // linhas — a seção da planilha os põe por cima.
         parametros: null,

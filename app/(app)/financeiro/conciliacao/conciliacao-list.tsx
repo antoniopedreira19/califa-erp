@@ -30,6 +30,7 @@ import {
 import { cn } from "@/lib/utils";
 import { abrirDocumentoDoLancamento } from "./actions-documento";
 import { ORIGEM_DA_CAUDA } from "./cauda-no-extrato";
+import { ORIGEM_DO_AJUSTE } from "./extrato-antes-do-inicio";
 import {
   BarraDosFiltrosDeColuna,
   celulaData,
@@ -191,6 +192,7 @@ export function ConciliacaoList({
   contexto = "",
   contaId,
   banco = null,
+  ajusteDeAbertura,
 }: {
   linhas: LancamentoLinha[];
   highlight?: string;
@@ -212,6 +214,8 @@ export function ConciliacaoList({
   contaId: string;
   /** `null`: a conta não tem extrato do banco importado (sem a coluna Banco). */
   banco?: MarcasDoBanco | null;
+  /** O ajuste de abertura (16/11/2026): de onde vem a linha, para a dica dela. */
+  ajusteDeAbertura?: { inicio: string; saldoInicial: number; historicoNaVespera: number };
 }) {
   const rowRefs = React.useRef<Record<string, HTMLTableRowElement | null>>({});
   const [abertos, setAbertos] = React.useState<Set<string>>(() => new Set());
@@ -317,6 +321,8 @@ export function ConciliacaoList({
     const estornada = l.estornada;
     // A cauda do histórico da planilha (decisão 211, A6): só leitura.
     const daCauda = l.origem === ORIGEM_DA_CAUDA;
+    // O ajuste de abertura (16/11/2026): calculado, só leitura, fora do DRE.
+    const doAjuste = l.origem === ORIGEM_DO_AJUSTE;
     const jobParaColuna = derivarJobParaColuna(l);
     const itens = itensDasFaturas[l.id] ?? [];
     // A guia de imposto abre no rateio; a fatura, nos itens.
@@ -337,6 +343,7 @@ export function ConciliacaoList({
         className={cn(
           "border-b border-border last:border-0 transition-colors hover:bg-muted/30",
           aberta && "bg-muted/20",
+          doAjuste && "bg-amber-50/70",
         )}
       >
         {comBanco && (
@@ -361,7 +368,31 @@ export function ConciliacaoList({
           {formatMoney(l.saldo)}
         </td>
         <td className={cn("px-3 py-2 text-xs", estornada && "text-muted-foreground line-through")}>
-          <span className="break-words">{limparPrefixoDescricao(l.descricao, l.origem)}</span>
+          {doAjuste && ajusteDeAbertura ? (
+            <Dica
+              conteudo={
+                <span className="block max-w-xs space-y-1">
+                  <span className="block">
+                    Saldo inicial do banco em {formatDate(ajusteDeAbertura.inicio)}:{" "}
+                    {formatMoney(ajusteDeAbertura.saldoInicial)}.
+                  </span>
+                  <span className="block">
+                    Histórico da planilha e baixas do sistema até a véspera:{" "}
+                    {formatMoney(ajusteDeAbertura.historicoNaVespera)}.
+                  </span>
+                  <span className="block">
+                    A diferença diminui sozinha à medida que os lançamentos que faltam entram no histórico. O saldo a
+                    partir de {formatDate(ajusteDeAbertura.inicio)} não muda.
+                  </span>
+                </span>
+              }
+              className="break-words font-semibold text-amber-800 underline decoration-dotted underline-offset-2"
+            >
+              {l.descricao}
+            </Dica>
+          ) : (
+            <span className="break-words">{limparPrefixoDescricao(l.descricao, l.origem)}</span>
+          )}
           {(jurosDasBaixas[l.id] ?? 0) > 0 && (
             <span className="text-[10px] text-muted-foreground">
               {" "}· inclui {formatMoney(jurosDasBaixas[l.id])} de juros
@@ -400,8 +431,10 @@ export function ConciliacaoList({
           </span>
         </td>
         <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
-          {daCauda ? (
-            <span className="font-sans italic text-violet-700" title="Job até o 3T fora do sistema: está no histórico da planilha">
+          {doAjuste ? (
+            <span className="text-muted-foreground">—</span>
+          ) : daCauda ? (
+            <span className="font-sans italic text-violet-700" title="Linha do histórico da planilha, só para leitura">
               Histórico
             </span>
           ) : jobParaColuna.tipo === "link" ? (
@@ -434,7 +467,11 @@ export function ConciliacaoList({
           )}
         </td>
         <td className="px-3 py-2 text-xs">
-          {itens.length > 0 ? (
+          {doAjuste ? (
+            <span className="block truncate italic text-muted-foreground" title="Ajuste de abertura · fora do DRE">
+              Fora do DRE
+            </span>
+          ) : itens.length > 0 ? (
             <Dica
               conteudo={<CentrosDaFatura centros={centrosDosItens(itens)} />}
               className="block w-full truncate italic text-muted-foreground underline decoration-dotted underline-offset-2"
@@ -483,7 +520,7 @@ export function ConciliacaoList({
           )}
         </td>
         <td className="px-2 py-2 text-center">
-          {!daCauda && (
+          {!daCauda && !doAjuste && (
           <BotaoDetalhes
             chave={`lancamento|${l.id}`}
             titulo={limparPrefixoDescricao(l.descricao, l.origem)}

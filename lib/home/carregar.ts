@@ -267,7 +267,7 @@ export async function carregarHomeAdmin(
       titulo: "Desembolsos em avaliação",
       contagem: desembolsosEmAvaliacao.count ?? 0,
       subtitulo: "Solicitações aguardando aprovação",
-      href: "/financeiro/desembolsos?filtro=avaliacao",
+      href: "/financeiro/contas-a-pagar?tab=desembolsos",
       icone: Wallet,
     },
     {
@@ -466,7 +466,7 @@ export async function carregarHomeFinanceiro(
       titulo: "Desembolsos em avaliação",
       contagem: desembolsosEmAvaliacao.count ?? 0,
       subtitulo: "Solicitações aguardando aprovação",
-      href: "/financeiro/desembolsos?filtro=avaliacao",
+      href: "/financeiro/contas-a-pagar?tab=desembolsos",
       icone: Wallet,
     },
     {

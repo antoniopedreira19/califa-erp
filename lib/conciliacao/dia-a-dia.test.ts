@@ -8,7 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { avisoDoSaldo, diasDaConta, motivoDeNaoFechar, saldosDoExtrato } from "./dia-a-dia";
+import { avisoDoSaldo, diasDaConta, mesesDaConta, saldosDoExtrato } from "./dia-a-dia";
 
 const l = (id: string, data: string, ordem: number, valor: number) => ({ id, data, ordem, valor });
 
@@ -70,30 +70,48 @@ test("os dias da conta: fechado, pronto, pendente e em andamento", () => {
       ["2026-11-07", 1, 1, "andamento"],
     ],
   );
-  assert.equal(motivoDeNaoFechar(dias, "2026-11-04", []), null);
-  assert.equal(motivoDeNaoFechar(dias, "2026-11-05", []), "Faltam 2 itens para fechar este dia.");
-  // O dia 06 está pronto, mas fechar é fechar ATÉ ele: o 05 vem antes.
-  assert.equal(motivoDeNaoFechar(dias, "2026-11-06", []), "Resolva antes 05/11: a conta fecha um dia depois do outro.");
-  assert.match(motivoDeNaoFechar(dias, "2026-11-07", []) ?? "", /ainda não está completo/);
 });
 
-test("o cadeado avisa o saldo que não bate antes do clique, depois das pendências", () => {
-  const dias = diasDaConta([linha("2026-11-04", false), linha("2026-11-05", true), linha("2026-11-06", false)], null, "2026-11-06");
+test("o saldo do dia que não bate é avisado na hora", () => {
   const saldos = [
     { data: "2026-11-04", saldo_banco: 91358.08, saldo_sistema: 91348.08, diferenca: 10 },
-    { data: "2026-11-05", saldo_banco: 500, saldo_sistema: 400, diferenca: 100 },
     { data: "2026-11-06", saldo_banco: null, saldo_sistema: 400, diferenca: null },
   ];
   const sem = (t: string | null) => (t ?? "").replace(/\u00a0/g, " ");
-  // Sem pendência e com o saldo diferente: o motivo é o saldo, com os dois valores.
-  assert.equal(sem(motivoDeNaoFechar(dias, "2026-11-04", saldos)), "O saldo de 04/11 não bate: banco R$ 91.358,08, sistema R$ 91.348,08 (diferença de R$ 10,00).");
-  // Com pendência, ela vem antes do saldo.
-  assert.equal(motivoDeNaoFechar(dias, "2026-11-05", saldos), "Falta 1 item para fechar este dia.");
+  assert.equal(sem(avisoDoSaldo(saldos, "2026-11-04")), "O saldo de 04/11 não bate: banco R$ 91.358,08, sistema R$ 91.348,08 (diferença de R$ 10,00).");
   // O extrato sem saldo também é recusado pelo servidor.
   assert.match(avisoDoSaldo(saldos, "2026-11-06") ?? "", /não informa o saldo do banco/);
   // Batendo (ou com diferença de arredondamento), nada a avisar; dia que o servidor não informou, também não.
   assert.equal(avisoDoSaldo([{ data: "2026-11-04", saldo_banco: 100, saldo_sistema: 100, diferenca: 0 }], "2026-11-04"), null);
   assert.equal(avisoDoSaldo(saldos, "2026-11-10"), null);
+});
+
+test("os meses: o que falta em cada um, em ordem, e o saldo por último", () => {
+  const dias = diasDaConta(
+    [linha("2026-09-30", false), linha("2026-10-05", false), linha("2026-10-30", false), linha("2026-11-03", true), linha("2026-11-04", true), linha("2026-11-10", false)],
+    "2026-09-30",
+    "2026-11-09",
+  );
+  const meses = mesesDaConta(dias, [], "2026-11-09");
+  // Setembro está fechado: não aparece.
+  assert.deepEqual(meses.map((m) => [m.mes, m.fim, m.dias.length]), [
+    ["2026-10", "2026-10-31", 2],
+    ["2026-11", "2026-11-30", 3],
+  ]);
+  // Outubro todo conciliado e o extrato passa de 31/10: fecha.
+  assert.deepEqual(meses[0].faltas, []);
+  assert.deepEqual(meses[1].faltas, [
+    "Feche outubro antes: os meses fecham em ordem.",
+    "Faltam 2 itens em 2 dias (03/11, 04/11).",
+    "O extrato importado vai até 09/11: o mês fecha quando o extrato chegar a 30/11.",
+  ]);
+  // O saldo do último dia do mês que não bate segura o mês, depois das pendências.
+  const saldo = [{ data: "2026-10-30", saldo_banco: 500, saldo_sistema: 400, diferenca: 100 }];
+  assert.match(mesesDaConta(dias, saldo, "2026-11-09")[0].faltas.join(" "), /O saldo de 30\/10 não bate/);
+  // Sem extrato do mês inteiro, não fecha.
+  assert.deepEqual(mesesDaConta(diasDaConta([linha("2026-10-05", false)], null, "2026-10-29"), [], "2026-10-29")[0].faltas, [
+    "O extrato importado vai até 29/10: o mês fecha quando o extrato chegar a 31/10.",
+  ]);
 });
 
 test("sem extrato completo, nenhum dia fecha", () => {

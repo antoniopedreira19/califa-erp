@@ -9109,3 +9109,64 @@ não volta. Detalhes em `HANDOFF_ORCAMENTO.md` e na decisão 210.
 
 - O envio em lote passou a mandar o **vencimento, as parcelas e o CNAE de cada nota** (antes eram os mesmos para todas). A fila e o Faturar já liam por nota: a nota do lote chega com as parcelas e o "Sugerido pelo GP" dela.
 - O envio só pede o CNPJ. O **nome do tomador** vem quando o CNPJ é o do cliente (ou o de um envio copiado); com outro CNPJ, vem vazio. O tipo (`tomador_nome` em `faturamento-list.tsx` e `page.tsx`) passou a `string | null`, e o Faturar mostra "Veio do envio em lote de …", sem "Tomador:" vazio.
+
+## ⚠️ Nota de 2026-11-16 — Conciliação automática: acertar a linha e conciliar no fim, centro de custo na linha, fechamento por mês e recebimento antes da NF pela linha (decisão 262)
+
+- **Parte 1 (no main em `1519fb52`):** a linha vem vazia; a sugestão do sistema é a 1ª opção do "Adicionar lançamento", e a linha da planilha de uma PP ou de um custo fixo não é oferecida (vem o título). O ajuste da diferença é escolhido embaixo da linha, inclusive "Corrigir o valor do título" (`corrigir_valor_do_titulo_pela_linha`). O acerto de cada linha fica no banco (`conciliacao_acertos`) até "Conciliar" ou "Conciliar tudo o que foi acertado". Sem a coluna Status: filtros Pendentes, A completar, A conciliar e Conciliadas. Tipo e Subtipo são campos de busca em qualquer lançamento (`conciliacao_centros`, `trocar_centro_dos_lancamentos`, `trocar_centro_das_previsoes`). O quadro do dia mostra os débitos e os créditos. Migration `20261116950001_conciliacao_acerto_e_centro_na_linha.sql`.
+- **Parte 2, o fechamento por mês:** o dia não fecha mais (✓ no lugar do cadeado; o dia fechado sai da barra). A **linha dos meses**, acima da barra de dias, mostra os meses fechados, o "Reabrir" do último e cada mês aberto com "Fechar outubro" (`fechar_conciliacao` até o fim do mês, sem mudança no banco). A dica do botão diz o que falta. "Reabrir outubro" chama `reabrir_mes_da_conciliacao`: setembro continua fechado se já tinha sido fechado alguma vez (coluna `reabertura_de`); se não, a conta fica toda aberta. No Extrato e nos Títulos, a faixa "Os meses" substitui o banner do fechamento; na Conciliação automática, a faixa sai. Migration `20261116960001_conciliacao_reabrir_mes_a_mes.sql`.
+- **Correção da parte 1:** o aviso do "Conciliar" de uma linha (e do "Conciliar tudo" sem falha) saía em vermelho, como erro; agora sai em verde (`avisarOk`).
+- **Parte 3, o recebimento antes da NF pela linha:** no ⋯ da linha de entrada da Conciliação automática, "Recebimento antes da NF": a data, o valor e a conta vêm da linha, escolhe-se o job (ou o BV) e o centro de custo, e "Registrar e conciliar" grava e concilia numa transação (`registrar_recebimento_antes_nf_pela_linha`). O internacional continua no Recebimento avulso. O Desfazer da linha cancela o recebimento (`_cancelamento_da_baixa` ganhou o caso `recebimento_antes_nf`). Migration `20261116970001_conciliacao_recebimento_antes_nf_pela_linha.sql`.
+
+## ⚠️ Nota de 2026-11-16 — Conciliação: sem o seletor Ecossistema × Teste; contas de teste no Sandbox (revisão da decisão 091)
+
+Regra completa na seção 10 da decisão 091. A nota de 2026-10-16 (4) vale só como história.
+
+- **O seletor "Ecossistema California × Teste" saiu** da lista de contas da Conciliação: ela mostra todas as contas do tenant aberto. Teste mora no Sandbox, e o tenant já separa.
+- **As contas "Teste" e "Conta Teste Presumido" foram para o Sandbox** (migration `20261116980001_contas_de_teste_para_o_sandbox.sql`). Tinham ficado na produção na mudança de 10/11, sem empresa visível (grupo "—"), somando R$ 127.809,53 no consolidado. Na produção: 15 contas, consolidado de −R$ 3.567.042,48 em 16/11. No Sandbox, a "Teste" passou a contar os próprios lançamentos (R$ 41.031,77).
+- **Pendente com o Tiago:** os cartões "ZZ Teste Empresa Teste" e "ZZ Teste Fatia 2" seguem na produção, com 8 PPs reais apontando para eles.
+
+## ⚠️ Nota de 2026-11-16 — Extrato contínuo com o ajuste de abertura (revisão da decisão 211, A3)
+
+Regra completa na seção "O Extrato contínuo e o ajuste de abertura" da decisão 211.
+
+- **Nas oito contas do recomeço de 03/11** (`contas_bancarias.saldo_inicial_do_banco`), o Extrato é um só, com um conjunto de cartões e saldo contínuo: antes do início, o histórico da planilha (período e cauda) e as baixas do sistema com data anterior; na véspera, a linha **"Ajuste de abertura · diferença a identificar"** (âmbar, fora do DRE), que leva o saldo ao saldo inicial do banco.
+- **O ajuste é calculado** (`extrato_antes_do_inicio`): diminui sozinho quando o que falta entra no histórico ou uma baixa antiga é ligada à linha da planilha. O saldo de hoje, a lista da Conciliação, o fechamento e o DRE não mudam.
+- Em 16/11: R$ 2.485.246,11 a identificar nos quatro pares (California Santander + ContaMax R$ 701.469,62; BB + Rende Fácil R$ 1.690.482,00; GoCrazy R$ 145.270,69; Hitlab −R$ 51.976,20).
+- As outras contas (sem o saldo do banco) seguem com os dois blocos até receberem o saldo do extrato.
+- **Migration** `20261116980002_ajuste_de_abertura_no_extrato.sql`.
+
+## ⚠️ Nota de 2026-11-16 — cartões de teste inativados na produção
+
+- **"ZZ Teste Empresa Teste" e "ZZ Teste Fatia 2" inativados** (migration `20261116980003_inativar_cartoes_de_teste_na_producao.sql`, OK do Tiago), o mesmo que o "Inativar" do cadastro, com a auditoria `cartao_credito.inativado`. As contas-espelho seguiram pelo gatilho.
+- Estavam ativos na produção e oito PPs reais foram aprovadas neles: PP-00044, PP-00210 (paga), PP-00824, PP-00950, PP-00272, PP-00719, PP-01084 e PP-01192. Nada nelas mudou: na baixa das 7 aprovadas, o diálogo não pré-escolhe mais o cartão de teste e o financeiro escolhe o certo.
+- **Pendente com o Tiago:** a PP-00210 (R$ 8.000,00) está paga na fatura aberta FC-00002 do "ZZ Teste Fatia 2"; falta decidir o cartão certo dela.
+
+## ⚠️ Nota de 2026-11-16 — Fundo Fixo California passa a Investimento
+
+- O tipo da conta "Fundo Fixo California" mudou de **caixa** para **investimento** (migration `20261116980004_fundo_fixo_como_investimento.sql`, pedido do Tiago: a conta não é usada no dia a dia como caixa). Auditado como a edição do cadastro.
+- Na lista da Conciliação, o grupo "Caixa" sumiu (não há outra conta do tipo) e o fundo entra em "Investimento". Ele passa a ser opção de conta de aplicação no rendimento do recebimento avulso. Pagar, baixar e conciliar seguem iguais.
+- O saldo continua −R$ 911,20 até o saldo inicial ser informado (a planilha diz R$ 46.088,59 em 30/09).
+
+## ⚠️ Nota de 2026-11-17 — baixa de PP pelo histórico aceita parcial (revisão da decisão 261)
+
+- `baixar_parcela_pp_pelo_historico` aceita linhas que somem menos que o que falta: a baixa é parcial, uma por dia de pagamento (migration `20261117100001_baixa_pelo_historico_parcial.sql`).
+- Usada na PP-00298: a baixa única de 05/11 (sem linha do banco) foi cancelada e refeita em 01/10 e 05/10, como na planilha; o pagamento foi para antes do início da conta e o ajuste de abertura da California Santander passou a R$ 2.409.607,84.
+- PP-00634 (12/11, R$ 4.500): a linha do banco estava ligada à linha da planilha (sem o código da PP) e a baixa tinha sido dada à mão depois, contando duas vezes. A linha foi ligada à baixa.
+
+## ⚠️ Nota de 2026-11-17 — Conciliação automática: a PP reconhecida na linha da planilha sem o código certo (revisão da decisão 262, D2)
+
+- A linha da planilha que é de uma PP aberta deixa de ser oferecida também quando o código vem sem hífen ("PP00634", "PP 634") e quando não há código mas o valor e o titular batem (nome mais curto é o começo do outro, até 20 dias da data prevista, par único). No lugar dela vem a PP.
+- Motivo: o caso da PP-00634 em 16/11 (conciliada pela linha da planilha sem código; baixa dada à mão depois, pagamento em dobro).
+- Código em `lib/conciliacao/planilha-de-titulo.ts` (8 testes).
+
+## ⚠️ Nota de 2026-11-17 — o pedido de desembolso com comprovante e a NF no cadastro de notas (decisão 264)
+
+Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer de criação, lista com botões na linha, página de detalhe).
+
+- **Módulo Desembolsos** (`/financeiro/desembolsos`): só os pedidos de quem está usando, em qualquer papel (a RLS também). Formulário vertical em quatro partes, com a empresa e a regional da alocação no RH (`minha_alocacao_vigente`), a data de pagamento pela regra da PP (janelas, prazo de envio, quarta de exceções com urgência e justificativa) e o comprovante obrigatório com as peças do anexo da PP. Rejeitado → "Corrigir" fora da tabela → reenvio com o mesmo código. O endereço antigo `/financeiro/desembolsos/[id]` redireciona para a tela do pedido (o financeiro, para a aba do Contas a Pagar).
+- **Contas a Pagar › Desembolsos:** grade fixa (Código, Valor, Parcela, Descrição, Quem recebe, Enviado por, Regional, Pagamento, Status), seção "Urgentes", filtro por coluna. O clique abre a tela cheia (comprovante + dados); o rodapé rejeita, segue para a aprovação (data, forma e cartão) ou reverte.
+- **NF:** reconhecida pelo número no cadastro único (152) e somada no saldo da nota entre PPs e desembolsos; registrada no controle de notas na aprovação. O formulário da PP também passa a ver os desembolsos que usam a nota, sem oferecer "Corrigir a DES-…".
+- **Banco:** `salvar_pedido_de_desembolso` e `aprovar_pedido_de_desembolso`; gatilho `trg_desembolso_status_pelo_papel` (só o financeiro decide; sem comprovante não se aprova). Arquivos no bucket `pedidos-compra` (o bucket `desembolsos` nunca existiu). Migrations `20261117300001` a `20261117300003`.
+- **Home:** os cartões "Desembolsos em avaliação" levam à aba do Contas a Pagar.
+- **Ficam para a etapa do controle de NFs:** retenções e crédito de PIS/COFINS na aprovação, a NF do reembolso no cadastro e a correção da NF pelo financeiro.
+- **Conferido no Sandbox** (GP, produtor e admin): envio com NF, rejeição, correção e reenvio, aprovação com o título em Títulos a Pagar e a nota registrada, reembolso com cupom fiscal; no banco, a NF sem saldo, o GP aprovando o próprio pedido, a mudança de status pela API e o pedido sem comprovante são recusados.

@@ -31,6 +31,7 @@ import type { EntradaDaBaixaEmLote } from "@/lib/financeiro/baixa-em-lote";
 import { darBaixaEmLote } from "../actions-baixa-em-lote";
 import { cancelarBaixa, type TipoDeBaixa } from "../actions-baixa-registrada";
 import { cancelarBaixaImposto } from "../fiscal/impostos/actions";
+import { cancelarRecebimentoAntesNf } from "../contas-a-receber/actions-recebimento-antes-nf";
 
 const DATA = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
 
@@ -517,7 +518,9 @@ export async function ignorarLinha(linhaId: string, motivo: string | null): Prom
 }
 
 /** O que o desfazer ainda tem de cancelar: o tipo e o id que
- *  `cancelarBaixa` recebe (o imposto vai por `cancelarBaixaImposto`). */
+ *  `cancelarBaixa` recebe (o imposto vai por `cancelarBaixaImposto`; o
+ *  recebimento antes da NF lançado pela linha, por `cancelarRecebimentoAntesNf`,
+ *  decisão 262). */
 export type BaixaADesfazer = { tipo: string; id: string };
 
 /** Quantas baixas uma chamada cancela: a remessa da folha desfeita tem
@@ -532,7 +535,9 @@ async function cancelarAsBaixas(lista: BaixaADesfazer[]): Promise<{ ok: true; ca
     const res =
       c.tipo === "imposto"
         ? await cancelarBaixaImposto({ imposto_id: c.id, motivo: MOTIVO_DO_DESFAZER })
-        : await cancelarBaixa({ tipo: c.tipo as TipoDeBaixa, id: c.id, motivo: MOTIVO_DO_DESFAZER });
+        : c.tipo === "recebimento_antes_nf"
+          ? await cancelarRecebimentoAntesNf({ id: c.id, motivo: MOTIVO_DO_DESFAZER })
+          : await cancelarBaixa({ tipo: c.tipo as TipoDeBaixa, id: c.id, motivo: MOTIVO_DO_DESFAZER });
     if (!res.ok) return { ok: false, canceladas, message: res.message };
     canceladas++;
   }
@@ -564,11 +569,15 @@ export async function desfazerConciliacao(linhaId: string): Promise<(Resultado &
   }
   const restantes = cancelar.slice(CANCELAR_POR_CHAMADA);
   if (restantes.length) return { ok: true, restantes };
+  const recebimentos = cancelar.filter((c) => c.tipo === "recebimento_antes_nf").length;
+  const baixas = cancelar.length - recebimentos;
   return {
     ok: true,
-    mensagem: cancelar.length
-      ? `Desfeito: ${cancelar.length === 1 ? "a baixa foi cancelada e o título voltou" : `as ${cancelar.length} baixas foram canceladas e os títulos voltaram`} a aberto.`
-      : "Desfeito: a linha voltou a pendente.",
+    mensagem: baixas
+      ? `Desfeito: ${baixas === 1 ? "a baixa foi cancelada e o título voltou" : `as ${baixas} baixas foram canceladas e os títulos voltaram`} a aberto.`
+      : recebimentos
+        ? `Desfeito: ${recebimentos === 1 ? "o recebimento antes da NF foi cancelado" : `os ${recebimentos} recebimentos antes da NF foram cancelados`}, e a linha voltou a pendente.`
+        : "Desfeito: a linha voltou a pendente.",
   };
 }
 

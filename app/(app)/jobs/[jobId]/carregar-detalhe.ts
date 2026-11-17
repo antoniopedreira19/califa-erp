@@ -974,6 +974,11 @@ export async function carregarDetalheDoJob(
           cancelamentos: prontaRaw.conteudo?.cancelamentos ?? [],
           // A organização da planilha (decisão 162); nula na pronta antiga.
           estrutura: prontaRaw.conteudo?.estrutura ?? null,
+          // Decisão 219: os meses do trimestre que a pronta inclui. Sem eles
+          // o GP reabre a errata sem os meses novos e o envio é recusado
+          // ("O mês do agrupamento novo não é deste job."); a pronta de
+          // antes de 27/10/2026 não tem o campo.
+          meses_novos: prontaRaw.conteudo?.meses_novos ?? [],
           // Decisão 233: os parâmetros do job que a pronta muda.
           parametros: prontaRaw.conteudo?.parametros ?? null,
         },

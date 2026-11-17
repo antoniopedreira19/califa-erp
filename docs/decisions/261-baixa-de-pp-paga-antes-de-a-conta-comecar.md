@@ -54,3 +54,22 @@ O envio pediu o vencimento numa janela aceita (25/11, pelo "Atualizar vencimento
 
 - Numa transação desfeita, na produção: a baixa comum segue barrada antes do saldo inicial; linha de outro valor é recusada; a mesma linha não se liga duas vezes; o saldo e as condições do fechamento não mudam; o histórico do extrato traz a PP; apagar a baixa desliga a linha.
 - Pela tela, no Extrato da California Santander: 21/07 com PP-00954/955/956/01102 nas linhas do histórico e sem a parte do sistema; 08/09 com PP-01100 uma vez só.
+
+## Revisão de 17/11/2026 — pagamento em mais de um dia (baixa parcial)
+
+⚠️ A soma das linhas do histórico não precisa mais ser igual ao que falta da
+parcela: pode ser menor ou igual, e a baixa é desse valor (parcial quando for
+menor). Uma chamada por dia de pagamento; seguem valendo a mesma conta, o
+mesmo dia, a data antes do início da conta e a linha ainda sem ligação.
+
+O caso que pediu a mudança: a PP-00298 (R$ 31.540,00), paga pela planilha em
+01/10 (R$ 15.295,00) e 05/10 (R$ 16.245,00), linhas da carga "só DRE", tinha
+recebido em 16/11 uma baixa única com data 05/11 e sem linha do banco (saldo
+de 05/11 R$ 31.540 abaixo do banco). A pedido do Tiago, a baixa foi cancelada
+(motivo registrado) e refeita em duas, nas datas da planilha, cada uma ligada
+à sua linha. O pagamento passou para antes do início e entrou no ajuste de
+abertura (decisão 211, "O Extrato contínuo e o ajuste de abertura"): o da
+California Santander foi de R$ 2.378.067,84 para R$ 2.409.607,84, e 05/11
+voltou a bater com o banco.
+
+Migration `20261117100001_baixa_pelo_historico_parcial.sql`.

@@ -2664,10 +2664,15 @@ export interface ConteudoErrata {
   cancelamentos: string[];
   /** Decisão 162: a organização da planilha. Ausente (ou nula) quando a
    *  errata não mexe nela — e na pronta gravada antes de 09/10/2026. */
-  estrutura?: EstruturaDaErrata | null;  /** Decisão 219: os meses do trimestre que a errata inclui no job
+  estrutura?: EstruturaDaErrata | null;
+  /** Decisão 219: os meses do trimestre que a errata inclui no job
    *  (`chave` = `mes-novo:AAAA-MM`, que os agrupamentos novos levam no
-   *  `mes_id`). Ausente na pronta gravada antes de 27/10/2026. */
-  meses_novos?: Array<{ chave: string; mes: string }>;
+   *  `mes_id`). A pronta gravada antes de 27/10/2026 não tem o campo: quem a
+   *  lê usa `?? []`. Obrigatório pelo mesmo motivo dos `parametros`: a
+   *  leitura da pronta esqueceu este campo em silêncio, o GP reabria a
+   *  errata sem os meses novos e o envio era recusado com "O mês do
+   *  agrupamento novo não é deste job." (17/11/2026, COL-1001/26). */
+  meses_novos: Array<{ chave: string; mes: string }>;
   /** Decisão 233: os parâmetros do job como a errata os deixa. Nulo quando
    *  ela não mexe neles. Obrigatório: quem remonta o conteúdo campo a campo
    *  (a leitura da pronta) não pode esquecê-lo em silêncio. */
@@ -3713,6 +3718,10 @@ export interface ContaBancaria {
   tipo: TipoContaBancaria;
   saldo_inicial: string; // numeric vem como string do Supabase — parse com Number(...)
   saldo_inicial_data: string; // YYYY-MM-DD
+  /** O saldo inicial veio do extrato do banco (recomeço de 03/11/2026). Só
+   *  nela o Extrato junta o histórico antes do início e mostra o ajuste de
+   *  abertura (`extrato_antes_do_inicio`). Marcada por migration. */
+  saldo_inicial_do_banco: boolean;
   ativo: boolean;
   ordem: number;
   /** Na conta de aplicação automática (ContaMax, Rende Fácil): a conta
@@ -4013,6 +4022,8 @@ export interface ConciliacaoFechamento {
   reaberto_por: string | null;
   motivo_reabertura: string | null;
   ativo: boolean;
+  /** Decisão 262: o registro que nasceu do "Reabrir" do mês seguinte aponta para o registro reaberto. */
+  reabertura_de: string | null;
 }
 
 /** As condições do fechamento (`condicoes_do_fechamento`, decisão 205):
@@ -4824,6 +4835,38 @@ export interface Desembolso {
    *  Cartão aqui não amarra a fatura — isso é da baixa. */
   forma_pagamento: FormaPagamento | null;
   cartao_credito_id: string | null;
+  /** Decisão 264: quem recebe — o fornecedor, ou reembolso a quem pediu. */
+  favorecido_tipo: "fornecedor" | "reembolso" | null;
+  /** Decisão 264: o último envio ao financeiro e o reenvio do rejeitado. */
+  enviado_em: string | null;
+  reenviado_em: string | null;
+  /** Decisão 264: pagamento urgente (libera a quarta de exceções), com justificativa. */
+  urgente: boolean;
+  urgente_justificativa: string | null;
+}
+
+/** Um comprovante do pedido de desembolso (decisão 264): o arquivo, o tipo
+ *  e, na NF, os dados da nota e a parte dela neste pedido; no reembolso, a
+ *  data e o valor do gasto. */
+export interface DesembolsoAnexo {
+  id: string;
+  tenant_id: string;
+  desembolso_id: string;
+  arquivo_path: string;
+  arquivo_nome_original: string;
+  arquivo_tamanho_bytes: number;
+  arquivo_mimetype: string | null;
+  documento_tipo: DocumentoTipo | null;
+  documento_numero: string | null;
+  nf_data_emissao: string | null;
+  nf_valor: string | null;
+  nf_tomador_estabelecimento_id: string | null;
+  /** A parte da NF neste pedido (null = a nota inteira). */
+  nf_valor_no_pedido: string | null;
+  /** A nota do cadastro único (`notas_fiscais_fornecedor`), ligada no envio. */
+  nota_fiscal_id: string | null;
+  criado_por: string;
+  created_at: string;
 }
 
 export interface DesembolsoParcela {
@@ -6015,6 +6058,8 @@ export interface NotaFiscalFornecedor {
   registrada_em: string | null;
   registrada_por: string | null;
   registrada_na_pp_id: string | null;
+  /** Decisão 264: o desembolso cuja aprovação registrou a nota. */
+  registrada_no_desembolso_id: string | null;
   iss_retido_aliquota: number | null;
   credito_pis_cofins_retirado: boolean;
   credito_pis_cofins_motivo: string | null;

@@ -1698,3 +1698,65 @@ depois vamos preenchendo as lacunas por aqui". O Tiago traz os extratos atualiza
   - **A relação de recorrências** que o Tiago vai mandar serve para cadastrar
     os custos fixos no sistema e ajudar a achar o título de cada baixa do OFX
     depois de 30/09.
+
+## O Extrato contínuo e o ajuste de abertura (16/11/2026)
+
+⚠️ **Revê a A3 (o histórico no Extrato) para as contas do recomeço de 03/11.**
+
+- **O problema:** no recomeço de 06/11 (migration `20261106900001`), oito
+  contas passaram a começar no sistema em 03/11 com o saldo do banco, e a
+  diferença para o histórico ficou só como número de controle, fora da tela.
+  O Extrato mostrava dois blocos de cartões que não se ligavam: o histórico,
+  parado no saldo da planilha de 30/09 e dizendo "nenhum movimento", e o
+  sistema a partir de R$ 0,00. As 1.722 linhas da cauda de outubro e 01/11 da
+  California Santander não apareciam em lugar nenhum; em outubro, as baixas
+  do sistema com data anterior ao início formavam um saldo próprio (de
+  −R$ 5,1 mi a +R$ 5,57 mi) que não existe.
+- **Decidido (Tiago, 16/11):** um extrato só, com saldo contínuo, e a
+  diferença numa linha que vai sendo consumida. Na conta marcada com
+  `saldo_inicial_do_banco`, antes do início entram o histórico que conta no
+  saldo (cargas `periodo` e `cauda`, e a previsão já ligada ao banco) e as
+  baixas do sistema com data anterior. Na véspera do início, a linha
+  **"Ajuste de abertura · diferença a identificar"** (fora do DRE) leva o
+  saldo exatamente ao saldo inicial do banco.
+- **O ajuste é calculado, nunca gravado:** saldo inicial − (histórico +
+  baixas antes do início). Quando um lançamento que falta entra no histórico,
+  ou uma baixa antiga entra no sistema, ele diminui sozinho; o saldo a partir
+  do início não muda. Uma avulsa de verdade iria ao DRE, ao Fluxo de Caixa,
+  ao Contas a Pagar e à fila da conciliação, e teria de ser corrigida à mão.
+- **O que conta e o que não conta:** o só DRE continua fora do saldo (ver "A
+  carga só DRE"). A baixa do sistema que uma linha do histórico já registra
+  (decisão 261, `historico_movimentos.lancamento_id`) não se repete; a ligada
+  a uma linha do só DRE conta, porque o só DRE não entra no saldo.
+- **Só nas contas marcadas:** as oito do recomeço (California Santander, BB
+  California, Santander GoCrazy, Santander Hitlab e as aplicações
+  automáticas delas). As contas que começaram com R$ 0,00 sem o saldo do
+  banco (Fundo Fixo, BB Americas, Bradesco, Paypal, XP California, BB
+  GoCrazy, XP GoCrazy) ficam com os dois blocos de antes: nelas o ajuste
+  mediria o saldo que falta, não a lacuna. Entram quando o saldo do extrato
+  for informado (migration que troca o saldo inicial e marca a conta).
+- **Os números em 16/11** (ajuste por conta; por par corrente + aplicação,
+  como a planilha registra): California Santander +R$ 2.378.067,84 e ContaMax
+  −R$ 1.676.598,22 (par: R$ 701.469,62); BB California +R$ 1.181.261,23 e
+  Rende Fácil +R$ 509.220,77 (R$ 1.690.482,00); Santander GoCrazy
+  +R$ 44.847,24 e ContaMax +R$ 100.423,45 (R$ 145.270,69); Santander Hitlab
+  −R$ 84.804,18 e ContaMax +R$ 32.827,98 (−R$ 51.976,20). Total:
+  **R$ 2.485.246,11**. Dentro do da California Santander, R$ 19.520,00 são 8
+  baixas de PP de agosto e setembro (PP-00030, 33 e 35 a 40) ainda sem
+  ligação com a linha da planilha: ligadas, saem do ajuste.
+- **Como:** migration `20261116980002_ajuste_de_abertura_no_extrato.sql`
+  (coluna `contas_bancarias.saldo_inicial_do_banco`, as oito marcadas e a
+  função `extrato_antes_do_inicio`). Tela: `extrato-antes-do-inicio.ts`
+  (leitura, linhas e a linha do ajuste), `aviso-do-ajuste.tsx` (a faixa, com o
+  link para o mês da véspera quando ela não está no período), `page.tsx` (o
+  saldo anterior contínuo, os totais da planilha pela função e a grade
+  única) e `conciliacao-list.tsx` (a linha do ajuste em âmbar, com a dica
+  dos dois números). Acima de 4.000 linhas da planilha no período, a grade
+  não sai (os cartões valem para o período inteiro).
+- **Conferido (16/11, na produção, só leitura):** novembro da California
+  Santander abre com −R$ 2.385.446,73, as 7 linhas da planilha de 01/11, o
+  ajuste em 02/11 e R$ 0,00 na virada; saldo final R$ 592.085,79, o mesmo de
+  antes. Setembro termina em −R$ 4.874,33, onde outubro começa; outubro
+  termina em −R$ 2.385.446,73, onde novembro começa. A ContaMax fecha em
+  R$ 414.229,23 na véspera e chega aos R$ 305.266,11 da lista. O Fundo Fixo
+  (sem a marca) segue com os dois blocos.

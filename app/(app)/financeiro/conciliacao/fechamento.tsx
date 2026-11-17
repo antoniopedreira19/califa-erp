@@ -1,16 +1,19 @@
 "use client";
 
 /**
- * O fechamento da conciliação na tela (task 029, fase 4, decisão 205),
- * portado do protótipo aprovado (`banco.jsx`: `BannerDoFechamento`,
- * `ReabrirDialog` e o botão de fechar de `AbaBancoRecomendada`):
+ * O fechamento da conciliação na tela (task 029, fase 4, decisão 205; por mês
+ * desde a decisão 262, D10):
  *
- * - a faixa no topo das três abas da conta: fechada (o caixa travado, com
- *   "Reabrir o período") ou reaberta (o motivo, o histórico e "Fechar de
- *   novo até dd/mm");
- * - na Conciliação automática, o botão "Fechar a conciliação até dd/mm",
- *   que só liga com as três condições, e "Reabrir o período";
- * - o reabrir pede o motivo, com pelo menos 10 caracteres.
+ * - no Extrato e nos Títulos, a faixa "Os meses" no topo: os meses fechados
+ *   (os 3 últimos, com cadeado), cada mês aberto até o de hoje (o reaberto
+ *   em amarelo, com o motivo na dica) e "Reabrir <mês>" (ou "Fechar <mês> de
+ *   novo", com a conta toda aberta);
+ * - na Conciliação automática, a faixa sai: os meses fechados e o "Reabrir"
+ *   ficam no começo da linha dos meses (`FechadosNaLinha`, montado pelo dia
+ *   a dia), e o "Fechar <mês>" fica em cada mês aberto de lá;
+ * - reabrir é mês a mês e pede o motivo, com pelo menos 10 caracteres: o mês
+ *   anterior continua fechado se já tinha sido fechado alguma vez
+ *   (`reabrir_mes_da_conciliacao`).
  *
  * As condições e a trava são do banco; a tela só mostra e chama.
  */
@@ -20,57 +23,31 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, CheckCheck, Lock, Unlock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDiaBr } from "@/lib/formatar-data-hora";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { dataBR } from "@/components/financeiro/planilha-de-titulos/planilha";
 import {
-  botaoDoFechamento,
+  continuaFechadoAoReabrir,
   diaMes,
-  eventosDoHistorico,
-  linhaDoHistorico,
+  ehFimDoMes,
+  fimDoMesAnterior,
+  maiuscula,
+  mesesDoFechamento,
+  nomeDoMes,
+  quemFechouOMes,
+  reaberturaDoMes,
+  textoDoRegistro,
   type FechamentoDaConta,
+  type RegistroDoFechamento,
 } from "@/lib/conciliacao/fechamento";
-import { fecharConciliacao, reabrirConciliacao } from "./actions-fechamento";
+import { fecharConciliacao, reabrirMesDaConciliacao } from "./actions-fechamento";
+import { InfoDica } from "./fila-da-conta";
 
 type Aviso = { tom: "ok" | "erro"; texto: string };
 
-const VARIANTES = {
-  escuro: "bg-[#282828] text-white hover:bg-black",
-  contorno: "border border-border bg-white text-foreground hover:bg-muted/50",
-  contornoVermelho: "border border-california-red/40 bg-white text-california-red hover:bg-california-red/5",
-  primario: "bg-california-red text-white hover:bg-california-red-hover",
-} as const;
-
-function Botao({
-  children,
-  onClick,
-  variante,
-  disabled,
-  title,
-  className,
-}: {
-  children: React.ReactNode;
-  onClick?: () => void;
-  variante: keyof typeof VARIANTES;
-  disabled?: boolean;
-  title?: string;
-  className?: string;
-}) {
-  return (
-    <button
-      type="button"
-      title={title}
-      disabled={disabled}
-      onClick={onClick}
-      className={cn(
-        "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3.5 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-        VARIANTES[variante],
-        className,
-      )}
-    >
-      {children}
-    </button>
-  );
-}
+/** "outubro"; o fechamento de antes do fechamento por mês, "o período até 19/10". */
+const oMes = (ate: string) => (ehFimDoMes(ate) ? nomeDoMes(ate) : `o período até ${diaMes(ate)}`);
+const semPontoFinal = (t: string | null) => String(t ?? "").replace(/[.\s]+$/, "");
 
 /** Fechar e reabrir, com o aviso do resultado e a página relida. */
 function useAcoesDoFechamento(contaId: string, contaNome: string) {
@@ -92,7 +69,7 @@ function useAcoesDoFechamento(contaId: string, contaNome: string) {
         r.ok
           ? {
               tom: "ok",
-              texto: `Conciliação da ${contaNome} fechada até ${dataBR(ate)}. Lançamento até essa data só muda reabrindo o período.`,
+              texto: `${ehFimDoMes(ate) ? `${maiuscula(nomeDoMes(ate))} fechado` : `Conciliação fechada até ${dataBR(ate)}`} na ${contaNome}. Lançamento até ${dataBR(ate)} só muda reabrindo o mês.`,
             }
           : { tom: "erro", texto: r.message },
       );
@@ -100,16 +77,19 @@ function useAcoesDoFechamento(contaId: string, contaNome: string) {
     });
   }
 
-  /** Devolve a mensagem de erro, ou `null` quando reabriu. */
+  /** `depois` recebe a mensagem de erro, ou `null` quando reabriu. */
   function reabrir(motivo: string, ate: string, depois: (erro: string | null) => void) {
     startTransition(async () => {
-      const r = await reabrirConciliacao(contaId, motivo);
+      const r = await reabrirMesDaConciliacao(contaId, motivo);
       if (!r.ok) {
         depois(r.message);
         return;
       }
       depois(null);
-      setAviso({ tom: "ok", texto: `Período até ${dataBR(ate)} reaberto. O motivo ficou na auditoria.` });
+      setAviso({
+        tom: "ok",
+        texto: `${maiuscula(oMes(ate))} reaberto${r.continuaFechadaAte ? `; ${nomeDoMes(r.continuaFechadaAte)} continua fechado` : ""}. O motivo ficou na auditoria.`,
+      });
       router.refresh();
     });
   }
@@ -142,8 +122,33 @@ function useAcoesDoFechamento(contaId: string, contaNome: string) {
   return { pending, fechar, reabrir, avisoNaTela };
 }
 
+/** O i do "Fechamento": o que o mês fechado trava e o histórico. */
+function DetalheDoFechamento({ registros }: { registros: RegistroDoFechamento[] }) {
+  return (
+    <span className="block text-left text-xs normal-case">
+      <span className="block">
+        Mês fechado: o caixa desta conta até o fim dele não muda (o Extrato e o DFC). Baixa, cancelamento, estorno e troca de data ou de centro de custo pedem
+        reabrir o mês. O DRE, por competência, tem fechamento próprio.
+      </span>
+      <span className="mt-1.5 block">Reabrir é mês a mês: o mês anterior continua fechado.</span>
+      {registros.length > 0 && <span className="mt-2 block font-semibold">Histórico</span>}
+      {[...registros].reverse().map((r) => (
+        <span key={r.id} className="block">
+          {textoDoRegistro(r)}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** A dica do mês fechado: quem fechou e quando (o registro do "Reabrir" do mês seguinte não conta). */
+function dicaDoFechado(registros: RegistroDoFechamento[], fim: string) {
+  const r = quemFechouOMes(registros, fim);
+  return `${maiuscula(nomeDoMes(fim))} de ${fim.slice(0, 4)} fechado${r ? ` em ${formatDiaBr(r.fechadoEm)} por ${r.fechadoPor}` : ""}.`;
+}
+
 // ---------------------------------------------------------------------------
-// A faixa do fechamento (protótipo: `BannerDoFechamento`)
+// A faixa "Os meses", no Extrato e nos Títulos
 // ---------------------------------------------------------------------------
 
 export function FaixaDoFechamento({
@@ -161,113 +166,84 @@ export function FaixaDoFechamento({
   const [reabrindo, setReabrindo] = React.useState(false);
   const ultimo = fechamento.ultimo;
   if (!ultimo) return null;
-  const historico = linhaDoHistorico(fechamento.registros);
+  const ativo = fechamento.ativo;
+  const { fechados, maisAntigos, parcialAte, abertos } = mesesDoFechamento(fechamento, hojeEmSaoPauloIso());
 
-  const reabrirDialog = reabrindo && fechamento.ativo && (
-    <ReabrirDialog
-      ate={fechamento.ativo.ate}
-      contaNome={contaNome}
-      bancoNome={bancoNome}
-      pending={pending}
-      onFechar={() => setReabrindo(false)}
-      onConfirmar={(motivo, depois) => reabrir(motivo, fechamento.ativo?.ate ?? "", depois)}
-    />
+  // Fechar de novo só o mês inteiro: o fechamento antigo, por dia, fecha pelo mês na Conciliação automática.
+  const botao = ativo ? (
+    <button
+      type="button"
+      disabled={pending}
+      onClick={() => setReabrindo(true)}
+      className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border border-california-red/40 bg-white px-3 text-xs font-semibold text-california-red hover:bg-california-red/5 disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      <Unlock className="h-3.5 w-3.5" />
+      Reabrir {oMes(ativo.ate)}
+    </button>
+  ) : !ehFimDoMes(ultimo.ate) ? null : (
+    <button
+      type="button"
+      disabled={pending}
+      onClick={() => fechar(ultimo.ate)}
+      title="Fecha de novo, se as linhas até lá estiverem conciliadas e o saldo bater."
+      className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg bg-[#282828] px-3 text-xs font-semibold text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
+    >
+      <Lock className="h-3.5 w-3.5" />
+      Fechar {oMes(ultimo.ate)} de novo
+    </button>
   );
 
-  if (!fechamento.ativo) {
-    return (
-      <>
-        <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
-          <Unlock className="h-4 w-4 shrink-0" />
-          <span className="min-w-[280px] flex-1">
-            <strong>Período reaberto</strong> em {formatDiaBr(ultimo.reabertoEm)} por {ultimo.reabertoPor ?? "—"}: “
-            {ultimo.motivo}”. Os lançamentos até {dataBR(ultimo.ate)} voltaram a poder mudar. Feche de novo quando terminar.
-            <span className="mt-0.5 block text-amber-800/70">Histórico: {historico}</span>
-          </span>
-          <Botao variante="escuro" disabled={pending} onClick={() => fechar(ultimo.ate)}>
-            <Lock className="h-4 w-4" />
-            Fechar de novo até {dataBR(ultimo.ate)}
-          </Botao>
-        </div>
-        {avisoNaTela}
-      </>
-    );
-  }
-
-  const ativo = fechamento.ativo;
   return (
     <>
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text-xs text-slate-800">
-        <Lock className="h-4 w-4 shrink-0" />
-        <span className="min-w-[280px] flex-1">
-          <strong>Conciliação fechada até {dataBR(ativo.ate)}</strong> · por {ativo.fechadoPor} em {formatDiaBr(ativo.fechadoEm)}.
-          O caixa desta conta até essa data não muda (o Extrato e o DFC): baixa, cancelamento, estorno e troca de data ou de
-          centro de custo pedem reabrir o período. O DRE, por competência, tem fechamento próprio.
-          {eventosDoHistorico(fechamento.registros) > 1 && <span className="mt-0.5 block opacity-70">Histórico: {historico}</span>}
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-300 bg-slate-100 px-4 py-2 text-slate-800">
+        <span className="mr-1 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-slate-600">
+          Fechamento
+          <InfoDica texto={<DetalheDoFechamento registros={fechamento.registros} />} largura={440} />
         </span>
-        <Botao variante="contornoVermelho" disabled={pending} onClick={() => setReabrindo(true)}>
-          <Unlock className="h-4 w-4" />
-          Reabrir o período
-        </Botao>
+        {maisAntigos && <span className="text-xs text-slate-500">…</span>}
+        {fechados.map((m) => (
+          <span
+            key={m}
+            title={dicaDoFechado(fechamento.registros, m)}
+            className="inline-flex h-7 items-center gap-1.5 rounded-md bg-slate-300/70 px-2.5 text-xs font-semibold text-slate-700"
+          >
+            <Lock className="h-3 w-3" />
+            {maiuscula(nomeDoMes(m))}
+          </span>
+        ))}
+        {parcialAte && (
+          <span className="inline-flex h-7 items-center gap-1.5 rounded-md bg-slate-300/70 px-2.5 text-xs font-semibold text-slate-700">
+            <Lock className="h-3 w-3" />
+            Até {diaMes(parcialAte)}
+          </span>
+        )}
+        {abertos.map((m) => {
+          const r = reaberturaDoMes(fechamento.registros, m);
+          return (
+            <span
+              key={m}
+              title={
+                r
+                  ? `${maiuscula(nomeDoMes(m))} reaberto em ${formatDiaBr(String(r.reabertoEm))}${r.reabertoPor ? ` por ${r.reabertoPor}` : ""}: “${semPontoFinal(r.motivo)}”. Feche de novo pela Conciliação automática.`
+                  : `${maiuscula(nomeDoMes(m))} de ${m.slice(0, 4)} ainda aberto: fecha pela Conciliação automática quando todos os dias estiverem conciliados.`
+              }
+              className={cn(
+                "inline-flex h-7 items-center gap-1.5 rounded-md border px-2.5 text-xs font-semibold",
+                r ? "border-amber-300 bg-amber-50 text-amber-900" : "border-dashed border-slate-300 bg-white text-slate-700",
+              )}
+            >
+              {r ? <Unlock className="h-3 w-3" /> : null}
+              {maiuscula(nomeDoMes(m))}
+              <span className="font-normal text-slate-500">{r ? "reaberto" : "aberto"}</span>
+            </span>
+          );
+        })}
+        <span className="flex-1" />
+        {botao}
       </div>
-      {reabrirDialog}
-      {avisoNaTela}
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// O botão de fechar, na Conciliação automática
-// ---------------------------------------------------------------------------
-
-export function BotoesDoFechamento({
-  contaId,
-  contaNome,
-  bancoNome,
-  fechamento,
-  ocupado,
-}: {
-  contaId: string;
-  contaNome: string;
-  bancoNome: string;
-  fechamento: FechamentoDaConta;
-  /** A aba está trabalhando (uma ação, a automação da importação). */
-  ocupado: boolean;
-}) {
-  const { pending, fechar, reabrir, avisoNaTela } = useAcoesDoFechamento(contaId, contaNome);
-  const [reabrindo, setReabrindo] = React.useState(false);
-  const ativo = fechamento.ativo;
-  const b = botaoDoFechamento(fechamento.condicoes, ativo?.ate ?? null);
-  const ate = b.ate;
-
-  const dica = b.jaFechada
-    ? undefined
-    : `Fecha até ${ate ? dataBR(ate) : "—"}, o último dia completo dos extratos importados (o dia em que o arquivo foi gerado não conta). Disponível quando as linhas até lá estiverem conciliadas, nenhuma baixa estiver fora do banco e o saldo desse dia bater.${
-        b.faltas.length ? ` Falta: ${b.faltas.join("; ")}.` : ""
-      }`;
-
-  return (
-    <>
-      <Botao
-        className="ml-auto"
-        variante={b.podeFechar ? "escuro" : "contorno"}
-        disabled={!b.podeFechar || pending || ocupado}
-        title={dica}
-        onClick={() => ate && fechar(ate)}
-      >
-        <Lock className="h-4 w-4" />
-        {b.jaFechada && ativo
-          ? `Conciliação fechada até ${dataBR(ativo.ate)}`
-          : `Fechar a conciliação até ${ate ? dataBR(ate) : "—"}`}
-      </Botao>
-      {ativo && (
-        <Botao variante="contornoVermelho" disabled={pending || ocupado} onClick={() => setReabrindo(true)}>
-          <Unlock className="h-4 w-4" />
-          Reabrir o período
-        </Botao>
-      )}
       {reabrindo && ativo && (
         <ReabrirDialog
+          continuaFechado={continuaFechadoAoReabrir(fechamento)}
           ate={ativo.ate}
           contaNome={contaNome}
           bancoNome={bancoNome}
@@ -282,10 +258,95 @@ export function BotoesDoFechamento({
 }
 
 // ---------------------------------------------------------------------------
-// Reabrir o período (protótipo: `ReabrirDialog`)
+// Na Conciliação automática: os meses fechados e o Reabrir, na linha dos meses
+// ---------------------------------------------------------------------------
+
+/** Os meses fechados (cadeado, os 3 últimos) e o "Reabrir" do último, no começo da linha dos meses. */
+export function FechadosNaLinha({
+  contaId,
+  contaNome,
+  bancoNome,
+  fechamento,
+}: {
+  contaId: string;
+  contaNome: string;
+  bancoNome: string;
+  fechamento: FechamentoDaConta;
+}) {
+  const { pending, reabrir, avisoNaTela } = useAcoesDoFechamento(contaId, contaNome);
+  const [reabrindo, setReabrindo] = React.useState(false);
+  const ativo = fechamento.ativo;
+  if (!ativo) return avisoNaTela || null;
+  const { fechados, maisAntigos, parcialAte } = mesesDoFechamento(fechamento, hojeEmSaoPauloIso());
+  const continua = continuaFechadoAoReabrir(fechamento);
+  const chip = "inline-flex h-8 items-center gap-1.5 rounded-lg bg-muted px-3 text-xs font-semibold text-muted-foreground";
+  return (
+    <>
+      <span className="inline-flex flex-wrap items-center gap-1.5">
+        <span className="mr-1 inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+          Fechamento
+          <InfoDica texto={<DetalheDoFechamento registros={fechamento.registros} />} largura={440} />
+        </span>
+        {maisAntigos && <span className="text-xs text-muted-foreground">…</span>}
+        {fechados.map((m) => (
+          <span key={m} className={chip} title={dicaDoFechado(fechamento.registros, m)}>
+            <Lock className="h-3.5 w-3.5" />
+            {maiuscula(nomeDoMes(m))}
+          </span>
+        ))}
+        {parcialAte && (
+          <span className={chip}>
+            <Lock className="h-3.5 w-3.5" />
+            Até {diaMes(parcialAte)}
+          </span>
+        )}
+        <button
+          type="button"
+          disabled={pending}
+          onClick={() => setReabrindo(true)}
+          title={`Reabre só ${oMes(ativo.ate)}: ${continua ? `${nomeDoMes(continua)} continua fechado` : "nenhum mês antes dele foi fechado, e a conta fica toda aberta"}. Pede o motivo.`}
+          className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border border-california-red/40 bg-white px-3 text-xs font-semibold text-california-red hover:bg-california-red/5 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Unlock className="h-3.5 w-3.5" />
+          Reabrir {oMes(ativo.ate)}
+        </button>
+      </span>
+      {reabrindo && (
+        <ReabrirDialog
+          continuaFechado={continua}
+          ate={ativo.ate}
+          contaNome={contaNome}
+          bancoNome={bancoNome}
+          pending={pending}
+          onFechar={() => setReabrindo(false)}
+          onConfirmar={(motivo, depois) => reabrir(motivo, ativo.ate, depois)}
+        />
+      )}
+      {avisoNaTela}
+    </>
+  );
+}
+
+/** Na linha dos meses, o mês aberto que já foi fechado e reaberto: "reaberto", com o motivo na dica. */
+export function SeloReaberto({ fim, registros }: { fim: string; registros: RegistroDoFechamento[] }) {
+  const r = reaberturaDoMes(registros, fim);
+  if (!r) return null;
+  return (
+    <span
+      title={`${maiuscula(nomeDoMes(fim))} reaberto em ${formatDiaBr(String(r.reabertoEm))}${r.reabertoPor ? ` por ${r.reabertoPor}` : ""}: “${semPontoFinal(r.motivo)}”.`}
+      className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800"
+    >
+      reaberto
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Reabrir o mês
 // ---------------------------------------------------------------------------
 
 function ReabrirDialog({
+  continuaFechado,
   ate,
   contaNome,
   bancoNome,
@@ -293,6 +354,8 @@ function ReabrirDialog({
   onFechar,
   onConfirmar,
 }: {
+  /** O mês anterior, que continua fechado; nulo, a conta fica toda aberta. */
+  continuaFechado: string | null;
   ate: string;
   contaNome: string;
   bancoNome: string;
@@ -302,13 +365,15 @@ function ReabrirDialog({
 }) {
   const [motivo, setMotivo] = React.useState("");
   const [erro, setErro] = React.useState<string | null>(null);
+  const mes = ehFimDoMes(ate);
+  const desde = mes ? ate.slice(0, 8) + "01" : null;
   return (
     <Dialog open onOpenChange={(o) => !o && onFechar()}>
       <DialogContent className="sm:max-w-[560px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Unlock className="h-4 w-4 text-california-red" />
-            Reabrir a conciliação até {diaMes(ate)}
+            Reabrir {oMes(ate)}
           </DialogTitle>
           <DialogDescription>
             {contaNome}
@@ -316,8 +381,12 @@ function ReabrirDialog({
           </DialogDescription>
         </DialogHeader>
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] leading-relaxed text-amber-900">
-          Os lançamentos desta conta até {dataBR(ate)} voltam a aceitar baixa, cancelamento, estorno e troca de data ou de
-          centro de custo. A conciliação precisa ser fechada de novo. A reabertura, com o motivo, fica registrada na auditoria.
+          Os lançamentos desta conta {desde ? `de ${dataBR(desde)} a ${dataBR(ate)}` : `até ${dataBR(ate)}`} voltam a aceitar baixa, cancelamento, estorno e troca de
+          data ou de centro de custo.{" "}
+          {continuaFechado
+            ? `${maiuscula(nomeDoMes(continuaFechado))} e os meses antes dele continuam fechados.`
+            : `Nenhum mês antes ${mes ? "dele" : "disso"} foi fechado: a conta fica toda aberta.`}{" "}
+          {maiuscula(oMes(ate))} precisa ser fechado de novo. A reabertura, com o motivo, fica registrada na auditoria.
         </div>
         <div className="space-y-1">
           <label htmlFor="reabrir-motivo" className="text-xs font-semibold">
@@ -337,11 +406,15 @@ function ReabrirDialog({
         </div>
         <DialogFooter className="items-center gap-2">
           {erro && <p className="mr-auto text-xs font-semibold text-california-red">{erro}</p>}
-          <Botao variante="contorno" onClick={onFechar}>
+          <button
+            type="button"
+            onClick={onFechar}
+            className="inline-flex items-center justify-center rounded-lg border border-border bg-white px-3.5 py-2 text-sm font-semibold text-foreground hover:bg-muted/50"
+          >
             Cancelar
-          </Botao>
-          <Botao
-            variante="primario"
+          </button>
+          <button
+            type="button"
             disabled={pending}
             onClick={() => {
               if (motivo.trim().length < 10) {
@@ -353,9 +426,10 @@ function ReabrirDialog({
                 else onFechar();
               });
             }}
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-california-red px-3.5 py-2 text-sm font-semibold text-white hover:bg-california-red-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {pending ? "Reabrindo…" : "Reabrir o período"}
-          </Botao>
+            {pending ? "Reabrindo…" : `Reabrir ${oMes(ate)}`}
+          </button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

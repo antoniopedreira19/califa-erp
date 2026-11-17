@@ -2,7 +2,8 @@
 
 **Data:** 2026-10-27
 **Status:** implementada em 27/10/2026 — entrega 1 (orçamento e
-planilhas) e entrega 2 (mês novo no job pela errata).
+planilhas) e entrega 2 (mês novo no job pela errata). Corrigida em
+17/11/2026: a errata pronta do produtor com mês novo (ver a nota no fim).
 **Quem decidiu:** Tiago. Pedido em 27/10/2026: "Atualmente GPs tem esquecido
 de adicionar os meses seguintes frequentemente." Protótipo aprovado no mesmo
 dia, depois de onze versões comentadas por ele:
@@ -187,3 +188,31 @@ Conferido no `ZZ Teste 158 planilha de um mês` (rascunho, três meses) e na
 versão aprovada do `ZZ Teste 219 mês pela errata` (com o "Histórico"); o
 job no TES-1035/26, pela produção e pelo financeiro (o "Recolher grupos"
 de outubro recolhe só outubro).
+
+## ⚠️ Nota de 2026-11-17 — a errata pronta com mês novo não chegava ao envio
+
+A entrega 2 foi conferida com o GP incluindo o mês na própria errata; o
+caminho da **errata pronta do produtor** (decisão 159) com mês novo ficou
+sem teste e estava quebrado desde 27/10. O produtor deixava a pronta com o
+mês, mas o GP, ao confirmar, recebia "O mês do agrupamento novo não é deste
+job." Aconteceu no COL-1001/26 (Always On, só outubro), com novembro e
+dezembro na pronta.
+
+- **Causa:** a leitura da pronta na página do job
+  (`app/(app)/jobs/[jobId]/carregar-detalhe.ts`) remonta o `conteudo` campo
+  a campo e não copiava `meses_novos`. O GP reabria a errata com os
+  agrupamentos novos (que levam `mes-novo:AAAA-MM` no `mes_id`) mas sem os
+  meses; o envio ia com `meses_novos: []` e `montarOrganizacao` não achava
+  o mês. Sintomas na tela do GP: o mês volta a aparecer como "Adicionar
+  mês" e o "Confirmar errata" não lista "Mês novo no job".
+- **Correção:** a leitura copia `meses_novos` (`?? []` para a pronta de
+  antes de 27/10), e o campo passou a obrigatório em `ConteudoErrata`
+  (`lib/types.ts`), como os `parametros` da 233: quem remonta o conteúdo e
+  esquece o campo agora é acusado pelo `tsc`. A pronta gravada no banco já
+  estava completa; não há dado a acertar.
+- **Conferência (17/11/2026, Sandbox):** TES-1035/26 (outubro e novembro).
+  O produtor deixou pronta uma errata com dezembro (itens de novembro). Na
+  versão publicada, o GP recebeu a mesma mensagem; com a correção, a mesma
+  pronta foi enviada: dezembro entrou na versão aprovada
+  (`incluido_na_errata_id`), o agrupamento e a linha de dezembro no job, e o
+  job voltou ao mural de abertura (R$ 20.877,35).

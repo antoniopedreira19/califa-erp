@@ -47,7 +47,8 @@ import {
 } from "@/lib/cartoes/competencia";
 import type { FaturaDoCartao } from "./fechar-fatura-dialog";
 import { RecorrentesList, type RecorrenteRow } from "./recorrentes-list";
-import { DesembolsosContasPagarList, type DesembolsoRow } from "./desembolsos-list";
+import { DesembolsosContasPagarList } from "./desembolsos-list";
+import { carregarPedidosDeDesembolso, carregarTomadores } from "@/app/(app)/financeiro/desembolsos/dados";
 import { PeopleList } from "./people-list";
 import type { PeopleAprovarItem } from "@/lib/types";
 import { carregarColaboradoresPagamento } from "@/lib/financeiro/colaboradores-pagamento";
@@ -57,7 +58,6 @@ import type {
   PlanoContaSubtipo,
   ContaBancaria,
   BandeiraCartao,
-  DesembolsoStatus,
 } from "@/lib/types";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { todasAsLinhas } from "@/lib/supabase/todas-as-linhas";
@@ -79,6 +79,8 @@ export default async function PedidosCompraFinanceiroPage({
     tab?: string;
     cartao?: string;
     competencia?: string;
+    /** O pedido de desembolso que a aba Desembolsos abre (decisão 264). */
+    abrir?: string;
   };
 }) {
   const session = await requireSession();
@@ -151,6 +153,7 @@ export default async function PedidosCompraFinanceiroPage({
     faturasNaBaixa,
     faturamentoDosJobs,
     ppsDeOutrasEmpresasRes,
+    tomadoresDosDesembolsos,
   ] = await Promise.all([
     // Página a página (15/11/2026): o PostgREST corta em 1.000 linhas sem
     // aviso, e com 1.045 PPs enviadas as 45 mais antigas sumiam da lista —
@@ -321,23 +324,9 @@ export default async function PedidosCompraFinanceiroPage({
       .eq("tenant_id", session.activeTenant.id)
       .eq("ativo", true)
       .order("nome"),
-    // Desembolsos — todos os status para a aba de aprovação (Task 9).
-    // Task 10 adiciona SELECT diferente com parcelas embed (apenas aprovada/pago).
-    (() => {
-      let q = supabase
-        .from("desembolsos")
-        .select(`
-        id, codigo, descricao, valor, status,
-        data_prevista_pagamento, motivo_rejeicao, motivo_cancelamento,
-        aprovada_em, rejeitada_em, cancelada_em, pago_em, created_at,
-        empresa:empresas(id, razao_social, nome_fantasia),
-        fornecedor:fornecedores(id, nome, razao_social),
-        criador:profiles!desembolsos_criado_por_fkey(nome)
-      `)
-        .eq("tenant_id", session.activeTenant.id);
-      if (empresaFiltroIds.length > 0) q = q.in("empresa_id", empresaFiltroIds);
-      return q.order("created_at", { ascending: false });
-    })(),
+    // Desembolsos — todos os pedidos para a aba de conferência (decisão
+    // 264), com parcelas, rateio e comprovantes.
+    carregarPedidosDeDesembolso(supabase, session.activeTenant.id, { empresaIds: empresaFiltroIds }),
     // Desembolsos para Títulos a Pagar — apenas aprovada|pago, com parcelas
     // embed. Query separada da de aprovação (Task 9) para não misturar filtros.
     (() => {
@@ -455,6 +444,8 @@ export default async function PedidosCompraFinanceiroPage({
             .order("id")
             .range(de, ate),
         ),
+    // Os CNPJs tomadores, para a tela do desembolso mostrar o da NF (decisão 264).
+    carregarTomadores(supabase, session.activeTenant.id),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
@@ -465,7 +456,6 @@ export default async function PedidosCompraFinanceiroPage({
   if (retencoesDaAprovacaoRes.error) console.error("[financeiro.retencoes_da_aprovacao]", retencoesDaAprovacaoRes.error.message);
   if (recorrentesRes.error) console.error("[financeiro.recorrentes.list]", recorrentesRes.error.message);
   if (cartoesRes.error) console.error("[financeiro.cartoes.list]", cartoesRes.error.message);
-  if (desembolsosRes.error) console.error("[financeiro.desembolsos.list]", desembolsosRes.error.message);
   if (desembolsosTitulosRes.error) console.error("[financeiro.desembolsos_titulos.list]", desembolsosTitulosRes.error.message);
   if (devolucoesRes.error) console.error("[financeiro.devolucoes.list]", devolucoesRes.error.message);
   if (ppsDeOutrasEmpresasRes.error) console.error("[financeiro.pp.contagem_outras_empresas]", ppsDeOutrasEmpresasRes.error.message);
@@ -750,46 +740,10 @@ export default async function PedidosCompraFinanceiroPage({
   );
 
   // -------------------------------------------------------------------
-  // Desembolsos — mapeamento para DesembolsoRow
+  // Desembolsos — os pedidos já montados (decisão 264)
   // -------------------------------------------------------------------
 
-  const desembolsosRows: DesembolsoRow[] = (
-    (desembolsosRes.data ?? []) as unknown as Array<{
-      id: string;
-      codigo: string;
-      descricao: string;
-      valor: string | number;
-      status: DesembolsoStatus;
-      data_prevista_pagamento: string | null;
-      motivo_rejeicao: string | null;
-      motivo_cancelamento: string | null;
-      aprovada_em: string | null;
-      rejeitada_em: string | null;
-      cancelada_em: string | null;
-      pago_em: string | null;
-      created_at: string;
-      empresa: { id: string; razao_social: string | null; nome_fantasia: string | null } | null;
-      fornecedor: { id: string; nome: string; razao_social: string | null } | null;
-      criador: { nome: string } | null;
-    }>
-  ).map((d) => ({
-    id: d.id,
-    codigo: d.codigo,
-    descricao: d.descricao,
-    valor: Number(d.valor),
-    status: d.status,
-    data_prevista_pagamento: d.data_prevista_pagamento,
-    motivo_rejeicao: d.motivo_rejeicao,
-    motivo_cancelamento: d.motivo_cancelamento,
-    aprovada_em: d.aprovada_em,
-    rejeitada_em: d.rejeitada_em,
-    cancelada_em: d.cancelada_em,
-    pago_em: d.pago_em,
-    created_at: d.created_at,
-    empresa_nome: d.empresa?.razao_social ?? d.empresa?.nome_fantasia ?? "—",
-    fornecedor_nome: d.fornecedor?.razao_social ?? d.fornecedor?.nome ?? "—",
-    criador_nome: d.criador?.nome ?? "—",
-  }));
+  const desembolsosRows = desembolsosRes;
 
   const desembolsosPendentesCount = desembolsosRows.filter(
     (d) => d.status === "em_avaliacao",
@@ -994,7 +948,14 @@ export default async function PedidosCompraFinanceiroPage({
             />
           }
           ppsPendentesCount={ppsPendentesCountRes.count ?? 0}
-          desembolsos={<DesembolsosContasPagarList rows={desembolsosRows} cartoes={cartoesList} />}
+          desembolsos={
+            <DesembolsosContasPagarList
+              rows={desembolsosRows}
+              cartoes={cartoesList}
+              tomadores={tomadoresDosDesembolsos}
+              abrirInicial={searchParams?.abrir ?? null}
+            />
+          }
           desembolsosPendentesCount={desembolsosPendentesCount}
           titulos={
             <TitulosPagarList

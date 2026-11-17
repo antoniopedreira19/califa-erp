@@ -23,7 +23,7 @@ import {
 import { FiltrosConta } from "./filtros-conta";
 import { ConciliacaoList } from "./conciliacao-list";
 import { HubConciliacao } from "./hub";
-import { lerPeriodo, lerVisao } from "./hub-periodo";
+import { lerPeriodo } from "./hub-periodo";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { AbasDaConta, type AbaDaConta } from "./abas-da-conta";
 import { AbaTitulos } from "./aba-titulos";
@@ -35,6 +35,12 @@ import { FaixaDoFechamento } from "./fechamento";
 import { carregarHistoricoDoExtrato } from "./historico-dados";
 import { carregarCaudaDoExtrato, juntarNaOrdemDoDia } from "./cauda-no-extrato";
 import { AvisoDoHistorico, HistoricoNoExtrato } from "./historico-no-extrato";
+import {
+  carregarExtratoAntesDoInicio,
+  comAjusteDeAbertura,
+  eDoHistoricoAntes,
+} from "./extrato-antes-do-inicio";
+import { AvisoDoAjusteDeAbertura } from "./aviso-do-ajuste";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { fimDoMes, somaDias, type ItemDaFatura } from "@/lib/financeiro/planilha-de-titulos";
 
@@ -49,8 +55,6 @@ export default async function ConciliacaoPage({
     ate?: string;
     highlight?: string;
     periodo?: string;
-    /** Na lista: `teste` mostra só as empresas de teste. */
-    visao?: string;
     /** A aba da conta: `titulos`, `banco`, ou nada para o Extrato. */
     aba?: string;
   };
@@ -88,7 +92,6 @@ export default async function ConciliacaoPage({
         supabase={supabase}
         tenantId={session.activeTenant.id}
         periodo={lerPeriodo(searchParams.periodo)}
-        visao={lerVisao(searchParams.visao)}
       />
     );
   }
@@ -111,7 +114,7 @@ export default async function ConciliacaoPage({
   const dataDe = searchParams.de ?? `${hojeBr.slice(0, 8)}01`;
   const dataAte = searchParams.ate ?? fimDoMes(hojeBr);
 
-  const [{ data: contas }, dadosTitulos, saldoDeHoje, dadosBanco, fechamento, historico] = await Promise.all([
+  const [{ data: contas }, dadosTitulos, saldoDeHoje, dadosBanco, fechamento, historico, antesDoInicio] = await Promise.all([
     supabase
       .from("contas_bancarias")
       .select("*")
@@ -162,7 +165,20 @@ export default async function ConciliacaoPage({
     aba === "extrato"
       ? carregarHistoricoDoExtrato(supabase, { contaId, dataDe, dataAte })
       : Promise.resolve(null),
+    // O Extrato contínuo com o ajuste de abertura (16/11/2026): só na conta
+    // cujo saldo inicial veio do banco; nas outras, a função devolve nulo.
+    aba === "extrato"
+      ? carregarExtratoAntesDoInicio(supabase, { contaId, dataDe, dataAte })
+      : Promise.resolve(null),
   ]);
+
+  // O período escolhido tem dias antes de a conta começar, e a conta começou
+  // pelo saldo do banco: um extrato só, com o histórico, as baixas antigas e
+  // a linha do ajuste de abertura, no lugar dos dois blocos.
+  const continuo = antesDoInicio?.periodo ? antesDoInicio : null;
+  // Mais linhas da planilha do que o limite: a grade não sai (o saldo de cada
+  // linha ficaria errado); os cartões valem para o período inteiro.
+  const historicoCortado = !!continuo && continuo.total > continuo.linhas.length;
 
   const listaContas = contas ?? [];
 
@@ -183,7 +199,9 @@ export default async function ConciliacaoPage({
       contaId,
       dataDe,
     });
-    saldoAnterior = s.saldoAnterior;
+    // Com o extrato contínuo, o saldo antes do período vem do histórico e
+    // das baixas antigas (o saldo inicial só vale a partir do início).
+    saldoAnterior = continuo ? continuo.saldoAnterior : s.saldoAnterior;
 
     // ⚠️ O erro é LIDO. Ele era descartado, e o efeito de qualquer engano
     // na query — um embed ambíguo, por exemplo — era a tela dizer
@@ -218,7 +236,9 @@ export default async function ConciliacaoPage({
     // aparece na linha do histórico que a registra (com o código da PP);
     // aqui ela sairia uma segunda vez, na parte do sistema.
     const naLinhaDoHistorico = new Set(
-      (historico?.linhas ?? []).map((l) => l.lancamentoId).filter((id): id is string => !!id),
+      continuo
+        ? continuo.ligados
+        : (historico?.linhas ?? []).map((l) => l.lancamentoId).filter((id): id is string => !!id),
     );
     const brutos: unknown[] = (data ?? []).filter(
       (r) => !naLinhaDoHistorico.has((r as { id: string }).id),
@@ -248,7 +268,11 @@ export default async function ConciliacaoPage({
     // A baixa e os juros dela também são um débito só no banco (decisão
     // 196): uma linha, com a soma, e "inclui R$ X de juros".
     const comJuros = juntarJurosNaBaixa(comGuias.linhas);
-    const semSaldo = juntarNaOrdemDoDia(comJuros.linhas, cauda.linhas);
+    // As linhas da planilha antes do início (no extrato contínuo) vêm antes
+    // da cauda, que começa no início: as duas juntas seguem na ordem do dia.
+    const semSaldo = continuo
+      ? comAjusteDeAbertura(juntarNaOrdemDoDia(comJuros.linhas, [...continuo.linhas, ...cauda.linhas]), continuo, contaId)
+      : juntarNaOrdemDoDia(comJuros.linhas, cauda.linhas);
     detalhesImposto = comGuias.detalhes;
     jurosDasBaixas = comJuros.juros;
     linhaDoLancamento = new Map([...comGuias.linhaDoLancamento, ...comJuros.linhaDoLancamento]);
@@ -275,8 +299,10 @@ export default async function ConciliacaoPage({
       const itens = itensPorFatura.get(l.fatura_cartao_id as string);
       if (itens) itensDasFaturas[l.id] = itens;
     }
-    creditos = linhas.reduce((acc, l) => acc + l.credito, 0);
-    debitos = linhas.reduce((acc, l) => acc + l.debito, 0);
+    // As linhas da planilha antes do início entram pelos totais da função,
+    // que valem também além do limite de linhas.
+    creditos = linhas.reduce((acc, l) => acc + (eDoHistoricoAntes(l) ? 0 : l.credito), 0) + (continuo?.creditos ?? 0);
+    debitos = linhas.reduce((acc, l) => acc + (eDoHistoricoAntes(l) ? 0 : l.debito), 0) + (continuo?.debitos ?? 0);
   }
 
   const saldoFinal = saldoAnterior + creditos - debitos;
@@ -284,7 +310,8 @@ export default async function ConciliacaoPage({
   // O período todo antes de a conta começar no sistema é só histórico: os
   // cartões do sistema diriam o saldo inicial e "nenhum lançamento".
   const periodoNoHistorico = historico?.periodo ?? null;
-  const mostrarSistema = !historico || !periodoNoHistorico || dataAte >= historico.corte || linhas.length > 0;
+  const mostrarSistema =
+    !!continuo || !historico || !periodoNoHistorico || dataAte >= historico.corte || linhas.length > 0;
 
   // A baixa de um imposto devolve o id de UM dos lançamentos dela para o
   // `&highlight=`; na tela, a guia é uma linha só, com o id de outro.
@@ -311,7 +338,8 @@ export default async function ConciliacaoPage({
         dataAte={dataAte}
       />
 
-      {contaId && (
+      {/* Decisão 262: na Conciliação automática, o fechamento fica na linha dos meses. */}
+      {contaId && aba !== "banco" && (
         <FaixaDoFechamento
           contaId={contaId}
           contaNome={contaAberta?.nome ?? "Conta"}
@@ -360,8 +388,9 @@ export default async function ConciliacaoPage({
             />
           ) : (
             <>
-              {historico && <AvisoDoHistorico historico={historico} contaId={contaId} />}
-              {historico && periodoNoHistorico && (
+              {historico && !continuo && <AvisoDoHistorico historico={historico} contaId={contaId} />}
+              {continuo && <AvisoDoAjusteDeAbertura antes={continuo} contaId={contaId} />}
+              {historico && periodoNoHistorico && !continuo && (
                 <HistoricoNoExtrato
                   historico={{ ...historico, periodo: periodoNoHistorico }}
                   saldoInicial={Number(contaAberta?.saldo_inicial ?? 0)}
@@ -385,15 +414,32 @@ export default async function ConciliacaoPage({
                     <SaldoCard label="Saldo final" valor={saldoFinal} destaque />
                   </div>
 
-                  <ConciliacaoList
-                    linhas={linhas}
-                    highlight={highlight}
-                    itensDasFaturas={itensDasFaturas}
-                    detalhesImposto={detalhesImposto}
-                    jurosDasBaixas={jurosDasBaixas}
-                    contexto={`${contaId}|${dataDe}|${dataAte}`}
-                    contaId={contaId}
-                  />
+                  {historicoCortado && continuo ? (
+                    <div className="rounded-xl border border-dashed border-border px-4 py-10 text-center text-sm text-muted-foreground">
+                      O período tem {continuo.total.toLocaleString("pt-BR")} linhas do histórico da planilha. Os
+                      cartões valem para o período inteiro; para ver as linhas, escolha um período menor, mês a mês
+                      pelas setas do filtro.
+                    </div>
+                  ) : (
+                    <ConciliacaoList
+                      linhas={linhas}
+                      highlight={highlight}
+                      itensDasFaturas={itensDasFaturas}
+                      detalhesImposto={detalhesImposto}
+                      jurosDasBaixas={jurosDasBaixas}
+                      contexto={`${contaId}|${dataDe}|${dataAte}`}
+                      contaId={contaId}
+                      ajusteDeAbertura={
+                        continuo
+                          ? {
+                              inicio: continuo.corte,
+                              saldoInicial: continuo.saldoInicial,
+                              historicoNaVespera: continuo.historicoNaVespera,
+                            }
+                          : undefined
+                      }
+                    />
+                  )}
                 </>
               )}
             </>

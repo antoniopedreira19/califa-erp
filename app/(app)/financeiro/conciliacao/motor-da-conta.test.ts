@@ -171,6 +171,21 @@ test("o texto da linha resolvida", () => {
     }),
   );
   assert.equal(conjunto?.texto, "Em conjunto com outras linhas do banco: “PP-00116 · Custo do job” e mais 1");
+  // Decisão 262: o recebimento antes da NF lançado pela linha; depois de a nota sair, a baixa da parcela 1 guarda a descrição.
+  const antes = (origem: string) =>
+    resolucaoDaLinha(
+      linhaDoBanco("a", {
+        conciliada: true,
+        conciliadaComo: "avulso",
+        ligados: [{ id: "l", descricao: "Recebimento antes da NF · TES-1030/26 · Job de teste", valor: 1263.6, origem }],
+      }),
+    )?.texto;
+  assert.equal(antes("recebimento_antes_nf"), "Lançado pela linha do banco: Recebimento antes da NF · TES-1030/26 · Job de teste");
+  assert.equal(antes("titulo_baixa"), "Lançado pela linha do banco: Recebimento antes da NF · TES-1030/26 · Job de teste");
+  const avulso = resolucaoDaLinha(
+    linhaDoBanco("a", { conciliada: true, conciliadaComo: "avulso", ligados: [{ id: "l", descricao: "Tarifa de manutenção", valor: -45, origem: "avulsa_baixa" }] }),
+  );
+  assert.equal(avulso?.texto, "Avulso criado e baixado: Tarifa de manutenção");
 });
 
 // Uma linha da planilha só com o que o motor lê.

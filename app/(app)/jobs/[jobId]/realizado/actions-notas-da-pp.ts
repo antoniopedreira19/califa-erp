@@ -33,8 +33,9 @@ export interface NotaExistente {
   tomador: string;
   /** O financeiro já registrou (a nota já está na Apuração). */
   registrada: boolean;
-  /** As PPs não canceladas que a nota cobre (sem a PP que está sendo editada). */
-  pps: Array<{ id: string; codigo: string; valor_na_pp: number | null; status: string }>;
+  /** Os documentos não cancelados que a nota cobre (sem o que está sendo
+   *  editado): as PPs e, desde a decisão 264, os pedidos de desembolso. */
+  pps: Array<{ id: string; codigo: string; valor_na_pp: number | null; status: string; tipo: "pp" | "desembolso" }>;
 }
 
 const entrada = z.object({
@@ -69,7 +70,7 @@ export async function buscarNotasDoFornecedor(
     valor: number | string;
     tomador_estabelecimento_id: string;
     registrada: boolean;
-    pps: Array<{ id: string; codigo: string; valor_na_pp: number | string | null; status: string }> | null;
+    pps: Array<{ id: string; codigo: string; valor_na_pp: number | string | null; status: string; tipo?: string }> | null;
   }>;
   return {
     ok: true,
@@ -86,6 +87,7 @@ export async function buscarNotasDoFornecedor(
         codigo: p.codigo,
         valor_na_pp: p.valor_na_pp === null ? null : Number(p.valor_na_pp),
         status: p.status,
+        tipo: p.tipo === "desembolso" ? ("desembolso" as const) : ("pp" as const),
       })),
     })),
   };

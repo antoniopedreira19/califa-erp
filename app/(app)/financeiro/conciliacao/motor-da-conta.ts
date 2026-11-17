@@ -252,7 +252,10 @@ export function resolucaoDaLinha(
       texto = `Em conjunto com outras linhas do banco: ${aspas(primeira)}${varios}${troca ? ` · data de ${diaMes(troca.de)} para ${diaMes(l.data)}, a do banco` : ""}`;
       break;
     case "avulso":
-      texto = `Avulso criado e baixado: ${primeira}`;
+      // Decisão 262: o recebimento antes da NF lançado pela linha (antes e depois de a nota sair).
+      texto = principais.some((x) => x.origem === "recebimento_antes_nf" || String(x.descricao ?? "").startsWith("Recebimento antes da NF"))
+        ? `Lançado pela linha do banco: ${primeira}`
+        : `Avulso criado e baixado: ${primeira}`;
       break;
     case "historico": {
       const jobs = [...new Set(l.historicos.map((h) => h.job ?? h.descricao ?? "sem job"))];

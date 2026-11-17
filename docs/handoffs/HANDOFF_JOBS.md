@@ -6831,3 +6831,10 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - **Envio:** o vencimento, as parcelas e o CNAE vão por nota (`actions-envio-lote.ts`, `envio-faturamento-lote.ts`); a nota de alguns jobs leva `jobs_da_nota` e entra na conta de `ratearNotas` (5 testes novos). Sem migration.
 - **Testado** no Sandbox: TET-1006, TET-1007 e TET-1008/26 (Teste 22) enviados em 3 notas — uma de dois jobs em 2 parcelas com CNAE, uma dividida à mão pela porcentagem e uma com os três.
 - **Fica de fora:** a cópia de um envio anterior traz a nota de alguns jobs como nota de todos; 5 jobs ou mais em duas linhas não foi visto na tela.
+
+## ⚠️ Nota de 2026-11-17 — a errata pronta com mês novo chega ao envio (correção da 219)
+
+- **Defeito:** o GP não conseguia enviar a errata pronta que inclui mês no Fee ou Always On: "O mês do agrupamento novo não é deste job." A leitura da pronta (`carregar-detalhe.ts`) não copiava `meses_novos`, e o GP reabria a errata sem os meses. Visto no COL-1001/26 (novembro e dezembro).
+- **Correção:** a leitura copia `meses_novos`; o campo ficou obrigatório em `ConteudoErrata` (o rascunho manda `[]` e a seção da planilha põe os meses por cima). Sem migration; a pronta no banco já estava completa.
+- **Testado** no Sandbox: TES-1035/26, pronta do produtor com dezembro; recusada na versão publicada, enviada com a correção (dezembro na versão aprovada e no job, job no mural de abertura).
+

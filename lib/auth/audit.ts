@@ -364,6 +364,11 @@ export type AuditAction =
   | "titulo.baixa_estornada"
   | "titulo.previsao_repactuada"
   | "desembolso.criado"
+  // Decisão 264: o pedido com comprovante vai ao financeiro no envio; o
+  // rejeitado volta corrigido (reenviado) ou o enviado ganha o comprovante.
+  | "desembolso.enviado"
+  | "desembolso.reenviado"
+  | "desembolso.corrigido"
   | "desembolso.aprovada"
   | "desembolso.rejeitada"
   | "desembolso.cancelada"

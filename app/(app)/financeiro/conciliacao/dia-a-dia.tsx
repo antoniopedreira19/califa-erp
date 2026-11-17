@@ -4,10 +4,14 @@
  * A Conciliação automática dia a dia (decisão 254).
  *
  * A fila única da conta virou um dia por vez: a barra de dias (com o que
- * falta em cada um e o cadeado de fechar no dia sem pendências), o resumo do
- * dia e a tabela com as linhas do banco na ordem do extrato
- * (`dia-a-dia-tabela.tsx`). O fechamento é o de sempre (decisão 205): fechar
- * o dia D é fechar a conciliação até D.
+ * falta em cada um, e ✓ no dia sem pendências), o resumo do dia e a tabela
+ * com as linhas do banco na ordem do extrato (`dia-a-dia-tabela.tsx`).
+ *
+ * O fechamento é do mês (decisão 262, D10): o dia não fecha mais. A linha
+ * dos meses, acima da barra de dias, mostra os meses fechados e o "Reabrir"
+ * do último (`FechadosNaLinha`) e cada mês em aberto com o que falta e o
+ * "Fechar outubro", que liga com as condições de sempre (decisão 205)
+ * olhadas no último dia do mês: é o fechamento até esse dia.
  *
  * "Retirar este extrato" tira da conta o último arquivo importado, para o
  * arquivo errado ou para recomeçar: desfaz o que foi conciliado com as linhas
@@ -15,15 +19,17 @@
  */
 
 import * as React from "react";
-import { AlertTriangle, CheckCheck, ChevronLeft, ChevronRight, Lock, Trash2, Unlock } from "lucide-react";
+import { AlertTriangle, CheckCheck, ChevronLeft, ChevronRight, Lock, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatBRL } from "@/lib/format";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { avisoDoSaldo, diasDaConta, motivoDeNaoFechar, type DiaDaConta, type SaldoDoDia } from "@/lib/conciliacao/dia-a-dia";
+import { avisoDoSaldo, diasDaConta, mesesDaConta, type DiaDaConta, type MesDaConta, type SaldoDoDia } from "@/lib/conciliacao/dia-a-dia";
+import { maiuscula, nomeDoMes } from "@/lib/conciliacao/fechamento";
 import { InfoDica, LinhaDeAvisos, LinhaDoArquivo, linhasComMutuo, type PropsDaFila } from "./fila-da-conta";
 import { itensDoSistema, TabelaDeComposicoes, type AcoesDoDia } from "./dia-a-dia-tabela";
 import { conciliarMisto, mudarDataDaBaixa, mudarDataDaPrevisao, previaDeRetirarExtrato, retirarExtrato, type PreviaDaRetirada } from "./actions-dia-a-dia";
 import { fecharConciliacao } from "./actions-fechamento";
+import { FechadosNaLinha, SeloReaberto } from "./fechamento";
 import { repactuarDataPagamento } from "../contas-a-pagar/actions-titulos";
 import { repactuarPrevisaoRecebimento } from "../contas-a-receber/actions";
 
@@ -69,13 +75,15 @@ export function ConciliacaoDiaADia(p: PropsDaFila) {
     ];
     return diasDaConta(entradas, p.fechadaAte, completoAte);
   }, [resultados, doSistema, p.fechadaAte, completoAte]);
-  const primeiroAberto = dias.find((d) => d.estado !== "fechado")?.data ?? dias[dias.length - 1]?.data ?? null;
+  // O dia fechado sai da barra (decisão 262): sem dia aberto, "Todos os dias".
+  const diasAbertos = React.useMemo(() => dias.filter((d) => d.estado !== "fechado"), [dias]);
+  const primeiroAberto = diasAbertos[0]?.data ?? null;
   const [dia, setDia] = React.useState<string | null>(primeiroAberto);
   React.useEffect(() => setDia(primeiroAberto), [conta]); // eslint-disable-line react-hooks/exhaustive-deps
   // O dia escolhido saiu da lista (fechou, ou o extrato foi retirado): vai ao primeiro aberto.
   React.useEffect(() => {
-    if (dia && !dias.some((d) => d.data === dia)) setDia(primeiroAberto);
-  }, [dias, dia, primeiroAberto]);
+    if (dia && !diasAbertos.some((d) => d.data === dia)) setDia(primeiroAberto);
+  }, [diasAbertos, dia, primeiroAberto]);
   const atual = dias.find((d) => d.data === dia) ?? null;
 
   // ---- O resumo do dia ----
@@ -88,14 +96,16 @@ export function ConciliacaoDiaADia(p: PropsDaFila) {
   };
   const resolvidas = linhasDoDia.filter((r) => r.resolvido).length;
 
-  const fecharDia = (data: string) => {
-    const seguinte = dias.find((d) => d.data > data)?.data ?? null;
+  // ---- Os meses (decisão 262): o mês fecha até o último dia dele ----
+  const meses = React.useMemo(() => mesesDaConta(dias, p.saldosDosDias, completoAte), [dias, p.saldosDosDias, completoAte]);
+  const fecharMes = (fim: string) => {
+    const seguinte = dias.find((d) => d.data > fim)?.data ?? null;
     rodar(
       async () => {
-        const res = await fecharConciliacao(conta, data);
-        return res.ok ? { ok: true, mensagem: `Dia ${ddmm(data)} fechado: nada com data até ele muda sem reabrir.` } : res;
+        const res = await fecharConciliacao(conta, fim);
+        return res.ok ? { ok: true, mensagem: `${maiuscula(nomeDoMes(fim))} fechado: nada com data até ${ddmm(fim)} muda sem reabrir o mês.` } : res;
       },
-      () => seguinte && setDia(seguinte),
+      () => setDia(seguinte),
     );
   };
 
@@ -149,7 +159,8 @@ export function ConciliacaoDiaADia(p: PropsDaFila) {
       </div>
       <LinhaDeAvisos {...p} />
 
-      <BarraDeDias dias={dias} saldos={p.saldosDosDias} dia={dia} setDia={setDia} fechadaAte={p.fechadaAte} onFechar={fecharDia} ocupado={pending} />
+      <LinhaDosMeses p={p} meses={meses} onFechar={fecharMes} ocupado={pending} />
+      <BarraDeDias dias={diasAbertos} saldos={p.saldosDosDias} dia={dia} setDia={setDia} />
 
       {/* ---- O resumo do dia ---- */}
       <div className="flex flex-wrap items-center gap-x-8 gap-y-3 rounded-xl border border-border bg-card px-4 py-3">
@@ -169,26 +180,26 @@ export function ConciliacaoDiaADia(p: PropsDaFila) {
         {pending && <span className="ml-auto text-xs font-semibold text-muted-foreground">Trabalhando…</span>}
       </div>
 
-      {/* Tudo conciliado, mas o servidor recusaria o fechamento pelo saldo: dito antes do clique. */}
-      {dia && atual?.estado === "pronto" && motivoDeNaoFechar(dias, dia, []) === null && avisoDoSaldo(p.saldosDosDias, dia) && (
+      {/* Tudo conciliado, mas o saldo do dia não bate: dito na hora (o mês não fecharia). */}
+      {dia && atual?.estado === "pronto" && avisoDoSaldo(p.saldosDosDias, dia) && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           <AlertTriangle className="h-5 w-5 text-amber-700" />
           <span className="flex-1">
-            <strong>Tudo conciliado em {ddmm(dia)}, mas o dia ainda não fecha.</strong> {avisoDoSaldo(p.saldosDosDias, dia)}
+            <strong>Tudo conciliado em {ddmm(dia)}, mas o saldo do dia não bate.</strong> {avisoDoSaldo(p.saldosDosDias, dia)}
           </span>
         </div>
       )}
 
-      {dia && atual?.estado === "pronto" && !motivoDeNaoFechar(dias, dia, p.saldosDosDias) && (
+      {dia && atual?.estado === "pronto" && !avisoDoSaldo(p.saldosDosDias, dia) && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
           <CheckCheck className="h-5 w-5 text-emerald-700" />
           <span className="flex-1">
-            <strong>Tudo conciliado em {ddmm(dia)}.</strong> Confira os conciliados e feche o dia pelo cadeado dele, na barra de dias: depois de fechado, nada com essa data muda sem reabrir.
+            <strong>Tudo conciliado em {ddmm(dia)}.</strong> O dia fica com ✓ na barra de dias. O mês fecha quando todos os dias dele estiverem assim.
           </span>
         </div>
       )}
 
-      <TabelaDeComposicoes p={p} dia={dia} itensDoSistema={doSistema} saldoBase={p.condicoes?.ate && typeof p.condicoes.saldo_banco === "number" ? { ate: p.condicoes.ate, saldo: p.condicoes.saldo_banco } : null} servidor={servidor} avisar={p.avisar} />
+      <TabelaDeComposicoes p={p} dia={dia} itensDoSistema={doSistema} saldoBase={p.condicoes?.ate && typeof p.condicoes.saldo_banco === "number" ? { ate: p.condicoes.ate, saldo: p.condicoes.saldo_banco } : null} servidor={servidor} avisar={p.avisar} avisarOk={p.avisarOk} />
 
       {retirando && (
         <RetirarOExtrato
@@ -219,25 +230,90 @@ export function ConciliacaoDiaADia(p: PropsDaFila) {
 // ---------------------------------------------------------------------------
 
 
-/** A barra de dias: um dia por vez, em ordem; o cadeado no lugar do número quando o dia não tem mais pendências. */
+/** A linha dos meses (decisão 262): os meses fechados e o "Reabrir" do último,
+ *  e cada mês em aberto com o que falta nele e o botão de fechar. */
+function LinhaDosMeses({ p, meses, onFechar, ocupado }: { p: PropsDaFila; meses: MesDaConta[]; onFechar: (fim: string) => void; ocupado: boolean }) {
+  if (!p.fechamento.ativo && !meses.length) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3 py-2">
+      <FechadosNaLinha contaId={p.banco.conta.id} contaNome={p.banco.conta.nome} bancoNome={p.banco.conta.banco} fechamento={p.fechamento} />
+      {meses.map((m) => {
+        const dias = m.dias.length;
+        const feitos = m.dias.filter((d) => d.pendentes === 0).length;
+        return (
+          <span key={m.mes} className="inline-flex items-center gap-2 rounded-lg border border-border bg-white py-1 pl-3 pr-1">
+            <span className="flex flex-col leading-tight">
+              <span className="inline-flex items-center gap-1.5 text-xs font-semibold">
+                {maiuscula(nomeDoMes(m.fim))}
+                <SeloReaberto fim={m.fim} registros={p.fechamento.registros} />
+              </span>
+              <span className={cn("text-[11px]", m.faltas.length ? "text-muted-foreground" : "text-emerald-700")}>
+                {m.faltas.length ? `${feitos} de ${dias} ${dias === 1 ? "dia" : "dias"} com ✓` : "tudo conciliado"}
+              </span>
+            </span>
+            <BotaoDoMes m={m} onFechar={onFechar} ocupado={ocupado} />
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+/** O botão de fechar o mês: liga quando o mês não tem mais nada a fazer; a dica diz o que falta. */
+function BotaoDoMes({ m, onFechar, ocupado }: { m: MesDaConta; onFechar: (fim: string) => void; ocupado: boolean }) {
+  const pode = m.faltas.length === 0;
+  const nome = nomeDoMes(m.fim);
+  return (
+    <button
+      type="button"
+      disabled={!pode || ocupado}
+      onClick={() => onFechar(m.fim)}
+      title={pode ? `Fecha ${nome}: nada com data até ${ddmm(m.fim)} muda sem reabrir o mês.` : `Ainda não fecha ${nome}. ${m.faltas.join(" ")}`}
+      aria-label={`Fechar ${nome}`}
+      className={cn(
+        "inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-semibold transition-colors disabled:cursor-not-allowed",
+        pode ? "bg-[#282828] text-white hover:bg-black" : "border border-dashed border-border bg-white text-muted-foreground/70",
+      )}
+    >
+      <Lock className="h-3.5 w-3.5" />
+      Fechar {nome}
+    </button>
+  );
+}
+
+/** O dia sem pendências: ✓ (cinza enquanto o extrato do dia não está completo), ou ⚠ quando o saldo do dia não bate. */
+function IconeDoDia({ d, saldos }: { d: DiaDaConta; saldos: SaldoDoDia[] }) {
+  if (d.pendentes > 0) return null;
+  const aviso = d.estado === "pronto" ? avisoDoSaldo(saldos, d.data) : null;
+  const titulo =
+    d.estado === "andamento"
+      ? "Tudo conciliado até agora: o extrato deste dia ainda não está completo."
+      : aviso
+        ? `Tudo conciliado, mas o saldo não bate. ${aviso}`
+        : "Tudo conciliado neste dia.";
+  return (
+    <span title={titulo} aria-label={titulo} className="flex w-8 items-center justify-center pr-1">
+      {aviso ? (
+        <AlertTriangle className="h-4 w-4 text-amber-600" />
+      ) : (
+        <CheckCheck className={cn("h-4 w-4", d.estado === "andamento" ? "text-muted-foreground/60" : "text-emerald-600")} />
+      )}
+    </span>
+  );
+}
+
+/** A barra de dias em aberto: um dia por vez, em ordem, com um traço entre os meses. O dia sem pendências mostra ✓ no lugar do número. */
 function BarraDeDias({
   dias,
   saldos,
   dia,
   setDia,
-  fechadaAte,
-  onFechar,
-  ocupado,
 }: {
   dias: DiaDaConta[];
-  /** O saldo de cada dia pela conta do fechamento: o cadeado avisa antes do clique. */
+  /** O saldo de cada dia pela conta do fechamento: o ⚠ no dia que não bate. */
   saldos: SaldoDoDia[];
   dia: string | null;
   setDia: (d: string | null) => void;
-  fechadaAte: string | null;
-  /** O cadeado de cada dia: fecha a conciliação até ele. */
-  onFechar: (data: string) => void;
-  ocupado: boolean;
 }) {
   const k = dias.findIndex((d) => d.data === dia);
   const ir = (n: number) => {
@@ -247,77 +323,46 @@ function BarraDeDias({
   const seta = "inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-white text-muted-foreground hover:bg-muted disabled:opacity-40";
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5">
-      {fechadaAte && (
-        <span className="inline-flex h-9 items-center gap-2 rounded-lg bg-muted/60 px-3 text-xs font-semibold text-muted-foreground">
-          <Lock className="h-3.5 w-3.5" />
-          Fechado até {ddmm(fechadaAte)}
-        </span>
-      )}
       <button type="button" className={seta} disabled={k <= 0} onClick={() => ir(-1)} aria-label="Dia anterior">
         <ChevronLeft className="h-4 w-4" />
       </button>
       <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
-        {dias.map((d) => {
+        {dias.map((d, i) => {
           const ativo = d.data === dia;
-          const motivo = d.estado === "fechado" ? "Dia fechado" : motivoDeNaoFechar(dias, d.data, saldos);
-          const saldoNaoBate = d.estado === "pronto" && !!avisoDoSaldo(saldos, d.data);
           return (
-            <div
-              key={d.data}
-              className={cn(
-                "flex h-11 min-w-[104px] shrink-0 items-stretch rounded-lg border transition-colors",
-                ativo ? "border-california-red bg-california-red/5" : "border-border bg-white hover:bg-muted/50",
-                d.estado === "andamento" && !ativo && "border-dashed",
-              )}
-            >
-              <button
-                type="button"
-                onClick={() => setDia(d.data)}
-                aria-pressed={ativo}
-                title={
-                  d.estado === "fechado"
-                    ? "Dia fechado"
-                    : d.estado === "andamento"
-                      ? "Em andamento: o extrato do dia ainda não está completo"
-                      : d.estado === "pronto"
-                        ? saldoNaoBate
-                          ? "Tudo conciliado, mas o saldo do dia não confere com o banco"
-                          : "Tudo conciliado: pronto para fechar"
-                        : `${d.pendentes} ${d.pendentes === 1 ? "item" : "itens"} para resolver`
-                }
-                className={cn("flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg pl-3 text-left", d.estado !== "fechado" && d.pendentes > 0 ? "pr-3" : "pr-1")}
-              >
-                <span className="flex flex-col leading-tight">
-                  <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{diaDaSemana(d.data)}</span>
-                  <span className={cn("font-mono text-[13px] font-semibold", ativo && "text-california-red")}>{ddmm(d.data)}</span>
-                </span>
-                {/* Com pendências, só o número; o cadeado toma o lugar dele quando zera. */}
-                {d.estado !== "fechado" && d.pendentes > 0 && (
-                  <span className={cn("rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums", d.estado === "andamento" ? "bg-muted text-muted-foreground" : "bg-amber-100 text-amber-800")}>{d.pendentes}</span>
+            <React.Fragment key={d.data}>
+              {i > 0 && d.data.slice(0, 7) !== dias[i - 1].data.slice(0, 7) && <span className="mx-0.5 h-8 w-px shrink-0 bg-border" aria-hidden />}
+              <div
+                className={cn(
+                  "flex h-11 min-w-[104px] shrink-0 items-stretch rounded-lg border transition-colors",
+                  ativo ? "border-california-red bg-california-red/5" : "border-border bg-white hover:bg-muted/50",
+                  d.estado === "andamento" && !ativo && "border-dashed",
                 )}
-              </button>
-              {d.estado === "fechado" ? (
-                <span title="Dia fechado" className="flex w-9 items-center justify-center pr-1 text-muted-foreground">
-                  <Lock className="h-3.5 w-3.5" />
-                </span>
-              ) : d.pendentes === 0 ? (
-                <span className="flex items-center pr-2">
-                  <button
-                    type="button"
-                    disabled={!!motivo || ocupado}
-                    onClick={() => onFechar(d.data)}
-                    title={motivo ?? `Fechar o dia ${ddmm(d.data)}: nada com data até ele muda sem reabrir.`}
-                    aria-label={`Fechar o dia ${ddmm(d.data)}`}
-                    className={cn(
-                      "inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors disabled:cursor-not-allowed",
-                      motivo ? "text-muted-foreground/50" : "border border-border bg-white text-foreground hover:border-foreground/40 hover:bg-muted",
-                    )}
-                  >
-                    {motivo ? <Lock className="h-3.5 w-3.5" /> : <Unlock className="h-3.5 w-3.5" />}
-                  </button>
-                </span>
-              ) : null}
-            </div>
+              >
+                <button
+                  type="button"
+                  onClick={() => setDia(d.data)}
+                  aria-pressed={ativo}
+                  title={
+                    d.estado === "andamento"
+                      ? "Em andamento: o extrato do dia ainda não está completo"
+                      : d.pendentes === 0
+                        ? "Tudo conciliado neste dia"
+                        : `${d.pendentes} ${d.pendentes === 1 ? "item" : "itens"} para resolver`
+                  }
+                  className={cn("flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg pl-3 text-left", d.pendentes > 0 ? "pr-3" : "pr-1")}
+                >
+                  <span className="flex flex-col leading-tight">
+                    <span className="text-[10px] uppercase tracking-wide text-muted-foreground">{diaDaSemana(d.data)}</span>
+                    <span className={cn("font-mono text-[13px] font-semibold", ativo && "text-california-red")}>{ddmm(d.data)}</span>
+                  </span>
+                  {d.pendentes > 0 && (
+                    <span className={cn("rounded-full px-1.5 py-0.5 text-[11px] font-bold tabular-nums", d.estado === "andamento" ? "bg-muted text-muted-foreground" : "bg-amber-100 text-amber-800")}>{d.pendentes}</span>
+                  )}
+                </button>
+                <IconeDoDia d={d} saldos={saldos} />
+              </div>
+            </React.Fragment>
           );
         })}
       </div>
@@ -362,7 +407,7 @@ function RetirarOExtrato({ previa, ocupado, onFechar, onConfirmar }: { previa: P
               : `${conciliadas === 1 ? "é desfeita" : "são desfeitas"}, como no “Desfazer” de cada linha: o lançamento volta a ficar sem linha no banco, e a baixa dada num “baixar e conciliar” é cancelada (o título volta a em aberto).`}
           </li>
           {ignoradas > 0 && <li>{ignoradas === 1 ? "1 linha ignorada sai junto." : `${ignoradas} linhas ignoradas saem junto.`}</li>}
-          <li className="text-muted-foreground">Os lançamentos e os títulos do sistema não são apagados.</li>
+          <li className="text-muted-foreground">Os títulos do sistema não são apagados. O que foi lançado pela própria linha (pela regra, no PIX que voltou ou no recebimento antes da NF) sai junto.</li>
         </ul>
         {pedeMotivo && !bloqueio && (
           <textarea

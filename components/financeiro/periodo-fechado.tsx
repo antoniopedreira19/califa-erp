@@ -70,7 +70,7 @@ export function AvisoDoPeriodoFechado({ ate, contaNome }: { ate: string; contaNo
       <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" />
       <span>
         A conciliação {contaNome ? `da ${contaNome}` : "desta conta"} está fechada até {dataBR(ate)}. Baixa com data até lá só
-        entra reabrindo o período (na faixa do topo da Conciliação).
+        entra reabrindo o mês, na Conciliação.
       </span>
     </div>
   );

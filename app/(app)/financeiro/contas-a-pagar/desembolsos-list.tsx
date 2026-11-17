@@ -1,15 +1,11 @@
 "use client";
-
+// Contas a Pagar › Desembolsos (decisão 264): todos os pedidos, numa grade
+// fixa com o que o financeiro precisa — valor, parcela, quem recebe, quem
+// enviou, a regional e o pagamento. Sem botões na linha: o clique abre a
+// tela do pedido, como a da PP, e lá se decide. Os urgentes que esperam o
+// financeiro sobem para a seção "Urgentes", como na lista de PPs.
 import * as React from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import type { DesembolsoStatus } from "@/lib/types";
-import { desembolsoStatusLabel } from "@/lib/types";
-import { AprovarDesembolsoDialog } from "./aprovar-desembolso-dialog";
-import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
-import { RejeitarDesembolsoDialog, type ModoDialog } from "./rejeitar-desembolso-dialog";
-import { ReverterAprovacaoDialog } from "./reverter-aprovacao-dialog";
 import {
   BarraDosFiltrosDeColuna,
   celulaData,
@@ -18,200 +14,97 @@ import {
   useFiltrosDeColuna,
   type ColunaFiltravel,
 } from "@/components/ui/filtro-de-coluna";
-import { formatDiaBr } from "@/lib/formatar-data-hora";
+import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
+import type { TomadorDaNf } from "@/app/(app)/jobs/[jobId]/realizado/anexos-da-pp";
+import { ROTULO_DO_STATUS, type PedidoDeDesembolso, type StatusDoDesembolso } from "@/app/(app)/financeiro/desembolsos/tipos";
+import { SeloStatus, brl, dataBr, linhaDoStatus } from "@/app/(app)/financeiro/desembolsos/comum";
+import { TelaDoDesembolso } from "@/app/(app)/financeiro/desembolsos/tela";
 
-// ---------- Tipo da row (vindo do SELECT com joins) ----------
-
-export interface DesembolsoRow {
-  id: string;
-  codigo: string;
-  descricao: string;
-  valor: number;
-  status: DesembolsoStatus;
-  data_prevista_pagamento: string | null;
-  motivo_rejeicao: string | null;
-  motivo_cancelamento: string | null;
-  aprovada_em: string | null;
-  rejeitada_em: string | null;
-  cancelada_em: string | null;
-  pago_em: string | null;
-  created_at: string;
-  empresa_nome: string;
-  fornecedor_nome: string;
-  criador_nome: string;
-}
-
-// ---------- Helpers ----------
-
-function formatMoney(n: number): string {
-  return n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
-}
-
-function statusBadgeClasses(status: DesembolsoStatus): string {
-  switch (status) {
-    case "em_avaliacao":
-      return "bg-[#fffbeb] text-[#92400e] border-[#fde68a]";
-    case "aprovada":
-      return "bg-blue-50 text-blue-700 border-blue-200";
-    case "pago":
-      return "bg-emerald-50 text-emerald-700 border-emerald-200";
-    case "rejeitada":
-      return "bg-red-50 text-red-700 border-red-200";
-    case "cancelada":
-      return "bg-slate-100 text-slate-500 border-slate-200";
-  }
-}
-
-// ---------- Chips de filtro ----------
-
-type FiltroStatus = "em_avaliacao" | "aprovada" | "todas";
-
-const FILTROS: Array<{ key: FiltroStatus; label: string }> = [
+type Filtro = "em_avaliacao" | "aprovada" | "pago" | "rejeitada" | "cancelada" | "todos";
+const ORDEM: StatusDoDesembolso[] = ["em_avaliacao", "aprovada", "pago", "rejeitada", "cancelada"];
+const FILTROS: Array<{ key: Filtro; label: string }> = [
   { key: "em_avaliacao", label: "Em avaliação" },
   { key: "aprovada", label: "Aprovados" },
-  { key: "todas", label: "Todos" },
+  { key: "pago", label: "Pagos" },
+  { key: "rejeitada", label: "Rejeitados" },
+  { key: "cancelada", label: "Cancelados" },
+  { key: "todos", label: "Todos" },
 ];
 
-// ---------- Filtro e ordem pelo título da coluna ----------
-//
-// Como no Excel (pedido do Tiago, 09/10/2026, decisão 165 — o mesmo filtro da aba PPs do
-// job). Fica de fora só a coluna Ações (botões).
+const quemRecebe = (r: PedidoDeDesembolso) => (r.reembolso ? r.criador.nome : r.fornecedor?.nome ?? "—");
 
-/** A lista do funil de Status na ordem da esteira, não de A a Z. */
-const ORDEM_DO_STATUS: DesembolsoStatus[] = ["em_avaliacao", "aprovada", "pago", "rejeitada", "cancelada"];
-
-const COLUNAS: ColunaFiltravel<DesembolsoRow>[] = [
+const COLUNAS: ColunaFiltravel<PedidoDeDesembolso>[] = [
+  { chave: "codigo", rotulo: "Código", tipo: "texto", celula: (r) => ({ ...celulaTexto(r.codigo), busca: `${r.codigo} ${r.descricao}` }) },
+  { chave: "valor", rotulo: "Valor", tipo: "valor", faixa: true, alinhar: "right", celula: (r) => celulaValor(r.valor, brl) },
   {
-    chave: "codigo",
-    rotulo: "Código",
-    tipo: "texto",
-    // A célula mostra o código e a descrição: a busca da coluna acha pelos dois.
-    celula: (r) => ({ ...celulaTexto(r.codigo), busca: `${r.codigo} ${r.descricao}` }),
-  },
-  { chave: "empresa", rotulo: "Empresa", tipo: "texto", celula: (r) => celulaTexto(r.empresa_nome === "—" ? "" : r.empresa_nome) },
-  { chave: "fornecedor", rotulo: "Fornecedor", tipo: "texto", celula: (r) => celulaTexto(r.fornecedor_nome === "—" ? "" : r.fornecedor_nome) },
-  {
-    chave: "valor",
-    rotulo: "Valor",
+    chave: "parcela",
+    rotulo: "Parcela",
     tipo: "valor",
-    faixa: true,
-    alinhar: "right",
-    celula: (r) => celulaValor(r.valor, formatMoney),
+    celula: (r) => {
+      const n = Math.max(r.parcelas.length, 1);
+      return { valor: String(n), rotulo: `1/${n}`, ordem: n };
+    },
   },
-  { chave: "criador", rotulo: "Criado por", tipo: "texto", celula: (r) => celulaTexto(r.criador_nome === "—" ? "" : r.criador_nome) },
-  { chave: "criacao", rotulo: "Criação", tipo: "data", celula: (r) => celulaData(r.created_at) },
+  { chave: "descricao", rotulo: "Descrição", tipo: "texto", celula: (r) => celulaTexto(r.descricao) },
+  { chave: "quem", rotulo: "Quem recebe", tipo: "texto", celula: (r) => celulaTexto(r.reembolso ? `Reembolso · ${r.criador.nome}` : quemRecebe(r)) },
+  { chave: "enviado", rotulo: "Enviado por", tipo: "texto", celula: (r) => celulaTexto(r.criador.nome) },
+  // Pedido do Tiago (17/11): a regional em coluna própria; com rateio, uma por linha da célula.
+  { chave: "regional", rotulo: "Regional", tipo: "texto", celula: (r) => (r.regionais.length ? r.regionais.map((g) => celulaTexto(g.nome)) : celulaTexto(null)) },
+  { chave: "pagamento", rotulo: "Pagamento", tipo: "data", celula: (r) => celulaData(r.prevista) },
   {
     chave: "status",
     rotulo: "Status",
     tipo: "texto",
-    celula: (r) => ({
-      ...celulaTexto(desembolsoStatusLabel(r.status)),
-      // A busca acha também pelo motivo da rejeição ou do cancelamento.
-      busca: `${desembolsoStatusLabel(r.status)} ${r.motivo_rejeicao ?? ""} ${r.motivo_cancelamento ?? ""}`,
-      ordemNaLista: ORDEM_DO_STATUS.indexOf(r.status),
-    }),
+    celula: (r) => ({ ...celulaTexto(ROTULO_DO_STATUS[r.status]), ordemNaLista: ORDEM.indexOf(r.status) }),
   },
 ];
 
-// ---------- Componente principal ----------
-
-interface DesembolsosContasPagarListProps {
-  rows: DesembolsoRow[];
-  /** Para a intenção de pagamento na aprovação (decisão 093, §12). */
+export function DesembolsosContasPagarList({
+  rows,
+  cartoes,
+  tomadores,
+  abrirInicial = null,
+}: {
+  rows: PedidoDeDesembolso[];
   cartoes: CartaoOption[];
-}
-
-interface DialogState {
-  desembolso: DesembolsoRow | null;
-  tipo: "aprovar" | "rejeitar" | "cancelar" | null;
-}
-
-export function DesembolsosContasPagarList({ rows,
-  cartoes }: DesembolsosContasPagarListProps) {
-  const [filtro, setFiltro] = React.useState<FiltroStatus>("em_avaliacao");
-  const [dialog, setDialog] = React.useState<DialogState>({ desembolso: null, tipo: null });
-  const [revertendo, setRevertendo] = React.useState<DesembolsoRow | null>(null);
-
-  const contagens = React.useMemo(() => {
-    const c = { em_avaliacao: 0, aprovada: 0, todas: rows.length };
-    for (const r of rows) {
-      if (r.status === "em_avaliacao") c.em_avaliacao++;
-      else if (r.status === "aprovada") c.aprovada++;
-    }
-    return c;
-  }, [rows]);
-
-  /** O que passa no chip de cima. Os filtros dos títulos vêm depois. */
-  const doTopo = React.useMemo(() => {
-    if (filtro === "todas") return rows;
-    return rows.filter((r) => r.status === filtro);
-  }, [rows, filtro]);
+  tomadores: TomadorDaNf[];
+  /** O `?abrir=` (o endereço antigo do detalhe redireciona para cá). */
+  abrirInicial?: string | null;
+}) {
+  const [filtro, setFiltro] = React.useState<Filtro>(() =>
+    abrirInicial && rows.some((r) => r.id === abrirInicial) ? "todos" : "em_avaliacao",
+  );
+  const [aberto, setAberto] = React.useState<string | null>(
+    abrirInicial && rows.some((r) => r.id === abrirInicial) ? abrirInicial : null,
+  );
+  const conta = (k: Filtro) => (k === "todos" ? rows.length : rows.filter((l) => l.status === k).length);
+  const doTopo = React.useMemo(() => (filtro === "todos" ? rows : rows.filter((l) => l.status === filtro)), [rows, filtro]);
   const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "contas-a-pagar-desembolsos" });
-  const filtrados = colunas.visiveis;
-
-  function abrirDialog(desembolso: DesembolsoRow, tipo: "aprovar" | "rejeitar" | "cancelar") {
-    setDialog({ desembolso, tipo });
-  }
-
-  function fecharDialog() {
-    setDialog({ desembolso: null, tipo: null });
-  }
-
-  const desembolsoParaAprovar = dialog.tipo === "aprovar" && dialog.desembolso
-    ? {
-        id: dialog.desembolso.id,
-        codigo: dialog.desembolso.codigo,
-        descricao: dialog.desembolso.descricao,
-        valor: dialog.desembolso.valor,
-        status: dialog.desembolso.status,
-        fornecedor_nome: dialog.desembolso.fornecedor_nome,
-      }
-    : null;
-
-  const desembolsoParaRejeitar =
-    (dialog.tipo === "rejeitar" || dialog.tipo === "cancelar") && dialog.desembolso
-      ? {
-          id: dialog.desembolso.id,
-          codigo: dialog.desembolso.codigo,
-          descricao: dialog.desembolso.descricao,
-          valor: dialog.desembolso.valor,
-          fornecedor_nome: dialog.desembolso.fornecedor_nome,
-        }
-      : null;
+  const espera = (d: PedidoDeDesembolso) => d.urgente && (d.status === "em_avaliacao" || d.status === "aprovada");
+  const urgentes = colunas.visiveis.filter(espera);
+  const ordenadas = [...urgentes, ...colunas.visiveis.filter((d) => !espera(d))];
+  const pedidoAberto = aberto ? rows.find((r) => r.id === aberto) ?? null : null;
 
   return (
     <div className="space-y-4">
-      {/* Chips de filtro */}
       <div className="flex flex-wrap items-center gap-2">
-        {FILTROS.map((f) => {
-          const ativo = filtro === f.key;
-          const count = contagens[f.key];
-          return (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => setFiltro(f.key)}
-              className={cn(
-                "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
-                ativo
-                  ? "border-california-red bg-california-red text-white"
-                  : "border-border bg-white text-muted-foreground hover:border-california-red/50",
-              )}
-            >
-              {f.label}
-              <span
-                className={cn(
-                  "tabular-nums",
-                  ativo ? "text-white/85" : "text-muted-foreground/70",
-                )}
-              >
-                {count}
-              </span>
-            </button>
-          );
-        })}
+        {FILTROS.map((f) => (
+          <button
+            key={f.key}
+            type="button"
+            onClick={() => setFiltro(f.key)}
+            className={cn(
+              "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
+              filtro === f.key
+                ? "border-california-red bg-california-red text-white"
+                : "border-border bg-white text-muted-foreground hover:border-california-red/50",
+            )}
+          >
+            {f.label}
+            <span className={cn("tabular-nums", filtro === f.key ? "text-white/85" : "text-muted-foreground/70")}>{conta(f.key)}</span>
+          </button>
+        ))}
       </div>
-
       {colunas.ativo && (
         <BarraDosFiltrosDeColuna
           visiveis={colunas.visiveis.length}
@@ -221,175 +114,140 @@ export function DesembolsosContasPagarList({ rows,
           onLimpar={colunas.limpar}
         />
       )}
-
-      {/* Tabela */}
-      <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
-        <table className="w-full text-sm">
+      <div className="relative overflow-x-auto rounded-2xl border border-border bg-card shadow-soft">
+        <table className="w-full min-w-[1440px] table-fixed text-sm">
+          <colgroup>
+            <col className="w-[116px]" />
+            <col className="w-[132px]" />
+            <col className="w-[92px]" />
+            <col />
+            <col className="w-[230px]" />
+            <col className="w-[168px]" />
+            <col className="w-[124px]" />
+            <col className="w-[116px]" />
+            <col className="w-[136px]" />
+          </colgroup>
           <thead>
             <tr className="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wider text-muted-foreground">
               <th className="px-4 py-3 font-semibold">{colunas.titulo("codigo")}</th>
-              <th className="px-4 py-3 font-semibold">{colunas.titulo("empresa")}</th>
-              <th className="px-4 py-3 font-semibold">{colunas.titulo("fornecedor")}</th>
-              <th className="px-4 py-3 font-semibold text-right">{colunas.titulo("valor")}</th>
-              <th className="px-4 py-3 font-semibold">{colunas.titulo("criador")}</th>
-              <th className="px-4 py-3 font-semibold">{colunas.titulo("criacao")}</th>
+              <th className="px-4 py-3 text-right font-semibold">{colunas.titulo("valor")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("parcela")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("descricao")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("quem")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("enviado")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("regional")}</th>
+              <th className="px-4 py-3 font-semibold">{colunas.titulo("pagamento")}</th>
               <th className="px-4 py-3 font-semibold">{colunas.titulo("status")}</th>
-              <th className="px-4 py-3 font-semibold">Ações</th>
             </tr>
           </thead>
           <tbody>
-            {/* Vazio pelos filtros dos títulos: a tabela fica, com os
-                títulos, para desfazer. */}
-            {doTopo.length > 0 && filtrados.length === 0 && (
+            {colunas.visiveis.length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={9} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   Nenhum pedido de desembolso com esse filtro.
                 </td>
               </tr>
             )}
-            {doTopo.length === 0 && (
-              <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                  {rows.length === 0
-                    ? "Nenhum pedido de desembolso registrado ainda."
-                    : "Nenhum pedido de desembolso encontrado com esses filtros."}
-                </td>
-              </tr>
-            )}
-            {filtrados.map((r) => (
-              <tr
-                key={r.id}
-                className="border-b border-border last:border-0 hover:bg-accent/40 transition-colors"
-              >
-                {/* Código + descrição */}
-                <td className="px-4 py-3">
-                  <p className="font-mono text-xs font-bold text-california-red">{r.codigo}</p>
-                  <p className="text-xs text-muted-foreground line-clamp-1">{r.descricao}</p>
-                </td>
-
-                <td className="px-4 py-3 text-muted-foreground">{r.empresa_nome || "—"}</td>
-                <td className="px-4 py-3 text-muted-foreground">{r.fornecedor_nome || "—"}</td>
-
-                <td className="px-4 py-3 text-right tabular-nums font-semibold whitespace-nowrap">
-                  {formatMoney(r.valor)}
-                </td>
-
-                <td className="px-4 py-3 text-muted-foreground">{r.criador_nome || "—"}</td>
-                <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">
-                  {formatDiaBr(r.created_at)}
-                </td>
-
-                <td className="px-4 py-3">
-                  <Badge className={cn("whitespace-nowrap border", statusBadgeClasses(r.status))}>
-                    {desembolsoStatusLabel(r.status)}
-                  </Badge>
-                  {/* Motivo em leitura */}
-                  {r.status === "rejeitada" && r.motivo_rejeicao && (
-                    <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                      {r.motivo_rejeicao}
-                    </p>
+            {ordenadas.map((d, i) => {
+              const sub = linhaDoStatus(d);
+              const pedido = d.parcelas[0]?.vencimento;
+              const reprogramado = d.parcelas[0]?.dataPagamento && d.parcelas[0].dataPagamento !== pedido;
+              return (
+                <React.Fragment key={d.id}>
+                  {i === 0 && urgentes.length > 0 && (
+                    <tr className="border-b border-border bg-california-red/[0.07]">
+                      <td
+                        colSpan={9}
+                        className="border-l-[3px] border-l-california-red px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider text-california-red"
+                      >
+                        Urgentes · {urgentes.length}
+                      </td>
+                    </tr>
                   )}
-                  {r.status === "cancelada" && r.motivo_cancelamento && (
-                    <p className="mt-1 text-xs text-muted-foreground line-clamp-2">
-                      {r.motivo_cancelamento}
-                    </p>
+                  {i === urgentes.length && urgentes.length > 0 && (
+                    <tr className="border-b border-border bg-muted/30">
+                      <td colSpan={9} className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Demais pedidos
+                      </td>
+                    </tr>
                   )}
-                </td>
-
-                {/* Ações contextuais */}
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    {r.status === "em_avaliacao" && (
-                      <>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 px-2 text-xs border-emerald-300 text-emerald-700 hover:bg-emerald-50"
-                          onClick={() => abrirDialog(r, "aprovar")}
-                        >
-                          Aprovar
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 px-2 text-xs border-red-300 text-red-700 hover:bg-red-50"
-                          onClick={() => abrirDialog(r, "rejeitar")}
-                        >
-                          Rejeitar
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 px-2 text-xs text-muted-foreground hover:bg-muted"
-                          onClick={() => abrirDialog(r, "cancelar")}
-                        >
-                          Cancelar
-                        </Button>
-                      </>
-                    )}
-
-                    {r.status === "aprovada" && (
-                      <>
-                        {/* Decisão 253: antes da baixa, voltar para avaliação ou rejeitar. */}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 px-2 text-xs"
-                          onClick={() => setRevertendo(r)}
-                        >
-                          Reverter aprovação
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="h-7 px-2 text-xs text-muted-foreground hover:bg-muted"
-                          onClick={() => abrirDialog(r, "cancelar")}
-                        >
-                          Cancelar
-                        </Button>
-                      </>
-                    )}
-
-                    {(r.status === "pago" ||
-                      r.status === "rejeitada" ||
-                      r.status === "cancelada") && (
-                      <span className="text-xs text-muted-foreground/60 italic">—</span>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
+                  <tr
+                    onClick={() => setAberto(d.id)}
+                    title={d.urgente && d.justificativaUrgente ? `Urgente: ${d.justificativaUrgente}` : undefined}
+                    className="cursor-pointer border-b border-border transition-colors last:border-0 hover:bg-accent/40"
+                  >
+                    <td className="px-4 py-3 align-top">
+                      <p className="font-mono text-xs font-bold text-california-red">{d.codigo}</p>
+                      {d.reembolso && (
+                        <span className="mt-1 inline-block rounded-full border border-sky-200 bg-sky-50 px-1.5 py-px text-[10px] font-semibold uppercase text-sky-700">
+                          Reembolso
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right align-top font-semibold tabular-nums">{brl(d.valor)}</td>
+                    {/* Como na lista de PPs: "1/N", quantas vezes o financeiro vai
+                        pagar; cada parcela vira uma linha em Títulos a Pagar. */}
+                    <td className="px-4 py-3 align-top">
+                      <span className="rounded-md border border-border bg-muted px-2 py-0.5 font-mono text-xs font-semibold">
+                        1/{Math.max(d.parcelas.length, 1)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 align-top">
+                      <p className="line-clamp-2 text-[13px] leading-snug" title={d.descricao}>
+                        {d.descricao}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3 align-top">
+                      <p className="truncate text-[13px]" title={quemRecebe(d)}>
+                        {quemRecebe(d)}
+                      </p>
+                      <p className="truncate text-[11px] text-muted-foreground">
+                        {d.reembolso ? "Reembolso a quem pediu" : d.fornecedor?.documento ?? ""}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3 align-top">
+                      <p className="truncate text-[13px]" title={d.criador.nome}>
+                        {d.criador.nome}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">{dataBr(d.enviadoEm)}</p>
+                    </td>
+                    <td className="px-4 py-3 align-top">
+                      {d.regionais.length <= 1 ? (
+                        <p className="truncate text-[13px]">{d.regionais[0]?.nome ?? "—"}</p>
+                      ) : (
+                        d.regionais.map((r) => (
+                          <p key={r.id} className="truncate text-[12px] leading-snug">
+                            {r.nome} <span className="text-muted-foreground">{r.pct.toLocaleString("pt-BR")}%</span>
+                          </p>
+                        ))
+                      )}
+                    </td>
+                    <td className="px-4 py-3 align-top text-[13px] tabular-nums">
+                      {dataBr(d.prevista)}
+                      {reprogramado && <p className="text-[11px] text-amber-700">pedido {dataBr(pedido)}</p>}
+                    </td>
+                    <td className="px-4 py-3 align-top">
+                      <SeloStatus status={d.status} />
+                      {sub && <p className="mt-1 text-[11px] text-muted-foreground">{sub}</p>}
+                      {d.anexos.length === 0 && d.status === "em_avaliacao" && (
+                        <p className="mt-1 text-[11px] font-semibold text-california-red">Sem comprovante</p>
+                      )}
+                    </td>
+                  </tr>
+                </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>
-
-      {/* Dialogs */}
-      <AprovarDesembolsoDialog
-        desembolso={desembolsoParaAprovar}
+      <TelaDoDesembolso
+        pedido={pedidoAberto}
+        open={pedidoAberto !== null}
+        onOpenChange={(o) => !o && setAberto(null)}
+        financeiro
+        tomadores={tomadores}
         cartoes={cartoes}
-        open={dialog.tipo === "aprovar" && dialog.desembolso !== null}
-        onOpenChange={(open) => { if (!open) fecharDialog(); }}
       />
-
-      <RejeitarDesembolsoDialog
-        desembolso={desembolsoParaRejeitar}
-        open={(dialog.tipo === "rejeitar" || dialog.tipo === "cancelar") && dialog.desembolso !== null}
-        onOpenChange={(open) => { if (!open) fecharDialog(); }}
-        modo={(dialog.tipo === "rejeitar" ? "rejeitar" : "cancelar") as ModoDialog}
-      />
-
-      {revertendo && (
-        <ReverterAprovacaoDialog
-          origem="desembolso"
-          id={revertendo.id}
-          descricao={`${revertendo.codigo} · ${revertendo.descricao}`}
-          valor={revertendo.valor}
-          open={revertendo !== null}
-          onOpenChange={(o) => {
-            if (!o) setRevertendo(null);
-          }}
-        />
-      )}
     </div>
   );
 }

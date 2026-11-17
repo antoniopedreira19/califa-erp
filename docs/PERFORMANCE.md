@@ -120,6 +120,17 @@
 
 **Detecção:** `mcp__supabase-write__get_advisors` type=performance.
 
+**O mesmo vale para as NOSSAS funções de sessão, e o advisor não acusa.** `is_tenant_member(tenant_id)`, `is_tenant_admin/rh/financeiro(tenant_id)` e `session_role()` são `SECURITY DEFINER`: o Postgres não as "inlina", então dentro de uma policy rodam **uma vez por linha**, cada uma lendo `tenant_members` + `profiles`. Na policy, escreva:
+
+| Em vez de | Use |
+|---|---|
+| `is_tenant_member(tenant_id)` | `tenant_id in (select current_tenant_ids())` |
+| `is_tenant_admin(tenant_id)` | `tenant_id in (select current_tenant_ids_com_papel('administrador'))` |
+| `is_tenant_rh(tenant_id)` / `is_tenant_financeiro(tenant_id)` | idem, com `'rh'` / `'financeiro'` |
+| `session_role()` | `(select session_role())` |
+
+O subselect que não cita a linha vira InitPlan e roda uma vez por consulta. Função que recebe coluna da linha (`can_access_empresa_regional(..., empresa_id, ...)`, `e_colega_de_tenant(id)`) continua por linha: evite em tabela grande ou troque por um conjunto. Caso real: [case study 4](#4-regras-de-leitura-checando-a-sessão-linha-por-linha-nov2026).
+
 ### I) Server actions com N inserts em série
 
 **Sintoma:** action lenta ao gravar múltiplos registros.
@@ -166,6 +177,7 @@ Copie e cole isso em cada PR que toca em UI ou backend:
 - [ ] Toda tabela nova tem `GRANT select, insert, update, delete ... TO authenticated` (RLS ≠ GRANT).
 - [ ] FKs importantes têm índice (`create index on tabela(fk_col)`).
 - [ ] Policies RLS usam `(select auth.uid())`, não `auth.uid()` direto.
+- [ ] Policies de SELECT usam `tenant_id in (select current_tenant_ids())` e `(select session_role())`, nunca `is_tenant_member(tenant_id)` ou `session_role()` soltos (seção H).
 
 **Antes de commitar mudança de rota:**
 - [ ] Rodei o smoke test manual: `/orcamentos` → `/orcamentos/[id]` → versão → voltar. Tempo aceitável em cada passo?
@@ -220,6 +232,36 @@ Case studies documentam decisões erradas. Sempre atualizar aqui quando algo tra
 **Fix:** migration `20260725000001_grants_service_role.sql` com `ALTER DEFAULT PRIVILEGES`.
 
 **Aprendizado:** RLS ≠ GRANT. Regra já registrada.
+
+### 4. Regras de leitura checando a sessão linha por linha (nov/2026)
+
+**Sintoma:** sistema lento à tarde; pergunta se precisava de máquina maior na Supabase (Small, 2 núcleos compartilhados, 2 GB). Em 16/11 foram ~1.300 requisições acima de 2 s; o pico (15h) teve páginas de 1.000 linhas do orçado levando 7–8 s.
+
+**Diagnóstico:** não era a máquina. Banco de 203 MB inteiro em memória, 33 de 90 conexões, e a RPC leve `get_session_context` em ~20 ms de mediana até nos piores 15 minutos. As lentas eram leituras grandes, e o custo estava nas policies: 148 policies de SELECT chamavam `is_tenant_member`/`is_tenant_admin`/`is_tenant_rh`/`is_tenant_financeiro(tenant_id)` e `session_role()` sem subselect, uma vez por linha. `tenant_members` (106 linhas) teve 317 milhões de leituras de índice desde julho.
+
+**Fix:** migration `20261116990001_rls_leitura_checa_sessao_uma_vez.sql`. Troca mecânica para a forma de conjunto (tabela da seção H), com a função nova `current_tenant_ids_com_papel`. Antes de aplicar, cada policy foi avaliada linha a linha com o texto antigo e o novo para 14 usuários (um por papel e situação, nos dois tenants): zero divergências. Ganho medido com o usuário administrador: página do orçado 187 → 6 ms, realizado 179 → 4 ms, itens de versão 175 → 4 ms, `historico_movimentos` 46 → 3 ms, `fornecedores` 41 → 3 ms; `pedidos_compra` e as views do financeiro ganharam ~1,8×. O resto delas é `can_access_empresa_regional` por linha.
+
+**Aprendizado:** antes de trocar de máquina, compare uma consulta leve com as lentas no `edge_logs`; se a leve segue rápida no pico, o gargalo é consulta. E policy nova nunca chama função de sessão sem `(select ...)`.
+
+### 5. Lista do extrato varrendo o histórico inteiro, duas vezes (nov/2026)
+
+**Sintoma:** a lista da Conciliação (`vw_extrato_linhas` por conta) levava ~210 ms sozinha, média de 0,95 s e picos de 3,1 s sob carga, e não melhorou com o caso 4.
+
+**Diagnóstico:** a coluna `conciliada` era `EXISTS(lançamentos) OR EXISTS(histórico)`. EXISTS dentro de OR não vira semi-join, e o Postgres escolheu a forma "hashed SubPlan": varreu os 70 mil movimentos de `historico_movimentos` (~83 ms) duas vezes por consulta, uma no filtro e outra na coluna, ignorando o índice parcial em `extrato_linha_id`.
+
+**Fix:** migration `20261116990002_extrato_conciliada_pelo_indice.sql`. Cada EXISTS virou `coalesce((select true ... limit 1), false)`, uma subconsulta escalar, que não tem forma "hashed" e consulta o índice só para as linhas pedidas. Resultado conferido para 14 usuários: zero divergências. Lista 210 → 36 ms, pendentes dos Mútuos 154 → 41 ms; contagens do tenant inteiro ficaram iguais.
+
+**Aprendizado:** em view, coluna calculada com `EXISTS ... OR EXISTS ...` sobre tabela grande merece um `explain analyze`. Se aparecer `hashed SubPlan` com `Seq Scan` na tabela grande, troque pela subconsulta escalar com `limit 1`.
+
+### 6. Saldos dos dias em aberto recalculando tudo por dia (nov/2026)
+
+**Sintoma:** `saldos_dos_dias_em_aberto` (Conciliação) levava ~27 ms por dia em aberto: 221 ms com 8 dias, e piorava a cada dia sem conciliar (média 0,6 s e picos de 1,8 s sob carga).
+
+**Diagnóstico:** a função chamava `_condicoes_do_fechamento` uma vez por dia. Cada chamada refazia, desde o início da conta, as somas do extrato, dos lançamentos e da cauda do histórico, e ainda duas contagens que a tela não usa.
+
+**Fix:** migration `20261116990003_saldos_dos_dias_em_aberto_numa_passada.sql`. Cada fonte é lida uma vez, agrupada por dia, e cada dia soma o que veio até ele. Conferido em todos os 78 dias de extrato das 6 contas com importação: jsonb idêntico. Conta principal, 29 dias: 392 → 10 ms.
+
+**Aprendizado:** função que chama outra "por dia" (ou por item) dentro de um `lateral` repete o trabalho inteiro N vezes; calcule por conjunto. E CTE usada dentro de subconsulta correlacionada precisa de `as materialized`: sem isso o Postgres a reexecuta a cada linha (aqui, 96 ms em vez de 10).
 
 ---
 
