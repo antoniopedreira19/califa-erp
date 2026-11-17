@@ -5902,6 +5902,8 @@ export interface DecimoTerceiroAdiantamento {
   data: string;
   valor: string;
   obs: string | null;
+  /** Quando true, quita o 13º inteiro: o colaborador não gera linha na folha do ano. */
+  integral: boolean;
   conta_avulsa_id: string | null;
   created_at: string;
   created_by: string | null;
