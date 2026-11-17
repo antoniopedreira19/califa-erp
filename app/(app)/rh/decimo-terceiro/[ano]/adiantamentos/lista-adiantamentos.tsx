@@ -42,6 +42,7 @@ export interface AdiantamentoRow {
   data: string;
   valor: number;
   obs: string | null;
+  integral: boolean;
   folha_pagamento_id: string | null;
   folha_status: string | null;
   tem_nf: boolean;
@@ -49,13 +50,23 @@ export interface AdiantamentoRow {
 
 // ---------------------------------------------------------------------------
 // Deriva o status visual do adiantamento com base no estado da folha e NF
+//
+// Legado = sem folha vinculada (pagamento foi feito antes do ERP entrar em
+// vigor pra California). Nesses casos, se o adiantamento foi integral,
+// mostramos "Pago — integral" pra explicar por que o colaborador sumiu
+// da folha de 13º. Senão, só "Pago" cinza.
 
 function derivarStatusAdiantamento(
   folha_status: string | null,
   tem_nf: boolean,
   tipo_contratacao: string,
-): { label: string; variant: "legado" | "aguardando_nf" | "aguardando_aprovacao" | "aprovado" | "pago" } {
-  if (!folha_status) return { label: "Antigo", variant: "legado" };
+  integral: boolean,
+): { label: string; variant: "pago" | "pago_integral" | "aguardando_nf" | "aguardando_aprovacao" | "aprovado" } {
+  if (!folha_status) {
+    return integral
+      ? { label: "Pago — integral", variant: "pago_integral" }
+      : { label: "Pago", variant: "pago" };
+  }
   if (folha_status === "paga") return { label: "Pago", variant: "pago" };
   if (folha_status === "aprovada") return { label: "Aprovado — a pagar", variant: "aprovado" };
   // status === 'enviada' (ou 'pendente_correcao' tratado como enviada)
@@ -66,11 +77,11 @@ function derivarStatusAdiantamento(
 }
 
 const variantClasses: Record<ReturnType<typeof derivarStatusAdiantamento>["variant"], string> = {
-  legado: "bg-zinc-100 text-zinc-500",
+  pago: "bg-zinc-100 text-zinc-500",
+  pago_integral: "bg-zinc-100 text-zinc-600 ring-1 ring-zinc-300",
   aguardando_nf: "bg-amber-50 text-amber-700",
   aguardando_aprovacao: "bg-blue-50 text-blue-700",
   aprovado: "bg-emerald-50 text-emerald-700",
-  pago: "bg-zinc-100 text-zinc-400",
 };
 
 export interface ColabOpcao {
@@ -158,14 +169,13 @@ export function ListaAdiantamentos({
                 <th className="px-4 py-3 text-left font-medium">Colaborador</th>
                 <th className="px-4 py-3 text-right font-medium">Valor</th>
                 <th className="px-4 py-3 text-left font-medium">Observação</th>
-                <th className="px-4 py-3 text-center font-medium">Lançado</th>
                 <th className="px-4 py-3 text-left font-medium">Status</th>
                 <th className="px-4 py-3 text-center font-medium w-10"></th>
               </tr>
             </thead>
             <tbody>
               {adiantamentos.map((a) => {
-                const status = derivarStatusAdiantamento(a.folha_status, a.tem_nf, a.colaborador_tipo);
+                const status = derivarStatusAdiantamento(a.folha_status, a.tem_nf, a.colaborador_tipo, a.integral);
                 const bloqueadoAprovado = a.folha_status === "aprovada" || a.folha_status === "paga";
                 const bloqueadoNf = a.tem_nf && a.folha_status === "enviada";
                 const excluirBloqueado = bloqueadoAprovado || bloqueadoNf;
@@ -191,17 +201,6 @@ export function ListaAdiantamentos({
                     </td>
                     <td className="px-4 py-3 text-muted-foreground">
                       {a.obs ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      {a.folha_pagamento_id ? (
-                        <span className="inline-flex items-center rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700">
-                          enviado
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
-                          falhou
-                        </span>
-                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span

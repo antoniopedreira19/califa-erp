@@ -34,7 +34,7 @@ export default async function AdiantamentosPage({ params }: Props) {
     supabase
       .from("decimo_terceiro_adiantamentos")
       .select(
-        `id, ano, colaborador_id, data, valor, obs, folha_pagamento_id,
+        `id, ano, colaborador_id, data, valor, obs, integral, folha_pagamento_id,
          colaborador:colaboradores!decimo_terceiro_adiantamentos_colaborador_id_fkey(nome, funcao, tipo_contratacao),
          folha:folhas_pagamento!decimo_terceiro_adiantamentos_folha_pagamento_id_fkey(status)`,
       )
@@ -85,6 +85,7 @@ export default async function AdiantamentosPage({ params }: Props) {
     data: string;
     valor: string;
     obs: string | null;
+    integral: boolean;
     folha_pagamento_id: string | null;
     colaborador: ColabEmbed;
     folha: FolhaEmbed;
@@ -102,6 +103,7 @@ export default async function AdiantamentosPage({ params }: Props) {
       data: a.data,
       valor: Number(a.valor),
       obs: a.obs,
+      integral: a.integral,
       folha_pagamento_id: a.folha_pagamento_id,
       folha_status: folha?.status ?? null,
       tem_nf: nfSet.has(a.id),
