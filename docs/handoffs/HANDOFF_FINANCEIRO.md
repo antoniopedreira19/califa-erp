@@ -9140,3 +9140,9 @@ Regra completa na seção "O Extrato contínuo e o ajuste de abertura" da decis�
 - **"ZZ Teste Empresa Teste" e "ZZ Teste Fatia 2" inativados** (migration `20261116980003_inativar_cartoes_de_teste_na_producao.sql`, OK do Tiago), o mesmo que o "Inativar" do cadastro, com a auditoria `cartao_credito.inativado`. As contas-espelho seguiram pelo gatilho.
 - Estavam ativos na produção e oito PPs reais foram aprovadas neles: PP-00044, PP-00210 (paga), PP-00824, PP-00950, PP-00272, PP-00719, PP-01084 e PP-01192. Nada nelas mudou: na baixa das 7 aprovadas, o diálogo não pré-escolhe mais o cartão de teste e o financeiro escolhe o certo.
 - **Pendente com o Tiago:** a PP-00210 (R$ 8.000,00) está paga na fatura aberta FC-00002 do "ZZ Teste Fatia 2"; falta decidir o cartão certo dela.
+
+## ⚠️ Nota de 2026-11-16 — Fundo Fixo California passa a Investimento
+
+- O tipo da conta "Fundo Fixo California" mudou de **caixa** para **investimento** (migration `20261116980004_fundo_fixo_como_investimento.sql`, pedido do Tiago: a conta não é usada no dia a dia como caixa). Auditado como a edição do cadastro.
+- Na lista da Conciliação, o grupo "Caixa" sumiu (não há outra conta do tipo) e o fundo entra em "Investimento". Ele passa a ser opção de conta de aplicação no rendimento do recebimento avulso. Pagar, baixar e conciliar seguem iguais.
+- O saldo continua −R$ 911,20 até o saldo inicial ser informado (a planilha diz R$ 46.088,59 em 30/09).
