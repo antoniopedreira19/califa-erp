@@ -109,6 +109,42 @@ function formatarData(iso: string): string {
   return `${d}/${m}/${a}`;
 }
 
+/**
+ * Parse de valor BR robusto. Aceita:
+ *  - "1250" → 1250
+ *  - "1250,00" → 1250
+ *  - "1250.00" → 1250
+ *  - "1.250" → 1250  (ponto como milhar em pt-BR)
+ *  - "1.250,00" → 1250
+ *  - "1.250.000,50" → 1250000.5
+ *
+ * Regra: se tem vírgula, ela é decimal e qualquer ponto é milhar.
+ * Se não tem vírgula mas tem múltiplos pontos, todos são milhar.
+ * Se tem um único ponto com exatamente 3 dígitos depois (ex "1.250"),
+ * assume milhar — formato comum em pt-BR. Caso contrário o ponto é
+ * decimal.
+ */
+function parseValorBr(s: string): number | null {
+  const bruto = s.trim();
+  if (bruto === "") return null;
+  let normalizado: string;
+  if (bruto.includes(",")) {
+    normalizado = bruto.replace(/\./g, "").replace(",", ".");
+  } else {
+    const pontos = (bruto.match(/\./g) ?? []).length;
+    if (pontos > 1) {
+      normalizado = bruto.replace(/\./g, "");
+    } else if (/^\d{1,3}\.\d{3}$/.test(bruto)) {
+      // único ponto seguido de exatamente 3 dígitos → milhar
+      normalizado = bruto.replace(".", "");
+    } else {
+      normalizado = bruto;
+    }
+  }
+  const n = Number(normalizado);
+  return Number.isFinite(n) ? n : null;
+}
+
 interface Props {
   ano: number;
   adiantamentos: AdiantamentoRow[];
@@ -414,7 +450,9 @@ function NovoAdiantamentoDialogContent({
           setErro(res.message);
           setValor("");
         } else {
-          setValor(res.bruto.toFixed(2));
+          // Formata com vírgula decimal (pt-BR), coerente com o resto
+          // do app e com o novo parseValorBr.
+          setValor(res.bruto.toFixed(2).replace(".", ","));
         }
       })
       .finally(() => {
@@ -431,8 +469,8 @@ function NovoAdiantamentoDialogContent({
       setErro("Escolha um colaborador.");
       return;
     }
-    const valorNum = Number(valor.replace(",", "."));
-    if (!Number.isFinite(valorNum) || valorNum <= 0) {
+    const valorNum = parseValorBr(valor);
+    if (valorNum == null || valorNum <= 0) {
       setErro("Valor inválido.");
       return;
     }
@@ -514,9 +552,8 @@ function NovoAdiantamentoDialogContent({
             <Label htmlFor="valor">Valor (R$)</Label>
             <Input
               id="valor"
-              type="number"
-              step="0.01"
-              min="0.01"
+              type="text"
+              inputMode="decimal"
               placeholder={carregandoBruto ? "Calculando…" : "0,00"}
               value={valor}
               onChange={(e) => setValor(e.target.value)}
