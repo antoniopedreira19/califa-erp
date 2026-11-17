@@ -1,5 +1,7 @@
+"use client";
+
 import * as React from "react";
-import { FileText } from "lucide-react";
+import { Eye, EyeOff, FileText } from "lucide-react";
 import type { NfPendenteQuadro, TipoContratacao } from "@/lib/types";
 import { QuadroNfLinha } from "./quadro-nf-linha";
 
@@ -14,6 +16,11 @@ export function QuadroNf(props: {
   linhas: NfPendenteQuadro[];
   alocacaoResumo: string | null;
 }) {
+  // Valores dos salários/férias/13° ficam ocultos por padrão (mesmo
+  // comportamento do CardCustoQuadro no módulo RH). Toggle manual revela
+  // enquanto a aba está aberta.
+  const [oculto, setOculto] = React.useState(true);
+
   if (!TIPOS_COM_NF.includes(props.tipoContratacao)) return null;
 
   return (
@@ -31,7 +38,22 @@ export function QuadroNf(props: {
             </p>
           </div>
         </div>
-        <QuadroNfHistorico colaboradorId={props.colaboradorId} />
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setOculto((v) => !v)}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            aria-label={oculto ? "Mostrar valores" : "Esconder valores"}
+            title={oculto ? "Mostrar valores" : "Esconder valores"}
+          >
+            {oculto ? (
+              <EyeOff className="h-4 w-4" />
+            ) : (
+              <Eye className="h-4 w-4" />
+            )}
+          </button>
+          <QuadroNfHistorico colaboradorId={props.colaboradorId} />
+        </div>
       </div>
 
       {/* Lista de linhas */}
@@ -49,6 +71,7 @@ export function QuadroNf(props: {
                 key={key}
                 linha={l}
                 alocacaoResumo={props.alocacaoResumo}
+                valorOculto={oculto}
               />
             );
           })}
