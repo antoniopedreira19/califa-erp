@@ -417,6 +417,7 @@ export function TabelaLinhas({ linhas, podeEditar }: Props) {
                         </td>
                         <td className="px-4 py-2 text-muted-foreground">—</td>
                         <td className="px-4 py-2 text-muted-foreground">CLT</td>
+                        <td className="px-4 py-2"></td>
                         <td className="px-4 py-2 text-muted-foreground tabular-nums">
                           {brl.format((l.salario_editado ?? l.salario) - (l.valor_recibo ?? 0))}
                         </td>
@@ -449,6 +450,7 @@ export function TabelaLinhas({ linhas, podeEditar }: Props) {
                         </td>
                         <td className="px-4 py-2 text-muted-foreground">—</td>
                         <td className="px-4 py-2 text-muted-foreground">PJ</td>
+                        <td className="px-4 py-2"></td>
                         <td className="px-4 py-2 text-muted-foreground tabular-nums">
                           {brl.format(l.valor_recibo ?? 0)}
                         </td>
