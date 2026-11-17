@@ -84,6 +84,36 @@ export default async function AdiantamentosPage({ params }: Props) {
     }
   }
 
+  // Pra híbridos LEGADOS (sem folhas vinculadas), calcula o split em
+  // runtime usando o salário vigente do colaborador — assim a linha
+  // expansível aparece sempre que o colaborador for clt_recibo,
+  // independente de ter folha ativa ou não.
+  const hibridosSemFolhas = new Set<string>();
+  for (const a of adiantRes.data ?? []) {
+    const colab = Array.isArray(a.colaborador) ? a.colaborador[0] : a.colaborador;
+    if (
+      colab?.tipo_contratacao === "clt_recibo" &&
+      (folhasPorAdiant.get(a.id) ?? []).length === 0
+    ) {
+      hibridosSemFolhas.add(a.colaborador_id);
+    }
+  }
+  const salarioPorHibrido = new Map<string, { salario: number; valor_recibo: number }>();
+  if (hibridosSemFolhas.size > 0) {
+    const { data: salsHibridos } = await supabase
+      .from("colaboradores_salarios")
+      .select("colaborador_id, valor, valor_recibo")
+      .eq("tenant_id", session.activeTenant.id)
+      .is("data_fim", null)
+      .in("colaborador_id", Array.from(hibridosSemFolhas));
+    for (const s of salsHibridos ?? []) {
+      salarioPorHibrido.set(s.colaborador_id, {
+        salario: Number(s.valor),
+        valor_recibo: s.valor_recibo != null ? Number(s.valor_recibo) : 0,
+      });
+    }
+  }
+
   // Busca NFs de adiantamentos de 13° em lote (evita N+1)
   const nfSet = new Set<string>();
   if (adiantIds.length > 0) {
@@ -136,6 +166,30 @@ export default async function AdiantamentosPage({ params }: Props) {
   const adiantamentos: AdiantamentoRow[] = ((adiantRes.data ?? []) as AdiantamentoRaw[]).map((a) => {
     const colab = Array.isArray(a.colaborador) ? a.colaborador[0] : a.colaborador;
     const folhasDoAdiant = folhasPorAdiant.get(a.id) ?? [];
+    const valorNum = Number(a.valor);
+
+    // Partes: vem das folhas quando existem (híbrido novo).
+    // Pra híbrido legado (sem folhas), calcula em runtime pelo salário
+    // vigente. Mesma fórmula do montarFolhasAdiantamento.
+    let partes: Array<{ origem: string; salario_base: number }> = folhasDoAdiant
+      .map((f) => ({ origem: f.origem, salario_base: f.salario_base }))
+      .sort((x, y) => x.origem.localeCompare(y.origem));
+
+    if (
+      partes.length === 0 &&
+      colab?.tipo_contratacao === "clt_recibo"
+    ) {
+      const sal = salarioPorHibrido.get(a.colaborador_id);
+      if (sal && sal.salario > 0 && sal.valor_recibo > 0 && sal.valor_recibo <= sal.salario) {
+        const parteClt = Math.round((valorNum * (sal.salario - sal.valor_recibo)) / sal.salario * 100) / 100;
+        const partePj = Math.round((valorNum - parteClt) * 100) / 100;
+        const calculadas: Array<{ origem: string; salario_base: number }> = [];
+        if (partePj > 0) calculadas.push({ origem: "california", salario_base: partePj });
+        if (parteClt > 0) calculadas.push({ origem: "contabilidade", salario_base: parteClt });
+        partes = calculadas.sort((x, y) => x.origem.localeCompare(y.origem));
+      }
+    }
+
     return {
       id: a.id,
       colaborador_id: a.colaborador_id,
@@ -143,15 +197,13 @@ export default async function AdiantamentosPage({ params }: Props) {
       colaborador_funcao: colab?.funcao ?? "",
       colaborador_tipo: colab?.tipo_contratacao ?? "",
       data: a.data,
-      valor: Number(a.valor),
+      valor: valorNum,
       obs: a.obs,
       integral: a.integral,
       folha_pagamento_id: a.folha_pagamento_id,
       folha_status: statusCombinado(folhasDoAdiant),
       tem_nf: nfSet.has(a.id),
-      partes: folhasDoAdiant
-        .map((f) => ({ origem: f.origem, salario_base: f.salario_base }))
-        .sort((x, y) => x.origem.localeCompare(y.origem)),
+      partes,
     };
   });
 
