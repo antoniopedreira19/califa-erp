@@ -23,7 +23,7 @@ import {
 import { FiltrosConta } from "./filtros-conta";
 import { ConciliacaoList } from "./conciliacao-list";
 import { HubConciliacao } from "./hub";
-import { lerPeriodo, lerVisao } from "./hub-periodo";
+import { lerPeriodo } from "./hub-periodo";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { AbasDaConta, type AbaDaConta } from "./abas-da-conta";
 import { AbaTitulos } from "./aba-titulos";
@@ -49,8 +49,6 @@ export default async function ConciliacaoPage({
     ate?: string;
     highlight?: string;
     periodo?: string;
-    /** Na lista: `teste` mostra só as empresas de teste. */
-    visao?: string;
     /** A aba da conta: `titulos`, `banco`, ou nada para o Extrato. */
     aba?: string;
   };
@@ -88,7 +86,6 @@ export default async function ConciliacaoPage({
         supabase={supabase}
         tenantId={session.activeTenant.id}
         periodo={lerPeriodo(searchParams.periodo)}
-        visao={lerVisao(searchParams.visao)}
       />
     );
   }

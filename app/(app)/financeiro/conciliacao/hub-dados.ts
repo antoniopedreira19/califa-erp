@@ -17,7 +17,6 @@ import {
   type ContaResumo,
   type PeriodoChave,
   type TotaisConciliacao,
-  type Visao,
 } from "./hub-periodo";
 
 export type DadosDoHub = {
@@ -35,7 +34,6 @@ export async function carregarHub(
   supabase: SupabaseClient,
   tenantId: string,
   chave: PeriodoChave,
-  visao: Visao,
 ): Promise<DadosDoHub> {
   const periodo = { chave, ...faixaDoPeriodo(chave) };
 
@@ -56,9 +54,9 @@ export async function carregarHub(
     }),
     supabase
       .from("empresas_contabeis")
-      .select("id, razao_social, nome_fantasia, de_teste")
+      .select("id, razao_social, nome_fantasia")
       .eq("tenant_id", tenantId)
-      .returns<Pick<EmpresaContabil, "id" | "razao_social" | "nome_fantasia" | "de_teste">[]>(),
+      .returns<Pick<EmpresaContabil, "id" | "razao_social" | "nome_fantasia">[]>(),
   ]);
 
   // O erro é LIDO: sem isto, um engano na consulta vira "nenhuma conta
@@ -86,23 +84,19 @@ export async function carregarHub(
     ]),
   );
 
-  // A visão separa as empresas de teste (decisão 181) do Ecossistema
-  // California: cada uma mostra só as suas contas, e o consolidado soma só
-  // o que está na tela. Conta sem empresa conhecida fica no ecossistema.
-  const deTeste = new Set(
-    (contabeisRes.data ?? []).filter((e) => e.de_teste).map((e) => e.id),
-  );
-  const daVisao = (contasRes.data ?? []).filter(
-    (c) => deTeste.has(c.empresa_contabil_id) === (visao === "teste"),
-  );
+  // Todas as contas do tenant (16/11/2026). O seletor "Ecossistema
+  // California × Teste" saiu: as empresas e as contas de teste moram no
+  // tenant California Sandbox desde 10/11 (contas: 16/11), e o tenant já
+  // separa um do outro. No Sandbox, as contas de teste aparecem todas.
+  const doTenant = contasRes.data ?? [];
 
   // A corrente de cada aplicação automática (decisão 249): a tabela junta
   // as duas numa linha só.
   const aplicacaoDaCorrente = new Map(
-    daVisao.filter((c) => c.conta_corrente_id).map((c) => [c.conta_corrente_id as string, c.id]),
+    doTenant.filter((c) => c.conta_corrente_id).map((c) => [c.conta_corrente_id as string, c.id]),
   );
 
-  const contas: ContaResumo[] = daVisao.map((c) => {
+  const contas: ContaResumo[] = doTenant.map((c) => {
     const r = resumoPorConta.get(c.id);
     const agencia = c.agencia?.trim() || null;
     const numero = c.numero_conta?.trim() || null;

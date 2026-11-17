@@ -192,3 +192,30 @@ com uma conta só, mostrava "1 contas ativas".
 Arquivos: `hub-periodo.ts` (`Visao`, `VISOES`, `lerVisao`, `hrefLista`),
 `hub-dados.ts` (lê `de_teste` e filtra as contas), `hub.tsx` (o seletor),
 `page.tsx` (lê `?visao=`).
+
+## 10. Revisão de 16/11/2026 — o seletor de visão sai; as contas de teste vão para o Sandbox
+
+⚠️ **A seção 9 não vale mais.** Desde 10/11 as empresas e os dados de teste
+moram no tenant **California Sandbox**, e o tenant já separa um do outro. A
+pedido do Tiago, o seletor "Ecossistema California × Teste" saiu: a página
+mostra **todas as contas do tenant aberto**. No Sandbox, as contas de teste
+aparecem todas, agrupadas pela empresa de teste de cada uma.
+
+O que mostrou o problema: a mudança de 10/11 (migration
+`20261110990001`) levou as empresas contábeis "Empresa Teste" e "Empresa
+Teste Presumido", os lançamentos e os títulos, mas deixou as linhas das
+contas "Teste" e "Conta Teste Presumido" na produção. A lista da produção
+não achava a empresa delas (que estava no outro tenant), as punha num grupo
+"—" do Ecossistema e somava R$ 127.809,53 no consolidado da agência. A
+migration `20261116980001_contas_de_teste_para_o_sandbox.sql` levou as duas
+para o Sandbox (tudo o que apontava para elas já estava lá: 4 lançamentos e
+2 títulos da "Teste"; nada da "Conta Teste Presumido").
+
+Ficam na produção, de propósito: os cartões "ZZ Teste Empresa Teste" e "ZZ
+Teste Fatia 2" (não aparecem nesta página), porque há PPs reais apontando
+para eles. Qual cartão é o certo de cada PP é decisão pendente com o Tiago.
+
+Arquivos: `hub-periodo.ts` (sai `Visao`, `VISOES`, `lerVisao`; `hrefLista`
+só com o período), `hub-dados.ts` (sem o filtro por `de_teste`), `hub.tsx`
+(sem o seletor), `page.tsx` (não lê mais `?visao=`). Um link antigo com
+`?visao=teste` abre a lista normal.
