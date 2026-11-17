@@ -2664,10 +2664,15 @@ export interface ConteudoErrata {
   cancelamentos: string[];
   /** Decisão 162: a organização da planilha. Ausente (ou nula) quando a
    *  errata não mexe nela — e na pronta gravada antes de 09/10/2026. */
-  estrutura?: EstruturaDaErrata | null;  /** Decisão 219: os meses do trimestre que a errata inclui no job
+  estrutura?: EstruturaDaErrata | null;
+  /** Decisão 219: os meses do trimestre que a errata inclui no job
    *  (`chave` = `mes-novo:AAAA-MM`, que os agrupamentos novos levam no
-   *  `mes_id`). Ausente na pronta gravada antes de 27/10/2026. */
-  meses_novos?: Array<{ chave: string; mes: string }>;
+   *  `mes_id`). A pronta gravada antes de 27/10/2026 não tem o campo: quem a
+   *  lê usa `?? []`. Obrigatório pelo mesmo motivo dos `parametros`: a
+   *  leitura da pronta esqueceu este campo em silêncio, o GP reabria a
+   *  errata sem os meses novos e o envio era recusado com "O mês do
+   *  agrupamento novo não é deste job." (17/11/2026, COL-1001/26). */
+  meses_novos: Array<{ chave: string; mes: string }>;
   /** Decisão 233: os parâmetros do job como a errata os deixa. Nulo quando
    *  ela não mexe neles. Obrigatório: quem remonta o conteúdo campo a campo
    *  (a leitura da pronta) não pode esquecê-lo em silêncio. */
