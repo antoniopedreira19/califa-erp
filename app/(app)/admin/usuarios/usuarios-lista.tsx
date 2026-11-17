@@ -11,6 +11,13 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { ReenviarConviteButton } from "./reenviar-convite-button";
 import { AlterarStatusButton } from "./alterar-status-button";
@@ -22,6 +29,23 @@ type AcessoStatus = "ativo" | "pendente" | "inativo";
 type CampoOrdenacao = "nome" | "email";
 /** `null` = ordem de cadastro, como a lista vem do servidor. */
 type Ordenacao = { campo: CampoOrdenacao; direcao: "asc" | "desc" } | null;
+
+/**
+ * Sentinel pros filtros. Radix SelectItem crasha com value="", então usamos
+ * uma string marcada como "todos".
+ */
+const TODOS = "__todos__";
+type FiltroStatus = AcessoStatus | typeof TODOS;
+type FiltroRole = AppRole | typeof TODOS;
+const ROLES_ORDEM: AppRole[] = [
+  "administrador",
+  "gerente_producao",
+  "produtor",
+  "financeiro",
+  "rh",
+  "freelancer",
+  "colaborador",
+];
 
 /** Busca sem distinguir acento nem caixa: "natalia" acha "Natália". */
 function normalizar(s: string) {
@@ -53,15 +77,20 @@ export function UsuariosLista({
 }: UsuariosListaProps) {
   const [editando, setEditando] = React.useState<UsuarioRow | null>(null);
   const [busca, setBusca] = React.useState("");
+  const [filtroStatus, setFiltroStatus] = React.useState<FiltroStatus>(TODOS);
+  const [filtroRole, setFiltroRole] = React.useState<FiltroRole>(TODOS);
   const [ordenacao, setOrdenacao] = React.useState<Ordenacao>(null);
 
   const visiveis = React.useMemo(() => {
     const q = normalizar(busca.trim());
-    const filtradas = q
-      ? rows.filter(
-          (r) => normalizar(r.nome).includes(q) || normalizar(r.email).includes(q),
-        )
-      : rows;
+    const filtradas = rows.filter((r) => {
+      if (q && !(normalizar(r.nome).includes(q) || normalizar(r.email).includes(q))) {
+        return false;
+      }
+      if (filtroStatus !== TODOS && r.acesso !== filtroStatus) return false;
+      if (filtroRole !== TODOS && r.role !== filtroRole) return false;
+      return true;
+    });
     if (!ordenacao) return filtradas;
     const fator = ordenacao.direcao === "asc" ? 1 : -1;
     const { campo } = ordenacao;
@@ -69,7 +98,7 @@ export function UsuariosLista({
       (a, b) =>
         a[campo].localeCompare(b[campo], "pt-BR", { sensitivity: "base" }) * fator,
     );
-  }, [rows, busca, ordenacao]);
+  }, [rows, busca, filtroStatus, filtroRole, ordenacao]);
 
   // A → Z, Z → A e de volta à ordem de cadastro.
   function trocarOrdenacao(campo: CampoOrdenacao) {
@@ -80,18 +109,61 @@ export function UsuariosLista({
     });
   }
 
+  const temFiltroAtivo =
+    busca.trim().length > 0 || filtroStatus !== TODOS || filtroRole !== TODOS;
+
   return (
     <div className="space-y-4">
       {rows.length > 0 && (
-        <div className="relative w-full md:max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por nome ou e-mail..."
-            aria-label="Buscar usuário por nome ou e-mail"
-            className="pl-10"
-          />
+        <div className="flex flex-col gap-3 md:flex-row md:items-center">
+          <div className="relative w-full md:max-w-sm">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar por nome ou e-mail..."
+              aria-label="Buscar usuário por nome ou e-mail"
+              className="pl-10"
+            />
+          </div>
+          <div className="flex gap-2">
+            <Select
+              value={filtroStatus}
+              onValueChange={(v) => setFiltroStatus(v as FiltroStatus)}
+            >
+              <SelectTrigger
+                aria-label="Filtrar por status"
+                className="w-[170px]"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TODOS}>Todos os status</SelectItem>
+                <SelectItem value="ativo">Ativos</SelectItem>
+                <SelectItem value="pendente">Convite pendente</SelectItem>
+                <SelectItem value="inativo">Inativos</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={filtroRole}
+              onValueChange={(v) => setFiltroRole(v as FiltroRole)}
+            >
+              <SelectTrigger
+                aria-label="Filtrar por papel"
+                className="w-[180px]"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={TODOS}>Todos os papéis</SelectItem>
+                {ROLES_ORDEM.map((r) => (
+                  <SelectItem key={r} value={r}>
+                    {roleLabel(r)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       )}
 
@@ -110,17 +182,17 @@ export function UsuariosLista({
                   campo="nome"
                   ordenacao={ordenacao}
                   onTrocar={trocarOrdenacao}
-                  className="w-[35%]"
+                  className="w-[32%]"
                 />
                 <CabecalhoOrdenavel
                   rotulo="E-mail"
                   campo="email"
                   ordenacao={ordenacao}
                   onTrocar={trocarOrdenacao}
-                  className="w-[30%]"
+                  className="w-[28%]"
                 />
                 <th className="w-[13%] text-left font-semibold px-6 py-3">Papel</th>
-                <th className="w-[12%] text-left font-semibold px-6 py-3">Status</th>
+                <th className="w-[16%] text-left font-semibold px-6 py-3">Status</th>
                 <th className="text-right font-semibold px-6 py-3">Ações</th>
               </tr>
             </thead>
@@ -131,7 +203,9 @@ export function UsuariosLista({
                     colSpan={5}
                     className="px-6 py-10 text-center text-sm text-muted-foreground"
                   >
-                    Nenhum usuário encontrado para “{busca.trim()}”.
+                    {temFiltroAtivo
+                      ? "Nenhum usuário encontrado com esses filtros."
+                      : "Nenhum usuário encontrado."}
                   </td>
                 </tr>
               )}
@@ -167,20 +241,20 @@ export function UsuariosLista({
                       {roleLabel(row.role)}
                     </span>
                   </td>
-                  <td className="px-6 py-3.5">
+                  <td className="px-6 py-3.5 whitespace-nowrap">
                     {row.acesso === "ativo" && (
-                      <Badge className="bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/10 border-emerald-500/20">
+                      <Badge className="whitespace-nowrap bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/10 border-emerald-500/20">
                         Ativo
                       </Badge>
                     )}
                     {row.acesso === "pendente" && (
-                      <Badge className="bg-amber-500/10 text-amber-700 hover:bg-amber-500/10 border-amber-500/20 inline-flex items-center gap-1">
+                      <Badge className="whitespace-nowrap inline-flex items-center gap-1 bg-amber-500/10 text-amber-700 hover:bg-amber-500/10 border-amber-500/20">
                         <MailWarning className="h-3 w-3" />
                         Convite pendente
                       </Badge>
                     )}
                     {row.acesso === "inativo" && (
-                      <Badge className="bg-muted text-muted-foreground hover:bg-muted border-border">
+                      <Badge className="whitespace-nowrap bg-muted text-muted-foreground hover:bg-muted border-border">
                         Inativo
                       </Badge>
                     )}
