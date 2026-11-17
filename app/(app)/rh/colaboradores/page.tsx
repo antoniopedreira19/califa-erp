@@ -8,6 +8,7 @@ import {
   ArrowDownRight,
   Minus,
   UserCheck,
+  GraduationCap,
 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -405,6 +406,31 @@ export default async function ColaboradoresPage() {
         title="Colaboradores"
         description="Quadro atual da agência, valor total da folha e alocação por empresa e regional. Clique em um colaborador para ver o detalhe."
         icon={Users}
+        topActions={
+          <>
+            <Link
+              href="/rh/colaboradores/niveis"
+              prefetch={false}
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-3 text-[13px] font-semibold text-foreground shadow-sm hover:border-california-red/30 hover:text-california-red transition-all"
+            >
+              <GraduationCap className="h-3.5 w-3.5" />
+              Níveis
+              {niveisAtivosCount > 0 && (
+                <span className="text-xs font-medium text-muted-foreground">
+                  ({niveisAtivosCount})
+                </span>
+              )}
+            </Link>
+            <Link
+              href="/rh/colaboradores/novo"
+              prefetch={false}
+              className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-california-red px-3.5 text-[13px] font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Novo colaborador
+            </Link>
+          </>
+        }
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -474,7 +500,6 @@ export default async function ColaboradoresPage() {
       ) : (
         <ColaboradoresList
           colaboradores={linhas}
-          niveisAtivosCount={niveisAtivosCount}
           empresasOpcoes={empresasOpcoes}
           regionaisOpcoes={regionaisOpcoes}
         />

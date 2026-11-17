@@ -5,13 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
   Search,
-  GraduationCap,
-  Plus,
   Eye,
   EyeOff,
   AlertCircle,
   BadgeCheck,
-  CheckCircle2,
   Circle,
 } from "lucide-react";
 import {
@@ -65,10 +62,6 @@ export type RegionalOpcao = { id: string; nome: string; empresa_id: string };
 
 type StatusFiltro = "ativos" | "inativos" | "todos";
 type TipoFiltro = "todos" | TipoContratacao;
-// Segmentado em 3: Todos / Com pendências / Sem pendências. O detalhe
-// de qual campo está pendente aparece no tooltip do selo na linha —
-// não precisa separar críticas de parciais no filtro.
-type PendenciaFiltro = "todos" | "pendentes" | "sem_pendencias";
 
 // Sentinel para "todas" (Radix Select não aceita value="").
 const TODAS = "__todas__";
@@ -83,12 +76,10 @@ const brl = new Intl.NumberFormat("pt-BR", {
 
 export function ColaboradoresList({
   colaboradores,
-  niveisAtivosCount,
   empresasOpcoes,
   regionaisOpcoes,
 }: {
   colaboradores: ColaboradorRow[];
-  niveisAtivosCount: number;
   empresasOpcoes: EmpresaOpcao[];
   regionaisOpcoes: RegionalOpcao[];
 }) {
@@ -96,10 +87,19 @@ export function ColaboradoresList({
   const [busca, setBusca] = React.useState("");
   const [status, setStatus] = React.useState<StatusFiltro>("ativos");
   const [tipo, setTipo] = React.useState<TipoFiltro>("todos");
+  const [cargoFiltro, setCargoFiltro] = React.useState<string>(TODAS);
   const [empresaFiltro, setEmpresaFiltro] = React.useState<string>(TODAS);
   const [regionalFiltro, setRegionalFiltro] = React.useState<string>(TODAS);
-  const [pendenciaFiltro, setPendenciaFiltro] =
-    React.useState<PendenciaFiltro>("todos");
+
+  // Cargos distintos presentes no banco. Ordenação alfabética para
+  // facilitar a varredura visual; valores vazios/null são ignorados.
+  const cargosOpcoes = React.useMemo(() => {
+    const set = new Set<string>();
+    for (const c of colaboradores) {
+      if (c.funcao && c.funcao.trim()) set.add(c.funcao.trim());
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }, [colaboradores]);
   // Ocultos por padrão — decisão de UI pra evitar exposição acidental de
   // salários em telas compartilhadas. O RH clica no ícone da coluna Valor
   // pra revelar.
@@ -125,16 +125,13 @@ export function ColaboradoresList({
       if (status === "ativos" && c.status !== "ativo") return false;
       if (status === "inativos" && c.status !== "inativo") return false;
       if (tipo !== "todos" && c.tipo_contratacao !== tipo) return false;
+      if (cargoFiltro !== TODAS && c.funcao !== cargoFiltro) return false;
       if (empresaFiltro !== TODAS && c.empresa_id !== empresaFiltro) return false;
       if (regionalFiltro === HUB) {
         if (!c.usa_rateio_empresa) return false;
       } else if (regionalFiltro !== TODAS) {
         if (c.regional_id !== regionalFiltro) return false;
       }
-      if (pendenciaFiltro === "pendentes" && c.pendencia_nivel === "completo")
-        return false;
-      if (pendenciaFiltro === "sem_pendencias" && c.pendencia_nivel !== "completo")
-        return false;
       if (!q) return true;
       return (
         c.nome.toLowerCase().includes(q) ||
@@ -148,18 +145,10 @@ export function ColaboradoresList({
     busca,
     status,
     tipo,
+    cargoFiltro,
     empresaFiltro,
     regionalFiltro,
-    pendenciaFiltro,
   ]);
-
-  // Contagem de qualquer pendência (crítica ou parcial). Usada como
-  // badge do toggle "Só pendentes".
-  const contagemPendentes = React.useMemo(
-    () =>
-      colaboradores.filter((c) => c.pendencia_nivel !== "completo").length,
-    [colaboradores],
-  );
 
   // Rodapé do card: total do que está filtrado. Ajuda a perceber quanto
   // "vale" o recorte da tela quando o usuário filtra por empresa/regional.
@@ -170,131 +159,116 @@ export function ColaboradoresList({
 
   return (
     <div className="space-y-4">
-      {/* Filtros em 2 linhas à esquerda + ações agrupadas à direita.
-          Linha 1: 4 selects + busca. Linha 2: toggle de pendências.
-          Ações (Níveis + Novo colaborador) ficam num bloco separado
-          na direita, alinhadas ao topo pra visualmente serem "outra
-          coisa" (ação != filtro). */}
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-2 min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <Select
-              value={status}
-              onValueChange={(v) => setStatus(v as StatusFiltro)}
-            >
-              <SelectTrigger className="h-9 w-[110px] px-2.5 text-[13px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent
-                side="bottom"
-                avoidCollisions={false}
-                className="w-[--radix-select-trigger-width]"
-              >
-                <SelectItem value="ativos">Ativos</SelectItem>
-                <SelectItem value="inativos">Inativos</SelectItem>
-                <SelectItem value="todos">Todos</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={tipo} onValueChange={(v) => setTipo(v as TipoFiltro)}>
-              <SelectTrigger className="h-9 w-[150px] px-2.5 text-[13px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent
-                side="bottom"
-                avoidCollisions={false}
-                className="w-[--radix-select-trigger-width]"
-              >
-                <SelectItem value="todos">Todos os tipos</SelectItem>
-                <SelectItem value="pj">PJ</SelectItem>
-                <SelectItem value="clt_recibo">CLT + Recibo</SelectItem>
-                <SelectItem value="clt">CLT</SelectItem>
-                <SelectItem value="estagio">Estágio</SelectItem>
-                <SelectItem value="socio">Sócio</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select
-              value={empresaFiltro}
-              onValueChange={(v) => setEmpresaFiltro(v)}
-            >
-              <SelectTrigger className="h-9 w-[170px] px-2.5 text-[13px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent
-                side="bottom"
-                avoidCollisions={false}
-                className="w-[--radix-select-trigger-width]"
-              >
-                <SelectItem value={TODAS}>Todas as empresas</SelectItem>
-                {empresasOpcoes.map((e) => (
-                  <SelectItem key={e.id} value={e.id}>
-                    {e.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select
-              value={regionalFiltro}
-              onValueChange={(v) => setRegionalFiltro(v)}
-            >
-              <SelectTrigger className="h-9 w-[160px] px-2.5 text-[13px]">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent
-                side="bottom"
-                avoidCollisions={false}
-                className="w-[--radix-select-trigger-width]"
-              >
-                <SelectItem value={TODAS}>Todas as regionais</SelectItem>
-                <SelectItem value={HUB}>Hub</SelectItem>
-                {regionaisFiltradas.map((r) => (
-                  <SelectItem key={r.id} value={r.id}>
-                    {r.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <div className="relative flex items-center">
-              <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
-              <input
-                type="text"
-                value={busca}
-                onChange={(e) => setBusca(e.target.value)}
-                placeholder="Buscar colaborador..."
-                className="h-9 w-56 rounded-lg border border-border bg-white pl-[30px] pr-3 text-xs text-foreground outline-none focus:border-california-red/40"
-              />
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <TogglePendencias
-              valor={pendenciaFiltro}
-              onChange={setPendenciaFiltro}
-              contagemPendentes={contagemPendentes}
-            />
-          </div>
+      {/* Filtros em linha única: busca + 5 selects.
+          Ordem: Busca | Status | Cargo | Tipo | Empresa | Regionais.
+          Ações (Níveis + Novo colaborador) ficam no PageHeader, alinhadas
+          com o título. */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative flex items-center">
+          <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
+          <input
+            type="text"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar colaborador..."
+            className="h-9 w-56 rounded-lg border border-border bg-white pl-[30px] pr-3 text-xs text-foreground outline-none focus:border-california-red/40"
+          />
         </div>
-        <div className="flex items-center gap-2">
-          <Link
-            href="/rh/colaboradores/niveis"
-            prefetch={false}
-            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-3 text-[13px] font-semibold text-foreground shadow-sm hover:border-california-red/30 hover:text-california-red transition-all"
+        <Select
+          value={status}
+          onValueChange={(v) => setStatus(v as StatusFiltro)}
+        >
+          <SelectTrigger className="h-9 w-[110px] px-2.5 text-[13px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent
+            side="bottom"
+            avoidCollisions={false}
+            className="w-[--radix-select-trigger-width]"
           >
-            <GraduationCap className="h-3.5 w-3.5" />
-            Níveis
-            {niveisAtivosCount > 0 && (
-              <span className="text-xs font-medium text-muted-foreground">
-                ({niveisAtivosCount})
-              </span>
-            )}
-          </Link>
-          <Link
-            href="/rh/colaboradores/novo"
-            prefetch={false}
-            className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg bg-california-red px-3.5 text-[13px] font-semibold text-white shadow-sm hover:bg-california-red-hover hover:shadow-brand transition-all"
+            <SelectItem value="ativos">Ativos</SelectItem>
+            <SelectItem value="inativos">Inativos</SelectItem>
+            <SelectItem value="todos">Todos</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select
+          value={cargoFiltro}
+          onValueChange={(v) => setCargoFiltro(v)}
+        >
+          <SelectTrigger className="h-9 w-[180px] px-2.5 text-[13px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent
+            side="bottom"
+            avoidCollisions={false}
+            className="w-[--radix-select-trigger-width]"
           >
-            <Plus className="h-3.5 w-3.5" />
-            Novo colaborador
-          </Link>
-        </div>
+            <SelectItem value={TODAS}>Todos os cargos</SelectItem>
+            {cargosOpcoes.map((cargo) => (
+              <SelectItem key={cargo} value={cargo}>
+                {cargo}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={tipo} onValueChange={(v) => setTipo(v as TipoFiltro)}>
+          <SelectTrigger className="h-9 w-[150px] px-2.5 text-[13px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent
+            side="bottom"
+            avoidCollisions={false}
+            className="w-[--radix-select-trigger-width]"
+          >
+            <SelectItem value="todos">Todos os tipos</SelectItem>
+            <SelectItem value="pj">PJ</SelectItem>
+            <SelectItem value="clt_recibo">CLT + Recibo</SelectItem>
+            <SelectItem value="clt">CLT</SelectItem>
+            <SelectItem value="estagio">Estágio</SelectItem>
+            <SelectItem value="socio">Sócio</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select
+          value={empresaFiltro}
+          onValueChange={(v) => setEmpresaFiltro(v)}
+        >
+          <SelectTrigger className="h-9 w-[170px] px-2.5 text-[13px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent
+            side="bottom"
+            avoidCollisions={false}
+            className="w-[--radix-select-trigger-width]"
+          >
+            <SelectItem value={TODAS}>Todas as empresas</SelectItem>
+            {empresasOpcoes.map((e) => (
+              <SelectItem key={e.id} value={e.id}>
+                {e.nome}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={regionalFiltro}
+          onValueChange={(v) => setRegionalFiltro(v)}
+        >
+          <SelectTrigger className="h-9 w-[160px] px-2.5 text-[13px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent
+            side="bottom"
+            avoidCollisions={false}
+            className="w-[--radix-select-trigger-width]"
+          >
+            <SelectItem value={TODAS}>Todas as regionais</SelectItem>
+            <SelectItem value={HUB}>Hub</SelectItem>
+            {regionaisFiltradas.map((r) => (
+              <SelectItem key={r.id} value={r.id}>
+                {r.nome}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {filtered.length === 0 ? (
@@ -449,86 +423,6 @@ export function ColaboradoresList({
         </div>
       )}
     </div>
-  );
-}
-
-/**
- * Toggle segmentado com 3 opções: Todos / Com pendências / Sem
- * pendências. Segue o formato do ChaveMeusTodos (pílula em fundo cinza
- * claro) pra manter a gramática das listas do sistema consistente.
- * Padding do botão é px-3 (menor que o padrão px-3.5) porque 3
- * posições ocupam mais espaço que 2 e a barra de filtros já é densa.
- */
-function TogglePendencias({
-  valor,
-  onChange,
-  contagemPendentes,
-}: {
-  valor: PendenciaFiltro;
-  onChange: (v: PendenciaFiltro) => void;
-  contagemPendentes: number;
-}) {
-  return (
-    <div
-      role="group"
-      aria-label="Filtro de pendências"
-      className="inline-flex flex-none items-center gap-0.5 rounded-full bg-[#f1f0ec] p-[3px]"
-    >
-      <BotaoPill ativo={valor === "todos"} onClick={() => onChange("todos")}>
-        Todos
-      </BotaoPill>
-      <BotaoPill
-        ativo={valor === "pendentes"}
-        onClick={() => onChange("pendentes")}
-      >
-        <AlertCircle className="h-3 w-3" aria-hidden="true" />
-        Com pendências
-        {contagemPendentes > 0 && (
-          <span
-            className={`ml-0.5 text-[10px] font-medium ${
-              valor === "pendentes"
-                ? "text-california-red"
-                : "text-muted-foreground"
-            }`}
-          >
-            ({contagemPendentes})
-          </span>
-        )}
-      </BotaoPill>
-      <BotaoPill
-        ativo={valor === "sem_pendencias"}
-        onClick={() => onChange("sem_pendencias")}
-      >
-        <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
-        Sem pendências
-      </BotaoPill>
-    </div>
-  );
-}
-
-function BotaoPill({
-  ativo,
-  onClick,
-  children,
-}: {
-  ativo: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      aria-pressed={ativo}
-      onClick={onClick}
-      className={
-        "inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-[5px] text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-california-red/30 " +
-        (ativo
-          ? "bg-white font-semibold text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
-          : "bg-transparent font-medium text-[#8a8a8a] hover:text-foreground")
-      }
-    >
-      {children}
-    </button>
   );
 }
 

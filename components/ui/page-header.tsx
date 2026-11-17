@@ -13,6 +13,13 @@ export type PageHeaderProps = {
   activeEmpresas?: Empresa[];
   actions?: React.ReactNode;
   filters?: React.ReactNode;
+  /**
+   * Ações renderizadas no canto superior direito, alinhadas com o
+   * título. Útil quando a tela não tem a linha de filtros embaixo
+   * mas precisa de botões (Ex.: "Novo X", "Configurar") próximos
+   * do cabeçalho.
+   */
+  topActions?: React.ReactNode;
 };
 
 /**
@@ -32,6 +39,7 @@ export function PageHeader(props: PageHeaderProps) {
     activeEmpresas,
     actions,
     filters,
+    topActions,
   } = props;
 
   const temLinhaDeBaixo = filters || actions;
@@ -67,6 +75,12 @@ export function PageHeader(props: PageHeaderProps) {
               empresas={empresas!}
               activeEmpresas={activeEmpresas!}
             />
+          </div>
+        )}
+
+        {topActions && (
+          <div className="shrink-0 pt-1 flex items-center gap-2">
+            {topActions}
           </div>
         )}
       </div>
