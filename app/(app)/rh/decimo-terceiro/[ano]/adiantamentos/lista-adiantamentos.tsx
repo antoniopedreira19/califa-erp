@@ -2,7 +2,16 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Loader2, AlertCircle } from "lucide-react";
+import {
+  Plus,
+  Trash2,
+  Loader2,
+  AlertCircle,
+  Search,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+} from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -107,6 +116,25 @@ interface Props {
   podeEditar: boolean;
 }
 
+type OrdemCampo = "data" | "valor";
+type OrdemDirecao = "asc" | "desc";
+type FiltroStatus =
+  | "todos"
+  | "pago"
+  | "pago_integral"
+  | "aguardando_nf"
+  | "aguardando_aprovacao"
+  | "aprovado";
+
+const FILTRO_STATUS_LABEL: Record<FiltroStatus, string> = {
+  todos: "Todos os status",
+  pago: "Pago",
+  pago_integral: "Pago — integral",
+  aguardando_nf: "Aguardando NF",
+  aguardando_aprovacao: "Aguardando aprovação",
+  aprovado: "Aprovado — a pagar",
+};
+
 export function ListaAdiantamentos({
   ano,
   adiantamentos,
@@ -116,6 +144,10 @@ export function ListaAdiantamentos({
   const router = useRouter();
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [excluindoId, setExcluindoId] = React.useState<string | null>(null);
+  const [busca, setBusca] = React.useState("");
+  const [filtroStatus, setFiltroStatus] = React.useState<FiltroStatus>("todos");
+  const [ordemCampo, setOrdemCampo] = React.useState<OrdemCampo>("data");
+  const [ordemDirecao, setOrdemDirecao] = React.useState<OrdemDirecao>("desc");
 
   async function handleExcluir(adiantamentoId: string) {
     if (!confirm("Excluir este adiantamento? A linha no financeiro será removida automaticamente se ainda não estiver aprovada.")) {
@@ -131,15 +163,85 @@ export function ListaAdiantamentos({
     router.refresh();
   }
 
+  function toggleOrdem(campo: OrdemCampo) {
+    if (ordemCampo === campo) {
+      setOrdemDirecao((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setOrdemCampo(campo);
+      setOrdemDirecao(campo === "data" ? "desc" : "desc");
+    }
+  }
+
+  // Enriquece com o status derivado uma vez só, pra usar no filtro e na row
+  const adiantamentosComStatus = React.useMemo(
+    () =>
+      adiantamentos.map((a) => ({
+        row: a,
+        status: derivarStatusAdiantamento(
+          a.folha_status,
+          a.tem_nf,
+          a.colaborador_tipo,
+          a.integral,
+        ),
+      })),
+    [adiantamentos],
+  );
+
+  const lista = React.useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    const filtrada = adiantamentosComStatus.filter(({ row, status }) => {
+      if (filtroStatus !== "todos" && status.variant !== filtroStatus) return false;
+      if (termo === "") return true;
+      return (
+        row.colaborador_nome.toLowerCase().includes(termo) ||
+        row.colaborador_funcao.toLowerCase().includes(termo) ||
+        (row.obs?.toLowerCase().includes(termo) ?? false)
+      );
+    });
+    const sinal = ordemDirecao === "asc" ? 1 : -1;
+    return [...filtrada].sort((a, b) => {
+      if (ordemCampo === "data") {
+        return a.row.data.localeCompare(b.row.data) * sinal;
+      }
+      return (a.row.valor - b.row.valor) * sinal;
+    });
+  }, [adiantamentosComStatus, busca, filtroStatus, ordemCampo, ordemDirecao]);
+
   return (
     <>
-      <div className="flex items-center justify-end">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-1 flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="relative w-full sm:max-w-sm">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar por colaborador, função ou observação…"
+              className="pl-9"
+            />
+          </div>
+          <Select
+            value={filtroStatus}
+            onValueChange={(v) => setFiltroStatus(v as FiltroStatus)}
+          >
+            <SelectTrigger className="sm:w-56">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {(Object.keys(FILTRO_STATUS_LABEL) as FiltroStatus[]).map((k) => (
+                <SelectItem key={k} value={k}>
+                  {FILTRO_STATUS_LABEL[k]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
         {podeEditar && (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <button
                 type="button"
-                className="inline-flex items-center gap-2 rounded-lg bg-california-red px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-california-red-hover transition-all"
+                className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-california-red px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-california-red-hover"
               >
                 <Plus className="h-4 w-4" />
                 Novo adiantamento
@@ -160,22 +262,45 @@ export function ListaAdiantamentos({
             Nenhum adiantamento registrado em {ano}.
           </p>
         </div>
+      ) : lista.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-10 text-center">
+          <p className="text-sm text-muted-foreground">
+            Nenhum adiantamento corresponde aos filtros aplicados.
+          </p>
+        </div>
       ) : (
         <div className="overflow-x-auto rounded-2xl border border-border bg-card shadow-soft">
           <table className="w-full border-collapse text-sm">
             <thead className="bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Data</th>
+                <th className="px-4 py-3 text-left font-medium">
+                  <HeaderOrdenavel
+                    label="Data"
+                    campo="data"
+                    ordemCampo={ordemCampo}
+                    ordemDirecao={ordemDirecao}
+                    onClick={() => toggleOrdem("data")}
+                    align="left"
+                  />
+                </th>
                 <th className="px-4 py-3 text-left font-medium">Colaborador</th>
-                <th className="px-4 py-3 text-right font-medium">Valor</th>
+                <th className="px-4 py-3 text-right font-medium">
+                  <HeaderOrdenavel
+                    label="Valor"
+                    campo="valor"
+                    ordemCampo={ordemCampo}
+                    ordemDirecao={ordemDirecao}
+                    onClick={() => toggleOrdem("valor")}
+                    align="right"
+                  />
+                </th>
                 <th className="px-4 py-3 text-left font-medium">Observação</th>
                 <th className="px-4 py-3 text-left font-medium">Status</th>
                 <th className="px-4 py-3 text-center font-medium w-10"></th>
               </tr>
             </thead>
             <tbody>
-              {adiantamentos.map((a) => {
-                const status = derivarStatusAdiantamento(a.folha_status, a.tem_nf, a.colaborador_tipo, a.integral);
+              {lista.map(({ row: a, status }) => {
                 const bloqueadoAprovado = a.folha_status === "aprovada" || a.folha_status === "paga";
                 const bloqueadoNf = a.tem_nf && a.folha_status === "enviada";
                 const excluirBloqueado = bloqueadoAprovado || bloqueadoNf;
@@ -330,7 +455,7 @@ function NovoAdiantamentoDialogContent({
   }
 
   return (
-    <DialogContent>
+    <DialogContent className="sm:max-w-[560px]">
       <DialogHeader>
         <DialogTitle>Novo adiantamento de 13º</DialogTitle>
         <DialogDescription>
@@ -339,7 +464,7 @@ function NovoAdiantamentoDialogContent({
         </DialogDescription>
       </DialogHeader>
 
-      <div className="space-y-4">
+      <div className="space-y-5">
         <div className="space-y-2">
           <Label htmlFor="colab">Colaborador</Label>
           <Select value={colabId} onValueChange={setColabId}>
@@ -374,7 +499,7 @@ function NovoAdiantamentoDialogContent({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-4">
           <div className="space-y-2">
             <Label htmlFor="data">Data do adiantamento</Label>
             <Input
@@ -386,14 +511,7 @@ function NovoAdiantamentoDialogContent({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="valor">
-              Valor (R$)
-              {integral && (
-                <span className="ml-2 text-xs font-normal text-muted-foreground">
-                  (preenchido automaticamente)
-                </span>
-              )}
-            </Label>
+            <Label htmlFor="valor">Valor (R$)</Label>
             <Input
               id="valor"
               type="number"
@@ -406,6 +524,11 @@ function NovoAdiantamentoDialogContent({
               readOnly={integral}
               className={integral ? "bg-muted cursor-not-allowed" : undefined}
             />
+            {integral && (
+              <p className="text-xs text-muted-foreground">
+                Preenchido automaticamente com o 13º bruto.
+              </p>
+            )}
           </div>
         </div>
 
@@ -449,5 +572,36 @@ function NovoAdiantamentoDialogContent({
         </div>
       </div>
     </DialogContent>
+  );
+}
+
+function HeaderOrdenavel({
+  label,
+  campo,
+  ordemCampo,
+  ordemDirecao,
+  onClick,
+  align,
+}: {
+  label: string;
+  campo: OrdemCampo;
+  ordemCampo: OrdemCampo;
+  ordemDirecao: OrdemDirecao;
+  onClick: () => void;
+  align: "left" | "right";
+}) {
+  const ativo = ordemCampo === campo;
+  const Icon = !ativo ? ArrowUpDown : ordemDirecao === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`inline-flex items-center gap-1 uppercase tracking-wider transition-colors hover:text-foreground ${
+        ativo ? "text-foreground" : ""
+      } ${align === "right" ? "flex-row-reverse" : ""}`}
+    >
+      {label}
+      <Icon className="h-3 w-3" />
+    </button>
   );
 }
