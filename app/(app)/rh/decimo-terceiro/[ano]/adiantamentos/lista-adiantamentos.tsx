@@ -35,7 +35,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Checkbox } from "@/components/ui/checkbox";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
   lancarAdiantamentoDecimoTerceiro,
   excluirAdiantamentoDecimoTerceiro,
@@ -122,42 +122,6 @@ const TIPO_CLASSE: Record<string, string> = {
   pj: "bg-sky-50 text-sky-700",
   mei: "bg-sky-50 text-sky-700",
 };
-
-/**
- * Parse de valor BR robusto. Aceita:
- *  - "1250" → 1250
- *  - "1250,00" → 1250
- *  - "1250.00" → 1250
- *  - "1.250" → 1250  (ponto como milhar em pt-BR)
- *  - "1.250,00" → 1250
- *  - "1.250.000,50" → 1250000.5
- *
- * Regra: se tem vírgula, ela é decimal e qualquer ponto é milhar.
- * Se não tem vírgula mas tem múltiplos pontos, todos são milhar.
- * Se tem um único ponto com exatamente 3 dígitos depois (ex "1.250"),
- * assume milhar — formato comum em pt-BR. Caso contrário o ponto é
- * decimal.
- */
-function parseValorBr(s: string): number | null {
-  const bruto = s.trim();
-  if (bruto === "") return null;
-  let normalizado: string;
-  if (bruto.includes(",")) {
-    normalizado = bruto.replace(/\./g, "").replace(",", ".");
-  } else {
-    const pontos = (bruto.match(/\./g) ?? []).length;
-    if (pontos > 1) {
-      normalizado = bruto.replace(/\./g, "");
-    } else if (/^\d{1,3}\.\d{3}$/.test(bruto)) {
-      // único ponto seguido de exatamente 3 dígitos → milhar
-      normalizado = bruto.replace(".", "");
-    } else {
-      normalizado = bruto;
-    }
-  }
-  const n = Number(normalizado);
-  return Number.isFinite(n) ? n : null;
-}
 
 interface Props {
   ano: number;
@@ -454,33 +418,38 @@ function NovoAdiantamentoDialogContent({
   const hoje = new Date().toISOString().slice(0, 10);
   const [colabId, setColabId] = React.useState<string>("");
   const [data, setData] = React.useState<string>(hoje);
-  const [valor, setValor] = React.useState<string>("");
   const [obs, setObs] = React.useState<string>("");
-  const [integral, setIntegral] = React.useState(false);
+  const [tipoAdiantamento, setTipoAdiantamento] = React.useState<
+    "primeira_parcela" | "integral" | null
+  >(null);
+  const [brutoCalculado, setBrutoCalculado] = React.useState<number | null>(
+    null,
+  );
   const [carregandoBruto, setCarregandoBruto] = React.useState(false);
   const [enviando, setEnviando] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
 
-  // Quando marca "integral" + tem colaborador escolhido: busca o 13º bruto
-  // esperado e preenche o campo valor automaticamente. Mantém o campo
-  // readonly enquanto a flag estiver ligada. Erro do servidor desmarca
-  // o checkbox e exibe a mensagem.
+  // Ao escolher o colaborador, busca o 13º bruto esperado. Os dois radios
+  // mostram os valores calculados lado a lado (metade / inteiro).
   React.useEffect(() => {
-    if (!integral || !colabId) return;
+    if (!colabId) {
+      setBrutoCalculado(null);
+      setTipoAdiantamento(null);
+      return;
+    }
     let cancelado = false;
     setCarregandoBruto(true);
     setErro(null);
+    setBrutoCalculado(null);
+    setTipoAdiantamento(null);
     calcularTreizeBrutoEsperado({ colaborador_id: colabId, ano })
       .then((res) => {
         if (cancelado) return;
         if (!res.ok) {
-          setIntegral(false);
           setErro(res.message);
-          setValor("");
+          setBrutoCalculado(null);
         } else {
-          // Formata com vírgula decimal (pt-BR), coerente com o resto
-          // do app e com o novo parseValorBr.
-          setValor(res.bruto.toFixed(2).replace(".", ","));
+          setBrutoCalculado(res.bruto);
         }
       })
       .finally(() => {
@@ -489,7 +458,16 @@ function NovoAdiantamentoDialogContent({
     return () => {
       cancelado = true;
     };
-  }, [integral, colabId, ano]);
+  }, [colabId, ano]);
+
+  // Valor final conforme o tipo escolhido. 1ª parcela = bruto / 2
+  // (arredondado em duas casas), integral = bruto.
+  const valorCalculado =
+    brutoCalculado == null || tipoAdiantamento == null
+      ? null
+      : tipoAdiantamento === "integral"
+        ? brutoCalculado
+        : Math.round((brutoCalculado / 2) * 100) / 100;
 
   async function handleSalvar() {
     setErro(null);
@@ -497,9 +475,8 @@ function NovoAdiantamentoDialogContent({
       setErro("Escolha um colaborador.");
       return;
     }
-    const valorNum = parseValorBr(valor);
-    if (valorNum == null || valorNum <= 0) {
-      setErro("Valor inválido.");
+    if (tipoAdiantamento == null || valorCalculado == null || valorCalculado <= 0) {
+      setErro("Escolha o tipo do adiantamento.");
       return;
     }
     setEnviando(true);
@@ -507,9 +484,9 @@ function NovoAdiantamentoDialogContent({
       ano,
       colaborador_id: colabId,
       data,
-      valor: valorNum,
+      valor: valorCalculado,
       obs: obs.trim() === "" ? null : obs.trim(),
-      integral,
+      integral: tipoAdiantamento === "integral",
     });
     setEnviando(false);
     if (!res.ok) {
@@ -547,54 +524,86 @@ function NovoAdiantamentoDialogContent({
           </Select>
         </div>
 
-        <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-3">
-          <Checkbox
-            id="integral"
-            checked={integral}
-            onCheckedChange={(v) => setIntegral(v === true)}
-            disabled={enviando || !colabId}
-            className="mt-0.5"
-          />
-          <div className="space-y-0.5">
-            <Label htmlFor="integral" className="cursor-pointer text-sm font-medium">
-              Pagamento integral do 13º
-            </Label>
-            <p className="text-xs text-muted-foreground">
-              Quita o 13º inteiro. O colaborador não participa da folha deste ano.
+        <div className="space-y-2">
+          <Label>Tipo do adiantamento</Label>
+          {!colabId ? (
+            <p className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-4 text-center text-xs text-muted-foreground">
+              Escolha um colaborador acima pra ver os valores calculados.
             </p>
-          </div>
+          ) : carregandoBruto ? (
+            <p className="rounded-lg border border-border bg-muted/30 px-3 py-4 text-center text-xs text-muted-foreground">
+              <Loader2 className="mr-2 inline h-3 w-3 animate-spin" />
+              Calculando o 13º do colaborador…
+            </p>
+          ) : brutoCalculado == null ? (
+            <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-4 text-center text-xs text-destructive">
+              Não foi possível calcular o 13º — veja o erro acima.
+            </p>
+          ) : (
+            <RadioGroup
+              value={tipoAdiantamento ?? ""}
+              onValueChange={(v) =>
+                setTipoAdiantamento(v as "primeira_parcela" | "integral")
+              }
+              disabled={enviando}
+              className="gap-2"
+            >
+              <label
+                htmlFor="tipo-primeira"
+                className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors ${
+                  tipoAdiantamento === "primeira_parcela"
+                    ? "border-california-red bg-california-red/5"
+                    : "border-border bg-muted/20 hover:bg-muted/40"
+                }`}
+              >
+                <RadioGroupItem id="tipo-primeira" value="primeira_parcela" />
+                <div className="flex flex-1 items-center justify-between gap-2">
+                  <div className="space-y-0.5">
+                    <div className="text-sm font-medium">Primeira parcela do 13º</div>
+                    <div className="text-xs text-muted-foreground">
+                      Metade do 13º. Abate da 1ª parcela quando a folha for calculada.
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right tabular-nums font-semibold text-california-red">
+                    {brl.format(Math.round((brutoCalculado / 2) * 100) / 100)}
+                  </div>
+                </div>
+              </label>
+              <label
+                htmlFor="tipo-integral"
+                className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors ${
+                  tipoAdiantamento === "integral"
+                    ? "border-california-red bg-california-red/5"
+                    : "border-border bg-muted/20 hover:bg-muted/40"
+                }`}
+              >
+                <RadioGroupItem id="tipo-integral" value="integral" />
+                <div className="flex flex-1 items-center justify-between gap-2">
+                  <div className="space-y-0.5">
+                    <div className="text-sm font-medium">Valor integral do 13º</div>
+                    <div className="text-xs text-muted-foreground">
+                      Quita o 13º inteiro. O colaborador não participa da folha deste ano.
+                    </div>
+                  </div>
+                  <div className="shrink-0 text-right tabular-nums font-semibold text-california-red">
+                    {brl.format(brutoCalculado)}
+                  </div>
+                </div>
+              </label>
+            </RadioGroup>
+          )}
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label htmlFor="data">Data do adiantamento</Label>
-            <Input
-              id="data"
-              type="date"
-              value={data}
-              onChange={(e) => setData(e.target.value)}
-              disabled={enviando}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="valor">Valor (R$)</Label>
-            <Input
-              id="valor"
-              type="text"
-              inputMode="decimal"
-              placeholder={carregandoBruto ? "Calculando…" : "0,00"}
-              value={valor}
-              onChange={(e) => setValor(e.target.value)}
-              disabled={enviando || carregandoBruto}
-              readOnly={integral}
-              className={integral ? "bg-muted cursor-not-allowed" : undefined}
-            />
-            {integral && (
-              <p className="text-xs text-muted-foreground">
-                Preenchido automaticamente com o 13º bruto.
-              </p>
-            )}
-          </div>
+        <div className="space-y-2">
+          <Label htmlFor="data">Data do adiantamento</Label>
+          <Input
+            id="data"
+            type="date"
+            value={data}
+            onChange={(e) => setData(e.target.value)}
+            disabled={enviando}
+            className="sm:max-w-[200px]"
+          />
         </div>
 
         <div className="space-y-2">
