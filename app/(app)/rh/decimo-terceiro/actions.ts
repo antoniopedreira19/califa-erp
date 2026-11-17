@@ -1242,6 +1242,7 @@ const LancarAdiantamentoInput = z.object({
   data: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
   valor: z.number().positive(),
   obs: z.string().max(500).nullable(),
+  integral: z.boolean().optional().default(false),
 });
 
 async function recalcularLinhaDeAdiantamento(
@@ -1348,6 +1349,7 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
   data: string;
   valor: number;
   obs: string | null;
+  integral?: boolean;
 }): Promise<ActionResult<{ id: string; folha_pagamento_id: string | null }>> {
   const session = await requireSession();
   if (!pode(session.activeRole, "rh.decimo_terceiro.editar")) {
@@ -1357,7 +1359,7 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
   if (!parsed.success) {
     return { ok: false, message: "Dados inválidos." };
   }
-  const { ano, colaborador_id, data, valor, obs } = parsed.data;
+  const { ano, colaborador_id, data, valor, obs, integral } = parsed.data;
   const tenantId = session.activeTenant.id;
   const supabase = createClient();
 
@@ -1375,6 +1377,33 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
     return { ok: false, message: "Valor do adiantamento deve ser maior que zero." };
   }
 
+  // Regra: por colaborador/ano, ou É integral (único) OU são vários
+  // parciais. Nunca mistura. Impede duplicata de integral e impede
+  // adicionar parcial depois de integral (ou integral quando já existem
+  // parciais).
+  const { data: existentes } = await supabase
+    .from("decimo_terceiro_adiantamentos")
+    .select("id, integral")
+    .eq("tenant_id", tenantId)
+    .eq("ano", ano)
+    .eq("colaborador_id", colaborador_id);
+
+  const temIntegral = (existentes ?? []).some((e) => e.integral);
+  if (temIntegral) {
+    return {
+      ok: false,
+      message:
+        "Este colaborador já tem um adiantamento integral registrado no ano — não aceita mais lançamentos.",
+    };
+  }
+  if (integral && (existentes ?? []).length > 0) {
+    return {
+      ok: false,
+      message:
+        "Não é possível lançar adiantamento integral: o colaborador já tem adiantamentos parciais no ano.",
+    };
+  }
+
   // 1) Insert do adiantamento sem conta_avulsa_id nem folha_pagamento_id
   //    (esses campos são preenchidos nos passos seguintes).
   const { data: adiantInserido, error: errAd } = await supabase
@@ -1386,6 +1415,7 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
       data,
       valor,
       obs,
+      integral,
       created_by: session.profile.id,
     })
     .select("id")

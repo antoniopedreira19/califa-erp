@@ -26,9 +26,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   lancarAdiantamentoDecimoTerceiro,
   excluirAdiantamentoDecimoTerceiro,
+  calcularTreizeBrutoEsperado,
 } from "../../actions";
 
 export interface AdiantamentoRow {
@@ -266,8 +268,38 @@ function NovoAdiantamentoDialogContent({
   const [data, setData] = React.useState<string>(hoje);
   const [valor, setValor] = React.useState<string>("");
   const [obs, setObs] = React.useState<string>("");
+  const [integral, setIntegral] = React.useState(false);
+  const [carregandoBruto, setCarregandoBruto] = React.useState(false);
   const [enviando, setEnviando] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
+
+  // Quando marca "integral" + tem colaborador escolhido: busca o 13º bruto
+  // esperado e preenche o campo valor automaticamente. Mantém o campo
+  // readonly enquanto a flag estiver ligada. Erro do servidor desmarca
+  // o checkbox e exibe a mensagem.
+  React.useEffect(() => {
+    if (!integral || !colabId) return;
+    let cancelado = false;
+    setCarregandoBruto(true);
+    setErro(null);
+    calcularTreizeBrutoEsperado({ colaborador_id: colabId, ano })
+      .then((res) => {
+        if (cancelado) return;
+        if (!res.ok) {
+          setIntegral(false);
+          setErro(res.message);
+          setValor("");
+        } else {
+          setValor(res.bruto.toFixed(2));
+        }
+      })
+      .finally(() => {
+        if (!cancelado) setCarregandoBruto(false);
+      });
+    return () => {
+      cancelado = true;
+    };
+  }, [integral, colabId, ano]);
 
   async function handleSalvar() {
     setErro(null);
@@ -287,6 +319,7 @@ function NovoAdiantamentoDialogContent({
       data,
       valor: valorNum,
       obs: obs.trim() === "" ? null : obs.trim(),
+      integral,
     });
     setEnviando(false);
     if (!res.ok) {
@@ -324,6 +357,24 @@ function NovoAdiantamentoDialogContent({
           </Select>
         </div>
 
+        <div className="flex items-start gap-3 rounded-lg border border-border bg-muted/30 p-3">
+          <Checkbox
+            id="integral"
+            checked={integral}
+            onCheckedChange={(v) => setIntegral(v === true)}
+            disabled={enviando || !colabId}
+            className="mt-0.5"
+          />
+          <div className="space-y-0.5">
+            <Label htmlFor="integral" className="cursor-pointer text-sm font-medium">
+              Pagamento integral do 13º
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              Quita o 13º inteiro. O colaborador não participa da folha deste ano.
+            </p>
+          </div>
+        </div>
+
         <div className="grid grid-cols-2 gap-3">
           <div className="space-y-2">
             <Label htmlFor="data">Data do adiantamento</Label>
@@ -336,16 +387,25 @@ function NovoAdiantamentoDialogContent({
             />
           </div>
           <div className="space-y-2">
-            <Label htmlFor="valor">Valor (R$)</Label>
+            <Label htmlFor="valor">
+              Valor (R$)
+              {integral && (
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
+                  (preenchido automaticamente)
+                </span>
+              )}
+            </Label>
             <Input
               id="valor"
               type="number"
               step="0.01"
               min="0.01"
-              placeholder="0,00"
+              placeholder={carregandoBruto ? "Calculando…" : "0,00"}
               value={valor}
               onChange={(e) => setValor(e.target.value)}
-              disabled={enviando}
+              disabled={enviando || carregandoBruto}
+              readOnly={integral}
+              className={integral ? "bg-muted cursor-not-allowed" : undefined}
             />
           </div>
         </div>
