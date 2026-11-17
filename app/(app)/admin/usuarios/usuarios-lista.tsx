@@ -5,6 +5,7 @@ import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
+  Download,
   MailWarning,
   Search,
   ShieldCheck,
@@ -80,6 +81,7 @@ export function UsuariosLista({
   const [filtroStatus, setFiltroStatus] = React.useState<FiltroStatus>(TODOS);
   const [filtroRole, setFiltroRole] = React.useState<FiltroRole>(TODOS);
   const [ordenacao, setOrdenacao] = React.useState<Ordenacao>(null);
+  const [exportando, setExportando] = React.useState(false);
 
   const visiveis = React.useMemo(() => {
     const q = normalizar(busca.trim());
@@ -111,6 +113,17 @@ export function UsuariosLista({
 
   const temFiltroAtivo =
     busca.trim().length > 0 || filtroStatus !== TODOS || filtroRole !== TODOS;
+
+  async function exportar() {
+    if (visiveis.length === 0 || exportando) return;
+    setExportando(true);
+    try {
+      const { exportarUsuariosXlsx } = await import("./exportar-usuarios");
+      await exportarUsuariosXlsx(visiveis);
+    } finally {
+      setExportando(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -164,6 +177,16 @@ export function UsuariosLista({
               </SelectContent>
             </Select>
           </div>
+          <button
+            type="button"
+            onClick={exportar}
+            disabled={visiveis.length === 0 || exportando}
+            className="md:ml-auto inline-flex items-center gap-2 rounded-lg border border-border bg-white px-4 py-2 text-sm font-semibold text-foreground hover:border-california-red/40 hover:text-california-red transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:border-border disabled:hover:text-foreground"
+            aria-label="Exportar usuários para planilha"
+          >
+            <Download className="h-4 w-4" />
+            {exportando ? "Exportando..." : "Exportar"}
+          </button>
         </div>
       )}
 
