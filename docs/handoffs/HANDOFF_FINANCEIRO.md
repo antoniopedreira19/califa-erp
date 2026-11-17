@@ -9152,3 +9152,9 @@ Regra completa na seção "O Extrato contínuo e o ajuste de abertura" da decis�
 - `baixar_parcela_pp_pelo_historico` aceita linhas que somem menos que o que falta: a baixa é parcial, uma por dia de pagamento (migration `20261117100001_baixa_pelo_historico_parcial.sql`).
 - Usada na PP-00298: a baixa única de 05/11 (sem linha do banco) foi cancelada e refeita em 01/10 e 05/10, como na planilha; o pagamento foi para antes do início da conta e o ajuste de abertura da California Santander passou a R$ 2.409.607,84.
 - PP-00634 (12/11, R$ 4.500): a linha do banco estava ligada à linha da planilha (sem o código da PP) e a baixa tinha sido dada à mão depois, contando duas vezes. A linha foi ligada à baixa.
+
+## ⚠️ Nota de 2026-11-17 — Conciliação automática: a PP reconhecida na linha da planilha sem o código certo (revisão da decisão 262, D2)
+
+- A linha da planilha que é de uma PP aberta deixa de ser oferecida também quando o código vem sem hífen ("PP00634", "PP 634") e quando não há código mas o valor e o titular batem (nome mais curto é o começo do outro, até 20 dias da data prevista, par único). No lugar dela vem a PP.
+- Motivo: o caso da PP-00634 em 16/11 (conciliada pela linha da planilha sem código; baixa dada à mão depois, pagamento em dobro).
+- Código em `lib/conciliacao/planilha-de-titulo.ts` (8 testes).

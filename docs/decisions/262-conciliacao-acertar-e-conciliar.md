@@ -55,3 +55,34 @@ Na conta real (o acerto da California Santander de 01 a 11/11/2026), a sugestão
 1. Parte 1 — a tela do dia a dia (D1 a D9).
 2. Parte 2 — o fechamento por mês (D10).
 3. Parte 3 — o recebimento antes da NF pela linha (D11).
+
+## Revisão de 17/11/2026 — D2: a PP pelo código em qualquer forma e pelo valor e titular
+
+⚠️ **D2 ampliada.** O caso: em 16/11, uma linha de −R$ 4.500,00 de 12/11 foi
+conciliada pela linha da planilha "Controller…", que não cita o código da PP.
+A D2 só reconhecia a PP pelo código escrito como "PP-00634", então ofereceu a
+linha da planilha; a PP-00634 ficou aberta, a baixa foi dada à mão depois e o
+pagamento contou duas vezes (corrigido no mesmo dia).
+
+A linha da planilha que é de um título em aberto passa a ser reconhecida, nesta ordem:
+
+1. **Pelo código da PP em qualquer forma:** "PP-00634", "PP00634", "PP 634",
+   "PP-634". Com os dados de 17/11, mais 17 linhas da planilha (código sem
+   hífen) deixam de ser oferecidas no lugar da PP aberta.
+2. **Pela chave do custo fixo** (fornecedor e descrição iguais), como antes.
+3. **Pela PP aberta com o mesmo valor e o mesmo titular**, só quando a linha
+   não cita PP nenhuma (a que cita uma PP já paga é, em geral, pagamento em
+   duplicidade). O titular casa quando o nome mais curto (8 letras ou mais) é
+   o começo do outro, em qualquer parte do texto da planilha separada por "|"
+   ("Flash App | Fulana de Tal"); a data prevista da PP fica a até 20 dias; e
+   o par tem que ser único dos dois lados (uma PP, uma linha). Na dúvida, a
+   linha da planilha continua oferecida.
+
+No lugar da linha vem o título, com o aviso de sempre ("A planilha tem este
+pagamento como da PP-…"). Código: `lib/conciliacao/planilha-de-titulo.ts`
+(com testes em `planilha-de-titulo.test.ts`), usado por
+`dia-a-dia-tabela.tsx`.
+
+**Conferido (17/11, na produção, só leitura):** na linha de débito de 16/11 da
+California Santander, a busca por "samba" traz só a PP-00384 (em aberto); a
+linha "PP00384 - Roda de samba" da planilha, do mesmo dia, não é mais opção.

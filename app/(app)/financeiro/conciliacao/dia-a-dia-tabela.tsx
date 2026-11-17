@@ -55,6 +55,7 @@ import { itemDoLote, type ResultadoDaLinha } from "./motor-da-conta";
 import { EditarDataPagamentoDialog } from "../contas-a-pagar/editar-data-pagamento-dialog";
 import { EditarPrevisaoDialog } from "../contas-a-receber/editar-previsao-dialog";
 import { naOrdemDoExtrato, saldosDoExtrato, type SaldoBase } from "@/lib/conciliacao/dia-a-dia";
+import { donosDaPlanilha as donosPelaRegra } from "@/lib/conciliacao/planilha-de-titulo";
 import type { EntradaDaBaixaEmLote } from "@/lib/financeiro/baixa-em-lote";
 import type { LancamentoSemLinha } from "./banco-dados";
 import { correcaoDaBaixaCabe, RETENCOES_COMUNS, retencaoQueExplica, type TituloDoMotor } from "@/lib/conciliacao/motor";
@@ -222,25 +223,20 @@ interface Sugestao {
   /** O título sugerido tem uma linha da planilha, que não é oferecida ("da PP-00818", "do título “…”"). */
   daPlanilha: string | null;
 }
-const normalizar = (s: string | null | undefined) =>
-  (s ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 /** A linha da planilha já reconhecida como de um título não volta a ser
  *  oferecida depois que o título é baixado (no sistema, a regra da recorrência
  *  da decisão 235 tira a previsão do fluxo de vez; a da PP, pelo código). */
 const PLANILHA_DE_TITULO = new Set<string>();
-/** A linha da planilha que é de um título do sistema: o título dela. */
+/** A linha da planilha que é de um título do sistema: o título dela. A regra
+ *  (código da PP, chave do custo fixo e, desde 17/11/2026, a PP aberta pelo
+ *  valor e pelo titular) mora em `lib/conciliacao/planilha-de-titulo.ts`. */
 function donosDaPlanilha(itens: Candidato[]): Map<string, string> {
-  const m = new Map<string, string>();
+  const planilha = itens.filter((x): x is Extract<Candidato, { k: "planilha" }> => x.k === "planilha");
   const titulos = itens.filter((x): x is Extract<Candidato, { k: "titulo" }> => x.k === "titulo");
-  for (const x of itens) {
-    if (x.k !== "planilha") continue;
-    const codigo = x.descricao.match(/PP-\d{5}/)?.[0];
-    const t = codigo
-      ? titulos.find((t) => t.t.ref.includes(codigo) || t.descricao.includes(codigo))
-      : titulos.find((t) => !!normalizar(x.quem) && normalizar(t.quem) === normalizar(x.quem) && normalizar(t.descricao) === normalizar(x.descricao));
-    if (t) m.set(x.id, t.id);
-  }
-  return m;
+  return donosPelaRegra(
+    planilha.map((x) => ({ id: x.id, data: x.data, valor: x.valor, descricao: x.descricao, quem: x.quem })),
+    titulos.map((t) => ({ id: t.id, data: t.data, valor: t.valor, descricao: t.descricao, quem: t.quem, origem: String(t.t.origem), ref: t.t.ref })),
+  );
 }
 interface Comp {
   r: ResultadoDaLinha;
