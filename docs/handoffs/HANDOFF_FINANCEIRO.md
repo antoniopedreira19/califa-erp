@@ -9134,3 +9134,9 @@ Regra completa na seção "O Extrato contínuo e o ajuste de abertura" da decis�
 - Em 16/11: R$ 2.485.246,11 a identificar nos quatro pares (California Santander + ContaMax R$ 701.469,62; BB + Rende Fácil R$ 1.690.482,00; GoCrazy R$ 145.270,69; Hitlab −R$ 51.976,20).
 - As outras contas (sem o saldo do banco) seguem com os dois blocos até receberem o saldo do extrato.
 - **Migration** `20261116980002_ajuste_de_abertura_no_extrato.sql`.
+
+## ⚠️ Nota de 2026-11-16 — cartões de teste inativados na produção
+
+- **"ZZ Teste Empresa Teste" e "ZZ Teste Fatia 2" inativados** (migration `20261116980003_inativar_cartoes_de_teste_na_producao.sql`, OK do Tiago), o mesmo que o "Inativar" do cadastro, com a auditoria `cartao_credito.inativado`. As contas-espelho seguiram pelo gatilho.
+- Estavam ativos na produção e oito PPs reais foram aprovadas neles: PP-00044, PP-00210 (paga), PP-00824, PP-00950, PP-00272, PP-00719, PP-01084 e PP-01192. Nada nelas mudou: na baixa das 7 aprovadas, o diálogo não pré-escolhe mais o cartão de teste e o financeiro escolhe o certo.
+- **Pendente com o Tiago:** a PP-00210 (R$ 8.000,00) está paga na fatura aberta FC-00002 do "ZZ Teste Fatia 2"; falta decidir o cartão certo dela.
