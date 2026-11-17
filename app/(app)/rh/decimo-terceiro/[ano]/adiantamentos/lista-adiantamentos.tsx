@@ -11,6 +11,8 @@ import {
   ArrowUpDown,
   ArrowUp,
   ArrowDown,
+  ChevronRight,
+  ChevronDown,
 } from "lucide-react";
 import {
   Dialog,
@@ -55,6 +57,10 @@ export interface AdiantamentoRow {
   folha_pagamento_id: string | null;
   folha_status: string | null;
   tem_nf: boolean;
+  /** Folhas vinculadas por FK reversa: 2 pra híbrido novo (CLT+PJ),
+   *  1 pros puros, 0 pros legados. Ordenado por origem ascendente
+   *  (california, contabilidade). */
+  partes: Array<{ origem: string; salario_base: number }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -186,6 +192,17 @@ export function ListaAdiantamentos({
     }
   }
 
+  // Híbrido com 2 folhas (parte CLT + parte PJ) pode expandir
+  const [expandidas, setExpandidas] = React.useState<Set<string>>(new Set());
+  function toggleExpansao(id: string) {
+    setExpandidas((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+
   // Enriquece com o status derivado uma vez só, pra usar no filtro e na row
   const adiantamentosComStatus = React.useMemo(
     () =>
@@ -287,6 +304,7 @@ export function ListaAdiantamentos({
           <table className="w-full border-collapse text-sm">
             <thead className="bg-muted/50 text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
+                <th className="w-8 px-2 py-3"></th>
                 <th className="px-4 py-3 text-left font-medium">
                   <HeaderOrdenavel
                     label="Data"
@@ -324,9 +342,29 @@ export function ListaAdiantamentos({
                   : bloqueadoNf
                     ? "Colaborador já anexou NF — remova a NF antes de excluir."
                     : null;
+                const ehHibridoComSplit =
+                  a.colaborador_tipo === "clt_recibo" && a.partes.length >= 2;
+                const expandida = expandidas.has(a.id);
 
                 return (
-                  <tr key={a.id} className="border-t border-border">
+                  <React.Fragment key={a.id}>
+                  <tr className="border-t border-border">
+                    <td className="px-2 py-3 text-center">
+                      {ehHibridoComSplit && (
+                        <button
+                          type="button"
+                          onClick={() => toggleExpansao(a.id)}
+                          aria-label={expandida ? "Recolher" : "Expandir"}
+                          className="inline-flex items-center justify-center rounded p-1 transition-colors hover:bg-muted"
+                        >
+                          {expandida ? (
+                            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </button>
+                      )}
+                    </td>
                     <td className="px-4 py-3 tabular-nums text-muted-foreground">
                       {formatarData(a.data)}
                     </td>
@@ -395,6 +433,42 @@ export function ListaAdiantamentos({
                       )}
                     </td>
                   </tr>
+                  {ehHibridoComSplit && expandida &&
+                    a.partes.map((p) => {
+                      const ehClt = p.origem === "contabilidade";
+                      return (
+                        <tr
+                          key={`${a.id}-${p.origem}`}
+                          className="border-t border-border/50 bg-muted/20 text-xs"
+                        >
+                          <td className="px-2 py-2"></td>
+                          <td className="px-4 py-2 text-muted-foreground">—</td>
+                          <td className="px-4 py-2 pl-10 italic text-muted-foreground">
+                            {ehClt ? "Parte CLT (sem desconto)" : "Parte PJ (recibo)"}
+                          </td>
+                          <td className="px-4 py-2">
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                                ehClt
+                                  ? "bg-zinc-100 text-zinc-700"
+                                  : "bg-sky-50 text-sky-700"
+                              }`}
+                            >
+                              {ehClt ? "CLT" : "PJ"}
+                            </span>
+                          </td>
+                          <td className="px-4 py-2 text-right tabular-nums font-medium text-california-red">
+                            {brl.format(p.salario_base)}
+                          </td>
+                          <td className="px-4 py-2 text-muted-foreground">
+                            {ehClt ? "Contabilidade" : "California"}
+                          </td>
+                          <td className="px-4 py-2"></td>
+                          <td className="px-4 py-2"></td>
+                        </tr>
+                      );
+                    })}
+                  </React.Fragment>
                 );
               })}
             </tbody>

@@ -15,7 +15,7 @@ import {
   montarFolhasParcela,
   type LinhaParaMontar,
 } from "@/lib/decimo-terceiro/montar-folhas-parcela";
-import { montarFolhaAdiantamento } from "@/lib/decimo-terceiro/montar-folha-adiantamento";
+import { montarFolhasAdiantamento } from "@/lib/decimo-terceiro/montar-folha-adiantamento";
 import type { TipoContratacao } from "@/lib/types";
 
 export type ActionResult<T = Record<string, never>> =
@@ -1407,6 +1407,30 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
     return { ok: false, message: "Colaborador não encontrado." };
   }
 
+  // Pra híbrido, busca salário + valor_recibo (parte PJ) do salário
+  // vigente — necessário pro split proporcional em 2 folhas.
+  let salarioHibrido: number | null = null;
+  let valorReciboHibrido: number | null = null;
+  if (colab.tipo_contratacao === "clt_recibo") {
+    const { data: sal } = await supabase
+      .from("colaboradores_salarios")
+      .select("valor, valor_recibo")
+      .eq("tenant_id", tenantId)
+      .eq("colaborador_id", colaborador_id)
+      .is("data_fim", null)
+      .maybeSingle();
+    if (!sal) {
+      return {
+        ok: false,
+        message:
+          "Colaborador híbrido sem salário vigente — não dá pra dividir entre CLT e PJ.",
+      };
+    }
+    salarioHibrido = Number(sal.valor);
+    valorReciboHibrido =
+      sal.valor_recibo != null ? Number(sal.valor_recibo) : 0;
+  }
+
   if (valor <= 0) {
     return { ok: false, message: "Valor do adiantamento deve ser maior que zero." };
   }
@@ -1462,40 +1486,46 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
   }
   const adiantamentoId = adiantInserido.id;
 
-  // 2) Monta os campos da folha de pagamento usando a função pura.
-  const folhaMontada = montarFolhaAdiantamento({
+  // 2) Monta os campos das folhas de pagamento usando a função pura.
+  //    PJ/MEI/CLT puro: 1 folha. Híbrido (clt_recibo): 2 folhas (CLT em
+  //    'contabilidade' + PJ em 'california'), com valor proporcional ao
+  //    salário.
+  const folhasMontadas = montarFolhasAdiantamento({
     adiantamento_id: adiantamentoId,
     colaborador_id,
     tipo_contratacao: colab.tipo_contratacao as "clt" | "clt_recibo" | "pj" | "mei",
     valor,
+    salario: salarioHibrido ?? undefined,
+    valor_recibo: valorReciboHibrido ?? undefined,
   });
 
-  // 3) Insere linha em folhas_pagamento com status='enviada'.
+  // 3) Insere N linhas em folhas_pagamento com status='enviada'.
   //    data_pagamento_prevista usa a data do adiantamento — quando o pagamento
   //    sairá de fato (financeiro aprova e cria o título nessa data).
   const agora = new Date().toISOString();
-  const { data: folhaInserida, error: errFolha } = await supabase
+  const { data: folhasInseridas, error: errFolha } = await supabase
     .from("folhas_pagamento")
-    .insert({
-      tenant_id: tenantId,
-      colaborador_id: folhaMontada.colaborador_id,
-      competencia_ano: ano,
-      competencia_mes: 12,
-      salario_base: folhaMontada.salario_base,
-      status: "enviada",
-      tipo: folhaMontada.tipo,
-      origem: folhaMontada.origem,
-      enviada_em: agora,
-      enviada_por: session.profile.id,
-      data_pagamento_prevista: data,
-      decimo_terceiro_adiantamento_id: folhaMontada.decimo_terceiro_adiantamento_id,
-      decimo_terceiro_linha_id: null,
-      created_by: session.profile.id,
-    })
-    .select("id")
-    .single();
+    .insert(
+      folhasMontadas.map((f) => ({
+        tenant_id: tenantId,
+        colaborador_id: f.colaborador_id,
+        competencia_ano: ano,
+        competencia_mes: 12,
+        salario_base: f.salario_base,
+        status: "enviada",
+        tipo: f.tipo,
+        origem: f.origem,
+        enviada_em: agora,
+        enviada_por: session.profile.id,
+        data_pagamento_prevista: data,
+        decimo_terceiro_adiantamento_id: f.decimo_terceiro_adiantamento_id,
+        decimo_terceiro_linha_id: null,
+        created_by: session.profile.id,
+      })),
+    )
+    .select("id");
 
-  if (errFolha || !folhaInserida) {
+  if (errFolha || !folhasInseridas || folhasInseridas.length === 0) {
     // Rollback: deleta o adiantamento recém-inserido para não deixar órfão.
     await supabase
       .from("decimo_terceiro_adiantamentos")
@@ -1516,7 +1546,11 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
     };
   }
 
-  const folhaPagamentoId = folhaInserida.id;
+  // Pro híbrido com 2 folhas, folha_pagamento_id aponta pra PRIMEIRA
+  // (CLT quando existe, senão PJ). A UI busca as 2 folhas pela FK reversa
+  // quando precisa combinar status.
+  const folhaPagamentoId = folhasInseridas[0].id;
+  const idsFolhasCriadas = folhasInseridas.map((f) => f.id);
 
   // 4) Atualiza o adiantamento com o folha_pagamento_id.
   const { error: errUpdAd } = await supabase
@@ -1525,11 +1559,11 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
     .eq("id", adiantamentoId)
     .eq("tenant_id", tenantId);
   if (errUpdAd) {
-    // Rollback: deleta folha_pagamento e adiantamento para não deixar nenhum órfão.
+    // Rollback: deleta TODAS as folhas criadas + adiantamento.
     await supabase
       .from("folhas_pagamento")
       .delete()
-      .eq("id", folhaPagamentoId)
+      .in("id", idsFolhasCriadas)
       .eq("tenant_id", tenantId);
     const { error: errDelAd } = await supabase
       .from("decimo_terceiro_adiantamentos")
@@ -1595,10 +1629,18 @@ export async function excluirAdiantamentoDecimoTerceiro(
     return { ok: false, message: "Adiantamento não encontrado." };
   }
 
-  // Adiantamento legado (anterior à T6): sem folha vinculada.
-  // Mantém comportamento antigo — deleta só o adiantamento (ON DELETE SET NULL
-  // cuida da conta_avulsa_id se existir).
-  if (!adiantamento.folha_pagamento_id) {
+  // Busca TODAS as folhas vinculadas (FK reversa). Híbrido tem 2;
+  // PJ/MEI/CLT puro tem 1; legado tem 0.
+  const { data: folhasVinculadas } = await supabase
+    .from("folhas_pagamento")
+    .select("id, status")
+    .eq("tenant_id", tenantId)
+    .eq("tipo", "decimo_terceiro_adiantamento")
+    .eq("decimo_terceiro_adiantamento_id", adiantamentoId);
+  const folhas = folhasVinculadas ?? [];
+
+  // Adiantamento legado: sem folhas vinculadas. Deleta só o adiantamento.
+  if (folhas.length === 0) {
     const { error: errDel } = await supabase
       .from("decimo_terceiro_adiantamentos")
       .delete()
@@ -1625,16 +1667,11 @@ export async function excluirAdiantamentoDecimoTerceiro(
     return { ok: true, id: adiantamentoId };
   }
 
-  // 2) Busca a folha vinculada.
-  const { data: folha } = await supabase
-    .from("folhas_pagamento")
-    .select("id, status")
-    .eq("id", adiantamento.folha_pagamento_id)
-    .eq("tenant_id", tenantId)
-    .maybeSingle();
-
-  // Caso 1: folha aprovada ou paga — bloqueia.
-  if (folha && (folha.status === "aprovada" || folha.status === "paga")) {
+  // Caso 1: qualquer folha aprovada ou paga — bloqueia.
+  const folhaBloqueada = folhas.find(
+    (f) => f.status === "aprovada" || f.status === "paga",
+  );
+  if (folhaBloqueada) {
     await logAuditEvent({
       acao: "decimo_terceiro.adiantamento.exclusao_bloqueada",
       tenantId,
@@ -1642,8 +1679,8 @@ export async function excluirAdiantamentoDecimoTerceiro(
       entidadeId: adiantamentoId,
       metadata: {
         motivo: "folha_aprovada",
-        folha_status: folha.status,
-        folha_pagamento_id: adiantamento.folha_pagamento_id,
+        folha_status: folhaBloqueada.status,
+        folha_pagamento_id: folhaBloqueada.id,
       },
     });
     return {
@@ -1682,13 +1719,14 @@ export async function excluirAdiantamentoDecimoTerceiro(
     };
   }
 
-  // Caso 3: enviada, sem NF — deleta folha e depois adiantamento.
-  // Ordem: DELETE folha primeiro (SET NULL resolve a cross-FK do adiantamento),
-  // depois DELETE adiantamento (sem a RESTRICT no sentido inverso).
+  // Caso 3: todas 'enviada' / sem NF — deleta TODAS as folhas e depois o
+  // adiantamento. Ordem: DELETE folhas primeiro (SET NULL resolve a cross-FK
+  // do adiantamento), depois DELETE adiantamento.
+  const idsFolhas = folhas.map((f) => f.id);
   const { error: errFolha } = await supabase
     .from("folhas_pagamento")
     .delete()
-    .eq("id", adiantamento.folha_pagamento_id)
+    .in("id", idsFolhas)
     .eq("tenant_id", tenantId);
   if (errFolha) {
     return {

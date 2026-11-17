@@ -35,8 +35,7 @@ export default async function AdiantamentosPage({ params }: Props) {
       .from("decimo_terceiro_adiantamentos")
       .select(
         `id, ano, colaborador_id, data, valor, obs, integral, folha_pagamento_id,
-         colaborador:colaboradores!decimo_terceiro_adiantamentos_colaborador_id_fkey(nome, funcao, tipo_contratacao),
-         folha:folhas_pagamento!decimo_terceiro_adiantamentos_folha_pagamento_id_fkey(status)`,
+         colaborador:colaboradores!decimo_terceiro_adiantamentos_colaborador_id_fkey(nome, funcao, tipo_contratacao)`,
       )
       .eq("tenant_id", session.activeTenant.id)
       .eq("ano", ano)
@@ -55,8 +54,37 @@ export default async function AdiantamentosPage({ params }: Props) {
     throw new Error(`Falha ao carregar adiantamentos: ${adiantRes.error.message}`);
   }
 
-  // Busca NFs de adiantamentos de 13° em lote (evita N+1)
   const adiantIds = (adiantRes.data ?? []).map((a) => a.id);
+
+  // Busca todas as folhas de pagamento vinculadas aos adiantamentos pela
+  // FK reversa. Híbridos têm 2 (CLT contabilidade + PJ california);
+  // PJ/MEI/CLT puro têm 1; legados têm 0. Precisamos do split na UI
+  // (linha expansível) + status combinado.
+  const folhasPorAdiant = new Map<
+    string,
+    Array<{ id: string; status: string; origem: string; salario_base: number }>
+  >();
+  if (adiantIds.length > 0) {
+    const { data: folhasRows } = await supabase
+      .from("folhas_pagamento")
+      .select("id, status, origem, salario_base, decimo_terceiro_adiantamento_id")
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("tipo", "decimo_terceiro_adiantamento")
+      .in("decimo_terceiro_adiantamento_id", adiantIds);
+    for (const f of folhasRows ?? []) {
+      if (!f.decimo_terceiro_adiantamento_id) continue;
+      const arr = folhasPorAdiant.get(f.decimo_terceiro_adiantamento_id) ?? [];
+      arr.push({
+        id: f.id,
+        status: f.status,
+        origem: f.origem,
+        salario_base: Number(f.salario_base),
+      });
+      folhasPorAdiant.set(f.decimo_terceiro_adiantamento_id, arr);
+    }
+  }
+
+  // Busca NFs de adiantamentos de 13° em lote (evita N+1)
   const nfSet = new Set<string>();
   if (adiantIds.length > 0) {
     const { data: nfRows } = await supabase
@@ -74,10 +102,6 @@ export default async function AdiantamentosPage({ params }: Props) {
     | { nome: string; funcao: string; tipo_contratacao: string }
     | { nome: string; funcao: string; tipo_contratacao: string }[]
     | null;
-  type FolhaEmbed =
-    | { status: string }
-    | { status: string }[]
-    | null;
   interface AdiantamentoRaw {
     id: string;
     ano: number;
@@ -88,12 +112,30 @@ export default async function AdiantamentosPage({ params }: Props) {
     integral: boolean;
     folha_pagamento_id: string | null;
     colaborador: ColabEmbed;
-    folha: FolhaEmbed;
+  }
+
+  // Combina o status das folhas em UM status representativo: a de pior
+  // prioridade vence (enviada < pendente_correcao < aprovada < paga).
+  // Assim a label reflete o estado "mais atrás" no fluxo, que é o que
+  // o usuário precisa agir.
+  const prioridade: Record<string, number> = {
+    enviada: 0,
+    pendente_correcao: 1,
+    aprovada: 2,
+    paga: 3,
+  };
+  function statusCombinado(
+    folhas: Array<{ status: string }>,
+  ): string | null {
+    if (folhas.length === 0) return null;
+    return folhas.reduce((pior, f) =>
+      (prioridade[f.status] ?? 99) < (prioridade[pior.status] ?? 99) ? f : pior,
+    ).status;
   }
 
   const adiantamentos: AdiantamentoRow[] = ((adiantRes.data ?? []) as AdiantamentoRaw[]).map((a) => {
     const colab = Array.isArray(a.colaborador) ? a.colaborador[0] : a.colaborador;
-    const folha = Array.isArray(a.folha) ? a.folha[0] : a.folha;
+    const folhasDoAdiant = folhasPorAdiant.get(a.id) ?? [];
     return {
       id: a.id,
       colaborador_id: a.colaborador_id,
@@ -105,8 +147,11 @@ export default async function AdiantamentosPage({ params }: Props) {
       obs: a.obs,
       integral: a.integral,
       folha_pagamento_id: a.folha_pagamento_id,
-      folha_status: folha?.status ?? null,
+      folha_status: statusCombinado(folhasDoAdiant),
       tem_nf: nfSet.has(a.id),
+      partes: folhasDoAdiant
+        .map((f) => ({ origem: f.origem, salario_base: f.salario_base }))
+        .sort((x, y) => x.origem.localeCompare(y.origem)),
     };
   });
 
