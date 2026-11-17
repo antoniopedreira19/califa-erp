@@ -171,8 +171,20 @@ export default async function AdiantamentosPage({ params }: Props) {
     // Partes: vem das folhas quando existem (híbrido novo).
     // Pra híbrido legado (sem folhas), calcula em runtime pelo salário
     // vigente. Mesma fórmula do montarFolhasAdiantamento.
-    let partes: Array<{ origem: string; salario_base: number }> = folhasDoAdiant
-      .map((f) => ({ origem: f.origem, salario_base: f.salario_base }))
+    let partes: Array<{
+      origem: string;
+      salario_base: number;
+      status: string | null;
+      tem_nf: boolean;
+    }> = folhasDoAdiant
+      .map((f) => ({
+        origem: f.origem,
+        salario_base: f.salario_base,
+        status: f.status,
+        // Só origem california (parte PJ) exige NF. tem_nf do adiantamento
+        // já reflete a NF anexada ao escopo decimo_terceiro_adiantamento.
+        tem_nf: f.origem === "california" ? nfSet.has(a.id) : false,
+      }))
       .sort((x, y) => x.origem.localeCompare(y.origem));
 
     if (
@@ -183,9 +195,9 @@ export default async function AdiantamentosPage({ params }: Props) {
       if (sal && sal.salario > 0 && sal.valor_recibo > 0 && sal.valor_recibo <= sal.salario) {
         const parteClt = Math.round((valorNum * (sal.salario - sal.valor_recibo)) / sal.salario * 100) / 100;
         const partePj = Math.round((valorNum - parteClt) * 100) / 100;
-        const calculadas: Array<{ origem: string; salario_base: number }> = [];
-        if (partePj > 0) calculadas.push({ origem: "california", salario_base: partePj });
-        if (parteClt > 0) calculadas.push({ origem: "contabilidade", salario_base: parteClt });
+        const calculadas: typeof partes = [];
+        if (partePj > 0) calculadas.push({ origem: "california", salario_base: partePj, status: null, tem_nf: false });
+        if (parteClt > 0) calculadas.push({ origem: "contabilidade", salario_base: parteClt, status: null, tem_nf: false });
         partes = calculadas.sort((x, y) => x.origem.localeCompare(y.origem));
       }
     }

@@ -59,8 +59,15 @@ export interface AdiantamentoRow {
   tem_nf: boolean;
   /** Folhas vinculadas por FK reversa: 2 pra híbrido novo (CLT+PJ),
    *  1 pros puros, 0 pros legados. Ordenado por origem ascendente
-   *  (california, contabilidade). */
-  partes: Array<{ origem: string; salario_base: number }>;
+   *  (california, contabilidade).
+   *  - `status` null em legado calculado em runtime.
+   *  - `tem_nf` só faz sentido pra origem california (parte PJ). */
+  partes: Array<{
+    origem: string;
+    salario_base: number;
+    status: string | null;
+    tem_nf: boolean;
+  }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -436,6 +443,18 @@ export function ListaAdiantamentos({
                   {ehHibridoComSplit && expandida &&
                     a.partes.map((p) => {
                       const ehClt = p.origem === "contabilidade";
+                      // Status por parte: CLT puro nunca espera NF; PJ sim.
+                      // Se não tem status (legado), mostra "Pago".
+                      const partStatus = (() => {
+                        if (p.status == null) return { label: "Pago", classe: "bg-zinc-100 text-zinc-500" };
+                        if (p.status === "paga") return { label: "Pago", classe: "bg-zinc-100 text-zinc-500" };
+                        if (p.status === "aprovada") return { label: "Aprovado — a pagar", classe: "bg-emerald-50 text-emerald-700" };
+                        // enviada / pendente_correcao
+                        if (!ehClt && !p.tem_nf) {
+                          return { label: "Aguardando NF", classe: "bg-amber-50 text-amber-700" };
+                        }
+                        return { label: "Aguardando aprovação", classe: "bg-blue-50 text-blue-700" };
+                      })();
                       return (
                         <tr
                           key={`${a.id}-${p.origem}`}
@@ -463,7 +482,13 @@ export function ListaAdiantamentos({
                           <td className="px-4 py-2 text-muted-foreground">
                             {ehClt ? "Contabilidade" : "California"}
                           </td>
-                          <td className="px-4 py-2"></td>
+                          <td className="px-4 py-2">
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium ${partStatus.classe}`}
+                            >
+                              {partStatus.label}
+                            </span>
+                          </td>
                           <td className="px-4 py-2"></td>
                         </tr>
                       );

@@ -516,20 +516,30 @@ export function PeopleList({
               // Para outros escopos, usar labelEscopoTipo() (badge curto).
               const is13 = item.escopo_tipo === "decimo_terceiro_p1" || item.escopo_tipo === "decimo_terceiro_p2" || item.escopo_tipo === "decimo_terceiro_adiantamento";
 
-              // Para 13° parcelas (não adiantamento) com clt_recibo origem california, adiciona "(parte PJ)"
-              const is13Parcela = item.escopo_tipo === "decimo_terceiro_p1" || item.escopo_tipo === "decimo_terceiro_p2";
-              const ehPartePj = is13Parcela && item.tipo_contratacao === "clt_recibo" && item.origem === "california";
+              // Para 13° com clt_recibo origem california, adiciona "(parte PJ)".
+              // Vale pras parcelas 1/2 e também pro adiantamento, que a partir
+              // da Entrega 2 gera 2 folhas separadas pro híbrido.
+              const is13ComParte =
+                item.escopo_tipo === "decimo_terceiro_p1" ||
+                item.escopo_tipo === "decimo_terceiro_p2" ||
+                item.escopo_tipo === "decimo_terceiro_adiantamento";
+              const ehPartePj =
+                is13ComParte &&
+                item.tipo_contratacao === "clt_recibo" &&
+                item.origem === "california";
               const tipoTexto = is13
                 ? (ehPartePj ? `${item.label} (parte PJ)` : item.label)
                 : labelEscopoTipo(item.escopo_tipo);
               const eFolhaMensal = item.escopo_tipo === "folha_mensal";
 
               // Espelha a regra do server (actions-folhas.ts: exigeNf):
-              //   origem california + pj/mei/clt_recibo exigem NF.
-              //   Férias (usufruto/abono) também exigem NF.
-              //   CLT puro / sócio / estagio e 13° não exigem NF.
+              //   folha_mensal + origem california + pj/mei/clt_recibo → NF.
+              //   decimo_terceiro_adiantamento + origem california + pj/mei/clt_recibo → NF.
+              //   Férias (usufruto/abono) → NF.
+              //   CLT puro / sócio / estagio e parcelas 13° p1/p2 → não exigem.
               const exigeNfLinha =
-                item.escopo_tipo === "folha_mensal" &&
+                (item.escopo_tipo === "folha_mensal" ||
+                  item.escopo_tipo === "decimo_terceiro_adiantamento") &&
                 item.origem === "california" &&
                 ["pj", "mei", "clt_recibo"].includes(item.tipo_contratacao);
               const exigeNfFerias =
