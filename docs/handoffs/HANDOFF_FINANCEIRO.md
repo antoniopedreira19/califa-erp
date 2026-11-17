@@ -9146,3 +9146,9 @@ Regra completa na seção "O Extrato contínuo e o ajuste de abertura" da decis�
 - O tipo da conta "Fundo Fixo California" mudou de **caixa** para **investimento** (migration `20261116980004_fundo_fixo_como_investimento.sql`, pedido do Tiago: a conta não é usada no dia a dia como caixa). Auditado como a edição do cadastro.
 - Na lista da Conciliação, o grupo "Caixa" sumiu (não há outra conta do tipo) e o fundo entra em "Investimento". Ele passa a ser opção de conta de aplicação no rendimento do recebimento avulso. Pagar, baixar e conciliar seguem iguais.
 - O saldo continua −R$ 911,20 até o saldo inicial ser informado (a planilha diz R$ 46.088,59 em 30/09).
+
+## ⚠️ Nota de 2026-11-17 — baixa de PP pelo histórico aceita parcial (revisão da decisão 261)
+
+- `baixar_parcela_pp_pelo_historico` aceita linhas que somem menos que o que falta: a baixa é parcial, uma por dia de pagamento (migration `20261117100001_baixa_pelo_historico_parcial.sql`).
+- Usada na PP-00298: a baixa única de 05/11 (sem linha do banco) foi cancelada e refeita em 01/10 e 05/10, como na planilha; o pagamento foi para antes do início da conta e o ajuste de abertura da California Santander passou a R$ 2.409.607,84.
+- PP-00634 (12/11, R$ 4.500): a linha do banco estava ligada à linha da planilha (sem o código da PP) e a baixa tinha sido dada à mão depois, contando duas vezes. A linha foi ligada à baixa.
