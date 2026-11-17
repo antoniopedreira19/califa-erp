@@ -118,9 +118,11 @@ export async function criarFolhaDecimoTerceiro(
   }
 
   // Query 2.5: adiantamentos do ano por colaborador (Parte 2).
+  // Lê `integral` pra excluir da folha quem recebeu o 13º inteiro
+  // antecipado: esses colaboradores não geram linha.
   const { data: adiantamentos, error: errAd } = await supabase
     .from("decimo_terceiro_adiantamentos")
-    .select("colaborador_id, valor")
+    .select("colaborador_id, valor, integral")
     .eq("tenant_id", tenantId)
     .eq("ano", ano)
     .in("colaborador_id", elegiveisIds);
@@ -128,11 +130,13 @@ export async function criarFolhaDecimoTerceiro(
     return { ok: false, message: `Falha ao buscar adiantamentos: ${errAd.message}` };
   }
   const adiantadoPorColab = new Map<string, number>();
+  const colabsComIntegral = new Set<string>();
   for (const a of adiantamentos ?? []) {
     adiantadoPorColab.set(
       a.colaborador_id,
       (adiantadoPorColab.get(a.colaborador_id) ?? 0) + Number(a.valor),
     );
+    if (a.integral) colabsComIntegral.add(a.colaborador_id);
   }
 
   // Query 2.6: colaboradores que tiveram REAJUSTE no ano (Parte 4).
@@ -211,7 +215,12 @@ export async function criarFolhaDecimoTerceiro(
   // Monta elegiveis com todos os dados necessários; descarta quem não
   // tem salário vigente (não deveria acontecer no dataset atual).
   const elegiveis: ColaboradorElegivel[] = (colaboradores ?? [])
-    .filter((c) => elegiveisIds.includes(c.id) && salarioPorColab.has(c.id))
+    .filter(
+      (c) =>
+        elegiveisIds.includes(c.id) &&
+        salarioPorColab.has(c.id) &&
+        !colabsComIntegral.has(c.id),
+    )
     .map((c) => ({
       id: c.id,
       nome: c.nome,
@@ -1249,6 +1258,27 @@ async function recalcularLinhaDeAdiantamento(
     .eq("ano", ano)
     .maybeSingle();
   if (!folha) return;
+
+  // Se existe adiantamento integral no ano pro colaborador, ele saiu da
+  // folha: deleta a linha se estiver criada e termina. Reinclusão só via
+  // recriação da folha ou remoção do adiantamento integral.
+  const { data: integralCheck } = await supabase
+    .from("decimo_terceiro_adiantamentos")
+    .select("id")
+    .eq("tenant_id", tenantId)
+    .eq("ano", ano)
+    .eq("colaborador_id", colaboradorId)
+    .eq("integral", true)
+    .limit(1);
+  if ((integralCheck ?? []).length > 0) {
+    await supabase
+      .from("decimo_terceiro_linhas")
+      .delete()
+      .eq("tenant_id", tenantId)
+      .eq("folha_id", folha.id)
+      .eq("colaborador_id", colaboradorId);
+    return;
+  }
 
   const { data: linha } = await supabase
     .from("decimo_terceiro_linhas")
