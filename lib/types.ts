@@ -3713,6 +3713,10 @@ export interface ContaBancaria {
   tipo: TipoContaBancaria;
   saldo_inicial: string; // numeric vem como string do Supabase — parse com Number(...)
   saldo_inicial_data: string; // YYYY-MM-DD
+  /** O saldo inicial veio do extrato do banco (recomeço de 03/11/2026). Só
+   *  nela o Extrato junta o histórico antes do início e mostra o ajuste de
+   *  abertura (`extrato_antes_do_inicio`). Marcada por migration. */
+  saldo_inicial_do_banco: boolean;
   ativo: boolean;
   ordem: number;
   /** Na conta de aplicação automática (ContaMax, Rende Fácil): a conta

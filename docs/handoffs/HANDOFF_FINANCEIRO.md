@@ -9124,3 +9124,13 @@ Regra completa na seção 10 da decisão 091. A nota de 2026-10-16 (4) vale só 
 - **O seletor "Ecossistema California × Teste" saiu** da lista de contas da Conciliação: ela mostra todas as contas do tenant aberto. Teste mora no Sandbox, e o tenant já separa.
 - **As contas "Teste" e "Conta Teste Presumido" foram para o Sandbox** (migration `20261116980001_contas_de_teste_para_o_sandbox.sql`). Tinham ficado na produção na mudança de 10/11, sem empresa visível (grupo "—"), somando R$ 127.809,53 no consolidado. Na produção: 15 contas, consolidado de −R$ 3.567.042,48 em 16/11. No Sandbox, a "Teste" passou a contar os próprios lançamentos (R$ 41.031,77).
 - **Pendente com o Tiago:** os cartões "ZZ Teste Empresa Teste" e "ZZ Teste Fatia 2" seguem na produção, com 8 PPs reais apontando para eles.
+
+## ⚠️ Nota de 2026-11-16 — Extrato contínuo com o ajuste de abertura (revisão da decisão 211, A3)
+
+Regra completa na seção "O Extrato contínuo e o ajuste de abertura" da decisão 211.
+
+- **Nas oito contas do recomeço de 03/11** (`contas_bancarias.saldo_inicial_do_banco`), o Extrato é um só, com um conjunto de cartões e saldo contínuo: antes do início, o histórico da planilha (período e cauda) e as baixas do sistema com data anterior; na véspera, a linha **"Ajuste de abertura · diferença a identificar"** (âmbar, fora do DRE), que leva o saldo ao saldo inicial do banco.
+- **O ajuste é calculado** (`extrato_antes_do_inicio`): diminui sozinho quando o que falta entra no histórico ou uma baixa antiga é ligada à linha da planilha. O saldo de hoje, a lista da Conciliação, o fechamento e o DRE não mudam.
+- Em 16/11: R$ 2.485.246,11 a identificar nos quatro pares (California Santander + ContaMax R$ 701.469,62; BB + Rende Fácil R$ 1.690.482,00; GoCrazy R$ 145.270,69; Hitlab −R$ 51.976,20).
+- As outras contas (sem o saldo do banco) seguem com os dois blocos até receberem o saldo do extrato.
+- **Migration** `20261116980002_ajuste_de_abertura_no_extrato.sql`.
