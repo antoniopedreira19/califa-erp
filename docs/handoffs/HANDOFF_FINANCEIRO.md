@@ -9158,3 +9158,15 @@ Regra completa na seção "O Extrato contínuo e o ajuste de abertura" da decis�
 - A linha da planilha que é de uma PP aberta deixa de ser oferecida também quando o código vem sem hífen ("PP00634", "PP 634") e quando não há código mas o valor e o titular batem (nome mais curto é o começo do outro, até 20 dias da data prevista, par único). No lugar dela vem a PP.
 - Motivo: o caso da PP-00634 em 16/11 (conciliada pela linha da planilha sem código; baixa dada à mão depois, pagamento em dobro).
 - Código em `lib/conciliacao/planilha-de-titulo.ts` (8 testes).
+
+## ⚠️ Nota de 2026-11-17 — o pedido de desembolso com comprovante e a NF no cadastro de notas (decisão 264)
+
+Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer de criação, lista com botões na linha, página de detalhe).
+
+- **Módulo Desembolsos** (`/financeiro/desembolsos`): só os pedidos de quem está usando, em qualquer papel (a RLS também). Formulário vertical em quatro partes, com a empresa e a regional da alocação no RH (`minha_alocacao_vigente`), a data de pagamento pela regra da PP (janelas, prazo de envio, quarta de exceções com urgência e justificativa) e o comprovante obrigatório com as peças do anexo da PP. Rejeitado → "Corrigir" fora da tabela → reenvio com o mesmo código. O endereço antigo `/financeiro/desembolsos/[id]` redireciona para a tela do pedido (o financeiro, para a aba do Contas a Pagar).
+- **Contas a Pagar › Desembolsos:** grade fixa (Código, Valor, Parcela, Descrição, Quem recebe, Enviado por, Regional, Pagamento, Status), seção "Urgentes", filtro por coluna. O clique abre a tela cheia (comprovante + dados); o rodapé rejeita, segue para a aprovação (data, forma e cartão) ou reverte.
+- **NF:** reconhecida pelo número no cadastro único (152) e somada no saldo da nota entre PPs e desembolsos; registrada no controle de notas na aprovação. O formulário da PP também passa a ver os desembolsos que usam a nota, sem oferecer "Corrigir a DES-…".
+- **Banco:** `salvar_pedido_de_desembolso` e `aprovar_pedido_de_desembolso`; gatilho `trg_desembolso_status_pelo_papel` (só o financeiro decide; sem comprovante não se aprova). Arquivos no bucket `pedidos-compra` (o bucket `desembolsos` nunca existiu). Migrations `20261117300001` a `20261117300003`.
+- **Home:** os cartões "Desembolsos em avaliação" levam à aba do Contas a Pagar.
+- **Ficam para a etapa do controle de NFs:** retenções e crédito de PIS/COFINS na aprovação, a NF do reembolso no cadastro e a correção da NF pelo financeiro.
+- **Conferido no Sandbox** (GP, produtor e admin): envio com NF, rejeição, correção e reenvio, aprovação com o título em Títulos a Pagar e a nota registrada, reembolso com cupom fiscal; no banco, a NF sem saldo, o GP aprovando o próprio pedido, a mudança de status pela API e o pedido sem comprovante são recusados.

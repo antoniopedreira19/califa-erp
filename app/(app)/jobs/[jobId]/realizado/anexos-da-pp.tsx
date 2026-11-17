@@ -534,6 +534,58 @@ export function ListaDeAnexos({
  * A parte desta PP vai até o valor da PP (revisão da 152): com a nota maior
  * que a PP, "Valor nesta PP" abre sozinho com o valor da PP.
  */
+/**
+ * Os textos que dizem de qual documento é a nota. O padrão é a PP; o pedido
+ * de desembolso (decisão 264) usa as mesmas peças e troca só as palavras,
+ * pelo `TextosDoDocumentoDaNf.Provider`.
+ */
+export interface TextosDoDocumento {
+  soDeste: string;
+  cobreOutro: string;
+  valorNeste: string;
+  oDocumentoE: string;
+  jaEstaEm: string;
+  dadosVemDeUm: string;
+  dadosVemDeVarios: string;
+  inteiraNosOutros: string;
+  paraEste: string;
+  corrijaOutro: string;
+  nesteDoc: string;
+  doDoc: string;
+  oDocDe: string;
+}
+export const TEXTOS_DA_PP: TextosDoDocumento = {
+  soDeste: "Esta NF é só desta PP",
+  cobreOutro: "Esta NF também cobre outra PP",
+  valorNeste: "Valor nesta PP",
+  oDocumentoE: "a PP é de",
+  jaEstaEm: "Esta NF já está na",
+  dadosVemDeUm: "Os dados vêm de lá; para mudar, corrija a NF na outra PP.",
+  dadosVemDeVarios: "Os dados vêm de lá; para mudar, corrija a NF numa das outras PPs.",
+  inteiraNosOutros: "nas outras PPs",
+  paraEste: "para esta PP",
+  corrijaOutro: "Se a parte de outra PP está errada, corrija-a antes.",
+  nesteDoc: "nesta PP",
+  doDoc: "da PP",
+  oDocDe: "a PP, de",
+};
+export const TEXTOS_DO_DESEMBOLSO: TextosDoDocumento = {
+  soDeste: "Esta NF é só deste pedido",
+  cobreOutro: "Esta NF também cobre outro pedido",
+  valorNeste: "Valor neste pedido",
+  oDocumentoE: "o pedido é de",
+  jaEstaEm: "Esta NF já está em",
+  dadosVemDeUm: "Os dados vêm do cadastro de notas.",
+  dadosVemDeVarios: "Os dados vêm do cadastro de notas.",
+  inteiraNosOutros: "em outros documentos",
+  paraEste: "para este pedido",
+  corrijaOutro: "Ajuste o valor neste pedido.",
+  nesteDoc: "neste pedido",
+  doDoc: "do pedido",
+  oDocDe: "o pedido, de",
+};
+export const TextosDoDocumentoDaNf = React.createContext<TextosDoDocumento>(TEXTOS_DA_PP);
+
 export function NfDoAnexo({
   nf,
   onMudar,
@@ -603,6 +655,7 @@ export function NfDoAnexo({
   leitura?: LeituraDoAnexo;
 }) {
   const ast = obrigatorio ? " *" : "";
+  const tx = React.useContext(TextosDoDocumentoDaNf);
   const hoje = hojeEmSaoPauloIso();
   const t = tomadores.find((x) => x.id === nf.tomador);
   const rotulo = "text-[11px] font-medium text-muted-foreground";
@@ -726,7 +779,7 @@ export function NfDoAnexo({
   // outras PPs): alguma PP está com a parte errada. A que ainda está em
   // avaliação se corrige daqui.
   const passaDaSobra = sobra !== null && (sobra <= 0.004 || parteDaNf(nf) > sobra + 0.004);
-  const corrigiveis = outras.filter((o) => o.status === "em_avaliacao");
+  const corrigiveis = outras.filter((o) => o.status === "em_avaliacao" && o.tipo === "pp");
 
   return (
     <div className="space-y-1.5">
@@ -862,20 +915,20 @@ export function NfDoAnexo({
       {nf.cobreOutra && (
         <div className="flex flex-wrap items-center gap-2">
           <label htmlFor={`${idBase}-parte`} className={rotulo}>
-            Valor nesta PP{ast}
+            {tx.valorNeste}{ast}
           </label>
           <MoneyInput
             id={`${idBase}-parte`}
             value={nf.valorNaPP > 0 ? nf.valorNaPP : null}
             onValueChange={(v) => onMudar({ valorNaPP: v })}
-            aria-label="Valor nesta PP"
+            aria-label={tx.valorNeste}
             disabled={disabled}
             className={cn("w-[132px]", altura, faltas.includes("valorNaPP") && VERMELHO)}
           />
           {nf.valor > 0 && (
             <span className="text-[11px] text-muted-foreground">
               de {formatCurrency(nf.valor, "BRL")} da nota
-              {notaMaiorQueAPP && <> · a PP é de {formatCurrency(valorPP, "BRL")}</>}
+              {notaMaiorQueAPP && <> · {tx.oDocumentoE} {formatCurrency(valorPP, "BRL")}</>}
             </span>
           )}
         </div>
@@ -950,12 +1003,12 @@ export function NfDoAnexo({
               "Registrada pelo financeiro: os dados da nota só ele corrige. O valor nesta PP continua livre."
             ) : outras.length > 0 ? (
               <>
-                Esta NF já está na <ListaDePPs pps={outras} />.{" "}
+                {tx.jaEstaEm} <ListaDePPs pps={outras} />.{" "}
                 {existente?.registrada
                   ? "Os dados vêm de lá; só o financeiro corrige."
                   : outras.length === 1
-                    ? "Os dados vêm de lá; para mudar, corrija a NF na outra PP."
-                    : "Os dados vêm de lá; para mudar, corrija a NF numa das outras PPs."}
+                    ? tx.dadosVemDeUm
+                    : tx.dadosVemDeVarios}
                 {/* Atalho para corrigir a outra PP (no envio). Com a parte
                     passando do que sobra, ele fica no aviso vermelho. */}
                 {!existente?.registrada && !passaDaSobra && onCorrigirOutraPP && corrigiveis.length > 0 && (
@@ -1004,7 +1057,7 @@ export function NfDoAnexo({
             }
             className="text-[11px] font-semibold text-california-red underline-offset-2 hover:underline"
           >
-            {nf.cobreOutra ? "Esta NF é só desta PP" : "Esta NF também cobre outra PP"}
+            {nf.cobreOutra ? tx.soDeste : tx.cobreOutro}
           </button>
         )
       )}
@@ -1015,9 +1068,9 @@ export function NfDoAnexo({
             <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none" />
             <span>
               {sobra <= 0.004
-                ? `A NF ${existente?.numero ?? nf.numero} já está inteira nas outras PPs.`
-                : `Da NF ${existente?.numero ?? nf.numero} sobram ${formatCurrency(sobra, "BRL")} para esta PP.`}{" "}
-              Se a parte de outra PP está errada, corrija-a antes.
+                ? `A NF ${existente?.numero ?? nf.numero} já está inteira ${tx.inteiraNosOutros}.`
+                : `Da NF ${existente?.numero ?? nf.numero} sobram ${formatCurrency(sobra, "BRL")} ${tx.paraEste}.`}{" "}
+              {tx.corrijaOutro}
             </span>
           </p>
           {onCorrigirOutraPP && corrigiveis.length > 0 && (
@@ -1172,6 +1225,7 @@ export function ExigidosNoEnvio({ anexos, meio }: { anexos: AnexoEmEdicao[]; mei
 }
 
 export function ResumoDasNfs({ valores, valorPP }: { valores: number[]; valorPP: number }) {
+  const tx = React.useContext(TextosDoDocumentoDaNf);
   if (valores.length === 0) return null;
   const soma = Math.round(valores.reduce((t, v) => t + (v || 0), 0) * 100) / 100;
   const difere = soma > 0 && valorPP > 0 && Math.abs(soma - valorPP) > 0.004;
@@ -1183,8 +1237,8 @@ export function ResumoDasNfs({ valores, valorPP }: { valores: number[]; valorPP:
       <p className={cn("flex items-start gap-1.5 text-[11.5px] font-semibold leading-snug", cor)}>
         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none" />
         {passa
-          ? `A NF nesta PP (${formatCurrency(soma, "BRL")}) passa do valor da PP (${formatCurrency(valorPP, "BRL")}).`
-          : `A NF nesta PP é de ${formatCurrency(soma, "BRL")}; a PP, de ${formatCurrency(valorPP, "BRL")}. Confira o valor.`}
+          ? `A NF ${tx.nesteDoc} (${formatCurrency(soma, "BRL")}) passa do valor ${tx.doDoc} (${formatCurrency(valorPP, "BRL")}).`
+          : `A NF ${tx.nesteDoc} é de ${formatCurrency(soma, "BRL")}; ${tx.oDocDe} ${formatCurrency(valorPP, "BRL")}. Confira o valor.`}
       </p>
     );
   }
@@ -1192,19 +1246,19 @@ export function ResumoDasNfs({ valores, valorPP }: { valores: number[]; valorPP:
     <div className="space-y-1">
       <p className="flex flex-wrap items-baseline justify-end gap-x-3 text-[11.5px] text-muted-foreground">
         <span>
-          Soma das {valores.length} notas nesta PP{" "}
+          Soma das {valores.length} notas {tx.nesteDoc}{" "}
           <b className={cn("font-mono text-foreground", difere && cor)}>{formatCurrency(soma, "BRL")}</b>
         </span>
         <span>
-          Valor da PP <b className="font-mono text-foreground">{formatCurrency(valorPP, "BRL")}</b>
+          Valor {tx.doDoc} <b className="font-mono text-foreground">{formatCurrency(valorPP, "BRL")}</b>
         </span>
       </p>
       {difere && (
         <p className={cn("flex items-start justify-end gap-1.5 text-[11.5px] font-semibold leading-snug", cor)}>
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none" />
           {passa
-            ? "A soma das notas passa do valor da PP."
-            : "A soma das notas não bate com o valor da PP. Confira os valores."}
+            ? `A soma das notas passa do valor ${tx.doDoc}.`
+            : `A soma das notas não bate com o valor ${tx.doDoc}. Confira os valores.`}
         </p>
       )}
     </div>

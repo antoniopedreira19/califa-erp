@@ -18,7 +18,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { MoneyInput } from "@/components/ui/money-input";
 import { cn, formatCurrency } from "@/lib/utils";
 import type { ComprovanteDoReembolso } from "@/lib/calculos/reembolso";
-import type { AnexoEmEdicao } from "./anexos-da-pp";
+import { TextosDoDocumentoDaNf, type AnexoEmEdicao } from "./anexos-da-pp";
 
 const ROTULO = "text-[11px] font-medium text-muted-foreground";
 const ALTURA = "h-8 px-2 text-xs";
@@ -118,6 +118,7 @@ export function CamposDoComprovante({
 
 /** A soma dos comprovantes contra o valor da PP, embaixo da lista. */
 export function ResumoDosComprovantes({ anexos, valorPP }: { anexos: AnexoEmEdicao[]; valorPP: number }) {
+  const tx = React.useContext(TextosDoDocumentoDaNf);
   const ok = anexos.filter((a) => a.status === "ok");
   if (ok.length === 0) return null;
   const soma = Math.round(ok.reduce((t, a) => t + (a.nf.valor || 0), 0) * 100) / 100;
@@ -132,14 +133,14 @@ export function ResumoDosComprovantes({ anexos, valorPP }: { anexos: AnexoEmEdic
           </b>
         </span>
         <span>
-          Valor da PP <b className="font-mono text-foreground">{formatCurrency(valorPP, "BRL")}</b>
+          Valor {tx.doDoc} <b className="font-mono text-foreground">{formatCurrency(valorPP, "BRL")}</b>
         </span>
         {bate && <CheckCircle2 className="h-3.5 w-3.5 self-center text-emerald-600" aria-label="A soma fecha" />}
       </p>
       {soma > 0 && valorPP > 0 && !bate && (
         <p className="flex items-start justify-end gap-1.5 text-[11.5px] font-semibold leading-snug text-amber-800">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-none" />
-          O reembolso devolve o que foi pago: a soma precisa ser o valor da PP.
+          O reembolso devolve o que foi pago: a soma precisa ser o valor {tx.doDoc}.
         </p>
       )}
     </div>

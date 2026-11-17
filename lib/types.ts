@@ -4830,6 +4830,38 @@ export interface Desembolso {
    *  Cartão aqui não amarra a fatura — isso é da baixa. */
   forma_pagamento: FormaPagamento | null;
   cartao_credito_id: string | null;
+  /** Decisão 264: quem recebe — o fornecedor, ou reembolso a quem pediu. */
+  favorecido_tipo: "fornecedor" | "reembolso" | null;
+  /** Decisão 264: o último envio ao financeiro e o reenvio do rejeitado. */
+  enviado_em: string | null;
+  reenviado_em: string | null;
+  /** Decisão 264: pagamento urgente (libera a quarta de exceções), com justificativa. */
+  urgente: boolean;
+  urgente_justificativa: string | null;
+}
+
+/** Um comprovante do pedido de desembolso (decisão 264): o arquivo, o tipo
+ *  e, na NF, os dados da nota e a parte dela neste pedido; no reembolso, a
+ *  data e o valor do gasto. */
+export interface DesembolsoAnexo {
+  id: string;
+  tenant_id: string;
+  desembolso_id: string;
+  arquivo_path: string;
+  arquivo_nome_original: string;
+  arquivo_tamanho_bytes: number;
+  arquivo_mimetype: string | null;
+  documento_tipo: DocumentoTipo | null;
+  documento_numero: string | null;
+  nf_data_emissao: string | null;
+  nf_valor: string | null;
+  nf_tomador_estabelecimento_id: string | null;
+  /** A parte da NF neste pedido (null = a nota inteira). */
+  nf_valor_no_pedido: string | null;
+  /** A nota do cadastro único (`notas_fiscais_fornecedor`), ligada no envio. */
+  nota_fiscal_id: string | null;
+  criado_por: string;
+  created_at: string;
 }
 
 export interface DesembolsoParcela {
@@ -6021,6 +6053,8 @@ export interface NotaFiscalFornecedor {
   registrada_em: string | null;
   registrada_por: string | null;
   registrada_na_pp_id: string | null;
+  /** Decisão 264: o desembolso cuja aprovação registrou a nota. */
+  registrada_no_desembolso_id: string | null;
   iss_retido_aliquota: number | null;
   credito_pis_cofins_retirado: boolean;
   credito_pis_cofins_motivo: string | null;

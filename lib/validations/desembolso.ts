@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { DOCUMENTO_TIPOS } from "@/lib/types";
+import { DOCUMENTO_TIPOS, PP_ANEXO_MIMETYPES_ACEITOS } from "@/lib/types";
 
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -13,92 +13,82 @@ const rateioSchema = z
         .max(100, "Percentual máximo 100."),
     }),
   )
-  .min(1, "Adicione pelo menos uma regional.")
-  .refine(
-    (a) => Math.abs(a.reduce((s, r) => s + r.percentual, 0) - 100) < 0.01,
-    { message: "A soma dos percentuais deve ser 100,00.", path: ["_sum"] },
-  )
-  .refine(
-    (a) => new Set(a.map((r) => r.regional_id)).size === a.length,
-    { message: "Cada regional só pode aparecer uma vez.", path: ["_dup"] },
-  );
-
-const parcelaSchema = z.object({
-  numero: z.number().int().min(1),
-  data_vencimento: z.string().regex(dateRegex, "Data em YYYY-MM-DD."),
-  valor: z
-    .string()
-    .refine((v) => !Number.isNaN(Number(v)) && Number(v) > 0, "Valor deve ser positivo."),
-});
-
-export const criarDesembolsoSchema = z
-  .object({
-    empresa_id: z.string().uuid("Selecione a empresa."),
-    descricao: z.string().trim().min(3, "Descrição muito curta.").max(500),
-    valor: z
-      .string()
-      .refine((v) => !Number.isNaN(Number(v)) && Number(v) > 0, "Valor deve ser positivo."),
-    data_prevista_pagamento: z
-      .string()
-      .regex(dateRegex, "Data em YYYY-MM-DD.")
-      .nullable()
-      .or(z.literal("").transform(() => null)),
-    fornecedor_id: z
-      .string()
-      .uuid()
-      .nullable()
-      .or(z.literal("").transform(() => null)),
-    cliente_id: z
-      .string()
-      .uuid()
-      .nullable()
-      .or(z.literal("").transform(() => null)),
-    rateio: rateioSchema,
-    parcelas: z.array(parcelaSchema).min(1, "Adicione pelo menos uma parcela.")
-      .refine((ps) => new Set(ps.map((p) => p.numero)).size === ps.length,
-        "Número de parcela repetido."),
-    anexos: z
-      .array(
-        z.object({
-          path: z.string().min(1),
-          nome: z.string().min(1),
-          tamanho: z.number().int().positive(),
-          mimetype: z.string().min(1),
-          // Que documento este arquivo é (28/08/2026). O par anda junto:
-          // número sem tipo não identifica nada.
-          documento_tipo: z.enum(DOCUMENTO_TIPOS).nullable().default(null),
-          documento_numero: z.string().trim().max(60).nullable().default(null),
-        }),
-      )
-      .default([]),
+  .min(1, "Escolha a regional do pedido.")
+  .refine((a) => Math.abs(a.reduce((s, r) => s + r.percentual, 0) - 100) < 0.01, {
+    message: "O rateio por regional precisa somar 100%.",
   })
-  .superRefine((data, ctx) => {
-    // Soma das parcelas bate com valor total
-    const totalParcelas = data.parcelas.reduce((s, p) => s + Number(p.valor), 0);
-    const totalDesembolso = Number(data.valor);
-    if (Math.abs(totalParcelas - totalDesembolso) > 0.01) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "A soma das parcelas deve bater com o valor total.",
-        path: ["parcelas"],
-      });
-    }
+  .refine((a) => new Set(a.map((r) => r.regional_id)).size === a.length, {
+    message: "Cada regional só pode aparecer uma vez.",
   });
 
-export type CriarDesembolsoInput = z.infer<typeof criarDesembolsoSchema>;
+/**
+ * Um anexo do pedido (decisão 264), no formato do anexo da PP: o tipo
+ * obrigatório e, na NF, número, emissão, valor, CNPJ tomador e a parte da
+ * nota neste pedido. No reembolso, data e valor de cada comprovante
+ * (decisão 187). `id` = o anexo já gravado (corrigir e reenviar).
+ */
+const anexoDoPedidoSchema = z.object({
+  id: z.string().uuid().nullable(),
+  path: z.string().min(1),
+  nome: z.string().min(1).max(255),
+  tamanho: z.number().int().nonnegative(),
+  mimetype: z.enum(PP_ANEXO_MIMETYPES_ACEITOS, { errorMap: () => ({ message: "Tipo de arquivo não aceito." }) }),
+  // Como o anexo da PP: o cupom fiscal vale nos comprovantes do reembolso (decisão 187).
+  documento_tipo: z.enum([...DOCUMENTO_TIPOS, "cupom_fiscal"]).nullable(),
+  documento_numero: z.string().trim().max(60).nullable(),
+  nf_data_emissao: z.string().regex(dateRegex).nullable(),
+  nf_valor: z.number().positive().nullable(),
+  nf_tomador_estabelecimento_id: z.string().uuid().nullable(),
+  nf_valor_no_pedido: z.number().positive().nullable(),
+});
+export type AnexoDoPedidoInput = z.infer<typeof anexoDoPedidoSchema>;
+
+/** O pedido novo, ou o rejeitado que quem pediu corrige e reenvia (`id`). */
+export const salvarPedidoDeDesembolsoSchema = z
+  .object({
+    id: z.string().uuid().nullable(),
+    empresa_id: z.string().uuid("Escolha a empresa."),
+    descricao: z.string().trim().min(3, "Escreva a descrição do pedido.").max(500),
+    favorecido_tipo: z.enum(["fornecedor", "reembolso"]),
+    fornecedor_id: z.string().uuid().nullable(),
+    valor: z.number({ invalid_type_error: "Informe o valor." }).positive("Informe o valor."),
+    urgente: z.boolean(),
+    urgente_justificativa: z.string().trim().max(500).nullable(),
+    rateio: rateioSchema,
+    parcelas: z
+      .array(
+        z.object({
+          numero: z.number().int().min(1),
+          data_vencimento: z.string().regex(dateRegex, "Escolha a data de pagamento."),
+          valor: z.number().positive("Valor de parcela precisa ser positivo."),
+        }),
+      )
+      .min(1, "Escolha a data de pagamento.")
+      .max(36),
+    anexos: z.array(anexoDoPedidoSchema).min(1, "Anexe o comprovante: sem ele o financeiro não aprova.").max(20),
+  })
+  .superRefine((d, ctx) => {
+    const erro = (message: string) => ctx.addIssue({ code: z.ZodIssueCode.custom, message });
+    if (d.favorecido_tipo === "fornecedor" && !d.fornecedor_id) erro("Escolha o fornecedor que recebe, ou marque reembolso.");
+    if (d.urgente && (d.urgente_justificativa ?? "").trim().length < 10) {
+      erro("Escreva a justificativa do pagamento urgente (mín. 10 caracteres).");
+    }
+    const soma = Math.round(d.parcelas.reduce((s, p) => s + p.valor, 0) * 100) / 100;
+    if (Math.abs(soma - d.valor) > 0.005) erro("A soma das parcelas precisa bater com o valor do pedido.");
+    if (new Set(d.parcelas.map((p) => p.numero)).size !== d.parcelas.length) erro("Número de parcela repetido.");
+    if (d.anexos.some((a) => !a.documento_tipo)) erro("Escolha o tipo de cada arquivo.");
+  });
+export type SalvarPedidoDeDesembolsoInput = z.infer<typeof salvarPedidoDeDesembolsoSchema>;
 
 export const aprovarDesembolsoSchema = z
   .object({
     desembolso_id: z.string().uuid(),
-    data_pagamento: z.string().regex(dateRegex, "Data em YYYY-MM-DD."),
+    data_pagamento: z.string().regex(dateRegex, "Escolha a data de pagamento."),
     // A INTENÇÃO de pagamento (decisão 093, §12): como a PP, o financeiro
     // pode dizer na aprovação por onde o desembolso vai sair. Cartão aqui
     // não amarra a fatura — isso acontece na baixa; serve para pré-preencher
     // a baixa e para a previsão de caixa cair no vencimento da fatura.
-    forma_pagamento: z
-      .enum(["pix", "transferencia", "boleto", "cartao_credito"])
-      .nullable()
-      .optional(),
+    forma_pagamento: z.enum(["pix", "transferencia", "boleto", "cartao_credito"]).nullable().optional(),
     cartao_credito_id: z.string().uuid().nullable().optional(),
   })
   .superRefine((v, ctx) => {
