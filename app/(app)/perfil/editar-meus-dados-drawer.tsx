@@ -270,7 +270,20 @@ export function EditarMeusDadosDrawer({ colaborador: c, onFechar }: Props) {
                   id="banco_codigo"
                   value={form.banco_codigo}
                   onChange={(v) => set("banco_codigo", v)}
-                  placeholder="001"
+                  onBlur={(v) => {
+                    // Normaliza pra 3 dígitos (constraint colaboradores_banco_formato).
+                    const so_digitos = v.replace(/\D/g, "");
+                    if (!so_digitos) return;
+                    const normalizado =
+                      so_digitos.length > 3
+                        ? so_digitos.slice(-3)
+                        : so_digitos.padStart(3, "0");
+                    if (normalizado !== form.banco_codigo) {
+                      set("banco_codigo", normalizado);
+                    }
+                  }}
+                  placeholder="260"
+                  maxLength={4}
                   errors={fieldErrors.banco_codigo}
                 />
                 <CampoInput
@@ -294,7 +307,9 @@ export function EditarMeusDadosDrawer({ colaborador: c, onFechar }: Props) {
                   label="Dígito"
                   id="agencia_dv"
                   value={form.agencia_dv}
-                  onChange={(v) => set("agencia_dv", v.slice(0, 2))}
+                  onChange={(v) => set("agencia_dv", v.slice(0, 1))}
+                  placeholder="—"
+                  maxLength={1}
                   errors={fieldErrors.agencia_dv}
                 />
                 <CampoInput
@@ -308,7 +323,8 @@ export function EditarMeusDadosDrawer({ colaborador: c, onFechar }: Props) {
                   label="Dígito"
                   id="conta_dv"
                   value={form.conta_dv}
-                  onChange={(v) => set("conta_dv", v.slice(0, 2))}
+                  onChange={(v) => set("conta_dv", v.slice(0, 1))}
+                  maxLength={1}
                   errors={fieldErrors.conta_dv}
                 />
               </div>
@@ -400,16 +416,20 @@ function CampoInput({
   id,
   value,
   onChange,
+  onBlur,
   placeholder,
   type = "text",
+  maxLength,
   errors,
 }: {
   label: string;
   id: string;
   value: string;
   onChange: (v: string) => void;
+  onBlur?: (v: string) => void;
   placeholder?: string;
   type?: string;
+  maxLength?: number;
   errors?: string[];
 }) {
   return (
@@ -420,7 +440,9 @@ function CampoInput({
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onBlur={onBlur ? (e) => onBlur(e.target.value) : undefined}
         placeholder={placeholder}
+        maxLength={maxLength}
       />
       {errors?.map((msg, i) => (
         <p key={i} className="text-xs text-red-700">

@@ -786,7 +786,21 @@ function Passo5Bancario({ dados, atualizar }: PassoProps) {
             <Input
               value={dados.banco_codigo}
               onChange={(e) => atualizar("banco_codigo", e.target.value)}
-              placeholder="001"
+              onBlur={(e) => {
+                // Normaliza pra 3 dígitos: "0260" -> "260", "1" -> "001".
+                // A constraint `colaboradores_banco_formato` exige ^[0-9]{3}$.
+                const so_digitos = e.target.value.replace(/\D/g, "");
+                if (!so_digitos) return;
+                const normalizado =
+                  so_digitos.length > 3
+                    ? so_digitos.slice(-3)
+                    : so_digitos.padStart(3, "0");
+                if (normalizado !== dados.banco_codigo) {
+                  atualizar("banco_codigo", normalizado);
+                }
+              }}
+              placeholder="260"
+              maxLength={4}
             />
           </Campo>
         </div>
@@ -812,7 +826,8 @@ function Passo5Bancario({ dados, atualizar }: PassoProps) {
             <Input
               value={dados.agencia_dv}
               onChange={(e) => atualizar("agencia_dv", e.target.value)}
-              maxLength={2}
+              maxLength={1}
+              placeholder="—"
             />
           </Campo>
         </div>
@@ -829,7 +844,7 @@ function Passo5Bancario({ dados, atualizar }: PassoProps) {
             <Input
               value={dados.conta_dv}
               onChange={(e) => atualizar("conta_dv", e.target.value)}
-              maxLength={2}
+              maxLength={1}
             />
           </Campo>
         </div>
