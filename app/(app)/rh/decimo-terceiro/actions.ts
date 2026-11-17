@@ -1667,3 +1667,98 @@ export async function excluirAdiantamentoDecimoTerceiro(
 
   return { ok: true, id: adiantamentoId };
 }
+
+// ---------------------------------------------------------------------------
+// Helper usado pelo dialog "Novo adiantamento" quando o usuário marca
+// "Pagamento integral do 13º": calcula o valor bruto esperado do 13º do
+// colaborador no ano, pra autopreencher o campo e travar edição.
+//
+// Reusa calcularLinhaDecimoTerceiro com totalAdiantado=0 — devolve o
+// totalBruto que a folha calcularia sem adiantamentos.
+
+const CalcularBrutoInput = z.object({
+  colaborador_id: z.string().uuid(),
+  ano: z.number().int().min(2020).max(2100),
+});
+
+export async function calcularTreizeBrutoEsperado(input: {
+  colaborador_id: string;
+  ano: number;
+}): Promise<ActionResult<{ bruto: number }>> {
+  const session = await requireSession();
+  if (!pode(session.activeRole, "rh.decimo_terceiro.editar")) {
+    return { ok: false, message: "Sem permissão para esta ação." };
+  }
+  const parsed = CalcularBrutoInput.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: "Dados inválidos." };
+  }
+  const { colaborador_id, ano } = parsed.data;
+  const tenantId = session.activeTenant.id;
+  const supabase = createClient();
+
+  const { data: colab } = await supabase
+    .from("colaboradores")
+    .select("id, tipo_contratacao, data_admissao, data_encerramento")
+    .eq("id", colaborador_id)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (!colab) {
+    return { ok: false, message: "Colaborador não encontrado." };
+  }
+  if (
+    !["clt", "clt_recibo", "pj", "mei"].includes(colab.tipo_contratacao)
+  ) {
+    return {
+      ok: false,
+      message: "Tipo de contratação não elegível a 13º.",
+    };
+  }
+  if (
+    colab.data_encerramento != null &&
+    colab.data_encerramento <= `${ano}-12-31`
+  ) {
+    return {
+      ok: false,
+      message:
+        "Colaborador desligado dentro do ano — 13º proporcional é calculado em Rescisões.",
+    };
+  }
+
+  const { data: salario } = await supabase
+    .from("colaboradores_salarios")
+    .select("valor, valor_recibo")
+    .eq("tenant_id", tenantId)
+    .eq("colaborador_id", colaborador_id)
+    .is("data_fim", null)
+    .maybeSingle();
+  if (!salario) {
+    return {
+      ok: false,
+      message: "Colaborador sem salário vigente — não dá pra calcular o 13º.",
+    };
+  }
+
+  const valorReciboNum =
+    salario.valor_recibo != null && Number(salario.valor_recibo) > 0
+      ? Number(salario.valor_recibo)
+      : null;
+
+  const calc = calcularLinhaDecimoTerceiro({
+    salario: Number(salario.valor),
+    dataAdmissao: new Date(`${colab.data_admissao}T00:00:00Z`),
+    ano,
+    tipoContratacao: colab.tipo_contratacao as TipoContratacao,
+    totalAdiantado: 0,
+    valorRecibo: valorReciboNum,
+  });
+
+  if (calc.avos === 0) {
+    return {
+      ok: false,
+      message: "Admissão após 15/12 do ano — sem direito a avos, 13º é R$ 0.",
+    };
+  }
+
+  return { ok: true, bruto: calc.totalBruto };
+}
