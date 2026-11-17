@@ -253,6 +253,16 @@ Case studies documentam decisões erradas. Sempre atualizar aqui quando algo tra
 
 **Aprendizado:** em view, coluna calculada com `EXISTS ... OR EXISTS ...` sobre tabela grande merece um `explain analyze`. Se aparecer `hashed SubPlan` com `Seq Scan` na tabela grande, troque pela subconsulta escalar com `limit 1`.
 
+### 6. Saldos dos dias em aberto recalculando tudo por dia (nov/2026)
+
+**Sintoma:** `saldos_dos_dias_em_aberto` (Conciliação) levava ~27 ms por dia em aberto: 221 ms com 8 dias, e piorava a cada dia sem conciliar (média 0,6 s e picos de 1,8 s sob carga).
+
+**Diagnóstico:** a função chamava `_condicoes_do_fechamento` uma vez por dia. Cada chamada refazia, desde o início da conta, as somas do extrato, dos lançamentos e da cauda do histórico, e ainda duas contagens que a tela não usa.
+
+**Fix:** migration `20261116990003_saldos_dos_dias_em_aberto_numa_passada.sql`. Cada fonte é lida uma vez, agrupada por dia, e cada dia soma o que veio até ele. Conferido em todos os 78 dias de extrato das 6 contas com importação: jsonb idêntico. Conta principal, 29 dias: 392 → 10 ms.
+
+**Aprendizado:** função que chama outra "por dia" (ou por item) dentro de um `lateral` repete o trabalho inteiro N vezes; calcule por conjunto. E CTE usada dentro de subconsulta correlacionada precisa de `as materialized`: sem isso o Postgres a reexecuta a cada linha (aqui, 96 ms em vez de 10).
+
 ---
 
 ## Anti-padrões proibidos
