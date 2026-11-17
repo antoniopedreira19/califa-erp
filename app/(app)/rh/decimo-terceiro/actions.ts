@@ -516,16 +516,21 @@ export async function recalcularFolhaDecimoTerceiro(
     return { ok: false, message: `Falha ao buscar colaboradores: ${errCol.message}` };
   }
 
-  // Rebuscar adiantamentos do ano (Parte 2).
+  // Rebuscar adiantamentos do ano (Parte 2). Lê `integral` também pra
+  // deletar linhas de colaboradores que receberam o 13º inteiro
+  // antecipado — eles não participam da folha do ano.
   const { data: adiantamentos, error: errAd } = await supabase
     .from("decimo_terceiro_adiantamentos")
-    .select("colaborador_id, valor")
+    .select("colaborador_id, valor, integral")
     .eq("tenant_id", tenantId)
     .eq("ano", folha.ano)
     .in("colaborador_id", colabIds);
   if (errAd) {
     return { ok: false, message: `Falha ao buscar adiantamentos: ${errAd.message}` };
   }
+  const colabsComIntegralRecalc = new Set<string>(
+    (adiantamentos ?? []).filter((a) => a.integral).map((a) => a.colaborador_id),
+  );
 
   const salPorColab = new Map(
     (salariosAtuais ?? []).map((s) => [s.colaborador_id, s.valor]),
@@ -597,6 +602,16 @@ export async function recalcularFolhaDecimoTerceiro(
       const desligadoNoAno =
         dataEnc != null && dataEnc <= fimDoAno;
       if (desligadoNoAno) {
+        return supabase
+          .from("decimo_terceiro_linhas")
+          .delete()
+          .eq("id", l.id)
+          .eq("tenant_id", tenantId);
+      }
+
+      // Se o colaborador recebeu adiantamento integral, remove a linha:
+      // ele quitou o 13º inteiro por fora da folha.
+      if (colabsComIntegralRecalc.has(l.colaborador_id)) {
         return supabase
           .from("decimo_terceiro_linhas")
           .delete()
@@ -694,9 +709,28 @@ export async function recalcularFolhaDecimoTerceiro(
   const jaNaFolhaIds = new Set(
     (todasLinhasIds ?? []).map((l) => l.colaborador_id),
   );
+
+  // Buscar adiantamentos integrais do ano pra EXCLUIR esses colaboradores
+  // dos "faltantes". Senão o recalc recria linhas que a semântica de
+  // integral já tirou da folha.
+  const { data: adInteg, error: errAdInteg } = await supabase
+    .from("decimo_terceiro_adiantamentos")
+    .select("colaborador_id")
+    .eq("tenant_id", tenantId)
+    .eq("ano", folha.ano)
+    .eq("integral", true);
+  if (errAdInteg) {
+    return {
+      ok: false,
+      message: `Falha ao buscar integrais do ano: ${errAdInteg.message}`,
+    };
+  }
+  const integralIds = new Set((adInteg ?? []).map((a) => a.colaborador_id));
+
   const faltantes = (todosColabs ?? []).filter(
     (c) =>
       !jaNaFolhaIds.has(c.id) &&
+      !integralIds.has(c.id) &&
       (c.data_encerramento == null || c.data_encerramento > fimDoAno),
   );
 
