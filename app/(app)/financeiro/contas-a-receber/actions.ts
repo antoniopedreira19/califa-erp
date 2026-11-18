@@ -315,8 +315,14 @@ export async function emitirFaturamento(
   if (d.origem_tipo !== "bv" && !d.tomador_exterior && !/^\d{14}$/.test(cnpjTomador)) {
     return { ok: false, message: "Informe o CNPJ do tomador, ou marque “Tomador no exterior, sem CNPJ”." };
   }
-  if (d.job_referencia_id && d.origem_tipo !== "avulso") {
-    return { ok: false, message: "Só a nota avulsa leva job de referência." };
+  // Decisão 265: a avulsa "referente a um job" saiu — extra de job ganha
+  // orçamento próprio, e a nota do job é a do Novo faturamento (Job, no
+  // "+ Faturamento"). As notas antigas com job de referência ficam como estão.
+  if (d.job_referencia_id) {
+    return {
+      ok: false,
+      message: "A nota de um job sai pelo Job do “+ Faturamento”, que conta no faturamento dele.",
+    };
   }
   // Decisão 247: o save avulso é uma avulsa sem job e sem rateio — a
   // regional é a do job que consumir o crédito.

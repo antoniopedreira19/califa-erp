@@ -44,6 +44,10 @@ export const SELECT_VW_PARAMETROS_DO_JOB =
 export const MENSAGEM_PARAMETROS_DEPOIS_DO_ENVIO =
   "O job já foi enviado para faturamento: honorários, impostos e taxas agora só mudam pelo financeiro.";
 
+/** A mesma trava, pela nota do Novo faturamento (decisão 265). */
+export const MENSAGEM_PARAMETROS_DEPOIS_DO_NOVO_FATURAMENTO =
+  "O job já foi faturado pelo financeiro: honorários, impostos e taxas agora só mudam pelo financeiro.";
+
 /** Os campos do câmbio: o financeiro os muda até o encerramento. */
 export const CAMPOS_DO_CAMBIO = ["moeda_estrangeira", "cambio_cotacao", "cambio_data", "cambio_compra", "cambio_venda"];
 

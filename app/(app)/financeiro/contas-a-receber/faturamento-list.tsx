@@ -48,8 +48,6 @@ import { createPortal } from "react-dom";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   AlertCircle,
-  Briefcase,
-  ReceiptText,
   Building2,
   Check,
   ChevronDown,
@@ -801,7 +799,6 @@ export function FaturamentoList({
   }
 
   const todasAsLinhas = React.useMemo(() => agruparPorNota(pendentes), [pendentes]);
-  const [menuFaturar, setMenuFaturar] = React.useState(false);
 
   /** Fecha o formulário e abre o Faturar da linha do envio do job. */
   function faturarPeloEnvio(jobId: string) {
@@ -1320,38 +1317,15 @@ export function FaturamentoList({
             <Layers className="h-3.5 w-3.5" />
             {modoSelecao ? "Sair do agrupamento" : "Faturamento Agrupado"}
           </button>
-          <Popover open={menuFaturar} onOpenChange={setMenuFaturar}>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-california-red px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-california-red-hover"
-              >
-                <Plus className="h-3.5 w-3.5" />
-                Faturamento
-              </button>
-            </PopoverTrigger>
-            <PopoverContent align="end" className="w-[200px] p-1.5">
-              {(
-                [
-                  ["adicional", "Novo faturamento", Briefcase],
-                  ["avulso", "Faturamento avulso", ReceiptText],
-                ] as const
-              ).map(([modo, rotulo, Icone]) => (
-                <button
-                  key={modo}
-                  type="button"
-                  onClick={() => {
-                    setMenuFaturar(false);
-                    setDrawer({ modo });
-                  }}
-                  className="flex w-full items-center gap-2.5 rounded-md px-3 py-2 text-left text-[13px] font-semibold text-foreground transition-colors hover:bg-muted"
-                >
-                  <Icone className="h-4 w-4 shrink-0 text-muted-foreground" />
-                  {rotulo}
-                </button>
-              ))}
-            </PopoverContent>
-          </Popover>
+          {/* Decisão 265: um formulário só (Job, Save avulso ou Sem job), sem o menu. */}
+          <button
+            type="button"
+            onClick={() => setDrawer({ modo: "avulso" })}
+            className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg bg-california-red px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-california-red-hover"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Faturamento
+          </button>
         </div>
       </div>
 

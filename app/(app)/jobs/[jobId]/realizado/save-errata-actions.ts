@@ -39,6 +39,7 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import {
   MENSAGEM_CONSUMO_JA_ENVIADO,
+  MENSAGEM_CONSUMO_JA_FATURADO_PELO_FINANCEIRO,
   jobJaEnviadoParaFaturamento,
   mensagemConsumoMesJaEnviado,
   mesesEnviadosDoJob,
@@ -216,9 +217,13 @@ async function portaDoConsumo(
   grupoId: string | null,
 ): Promise<string | null> {
   if (base.modeloPlanilha !== "mensal") {
-    return (await jobJaEnviadoParaFaturamento(supabase, jobId, tenantId))
-      ? MENSAGEM_CONSUMO_JA_ENVIADO
-      : null;
+    // Decisão 265: a nota do Novo faturamento fecha a porta como o envio.
+    const porta = await jobJaEnviadoParaFaturamento(supabase, jobId, tenantId);
+    return porta === "financeiro"
+      ? MENSAGEM_CONSUMO_JA_FATURADO_PELO_FINANCEIRO
+      : porta
+        ? MENSAGEM_CONSUMO_JA_ENVIADO
+        : null;
   }
 
   const falhou =

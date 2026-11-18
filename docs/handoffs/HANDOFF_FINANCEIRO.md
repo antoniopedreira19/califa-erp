@@ -9170,3 +9170,11 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Home:** os cartões "Desembolsos em avaliação" levam à aba do Contas a Pagar.
 - **Ficam para a etapa do controle de NFs:** retenções e crédito de PIS/COFINS na aprovação, a NF do reembolso no cadastro e a correção da NF pelo financeiro.
 - **Conferido no Sandbox** (GP, produtor e admin): envio com NF, rejeição, correção e reenvio, aprovação com o título em Títulos a Pagar e a nota registrada, reembolso com cupom fiscal; no banco, a NF sem saldo, o GP aprovando o próprio pedido, a mudança de status pela API e o pedido sem comprovante são recusados.
+
+
+## ⚠️ Nota de 2026-11-18 — "+ Faturamento" com um formulário só (decisão 265, revê a 256 e a 184)
+
+- **Sem o menu:** o "+ Faturamento" abre direto o formulário "Faturamento", com o vínculo em cima: **Job** (o Novo faturamento da 256, sem mudança de regra), **Save avulso** ou **Sem job**. A avulsa "referente a um job" saiu (extra de job ganha orçamento próprio); o servidor recusa `job_referencia_id`. A linha de saldo continua abrindo o "Novo faturamento" direto no job.
+- **Produção:** as NFs 6468 (AMB-1061/26), 6376 (AMB-1042/26) e 6475 (AMB-1058/26), lançadas como avulsa referente a um job, viraram Novo faturamento (migration `20261118400001`, autorizada pelo Tiago). Os jobs ficaram faturados; o AMB-1058/26 tem saldo de R$ 20.741,02 na fila. O "antes" está na auditoria.
+- **Fica de fora:** a Rentabilidade (`vw_job_rentabilidade`, da outra frente) conta o realizado pelo envio do GP e não vê nenhum Novo faturamento.
+- **Conferido no Sandbox:** o formulário nas três escolhas, a linha de saldo do TES-1006/26 e as travas da planilha (abaixo, no HANDOFF_JOBS).

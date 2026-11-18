@@ -20,7 +20,10 @@ import {
   tipoDaVerba,
 } from "@/lib/types";
 import { parametrosGravadosDe } from "@/lib/data/parametros-do-job";
-import { MENSAGEM_PARAMETROS_DEPOIS_DO_ENVIO } from "@/lib/calculos/parametros-do-job";
+import {
+  MENSAGEM_PARAMETROS_DEPOIS_DO_ENVIO,
+  MENSAGEM_PARAMETROS_DEPOIS_DO_NOVO_FATURAMENTO,
+} from "@/lib/calculos/parametros-do-job";
 import {
   jobStatusLabel,
   jobStatusExibido,
@@ -547,7 +550,10 @@ export default async function JobDetailPage({
                         envioFaturamento !== null ||
                         detalhe.faturamentoMensal.some((m) => m.envio !== null)
                           ? MENSAGEM_PARAMETROS_DEPOIS_DO_ENVIO
-                          : null,
+                          : detalhe.faturamentoEnvioUnico?.peloFinanceiro ||
+                              detalhe.faturamentoMensal.some((m) => m.peloFinanceiro)
+                            ? MENSAGEM_PARAMETROS_DEPOIS_DO_NOVO_FATURAMENTO
+                            : null,
                       cambioDepoisDaTrava: false,
                     }
                   : null,
@@ -627,7 +633,14 @@ export default async function JobDetailPage({
             ppsQuePossoPrestarContas={ppsQuePossoPrestarContas}
             midiaSystem={detalhe.midiaSystem}
             podeConfirmarBv={podeConfirmarBv && !comPedido && !emDecisao}
-            jaEnviadoParaFaturamento={envioFaturamento !== null}
+            // Decisão 265: a nota do Novo faturamento trava como o envio.
+            jaEnviadoParaFaturamento={
+              envioFaturamento !== null
+                ? "envio"
+                : detalhe.faturamentoEnvioUnico?.peloFinanceiro
+                  ? "financeiro"
+                  : false
+            }
             ppsPorItemId={ppsPorItemId}
             aEmitirPorItemId={aEmitirPorItemId}
             tomadoresDaNf={tomadoresDaNf}

@@ -126,6 +126,7 @@ import { AvisoDoMesEnviado } from "./aviso-do-mes-enviado";
 import { MesesQueFaltam } from "./meses-que-faltam";
 import { ErrataProntaFaixa, quandoDaPronta } from "./errata-pronta-faixa";
 import type { FechamentoDaAbertura } from "@/lib/calculos/abertura-do-job";
+import type { PortaDoFaturamento } from "@/lib/data/envio-faturamento";
 import { ErrataBarra } from "./errata-barra";
 import { ErrataConfirmarDialog } from "./errata-confirmar-dialog";
 import {
@@ -317,8 +318,10 @@ interface Props {
   /** Job já enviado para faturamento: o valor da nota está congelado em
    *  `jobs_envio_faturamento` e nem errata nem save podem mexer nele
    *  (decisão 028, nota de 27/08/2026). O servidor já recusava — sem
-   *  isto a tela deixava montar a errata inteira antes de reprovar. */
-  jaEnviadoParaFaturamento?: boolean;
+   *  isto a tela deixava montar a errata inteira antes de reprovar.
+   *  Decisão 265: `"financeiro"` quando quem fechou foi a nota do Novo
+   *  faturamento. */
+  jaEnviadoParaFaturamento?: PortaDoFaturamento;
   /** Todas as PPs ativas de cada item realizado (PPs parciais). */
   ppsPorItemId: Map<string, PedidoCompraNaLista[]>;
   /** Decisão 153: as PPs a emitir de cada item, fora do realizado. */
@@ -1332,8 +1335,10 @@ function PlanilhaDoJob({
   // gerar save vale até o envio para ENCERRAMENTO, e só consumir e retirar
   // consumo fecham com o envio para faturamento (no mensal, pelo mês da
   // linha). Ver `modoDoSave` e `portaDoConsumo`, logo abaixo.
+  // Decisão 265: o mês faturado pelo financeiro (Novo faturamento) fecha
+  // como o mês enviado.
   const mesesEnviados = React.useMemo(
-    () => new Set(faturamentoMensal.filter((m) => m.envio !== null).map((m) => m.mesId)),
+    () => new Set(faturamentoMensal.filter((m) => m.envio !== null || m.peloFinanceiro).map((m) => m.mesId)),
     [faturamentoMensal],
   );
   // Com mês faltando no trimestre, a errata segue aberta mesmo com todos os
@@ -1388,7 +1393,9 @@ function PlanilhaDoJob({
       : job.status === "rejeitado_financeiro"
         ? "direto"
         : null;
-  const motivoErrataTravada = jaEnviadoParaFaturamento
+  const motivoErrataTravada = jaEnviadoParaFaturamento === "financeiro"
+    ? "Job já faturado pelo financeiro: o valor da nota está congelado e não há mais errata. Se algo estiver errado, fale com o financeiro."
+    : jaEnviadoParaFaturamento
     ? "Job já enviado para faturamento: o valor da nota está congelado e não há mais errata. Fale com o financeiro antes da emissão da nota."
     : todosOsMesesEnviados
       ? "Todos os meses do job já foram enviados para faturamento: o valor das notas está congelado e não há mais errata."
@@ -1426,7 +1433,9 @@ function PlanilhaDoJob({
   /** O consumo desta linha já não muda: o job foi enviado para faturamento
    *  ou, no modelo mensal, o mês dela foi (§14). */
   function portaDoConsumo(item: ItemPlanilhaJob): PortaDoConsumo | null {
-    if (jaEnviadoParaFaturamento) return { motivo: "faturamento" };
+    if (jaEnviadoParaFaturamento) {
+      return { motivo: "faturamento", peloFinanceiro: jaEnviadoParaFaturamento === "financeiro" };
+    }
     const mesId = mesDoGrupo.get(item.grupo_id) ?? null;
     if (mesId && mesesEnviados.has(mesId)) {
       const mes = meses.find((m) => m.id === mesId);

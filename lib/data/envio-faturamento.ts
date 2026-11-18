@@ -34,25 +34,55 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-/** `true` quando o job já teve o envio ÚNICO para faturamento. Nos jobs
- *  do modelo mensal cada mês tem o seu envio, e a porta fecha por mês —
- *  ver `mesesEnviadosDoJob`. */
+/** O que fechou a porta do faturamento: o envio do GP, ou a nota do Novo
+ *  faturamento (decisão 265). `false` com a porta aberta. */
+export type PortaDoFaturamento = false | "envio" | "financeiro";
+
+/** Os meses do job que o financeiro já faturou pelo Novo faturamento
+ *  (decisão 265): `inteiro` quando a nota é do job todo (mês nulo). Lido
+ *  pela função do banco porque a errata é do GP e do produtor, que nem
+ *  sempre leem a nota. */
+async function novoFaturamentoDoJob(
+  supabase: SupabaseClient,
+  jobId: string,
+): Promise<{ inteiro: boolean; meses: string[] }> {
+  const { data, error } = await supabase.rpc("novo_faturamento_do_job", { p_job_id: jobId });
+  if (error) throw new Error(error.message);
+  const linhas = (data ?? []) as Array<{ mes: string | null }>;
+  return {
+    inteiro: linhas.some((l) => l.mes === null),
+    meses: linhas.flatMap((l) => (l.mes ? [String(l.mes).slice(0, 10)] : [])),
+  };
+}
+
+/** Verdadeiro (`"envio"` ou `"financeiro"`) quando o job já teve o envio
+ *  ÚNICO para faturamento ou, desde a decisão 265, a nota do Novo
+ *  faturamento do job inteiro. Nos jobs do modelo mensal cada mês tem o seu
+ *  envio, e a porta fecha por mês — ver `mesesEnviadosDoJob`. */
 export async function jobJaEnviadoParaFaturamento(
   supabase: SupabaseClient,
   jobId: string,
   tenantId: string,
-): Promise<boolean> {
-  const { count } = await supabase
-    .from("jobs_envio_faturamento")
-    .select("id", { count: "exact", head: true })
-    .eq("job_id", jobId)
-    .eq("tenant_id", tenantId)
-    .is("mes", null);
-  return (count ?? 0) > 0;
+): Promise<PortaDoFaturamento> {
+  const [{ count }, novo] = await Promise.all([
+    supabase
+      .from("jobs_envio_faturamento")
+      .select("id", { count: "exact", head: true })
+      .eq("job_id", jobId)
+      .eq("tenant_id", tenantId)
+      .is("mes", null),
+    novoFaturamentoDoJob(supabase, jobId).catch((e: Error) => {
+      console.error("[envio-faturamento.novo]", e.message);
+      return { inteiro: false, meses: [] as string[] };
+    }),
+  ]);
+  if ((count ?? 0) > 0) return "envio";
+  return novo.inteiro ? "financeiro" : false;
 }
 
 /** Os meses (primeiro dia, `yyyy-mm-dd`) de um job do modelo mensal que
- *  já foram enviados para faturamento — Fee e Always On (decisão 078).
+ *  já foram enviados para faturamento — Fee e Always On (decisão 078) —
+ *  ou, desde a decisão 265, faturados pelo financeiro no Novo faturamento.
  *  Errata e consumo de save travam só nesses meses; os outros seguem
  *  editáveis. */
 export async function mesesEnviadosDoJob(
@@ -60,18 +90,21 @@ export async function mesesEnviadosDoJob(
   jobId: string,
   tenantId: string,
 ): Promise<Set<string>> {
-  const { data, error } = await supabase
-    .from("jobs_envio_faturamento")
-    .select("mes")
-    .eq("job_id", jobId)
-    .eq("tenant_id", tenantId)
-    .not("mes", "is", null);
-  if (error) {
+  const [{ data, error }, novo] = await Promise.all([
+    supabase
+      .from("jobs_envio_faturamento")
+      .select("mes")
+      .eq("job_id", jobId)
+      .eq("tenant_id", tenantId)
+      .not("mes", "is", null),
+    novoFaturamentoDoJob(supabase, jobId).catch((e: Error) => e),
+  ]);
+  if (error || novo instanceof Error) {
     // Sem saber o que foi enviado, trava tudo: é o lado seguro da porta.
-    console.error("[envio-faturamento.meses]", error.message);
+    console.error("[envio-faturamento.meses]", error?.message ?? (novo as Error).message);
     throw new Error("Não foi possível conferir os meses enviados para faturamento.");
   }
-  return new Set(((data ?? []) as { mes: string }[]).map((e) => e.mes));
+  return new Set([...((data ?? []) as { mes: string }[]).map((e) => e.mes), ...novo.meses]);
 }
 
 /** A frase da porta mensal, com os meses que ela fecha ("outubro"). */
@@ -96,6 +129,19 @@ export const MENSAGEM_JA_ENVIADO =
   "mais o do job. Daqui em diante não há errata. Se algo estiver " +
   "errado, fale com o financeiro antes da emissão da nota.";
 
+/** A mesma porta, fechada pela nota do Novo faturamento (decisão 265): o
+ *  financeiro já faturou o job sem o envio da produção. */
+export const MENSAGEM_JA_FATURADO_PELO_FINANCEIRO =
+  "O financeiro já faturou este job e o valor da nota está congelado: " +
+  "alterá-lo agora faria a nota sair por um número que não é mais o do " +
+  "job. Daqui em diante não há errata. Se algo estiver errado, fale com o " +
+  "financeiro.";
+
+/** A porta da errata, com a frase de quem a fechou. */
+export function mensagemDaPorta(porta: Exclude<PortaDoFaturamento, false>): string {
+  return porta === "financeiro" ? MENSAGEM_JA_FATURADO_PELO_FINANCEIRO : MENSAGEM_JA_ENVIADO;
+}
+
 /** A porta do CONSUMO de save no envio único (decisão 099, 22/09/2026):
  *  consumir, editar o consumo e retirá-lo mudam o faturamento previsto, que
  *  a nota já congelou. Gerar save não passa por aqui. */
@@ -104,6 +150,13 @@ export const MENSAGEM_CONSUMO_JA_ENVIADO =
   "congelado: daqui em diante nenhuma linha passa a consumir saldo de save, " +
   "muda o consumo ou deixa de consumir. Gerar save continua possível até o " +
   "envio para encerramento.";
+
+/** A porta do consumo fechada pela nota do Novo faturamento (decisão 265). */
+export const MENSAGEM_CONSUMO_JA_FATURADO_PELO_FINANCEIRO =
+  "O financeiro já faturou este job e o valor da nota está congelado: " +
+  "daqui em diante nenhuma linha passa a consumir saldo de save, muda o " +
+  "consumo ou deixa de consumir. Gerar save continua possível até o envio " +
+  "para encerramento.";
 
 /** A porta do CONSUMO de save no modelo mensal: fecha só no mês já
  *  enviado (decisão 099, 22/09/2026). */

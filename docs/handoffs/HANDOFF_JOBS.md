@@ -6838,3 +6838,11 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - **Correção:** a leitura copia `meses_novos`; o campo ficou obrigatório em `ConteudoErrata` (o rascunho manda `[]` e a seção da planilha põe os meses por cima). Sem migration; a pronta no banco já estava completa.
 - **Testado** no Sandbox: TES-1035/26, pronta do produtor com dezembro; recusada na versão publicada, enviada com a correção (dezembro na versão aprovada e no job, job no mural de abertura).
 
+
+
+## ⚠️ Nota de 2026-11-18 — o Novo faturamento trava a planilha como o envio (decisão 265)
+
+- **Antes:** a nota do Novo faturamento (256) fechava o envio da produção, mas a errata seguia aberta: a porta (`jobJaEnviadoParaFaturamento`, `mesesEnviadosDoJob`, `gravar_parametros_da_errata`) só olhava `jobs_envio_faturamento`.
+- **Agora:** a nota do financeiro fecha a mesma porta — sem errata, linha vermelha (fora a dos pagamentos atrasados, 259) nem mudança de consumo de save; parâmetros só pelo financeiro. No mensal e na Mídia Off, por mês. O "Editar planilha" fica desabilitado com "Job já faturado pelo financeiro…".
+- **Banco:** `novo_faturamento_do_job(job)` (`security definer`, só `authenticated`), lida pelas server actions; `gravar_parametros_da_errata` conta o Novo faturamento (migration `20261118400002`).
+- **Conferido no Sandbox:** TES-1006/26 com o "Editar planilha" desabilitado e a trava dos parâmetros; TES-1035/26 com outubro travado e novembro editável.
