@@ -13,6 +13,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { emitiNfDeFerias } from "@/lib/types";
 import type {
   FeriasLancamentoStatus,
   FeriasLancamentoTipo,
@@ -283,14 +284,20 @@ export function AcoesLancamento({
 function ResumoValores({ dados }: { dados: PreviewValores }) {
   const v = dados.valores!;
   const hibrido = dados.tipo_contratacao === "clt_recibo";
+  const emiteNf = emitiNfDeFerias(dados.tipo_contratacao);
   const totalCombinado = hibrido && dados.valores_clt
     ? v.valor_total + dados.valores_clt.valor_total
     : null;
+  const tituloPrincipal = hibrido
+    ? "Parte PJ (RPA, via NF)"
+    : emiteNf
+    ? "Resumo dos valores (via NF)"
+    : "Resumo dos valores (folha pela contabilidade)";
 
   return (
     <div className="rounded-lg border border-border bg-muted/40 p-3 text-sm space-y-3">
       <BlocoValores
-        titulo={hibrido ? "Parte PJ (RPA)" : "Resumo dos valores"}
+        titulo={tituloPrincipal}
         valores={v}
         tipo={dados.tipo}
         dias={dados.dias}

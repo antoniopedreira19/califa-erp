@@ -26,7 +26,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { tipoContratacaoLabel } from "@/lib/types";
+import { emitiNfDeFerias, tipoContratacaoLabel } from "@/lib/types";
 import type { SolicitacaoRow } from "./aba-fluxo";
 import {
   aprovarLancamento,
@@ -131,10 +131,16 @@ export function ModalDetalheSolicitacao({ row, onFechar, onSucesso }: Props) {
   const fim = new Date(row.data_fim + "T00:00:00").toLocaleDateString("pt-BR");
   const diasFolga = row.dias - row.dias_abono;
   const hibrido = row.tipo_contratacao === "clt_recibo";
+  const emiteNf = emitiNfDeFerias(row.tipo_contratacao);
+  const tituloBlocoValores = hibrido
+    ? "Parte California (PJ, via NF)"
+    : emiteNf
+    ? "Valores a pagar (parte California)"
+    : "Valores a pagar (folha pela contabilidade)";
 
-  // Lista de NFs que vão ser geradas (parte California / PJ)
+  // Lista de NFs que vão ser geradas — só quando o tipo emite NF
   const nfs: Array<{ rotulo: string; valor: number }> = [];
-  if (preview?.valores) {
+  if (emiteNf && preview?.valores) {
     const v = preview.valores;
     if (row.tipo === "usufruto") {
       nfs.push({
@@ -187,12 +193,13 @@ export function ModalDetalheSolicitacao({ row, onFechar, onSucesso }: Props) {
               {/* Valores */}
               {preview?.valores && (
                 <BlocoValores
-                  titulo="Valores a pagar (parte California)"
+                  titulo={tituloBlocoValores}
                   valores={preview.valores}
                   tipo={row.tipo}
                   dias={row.dias}
                   diasFolga={diasFolga}
                   diasAbono={row.dias_abono}
+                  variantSecundario={!emiteNf}
                 />
               )}
 

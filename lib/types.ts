@@ -4928,6 +4928,15 @@ export function tipoContratacaoLabel(tipo: TipoContratacao): string {
   }
 }
 
+/**
+ * Indica se, pro tipo de contratação, o colaborador emite NF ao receber
+ * férias. PJ e MEI emitem pelo valor cheio; clt_recibo emite só a parte
+ * RPA (parte PJ do híbrido). CLT puro, estagiário e sócio recebem pela
+ * folha/contabilidade, sem NF. */
+export function emitiNfDeFerias(tipo: TipoContratacao): boolean {
+  return tipo === "pj" || tipo === "mei" || tipo === "clt_recibo";
+}
+
 /** Catálogo tenant-wide de níveis de cargo (hierarquia, não faixa salarial). */
 export interface Nivel {
   id: string;
