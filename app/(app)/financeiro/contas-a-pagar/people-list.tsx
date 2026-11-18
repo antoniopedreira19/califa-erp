@@ -480,11 +480,25 @@ export function PeopleList({
 
     const alocacoesLinha = alocacoesPorFolha[item.linha_id] ?? [];
 
-    // Espelha a regra do server (actions-folhas.ts: exigeNf):
-    //   folha_mensal + origem california + pj/mei/clt_recibo → NF.
-    //   decimo_terceiro_adiantamento + origem california + pj/mei/clt_recibo → NF.
-    //   Férias (usufruto/abono) → NF.
-    //   CLT puro / sócio / estagio e parcelas 13° p1/p2 → não exigem.
+    // Duas regras diferentes na mesma coluna:
+    //
+    // 1) `mostraNf` controla EXIBIÇÃO do badge na UI. Mostra sempre que o
+    //    tipo gera NF: PJ, MEI, ou parte PJ do híbrido (clt_recibo com
+    //    origem california). CLT puro, estágio, sócio e parte CLT do
+    //    híbrido ficam em branco — independente do escopo.
+    //
+    // 2) `exigeNfParaUI` espelha a regra do server (actions-folhas.ts:
+    //    exigeNf) e controla se o botão "Revisar" fica BLOQUEADO
+    //    esperando o anexo. Regra do server:
+    //      folha_mensal + origem california + pj/mei/clt_recibo → NF
+    //      decimo_terceiro_adiantamento + origem california + pj/mei/clt_recibo → NF
+    //      Férias (usufruto/abono) → NF
+    //      CLT puro / sócio / estagio e parcelas 13° p1/p2 → não exigem
+    const mostraNf =
+      item.tipo_contratacao === "pj" ||
+      item.tipo_contratacao === "mei" ||
+      (item.tipo_contratacao === "clt_recibo" &&
+        item.origem === "california");
     const exigeNfLinha =
       (item.escopo_tipo === "folha_mensal" ||
         item.escopo_tipo === "decimo_terceiro_adiantamento") &&
@@ -540,7 +554,7 @@ export function PeopleList({
           <CelulaAlocacao alocacoes={alocacoesLinha} />
         </td>
         <td className="px-4 py-3">
-          {exigeNfParaUI ? <BadgeNf anexada={item.nf_anexada} /> : null}
+          {mostraNf ? <BadgeNf anexada={item.nf_anexada} /> : null}
         </td>
         <td className="px-4 py-3 text-right tabular-nums font-semibold">
           {item.valor != null ? formatBRL(Number(item.valor)) : "—"}
@@ -597,20 +611,16 @@ export function PeopleList({
     // Pra NF do pai: só "Anexada" se TODAS as partes que exigem NF foram anexadas.
     const todasAnexadas = grupo.items.every((i) => i.nf_anexada);
 
-    // Alguma parte exige NF? Se nenhuma parte exige (ex: híbrido 13° p1/p2
-    // em que ambas as origens não geram NF), omite o badge pra manter a
-    // coluna visualmente limpa — igual ao que fazemos na linha simples.
-    const algumExigeNf = grupo.items.some((i) => {
-      const exigeLinha =
-        (i.escopo_tipo === "folha_mensal" ||
-          i.escopo_tipo === "decimo_terceiro_adiantamento") &&
-        i.origem === "california" &&
-        ["pj", "mei", "clt_recibo"].includes(i.tipo_contratacao);
-      const exigeFerias =
-        i.escopo_tipo === "ferias_usufruto" ||
-        i.escopo_tipo === "ferias_abono";
-      return exigeLinha || exigeFerias;
-    });
+    // Alguma parte do grupo tem tipo que gera NF? Segue a mesma regra de
+    // exibição da linha simples (`mostraNf`): PJ, MEI ou parte PJ do
+    // híbrido (clt_recibo + origem california). Se nenhuma parte entra
+    // na regra, coluna NF fica em branco.
+    const algumMostraNf = grupo.items.some(
+      (i) =>
+        i.tipo_contratacao === "pj" ||
+        i.tipo_contratacao === "mei" ||
+        (i.tipo_contratacao === "clt_recibo" && i.origem === "california"),
+    );
 
     // Alocação do pai usa a do primeiro item: na prática as partes do híbrido
     // compartilham o mesmo rateio (mesmo colaborador, mesma competência).
@@ -650,7 +660,7 @@ export function PeopleList({
           <CelulaAlocacao alocacoes={alocacoesLinha} />
         </td>
         <td className="px-4 py-3">
-          {algumExigeNf ? <BadgeNf anexada={todasAnexadas} /> : null}
+          {algumMostraNf ? <BadgeNf anexada={todasAnexadas} /> : null}
         </td>
         <td className="px-4 py-3 text-right tabular-nums font-semibold">
           {formatBRL(valorTotal)}
