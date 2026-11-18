@@ -22,7 +22,8 @@ Há pagamentos que não pertencem a um job de cliente: acertos de coisas que já
 6. **Do Interno, só o "não fatura":** serviço Pagamentos, tipo F · Interno, sem save, sem honorário, sem imposto e sem faturamento. **O planejado não acompanha o orçado** (o orçado é sempre zero).
 7. **Sem errata:** na planilha do job, item novo, linha vermelha, agrupamento novo e planejado entram direto, pelo "Salvar". A PP já pode ser gerada em seguida.
 8. **Rentabilidade como está:** o job aparece com faturamento zero e o custo planejado negativo, como qualquer custo.
-9. **No "Editar registro" do financeiro:** sem o campo Marca; serviço, categoria e empresa travados (a empresa é também o cliente); regional, competência, projeto unificado, contas e previsões seguem editáveis. A curva de desembolso segue a regra de qualquer job: fecha com o custo previsto (o planejado).
+9. **No "Editar registro" do financeiro:** sem o campo Marca; serviço, categoria e empresa travados (a empresa é também o cliente); regional, competência, projeto unificado e contas seguem editáveis.
+10. **Sem curva de desembolso** (Tiago, 18/11/2026: "Sem curva"): o job de pagamentos não tem previsão de custos, com qualquer planejado. O custo só entra no fluxo de caixa quando a PP vira título (aprovada), "pulando" a etapa de previsão. A conta de pagamento fica opcional, como em todo job sem desembolso.
 
 ## Implementação
 
@@ -35,13 +36,13 @@ Há pagamentos que não pertencem a um job de cliente: acertos de coisas que já
   - `criar_job_de_pagamentos(...)`: numa transação, o projeto unificado (se for novo), o projeto escondido, o orçamento aprovado e vazio (V1, 0% de honorário e de imposto, com o agrupamento "Pagamentos"), o job aberto, a competência e a foto da abertura. Só administrador e financeiro.
   - `salvar_planilha_do_job_de_pagamentos(job, conteudo)`: linhas novas, agrupamentos novos e planejado, sem errata. Administrador, GP e produtor, com o job aberto ou em produção.
   - Permissão só para `authenticated`.
-- **Financeiro:** `criar-job-de-pagamentos.tsx` (o botão e o pop-up), `actions-job-de-pagamentos.ts` (as opções e a criação, com os códigos de job, projeto e orçamento e a auditoria `job.pagamentos_criado`), `jobs-abertos-list.tsx` (o botão, o Exportar na linha da busca e o aviso "Job … criado e aberto"), `lib/validations/job-de-pagamentos.ts`. No registro: `abertura-form.tsx`, `dados.ts`, `actions.ts` e `lib/validations/abertura-financeiro.ts` (marca nula só no job de pagamentos; o servidor recusa a troca da empresa).
+- **Fluxo de caixa:** sem mudança. A `vw_fluxo_caixa` só prevê custo a partir da curva (`jobs_previsao_custo`); sem curva, o job aparece no fluxo pelos títulos das PPs.
+- **Financeiro:** `criar-job-de-pagamentos.tsx` (o botão e o pop-up), `actions-job-de-pagamentos.ts` (as opções e a criação, com os códigos de job, projeto e orçamento e a auditoria `job.pagamentos_criado`), `jobs-abertos-list.tsx` (o botão, o Exportar na linha da busca e o aviso "Job … criado e aberto"), `lib/validations/job-de-pagamentos.ts`. No registro: `abertura-form.tsx`, `dados.ts`, `actions.ts` e `lib/validations/abertura-financeiro.ts` (marca nula só no job de pagamentos; o servidor recusa a troca da empresa e recusa curva no job de pagamentos).
 - **Jobs:** `actions-job-de-pagamentos.ts` (o "Salvar" da planilha, auditoria `job.planilha_de_pagamentos_salva`), `errata-rascunho.ts`, `errata-barra.tsx`, `job-realizado-section.tsx` e `job-item-realizado-table.tsx` (sem errata, planejado livre, sem "Editar orçado" nem "Ver versão aprovada"), `ficha-job.tsx` (envio para abertura "Não se aplica · criado pelo financeiro", sem a linha do orçamento aprovado e sem link para o projeto), `carregar-detalhe.ts`, `lib/data/equipe-do-projeto.ts`.
 - **Orçamentos:** o projeto de pagamentos não aparece na lista, e o serviço e a categoria Pagamentos não aparecem para escolha em orçamento nem em Cadastros › Categorias (`lib/data/servicos.ts` e os filtros `job_de_pagamentos = false`). A abertura recusa trocar um job comum para Pagamentos e vice-versa.
-- **Conferido no Sandbox** (TES-1039/26): criação, o job em Jobs para o GP, planilha salva direto (item e linha vermelha, orçado zero, nenhuma errata), o formulário da PP com o planejado, e o "Editar registro" salvo sem marca.
+- **Conferido no Sandbox** (TES-1039/26): criação, o job em Jobs para o GP, planilha salva direto (item e linha vermelha, orçado zero, nenhuma errata), o formulário da PP com o planejado, e o "Editar registro" salvo sem marca e sem curva.
 
 ## Fica de fora
 
-- **A curva de desembolso do planejado:** o job nasce com custo zero e sem curva. Quando a produção lança o planejado, a curva não acompanha (não há errata que leve o job à revisão do financeiro); ela só é preenchida se o financeiro abrir o "Editar registro". Aguarda o Tiago.
 - **PDF da PP:** a assinatura do GP sai em branco, porque o job não tem GP.
 - O projeto e o orçamento escondidos não aparecem em lugar nenhum; na planilha do job, o único rastro é o nome do agrupamento "Pagamentos".

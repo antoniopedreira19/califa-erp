@@ -1914,13 +1914,18 @@ export async function editarRegistroDaAbertura(
   }));
 
   // ---------- Curva de custo ----------
-  const semDesembolso = custoPrevisto <= 0;
+  // O job de pagamentos não tem curva, com qualquer custo (decisão 266,
+  // Tiago 18/11/2026): o custo só entra no fluxo de caixa quando a PP vira
+  // título, sem passar por previsão.
+  const semDesembolso = custoPrevisto <= 0 || job.de_pagamentos === true;
 
   if (semDesembolso && parsed.data.curva.length > 0) {
     return {
       ok: false,
       message:
-        "Este job não tem desembolso previsto pela California — a curva precisa ficar vazia.",
+        job.de_pagamentos === true
+          ? "O job de pagamentos não tem curva de desembolso: o custo entra no fluxo de caixa quando a PP vira título."
+          : "Este job não tem desembolso previsto pela California — a curva precisa ficar vazia.",
     };
   }
 

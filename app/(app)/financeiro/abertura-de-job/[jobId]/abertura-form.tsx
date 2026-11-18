@@ -784,8 +784,12 @@ export function AberturaForm({
   const difCurva = emCentavos(somaDaCurva - custoPrevisto);
 
   // Custo zero é legítimo: job 100% pago direto pelo cliente ao
-  // fornecedor (tipos A/D) abre sem curva de desembolso.
-  const semDesembolso = custoPrevisto <= 0;
+  // fornecedor (tipos A/D) abre sem curva de desembolso. O job de
+  // pagamentos também não tem curva, com qualquer custo (decisão 266,
+  // Tiago 18/11/2026): o planejado é lançado pela produção sem errata, e o
+  // custo só entra no fluxo de caixa quando a PP vira título, sem passar
+  // por previsão.
+  const semDesembolso = custoPrevisto <= 0 || pagamentos;
   // Por que o custo é zero (07/10/2026): linha em save não tem custo neste
   // job (decisão 028 §9). Até aqui o aviso dizia sempre "pago direto pelo
   // cliente ao fornecedor (itens de calha BV)", e o job todo em save, sem
@@ -1219,7 +1223,9 @@ export function AberturaForm({
       ? "1 recebimento"
       : `${recebimento.length} recebimentos`;
   const qtdDatasCustoLabel = semDesembolso
-    ? "Sem desembolso"
+    ? pagamentos
+      ? "Sem curva"
+      : "Sem desembolso"
     : curva.length === 1
       ? "1 data"
       : `${curva.length} datas`;
@@ -1288,7 +1294,9 @@ export function AberturaForm({
                               ? "Marque “Aprovar save gerado” para abrir o job."
                               : "Marque “Aprovar consumo de save” para abrir o job."
                         : semDesembolso
-                          ? "Tudo pronto. Este job não tem desembolso previsto pela California — abre sem curva."
+                          ? pagamentos
+                            ? "Tudo pronto. Job de pagamentos: sem curva de desembolso; o custo entra no fluxo de caixa quando a PP vira título."
+                            : "Tudo pronto. Este job não tem desembolso previsto pela California — abre sem curva."
                           : temRateio
                             ? `Tudo pronto: nome, categoria, serviço, ${pagamentos ? "" : "marca, "}empresa, regional, competência rateada em ${comps.length} trimestres, recebimento, custos e impostos preenchidos.`
                             : `Tudo pronto: nome, categoria, serviço, ${pagamentos ? "" : "marca, "}empresa, regional, competência, recebimento, custos e impostos preenchidos.`;
@@ -2908,7 +2916,7 @@ export function AberturaForm({
                       ? "Todas as linhas estão em save — o custo nasce no job que consumir o saldo."
                       : custoZeroPeloSave === "misto"
                         ? "Linhas em save e itens de calha BV — a California não desembolsa neste job."
-                        : semDesembolso
+                        : semDesembolso && !pagamentos
                           ? "Nenhum item de calha PP — a California não desembolsa neste job."
                           : job.modelo_planilha_orcamento === "midia_off"
                             ? // Decisão 167: o planejado da linha de mídia é o negociado.
@@ -3286,10 +3294,19 @@ export function AberturaForm({
                             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-700" />
                             <div>
                               <p className="text-[13px] font-semibold text-amber-800">
-                                Nenhum desembolso previsto pela California
+                                {pagamentos
+                                  ? "Sem curva de desembolso"
+                                  : "Nenhum desembolso previsto pela California"}
                               </p>
                               <p className="mt-1 text-xs leading-relaxed text-amber-800/80">
-                                {custoZeroPeloSave === "todo" ? (
+                                {pagamentos ? (
+                                  <>
+                                    Job de pagamentos: o planejado é lançado
+                                    pela produção, sem errata, e não gera
+                                    previsão de custos. O custo entra no fluxo
+                                    de caixa só quando a PP vira título.
+                                  </>
+                                ) : custoZeroPeloSave === "todo" ? (
                                   <>
                                     Todas as linhas deste job estão em save: o
                                     serviço não acontece aqui, e sim no job que
@@ -4239,7 +4256,9 @@ export function AberturaForm({
               rotulo="Curva"
               valor={
                 semDesembolso
-                  ? "Sem desembolso previsto"
+                  ? pagamentos
+                    ? "Sem curva · entra pelos títulos das PPs"
+                    : "Sem desembolso previsto"
                   : `${curva.length}× · ${formatDataBr(curva[0]?.data)}${
                       curva.length > 1
                         ? ` → ${formatDataBr(curva[curva.length - 1]?.data)}`

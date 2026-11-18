@@ -9193,7 +9193,7 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 
 - **Visualizar Jobs:** botão "Criar Job de Pagamentos" ao lado dos filtros; o "Exportar" desceu para a linha da busca. O pop-up cria o job já aberto, sem orçamento visível e sem fila: Nome, Projeto unificado, Abertura; Código previsto, Serviço e Categoria "Pagamentos"; Empresa (é também o cliente), Regional, Competência; Descritivo do Job. Sem cliente, marca, GP e produtor.
 - **Clientes:** cada empresa aponta para o seu cliente (`empresas.cliente_id`). CCH e Ventura ganharam cliente (CCH e VEN); o cliente CAL passou a "Agência California", com o mesmo código e os mesmos jobs.
-- **Editar registro:** sem o campo Marca; serviço, categoria e empresa travados; o servidor recusa marca e troca de empresa no job de pagamentos. A curva de desembolso segue a regra de sempre (fecha com o custo previsto).
+- **Editar registro:** sem o campo Marca; serviço, categoria e empresa travados; o servidor recusa marca e troca de empresa no job de pagamentos.
+- **Sem curva de desembolso** (Tiago): o job de pagamentos não tem previsão de custos, com qualquer planejado. O custo só entra no fluxo de caixa quando a PP vira título; a conta de pagamento fica opcional. O servidor recusa curva nesse job.
 - **Banco:** migration `20261118700001` (aditiva), com `criar_job_de_pagamentos` e `salvar_planilha_do_job_de_pagamentos`.
-- **Conferido no Sandbox:** TES-1039/26 criado pelo pop-up, aviso na lista, fora de Orçamentos, e o "Editar registro" salvo sem marca (foto nº 2, curva de R$ 1.800,00).
-- **Em aberto:** a curva não acompanha o planejado que a produção lança (não há errata que leve o job à revisão).
+- **Conferido no Sandbox:** TES-1039/26 criado pelo pop-up, aviso na lista, fora de Orçamentos, e o "Editar registro" salvo sem marca e sem curva (foto nº 3; a curva de R$ 1.800,00 da foto nº 2, de um teste anterior à regra, saiu pelo mesmo salvar).
