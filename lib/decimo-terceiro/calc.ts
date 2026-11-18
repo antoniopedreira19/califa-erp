@@ -189,6 +189,15 @@ export interface CalcInput {
   valorRecibo?: number | null;
   /** Número de dependentes IR (default 0). Afeta só o IRRF. */
   dependentes?: number;
+  /** Quanto do totalAdiantado foi destinado especificamente à parte CLT
+   *  (destino='clt'). Só relevante pro híbrido; undefined cai no rateio
+   *  proporcional legado. A soma com `totalAdiantadoPj` NÃO precisa
+   *  bater com `totalAdiantado` — a diferença é o destino='ambos',
+   *  rateado proporcional. */
+  totalAdiantadoClt?: number;
+  /** Quanto do totalAdiantado foi destinado especificamente à parte PJ
+   *  (destino='pj'). Simétrico ao totalAdiantadoClt. */
+  totalAdiantadoPj?: number;
 }
 
 export interface ParteBreakdown {
@@ -234,11 +243,22 @@ export function calcularLinhaDecimoTerceiro(input: CalcInput): CalcOutput {
     const salarioClt = salario - valorRecibo;
     const salarioPj = valorRecibo;
 
-    // Adiantamento rateado proporcional ao salário de cada parte
-    const adiantamentoClt = round2(
-      (input.totalAdiantado * salarioClt) / salario,
+    // Adiantamento por parte:
+    //   - totalAdiantadoClt / totalAdiantadoPj (quando passados) carregam
+    //     o que foi destinado EXPLICITAMENTE a cada parte (adiantamentos
+    //     com destino='clt' ou 'pj').
+    //   - O restante (= totalAdiantado - clt - pj) é destino='ambos' e
+    //     continua rateado proporcional.
+    const destinadoClt = input.totalAdiantadoClt ?? 0;
+    const destinadoPj = input.totalAdiantadoPj ?? 0;
+    const sobraAmbos = Math.max(
+      0,
+      input.totalAdiantado - destinadoClt - destinadoPj,
     );
-    const adiantamentoPj = round2(input.totalAdiantado - adiantamentoClt);
+    const rateadoClt = round2((sobraAmbos * salarioClt) / salario);
+    const rateadoPj = round2(sobraAmbos - rateadoClt);
+    const adiantamentoClt = round2(destinadoClt + rateadoClt);
+    const adiantamentoPj = round2(destinadoPj + rateadoPj);
 
     const clt = calcularParte({
       salario: salarioClt,

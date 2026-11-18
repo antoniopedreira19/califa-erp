@@ -122,7 +122,7 @@ export async function criarFolhaDecimoTerceiro(
   // antecipado: esses colaboradores não geram linha.
   const { data: adiantamentos, error: errAd } = await supabase
     .from("decimo_terceiro_adiantamentos")
-    .select("colaborador_id, valor, integral")
+    .select("colaborador_id, valor, integral, destino")
     .eq("tenant_id", tenantId)
     .eq("ano", ano)
     .in("colaborador_id", elegiveisIds);
@@ -130,12 +130,26 @@ export async function criarFolhaDecimoTerceiro(
     return { ok: false, message: `Falha ao buscar adiantamentos: ${errAd.message}` };
   }
   const adiantadoPorColab = new Map<string, number>();
+  const adiantadoCltPorColab = new Map<string, number>();
+  const adiantadoPjPorColab = new Map<string, number>();
   const colabsComIntegral = new Set<string>();
   for (const a of adiantamentos ?? []) {
+    const v = Number(a.valor);
     adiantadoPorColab.set(
       a.colaborador_id,
-      (adiantadoPorColab.get(a.colaborador_id) ?? 0) + Number(a.valor),
+      (adiantadoPorColab.get(a.colaborador_id) ?? 0) + v,
     );
+    if (a.destino === "clt") {
+      adiantadoCltPorColab.set(
+        a.colaborador_id,
+        (adiantadoCltPorColab.get(a.colaborador_id) ?? 0) + v,
+      );
+    } else if (a.destino === "pj") {
+      adiantadoPjPorColab.set(
+        a.colaborador_id,
+        (adiantadoPjPorColab.get(a.colaborador_id) ?? 0) + v,
+      );
+    }
     if (a.integral) colabsComIntegral.add(a.colaborador_id);
   }
 
@@ -269,6 +283,8 @@ export async function criarFolhaDecimoTerceiro(
       ano,
       tipoContratacao: c.tipo_contratacao,
       totalAdiantado,
+      totalAdiantadoClt: adiantadoCltPorColab.get(c.id) ?? 0,
+      totalAdiantadoPj: adiantadoPjPorColab.get(c.id) ?? 0,
       valorRecibo: valorReciboNum,
     });
     const obsAuto = calc.avos === 0 ? "Admitido após 15/12 — sem direito a avos" : null;
@@ -369,7 +385,7 @@ export async function editarLinhaDecimoTerceiro(
   const { data: linha, error: errLinha } = await supabase
     .from("decimo_terceiro_linhas")
     .select(
-      "id, folha_id, snapshot_tipo_contratacao, snapshot_data_admissao, snapshot_salario, snapshot_valor_recibo, total_adiantado",
+      "id, folha_id, colaborador_id, snapshot_tipo_contratacao, snapshot_data_admissao, snapshot_salario, snapshot_valor_recibo, total_adiantado",
     )
     .eq("id", linhaId)
     .eq("tenant_id", tenantId)
@@ -398,12 +414,29 @@ export async function editarLinhaDecimoTerceiro(
         ? Number(linha.snapshot_valor_recibo)
         : null;
 
+  // Agrega adiantamentos por destino pra que o split do híbrido na 1ª
+  // parcela respeite o que foi destinado a cada parte.
+  const { data: adsLinha } = await supabase
+    .from("decimo_terceiro_adiantamentos")
+    .select("valor, destino")
+    .eq("tenant_id", tenantId)
+    .eq("ano", folha.ano)
+    .eq("colaborador_id", linha.colaborador_id);
+  let adClt = 0;
+  let adPj = 0;
+  for (const a of adsLinha ?? []) {
+    if (a.destino === "clt") adClt += Number(a.valor);
+    else if (a.destino === "pj") adPj += Number(a.valor);
+  }
+
   const calc = calcularLinhaDecimoTerceiro({
     salario: Number(linha.snapshot_salario),
     dataAdmissao: new Date(`${linha.snapshot_data_admissao}T00:00:00Z`),
     ano: folha.ano,
     tipoContratacao: linha.snapshot_tipo_contratacao as TipoContratacao,
     totalAdiantado: Number(linha.total_adiantado),
+    totalAdiantadoClt: adClt,
+    totalAdiantadoPj: adPj,
     salarioEditado: parsed.data.salario_editado,
     avosEditado: parsed.data.avos_editado,
     valorRecibo: valorReciboEfetivo,
@@ -521,7 +554,7 @@ export async function recalcularFolhaDecimoTerceiro(
   // antecipado — eles não participam da folha do ano.
   const { data: adiantamentos, error: errAd } = await supabase
     .from("decimo_terceiro_adiantamentos")
-    .select("colaborador_id, valor, integral")
+    .select("colaborador_id, valor, integral, destino")
     .eq("tenant_id", tenantId)
     .eq("ano", folha.ano)
     .in("colaborador_id", colabIds);
@@ -573,11 +606,25 @@ export async function recalcularFolhaDecimoTerceiro(
     }
   }
   const adiantadoPorColab = new Map<string, number>();
+  const adiantadoCltPorColab = new Map<string, number>();
+  const adiantadoPjPorColab = new Map<string, number>();
   for (const a of adiantamentos ?? []) {
+    const v = Number(a.valor);
     adiantadoPorColab.set(
       a.colaborador_id,
-      (adiantadoPorColab.get(a.colaborador_id) ?? 0) + Number(a.valor),
+      (adiantadoPorColab.get(a.colaborador_id) ?? 0) + v,
     );
+    if (a.destino === "clt") {
+      adiantadoCltPorColab.set(
+        a.colaborador_id,
+        (adiantadoCltPorColab.get(a.colaborador_id) ?? 0) + v,
+      );
+    } else if (a.destino === "pj") {
+      adiantadoPjPorColab.set(
+        a.colaborador_id,
+        (adiantadoPjPorColab.get(a.colaborador_id) ?? 0) + v,
+      );
+    }
   }
 
   // Dispara os updates em batches de 25 em paralelo. 200+ em um só
@@ -625,6 +672,8 @@ export async function recalcularFolhaDecimoTerceiro(
         ano: folha.ano,
         tipoContratacao: l.snapshot_tipo_contratacao as TipoContratacao,
         totalAdiantado,
+        totalAdiantadoClt: adiantadoCltPorColab.get(l.colaborador_id) ?? 0,
+        totalAdiantadoPj: adiantadoPjPorColab.get(l.colaborador_id) ?? 0,
         valorRecibo: valorReciboNum,
       });
       const obsAuto =
@@ -754,7 +803,7 @@ export async function recalcularFolhaDecimoTerceiro(
 
     const { data: adF, error: errAdF } = await supabase
       .from("decimo_terceiro_adiantamentos")
-      .select("colaborador_id, valor")
+      .select("colaborador_id, valor, destino")
       .eq("tenant_id", tenantId)
       .eq("ano", folha.ano)
       .in("colaborador_id", faltantesIds);
@@ -837,11 +886,25 @@ export async function recalcularFolhaDecimoTerceiro(
       }
     }
     const adPorColabF = new Map<string, number>();
+    const adCltPorColabF = new Map<string, number>();
+    const adPjPorColabF = new Map<string, number>();
     for (const a of adF ?? []) {
+      const v = Number(a.valor);
       adPorColabF.set(
         a.colaborador_id,
-        (adPorColabF.get(a.colaborador_id) ?? 0) + Number(a.valor),
+        (adPorColabF.get(a.colaborador_id) ?? 0) + v,
       );
+      if (a.destino === "clt") {
+        adCltPorColabF.set(
+          a.colaborador_id,
+          (adCltPorColabF.get(a.colaborador_id) ?? 0) + v,
+        );
+      } else if (a.destino === "pj") {
+        adPjPorColabF.set(
+          a.colaborador_id,
+          (adPjPorColabF.get(a.colaborador_id) ?? 0) + v,
+        );
+      }
     }
 
     // Monta linhas pra inserir — descarta quem não tem salário vigente
@@ -862,6 +925,8 @@ export async function recalcularFolhaDecimoTerceiro(
           ano: folha.ano,
           tipoContratacao: c.tipo_contratacao as TipoContratacao,
           totalAdiantado,
+          totalAdiantadoClt: adCltPorColabF.get(c.id) ?? 0,
+          totalAdiantadoPj: adPjPorColabF.get(c.id) ?? 0,
           valorRecibo: valorReciboNum,
         });
         const obsAuto =
@@ -1291,6 +1356,10 @@ const LancarAdiantamentoInput = z.object({
   valor: z.number().positive(),
   obs: z.string().max(500).nullable(),
   integral: z.boolean().optional().default(false),
+  /** Só relevante pro híbrido. Default 'ambos' = split proporcional
+   *  (comportamento pré-existente). 'clt' / 'pj' = valor integral vai
+   *  pra uma parte só. */
+  destino: z.enum(["ambos", "clt", "pj"]).optional().default("ambos"),
 });
 
 async function recalcularLinhaDeAdiantamento(
@@ -1342,14 +1411,19 @@ async function recalcularLinhaDeAdiantamento(
 
   const { data: todosAd } = await supabase
     .from("decimo_terceiro_adiantamentos")
-    .select("valor")
+    .select("valor, destino")
     .eq("tenant_id", tenantId)
     .eq("ano", ano)
     .eq("colaborador_id", colaboradorId);
-  const totalAdiantado = (todosAd ?? []).reduce(
-    (acc, a) => acc + Number(a.valor),
-    0,
-  );
+  let totalAdiantado = 0;
+  let totalAdiantadoClt = 0;
+  let totalAdiantadoPj = 0;
+  for (const a of todosAd ?? []) {
+    const v = Number(a.valor);
+    totalAdiantado += v;
+    if (a.destino === "clt") totalAdiantadoClt += v;
+    else if (a.destino === "pj") totalAdiantadoPj += v;
+  }
 
   const valorReciboNum =
     linha.snapshot_valor_recibo != null
@@ -1361,6 +1435,8 @@ async function recalcularLinhaDeAdiantamento(
     ano,
     tipoContratacao: linha.snapshot_tipo_contratacao as TipoContratacao,
     totalAdiantado,
+    totalAdiantadoClt,
+    totalAdiantadoPj,
     salarioEditado:
       linha.salario_editado != null ? Number(linha.salario_editado) : null,
     avosEditado: linha.avos_editado,
@@ -1398,6 +1474,7 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
   valor: number;
   obs: string | null;
   integral?: boolean;
+  destino?: "ambos" | "clt" | "pj";
 }): Promise<ActionResult<{ id: string; folha_pagamento_id: string | null }>> {
   const session = await requireSession();
   if (!pode(session.activeRole, "rh.decimo_terceiro.editar")) {
@@ -1407,7 +1484,8 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
   if (!parsed.success) {
     return { ok: false, message: "Dados inválidos." };
   }
-  const { ano, colaborador_id, data, valor, obs, integral } = parsed.data;
+  const { ano, colaborador_id, data, valor, obs, integral, destino } =
+    parsed.data;
   const tenantId = session.activeTenant.id;
   const supabase = createClient();
 
@@ -1449,6 +1527,17 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
     return { ok: false, message: "Valor do adiantamento deve ser maior que zero." };
   }
 
+  // Integral significa "quitou o 13º inteiro, tira da folha". Isso só
+  // faz sentido quando o adiantamento cobre as duas partes do híbrido
+  // (destino='ambos') ou pra tipos não híbridos.
+  if (integral && colab.tipo_contratacao === "clt_recibo" && destino !== "ambos") {
+    return {
+      ok: false,
+      message:
+        "Adiantamento integral só se aplica quando o destino é 'ambas as partes' — para parte específica, use parcela.",
+    };
+  }
+
   // Regra: por colaborador/ano, ou É integral (único) OU são vários
   // parciais. Nunca mistura. Impede duplicata de integral e impede
   // adicionar parcial depois de integral (ou integral quando já existem
@@ -1478,6 +1567,11 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
 
   // 1) Insert do adiantamento sem conta_avulsa_id nem folha_pagamento_id
   //    (esses campos são preenchidos nos passos seguintes).
+  // destino só vale pra híbrido; nos demais tipos é sempre 'ambos' pra
+  // evitar guardar um valor que depois distorce a agregação de totais
+  // por parte.
+  const destinoEfetivo =
+    colab.tipo_contratacao === "clt_recibo" ? destino : "ambos";
   const { data: adiantInserido, error: errAd } = await supabase
     .from("decimo_terceiro_adiantamentos")
     .insert({
@@ -1488,6 +1582,7 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
       valor,
       obs,
       integral,
+      destino: destinoEfetivo,
       created_by: session.profile.id,
     })
     .select("id")
@@ -1511,6 +1606,7 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
     valor,
     salario: salarioHibrido ?? undefined,
     valor_recibo: valorReciboHibrido ?? undefined,
+    destino: destinoEfetivo,
   });
 
   // 3) Insere N linhas em folhas_pagamento com status='enviada'.
@@ -1812,7 +1908,18 @@ const CalcularBrutoInput = z.object({
 export async function calcularTreizeBrutoEsperado(input: {
   colaborador_id: string;
   ano: number;
-}): Promise<ActionResult<{ bruto: number }>> {
+}): Promise<
+  ActionResult<{
+    bruto: number;
+    /** Tipo de contratação do colaborador. Front usa pra decidir se mostra
+     *  o seletor "Destino" (só quando híbrido com valor_recibo > 0). */
+    tipo_contratacao: TipoContratacao;
+    /** Split do bruto entre parte CLT e parte PJ quando híbrido com
+     *  valor_recibo > 0. Null nos demais casos. */
+    brutoClt: number | null;
+    brutoPj: number | null;
+  }>
+> {
   const session = await requireSession();
   if (!pode(session.activeRole, "rh.decimo_terceiro.editar")) {
     return { ok: false, message: "Sem permissão para esta ação." };
@@ -1888,5 +1995,28 @@ export async function calcularTreizeBrutoEsperado(input: {
     };
   }
 
-  return { ok: true, bruto: calc.totalBruto };
+  // Split por parte pro híbrido: quando o colaborador é clt_recibo com
+  // valor_recibo > 0, parteClt/partePj vêm preenchidos e o totalBruto de
+  // cada parte é primeiraParcela + segundaParcela. Nos demais tipos,
+  // devolve null.
+  const brutoClt =
+    calc.parteClt != null
+      ? Math.round(
+          (calc.parteClt.primeiraParcela + calc.parteClt.segundaParcela) * 100,
+        ) / 100
+      : null;
+  const brutoPj =
+    calc.partePj != null
+      ? Math.round(
+          (calc.partePj.primeiraParcela + calc.partePj.segundaParcela) * 100,
+        ) / 100
+      : null;
+
+  return {
+    ok: true,
+    bruto: calc.totalBruto,
+    tipo_contratacao: colab.tipo_contratacao as TipoContratacao,
+    brutoClt,
+    brutoPj,
+  };
 }

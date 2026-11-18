@@ -1,12 +1,23 @@
+export type AdiantamentoDestino = "ambos" | "clt" | "pj";
+
 export type AdiantamentoParaMontar = {
   adiantamento_id: string;
   colaborador_id: string;
   tipo_contratacao: "clt" | "clt_recibo" | "pj" | "mei";
   valor: number;
-  /** Salário total vigente — obrigatório pra híbrido (clt_recibo), ignorado nos demais tipos. */
+  /** Salário total vigente — obrigatório pra híbrido (clt_recibo) com
+   *  destino 'ambos'. Ignorado se destino='clt'/'pj' (sem split) ou se
+   *  tipo não híbrido. */
   salario?: number;
-  /** Parte PJ (recibo) do salário — obrigatório pra híbrido. 0 = sem parte PJ, vira CLT puro. */
+  /** Parte PJ (recibo) do salário — obrigatório pra híbrido com
+   *  destino 'ambos'. 0 = sem parte PJ, vira CLT puro. Ignorado se
+   *  destino='clt'/'pj'. */
   valor_recibo?: number;
+  /** Apenas relevante pro híbrido (clt_recibo). Default 'ambos'.
+   *  - 'ambos' = split proporcional (comportamento legado)
+   *  - 'clt'   = valor inteiro na folha CLT ('contabilidade')
+   *  - 'pj'    = valor inteiro na folha PJ ('california') */
+  destino?: AdiantamentoDestino;
 };
 
 export type FolhaAdiantamentoMontada = {
@@ -24,12 +35,15 @@ function round2(n: number): number {
 /**
  * Monta as folhas de pagamento pra um adiantamento de 13º.
  *
- * - PJ/MEI: 1 folha "california".
- * - CLT puro: 1 folha "contabilidade".
- * - Híbrido (clt_recibo): até 2 folhas, com valor proporcional ao salário:
- *     parte CLT  = round2(valor × (salario − valor_recibo) / salario) → "contabilidade"
- *     parte PJ   = valor − parte CLT                                   → "california"
- *   Se valor_recibo = 0, vira 1 folha CLT só.
+ * - PJ/MEI: 1 folha "california" (destino é ignorado).
+ * - CLT puro: 1 folha "contabilidade" (destino é ignorado).
+ * - Híbrido (clt_recibo):
+ *     - destino='ambos' (default) → split proporcional entre CLT e PJ:
+ *         parte CLT = round2(valor × (salario − valor_recibo) / salario) → "contabilidade"
+ *         parte PJ  = valor − parte CLT                                  → "california"
+ *       Se valor_recibo = 0, vira 1 folha CLT só.
+ *     - destino='clt' → 1 folha "contabilidade" com o valor inteiro.
+ *     - destino='pj'  → 1 folha "california" com o valor inteiro.
  */
 export function montarFolhasAdiantamento(
   adiantamento: AdiantamentoParaMontar,
@@ -39,6 +53,7 @@ export function montarFolhasAdiantamento(
   }
 
   const { adiantamento_id, colaborador_id, tipo_contratacao, valor } = adiantamento;
+  const destino: AdiantamentoDestino = adiantamento.destino ?? "ambos";
   const base = {
     decimo_terceiro_adiantamento_id: adiantamento_id,
     colaborador_id,
@@ -53,9 +68,18 @@ export function montarFolhasAdiantamento(
   }
 
   // Híbrido (clt_recibo)
+  // Destinos específicos: sem split, vai tudo pra uma folha só.
+  if (destino === "clt") {
+    return [{ ...base, origem: "contabilidade", salario_base: valor }];
+  }
+  if (destino === "pj") {
+    return [{ ...base, origem: "california", salario_base: valor }];
+  }
+
+  // destino='ambos' → split proporcional
   if (adiantamento.salario == null || adiantamento.valor_recibo == null) {
     throw new Error(
-      "Híbrido (clt_recibo) requer salario e valor_recibo pra split.",
+      "Híbrido (clt_recibo) com destino 'ambos' requer salario e valor_recibo pra split.",
     );
   }
   const salario = adiantamento.salario;

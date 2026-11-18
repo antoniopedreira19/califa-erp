@@ -521,19 +521,26 @@ function NovoAdiantamentoDialogContent({
   const [tipoAdiantamento, setTipoAdiantamento] = React.useState<
     "primeira_parcela" | "integral" | null
   >(null);
-  const [brutoCalculado, setBrutoCalculado] = React.useState<number | null>(
-    null,
+  const [destino, setDestino] = React.useState<"ambos" | "clt" | "pj">(
+    "ambos",
   );
+  const [brutoCalculado, setBrutoCalculado] = React.useState<{
+    bruto: number;
+    tipoContratacao: string;
+    brutoClt: number | null;
+    brutoPj: number | null;
+  } | null>(null);
   const [carregandoBruto, setCarregandoBruto] = React.useState(false);
   const [enviando, setEnviando] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
 
-  // Ao escolher o colaborador, busca o 13º bruto esperado. Os dois radios
-  // mostram os valores calculados lado a lado (metade / inteiro).
+  // Ao escolher o colaborador, busca o 13º bruto esperado. Pra híbrido
+  // vem também o split brutoClt/brutoPj.
   React.useEffect(() => {
     if (!colabId) {
       setBrutoCalculado(null);
       setTipoAdiantamento(null);
+      setDestino("ambos");
       return;
     }
     let cancelado = false;
@@ -541,6 +548,7 @@ function NovoAdiantamentoDialogContent({
     setErro(null);
     setBrutoCalculado(null);
     setTipoAdiantamento(null);
+    setDestino("ambos");
     calcularTreizeBrutoEsperado({ colaborador_id: colabId, ano })
       .then((res) => {
         if (cancelado) return;
@@ -548,7 +556,12 @@ function NovoAdiantamentoDialogContent({
           setErro(res.message);
           setBrutoCalculado(null);
         } else {
-          setBrutoCalculado(res.bruto);
+          setBrutoCalculado({
+            bruto: res.bruto,
+            tipoContratacao: res.tipo_contratacao,
+            brutoClt: res.brutoClt,
+            brutoPj: res.brutoPj,
+          });
         }
       })
       .finally(() => {
@@ -559,14 +572,30 @@ function NovoAdiantamentoDialogContent({
     };
   }, [colabId, ano]);
 
-  // Valor final conforme o tipo escolhido. 1ª parcela = bruto / 2
-  // (arredondado em duas casas), integral = bruto.
+  // Híbrido só é "real" quando a API devolveu o split (clt_recibo com
+  // valor_recibo > 0 e < salário). Nos demais casos, o destino é
+  // irrelevante e o seletor fica escondido.
+  const ehHibrido =
+    brutoCalculado != null &&
+    brutoCalculado.tipoContratacao === "clt_recibo" &&
+    brutoCalculado.brutoClt != null &&
+    brutoCalculado.brutoPj != null;
+
+  // Base para os valores dos radios "primeira parcela" / "integral".
+  // Pra híbrido com destino='clt' ou 'pj', usa só a parte correspondente.
+  const baseBruto = React.useMemo(() => {
+    if (brutoCalculado == null) return null;
+    if (!ehHibrido || destino === "ambos") return brutoCalculado.bruto;
+    if (destino === "clt") return brutoCalculado.brutoClt;
+    return brutoCalculado.brutoPj;
+  }, [brutoCalculado, ehHibrido, destino]);
+
   const valorCalculado =
-    brutoCalculado == null || tipoAdiantamento == null
+    baseBruto == null || tipoAdiantamento == null
       ? null
       : tipoAdiantamento === "integral"
-        ? brutoCalculado
-        : Math.round((brutoCalculado / 2) * 100) / 100;
+        ? baseBruto
+        : Math.round((baseBruto / 2) * 100) / 100;
 
   async function handleSalvar() {
     setErro(null);
@@ -586,6 +615,7 @@ function NovoAdiantamentoDialogContent({
       valor: valorCalculado,
       obs: obs.trim() === "" ? null : obs.trim(),
       integral: tipoAdiantamento === "integral",
+      destino: ehHibrido ? destino : "ambos",
     });
     setEnviando(false);
     if (!res.ok) {
@@ -623,6 +653,54 @@ function NovoAdiantamentoDialogContent({
           </Select>
         </div>
 
+        {/* Seletor de destino: só aparece pra colaborador híbrido com split
+            real (clt_recibo + valor_recibo > 0). Pros demais, o backend
+            ignora destino e sempre grava 'ambos'. */}
+        {ehHibrido && (
+          <div className="space-y-2">
+            <Label>Qual parte do 13º adiantar?</Label>
+            <p className="text-xs text-muted-foreground">
+              O colaborador é híbrido (CLT + Recibo). Escolha se o adiantamento
+              cobre as duas partes proporcionalmente ou apenas uma delas.
+            </p>
+            <RadioGroup
+              value={destino}
+              onValueChange={(v) => {
+                setDestino(v as "ambos" | "clt" | "pj");
+                // Troca de destino muda o valor-base; limpa a escolha
+                // de tipo pra forçar o usuário a reconferir.
+                setTipoAdiantamento(null);
+              }}
+              disabled={enviando}
+              className="grid grid-cols-3 gap-2"
+            >
+              {([
+                { v: "ambos", label: "Ambas", val: brutoCalculado?.bruto },
+                { v: "clt", label: "Só CLT", val: brutoCalculado?.brutoClt },
+                { v: "pj", label: "Só PJ", val: brutoCalculado?.brutoPj },
+              ] as const).map((opt) => (
+                <label
+                  key={opt.v}
+                  htmlFor={`destino-${opt.v}`}
+                  className={`flex cursor-pointer flex-col items-start gap-1 rounded-lg border p-3 transition-colors ${
+                    destino === opt.v
+                      ? "border-california-red bg-california-red/5"
+                      : "border-border bg-muted/20 hover:bg-muted/40"
+                  }`}
+                >
+                  <div className="flex w-full items-center gap-2">
+                    <RadioGroupItem id={`destino-${opt.v}`} value={opt.v} />
+                    <span className="text-sm font-medium">{opt.label}</span>
+                  </div>
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    Base: {opt.val != null ? brl.format(opt.val) : "—"}
+                  </span>
+                </label>
+              ))}
+            </RadioGroup>
+          </div>
+        )}
+
         <div className="space-y-2">
           <Label>Tipo do adiantamento</Label>
           {!colabId ? (
@@ -634,7 +712,7 @@ function NovoAdiantamentoDialogContent({
               <Loader2 className="mr-2 inline h-3 w-3 animate-spin" />
               Calculando o 13º do colaborador…
             </p>
-          ) : brutoCalculado == null ? (
+          ) : brutoCalculado == null || baseBruto == null ? (
             <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-4 text-center text-xs text-destructive">
               Não foi possível calcular o 13º — veja o erro acima.
             </p>
@@ -660,35 +738,41 @@ function NovoAdiantamentoDialogContent({
                   <div className="space-y-0.5">
                     <div className="text-sm font-medium">Primeira parcela do 13º</div>
                     <div className="text-xs text-muted-foreground">
-                      Metade do 13º. Abate da 1ª parcela quando a folha for calculada.
+                      Metade do 13º{ehHibrido && destino !== "ambos" ? ` (parte ${destino === "clt" ? "CLT" : "PJ"})` : ""}. Abate da 1ª parcela quando a folha for calculada.
                     </div>
                   </div>
                   <div className="shrink-0 text-right tabular-nums font-semibold text-california-red">
-                    {brl.format(Math.round((brutoCalculado / 2) * 100) / 100)}
+                    {brl.format(Math.round((baseBruto / 2) * 100) / 100)}
                   </div>
                 </div>
               </label>
-              <label
-                htmlFor="tipo-integral"
-                className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors ${
-                  tipoAdiantamento === "integral"
-                    ? "border-california-red bg-california-red/5"
-                    : "border-border bg-muted/20 hover:bg-muted/40"
-                }`}
-              >
-                <RadioGroupItem id="tipo-integral" value="integral" />
-                <div className="flex flex-1 items-center justify-between gap-2">
-                  <div className="space-y-0.5">
-                    <div className="text-sm font-medium">Valor integral do 13º</div>
-                    <div className="text-xs text-muted-foreground">
-                      Quita o 13º inteiro. O colaborador não participa da folha deste ano.
+              {/* Integral só faz sentido pra destino='ambos': significa
+                  "quitou o 13º inteiro, tira da folha". Pra destino=clt/pj,
+                  o colaborador ainda tem a outra parte na folha, então
+                  mantemos só "primeira parcela" e opções de parcial. */}
+              {(!ehHibrido || destino === "ambos") && (
+                <label
+                  htmlFor="tipo-integral"
+                  className={`flex cursor-pointer items-center gap-3 rounded-lg border p-3 transition-colors ${
+                    tipoAdiantamento === "integral"
+                      ? "border-california-red bg-california-red/5"
+                      : "border-border bg-muted/20 hover:bg-muted/40"
+                  }`}
+                >
+                  <RadioGroupItem id="tipo-integral" value="integral" />
+                  <div className="flex flex-1 items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <div className="text-sm font-medium">Valor integral do 13º</div>
+                      <div className="text-xs text-muted-foreground">
+                        Quita o 13º inteiro. O colaborador não participa da folha deste ano.
+                      </div>
+                    </div>
+                    <div className="shrink-0 text-right tabular-nums font-semibold text-california-red">
+                      {brl.format(baseBruto)}
                     </div>
                   </div>
-                  <div className="shrink-0 text-right tabular-nums font-semibold text-california-red">
-                    {brl.format(brutoCalculado)}
-                  </div>
-                </div>
-              </label>
+                </label>
+              )}
             </RadioGroup>
           )}
         </div>

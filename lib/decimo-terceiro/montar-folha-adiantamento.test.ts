@@ -146,6 +146,80 @@ test("Híbrido com valor_recibo = 0 cai pra 1 folha CLT (sem parte PJ)", () => {
   ]);
 });
 
+test("Híbrido com destino='clt' gera 1 folha contabilidade com valor cheio", () => {
+  // Mesmo com salario e valor_recibo definidos, destino='clt' ignora o
+  // split e manda o valor inteiro pra folha CLT (contabilidade).
+  const folhas = montarFolhasAdiantamento({
+    adiantamento_id: "a1",
+    colaborador_id: "c1",
+    tipo_contratacao: "clt_recibo",
+    valor: 1500,
+    salario: 10000,
+    valor_recibo: 4000,
+    destino: "clt",
+  });
+  assert.deepEqual(folhas, [
+    {
+      decimo_terceiro_adiantamento_id: "a1",
+      colaborador_id: "c1",
+      tipo: "decimo_terceiro_adiantamento",
+      origem: "contabilidade",
+      salario_base: 1500,
+    },
+  ]);
+});
+
+test("Híbrido com destino='pj' gera 1 folha california com valor cheio", () => {
+  const folhas = montarFolhasAdiantamento({
+    adiantamento_id: "a1",
+    colaborador_id: "c1",
+    tipo_contratacao: "clt_recibo",
+    valor: 2500,
+    salario: 10000,
+    valor_recibo: 4000,
+    destino: "pj",
+  });
+  assert.deepEqual(folhas, [
+    {
+      decimo_terceiro_adiantamento_id: "a1",
+      colaborador_id: "c1",
+      tipo: "decimo_terceiro_adiantamento",
+      origem: "california",
+      salario_base: 2500,
+    },
+  ]);
+});
+
+test("Híbrido destino='clt' não exige salario/valor_recibo (sem split)", () => {
+  // Como destino força a parte, não precisa das infos do split.
+  assert.doesNotThrow(() => {
+    montarFolhasAdiantamento({
+      adiantamento_id: "a1",
+      colaborador_id: "c1",
+      tipo_contratacao: "clt_recibo",
+      valor: 500,
+      destino: "clt",
+    });
+  });
+});
+
+test("Híbrido destino='ambos' (default) continua exigindo salario+valor_recibo", () => {
+  // Preserva o contrato antigo pra callers que não passam destino.
+  assert.throws(
+    () => {
+      montarFolhasAdiantamento({
+        adiantamento_id: "a1",
+        colaborador_id: "c1",
+        tipo_contratacao: "clt_recibo",
+        valor: 800,
+      } as AdiantamentoParaMontar);
+    },
+    {
+      message: /salario.*valor_recibo|híbrido.*split/i,
+    },
+  );
+});
+
 test("valor <= 0 lança erro", () => {
   assert.throws(
     () => {

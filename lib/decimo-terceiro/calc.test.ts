@@ -289,3 +289,69 @@ test("híbrido: adiantamento rateia proporcional ao salário de cada parte", () 
   assert.equal(r.partePj!.primeiraParcela, 1600); // 2000 - 400
   assert.equal(r.primeiraParcela, 4000); // 5000 - 1000
 });
+
+test("híbrido: adiantamento destinado só pra CLT abate 100% da parte CLT", () => {
+  // Total adiantado 1000, todo destinado a CLT. Proporção 60/40 continua
+  // pros brutos (CLT 6000, PJ 4000), mas o abatimento da 1ª parcela vai
+  // 100% em CLT.
+  const r = calcularLinhaDecimoTerceiro({
+    salario: 10000,
+    dataAdmissao: new Date("2020-01-01"),
+    ano: 2026,
+    tipoContratacao: "clt_recibo",
+    totalAdiantado: 1000,
+    totalAdiantadoClt: 1000,
+    totalAdiantadoPj: 0,
+    valorRecibo: 4000,
+  });
+  assert.ok(r.parteClt);
+  // CLT: metade = 3000, abate 1000 → 1ª parcela = 2000
+  assert.equal(r.parteClt!.primeiraParcela, 2000);
+  assert.ok(r.partePj);
+  // PJ: metade = 2000, abate 0 → 1ª parcela = 2000
+  assert.equal(r.partePj!.primeiraParcela, 2000);
+  assert.equal(r.primeiraParcela, 4000);
+});
+
+test("híbrido: adiantamento destinado só pra PJ abate 100% da parte PJ", () => {
+  const r = calcularLinhaDecimoTerceiro({
+    salario: 10000,
+    dataAdmissao: new Date("2020-01-01"),
+    ano: 2026,
+    tipoContratacao: "clt_recibo",
+    totalAdiantado: 500,
+    totalAdiantadoClt: 0,
+    totalAdiantadoPj: 500,
+    valorRecibo: 4000,
+  });
+  assert.ok(r.parteClt);
+  // CLT: metade = 3000, abate 0
+  assert.equal(r.parteClt!.primeiraParcela, 3000);
+  assert.ok(r.partePj);
+  // PJ: metade = 2000, abate 500 → 1500
+  assert.equal(r.partePj!.primeiraParcela, 1500);
+  assert.equal(r.primeiraParcela, 4500);
+});
+
+test("híbrido: mistura de destinos (1 ambos + 1 clt) soma corretamente", () => {
+  // totalAdiantado 1000 = 400 destinado CLT + 600 destino 'ambos'.
+  // A sobra ambos (600) rateia 60/40 → CLT 360, PJ 240.
+  // Resultado: CLT recebe 400 + 360 = 760; PJ recebe 240.
+  const r = calcularLinhaDecimoTerceiro({
+    salario: 10000,
+    dataAdmissao: new Date("2020-01-01"),
+    ano: 2026,
+    tipoContratacao: "clt_recibo",
+    totalAdiantado: 1000,
+    totalAdiantadoClt: 400,
+    totalAdiantadoPj: 0,
+    valorRecibo: 4000,
+  });
+  assert.ok(r.parteClt);
+  // CLT: metade = 3000, abate 760 → 2240
+  assert.equal(r.parteClt!.primeiraParcela, 2240);
+  assert.ok(r.partePj);
+  // PJ: metade = 2000, abate 240 → 1760
+  assert.equal(r.partePj!.primeiraParcela, 1760);
+  assert.equal(r.primeiraParcela, 4000);
+});
