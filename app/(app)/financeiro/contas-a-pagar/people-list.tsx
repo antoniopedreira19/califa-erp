@@ -40,6 +40,25 @@ const ESCOPO_OPCOES: {
   { valor: "decimo_terceiro_adiantamento", label: "13º adiantamento" },
 ];
 
+// Filtro de contratação agrupado por categoria exibida ao usuário.
+// "Híbrido" = clt_recibo.
+type CategoriaContratacao = "pj" | "clt" | "hibrido";
+const CONTRATACAO_OPCOES: { valor: CategoriaContratacao; label: string }[] = [
+  { valor: "pj", label: "PJ" },
+  { valor: "clt", label: "CLT" },
+  { valor: "hibrido", label: "Híbrido" },
+];
+function categoriaContratacao(tipo: TipoContratacao): CategoriaContratacao {
+  if (tipo === "clt_recibo") return "hibrido";
+  if (tipo === "pj" || tipo === "mei") return "pj";
+  return "clt"; // clt, estagio, socio
+}
+
+// Label local que substitui "CLT + Recibo" por "Híbrido" só nesta tela.
+function labelContratacaoLocal(tipo: TipoContratacao): string {
+  return tipo === "clt_recibo" ? "Híbrido" : tipoContratacaoLabel(tipo);
+}
+
 const NOMES_MES = [
   "Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
   "Jul", "Ago", "Set", "Out", "Nov", "Dez",
@@ -107,7 +126,7 @@ function BadgeContratacao({ tipo }: { tipo: TipoContratacao }) {
           : "border-border text-muted-foreground"
       }`}
     >
-      {tipoContratacaoLabel(tipo)}
+      {labelContratacaoLocal(tipo)}
     </span>
   );
 }
@@ -318,7 +337,7 @@ export function PeopleList({
   // Filtros
   const [busca, setBusca] = React.useState("");
   const [filtroTipo, setFiltroTipo] = React.useState<string>("");
-  const [filtroFuncao, setFiltroFuncao] = React.useState<string>("");
+  const [filtroContratacao, setFiltroContratacao] = React.useState<string>("");
   const [filtroEmpresa, setFiltroEmpresa] = React.useState<string>("");
   const [filtroRegional, setFiltroRegional] = React.useState<string>("");
 
@@ -335,15 +354,6 @@ export function PeopleList({
       return { coluna: null, direcao: "asc" };
     });
   }
-
-  // Funções únicas presentes nos items — pro dropdown dinâmico.
-  const funcoesDisponiveis = React.useMemo(() => {
-    const set = new Set<string>();
-    for (const i of items) {
-      if (i.funcao) set.add(i.funcao);
-    }
-    return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
-  }, [items]);
 
   // Regionais filtradas pela empresa selecionada (se houver).
   const regionaisFiltradas = React.useMemo(() => {
@@ -362,7 +372,12 @@ export function PeopleList({
     const buscaNormalizada = busca.trim().toLowerCase();
     const filtrados = items.filter((item) => {
       if (filtroTipo && item.escopo_tipo !== filtroTipo) return false;
-      if (filtroFuncao && item.funcao !== filtroFuncao) return false;
+      if (
+        filtroContratacao &&
+        categoriaContratacao(item.tipo_contratacao) !== filtroContratacao
+      ) {
+        return false;
+      }
 
       const alocacoes = alocacoesPorFolha[item.linha_id] ?? [];
       if (filtroEmpresa) {
@@ -407,7 +422,7 @@ export function PeopleList({
     items,
     busca,
     filtroTipo,
-    filtroFuncao,
+    filtroContratacao,
     filtroEmpresa,
     filtroRegional,
     alocacoesPorFolha,
@@ -525,7 +540,7 @@ export function PeopleList({
           <CelulaAlocacao alocacoes={alocacoesLinha} />
         </td>
         <td className="px-4 py-3">
-          <BadgeNf anexada={item.nf_anexada} />
+          {exigeNfParaUI ? <BadgeNf anexada={item.nf_anexada} /> : null}
         </td>
         <td className="px-4 py-3 text-right tabular-nums font-semibold">
           {item.valor != null ? formatBRL(Number(item.valor)) : "—"}
@@ -582,6 +597,21 @@ export function PeopleList({
     // Pra NF do pai: só "Anexada" se TODAS as partes que exigem NF foram anexadas.
     const todasAnexadas = grupo.items.every((i) => i.nf_anexada);
 
+    // Alguma parte exige NF? Se nenhuma parte exige (ex: híbrido 13° p1/p2
+    // em que ambas as origens não geram NF), omite o badge pra manter a
+    // coluna visualmente limpa — igual ao que fazemos na linha simples.
+    const algumExigeNf = grupo.items.some((i) => {
+      const exigeLinha =
+        (i.escopo_tipo === "folha_mensal" ||
+          i.escopo_tipo === "decimo_terceiro_adiantamento") &&
+        i.origem === "california" &&
+        ["pj", "mei", "clt_recibo"].includes(i.tipo_contratacao);
+      const exigeFerias =
+        i.escopo_tipo === "ferias_usufruto" ||
+        i.escopo_tipo === "ferias_abono";
+      return exigeLinha || exigeFerias;
+    });
+
     // Alocação do pai usa a do primeiro item: na prática as partes do híbrido
     // compartilham o mesmo rateio (mesmo colaborador, mesma competência).
     const alocacoesLinha = alocacoesPorFolha[first.linha_id] ?? [];
@@ -620,7 +650,7 @@ export function PeopleList({
           <CelulaAlocacao alocacoes={alocacoesLinha} />
         </td>
         <td className="px-4 py-3">
-          <BadgeNf anexada={todasAnexadas} />
+          {algumExigeNf ? <BadgeNf anexada={todasAnexadas} /> : null}
         </td>
         <td className="px-4 py-3 text-right tabular-nums font-semibold">
           {formatBRL(valorTotal)}
@@ -677,19 +707,21 @@ export function PeopleList({
           </Select>
         </CampoFiltro>
 
-        <CampoFiltro rotulo="Função" className="min-w-[180px]">
+        <CampoFiltro rotulo="Contratação" className="min-w-[160px]">
           <Select
-            value={filtroFuncao || SEM_FILTRO}
-            onValueChange={(v) => setFiltroFuncao(v === SEM_FILTRO ? "" : v)}
+            value={filtroContratacao || SEM_FILTRO}
+            onValueChange={(v) =>
+              setFiltroContratacao(v === SEM_FILTRO ? "" : v)
+            }
           >
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={SEM_FILTRO}>Todas</SelectItem>
-              {funcoesDisponiveis.map((f) => (
-                <SelectItem key={f} value={f}>
-                  {f}
+              {CONTRATACAO_OPCOES.map((o) => (
+                <SelectItem key={o.valor} value={o.valor}>
+                  {o.label}
                 </SelectItem>
               ))}
             </SelectContent>
