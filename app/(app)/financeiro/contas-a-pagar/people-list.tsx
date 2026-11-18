@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, CheckCircle2, Search, XCircle } from "lucide-react";
+import { ArrowDown, ArrowUp, ArrowUpDown, CheckCircle2, ChevronDown, ChevronRight, Search, XCircle } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -219,6 +219,18 @@ export function PeopleList({
 }) {
   const [revisandoId, setRevisandoId] = React.useState<string | null>(null);
 
+  // Grupos híbridos (colab × escopo × competência com +1 parte) começam
+  // recolhidos. Expandido mantém a chave do grupo no Set.
+  const [expandidos, setExpandidos] = React.useState<Set<string>>(new Set());
+  function alternarExpansao(chave: string) {
+    setExpandidos((prev) => {
+      const next = new Set(prev);
+      if (next.has(chave)) next.delete(chave);
+      else next.add(chave);
+      return next;
+    });
+  }
+
   // Filtros
   const [busca, setBusca] = React.useState("");
   const [filtroTipo, setFiltroTipo] = React.useState<string>("");
@@ -326,6 +338,241 @@ export function PeopleList({
     const alocacoes = alocacoesPorFolha[item.linha_id] ?? [];
     return toFolhaLinha(item, colaboradores[item.colaborador_id], alocacoes);
   }, [revisandoId, items, colaboradores, alocacoesPorFolha]);
+
+  // Agrupa linhas que representam o mesmo pagamento em partes diferentes
+  // (híbrido CLT+Recibo tem 2 folhas no 13º: uma CLT, outra PJ). Grupos de 1
+  // linha são o caso comum. Dentro do grupo, CLT vem primeiro, PJ (california)
+  // depois.
+  const grupos = React.useMemo(() => {
+    const map = new Map<string, PeopleAprovarItem[]>();
+    for (const it of itemsFiltrados) {
+      const chave = `${it.colaborador_id}|${it.escopo_tipo}|${it.competencia_ano ?? 0}|${it.competencia_mes ?? 0}`;
+      const list = map.get(chave) ?? [];
+      list.push(it);
+      map.set(chave, list);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => {
+        if (a.origem === b.origem) return 0;
+        if (a.origem === "california") return 1;
+        return -1;
+      });
+    }
+    return Array.from(map.entries()).map(([chave, items]) => ({ chave, items }));
+  }, [itemsFiltrados]);
+
+  function renderLinhaPagamento(
+    item: PeopleAprovarItem,
+    modo: "unica" | "filha",
+  ) {
+    const colab = colaboradores[item.colaborador_id];
+    const nomeColab = colab?.nome ?? "—";
+    const variante = badgeVariantParaEscopo(item.escopo_tipo);
+    const is13 =
+      item.escopo_tipo === "decimo_terceiro_p1" ||
+      item.escopo_tipo === "decimo_terceiro_p2" ||
+      item.escopo_tipo === "decimo_terceiro_adiantamento";
+
+    const tipoTexto = is13 ? item.label : labelEscopoTipo(item.escopo_tipo);
+    // Na filha, substitui o badge do escopo por "Parte CLT" / "Parte PJ":
+    // o escopo já está na linha-pai, não precisa repetir. Deixa a coluna
+    // compacta o suficiente pra caber em w-56.
+    const ehParteCalifornia = item.origem === "california";
+
+    const alocacoesLinha = alocacoesPorFolha[item.linha_id] ?? [];
+
+    // Espelha a regra do server (actions-folhas.ts: exigeNf):
+    //   folha_mensal + origem california + pj/mei/clt_recibo → NF.
+    //   decimo_terceiro_adiantamento + origem california + pj/mei/clt_recibo → NF.
+    //   Férias (usufruto/abono) → NF.
+    //   CLT puro / sócio / estagio e parcelas 13° p1/p2 → não exigem.
+    const exigeNfLinha =
+      (item.escopo_tipo === "folha_mensal" ||
+        item.escopo_tipo === "decimo_terceiro_adiantamento") &&
+      item.origem === "california" &&
+      ["pj", "mei", "clt_recibo"].includes(item.tipo_contratacao);
+    const exigeNfFerias =
+      item.escopo_tipo === "ferias_usufruto" ||
+      item.escopo_tipo === "ferias_abono";
+    const exigeNfParaUI = exigeNfLinha || exigeNfFerias;
+
+    const bloqueado = exigeNfParaUI && !item.nf_anexada;
+    const tooltipBloqueado = bloqueado
+      ? "Aguardando o colaborador anexar a NF."
+      : null;
+
+    const ehFilha = modo === "filha";
+
+    return (
+      <tr
+        key={item.linha_id}
+        className={`border-b border-border last:border-0 ${
+          ehFilha ? "bg-muted/30" : ""
+        }`}
+      >
+        <td className={`px-4 py-3 ${ehFilha ? "pl-10" : ""}`}>
+          {ehFilha ? (
+            <span
+              className={`inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold ${
+                ehParteCalifornia
+                  ? "border-blue-200 bg-blue-50 text-blue-800"
+                  : "border-amber-200 bg-amber-50 text-amber-800"
+              }`}
+            >
+              {ehParteCalifornia ? "Parte PJ" : "Parte CLT"}
+            </span>
+          ) : (
+            <BadgeTipo variante={variante} texto={tipoTexto} />
+          )}
+        </td>
+        <td className="px-4 py-3 tabular-nums text-muted-foreground">
+          {competenciaLabel(item.competencia_ano, item.competencia_mes)}
+        </td>
+        <td className="px-4 py-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="font-medium">{nomeColab}</span>
+          </div>
+          <div className="text-xs text-muted-foreground">{item.label}</div>
+        </td>
+        <td className="px-4 py-3">
+          <BadgeContratacao tipo={item.tipo_contratacao} />
+        </td>
+        <td className="px-4 py-3 text-xs text-muted-foreground">
+          {alocacoesLinha.length === 0 ? (
+            <span className="text-muted-foreground/50">—</span>
+          ) : (
+            <div className="flex flex-col gap-0.5">
+              {alocacoesLinha.map((a) => (
+                <span key={a.id} className="whitespace-nowrap">
+                  {a.empresa_nome} · {a.regional_nome}
+                  <span className="ml-1 text-muted-foreground/70 tabular-nums">
+                    ({Number(a.percentual).toFixed(0)}%)
+                  </span>
+                </span>
+              ))}
+            </div>
+          )}
+        </td>
+        <td className="px-4 py-3">
+          <BadgeNf anexada={item.nf_anexada} />
+        </td>
+        <td className="px-4 py-3 text-right tabular-nums font-semibold">
+          {item.valor != null ? formatBRL(Number(item.valor)) : "—"}
+        </td>
+        <td className="px-4 py-3 text-center">
+          {bloqueado ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-block">
+                  <button
+                    type="button"
+                    disabled
+                    aria-disabled="true"
+                    className="rounded-lg border border-border bg-muted px-3 py-1.5 text-xs font-semibold text-muted-foreground opacity-50 cursor-not-allowed"
+                  >
+                    Revisar
+                  </button>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="left">{tooltipBloqueado}</TooltipContent>
+            </Tooltip>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setRevisandoId(item.linha_id)}
+              className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
+            >
+              Revisar
+            </button>
+          )}
+        </td>
+      </tr>
+    );
+  }
+
+  function renderLinhaHibridoPai(
+    grupo: { chave: string; items: PeopleAprovarItem[] },
+    expandido: boolean,
+  ) {
+    const first = grupo.items[0];
+    const colab = colaboradores[first.colaborador_id];
+    const nomeColab = colab?.nome ?? "—";
+    const variante = badgeVariantParaEscopo(first.escopo_tipo);
+    const is13 =
+      first.escopo_tipo === "decimo_terceiro_p1" ||
+      first.escopo_tipo === "decimo_terceiro_p2" ||
+      first.escopo_tipo === "decimo_terceiro_adiantamento";
+    const tipoTexto = is13 ? first.label : labelEscopoTipo(first.escopo_tipo);
+
+    const valorTotal = grupo.items.reduce(
+      (acc, i) => acc + (i.valor != null ? Number(i.valor) : 0),
+      0,
+    );
+    // Pra NF do pai: só "Anexada" se TODAS as partes que exigem NF foram anexadas.
+    const todasAnexadas = grupo.items.every((i) => i.nf_anexada);
+
+    // Alocação do pai usa a do primeiro item: na prática as partes do híbrido
+    // compartilham o mesmo rateio (mesmo colaborador, mesma competência).
+    const alocacoesLinha = alocacoesPorFolha[first.linha_id] ?? [];
+
+    return (
+      <tr
+        key={grupo.chave}
+        className="border-b border-border last:border-0 cursor-pointer hover:bg-muted/20"
+        onClick={() => alternarExpansao(grupo.chave)}
+      >
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-2">
+            {expandido ? (
+              <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+            )}
+            <BadgeTipo variante={variante} texto={tipoTexto} />
+          </div>
+        </td>
+        <td className="px-4 py-3 tabular-nums text-muted-foreground">
+          {competenciaLabel(first.competencia_ano, first.competencia_mes)}
+        </td>
+        <td className="px-4 py-3">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="font-medium">{nomeColab}</span>
+          </div>
+          <div className="text-xs text-muted-foreground">
+            {first.label} · {grupo.items.length} partes
+          </div>
+        </td>
+        <td className="px-4 py-3">
+          <BadgeContratacao tipo={first.tipo_contratacao} />
+        </td>
+        <td className="px-4 py-3 text-xs text-muted-foreground">
+          {alocacoesLinha.length === 0 ? (
+            <span className="text-muted-foreground/50">—</span>
+          ) : (
+            <div className="flex flex-col gap-0.5">
+              {alocacoesLinha.map((a) => (
+                <span key={a.id} className="whitespace-nowrap">
+                  {a.empresa_nome} · {a.regional_nome}
+                  <span className="ml-1 text-muted-foreground/70 tabular-nums">
+                    ({Number(a.percentual).toFixed(0)}%)
+                  </span>
+                </span>
+              ))}
+            </div>
+          )}
+        </td>
+        <td className="px-4 py-3">
+          <BadgeNf anexada={todasAnexadas} />
+        </td>
+        <td className="px-4 py-3 text-right tabular-nums font-semibold">
+          {formatBRL(valorTotal)}
+        </td>
+        <td className="px-4 py-3 text-center text-xs font-medium text-muted-foreground">
+          {expandido ? "Recolher" : "Ver partes"}
+        </td>
+      </tr>
+    );
+  }
 
   if (items.length === 0) {
     return (
@@ -487,122 +734,19 @@ export function PeopleList({
                 </td>
               </tr>
             )}
-            {itemsFiltrados.map((item) => {
-              const colab = colaboradores[item.colaborador_id];
-              const nomeColab = colab?.nome ?? "—";
-              const variante = badgeVariantParaEscopo(item.escopo_tipo);
-              // Para 13°, usar label da view (tem o ano e descrição completa).
-              // Para outros escopos, usar labelEscopoTipo() (badge curto).
-              const is13 = item.escopo_tipo === "decimo_terceiro_p1" || item.escopo_tipo === "decimo_terceiro_p2" || item.escopo_tipo === "decimo_terceiro_adiantamento";
-
-              // Para 13° com clt_recibo origem california, adiciona "(parte PJ)".
-              // Vale pras parcelas 1/2 e também pro adiantamento, que a partir
-              // da Entrega 2 gera 2 folhas separadas pro híbrido.
-              const is13ComParte =
-                item.escopo_tipo === "decimo_terceiro_p1" ||
-                item.escopo_tipo === "decimo_terceiro_p2" ||
-                item.escopo_tipo === "decimo_terceiro_adiantamento";
-              const ehPartePj =
-                is13ComParte &&
-                item.tipo_contratacao === "clt_recibo" &&
-                item.origem === "california";
-              const tipoTexto = is13
-                ? (ehPartePj ? `${item.label} (parte PJ)` : item.label)
-                : labelEscopoTipo(item.escopo_tipo);
-              const alocacoesLinha = alocacoesPorFolha[item.linha_id] ?? [];
-
-              // Espelha a regra do server (actions-folhas.ts: exigeNf):
-              //   folha_mensal + origem california + pj/mei/clt_recibo → NF.
-              //   decimo_terceiro_adiantamento + origem california + pj/mei/clt_recibo → NF.
-              //   Férias (usufruto/abono) → NF.
-              //   CLT puro / sócio / estagio e parcelas 13° p1/p2 → não exigem.
-              const exigeNfLinha =
-                (item.escopo_tipo === "folha_mensal" ||
-                  item.escopo_tipo === "decimo_terceiro_adiantamento") &&
-                item.origem === "california" &&
-                ["pj", "mei", "clt_recibo"].includes(item.tipo_contratacao);
-              const exigeNfFerias =
-                item.escopo_tipo === "ferias_usufruto" ||
-                item.escopo_tipo === "ferias_abono";
-              const exigeNfParaUI = exigeNfLinha || exigeNfFerias;
-
-              const bloqueado = exigeNfParaUI && !item.nf_anexada;
-              const tooltipBloqueado = bloqueado
-                ? "Aguardando o colaborador anexar a NF."
-                : null;
-
+            {grupos.map((grupo) => {
+              if (grupo.items.length === 1) {
+                return renderLinhaPagamento(grupo.items[0], "unica");
+              }
+              const expandido = expandidos.has(grupo.chave);
               return (
-                <tr
-                  key={item.linha_id}
-                  className="border-b border-border last:border-0"
-                >
-                  <td className="px-4 py-3">
-                    <BadgeTipo variante={variante} texto={tipoTexto} />
-                  </td>
-                  <td className="px-4 py-3 tabular-nums text-muted-foreground">
-                    {competenciaLabel(item.competencia_ano, item.competencia_mes)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="font-medium">{nomeColab}</span>
-                    </div>
-                    <div className="text-xs text-muted-foreground">{item.label}</div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <BadgeContratacao tipo={item.tipo_contratacao} />
-                  </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">
-                    {alocacoesLinha.length === 0 ? (
-                      <span className="text-muted-foreground/50">—</span>
-                    ) : (
-                      <div className="flex flex-col gap-0.5">
-                        {alocacoesLinha.map((a) => (
-                          <span key={a.id} className="whitespace-nowrap">
-                            {a.empresa_nome} · {a.regional_nome}
-                            <span className="ml-1 text-muted-foreground/70 tabular-nums">
-                              ({Number(a.percentual).toFixed(0)}%)
-                            </span>
-                          </span>
-                        ))}
-                      </div>
+                <React.Fragment key={grupo.chave}>
+                  {renderLinhaHibridoPai(grupo, expandido)}
+                  {expandido &&
+                    grupo.items.map((item) =>
+                      renderLinhaPagamento(item, "filha"),
                     )}
-                  </td>
-                  <td className="px-4 py-3">
-                    <BadgeNf anexada={item.nf_anexada} />
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums font-semibold">
-                    {item.valor != null ? formatBRL(Number(item.valor)) : "—"}
-                  </td>
-                  <td className="px-4 py-3 text-center">
-                    {bloqueado ? (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span className="inline-block">
-                            <button
-                              type="button"
-                              disabled
-                              aria-disabled="true"
-                              className="rounded-lg border border-border bg-muted px-3 py-1.5 text-xs font-semibold text-muted-foreground opacity-50 cursor-not-allowed"
-                            >
-                              Revisar
-                            </button>
-                          </span>
-                        </TooltipTrigger>
-                        <TooltipContent side="left">
-                          {tooltipBloqueado}
-                        </TooltipContent>
-                      </Tooltip>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => setRevisandoId(item.linha_id)}
-                        className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-100 transition-colors"
-                      >
-                        Revisar
-                      </button>
-                    )}
-                  </td>
-                </tr>
+                </React.Fragment>
               );
             })}
           </tbody>
