@@ -9197,3 +9197,10 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Sem curva de desembolso** (Tiago): o job de pagamentos não tem previsão de custos, com qualquer planejado. O custo só entra no fluxo de caixa quando a PP vira título; a conta de pagamento fica opcional. O servidor recusa curva nesse job.
 - **Banco:** migration `20261118700001` (aditiva), com `criar_job_de_pagamentos` e `salvar_planilha_do_job_de_pagamentos`.
 - **Conferido no Sandbox:** TES-1039/26 criado pelo pop-up, aviso na lista, fora de Orçamentos, e o "Editar registro" salvo sem marca e sem curva (foto nº 3; a curva de R$ 1.800,00 da foto nº 2, de um teste anterior à regra, saiu pelo mesmo salvar).
+
+## ⚠️ Nota de 2026-11-18 — o fluxo de caixa voltou a mostrar entradas e realizado
+
+- **Sintoma:** o Fluxo de caixa da produção abria só com parte das saídas; entradas, títulos e realizado vinham vazios. O caixa por job (Exibir e o fluxo do job) dava erro desde pelo menos 10/11.
+- **Causa:** `proxima_fatura_cartao` lia o cartão como o usuário. O cartão de teste "ZZ Teste Empresa Teste" ficou no tenant da produção com a empresa que foi para o Sandbox: ninguém da produção o enxerga, a função levantava exceção e derrubava a `vw_fluxo_caixa` (e as views do fluxo por job) inteira. Não veio da decisão 265: a view anterior falhava igual.
+- **Correção:** a função lê o cartão como dona (`security definer`), migration `20261118400004`. Conferido como o usuário da produção: a view responde em 1,6 s, as views por job voltaram, e o fluxo mostra os títulos das NFs 6376, 6468 e 6475 e só o saldo de R$ 20.741,02 do AMB-1058/26 como previsão.
+- **Pendente:** o cartão certo das 5 PPs da produção no cartão de teste (PP-00044, PP-00210, PP-00397, PP-00824, PP-00950).
