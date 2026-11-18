@@ -1097,11 +1097,23 @@ export function JobPPsSection({
       className="space-y-3.5"
       style={{ paddingRight: 10 + larguraTrilha - AVANCO_NA_MARGEM }}
     >
+      {/* Filtros em cima, sozinhos: com "Selecionar" junto eles ficavam
+          espremidos na mesma linha da busca. Desde 18/11/2026 (revisão do
+          mesmo dia), a ação vai pra linha da busca. */}
       <div className="flex flex-wrap items-center gap-2">
-        {/* "Selecionar" (18/11/2026): no canto esquerdo da linha de ações,
-            abre as caixinhas de seleção na coluna Código e um rodapé
-            "TOTAL SELECIONADO" no estilo das trilhas Faturamento /
-            Encerramento, com a soma das linhas marcadas. */}
+        <BarraDeFiltros
+          itens={CHIPS.map((c) => ({
+            ...c,
+            n: quantas(c.key),
+            alerta: c.key === "comite" && noComite.some((x) => x.pedido.status === "pendente"),
+          }))}
+          filtro={filtro}
+          onFiltro={setFiltro}
+        />
+      </div>
+      {/* Linha das ações: "Selecionar" à esquerda; "Exportar" colado à
+          busca, à direita. */}
+      <div className="flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => {
@@ -1118,18 +1130,6 @@ export function JobPPsSection({
           <CheckSquare className="h-3.5 w-3.5" />
           {modoSelecao ? "Sair da seleção" : "Selecionar"}
         </button>
-        <BarraDeFiltros
-          itens={CHIPS.map((c) => ({
-            ...c,
-            n: quantas(c.key),
-            alerta: c.key === "comite" && noComite.some((x) => x.pedido.status === "pendente"),
-          }))}
-          filtro={filtro}
-          onFiltro={setFiltro}
-        />
-        {/* O "Exportar" entrou colado à esquerda da busca em 18/11/2026: a
-            tabela como a tela mostra, com o filtro ativo. Só ícone para não
-            empurrar a busca pra outra linha. */}
         <div className="ml-auto flex items-center gap-2">
           <Tooltip>
             <TooltipTrigger asChild>
