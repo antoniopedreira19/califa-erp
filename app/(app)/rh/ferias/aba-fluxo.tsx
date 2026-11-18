@@ -84,11 +84,11 @@ export async function AbaFluxo({ tenantId }: { tenantId: string }) {
     supabase
       .from("colaboradores_alocacoes")
       .select(
-        // Pedir empresa_id e regional_id junto com o embed é o padrão
-        // do /rh/ferias/[id] — sem eles, o PostgREST às vezes falha
-        // de resolver o embed em queries com .in() + muitos resultados,
-        // e retorna empresa/regional como null em silêncio.
-        "colaborador_id, empresa_id, regional_id, data_inicio, empresa:empresas(nome_fantasia), regional:regionais(nome)",
+        // FK dupla: colaboradores_alocacoes tem FK simples (empresa_id,
+        // regional_id) + FK composto fk_alocacao_regional_pertence_empresa.
+        // Sem a dica !nome_da_fk o PostgREST retorna empresa/regional como
+        // null em silêncio (idem bug do 13º e de rh/colaboradores/[id]).
+        "colaborador_id, empresa_id, regional_id, data_inicio, empresa:empresas!colaboradores_alocacoes_empresa_id_fkey(nome_fantasia), regional:regionais!colaboradores_alocacoes_regional_id_fkey(nome)",
       )
       .eq("tenant_id", tenantId)
       .in("colaborador_id", colabIdsSeguro)
