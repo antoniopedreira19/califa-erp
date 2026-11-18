@@ -274,12 +274,17 @@ async function assertProjetoDoTenant(
 ): Promise<{ ok: true } | { ok: false; message: string }> {
   const { data, error } = await supabase
     .from("projetos")
-    .select("id, status")
+    .select("id, status, de_pagamentos")
     .eq("id", projetoId)
     .eq("tenant_id", tenantId)
-    .maybeSingle<{ id: string; status: string }>();
+    .maybeSingle<{ id: string; status: string; de_pagamentos: boolean }>();
   if (error || !data) {
     return { ok: false, message: "Projeto não encontrado." };
+  }
+  // Decisão 266: o projeto do job de pagamentos não tem orçamento para
+  // criar, editar ou arquivar. O banco recusa o orçamento novo também.
+  if (data.de_pagamentos) {
+    return { ok: false, message: "Este projeto é do job de pagamentos e não tem orçamentos." };
   }
   // Decisão 118: projeto arquivado é só leitura. O banco recusa também;
   // aqui a mensagem chega inteira.
