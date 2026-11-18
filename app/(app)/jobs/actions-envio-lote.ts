@@ -25,6 +25,7 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { contatosDeCobrancaPorJob } from "@/lib/data/contatos-cobranca";
 import { lerFaturamentoPorMesDoJob } from "@/lib/data/faturamento-mensal";
+import { mesesEnviadosDoJob } from "@/lib/data/envio-faturamento";
 import { nomeDoMes } from "@/lib/calculos/meses-trimestre";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import {
@@ -235,13 +236,16 @@ interface JobLido {
 /**
  * O próximo mês a enviar de um job mensal (Fee e Always On): o primeiro mês
  * do orçamento com faturamento e sem envio. `null` quando não há.
+ *
+ * Decisão 265: o mês que o financeiro já faturou pelo Novo faturamento está
+ * fechado como o mês enviado — `mesesEnviadosDoJob` devolve os dois.
  */
 async function proximoMesDoJob(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
   j: JobLido,
 ): Promise<{ iso: string; ordem: number; total: number } | null | "erro"> {
-  const [porMes, enviosRes] = await Promise.all([
+  const [porMes, mesesFechados] = await Promise.all([
     lerFaturamentoPorMesDoJob(supabase, {
       tenantId,
       jobId: j.id,
@@ -250,16 +254,14 @@ async function proximoMesDoJob(
       percentualImposto: Number(j.versao?.percentual_imposto ?? 0),
       contar: [],
     }),
-    supabase
-      .from("jobs_envio_faturamento")
-      .select("mes")
-      .eq("job_id", j.id)
-      .eq("tenant_id", tenantId)
-      .not("mes", "is", null)
-      .returns<{ mes: string }[]>(),
+    // Sem saber o que já fechou, o job fica fora do lote (o "erro" de antes).
+    mesesEnviadosDoJob(supabase, j.id, tenantId).catch((e: Error) => {
+      console.error("[jobs.lote.meses_enviados]", e.message);
+      return null;
+    }),
   ]);
-  if (!porMes || enviosRes.error) return "erro";
-  const enviados = new Set((enviosRes.data ?? []).map((e) => e.mes.slice(0, 10)));
+  if (!porMes || mesesFechados === null) return "erro";
+  const enviados = new Set([...mesesFechados].map((m) => m.slice(0, 10)));
   const i = porMes.findIndex((m) => m.faturamento > 0.004 && !enviados.has(m.mes.slice(0, 10)));
   if (i < 0) return null;
   return { iso: porMes[i].mes.slice(0, 10), ordem: i + 1, total: porMes.length };
@@ -350,7 +352,12 @@ export async function carregarEnvioEmLote(jobIds: string[]): Promise<CarregarLot
     if (p === "erro") {
       foraDoLote.push({ id: j.id, codigo: j.codigo, motivo: "Não foi possível ler os meses do job. Tente de novo." });
     } else if (p === null) {
-      foraDoLote.push({ id: j.id, codigo: j.codigo, motivo: "Todos os meses com faturamento já foram enviados." });
+      // Decisão 265: o mês faturado pelo financeiro também fecha.
+      foraDoLote.push({
+        id: j.id,
+        codigo: j.codigo,
+        motivo: "Todos os meses com faturamento já foram enviados ou faturados pelo financeiro.",
+      });
     } else {
       proximoDe.set(j.id, p);
     }

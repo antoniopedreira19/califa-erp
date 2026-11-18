@@ -1,7 +1,7 @@
 # 265 — "+ Faturamento" com um formulário só: o Job é o Novo faturamento, e ele trava a planilha
 
 **Data:** 2026-11-17
-**Status:** aceita e implementada em 18/11/2026.
+**Status:** aceita e implementada em 18/11/2026. Ampliada no mesmo dia: o Novo faturamento substitui o envio em todos os contextos (seção 7).
 **Quem decidiu:** Tiago, em 17/11/2026 ("Pode implementar"), depois de ver que "Novo faturamento" e "Faturamento avulso" confundiam o financeiro.
 **Revê:** a [256](256-novo-faturamento-e-faturar-unificado.md) (o menu com as duas saídas sai; o Novo faturamento passa a travar a errata) e a [184](184-faturar-drawer-que-abre-a-nota-e-cnpj-do-tomador.md) (a avulsa "referente a um job" sai).
 
@@ -30,16 +30,24 @@ Além disso, a 256 fez o Novo faturamento fechar o envio da produção e carimba
 5. **O Novo faturamento trava a planilha como o envio do GP**: depois da nota do financeiro (no mensal e na Mídia Off, a do mês), não há errata, linha vermelha (fora a dos pagamentos atrasados, decisão 259) nem mudança de consumo de save; honorários, impostos e taxas só mudam pelo financeiro.
 6. **As três notas acima viraram Novo faturamento** (autorizado pelo Tiago: "Converta"). Os jobs ficaram carimbados como faturados na hora em que a nota foi lançada; o AMB-1058/26 ficou com o saldo de R$ 20.741,02 na fila do financeiro (regra da 256).
 
+7. **O Novo faturamento substitui o envio e o faturamento do envio em todos os contextos** (Tiago, 18/11/2026). Onde o sistema mede o faturamento do job pelo envio do GP, a nota do Novo faturamento conta igual:
+   - **Rentabilidade, Relatório de Faturamento e Impostos da Abertura › Abertos:** o realizado soma as notas do Novo faturamento (e o save delas; na Mídia Off, os meses delas). Os três jobs AMB saíam "Não Faturado", com R$ 0 de R$ 927.741,02.
+   - **Fluxo de caixa:** o que o Novo faturamento cobriu sai da previsão de recebimento do job, na ordem das parcelas (no mensal, do mês). Antes a previsão ficava ao lado dos títulos da nota e o valor entrava duas vezes (R$ 927.741,02 na produção). O resto fica como previsão: é o saldo com o financeiro (R$ 20.741,02 no AMB-1058/26).
+   - **Cancelar job:** o job faturado pelo financeiro não se cancela pelo sistema, como o enviado para faturamento.
+   - **Save mexido depois da nota:** o rateio job × save da nota do Novo faturamento (do job inteiro) se refaz como na emissão.
+   - **Telas:** a situação do faturamento do mensal (Abertura › Abertos e o job no financeiro), o selo "Aguardando encerramento" (só com o job todo coberto; com saldo, não acende, como o envio com parcela por faturar), o envio em lote (pula o mês já faturado), a Mídia Off (o mês faturado pelo financeiro conta como enviado para o último envio encerrar o job), a mensagem do envio recusado, a trava do "Editar orçado" no servidor e a etapa "Faturado pelo financeiro" na ficha e no cabeçalho do job.
+   - **O Novo faturamento nunca encerra o job**, nem no último mês da Mídia Off: o encerramento é da produção, com as pendências dela.
+
 ## Implementação
 
 - **Banco:**
   - `20261118400001_tres_avulsas_com_job_viram_novo_faturamento.sql`: as três notas passam a nota de job (`origem_tipo = 'job'`, `faturado_pelo_financeiro`), sem `job_referencia_id`, sem centro de custo e sem rateio (a nota de job fica na regional do job); o item vira `job`; a PO passa a ser do job; o job é carimbado. Valor, número, emissão, títulos, CBS/IBS e anexo não mudaram. O "antes" de cada nota ficou na auditoria (`faturamento.convertido_em_novo_faturamento`).
   - `20261118400002_novo_faturamento_trava_a_errata.sql`: `novo_faturamento_do_job(job)` (os meses já faturados pelo financeiro; mês nulo = o job inteiro; `security definer`, só `authenticated`) e `gravar_parametros_da_errata` contando o Novo faturamento.
 - **Contas a Receber:** `faturamento-list.tsx` (o botão abre o formulário, sem o menu), `faturar-drawer.tsx` (o seletor do vínculo; Job usa o bloco do Novo faturamento; o bloco do avulso fica só para Save avulso e Sem job), `actions.ts` (recusa `job_referencia_id`).
+- **Em todos os contextos (migration `20261118400003_novo_faturamento_em_todos_os_contextos.sql`):** `vw_job_rentabilidade` (realizado, save enviado e imposto da Mídia Off), `vw_fluxo_caixa` (a previsão de recebimento menos o que o Novo faturamento cobriu), `trava_do_cancelamento_do_job` e `save_rateio_das_notas`. Conferida antes numa transação desfeita: mudaram só os 10 jobs com Novo faturamento (3 na produção, 7 no Sandbox).
 - **Jobs:** `lib/data/envio-faturamento.ts` (`jobJaEnviadoParaFaturamento` diz quem fechou a porta, `"envio"` ou `"financeiro"`; `mesesEnviadosDoJob` soma os meses do Novo faturamento; as mensagens do financeiro), `actions-errata.ts` e `save-errata-actions.ts` (as mensagens), `page.tsx` e `job-realizado-section.tsx` (o "Editar planilha" desabilitado e o mês travado), `save-dialog.tsx` (o texto da porta do consumo), `lib/calculos/parametros-do-job.ts`.
 
 ## Fica de fora
 
-- **Rentabilidade:** a `vw_job_rentabilidade` (da outra frente) conta o faturamento realizado pelo envio do GP (`jobs_envio_faturamento`), não pela nota. Nenhum Novo faturamento entra no realizado dela — nem estes três jobs. Mexer na view é com o Tiago e o Antonio.
 - A NF 6468 foi lançada antes da 256 e não tem CBS e IBS gravados; as três não têm deduções (repasse) informadas.
 - O aviso do mês travado no mensal continua dizendo "já foi enviado para faturamento" também no mês faturado pelo financeiro.

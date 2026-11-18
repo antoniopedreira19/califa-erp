@@ -43,6 +43,9 @@ export interface EtapasDaFicha {
   enviadoAberturaPorNome: string | null;
   envioFaturamentoEm: string | null;
   envioFaturamentoPorNome: string | null;
+  /** Decisão 265: sem envio, a etapa é a primeira nota do Novo faturamento
+   *  (`envioFaturamentoEm` e `...PorNome` são a emissão e quem emitiu). */
+  faturadoPeloFinanceiro: boolean;
   encerradoEm: string | null;
   encerradoPorNome: string | null;
 }
@@ -293,7 +296,8 @@ export function FichaJob({
               </Campo>
               {etapas.envioFaturamentoEm && (
                 <Etapa
-                  rotulo="Envio para faturamento"
+                  // Decisão 265: o Novo faturamento substitui o envio.
+                  rotulo={etapas.faturadoPeloFinanceiro ? "Faturado pelo financeiro" : "Envio para faturamento"}
                   em={etapas.envioFaturamentoEm}
                   quem={etapas.envioFaturamentoPorNome}
                 />

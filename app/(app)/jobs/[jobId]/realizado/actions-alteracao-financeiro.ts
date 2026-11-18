@@ -333,6 +333,7 @@ async function montarAlteracao(
     enviosRes,
     notasPorJob,
     parametrosRes,
+    novoRes,
   ] = await Promise.all([
     lerBaseDosEspelhos(supabase, tenantId, jobId),
     supabase
@@ -388,6 +389,9 @@ async function montarAlteracao(
           .eq("tenant_id", tenantId)
           .maybeSingle()
       : Promise.resolve({ data: null, error: null }),
+    // Decisão 265: os meses que o financeiro já faturou pelo Novo
+    // faturamento (sem envio) travam as linhas do mês como a nota do envio.
+    supabase.rpc("novo_faturamento_do_job", { p_job_id: jobId }),
   ]);
 
   if (!baseRes.ok) return { ok: false, message: baseRes.message };
@@ -399,7 +403,8 @@ async function montarAlteracao(
     recebimentoRes.error ??
     impostosRes.error ??
     enviosRes.error ??
-    parametrosRes.error;
+    parametrosRes.error ??
+    novoRes.error;
   if (erroLeitura || !itensRes.data || (entrada.parametros && !parametrosRes.data)) {
     // Sem saber o estado inteiro (save, envio, previsões), gravar seria
     // deixar alguma parte para trás: melhor parar.
@@ -484,9 +489,13 @@ async function montarAlteracao(
     const mesId = grupoPorId.get(grupoId)?.mesId ?? null;
     return mesId ? (mesPorId.get(mesId) ?? null) : null;
   };
-  const mesesComNota = new Set(
-    envios.filter((e) => e.mes && envioComNota(e)).map((e) => (e.mes as string).slice(0, 7)),
-  );
+  const mesesComNota = new Set([
+    ...envios.filter((e) => e.mes && envioComNota(e)).map((e) => (e.mes as string).slice(0, 7)),
+    // Decisão 265: o mês fechado pelo Novo faturamento tem nota emitida.
+    ...((novoRes.data ?? []) as Array<{ mes: string | null }>).flatMap((l) =>
+      l.mes ? [String(l.mes).slice(0, 7)] : [],
+    ),
+  ]);
 
   interface Mudanca {
     id: string;

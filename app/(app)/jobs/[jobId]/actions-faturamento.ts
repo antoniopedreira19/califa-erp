@@ -20,6 +20,7 @@ import {
 import { diaSeguinte, limitesDoMes, mesEmVeiculacao } from "@/lib/calculos/midia-off";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { lerUltimaVeiculacaoDoMes } from "@/lib/data/midia-do-job";
+import { mesesEnviadosDoJob } from "@/lib/data/envio-faturamento";
 import { impedimentosDosJobs } from "@/lib/data/impedimentos-encerramento";
 import { encerrarJob } from "./actions-encerramento";
 
@@ -166,17 +167,17 @@ async function conferirEnvioDoMesDaMidia(
     mesesComFaturamento: string[];
   },
 ): Promise<{ recusa: string; motivo: string } | { encerra: boolean }> {
-  const [ultima, enviosRes] = await Promise.all([
+  const [ultima, mesesFechados] = await Promise.all([
     lerUltimaVeiculacaoDoMes(supabase, p.tenantId, p.jobId, p.versaoAprovadaId, p.mes),
-    supabase
-      .from("jobs_envio_faturamento")
-      .select("mes")
-      .eq("job_id", p.jobId)
-      .eq("tenant_id", p.tenantId)
-      .returns<{ mes: string | null }[]>(),
+    // Decisão 265: o mês faturado pelo financeiro (Novo faturamento) conta
+    // como enviado. O Novo nunca encerra o job sozinho: quem encerra é o
+    // envio do GP que fecha o último mês que falta.
+    mesesEnviadosDoJob(supabase, p.jobId, p.tenantId).catch((e: Error) => {
+      console.error("[job.enviarFaturamento.midia]", e.message);
+      return null;
+    }),
   ]);
-  if (ultima === undefined || enviosRes.error) {
-    if (enviosRes.error) console.error("[job.enviarFaturamento.midia]", enviosRes.error.message);
+  if (ultima === undefined || mesesFechados === null) {
     return {
       recusa: "Não foi possível conferir a veiculação do mês. Tente de novo.",
       motivo: "leitura_da_veiculacao",
@@ -191,9 +192,7 @@ async function conferirEnvioDoMesDaMidia(
     };
   }
 
-  const enviados = new Set(
-    (enviosRes.data ?? []).map((e) => (e.mes ?? "").slice(0, 10)).filter(Boolean),
-  );
+  const enviados = new Set([...mesesFechados].map((m) => m.slice(0, 10)));
   const encerra = p.mesesComFaturamento.every(
     (m) => m.slice(0, 10) === p.mes.slice(0, 10) || enviados.has(m.slice(0, 10)),
   );

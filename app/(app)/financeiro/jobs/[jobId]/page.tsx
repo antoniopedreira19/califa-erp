@@ -535,7 +535,10 @@ export default async function JobNoFinanceiroPage({
               {/* Quem mandou para faturamento, e quando (decisão 136). */}
               {detalhe.etapasDoJob.envioFaturamentoEm && (
                 <span className="text-[12px] text-muted-foreground">
-                  para faturamento por{" "}
+                  {/* Decisão 265: sem envio, quem emitiu o Novo faturamento. */}
+                  {detalhe.etapasDoJob.faturadoPeloFinanceiro
+                    ? "Faturado pelo financeiro por"
+                    : "para faturamento por"}{" "}
                   <span className="font-semibold text-foreground">
                     {detalhe.etapasDoJob.envioFaturamentoPorNome ?? "—"}
                   </span>{" "}

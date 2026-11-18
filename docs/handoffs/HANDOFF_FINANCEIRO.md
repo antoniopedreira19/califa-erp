@@ -9178,3 +9178,12 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Produção:** as NFs 6468 (AMB-1061/26), 6376 (AMB-1042/26) e 6475 (AMB-1058/26), lançadas como avulsa referente a um job, viraram Novo faturamento (migration `20261118400001`, autorizada pelo Tiago). Os jobs ficaram faturados; o AMB-1058/26 tem saldo de R$ 20.741,02 na fila. O "antes" está na auditoria.
 - **Fica de fora:** a Rentabilidade (`vw_job_rentabilidade`, da outra frente) conta o realizado pelo envio do GP e não vê nenhum Novo faturamento.
 - **Conferido no Sandbox:** o formulário nas três escolhas, a linha de saldo do TES-1006/26 e as travas da planilha (abaixo, no HANDOFF_JOBS).
+
+
+## ⚠️ Nota de 2026-11-18 — o Novo faturamento substitui o envio em todos os contextos (decisão 265, seção 7)
+
+- **Regra do Tiago:** onde o sistema mede o faturamento do job pelo envio do GP, a nota do Novo faturamento conta igual.
+- **Fluxo de caixa:** o que o Novo faturamento cobriu sai da previsão de recebimento do job (antes, previsão e título entravam juntos: R$ 927.741,02 em dobro na produção, nos AMB-1042/26, AMB-1058/26 e AMB-1061/26). O AMB-1058/26 fica com a previsão do saldo, R$ 20.741,02.
+- **Rentabilidade e Relatório de Faturamento:** o realizado soma as notas do Novo faturamento; os três jobs AMB deixam de sair "Não Faturado".
+- **Telas do financeiro:** situação do faturamento do mensal (Abertura › Abertos), selo "Aguardando encerramento" (só com o job coberto), etapa "Faturado pelo financeiro" no cabeçalho do job, trava do "Editar orçado" no servidor.
+- **Banco:** migration `20261118400003` (`vw_job_rentabilidade`, `vw_fluxo_caixa`, `trava_do_cancelamento_do_job`, `save_rateio_das_notas`), conferida antes numa transação desfeita.

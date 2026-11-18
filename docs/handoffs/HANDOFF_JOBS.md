@@ -6846,3 +6846,12 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - **Agora:** a nota do financeiro fecha a mesma porta — sem errata, linha vermelha (fora a dos pagamentos atrasados, 259) nem mudança de consumo de save; parâmetros só pelo financeiro. No mensal e na Mídia Off, por mês. O "Editar planilha" fica desabilitado com "Job já faturado pelo financeiro…".
 - **Banco:** `novo_faturamento_do_job(job)` (`security definer`, só `authenticated`), lida pelas server actions; `gravar_parametros_da_errata` conta o Novo faturamento (migration `20261118400002`).
 - **Conferido no Sandbox:** TES-1006/26 com o "Editar planilha" desabilitado e a trava dos parâmetros; TES-1035/26 com outubro travado e novembro editável.
+
+
+## ⚠️ Nota de 2026-11-18 — o Novo faturamento substitui o envio na produção também (decisão 265, seção 7)
+
+- **Envio em lote:** o mês já faturado pelo financeiro não é mais proposto (antes o lote inteiro falhava).
+- **Mídia Off:** o mês faturado pelo financeiro conta como enviado, então o envio do último mês pelo GP encerra o job. O Novo faturamento em si nunca encerra o job.
+- **Envio recusado:** o GP que tenta enviar um job (ou mês) já faturado pelo financeiro recebe a mensagem certa, não a genérica.
+- **Cancelar job:** o job faturado pelo financeiro não se cancela pelo sistema.
+- **Ficha do job:** a etapa do envio mostra "Faturado pelo financeiro", com quem e quando.

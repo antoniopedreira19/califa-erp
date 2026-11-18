@@ -365,13 +365,34 @@ export async function conferirEnvioDoJob(
   // Um envio por job — ou por job + mês no modelo mensal (índices únicos
   // parciais). Conferir antes devolve mensagem legível em vez de erro de
   // constraint.
+  // Decisão 265: o Novo faturamento (decisão 256) fecha o envio como o envio
+  // do GP — o do job inteiro (mês nulo) fecha também cada mês, a mesma regra
+  // da trava do banco (`envio_faturamento_guarda_escrita_direta`). Lido
+  // junto, pela função do banco, para a recusa sair com a frase certa em vez
+  // do erro genérico da gravação.
   const consultaEnvio = supabase.from("jobs_envio_faturamento").select("id").eq("job_id", jobId);
-  const { data: jaEnviado } = await (mes
-    ? consultaEnvio.eq("mes", mes)
-    : consultaEnvio.is("mes", null)
-  ).maybeSingle<{ id: string }>();
+  const [{ data: jaEnviado }, novoRes] = await Promise.all([
+    (mes ? consultaEnvio.eq("mes", mes) : consultaEnvio.is("mes", null)).maybeSingle<{ id: string }>(),
+    supabase.rpc("novo_faturamento_do_job", { p_job_id: jobId }),
+  ]);
   if (jaEnviado) {
     return { ok: false, message: mensagemJaEnviado(nomeMes) };
+  }
+  if (novoRes.error) {
+    console.error("[faturamento.novo_faturamento_do_job]", novoRes.error.message);
+    return {
+      ok: false,
+      message: "Não foi possível conferir se o financeiro já faturou este job. Tente de novo.",
+    };
+  }
+  const mesesDoNovo = ((novoRes.data ?? []) as Array<{ mes: string | null }>).map((l) =>
+    l.mes === null ? null : String(l.mes).slice(0, 10),
+  );
+  const fechadoPeloFinanceiro = mesesDoNovo.some(
+    (m) => m === null || (mes !== null && m === mes.slice(0, 10)),
+  );
+  if (fechadoPeloFinanceiro) {
+    return { ok: false, message: mensagemJaFaturadoPeloFinanceiro(nomeMes) };
   }
 
   return { ok: true, job, mensal, midiaOff, paramsMidia, mes, nomeMes, valor, valorSave, porMes };
@@ -381,4 +402,11 @@ export function mensagemJaEnviado(nomeMes: string | null): string {
   return nomeMes
     ? `${comMaiuscula(nomeMes)} deste job já foi enviado para faturamento.`
     : "Este job já foi enviado para faturamento.";
+}
+
+/** Decisão 265: o envio fechado pela nota do Novo faturamento. */
+export function mensagemJaFaturadoPeloFinanceiro(nomeMes: string | null): string {
+  return nomeMes
+    ? `${comMaiuscula(nomeMes)} deste job já foi faturado pelo financeiro: o envio para faturamento do mês está fechado.`
+    : "O financeiro já faturou este job pelo Novo faturamento: o envio para faturamento está fechado.";
 }
