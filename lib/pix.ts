@@ -117,6 +117,30 @@ export function telefonePixSemDdi(chave: string): string {
   return d.startsWith("55") && d.length > 11 ? d.slice(2) : d;
 }
 
+/**
+ * A chave como ela se lê. CPF/CNPJ com máscara, telefone sem `+55` e
+ * já com os parênteses do DDD, e-mail e EVP como estão. É o que entra em
+ * card de leitura, PDF, planilha — qualquer lugar visível ao usuário.
+ */
+export function chavePixLegivel(
+  tipo: string | null | undefined,
+  chave: string | null | undefined,
+): string {
+  if (!tipo || !chave) return "";
+  const d = chave.replace(/\D/g, "");
+  if (tipo === "cpf" && d.length === 11) {
+    return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
+  }
+  if (tipo === "cnpj" && d.length === 14) {
+    return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
+  }
+  if (tipo === "telefone") {
+    const t = d.startsWith("55") && d.length > 11 ? d.slice(2) : d;
+    return t.length === 11 ? `(${t.slice(0, 2)}) ${t.slice(2, 7)}-${t.slice(7)}` : chave;
+  }
+  return chave;
+}
+
 /** A chave aleatória é um EVP: 32 hexadecimais, com ou sem hífens. */
 export function evpValido(chave: string): boolean {
   return /^[0-9a-fA-F]{32}$/.test(chave.replace(/-/g, ""));

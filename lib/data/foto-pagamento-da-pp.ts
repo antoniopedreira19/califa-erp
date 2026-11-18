@@ -23,6 +23,7 @@ import type {
   TipoContaBancariaFornecedor,
 } from "@/lib/types";
 import { getBancoByCodigo } from "@/lib/dados/bancos-febraban";
+import { chavePixLegivel } from "@/lib/pix";
 import type { PagamentoDoTitularNoPdf } from "@/lib/pdf/pedido-compra";
 
 /** Os nove campos de pagamento, do jeito que o cadastro os guarda. */
@@ -305,23 +306,6 @@ const ROTULO_PIX_CURTO: Record<PixTipoChave, string> = {
   telefone: "telefone",
   aleatoria: "aleatória",
 };
-
-/** CPF/CNPJ com máscara, telefone sem o +55; e-mail e EVP como estão. */
-export function chavePixLegivel(tipo: PixTipoChave | null, chave: string | null): string {
-  if (!tipo || !chave) return "";
-  const d = chave.replace(/\D/g, "");
-  if (tipo === "cpf" && d.length === 11) {
-    return `${d.slice(0, 3)}.${d.slice(3, 6)}.${d.slice(6, 9)}-${d.slice(9)}`;
-  }
-  if (tipo === "cnpj" && d.length === 14) {
-    return `${d.slice(0, 2)}.${d.slice(2, 5)}.${d.slice(5, 8)}/${d.slice(8, 12)}-${d.slice(12)}`;
-  }
-  if (tipo === "telefone") {
-    const t = d.startsWith("55") && d.length > 11 ? d.slice(2) : d;
-    return t.length === 11 ? `(${t.slice(0, 2)}) ${t.slice(2, 7)}-${t.slice(7)}` : chave;
-  }
-  return chave;
-}
 
 /** "ITAÚ UNIBANCO S.A." → "ITAÚ UNIBANCO"; "NU PAGAMENTOS S.A. - IP" → "NU PAGAMENTOS". */
 export function nomeCurtoDoBanco(codigo: string, nome?: string | null): string {

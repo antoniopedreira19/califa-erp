@@ -23,8 +23,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Combobox } from "@/components/ui/combobox";
 import { MaskedInput } from "@/components/ui/masked-input";
 import { BANCOS_FEBRABAN, getBancoByCodigo } from "@/lib/dados/bancos-febraban";
-import { PIX_TIPOS, chavePixParaExibir, problemaDaChavePix } from "@/lib/pix";
-import { chavePixLegivel, nomeCurtoDoBanco } from "@/lib/data/foto-pagamento-da-pp";
+import { PIX_TIPOS, chavePixLegivel, chavePixParaExibir, problemaDaChavePix } from "@/lib/pix";
+import { nomeCurtoDoBanco } from "@/lib/data/foto-pagamento-da-pp";
 import type {
   PagamentoDoTitular,
   PixTipoChave,

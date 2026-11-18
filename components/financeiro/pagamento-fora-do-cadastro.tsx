@@ -27,7 +27,8 @@
 
 import { AlertTriangle, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { chavePixLegivel, nomeCurtoDoBanco } from "@/lib/data/foto-pagamento-da-pp";
+import { nomeCurtoDoBanco } from "@/lib/data/foto-pagamento-da-pp";
+import { chavePixLegivel } from "@/lib/pix";
 import { formatDataEHoraBr } from "@/lib/formatar-data-hora";
 import type {
   PagamentoForaDoCadastroDaPP,

@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import type { Colaborador } from "@/lib/types";
 import type { NivelPendencia } from "@/lib/rh/pendencias";
+import { chavePixLegivel } from "@/lib/pix";
 import { SeloPendencia } from "./selo-pendencia";
 import { salvarDadosBancariosColaborador } from "../actions";
 
@@ -92,7 +93,7 @@ export function CardDadosBancarios({ colaborador, pendencia }: Props) {
                 {tipoChaveLabel(colaborador.pix_tipo)}
               </p>
               <p className="break-all text-muted-foreground">
-                {colaborador.pix_chave}
+                {chavePixLegivel(colaborador.pix_tipo, colaborador.pix_chave)}
               </p>
             </div>
           ) : (

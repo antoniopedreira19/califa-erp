@@ -34,7 +34,7 @@ import {
 } from "../_components/transferir-responsavel-dialog";
 import type { JobItem } from "../_components/job-picker";
 import { formatCnpj, formatCep, formatCpf, formatDate, formatTelefone, initials } from "@/lib/utils";
-import { PIX_TIPOS } from "@/lib/pix";
+import { PIX_TIPOS, chavePixLegivel } from "@/lib/pix";
 import { jobsProPickerDeFreelancer } from "@/lib/data/jobs-pro-picker-de-freelancer";
 
 const ROLES_RESPONSAVEL: AppRole[] = [
@@ -539,7 +539,10 @@ export default async function FreelancerPerfilPage({
             />
           )}
           {freelancer.pix_chave && (
-            <Linha rotulo="Chave PIX" valor={freelancer.pix_chave} />
+            <Linha
+              rotulo="Chave PIX"
+              valor={chavePixLegivel(freelancer.pix_tipo, freelancer.pix_chave)}
+            />
           )}
         </BlocoInfo>
       )}

@@ -38,6 +38,7 @@ import {
   tipoContratacaoLabel,
 } from "@/lib/types";
 import { NATUREZA_PJ_LABEL } from "@/lib/rh/naturezas-pj";
+import { chavePixLegivel } from "@/lib/pix";
 import {
   enviarProposta,
   renovarLink,
@@ -370,7 +371,7 @@ export function ContratacaoDetalheView({
                   )}
                   {c.pix_chave && (
                     <p className="text-muted-foreground">
-                      PIX ({c.pix_tipo}): {c.pix_chave}
+                      PIX ({c.pix_tipo}): {chavePixLegivel(c.pix_tipo, c.pix_chave)}
                     </p>
                   )}
                 </div>

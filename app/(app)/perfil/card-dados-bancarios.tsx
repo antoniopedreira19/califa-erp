@@ -1,5 +1,6 @@
 import { Landmark } from "lucide-react";
 import type { Colaborador } from "@/lib/types";
+import { chavePixLegivel } from "@/lib/pix";
 import { CardBase, Campo } from "./card-base";
 
 type Props = {
@@ -70,7 +71,11 @@ export function CardDadosBancarios({ colaborador: c }: Props) {
             valor={c.pix_tipo ? PIX_LABEL[c.pix_tipo] : null}
           />
           <div className="md:col-span-2">
-            <Campo rotulo="Chave PIX" valor={c.pix_chave} mono />
+            <Campo
+              rotulo="Chave PIX"
+              valor={chavePixLegivel(c.pix_tipo, c.pix_chave) || null}
+              mono
+            />
           </div>
         </div>
       )}

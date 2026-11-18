@@ -50,7 +50,8 @@ import {
   ROTULO_CONTA,
   ROTULO_PIX,
 } from "@/components/financeiro/pagamento-fora-do-cadastro";
-import { chavePixLegivel, nomeCurtoDoBanco } from "@/lib/data/foto-pagamento-da-pp";
+import { nomeCurtoDoBanco } from "@/lib/data/foto-pagamento-da-pp";
+import { chavePixLegivel } from "@/lib/pix";
 import type {
   PagamentoForaDoCadastroDaPP,
   PixTipoChave,
