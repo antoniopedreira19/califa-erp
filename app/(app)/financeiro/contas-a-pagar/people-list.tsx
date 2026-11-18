@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { PeopleAprovarItem, TipoContratacao, FolhaOrigem } from "@/lib/types";
+import type { PeopleAprovarItem, TipoContratacao } from "@/lib/types";
 import { tipoContratacaoLabel } from "@/lib/types";
 import type { ColaboradorPagamento } from "@/lib/financeiro/colaboradores-pagamento";
 import { RevisarFolhaDrawer } from "./revisar-folha-drawer";
@@ -90,7 +90,7 @@ function BadgeTipo({
   };
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${cls[variante]}`}
+      className={`inline-flex items-center whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${cls[variante]}`}
     >
       {texto}
     </span>
@@ -108,24 +108,6 @@ function BadgeContratacao({ tipo }: { tipo: TipoContratacao }) {
       }`}
     >
       {tipoContratacaoLabel(tipo)}
-    </span>
-  );
-}
-
-function BadgeOrigem({ origem }: { origem: FolhaOrigem }) {
-  const pj = origem === "california";
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-1.5 py-0 text-[10px] font-semibold ${
-        pj ? "bg-blue-100 text-blue-800" : "bg-emerald-100 text-emerald-800"
-      }`}
-      title={
-        pj
-          ? "Gerada pela California (fluxo PJ)"
-          : "Importada da contabilidade (fluxo CLT)"
-      }
-    >
-      {pj ? "PJ" : "CLT"}
     </span>
   );
 }
@@ -457,7 +439,7 @@ export function PeopleList({
         <table className="w-full text-sm">
           <thead className="border-b border-border bg-muted/40">
             <tr>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground w-24">
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground w-56">
                 Tipo
               </th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground w-28">
@@ -471,13 +453,10 @@ export function PeopleList({
                   onClick={() => alternarOrdenacao("nome")}
                 />
               </th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground w-32">
-                Função
-              </th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground w-20">
                 Contratação
               </th>
-              <th className="px-4 py-3 text-left font-medium text-muted-foreground w-36">
+              <th className="px-4 py-3 text-left font-medium text-muted-foreground w-56">
                 Alocação
               </th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground w-24">
@@ -501,7 +480,7 @@ export function PeopleList({
             {itemsFiltrados.length === 0 && (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={8}
                   className="px-4 py-12 text-center text-sm text-muted-foreground"
                 >
                   Nenhum pagamento encontrado com os filtros atuais.
@@ -530,7 +509,7 @@ export function PeopleList({
               const tipoTexto = is13
                 ? (ehPartePj ? `${item.label} (parte PJ)` : item.label)
                 : labelEscopoTipo(item.escopo_tipo);
-              const eFolhaMensal = item.escopo_tipo === "folha_mensal";
+              const alocacoesLinha = alocacoesPorFolha[item.linha_id] ?? [];
 
               // Espelha a regra do server (actions-folhas.ts: exigeNf):
               //   folha_mensal + origem california + pj/mei/clt_recibo → NF.
@@ -569,22 +548,23 @@ export function PeopleList({
                     </div>
                     <div className="text-xs text-muted-foreground">{item.label}</div>
                   </td>
-                  <td className="px-4 py-3 text-xs text-muted-foreground">
-                    {item.funcao ?? "—"}
-                  </td>
                   <td className="px-4 py-3">
                     <BadgeContratacao tipo={item.tipo_contratacao} />
                   </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">
-                    {eFolhaMensal && item.origem ? (
-                      <div className="flex flex-wrap items-center gap-1">
-                        <BadgeOrigem origem={item.origem} />
-                        {item.alocacao_resumo && (
-                          <span>{item.alocacao_resumo}</span>
-                        )}
-                      </div>
-                    ) : (
+                    {alocacoesLinha.length === 0 ? (
                       <span className="text-muted-foreground/50">—</span>
+                    ) : (
+                      <div className="flex flex-col gap-0.5">
+                        {alocacoesLinha.map((a) => (
+                          <span key={a.id} className="whitespace-nowrap">
+                            {a.empresa_nome} · {a.regional_nome}
+                            <span className="ml-1 text-muted-foreground/70 tabular-nums">
+                              ({Number(a.percentual).toFixed(0)}%)
+                            </span>
+                          </span>
+                        ))}
+                      </div>
                     )}
                   </td>
                   <td className="px-4 py-3">
