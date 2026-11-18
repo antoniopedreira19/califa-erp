@@ -197,8 +197,10 @@ const camposDaAbertura = z.object({
    */
   servico_id: z.string().uuid("Selecione o serviço do job."),
   // Decisão 214: marca, empresa e regional do job, que o financeiro confere
-  // e pode trocar no registro. Valem para o job inteiro.
-  produto_id: z.string().uuid("Selecione a marca do job."),
+  // e pode trocar no registro. Valem para o job inteiro. Nula só no job de
+  // pagamentos (decisão 266), que não tem marca: a server action exige a
+  // marca de todo outro job.
+  produto_id: z.string().uuid("Selecione a marca do job.").nullable(),
   empresa_id: z.string().uuid("Selecione a empresa do job."),
   regional_id: z.string().uuid("Selecione a regional do job."),
   // Decisão 216: o job auditado pelo cliente pela Mídia System. A PP vai

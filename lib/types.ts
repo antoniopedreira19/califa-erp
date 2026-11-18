@@ -322,8 +322,12 @@ export interface Projeto {
   produto_id: string | null;
   /** Compatibilidade: primeiro responsável selecionado. A lista completa
    *  vive em `projeto_responsaveis`. Não confundir com `created_by`, que
-   *  registra quem cadastrou o projeto. */
-  responsavel_id: string;
+   *  registra quem cadastrou o projeto. Nulo só no projeto de pagamentos
+   *  (decisão 266), que nasce por baixo do job de pagamentos. */
+  responsavel_id: string | null;
+  /** Projeto da produção do job de pagamentos (decisão 266): fica fora de
+   *  Orçamentos. */
+  de_pagamentos: boolean;
   /** Compatibilidade: primeira regional selecionada. A lista completa vive
    *  em `projeto_regionais`. */
   regional_id: string | null;
@@ -933,6 +937,9 @@ export interface CategoriaDominio {
   /** Categoria exclusiva de outro serviço que TAMBÉM vale para o serviço
    *  de investimento interno (decisão 105). Hoje só a Always On. */
   aceita_servico_interno: boolean;
+  /** O serviço e a categoria Pagamentos (decisão 266): do sistema, só do
+   *  job de pagamentos. Não aparecem para escolha nem no cadastro. */
+  job_de_pagamentos: boolean;
   /** Categoria que aparece nas listas, travada, e não pode ser escolhida:
    *  o modelo de planilha dela ainda está em construção (decisão 131). Hoje
    *  só a Mídia Off. Escrita só por migration. */
@@ -1062,10 +1069,16 @@ export interface Job {
   cidade: string | null;
   data_inicio_prevista: string | null;
   data_fim_prevista: string | null;
-  /** GP responsável, herdado do orçamento na abertura. */
-  responsavel_id: string;
+  /** GP responsável, herdado do orçamento na abertura. Nulo só no job de
+   *  pagamentos (decisão 266; o banco cobra pela
+   *  `chk_jobs_gp_vazio_so_no_de_pagamentos`). */
+  responsavel_id: string | null;
   /** Produtor responsável, herdado do orçamento na abertura. */
   produtor_id: string | null;
+  /** Job de pagamentos (decisão 266): criado pelo financeiro já aberto,
+   *  sem GP nem produtor, cliente = a própria empresa; do Interno só o "não
+   *  fatura" — planejado livre, orçado zero e linhas sem errata. */
+  de_pagamentos: boolean;
   /** Decisão 174: o Produtor Responsável envia PPs deste job ao
    *  financeiro, como o GP. Muda só pela Equipe (GP ou administrador), e
    *  trocar o produtor desliga. */

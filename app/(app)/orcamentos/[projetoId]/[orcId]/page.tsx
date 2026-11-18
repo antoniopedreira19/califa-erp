@@ -335,6 +335,8 @@ export default async function OrcamentoDetailPage({
       .eq("tenant_id", session.activeTenant.id)
       .eq("escopo", "orcamento")
       .eq("ativo", true)
+      // Decisão 266: Pagamentos é só do job de pagamentos.
+      .eq("job_de_pagamentos", false)
       .order("nome"),
     // Serviço: mesma tabela, escopo `projeto` — a outra lista (037).
     servicosDoOrcamentoQuery(supabase, session.activeTenant.id),

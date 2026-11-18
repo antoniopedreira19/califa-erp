@@ -46,6 +46,9 @@ interface Props {
    *  tem ela — o botão salva direto, sem pop-up; "junto": ela vai com uma
    *  errata e entra fora dela. */
   vermelhas: "nenhuma" | "so" | "junto";
+  /** Job de pagamentos (decisão 266): linha nova, linha vermelha e
+   *  planejado entram direto; a barra fala de "Salvar", não de errata. */
+  pagamentos: boolean;
   /** Salvando só a linha vermelha (que não passa pelo pop-up). */
   salvando: boolean;
   /** O erro de salvar só a linha vermelha. */
@@ -120,6 +123,7 @@ export function ErrataBarra({
   pronta,
   soOrganizacao,
   vermelhas,
+  pagamentos,
   salvando,
   erro,
 }: Props) {
@@ -144,9 +148,13 @@ export function ErrataBarra({
   const neutra = !pronta && !temMudanca;
   const titulo = neutra || vermelhas === "so" ? "Planilha em edição" : tituloDaErrata;
   const apoio = neutra
-    ? prepara
-      ? "Linha vermelha entra direto na planilha. Mudar valor, criar item, cancelar linha ou reorganizar fica pronto para um GP enviar."
-      : "Linha vermelha entra direto na planilha. Mudar valor, criar item, cancelar linha ou reorganizar vira errata."
+    ? pagamentos
+      ? "No job de pagamentos, item novo, linha vermelha e planejado entram direto, sem errata."
+      : prepara
+        ? "Linha vermelha entra direto na planilha. Mudar valor, criar item, cancelar linha ou reorganizar fica pronto para um GP enviar."
+        : "Linha vermelha entra direto na planilha. Mudar valor, criar item, cancelar linha ou reorganizar vira errata."
+    : vermelhas === "so" && pagamentos
+      ? "Salvar põe as linhas e o planejado na planilha na hora. No job de pagamentos não há errata: a PP já pode ser gerada."
     : vermelhas === "so"
       ? "Salvar põe a linha na planilha na hora. Não é errata: o job não volta ao mural e a PP dela já pode ser gerada e enviada."
       : vermelhas === "junto"
@@ -158,6 +166,8 @@ export function ErrataBarra({
       : vermelhas === "so"
         ? salvando
           ? "Salvando…"
+          : pagamentos
+            ? "Salvar"
           : resumo.startsWith("1 ")
             ? "Salvar linha vermelha"
             : "Salvar linhas vermelhas"

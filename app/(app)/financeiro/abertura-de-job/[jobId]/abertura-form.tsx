@@ -684,6 +684,11 @@ export function AberturaForm({
       ? job.servico_id
       : "",
   );
+  // Decisão 266: o job de pagamentos, criado direto pelo financeiro. Não
+  // tem marca, o cliente é a própria empresa, e serviço, categoria e
+  // empresa não mudam no registro (a server action e o gatilho
+  // `guarda_job_de_pagamentos` recusam o mesmo).
+  const pagamentos = job.de_pagamentos;
   // Decisão 240: no "Editar registro" livre, o serviço pode pôr o job no
   // Interno ou tirar dele — com o pop-up que mostra o que muda.
   const trocaInterno = useTrocaDoInterno({
@@ -694,7 +699,8 @@ export function AberturaForm({
     setServicoId,
     previa: previaInterno,
     setPrevia: setPreviaInterno,
-    habilitada: modo === "leitura" && editando && !pelaPlanilha && !aprovacaoSave,
+    habilitada:
+      modo === "leitura" && editando && !pelaPlanilha && !aprovacaoSave && !pagamentos,
   });
   // Marca, empresa e regional do job (decisão 214): chegam com as do job —
   // a marca do projeto, a empresa do projeto e a regional do orçamento — e
@@ -1061,7 +1067,7 @@ export function AberturaForm({
     projetoOk &&
     categoriaId !== "" &&
     servicoOk &&
-    marcaId !== "" &&
+    (pagamentos || marcaId !== "") &&
     empresaId !== "" &&
     regionalId !== "" &&
     rateioOk &&
@@ -1235,7 +1241,7 @@ export function AberturaForm({
       ? "Selecione a categoria do job."
       : !servicoOk
         ? "Selecione o serviço do job."
-        : marcaId === ""
+        : marcaId === "" && !pagamentos
           ? "Selecione a marca do job."
         : empresaId === ""
           ? "Selecione a empresa do job."
@@ -1284,8 +1290,8 @@ export function AberturaForm({
                         : semDesembolso
                           ? "Tudo pronto. Este job não tem desembolso previsto pela California — abre sem curva."
                           : temRateio
-                            ? `Tudo pronto: nome, categoria, serviço, marca, empresa, regional, competência rateada em ${comps.length} trimestres, recebimento, custos e impostos preenchidos.`
-                            : "Tudo pronto: nome, categoria, serviço, marca, empresa, regional, competência, recebimento, custos e impostos preenchidos.";
+                            ? `Tudo pronto: nome, categoria, serviço, ${pagamentos ? "" : "marca, "}empresa, regional, competência rateada em ${comps.length} trimestres, recebimento, custos e impostos preenchidos.`
+                            : `Tudo pronto: nome, categoria, serviço, ${pagamentos ? "" : "marca, "}empresa, regional, competência, recebimento, custos e impostos preenchidos.`;
 
   function atualizarCurva(id: string, patch: Partial<LinhaPrevisaoForm>) {
     setCurva((atual) =>
@@ -1556,7 +1562,7 @@ export function AberturaForm({
       conta_impostos_id: contaImpId,
       categoria_id: categoriaId,
       servico_id: servicoId,
-      produto_id: marcaId,
+      produto_id: pagamentos ? null : marcaId,
       empresa_id: empresaId,
       regional_id: regionalId,
       midia_system: midiaSystem,
@@ -1817,7 +1823,7 @@ export function AberturaForm({
     // A empresa do job, que vem do projeto (Tiago, 19/10/2026).
     { rotulo: "Empresa", valor: job.empresa_nome ?? "—" },
     { rotulo: "Cliente", valor: job.cliente_nome ?? "—" },
-    { rotulo: "Marca", valor: job.produto ?? "—" },
+    ...(pagamentos ? [] : [{ rotulo: "Marca", valor: job.produto ?? "—" }]),
     // A que veio do orçamento — fixa. O que o financeiro escolher no
     // campo ao lado aparece no "Resumo do registro", não aqui: este
     // painel é o que a produção mandou.
@@ -1829,8 +1835,13 @@ export function AberturaForm({
       rotulo: "Cidade · Regional",
       valor: [job.cidade, job.regional_nome].filter(Boolean).join(" · ") || "—",
     },
-    { rotulo: "GP Responsável", valor: job.responsavel_nome ?? "—" },
-    { rotulo: "Produtor Responsável", valor: job.produtor_nome ?? "—" },
+    // O job de pagamentos não tem marca, GP nem produtor (decisão 266).
+    ...(pagamentos
+      ? []
+      : [
+          { rotulo: "GP Responsável", valor: job.responsavel_nome ?? "—" },
+          { rotulo: "Produtor Responsável", valor: job.produtor_nome ?? "—" },
+        ]),
     {
       rotulo: "Início · fim",
       valor: formatPeriodo(job.data_inicio_prevista, job.data_fim_prevista),
@@ -2232,7 +2243,7 @@ export function AberturaForm({
                 <Select
                   value={categoriaId}
                   onValueChange={setCategoriaId}
-                  disabled={travado}
+                  disabled={travado || pagamentos}
                 >
                   <SelectTrigger id="categoria-job" className="h-[42px]">
                     <SelectValue placeholder="Selecione a categoria" />
@@ -2265,9 +2276,15 @@ export function AberturaForm({
                   </SelectContent>
                 </Select>
                 <span className="text-[11px] text-muted-foreground">
-                  Vem do orçamento{" "}
-                  <span className="font-medium text-foreground/80">{job.orcamento_nome ?? "—"}</span>
-                  . Pode ser trocada aqui sem alterar o orçamento.
+                  {pagamentos ? (
+                    "A do job de pagamentos. Não muda."
+                  ) : (
+                    <>
+                      Vem do orçamento{" "}
+                      <span className="font-medium text-foreground/80">{job.orcamento_nome ?? "—"}</span>
+                      . Pode ser trocada aqui sem alterar o orçamento.
+                    </>
+                  )}
                 </span>
                 {categorias.length === 0 && (
                   <span className="text-[11px] text-california-red">
@@ -2290,7 +2307,7 @@ export function AberturaForm({
                 <Select
                   value={servicoId}
                   onValueChange={trocaInterno.aoEscolher}
-                  disabled={travado}
+                  disabled={travado || pagamentos}
                 >
                   <SelectTrigger
                     id="servico-job"
@@ -2317,7 +2334,9 @@ export function AberturaForm({
                     trocaInterno.aviso && "hidden",
                   )}
                 >
-                  {servicoOk ? (
+                  {pagamentos ? (
+                    "Sem faturamento. Não muda no job de pagamentos."
+                  ) : servicoOk ? (
                     <>
                       Vem do orçamento{" "}
                       <span className="font-medium text-foreground/80">
@@ -2354,7 +2373,7 @@ export function AberturaForm({
                   <Select
                     value={empresaId}
                     onValueChange={trocarEmpresa}
-                    disabled={travado}
+                    disabled={travado || pagamentos}
                   >
                     <SelectTrigger
                       id="empresa-job"
@@ -2374,8 +2393,9 @@ export function AberturaForm({
                     </SelectContent>
                   </Select>
                   <span className="text-[11px] text-muted-foreground">
-                    Vem da produção. A troca vale para o job todo, e a regional
-                    segue a empresa.
+                    {pagamentos
+                      ? "É também o cliente do job. Não muda no job de pagamentos."
+                      : "Vem da produção. A troca vale para o job todo, e a regional segue a empresa."}
                   </span>
                 </div>
 
@@ -2418,7 +2438,11 @@ export function AberturaForm({
                 <div className="flex min-w-0 flex-col gap-1.5">
                   <span className="text-[12.5px] font-semibold">Cliente</span>
                   <div
-                    title="O cliente vem do orçamento e não muda aqui"
+                    title={
+                      pagamentos
+                        ? "O cliente é a própria empresa e não muda aqui"
+                        : "O cliente vem do orçamento e não muda aqui"
+                    }
                     className="flex h-[42px] min-w-0 items-center gap-2.5 rounded-lg border border-border bg-muted/60 px-3"
                   >
                     <Building2 className="h-[15px] w-[15px] shrink-0 text-[#8a8a8a]" />
@@ -2431,14 +2455,21 @@ export function AberturaForm({
                     />
                   </div>
                   <span className="text-[11px] text-muted-foreground">
-                    Vem do orçamento{" "}
-                    <span className="font-medium text-foreground/80">
-                      {job.orcamento_nome ?? "—"}
-                    </span>
-                    . Não muda no financeiro.
+                    {pagamentos ? (
+                      "A própria empresa do job. Não muda no financeiro."
+                    ) : (
+                      <>
+                        Vem do orçamento{" "}
+                        <span className="font-medium text-foreground/80">
+                          {job.orcamento_nome ?? "—"}
+                        </span>
+                        . Não muda no financeiro.
+                      </>
+                    )}
                   </span>
                 </div>
 
+                {!pagamentos && (
                 <div className="flex min-w-0 flex-col gap-1.5">
                   <label
                     htmlFor="marca-job"
@@ -2511,6 +2542,7 @@ export function AberturaForm({
                     )}
                   </span>
                 </div>
+                )}
 
               </div>
 
@@ -3022,7 +3054,13 @@ export function AberturaForm({
                                 Nenhum faturamento previsto pela California
                               </p>
                               <p className="mt-1 text-xs leading-relaxed text-amber-800/80">
-                                {servicos.find((x) => x.id === servicoId)?.investimento_interno ? (
+                                {pagamentos ? (
+                                  <>
+                                    Job de pagamentos: só lança custos, sem
+                                    nota a emitir. Fica sem previsão de
+                                    recebimento.
+                                  </>
+                                ) : servicos.find((x) => x.id === servicoId)?.investimento_interno ? (
                                   <>
                                     Este job é Interno: investimento da própria
                                     California, sem nota a emitir. O job abre
@@ -3841,7 +3879,7 @@ export function AberturaForm({
                 e, na linha de baixo, o primeiro envio. */}
             <div className="mt-0.5 flex items-baseline justify-between gap-3 border-t border-border pt-2.5">
               <span className="text-xs text-muted-foreground">
-                {job.reenviado ? "Reenviado por" : "Enviado por"}
+                {pagamentos ? "Criado por" : job.reenviado ? "Reenviado por" : "Enviado por"}
               </span>
               <span className="text-right">
                 <span className="block text-xs font-semibold">
@@ -3867,10 +3905,10 @@ export function AberturaForm({
             )}
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-xs text-muted-foreground">
-                Orçamento de origem
+                {pagamentos ? "Origem" : "Orçamento de origem"}
               </span>
               <span className="text-xs font-semibold">
-                {job.orcamento_nome ?? "—"}
+                {pagamentos ? "Criado pelo financeiro" : (job.orcamento_nome ?? "—")}
               </span>
             </div>
           </div>
@@ -3911,14 +3949,16 @@ export function AberturaForm({
                 {resumoMidia}
               </span>
             </div>
-            <div className="flex items-baseline justify-between gap-3">
-              <span className="text-[12.5px] text-muted-foreground">
-                Marca
-              </span>
-              <span className="text-right text-[12.5px] font-semibold">
-                {marcaNome}
-              </span>
-            </div>
+            {!pagamentos && (
+              <div className="flex items-baseline justify-between gap-3">
+                <span className="text-[12.5px] text-muted-foreground">
+                  Marca
+                </span>
+                <span className="text-right text-[12.5px] font-semibold">
+                  {marcaNome}
+                </span>
+              </div>
+            )}
             <div className="flex items-baseline justify-between gap-3">
               <span className="text-[12.5px] text-muted-foreground">
                 Empresa
@@ -4169,7 +4209,7 @@ export function AberturaForm({
             <ResumoLinha rotulo="Serviço" valor={servicoNome} />
             <ResumoLinha rotulo="Mídia System" valor={resumoMidia} />
             <ResumoLinha rotulo="Cliente" valor={job.cliente_nome ?? "—"} />
-            <ResumoLinha rotulo="Marca" valor={marcaNome} />
+            {!pagamentos && <ResumoLinha rotulo="Marca" valor={marcaNome} />}
             <ResumoLinha rotulo="Empresa" valor={empresaNomeEscolhida} />
             <ResumoLinha rotulo="Regional" valor={regionalNome} />
             <ResumoLinha rotulo="Competência" valor={competenciaLabel} mono />

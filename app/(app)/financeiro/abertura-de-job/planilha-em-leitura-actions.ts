@@ -74,6 +74,7 @@ export async function lerPlanilhaEmLeitura(jobId: string): Promise<ResultadoDaPl
       midia: detalhe.midia,
       comHistorico: false,
       interno: detalhe.interno,
+      pagamentos: detalhe.pagamentos,
       savePorItem: detalhe.savePorItem,
       saldosDeSave: [],
       clienteNome: detalhe.clienteNome,

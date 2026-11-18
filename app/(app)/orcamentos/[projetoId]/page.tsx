@@ -66,7 +66,7 @@ export default async function ProjetoDetailPage({
     supabase
       .from("projetos")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, campanha, status, cliente_id, produto_id, responsavel_id, regional_id, cidade_id, categoria_id, data_inicio_prevista, data_fim_prevista, descricao, created_by, created_at, updated_at, empresa:empresas(id, razao_social, nome_fantasia)",
+        "id, tenant_id, empresa_id, codigo, nome, campanha, status, cliente_id, produto_id, responsavel_id, regional_id, cidade_id, categoria_id, de_pagamentos, data_inicio_prevista, data_fim_prevista, descricao, created_by, created_at, updated_at, empresa:empresas(id, razao_social, nome_fantasia)",
       )
       .eq("id", params.projetoId)
       .eq("tenant_id", session.activeTenant.id)
@@ -105,6 +105,7 @@ export default async function ProjetoDetailPage({
       .eq("tenant_id", session.activeTenant.id)
       .eq("escopo", "projeto")
       .eq("ativo", true)
+      .eq("job_de_pagamentos", false)
       .order("nome"),
     listEmpresasAtivas(session.activeTenant.id),
     supabase
@@ -139,6 +140,7 @@ export default async function ProjetoDetailPage({
     regional_id: raw.regional_id,
     cidade_id: raw.cidade_id,
     categoria_id: raw.categoria_id,
+    de_pagamentos: raw.de_pagamentos === true,
     data_inicio_prevista: raw.data_inicio_prevista,
     data_fim_prevista: raw.data_fim_prevista,
     descricao: raw.descricao,

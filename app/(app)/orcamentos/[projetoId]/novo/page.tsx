@@ -45,6 +45,8 @@ export default async function NovoOrcamentoPage({
         .eq("tenant_id", session.activeTenant.id)
         .eq("escopo", "orcamento")
         .eq("ativo", true)
+        // Decisão 266: Pagamentos é só do job de pagamentos.
+        .eq("job_de_pagamentos", false)
         .order("nome"),
       // Serviço lê o escopo `projeto` — outra lista, ainda que a mesma
       // tabela. É o que permite Serviço e Categoria lado a lado sem
@@ -55,6 +57,7 @@ export default async function NovoOrcamentoPage({
         .eq("tenant_id", session.activeTenant.id)
         .eq("escopo", "projeto")
         .eq("ativo", true)
+        .eq("job_de_pagamentos", false)
         .order("nome"),
       // Regional e GP do orçamento saem do que foi cadastrado no projeto.
       supabase

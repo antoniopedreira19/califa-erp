@@ -6855,3 +6855,11 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - **Envio recusado:** o GP que tenta enviar um job (ou mês) já faturado pelo financeiro recebe a mensagem certa, não a genérica.
 - **Cancelar job:** o job faturado pelo financeiro não se cancela pelo sistema.
 - **Ficha do job:** a etapa do envio mostra "Faturado pelo financeiro", com quem e quando.
+
+
+## ⚠️ Nota de 2026-11-18 — o job de pagamentos na produção (decisão 266)
+
+- **Planilha sem errata:** no job de pagamentos, item novo, linha vermelha, agrupamento novo e planejado entram direto pelo "Salvar" (`salvar_planilha_do_job_de_pagamentos`). Orçado sempre zero, tipo F · Interno, sem save; o planejado não acompanha o orçado, ao contrário do Interno. Sem "Editar orçado" e sem "Ver versão aprovada".
+- **Ficha e Equipe:** envio para abertura "Não se aplica · criado pelo financeiro", sem a linha do orçamento aprovado e sem link para o projeto; sem GP e sem produtor, e a Equipe não oferece troca.
+- **Conferido no Sandbox:** TES-1039/26 na lista de Jobs do GP, item de R$ 1.500,00 corrigido para R$ 1.800,00 e a linha vermelha "Frete de material" salvos direto (nenhuma errata), e o formulário da PP com o planejado de R$ 1.800,00.
+- **Fica de fora:** no PDF da PP, a assinatura do GP sai em branco.

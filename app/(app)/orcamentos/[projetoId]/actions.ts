@@ -110,6 +110,8 @@ async function conferirServicoECategoria(
       .select("id, nome, modelo_planilha, servico_exclusivo_id, aceita_servico_interno, em_breve")
       .eq("tenant_id", tenantId)
       .eq("escopo", "orcamento")
+      // Decisão 266: Pagamentos não se escolhe em orçamento.
+      .eq("job_de_pagamentos", false)
       .returns<CategoriaParaServico[]>(),
     supabase
       .from("categorias_dominio")
@@ -117,6 +119,7 @@ async function conferirServicoECategoria(
       .eq("id", servicoId)
       .eq("tenant_id", tenantId)
       .eq("escopo", "projeto")
+      .eq("job_de_pagamentos", false)
       .maybeSingle<{ id: string; nome: string; investimento_interno: boolean }>(),
   ]);
 

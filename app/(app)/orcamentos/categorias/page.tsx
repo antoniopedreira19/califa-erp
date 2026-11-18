@@ -22,6 +22,9 @@ export default async function CategoriasHubPage() {
       .from("categorias_dominio")
       .select("*")
       .eq("tenant_id", session.activeTenant.id)
+      // Decisão 266: o serviço e a categoria Pagamentos são do sistema (o
+      // banco recusa renomear, desativar ou apagar): ficam fora do cadastro.
+      .eq("job_de_pagamentos", false)
       .order("escopo", { ascending: true })
       .order("nome", { ascending: true })
       .returns<CategoriaDominio[]>(),

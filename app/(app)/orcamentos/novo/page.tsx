@@ -31,6 +31,7 @@ export default async function NovoProjetoPage() {
       .eq("tenant_id", session.activeTenant.id)
       .eq("escopo", "projeto")
       .eq("ativo", true)
+      .eq("job_de_pagamentos", false)
       .order("nome"),
     listEmpresasAtivas(session.activeTenant.id),
     getEmpresaPrincipal(session.activeTenant.id),

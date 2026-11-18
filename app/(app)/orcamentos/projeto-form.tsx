@@ -113,7 +113,8 @@ export function ProjetoForm({
   const campoApresentacao = useApresentacoesDoProjeto(apresentacoes ?? []);
   const [empresaPendente, setEmpresaPendente] = React.useState<string>("");
   const [responsavelIds, setResponsavelIds] = React.useState<string[]>(
-    responsaveisSelecionados ?? (projeto ? [projeto.responsavel_id] : []),
+    responsaveisSelecionados ??
+      (projeto?.responsavel_id ? [projeto.responsavel_id] : []),
   );
   // A lista dos GPs Responsáveis: quem pode ser GP, mais quem já estava
   // gravado no projeto sem poder (decisão 170). Saído da lista e salvo, não

@@ -9187,3 +9187,13 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Rentabilidade e Relatório de Faturamento:** o realizado soma as notas do Novo faturamento; os três jobs AMB deixam de sair "Não Faturado".
 - **Telas do financeiro:** situação do faturamento do mensal (Abertura › Abertos), selo "Aguardando encerramento" (só com o job coberto), etapa "Faturado pelo financeiro" no cabeçalho do job, trava do "Editar orçado" no servidor.
 - **Banco:** migration `20261118400003` (`vw_job_rentabilidade`, `vw_fluxo_caixa`, `trava_do_cancelamento_do_job`, `save_rateio_das_notas`), conferida antes numa transação desfeita.
+
+
+## ⚠️ Nota de 2026-11-18 — Job de Pagamentos criado pelo financeiro (decisão 266)
+
+- **Visualizar Jobs:** botão "Criar Job de Pagamentos" ao lado dos filtros; o "Exportar" desceu para a linha da busca. O pop-up cria o job já aberto, sem orçamento visível e sem fila: Nome, Projeto unificado, Abertura; Código previsto, Serviço e Categoria "Pagamentos"; Empresa (é também o cliente), Regional, Competência; Descritivo do Job. Sem cliente, marca, GP e produtor.
+- **Clientes:** cada empresa aponta para o seu cliente (`empresas.cliente_id`). CCH e Ventura ganharam cliente (CCH e VEN); o cliente CAL passou a "Agência California", com o mesmo código e os mesmos jobs.
+- **Editar registro:** sem o campo Marca; serviço, categoria e empresa travados; o servidor recusa marca e troca de empresa no job de pagamentos. A curva de desembolso segue a regra de sempre (fecha com o custo previsto).
+- **Banco:** migration `20261118700001` (aditiva), com `criar_job_de_pagamentos` e `salvar_planilha_do_job_de_pagamentos`.
+- **Conferido no Sandbox:** TES-1039/26 criado pelo pop-up, aviso na lista, fora de Orçamentos, e o "Editar registro" salvo sem marca (foto nº 2, curva de R$ 1.800,00).
+- **Em aberto:** a curva não acompanha o planejado que a produção lança (não há errata que leve o job à revisão).

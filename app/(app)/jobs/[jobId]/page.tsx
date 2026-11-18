@@ -473,6 +473,7 @@ export default async function JobDetailPage({
               jobAtualId={job.id}
               jobLinkSuffix={jobLinkSuffix}
               gpNome={raw.responsavel?.nome ?? null}
+              pagamentos={detalhe.pagamentos}
               produtorNome={raw.produtor?.nome ?? null}
               origem={{
                 projetoHref: `/orcamentos/${raw.projeto_id}`,
@@ -568,6 +569,7 @@ export default async function JobDetailPage({
             // O histórico de versões da planilha (decisão 186).
             comHistorico
             interno={detalhe.interno}
+            pagamentos={detalhe.pagamentos}
             podeCadastrarFornecedor={podeCadastrarFornecedor}
             podeEditarFornecedor={podeEditarFornecedor}
             savePorItem={detalhe.savePorItem}

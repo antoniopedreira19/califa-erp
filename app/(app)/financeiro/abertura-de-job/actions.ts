@@ -83,7 +83,7 @@ async function conferirServico(
   const [{ data: servico }, { data: orc }] = await Promise.all([
     supabase
       .from("categorias_dominio")
-      .select("id, escopo, ativo, investimento_interno")
+      .select("id, escopo, ativo, investimento_interno, job_de_pagamentos")
       .eq("id", servicoId)
       .eq("tenant_id", tenantId)
       .maybeSingle<{
@@ -91,18 +91,30 @@ async function conferirServico(
         escopo: string;
         ativo: boolean;
         investimento_interno: boolean;
+        job_de_pagamentos: boolean;
       }>(),
     // `!servico_id`: `orcamentos` tem duas FKs para `categorias_dominio`.
     supabase
       .from("orcamentos")
-      .select("servico:categorias_dominio!servico_id(investimento_interno)")
+      .select("servico:categorias_dominio!servico_id(investimento_interno, job_de_pagamentos)")
       .eq("id", orcamentoId)
       .eq("tenant_id", tenantId)
-      .maybeSingle<{ servico: { investimento_interno: boolean } | null }>(),
+      .maybeSingle<{
+        servico: { investimento_interno: boolean; job_de_pagamentos: boolean } | null;
+      }>(),
   ]);
 
   if (!servico || servico.escopo !== "projeto") {
     return { erro: "Serviço de job inválido." };
+  }
+  // Decisão 266: o serviço Pagamentos é só do job de pagamentos, e o job de
+  // pagamentos não troca de serviço (o banco recusa o mesmo).
+  if (servico.job_de_pagamentos !== (orc?.servico?.job_de_pagamentos === true)) {
+    return {
+      erro: servico.job_de_pagamentos
+        ? "O serviço Pagamentos é só do job de pagamentos, criado pelo financeiro."
+        : "O serviço do job de pagamentos não muda.",
+    };
   }
   if (!servico.ativo) {
     return { erro: "Este serviço foi inativado. Escolha outro." };
@@ -133,15 +145,33 @@ async function conferirMarcaEmpresaRegional(
   tenantId: string,
   clienteId: string | null,
   marcaAtualId: string | null,
-  escolha: { produto_id: string; empresa_id: string; regional_id: string },
-): Promise<{ ok: true; marcaNome: string } | { ok: false; message: string }> {
+  escolha: { produto_id: string | null; empresa_id: string; regional_id: string },
+  /** Decisão 266: o job de pagamentos não tem marca, e a empresa dele é
+   *  também o cliente, que não muda. `null` no job de sempre. */
+  dePagamentos: { empresaAtualId: string | null } | null = null,
+): Promise<{ ok: true; marcaNome: string | null } | { ok: false; message: string }> {
+  if (dePagamentos) {
+    if (escolha.produto_id !== null) {
+      return { ok: false, message: "O job de pagamentos não tem marca." };
+    }
+    if (escolha.empresa_id !== dePagamentos.empresaAtualId) {
+      return {
+        ok: false,
+        message: "A empresa do job de pagamentos é também o cliente dele e não muda.",
+      };
+    }
+  } else if (escolha.produto_id === null) {
+    return { ok: false, message: "Selecione a marca do job." };
+  }
   const [{ data: marca }, { data: empresa }, { data: regional }] = await Promise.all([
-    supabase
-      .from("cliente_produtos")
-      .select("id, nome, cliente_id, ativo")
-      .eq("id", escolha.produto_id)
-      .eq("tenant_id", tenantId)
-      .maybeSingle<{ id: string; nome: string; cliente_id: string; ativo: boolean }>(),
+    escolha.produto_id === null
+      ? Promise.resolve({ data: null })
+      : supabase
+          .from("cliente_produtos")
+          .select("id, nome, cliente_id, ativo")
+          .eq("id", escolha.produto_id)
+          .eq("tenant_id", tenantId)
+          .maybeSingle<{ id: string; nome: string; cliente_id: string; ativo: boolean }>(),
     supabase
       .from("empresas")
       .select("id, ativo")
@@ -161,11 +191,13 @@ async function conferirMarcaEmpresaRegional(
       }>(),
   ]);
 
-  if (!marca || marca.cliente_id !== clienteId) {
-    return { ok: false, message: "A marca escolhida não é do cliente deste job." };
-  }
-  if (!marca.ativo && marca.id !== marcaAtualId) {
-    return { ok: false, message: "Esta marca foi inativada. Escolha outra." };
+  if (!dePagamentos) {
+    if (!marca || marca.cliente_id !== clienteId) {
+      return { ok: false, message: "A marca escolhida não é do cliente deste job." };
+    }
+    if (!marca.ativo && marca.id !== marcaAtualId) {
+      return { ok: false, message: "Esta marca foi inativada. Escolha outra." };
+    }
   }
   if (!empresa || !empresa.ativo) {
     return { ok: false, message: "Empresa do job inválida. Escolha outra." };
@@ -176,7 +208,7 @@ async function conferirMarcaEmpresaRegional(
   if (!regional.ativo || !regional.disponivel_em_projetos) {
     return { ok: false, message: "Esta regional não está disponível para jobs. Escolha outra." };
   }
-  return { ok: true, marcaNome: marca.nome };
+  return { ok: true, marcaNome: marca?.nome ?? null };
 }
 
 /**
@@ -199,7 +231,7 @@ async function conferirCategoriaDoJob(
 ): Promise<string | null> {
   const { data: categoria } = await supabase
     .from("categorias_dominio")
-    .select("id, nome, escopo, ativo, modelo_planilha, em_breve")
+    .select("id, nome, escopo, ativo, modelo_planilha, em_breve, job_de_pagamentos")
     .eq("id", categoriaId)
     .eq("tenant_id", tenantId)
     .maybeSingle<{
@@ -209,6 +241,7 @@ async function conferirCategoriaDoJob(
       ativo: boolean;
       modelo_planilha: string;
       em_breve: boolean;
+      job_de_pagamentos: boolean;
     }>();
 
   if (!categoria || categoria.escopo !== "orcamento") {
@@ -227,12 +260,20 @@ async function conferirCategoriaDoJob(
   // `categorias_dominio`, e o embed ambíguo derruba a query em silêncio.
   const { data: orc } = await supabase
     .from("orcamentos")
-    .select("categoria:categorias_dominio!categoria_id(nome, modelo_planilha)")
+    .select("categoria:categorias_dominio!categoria_id(nome, modelo_planilha, job_de_pagamentos)")
     .eq("id", orcamentoId)
     .eq("tenant_id", tenantId)
     .maybeSingle<{
-      categoria: { nome: string; modelo_planilha: string } | null;
+      categoria: { nome: string; modelo_planilha: string; job_de_pagamentos: boolean } | null;
     }>();
+
+  // Decisão 266: a categoria Pagamentos é só do job de pagamentos, que não
+  // troca de categoria (o banco recusa o mesmo).
+  if (categoria.job_de_pagamentos !== (orc?.categoria?.job_de_pagamentos === true)) {
+    return categoria.job_de_pagamentos
+      ? "A categoria Pagamentos é só do job de pagamentos, criado pelo financeiro."
+      : "A categoria do job de pagamentos não muda.";
+  }
 
   const modeloDoOrcamento = orc?.categoria?.modelo_planilha ?? "nacional";
   if (categoria.modelo_planilha !== modeloDoOrcamento) {
@@ -1574,7 +1615,7 @@ export async function editarRegistroDaAbertura(
         "conta_pagamento_id, conta_impostos_id, categoria_id, servico_id, competencia_trimestre, " +
         "competencia_ano, abertura_em_revisao, abertura_revisao_errata_id, " +
         "data_inicio_prevista, produto_id, empresa_id, regional_id, cliente_id, " +
-        "midia_system, midia_system_liberado_em",
+        "midia_system, midia_system_liberado_em, de_pagamentos",
     )
     .eq("id", jobId)
     .eq("tenant_id", session.activeTenant.id)
@@ -1772,6 +1813,7 @@ export async function editarRegistroDaAbertura(
     job.cliente_id ?? null,
     job.produto_id ?? null,
     parsed.data,
+    job.de_pagamentos === true ? { empresaAtualId: job.empresa_id ?? null } : null,
   );
   if (!marcaEmpresaRegional.ok) return marcaEmpresaRegional;
 

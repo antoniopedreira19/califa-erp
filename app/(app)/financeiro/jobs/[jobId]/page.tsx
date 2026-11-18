@@ -61,7 +61,7 @@ import {
   competenciasGravadas,
   previsoesGravadas,
 } from "../../abertura-de-job/consumo";
-import { servicosDoOrcamentoQuery } from "@/lib/data/servicos";
+import { comOServicoDoJob, servicosDoOrcamentoQuery } from "@/lib/data/servicos";
 import { trimestreDe } from "../../abertura-de-job/curva";
 import { formatDataAsHoraBr, formatDataHoraBr } from "../../abertura-de-job/formatos";
 import { SITUACAO_META } from "../../abertura-de-job/situacao-faturamento";
@@ -166,7 +166,7 @@ export default async function JobNoFinanceiroPage({
       // `modelo_planilha`: o combo só oferece categorias do modelo do
       // orçamento (decisões 072 e 105), como a abertura. `em_breve`: a
       // Mídia Off aparece travada no combo (decisão 131).
-      .select("id, nome, modelo_planilha, em_breve")
+      .select("id, nome, modelo_planilha, em_breve, job_de_pagamentos")
       .eq("tenant_id", tenantId)
       .eq("escopo", "orcamento")
       .eq("ativo", true)
@@ -631,13 +631,16 @@ export default async function JobNoFinanceiroPage({
             aprovacaoSave={aprovacaoSave}
             categorias={(categoriasRes.data ?? []).filter(
               (c) =>
-                c.modelo_planilha === jobNaFila.modelo_planilha_orcamento ||
+                // Decisão 266: a categoria Pagamentos só aparece para o job
+                // de pagamentos que já a tem.
+                (c.modelo_planilha === jobNaFila.modelo_planilha_orcamento &&
+                  !c.job_de_pagamentos) ||
                 c.id === jobNaFila.categoria_id,
             )}
             // Decisão 240: todos os serviços. No "Editar registro" o
             // financeiro pode pôr o job no Interno ou tirar dele, com o
             // pop-up que mostra o que muda (era `servicosDoLado`).
-            servicos={servicosRes.data ?? []}
+            servicos={comOServicoDoJob(servicosRes.data ?? [], jobNaFila)}
             projetos={projetos}
             // O job aberto já tem projeto: a sugestão é só da fila.
             sugestaoDeProjeto={null}
@@ -752,6 +755,7 @@ export default async function JobNoFinanceiroPage({
               jobHrefBase="/financeiro/jobs/"
               confirmarSaidaParaOrcamento
               gpNome={detalhe.raw.responsavel?.nome ?? null}
+              pagamentos={detalhe.pagamentos}
               produtorNome={detalhe.raw.produtor?.nome ?? null}
               origem={{
                 // Visão agregada DO FINANCEIRO, não a lista de orçamentos
@@ -903,6 +907,7 @@ export default async function JobNoFinanceiroPage({
               // na visão do financeiro.
               comHistorico
               interno={detalhe.interno}
+              pagamentos={detalhe.pagamentos}
               savePorItem={detalhe.savePorItem}
               saldosDeSave={[]}
               clienteNome={detalhe.clienteNome}

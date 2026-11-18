@@ -51,7 +51,10 @@ export default async function ProjetosPage({
             // orçamentos, abaixo.
             "categoria:categorias_dominio(nome)",
         )
-        .eq("tenant_id", session.activeTenant.id);
+        .eq("tenant_id", session.activeTenant.id)
+        // Decisão 266: o projeto (e o orçamento vazio) que nasce por baixo
+        // do job de pagamentos não é da produção: fica fora de Orçamentos.
+        .eq("de_pagamentos", false);
       if (empresaFiltroIds.length > 0) q = q.in("empresa_id", empresaFiltroIds);
       return q.order("created_at", { ascending: false });
     })(),

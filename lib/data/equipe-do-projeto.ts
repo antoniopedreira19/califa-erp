@@ -113,7 +113,7 @@ export async function carregarEquipeDoProjeto(
       supabase
         .from("jobs")
         .select(
-          "id, codigo, nome, status, responsavel_id, produtor_id, produtor_envia_pp",
+          "id, codigo, nome, status, responsavel_id, produtor_id, produtor_envia_pp, de_pagamentos",
         )
         .eq("projeto_id", projetoId)
         .eq("tenant_id", tenantId)
@@ -151,6 +151,8 @@ export async function carregarEquipeDoProjeto(
     responsavel_id: string | null;
     produtor_id: string | null;
     produtor_envia_pp: boolean | null;
+    /** Decisão 266: o job de pagamentos não tem GP nem produtor. */
+    de_pagamentos: boolean;
     status: JobStatus;
   }>;
   const prontasPorJob = new Map<string, string[]>();
@@ -248,7 +250,9 @@ export async function carregarEquipeDoProjeto(
       produtorEnviaPP: j.produtor_envia_pp === true,
       ppsProntas: prontasPorJob.get(j.id) ?? [],
       congelado: jobEstaCongelado(j.status),
-      aceitaTroca: j.status === "aberto" || j.status === "em_producao",
+      // Decisão 266: o job de pagamentos não tem GP nem produtor (o banco
+      // recusa pôr um).
+      aceitaTroca: (j.status === "aberto" || j.status === "em_producao") && j.de_pagamentos !== true,
     })),
     acrescimos,
     candidatos: ativos.filter((p) => !motivos.has(p.id)),

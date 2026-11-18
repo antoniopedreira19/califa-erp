@@ -151,7 +151,7 @@ export async function carregarDetalheDoJob(
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, recebimento_previsto_por_mes, observacoes, responsavel_id, produtor_id, produtor_envia_pp, produtor_envia_pp_por, produtor_envia_pp_em, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, midia_system, midia_system_liberado_em, midia_system_liberado_por, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, devolvido_em, enviado_abertura_por, enviado_abertura_em, codigo_reservado, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), enviado_abertura_perfil:profiles!enviado_abertura_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome, investimento_interno), categoria:categorias_dominio!categoria_id(nome, modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, cambio_cotacao, cambio_venda, cambio_data, percentual_veiculo, base_honorarios), cliente_id, cliente:clientes!jobs_cliente_id_fkey(id, nome_fantasia, cnpj), projeto:projetos(id, codigo, nome, data_inicio_prevista, data_fim_prevista), " +
+        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, de_pagamentos, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, recebimento_previsto_por_mes, observacoes, responsavel_id, produtor_id, produtor_envia_pp, produtor_envia_pp_por, produtor_envia_pp_em, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, midia_system, midia_system_liberado_em, midia_system_liberado_por, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, devolvido_em, enviado_abertura_por, enviado_abertura_em, codigo_reservado, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), enviado_abertura_perfil:profiles!enviado_abertura_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome, investimento_interno), categoria:categorias_dominio!categoria_id(nome, modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, cambio_cotacao, cambio_venda, cambio_data, percentual_veiculo, base_honorarios), cliente_id, cliente:clientes!jobs_cliente_id_fkey(id, nome_fantasia, cnpj), projeto:projetos(id, codigo, nome, data_inicio_prevista, data_fim_prevista), " +
           // Os parâmetros do job, quando o financeiro os alterou (decisão 224).
           SELECT_PARAMETROS_DO_JOB,
       )
@@ -1134,6 +1134,8 @@ export async function carregarDetalheDoJob(
     abertura_em_revisao: raw.abertura_em_revisao === true,
     abertura_revisao_desde: raw.abertura_revisao_desde ?? null,
     abertura_revisao_errata_id: raw.abertura_revisao_errata_id ?? null,
+    // Decisão 266: o job de pagamentos.
+    de_pagamentos: raw.de_pagamentos === true,
     // Decisão 216: o job Mídia System.
     midia_system: raw.midia_system === true,
     midia_system_liberado_em: raw.midia_system_liberado_em ?? null,
@@ -1930,6 +1932,8 @@ export async function carregarDetalheDoJob(
     interno:
       (raw.orcamento as { servico?: { investimento_interno?: boolean } | null } | null)
         ?.servico?.investimento_interno === true,
+    // Decisão 266: o job de pagamentos (do Interno, só o "não fatura").
+    pagamentos: (raw as { de_pagamentos?: boolean }).de_pagamentos === true,
     portaisDoCliente,
     jobsDoProjeto,
     apresentacoesDoProjeto,

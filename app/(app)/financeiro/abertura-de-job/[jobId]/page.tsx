@@ -173,6 +173,8 @@ export default async function AbrirJobNoFinanceiroPage({
       .eq("tenant_id", tenantId)
       .eq("escopo", "orcamento")
       .eq("ativo", true)
+      // Decisão 266: a categoria Pagamentos é só do job de pagamentos.
+      .eq("job_de_pagamentos", false)
       .order("nome"),
     listarContasBancarias(tenantId),
     // Serviços (escopo 'projeto'): o mesmo vocabulário do orçamento. O
@@ -405,6 +407,7 @@ export default async function AbrirJobNoFinanceiroPage({
               descritivo={jobDoDetalhe.observacoes}
               etapas={detalhe.etapasDoJob}
               antesDaAbertura
+              pagamentos={detalhe.pagamentos}
               job={{
                 codigo: jobDoDetalhe.codigo,
                 nome: job.nome,
@@ -501,6 +504,7 @@ export default async function AbrirJobNoFinanceiroPage({
                 : null,
             }}
             interno={detalhe.interno}
+            pagamentos={detalhe.pagamentos}
             savePorItem={detalhe.savePorItem}
             saldosDeSave={[]}
             clienteNome={detalhe.clienteNome}

@@ -153,6 +153,11 @@ interface Props {
   antesDaAbertura?: boolean;
   gpNome: string | null;
   produtorNome: string | null;
+  /** Job de pagamentos (decisão 266): criado pelo financeiro, sem envio
+   *  para abertura e sem orçamento à vista — o projeto e o orçamento que
+   *  existem por baixo dele ficam fora de Orçamentos, então a ficha não
+   *  leva até eles. Obrigatória: as duas telas da ficha passam. */
+  pagamentos: boolean;
   origem: OrigemDaFicha;
   contatos: ContatoCobranca[];
   statusBadgeClasses: (status: JobStatusExibido) => string;
@@ -181,6 +186,7 @@ export function FichaJob({
   antesDaAbertura = false,
   gpNome,
   produtorNome,
+  pagamentos,
   origem,
   contatos,
   statusBadgeClasses,
@@ -268,11 +274,19 @@ export function FichaJob({
               <Campo rotulo="Período" mono>
                 {formatPeriodo(job.dataInicio, job.dataFim)}
               </Campo>
-              <Etapa
-                rotulo="Envio para abertura"
-                em={etapas.enviadoAberturaEm}
-                quem={etapas.enviadoAberturaPorNome}
-              />
+              {pagamentos ? (
+                <Campo rotulo="Envio para abertura">
+                  <span className="text-muted-foreground">
+                    Não se aplica · criado pelo financeiro
+                  </span>
+                </Campo>
+              ) : (
+                <Etapa
+                  rotulo="Envio para abertura"
+                  em={etapas.enviadoAberturaEm}
+                  quem={etapas.enviadoAberturaPorNome}
+                />
+              )}
               <Campo rotulo="Abertura">
                 {job.dataAbertura ? (
                   <>
@@ -322,6 +336,7 @@ export function FichaJob({
               <CabecalhoColuna titulo="Projeto" />
               <Campo rotulo="Nome do projeto" destaque>
                 <LinkDoProjeto
+                  semLink={pagamentos}
                   href={origem.projetoHref}
                   saiDoModulo={saiDoModuloPeloProjeto}
                   projeto={projeto}
@@ -416,6 +431,7 @@ export function FichaJob({
             </CampoLateral>
             <CampoLateral rotulo="Projeto">
               <LinkDoProjeto
+                semLink={pagamentos}
                 href={origem.projetoHref}
                 saiDoModulo={saiDoModuloPeloProjeto}
                 projeto={projeto}
@@ -424,6 +440,7 @@ export function FichaJob({
                 {projeto.nome}
               </LinkDoProjeto>
             </CampoLateral>
+            {!pagamentos && (
             <CampoLateral rotulo="Orçamento aprovado">
               {confirmarSaidaParaOrcamento ? (
                 <LinkSaidaDeModulo
@@ -450,6 +467,7 @@ export function FichaJob({
               </Link>
               )}
             </CampoLateral>
+            )}
           </div>
 
           <div className="rounded-2xl border border-border bg-card shadow-soft">
@@ -507,18 +525,23 @@ export function FichaJob({
 
 /** O link "Projeto" da ficha: comum, ou com o aviso de saída do módulo. */
 function LinkDoProjeto({
+  semLink,
   href,
   saiDoModulo,
   projeto,
   className,
   children,
 }: {
+  /** Job de pagamentos (decisão 266): o projeto dele fica fora de
+   *  Orçamentos — o nome aparece sem link. */
+  semLink: boolean;
   href: string;
   saiDoModulo: boolean;
   projeto: ProjetoDaFicha;
   className: string;
   children: React.ReactNode;
 }) {
+  if (semLink) return <span>{children}</span>;
   if (saiDoModulo) {
     return (
       <LinkSaidaDeModulo
