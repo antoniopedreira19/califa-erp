@@ -175,6 +175,10 @@ export interface JobNaFila {
   midia_system: boolean;
   midia_system_liberado_em: string | null;
   midia_system_liberado_por_nome: string | null;
+  /** Decisão 266: o job de pagamentos, criado direto pelo financeiro. Não
+   *  tem marca, GP nem produtor, o cliente é a própria empresa, e serviço,
+   *  categoria e empresa não mudam no registro. */
+  de_pagamentos: boolean;
 }
 
 /**
@@ -359,7 +363,7 @@ const SELECT_JOB_FILA =
   "data_prevista_faturamento, recebimento_previsto_por_mes, observacoes, created_at, produto, cidade, projeto_id, " +
   // Marca, empresa e regional do job, que o registro do financeiro edita
   // (decisão 214).
-  "produto_id, empresa_id, regional_id, " +
+  "produto_id, empresa_id, regional_id, de_pagamentos, " +
   // Quem enviou (decisão 136). `created_by` aponta para `auth.users`, e o
   // nome dele sai em query própria; `enviado_abertura_por` aponta para
   // `profiles` e vem no embed.
@@ -539,6 +543,7 @@ function montarJobNaFila(
     midia_system: j.midia_system === true,
     midia_system_liberado_em: j.midia_system_liberado_em ?? null,
     midia_system_liberado_por_nome: j.midia_system_liberado?.nome ?? null,
+    de_pagamentos: j.de_pagamentos === true,
   };
 }
 

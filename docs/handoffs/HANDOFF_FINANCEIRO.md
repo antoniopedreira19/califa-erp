@@ -9170,3 +9170,30 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Home:** os cartões "Desembolsos em avaliação" levam à aba do Contas a Pagar.
 - **Ficam para a etapa do controle de NFs:** retenções e crédito de PIS/COFINS na aprovação, a NF do reembolso no cadastro e a correção da NF pelo financeiro.
 - **Conferido no Sandbox** (GP, produtor e admin): envio com NF, rejeição, correção e reenvio, aprovação com o título em Títulos a Pagar e a nota registrada, reembolso com cupom fiscal; no banco, a NF sem saldo, o GP aprovando o próprio pedido, a mudança de status pela API e o pedido sem comprovante são recusados.
+
+
+## ⚠️ Nota de 2026-11-18 — "+ Faturamento" com um formulário só (decisão 265, revê a 256 e a 184)
+
+- **Sem o menu:** o "+ Faturamento" abre direto o formulário "Faturamento", com o vínculo em cima: **Job** (o Novo faturamento da 256, sem mudança de regra), **Save avulso** ou **Sem job**. A avulsa "referente a um job" saiu (extra de job ganha orçamento próprio); o servidor recusa `job_referencia_id`. A linha de saldo continua abrindo o "Novo faturamento" direto no job.
+- **Produção:** as NFs 6468 (AMB-1061/26), 6376 (AMB-1042/26) e 6475 (AMB-1058/26), lançadas como avulsa referente a um job, viraram Novo faturamento (migration `20261118400001`, autorizada pelo Tiago). Os jobs ficaram faturados; o AMB-1058/26 tem saldo de R$ 20.741,02 na fila. O "antes" está na auditoria.
+- **Fica de fora:** a Rentabilidade (`vw_job_rentabilidade`, da outra frente) conta o realizado pelo envio do GP e não vê nenhum Novo faturamento.
+- **Conferido no Sandbox:** o formulário nas três escolhas, a linha de saldo do TES-1006/26 e as travas da planilha (abaixo, no HANDOFF_JOBS).
+
+
+## ⚠️ Nota de 2026-11-18 — o Novo faturamento substitui o envio em todos os contextos (decisão 265, seção 7)
+
+- **Regra do Tiago:** onde o sistema mede o faturamento do job pelo envio do GP, a nota do Novo faturamento conta igual.
+- **Fluxo de caixa:** o que o Novo faturamento cobriu sai da previsão de recebimento do job (antes, previsão e título entravam juntos: R$ 927.741,02 em dobro na produção, nos AMB-1042/26, AMB-1058/26 e AMB-1061/26). O AMB-1058/26 fica com a previsão do saldo, R$ 20.741,02.
+- **Rentabilidade e Relatório de Faturamento:** o realizado soma as notas do Novo faturamento; os três jobs AMB deixam de sair "Não Faturado".
+- **Telas do financeiro:** situação do faturamento do mensal (Abertura › Abertos), selo "Aguardando encerramento" (só com o job coberto), etapa "Faturado pelo financeiro" no cabeçalho do job, trava do "Editar orçado" no servidor.
+- **Banco:** migration `20261118400003` (`vw_job_rentabilidade`, `vw_fluxo_caixa`, `trava_do_cancelamento_do_job`, `save_rateio_das_notas`), conferida antes numa transação desfeita.
+
+
+## ⚠️ Nota de 2026-11-18 — Job de Pagamentos criado pelo financeiro (decisão 266)
+
+- **Visualizar Jobs:** botão "Criar Job de Pagamentos" ao lado dos filtros; o "Exportar" desceu para a linha da busca. O pop-up cria o job já aberto, sem orçamento visível e sem fila: Nome, Projeto unificado, Abertura; Código previsto, Serviço e Categoria "Pagamentos"; Empresa (é também o cliente), Regional, Competência; Descritivo do Job. Sem cliente, marca, GP e produtor.
+- **Clientes:** cada empresa aponta para o seu cliente (`empresas.cliente_id`). CCH e Ventura ganharam cliente (CCH e VEN); o cliente CAL passou a "Agência California", com o mesmo código e os mesmos jobs.
+- **Editar registro:** sem o campo Marca; serviço, categoria e empresa travados; o servidor recusa marca e troca de empresa no job de pagamentos.
+- **Sem curva de desembolso** (Tiago): o job de pagamentos não tem previsão de custos, com qualquer planejado. O custo só entra no fluxo de caixa quando a PP vira título; a conta de pagamento fica opcional. O servidor recusa curva nesse job.
+- **Banco:** migration `20261118700001` (aditiva), com `criar_job_de_pagamentos` e `salvar_planilha_do_job_de_pagamentos`.
+- **Conferido no Sandbox:** TES-1039/26 criado pelo pop-up, aviso na lista, fora de Orçamentos, e o "Editar registro" salvo sem marca e sem curva (foto nº 3; a curva de R$ 1.800,00 da foto nº 2, de um teste anterior à regra, saiu pelo mesmo salvar).

@@ -278,6 +278,8 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 261 | [A baixa de PP paga antes de a conta começar no sistema, pela linha do histórico](261-baixa-de-pp-paga-antes-de-a-conta-comecar.md) | 2026-11-16 |
 | 262 | [Conciliação automática: acertar a linha e conciliar no fim, centro de custo na linha e fechamento por mês](262-conciliacao-acertar-e-conciliar.md) | 2026-11-16 |
 | 263 | [O envio em lote parecido com o envio de um job: cada nota num cartão, os jobs marcados na própria nota](263-envio-em-lote-como-o-envio-de-um-job.md) | 2026-11-16 |
+| 265 | ["+ Faturamento" com um formulário só: o Job é o Novo faturamento, e ele trava a planilha](265-mais-faturamento-um-formulario-so.md) | 2026-11-17 |
+| 266 | [Job de Pagamentos: o financeiro cria um job aberto, só para lançar custos](266-job-de-pagamentos.md) | 2026-11-18 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -290,4 +292,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 264**. (A 240 está em uso por outra frente, ainda sem arquivo neste índice.) (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 267**. (A 264 existe na pasta e ainda não está nesta tabela.) (A 240 está em uso por outra frente, ainda sem arquivo neste índice.) (091 e 092 existem na pasta e ainda não estão nesta tabela.)

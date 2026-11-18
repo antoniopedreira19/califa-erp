@@ -6102,3 +6102,8 @@ motivo ficava no fim da janela, depois do Descritivo.
 - O save do orçamento inteiro (154) também consome um save avulso: "Consumir um saldo do cliente…" (`versao_save_consumir_avulso`, `versoes_orcamento.save_consumo_avulso_id`). A faixa diz 'Consumindo o saldo do save “Nome”'.
 - O consumo segue o save de hoje: rascunho reserva, a aprovação da versão confere o crédito, a abertura aprova o pedido. A importação por cima de uma versão que consome um save avulso confere o crédito antes de apagar as linhas.
 - Na coluna Save, o nome do save avulso corta com reticências; a dica traz o nome inteiro.
+
+
+## ⚠️ Nota de 2026-11-18 — o projeto do job de pagamentos fica fora de Orçamentos (decisão 266)
+
+- O job de pagamentos, criado pelo financeiro, tem um projeto e um orçamento aprovado e vazio, que ancoram a planilha do job. Os dois não aparecem em Orçamentos (`projetos.de_pagamentos`), e o serviço e a categoria Pagamentos não aparecem para escolha nos formulários de orçamento nem em Cadastros › Categorias.

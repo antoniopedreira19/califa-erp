@@ -6838,3 +6838,28 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - **Correção:** a leitura copia `meses_novos`; o campo ficou obrigatório em `ConteudoErrata` (o rascunho manda `[]` e a seção da planilha põe os meses por cima). Sem migration; a pronta no banco já estava completa.
 - **Testado** no Sandbox: TES-1035/26, pronta do produtor com dezembro; recusada na versão publicada, enviada com a correção (dezembro na versão aprovada e no job, job no mural de abertura).
 
+
+
+## ⚠️ Nota de 2026-11-18 — o Novo faturamento trava a planilha como o envio (decisão 265)
+
+- **Antes:** a nota do Novo faturamento (256) fechava o envio da produção, mas a errata seguia aberta: a porta (`jobJaEnviadoParaFaturamento`, `mesesEnviadosDoJob`, `gravar_parametros_da_errata`) só olhava `jobs_envio_faturamento`.
+- **Agora:** a nota do financeiro fecha a mesma porta — sem errata, linha vermelha (fora a dos pagamentos atrasados, 259) nem mudança de consumo de save; parâmetros só pelo financeiro. No mensal e na Mídia Off, por mês. O "Editar planilha" fica desabilitado com "Job já faturado pelo financeiro…".
+- **Banco:** `novo_faturamento_do_job(job)` (`security definer`, só `authenticated`), lida pelas server actions; `gravar_parametros_da_errata` conta o Novo faturamento (migration `20261118400002`).
+- **Conferido no Sandbox:** TES-1006/26 com o "Editar planilha" desabilitado e a trava dos parâmetros; TES-1035/26 com outubro travado e novembro editável.
+
+
+## ⚠️ Nota de 2026-11-18 — o Novo faturamento substitui o envio na produção também (decisão 265, seção 7)
+
+- **Envio em lote:** o mês já faturado pelo financeiro não é mais proposto (antes o lote inteiro falhava).
+- **Mídia Off:** o mês faturado pelo financeiro conta como enviado, então o envio do último mês pelo GP encerra o job. O Novo faturamento em si nunca encerra o job.
+- **Envio recusado:** o GP que tenta enviar um job (ou mês) já faturado pelo financeiro recebe a mensagem certa, não a genérica.
+- **Cancelar job:** o job faturado pelo financeiro não se cancela pelo sistema.
+- **Ficha do job:** a etapa do envio mostra "Faturado pelo financeiro", com quem e quando.
+
+
+## ⚠️ Nota de 2026-11-18 — o job de pagamentos na produção (decisão 266)
+
+- **Planilha sem errata:** no job de pagamentos, item novo, linha vermelha, agrupamento novo e planejado entram direto pelo "Salvar" (`salvar_planilha_do_job_de_pagamentos`). Orçado sempre zero, tipo F · Interno, sem save; o planejado não acompanha o orçado, ao contrário do Interno. Sem "Editar orçado" e sem "Ver versão aprovada".
+- **Ficha e Equipe:** envio para abertura "Não se aplica · criado pelo financeiro", sem a linha do orçamento aprovado e sem link para o projeto; sem GP e sem produtor, e a Equipe não oferece troca.
+- **Conferido no Sandbox:** TES-1039/26 na lista de Jobs do GP, item de R$ 1.500,00 corrigido para R$ 1.800,00 e a linha vermelha "Frete de material" salvos direto (nenhuma errata), e o formulário da PP com o planejado de R$ 1.800,00.
+- **Fica de fora:** no PDF da PP, a assinatura do GP sai em branco.

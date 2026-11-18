@@ -20,7 +20,10 @@ import {
   tipoDaVerba,
 } from "@/lib/types";
 import { parametrosGravadosDe } from "@/lib/data/parametros-do-job";
-import { MENSAGEM_PARAMETROS_DEPOIS_DO_ENVIO } from "@/lib/calculos/parametros-do-job";
+import {
+  MENSAGEM_PARAMETROS_DEPOIS_DO_ENVIO,
+  MENSAGEM_PARAMETROS_DEPOIS_DO_NOVO_FATURAMENTO,
+} from "@/lib/calculos/parametros-do-job";
 import {
   jobStatusLabel,
   jobStatusExibido,
@@ -470,6 +473,7 @@ export default async function JobDetailPage({
               jobAtualId={job.id}
               jobLinkSuffix={jobLinkSuffix}
               gpNome={raw.responsavel?.nome ?? null}
+              pagamentos={detalhe.pagamentos}
               produtorNome={raw.produtor?.nome ?? null}
               origem={{
                 projetoHref: `/orcamentos/${raw.projeto_id}`,
@@ -547,7 +551,10 @@ export default async function JobDetailPage({
                         envioFaturamento !== null ||
                         detalhe.faturamentoMensal.some((m) => m.envio !== null)
                           ? MENSAGEM_PARAMETROS_DEPOIS_DO_ENVIO
-                          : null,
+                          : detalhe.faturamentoEnvioUnico?.peloFinanceiro ||
+                              detalhe.faturamentoMensal.some((m) => m.peloFinanceiro)
+                            ? MENSAGEM_PARAMETROS_DEPOIS_DO_NOVO_FATURAMENTO
+                            : null,
                       cambioDepoisDaTrava: false,
                     }
                   : null,
@@ -562,6 +569,7 @@ export default async function JobDetailPage({
             // O histórico de versões da planilha (decisão 186).
             comHistorico
             interno={detalhe.interno}
+            pagamentos={detalhe.pagamentos}
             podeCadastrarFornecedor={podeCadastrarFornecedor}
             podeEditarFornecedor={podeEditarFornecedor}
             savePorItem={detalhe.savePorItem}
@@ -627,7 +635,14 @@ export default async function JobDetailPage({
             ppsQuePossoPrestarContas={ppsQuePossoPrestarContas}
             midiaSystem={detalhe.midiaSystem}
             podeConfirmarBv={podeConfirmarBv && !comPedido && !emDecisao}
-            jaEnviadoParaFaturamento={envioFaturamento !== null}
+            // Decisão 265: a nota do Novo faturamento trava como o envio.
+            jaEnviadoParaFaturamento={
+              envioFaturamento !== null
+                ? "envio"
+                : detalhe.faturamentoEnvioUnico?.peloFinanceiro
+                  ? "financeiro"
+                  : false
+            }
             ppsPorItemId={ppsPorItemId}
             aEmitirPorItemId={aEmitirPorItemId}
             tomadoresDaNf={tomadoresDaNf}

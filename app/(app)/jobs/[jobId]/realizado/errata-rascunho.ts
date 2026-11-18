@@ -165,6 +165,11 @@ export interface RascunhoErrata {
   /** Job de serviço Interno (decisão 105): tipo sempre F · Interno e o
    *  planejado igual ao orçado — a tabela não abre nenhum dos dois. */
   interno: boolean;
+  /** Job de pagamentos (decisão 266): do Interno ele herda só o "não
+   *  fatura" (tipo F · Interno, sem save). O planejado NÃO acompanha o
+   *  orçado, o orçado fica em zero, e linha nova, linha vermelha e a
+   *  correção do planejado entram sem errata (`soVermelhas`). */
+  pagamentos: boolean;
   /** Liga o modo errata. Com `conteudo`, abre a errata pronta para envio
    *  (decisão 159) já aplicada na planilha: quem abre continua dela. */
   ligar: (conteudo?: ConteudoErrata | null) => void;
@@ -256,7 +261,12 @@ export function useRascunhoErrata(
   interno: boolean,
   /** Os agrupamentos do job, na ordem. */
   gruposSalvos: VersaoOrcamentoGrupo[],
+  /** Job de pagamentos (decisão 266): planejado livre e sem errata. */
+  pagamentos: boolean,
 ): RascunhoErrata {
+  // No Interno o planejado acompanha o orçado (decisão 105); no job de
+  // pagamentos, não (decisão 266), embora ele siga o Interno no resto.
+  const planejadoAcompanha = interno && !pagamentos;
   const [ativo, setAtivo] = React.useState(false);
   const [edicoes, setEdicoes] = React.useState<Record<string, EdicaoLinha>>({});
   const [novas, setNovas] = React.useState<LinhaNovaRascunho[]>([]);
@@ -591,7 +601,7 @@ export function useRascunhoErrata(
    *  é o da abertura. `null` só na linha vermelha, que nem mostra número. */
   const travaDoPlanejado = React.useCallback(
     (chave: string): string | null => {
-      if (interno) return "No serviço Interno o planejado é igual ao orçado.";
+      if (planejadoAcompanha) return "No serviço Interno o planejado é igual ao orçado.";
       if (canceladas.includes(chave)) return "Linha cancelada nesta errata: o orçado e o planejado vão a zero.";
       const nova = novas.find((n) => n.chave === chave);
       if (nova) return null;
@@ -602,12 +612,12 @@ export function useRascunhoErrata(
       if (salvo.cancelada_em) return "Linha cancelada por errata não se corrige.";
       return null;
     },
-    [novas, salvosPorId, interno, canceladas],
+    [novas, salvosPorId, planejadoAcompanha, canceladas],
   );
 
   const planejadoLiberado = React.useCallback(
     (chave: string) => {
-      if (interno || canceladas.includes(chave)) return false;
+      if (planejadoAcompanha || canceladas.includes(chave)) return false;
       const nova = novas.find((n) => n.chave === chave);
       if (nova) return !nova.vermelha;
       const salvo = salvosPorId.get(chave);
@@ -615,7 +625,7 @@ export function useRascunhoErrata(
         !!salvo && !salvo.linha_vermelha && salvo.em_save !== true && !salvo.cancelada_em
       );
     },
-    [interno, canceladas, novas, salvosPorId],
+    [planejadoAcompanha, canceladas, novas, salvosPorId],
   );
 
   /** A planilha como ela ficaria depois de confirmar. */
@@ -657,7 +667,7 @@ export function useRascunhoErrata(
         // O planejado digitado onde ele abre (15/10/2026); onde não abre,
         // o salvo. No Interno ele acompanha o orçado, como o trigger do
         // banco grava (decisão 105).
-        const plan = interno
+        const plan = planejadoAcompanha
           ? { u: unit, q: qtd, d: dm }
           : planejadoLiberado(i.id)
             ? {
@@ -693,7 +703,7 @@ export function useRascunhoErrata(
       // planejado acompanha o orçado (decisão 105).
       const plan = n.vermelha
         ? { u: 0, q: 0, d: 0 }
-        : interno
+        : planejadoAcompanha
           ? { u: unit, q: qtd, d: dm }
           : {
               u: numeroDe(n.planUnitario, 0),
@@ -750,7 +760,7 @@ export function useRascunhoErrata(
             (posicao.get(b.i.id) ?? Number.MAX_SAFE_INTEGER) || a.k - b.k,
       )
       .map(({ i }, k) => ({ ...i, ordem: k + 1 }));
-  }, [ativo, itensSalvos, edicoes, novas, canceladas, interno, grupos, grupoDoItem, sequencia, planejadoLiberado, nomes]);
+  }, [ativo, itensSalvos, edicoes, novas, canceladas, planejadoAcompanha, grupos, grupoDoItem, sequencia, planejadoLiberado, nomes]);
 
   // A lista mais recente, para as ações de organização lerem sem esperar
   // o próximo render.
@@ -962,7 +972,8 @@ export function useRascunhoErrata(
   // elas (revisão de 29/10/2026). O agrupamento novo de um mês novo
   // (decisão 219) fica na errata.
   const gruposForaDaErrata = React.useMemo(() => {
-    const vermelhas = new Set(novas.filter((n) => n.vermelha).map((n) => n.chave));
+    // No job de pagamentos toda linha nova entra direto (decisão 266).
+    const vermelhas = new Set(novas.filter((n) => n.vermelha || pagamentos).map((n) => n.chave));
     const saem = new Set(gruposQueSaem);
     return grupos
       .filter((g) => {
@@ -972,20 +983,27 @@ export function useRascunhoErrata(
         return doGrupo.length > 0 && doGrupo.every((i) => vermelhas.has(i.id));
       })
       .map((g) => g.id);
-  }, [novas, grupos, gruposQueSaem, itens]);
+  }, [novas, grupos, gruposQueSaem, itens, pagamentos]);
   const vermelhasForaDaErrata = React.useMemo(() => {
     const grupoDe = new Map(itens.map((i) => [i.id, i.grupo_id]));
     return novas
       .filter((n) => {
-        if (!n.vermelha) return false;
+        if (!n.vermelha && !pagamentos) return false;
         const g = grupoDe.get(n.chave) ?? n.grupoId;
         return !g.startsWith(PREFIXO_GRUPO_NOVO) || gruposForaDaErrata.includes(g);
       })
       .map((n) => n.chave);
-  }, [novas, itens, gruposForaDaErrata]);
+  }, [novas, itens, gruposForaDaErrata, pagamentos]);
+  // No job de pagamentos, a correção do planejado também entra direto (o
+  // orçado e o tipo ficam travados na tabela, então "alterada" ali é só o
+  // planejado).
   const soVermelhas =
     mudancas.length > 0 &&
-    mudancas.every((m) => m.acao === "nova" && vermelhasForaDaErrata.includes(m.chave)) &&
+    mudancas.every(
+      (m) =>
+        (m.acao === "nova" && vermelhasForaDaErrata.includes(m.chave)) ||
+        (pagamentos && m.acao === "alterada"),
+    ) &&
     estrutura.every((m) => m.tipo === "grupo_novo" && gruposForaDaErrata.includes(m.chave));
   const chaveDaNovaDoPedido = React.useCallback(
     (chavePedido: string) => {
@@ -1105,6 +1123,7 @@ export function useRascunhoErrata(
   return {
     ativo,
     interno,
+    pagamentos,
     ligar,
     descartar,
     desfazer,

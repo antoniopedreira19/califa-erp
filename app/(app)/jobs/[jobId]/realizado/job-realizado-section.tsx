@@ -126,7 +126,9 @@ import { AvisoDoMesEnviado } from "./aviso-do-mes-enviado";
 import { MesesQueFaltam } from "./meses-que-faltam";
 import { ErrataProntaFaixa, quandoDaPronta } from "./errata-pronta-faixa";
 import type { FechamentoDaAbertura } from "@/lib/calculos/abertura-do-job";
+import type { PortaDoFaturamento } from "@/lib/data/envio-faturamento";
 import { ErrataBarra } from "./errata-barra";
+import { salvarPlanilhaDoJobDePagamentos } from "./actions-job-de-pagamentos";
 import { ErrataConfirmarDialog } from "./errata-confirmar-dialog";
 import {
   registrarErrata,
@@ -317,8 +319,10 @@ interface Props {
   /** Job já enviado para faturamento: o valor da nota está congelado em
    *  `jobs_envio_faturamento` e nem errata nem save podem mexer nele
    *  (decisão 028, nota de 27/08/2026). O servidor já recusava — sem
-   *  isto a tela deixava montar a errata inteira antes de reprovar. */
-  jaEnviadoParaFaturamento?: boolean;
+   *  isto a tela deixava montar a errata inteira antes de reprovar.
+   *  Decisão 265: `"financeiro"` quando quem fechou foi a nota do Novo
+   *  faturamento. */
+  jaEnviadoParaFaturamento?: PortaDoFaturamento;
   /** Todas as PPs ativas de cada item realizado (PPs parciais). */
   ppsPorItemId: Map<string, PedidoCompraNaLista[]>;
   /** Decisão 153: as PPs a emitir de cada item, fora do realizado. */
@@ -366,6 +370,11 @@ interface Props {
    *  planejado, e o save não existe — nem coluna, nem pedido. Obrigatória:
    *  prop opcional esconde a fronteira em que o campo some. */
   interno: boolean;
+  /** Job de pagamentos (decisão 266): o planejado não acompanha o orçado,
+   *  o orçado fica em zero e linha nova, linha vermelha e planejado entram
+   *  no "Salvar", sem errata. Não há versão aprovada para ver nem "Editar
+   *  planilha" do financeiro. Obrigatória pelo mesmo motivo de `interno`. */
+  pagamentos: boolean;
   /** Na tela do job no financeiro, "Ver versão aprovada" sai do módulo e
    *  pede confirmação, como o "Orçamento aprovado" da ficha (decisões 021
    *  e 108). Obrigatória pelo mesmo motivo de `interno`. */
@@ -676,6 +685,7 @@ function PlanilhaDoJob({
   hrefPlanilha,
   faturamentoMensal = SEM_FATURAMENTO_MENSAL,
   interno,
+  pagamentos,
   confirmarSaidaParaOrcamento,
   edicaoDoFinanceiro,
   pagamentosAtrasados = null,
@@ -725,7 +735,7 @@ function PlanilhaDoJob({
     !modoFinanceiro && liberacaoAberta !== null && pagamentosAtrasados?.podeCriarLinha === true;
   const modoAtrasado = podeAbrirAtrasado && atrasadoAtivo;
   const planejadoNaFila = modoFinanceiro && job.status === "aguardando_abertura";
-  const rascunho = useRascunhoErrata(itens, interno, grupos);
+  const rascunho = useRascunhoErrata(itens, interno, grupos, pagamentos);
   const errata = React.useMemo(
     () =>
       modoFinanceiro && !planejadoNaFila
@@ -735,10 +745,12 @@ function PlanilhaDoJob({
             // No Interno o planejado acompanha o orçado (decisão 105): vale o
             // texto do rascunho, que diz isso.
             motivoPlanejadoTravado: (chave: string) =>
-              interno ? rascunho.motivoPlanejadoTravado(chave) : MOTIVO_PLANEJADO_DO_FINANCEIRO,
+              interno && !pagamentos
+                ? rascunho.motivoPlanejadoTravado(chave)
+                : MOTIVO_PLANEJADO_DO_FINANCEIRO,
           }
         : rascunho,
-    [modoFinanceiro, planejadoNaFila, rascunho, interno],
+    [modoFinanceiro, planejadoNaFila, rascunho, interno, pagamentos],
   );
 
   // Os parâmetros do job abrem junto com o "Editar planilha" (revisão de
@@ -1206,6 +1218,27 @@ function PlanilhaDoJob({
     router.refresh();
   }
 
+  /** Decisão 266: o "Salvar" do job de pagamentos — linha nova, linha
+   *  vermelha, agrupamento novo e planejado, sem errata e sem pop-up. */
+  async function salvarPlanilhaDePagamentos() {
+    if (errata.faltaNomear) {
+      setErroErrata("Preencha o nome da linha antes de salvar.");
+      return;
+    }
+    setSalvando(true);
+    setErroErrata(null);
+    const { descricao: _descricao, ...doRascunho } = errata.payload("");
+    void _descricao;
+    const r = await salvarPlanilhaDoJobDePagamentos(job.id, doRascunho);
+    setSalvando(false);
+    if (!r.ok) {
+      setErroErrata(r.message);
+      return;
+    }
+    errata.descartar();
+    router.refresh();
+  }
+
   async function confirmarDescarteDaPronta() {
     if (!errataPronta) return;
     setDescartePendente(true);
@@ -1332,8 +1365,10 @@ function PlanilhaDoJob({
   // gerar save vale até o envio para ENCERRAMENTO, e só consumir e retirar
   // consumo fecham com o envio para faturamento (no mensal, pelo mês da
   // linha). Ver `modoDoSave` e `portaDoConsumo`, logo abaixo.
+  // Decisão 265: o mês faturado pelo financeiro (Novo faturamento) fecha
+  // como o mês enviado.
   const mesesEnviados = React.useMemo(
-    () => new Set(faturamentoMensal.filter((m) => m.envio !== null).map((m) => m.mesId)),
+    () => new Set(faturamentoMensal.filter((m) => m.envio !== null || m.peloFinanceiro).map((m) => m.mesId)),
     [faturamentoMensal],
   );
   // Com mês faltando no trimestre, a errata segue aberta mesmo com todos os
@@ -1388,7 +1423,9 @@ function PlanilhaDoJob({
       : job.status === "rejeitado_financeiro"
         ? "direto"
         : null;
-  const motivoErrataTravada = jaEnviadoParaFaturamento
+  const motivoErrataTravada = jaEnviadoParaFaturamento === "financeiro"
+    ? "Job já faturado pelo financeiro: o valor da nota está congelado e não há mais errata. Se algo estiver errado, fale com o financeiro."
+    : jaEnviadoParaFaturamento
     ? "Job já enviado para faturamento: o valor da nota está congelado e não há mais errata. Fale com o financeiro antes da emissão da nota."
     : todosOsMesesEnviados
       ? "Todos os meses do job já foram enviados para faturamento: o valor das notas está congelado e não há mais errata."
@@ -1426,7 +1463,9 @@ function PlanilhaDoJob({
   /** O consumo desta linha já não muda: o job foi enviado para faturamento
    *  ou, no modelo mensal, o mês dela foi (§14). */
   function portaDoConsumo(item: ItemPlanilhaJob): PortaDoConsumo | null {
-    if (jaEnviadoParaFaturamento) return { motivo: "faturamento" };
+    if (jaEnviadoParaFaturamento) {
+      return { motivo: "faturamento", peloFinanceiro: jaEnviadoParaFaturamento === "financeiro" };
+    }
     const mesId = mesDoGrupo.get(item.grupo_id) ?? null;
     if (mesId && mesesEnviados.has(mesId)) {
       const mes = meses.find((m) => m.id === mesId);
@@ -2249,7 +2288,10 @@ function PlanilhaDoJob({
             !errata.ativo && <BotaoConcluirPagamentosAtrasados jobId={job.id} liberacao={liberacaoAberta} />}
           {/* O "Editar orçado" do financeiro (decisão 115), no mesmo lugar
               em que a produção tem o "Realizar errata". */}
-          {modoFinanceiro && (
+          {/* Decisão 266: no job de pagamentos quem mexe na planilha é a
+              produção (orçado zero, planejado direto): o financeiro não tem
+              o que editar nela. */}
+          {modoFinanceiro && !pagamentos && (
             <EditarOrcadoButton
               ativo={errata.ativo}
               travadoPor={motivoEdicaoTravada}
@@ -2287,7 +2329,9 @@ function PlanilhaDoJob({
               itensEmAberto={itensEmAberto}
             />
           )}
-          {confirmarSaidaParaOrcamento ? (
+          {/* Decisão 266: o job de pagamentos não tem orçamento à vista —
+              o que existe por baixo fica fora de Orçamentos. */}
+          {pagamentos ? null : confirmarSaidaParaOrcamento ? (
             <LinkSaidaDeModulo
               href={`/orcamentos/${job.projeto_id}/${job.orcamento_id}/versoes/${versao.id}`}
               modulo="Orçamentos"
@@ -2576,9 +2620,10 @@ function PlanilhaDoJob({
           podeDesfazer={errata.podeDesfazer}
           onConfirmar={() => {
             setErroErrata(null);
-            // Decisão 226: só linha vermelha salva direto, sem pop-up.
+            // Decisão 226: só linha vermelha salva direto, sem pop-up. No job
+            // de pagamentos (decisão 266), também a linha nova e o planejado.
             if (soVermelhas && !prontaAberta) {
-              void salvarSoVermelhas();
+              void (pagamentos ? salvarPlanilhaDePagamentos() : salvarSoVermelhas());
               return;
             }
             setConfirmando(true);
@@ -2592,6 +2637,7 @@ function PlanilhaDoJob({
                 }
               : null
           }
+          pagamentos={pagamentos}
           vermelhas={
             soVermelhas && !prontaAberta
               ? "so"
@@ -2658,7 +2704,7 @@ function PlanilhaDoJob({
         recebimentoSemPrevisao={emRevisao ? [] : acompanhamDoFinanceiro.semPrevisao}
         parametros={camposDosParametros}
         revisao={emRevisao ? registroDaRevisao.current : null}
-        planejadoAcompanha={interno}
+        planejadoAcompanha={interno && !pagamentos}
         naAbertura={job.status === "aguardando_abertura"}
         salvando={salvando}
         erro={erroErrata}

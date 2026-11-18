@@ -41,7 +41,30 @@ export function servicosDoOrcamentoQuery(
     .eq("tenant_id", tenantId)
     .eq("escopo", "projeto")
     .eq("ativo", true)
+    // Decisão 266: o serviço Pagamentos é do sistema — nasce só com o job
+    // de pagamentos e não se escolhe em formulário nenhum.
+    .eq("job_de_pagamentos", false)
     .order("nome");
+}
+
+/**
+ * O serviço que o job já tem entra na lista, mesmo fora dela (decisão 266:
+ * o job de pagamentos tem o serviço Pagamentos, que não aparece para
+ * escolha) — o campo nunca abre vazio.
+ */
+export function comOServicoDoJob<T extends ServicoOption>(
+  servicos: T[],
+  job: { servico_id: string | null; servico_nome: string | null; servico_orcamento_interno: boolean },
+): ServicoOption[] {
+  if (!job.servico_id || servicos.some((s) => s.id === job.servico_id)) return servicos;
+  return [
+    ...servicos,
+    {
+      id: job.servico_id,
+      nome: job.servico_nome ?? "—",
+      investimento_interno: job.servico_orcamento_interno,
+    },
+  ];
 }
 
 /**

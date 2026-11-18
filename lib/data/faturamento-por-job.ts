@@ -221,6 +221,18 @@ export async function faturamentoPorJob(
     .select("job_id, mes")
     .eq("tenant_id", tenantId)
     .not("mes", "is", null);
+  // Decisão 265: os meses que o financeiro faturou pelo Novo faturamento
+  // (decisão 256) fecham o mês como o envio do GP. Só as notas do mês
+  // (`mes_novo_faturamento`) — a do job inteiro não é de mensal. Poucas
+  // linhas, no índice parcial `idx_faturamentos_pelo_financeiro`.
+  let novoPorMesQuery = supabase
+    .from("faturamentos")
+    .select("mes_novo_faturamento, previsto_do_mes, itens:faturamento_itens!inner(origem_id)")
+    .eq("tenant_id", tenantId)
+    .eq("status", "emitido")
+    .eq("faturado_pelo_financeiro", true)
+    .not("mes_novo_faturamento", "is", null)
+    .in("itens.origem_tipo", ["job", "save"]);
   // O filtro vale para as três: sem ele na previsão, a contagem de meses do
   // mensal sairia do tenant inteiro e nunca bateria.
   if (jobIds) {
@@ -229,6 +241,7 @@ export async function faturamentoPorJob(
     semFaturamentoQuery = semFaturamentoQuery.in("id", jobIds);
     mesesQuery = mesesQuery.in("job_id", jobIds);
     consumosDecididosQuery = consumosDecididosQuery.in("job_id", jobIds);
+    novoPorMesQuery = novoPorMesQuery.in("itens.origem_id", jobIds);
   }
 
   const [
@@ -238,6 +251,7 @@ export async function faturamentoPorJob(
     mesesPrevistosRes,
     consumosDecididosRes,
     semFaturamentoRes,
+    novoPorMesRes,
   ] = await Promise.all([
     enviosQuery,
     notasEmitidasDosJobs(tenantId, jobIds),
@@ -245,25 +259,59 @@ export async function faturamentoPorJob(
     mesesQuery,
     consumosDecididosQuery,
     semFaturamentoQuery,
+    novoPorMesQuery,
   ]);
 
   if (enviosRes.error) {
     console.error("[faturamento-por-job.envios]", enviosRes.error.message);
   }
+  if (novoPorMesRes.error) {
+    console.error("[faturamento-por-job.novo_por_mes]", novoPorMesRes.error.message);
+  }
 
   // Um envio por job — ou um por mês nos jobs do modelo mensal (decisão
   // 078). Com vários, o valor enviado é a soma e a data é a do primeiro.
+  // Decisão 265: `porMes` guarda o valor de cada mês enviado, para o mês
+  // que também tem Novo faturamento não contar duas vezes.
   const envioPorJob = new Map<
     string,
-    { valor: number; em: string; mensais: number }
+    { valor: number; em: string; mensais: number; porMes: Map<string, number> }
   >();
   for (const e of (enviosRes.data ?? []) as any[]) {
     const atual = envioPorJob.get(e.job_id);
+    const porMes = atual?.porMes ?? new Map<string, number>();
+    if (e.mes) {
+      const chave = String(e.mes).slice(0, 10);
+      porMes.set(chave, (porMes.get(chave) ?? 0) + Number(e.valor_faturado ?? 0));
+    }
     envioPorJob.set(e.job_id, {
       valor: (atual?.valor ?? 0) + Number(e.valor_faturado ?? 0),
       em: atual && atual.em < e.enviado_em ? atual.em : e.enviado_em,
       mensais: (atual?.mensais ?? 0) + (e.mes ? 1 : 0),
+      porMes,
     });
+  }
+
+  // Decisão 265: o Novo faturamento substitui o envio do mês. O valor
+  // "enviado" do mês é o `previsto_do_mes` (o previsto que o mês tinha no
+  // dia da nota), e não o valor da nota — a mesma régua do banco em
+  // `job_faturamento_todo_enviado`. Com o valor da nota, todo Novo se
+  // cobriria sozinho e o job iria a "Liquidado" com o saldo do mês ainda
+  // na fila do financeiro; com o previsto, o Novo abaixo do previsto fica
+  // como o envio com parcela sem nota: falta faturar. Várias notas no mesmo
+  // mês (a do saldo) levam o maior previsto, como no banco.
+  const novoPorJob = new Map<string, Map<string, number>>();
+  for (const f of (novoPorMesRes.data ?? []) as unknown as Array<{
+    mes_novo_faturamento: string;
+    previsto_do_mes: number | string | null;
+    itens: Array<{ origem_id: string | null }>;
+  }>) {
+    const jobId = f.itens.find((i) => i.origem_id)?.origem_id;
+    if (!jobId) continue;
+    const meses = novoPorJob.get(jobId) ?? new Map<string, number>();
+    const chave = String(f.mes_novo_faturamento).slice(0, 10);
+    meses.set(chave, Math.max(meses.get(chave) ?? 0, Number(f.previsto_do_mes ?? 0)));
+    novoPorJob.set(jobId, meses);
   }
   if (mesesPrevistosRes.error) {
     console.error("[faturamento-por-job.meses]", mesesPrevistosRes.error.message);
@@ -342,12 +390,23 @@ export async function faturamentoPorJob(
 
     // Job mensal: só liquida com todos os meses enviados e as notas
     // cobrindo tudo o que foi enviado.
-    const mensais = envio?.mensais ?? 0;
+    // Decisão 265: o mês fechado pelo Novo faturamento conta como mês
+    // enviado, pelo previsto dele; o envio do mesmo mês (se houver) sai da
+    // conta para o mês não valer duas vezes — como no banco.
+    const mesesDoNovo = novoPorJob.get(jobId) ?? new Map<string, number>();
+    const enviosNosMesesDoNovo = [...(envio?.porMes ?? new Map<string, number>()).entries()].filter(
+      ([mes]) => mesesDoNovo.has(mes),
+    );
+    const mensais = (envio?.mensais ?? 0) - enviosNosMesesDoNovo.length + mesesDoNovo.size;
+    const valorEnviado =
+      (envio?.valor ?? 0) -
+      enviosNosMesesDoNovo.reduce((s, [, v]) => s + v, 0) +
+      [...mesesDoNovo.values()].reduce((s, v) => s + v, 0);
     const parteNasNotas = notas.reduce((s, n) => s + n.parte_do_job, 0);
     const faltaFaturar =
       mensais > 0 &&
       (mensais < (mesesPorJob.get(jobId)?.size ?? 0) ||
-        parteNasNotas < (envio?.valor ?? 0) - 0.01);
+        parteNasNotas < valorEnviado - 0.01);
 
     const consolidado = consolidarNotasDoJob(
       notas,

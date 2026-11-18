@@ -149,11 +149,15 @@ export function BarraFaturamentoMensal({
   const proximo = meses.find((m) => m.situacao === "a_enviar") ?? null;
   // Mídia Off: o envio que deixa todos os meses com faturamento enviados é
   // o que encerra o job — qualquer que seja a ordem dos envios.
+  // Decisão 265: o mês faturado pelo financeiro (Novo faturamento) conta
+  // como enviado nos OUTROS meses; ele mesmo nunca encerra o job — quem
+  // encerra é o envio do GP que fecha o último mês que falta.
   const encerraNoEnvio = (m: MesDeFaturamento) =>
     encerraComOUltimoMes !== null &&
     m.envio === null &&
+    !m.peloFinanceiro &&
     m.faturamento > 0 &&
-    meses.every((o) => o === m || o.envio !== null || o.faturamento <= 0);
+    meses.every((o) => o === m || o.envio !== null || o.peloFinanceiro || o.faturamento <= 0);
   const pendenciasDoMes = (m: MesDeFaturamento) =>
     encerraNoEnvio(m) ? (encerraComOUltimoMes?.pendencias ?? []) : [];
   const podeEnviarMes = (m: MesDeFaturamento) =>

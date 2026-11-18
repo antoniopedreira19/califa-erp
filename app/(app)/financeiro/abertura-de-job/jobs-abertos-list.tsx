@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
+  CheckCheck,
   ArrowRight,
   ChevronRight,
   Download,
@@ -31,6 +32,7 @@ import {
   type ColunaFiltravel,
 } from "@/components/ui/filtro-de-coluna";
 import { formatDiaBr } from "@/lib/formatar-data-hora";
+import { BotaoCriarJobDePagamentos } from "./criar-job-de-pagamentos";
 
 const TODOS = "Todos";
 
@@ -768,6 +770,13 @@ export function JobsAbertosList({
 
   const [exportando, setExportando] = React.useState(false);
   const [erroExportar, setErroExportar] = React.useState(false);
+  // Decisão 266: o aviso do job de pagamentos recém-criado.
+  const [avisoCriado, setAvisoCriado] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!avisoCriado) return;
+    const t = setTimeout(() => setAvisoCriado(null), 8000);
+    return () => clearTimeout(t);
+  }, [avisoCriado]);
 
   /**
    * Baixa em Excel o que está na tela, na ordem da arrumação escolhida
@@ -790,6 +799,39 @@ export function JobsAbertosList({
       setExportando(false);
     }
   }
+
+  const botaoExportar = (
+    <>
+      {erroExportar && (
+        <span className="text-[12px] text-california-red">
+          Não foi possível gerar a planilha. Tente de novo.
+        </span>
+      )}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            onClick={exportar}
+            disabled={exportando || visiveis.length === 0}
+            className="inline-flex h-[34px] items-center gap-1.5 rounded-lg border border-border bg-white px-3.5 text-[12.5px] font-semibold text-foreground transition-colors hover:border-california-red/30 hover:bg-california-red/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {exportando ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-california-red" />
+            ) : (
+              <Download className="h-3.5 w-3.5 text-california-red" />
+            )}
+            {exportando ? "Exportando…" : "Exportar Excel"}
+          </button>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" align="end">
+          {visiveis.length === 1
+            ? "O job da lista"
+            : `Os ${visiveis.length} jobs da lista`}
+          {filtroAtivo ? ", com os filtros aplicados" : ""}
+        </TooltipContent>
+      </Tooltip>
+    </>
+  );
 
   const vazio = (
     <p className="px-4 py-12 text-center text-sm text-muted-foreground">
@@ -822,34 +864,19 @@ export function JobsAbertosList({
         ))}
 
         <div className="ml-auto flex items-center gap-2.5">
-          {erroExportar && (
-            <span className="text-[12px] text-california-red">
-              Não foi possível gerar a planilha. Tente de novo.
-            </span>
+          {/* Decisão 266: na Abertura de Job, o Criar Job de Pagamentos fica
+              na linha dos chips e o Exportar Excel desce para a linha da
+              busca (pedido do Tiago, 18/11/2026). No Resultado de Job, a
+              mesma lista segue como era. */}
+          {tela === "abertura" ? (
+            <BotaoCriarJobDePagamentos
+              onCriado={(codigo) =>
+                setAvisoCriado(`Job ${codigo} criado e aberto. A produção já o vê em Jobs.`)
+              }
+            />
+          ) : (
+            botaoExportar
           )}
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={exportar}
-                disabled={exportando || visiveis.length === 0}
-                className="inline-flex h-[34px] items-center gap-1.5 rounded-lg border border-border bg-white px-3.5 text-[12.5px] font-semibold text-foreground transition-colors hover:border-california-red/30 hover:bg-california-red/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {exportando ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin text-california-red" />
-                ) : (
-                  <Download className="h-3.5 w-3.5 text-california-red" />
-                )}
-                {exportando ? "Exportando…" : "Exportar Excel"}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" align="end">
-              {visiveis.length === 1
-                ? "O job da lista"
-                : `Os ${visiveis.length} jobs da lista`}
-              {filtroAtivo ? ", com os filtros aplicados" : ""}
-            </TooltipContent>
-          </Tooltip>
         </div>
       </div>
 
@@ -920,6 +947,9 @@ export function JobsAbertosList({
             className="h-[38px] w-64 rounded-lg border border-border bg-white pl-9 pr-3 text-[12.5px] outline-none focus:border-california-red/40"
           />
         </div>
+        {tela === "abertura" && (
+          <div className="flex items-center gap-2.5">{botaoExportar}</div>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-3.5 text-[12.5px] text-muted-foreground">
@@ -1238,6 +1268,26 @@ export function JobsAbertosList({
           </table>
 
           {linhasPorJob.length === 0 && vazio}
+        </div>
+      )}
+
+      {/* O aviso do job de pagamentos criado: o mesmo cartão das baixas do
+          Contas a Pagar. */}
+      {avisoCriado && (
+        <div
+          role="status"
+          className="fixed bottom-6 right-6 z-50 flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 shadow-elevated"
+        >
+          <CheckCheck className="h-4 w-4 shrink-0 text-emerald-700" />
+          <span className="text-sm font-semibold text-emerald-900">{avisoCriado}</span>
+          <button
+            type="button"
+            onClick={() => setAvisoCriado(null)}
+            aria-label="Fechar aviso"
+            className="text-emerald-700 hover:text-emerald-900"
+          >
+            ×
+          </button>
         </div>
       )}
     </div>

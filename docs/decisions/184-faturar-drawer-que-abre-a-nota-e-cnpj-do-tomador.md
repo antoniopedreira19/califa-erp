@@ -1,7 +1,7 @@
 # 184 — O Faturar redesenhado: drawer que abre a nota, "Faturar", job de referência e CNPJ do tomador
 
 **Data:** 2026-10-16
-**Status:** aceita e implementada (16/10/2026).
+**Status:** aceita e implementada (16/10/2026). A avulsa "referente a um job" saiu pela [265](265-mais-faturamento-um-formulario-so.md) em 17/11/2026: a nota do job é a do Novo faturamento.
 **Quem decidiu:** Tiago, em 16/10/2026, sobre o protótipo interativo
 "Faturamento Avulso" (https://claude.ai/artifact/21vxXc3TWAMfZQ2kPQg3vr,
 versão 5): pediu para reorganizar o formulário ("a ordem das informações

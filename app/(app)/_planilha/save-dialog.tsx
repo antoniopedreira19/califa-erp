@@ -101,7 +101,8 @@ export type MudancaNaLinha =
 
 /** Por que o consumo desta linha não muda mais (decisão 099 §14). */
 export type PortaDoConsumo =
-  | { motivo: "faturamento" }
+  /** `peloFinanceiro`: fechada pela nota do Novo faturamento (decisão 265). */
+  | { motivo: "faturamento"; peloFinanceiro?: boolean }
   /** Modelo mensal: o mês da linha já foi enviado. `mes` é o nome do mês,
    *  em minúsculas ("julho"). */
   | { motivo: "mes"; mes: string };
@@ -275,9 +276,12 @@ function maiuscula(texto: string): string {
  *  distingue a linha que já consome da que ainda não consome. */
 function textoDaPorta(porta: PortaDoConsumo, comConsumo: boolean): string {
   if (porta.motivo === "faturamento") {
+    const quem = porta.peloFinanceiro
+      ? "O job já foi faturado pelo financeiro"
+      : "O job já foi enviado para faturamento";
     return comConsumo
-      ? "O job já foi enviado para faturamento: o consumo desta linha não muda mais."
-      : "O job já foi enviado para faturamento: nenhuma linha dele passa a consumir save.";
+      ? `${quem}: o consumo desta linha não muda mais.`
+      : `${quem}: nenhuma linha dele passa a consumir save.`;
   }
   const mes = maiuscula(porta.mes);
   return comConsumo

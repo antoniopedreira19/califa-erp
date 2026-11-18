@@ -11,8 +11,8 @@ import { carregarRegrasDoComite } from "@/lib/data/comite";
 import { orcadoDaErrataAbaixoDasPPs } from "@/lib/calculos/limites-orcamento";
 import { motivoDaTrocaRecusada, travaDoTipo } from "@/lib/calculos/alteracao-financeiro";
 import {
-  MENSAGEM_JA_ENVIADO,
   jobJaEnviadoParaFaturamento,
+  mensagemDaPorta,
   mensagemMesJaEnviado,
   mesesEnviadosDoJob,
 } from "@/lib/data/envio-faturamento";
@@ -53,6 +53,7 @@ import {
 import { comParametrosDoJob } from "@/lib/data/parametros-do-job";
 import {
   MENSAGEM_PARAMETROS_DEPOIS_DO_ENVIO,
+  MENSAGEM_PARAMETROS_DEPOIS_DO_NOVO_FATURAMENTO,
   SELECT_VW_PARAMETROS_DO_JOB,
   parametrosAtuaisDe,
   camposDaAlteracao,
@@ -1061,8 +1062,10 @@ async function gravarLinhasVermelhas(
         return { ok: false, message: mensagemMesJaEnviado([...tocados].sort().map(nomeDoMes)) };
       }
     }
-  } else if (await jobJaEnviadoParaFaturamento(supabase, jobId, tenantId)) {
-    return { ok: false, message: MENSAGEM_JA_ENVIADO };
+  } else {
+    // Decisão 265: a nota do Novo faturamento fecha a porta como o envio.
+    const porta = await jobJaEnviadoParaFaturamento(supabase, jobId, tenantId);
+    if (porta) return { ok: false, message: mensagemDaPorta(porta) };
   }
 
   const { data, error } = await supabase.rpc("adicionar_linhas_vermelhas_do_job", {
@@ -1322,7 +1325,7 @@ async function montarErrata(
   // (`gravar_parametros_da_errata`), inclusive que o "de" é o de hoje.
   let parametros: ErrataMontada["parametros"] = null;
   if (conteudo.parametros) {
-    const [atuaisRes, enviosRes] = await Promise.all([
+    const [atuaisRes, enviosRes, novoRes] = await Promise.all([
       supabase
         .from("vw_parametros_do_job")
         .select(SELECT_VW_PARAMETROS_DO_JOB)
@@ -1334,9 +1337,14 @@ async function montarErrata(
         .select("id", { count: "exact", head: true })
         .eq("job_id", jobId)
         .eq("tenant_id", session.activeTenant.id),
+      // Decisão 265: a nota do Novo faturamento trava como o envio.
+      supabase.rpc("novo_faturamento_do_job", { p_job_id: jobId }),
     ]);
-    if (atuaisRes.error || !atuaisRes.data || enviosRes.error) {
-      console.error("[errata.parametros]", atuaisRes.error?.message ?? enviosRes.error?.message);
+    if (atuaisRes.error || !atuaisRes.data || enviosRes.error || novoRes.error) {
+      console.error(
+        "[errata.parametros]",
+        atuaisRes.error?.message ?? enviosRes.error?.message ?? novoRes.error?.message,
+      );
       return { ok: false, message: "Não foi possível ler os parâmetros do job agora. Tente de novo." };
     }
     const pedido = parametrosDoPedido(
@@ -1348,6 +1356,9 @@ async function montarErrata(
     parametros = pedido.parametros;
     if (parametros && (enviosRes.count ?? 0) > 0) {
       return { ok: false, message: MENSAGEM_PARAMETROS_DEPOIS_DO_ENVIO };
+    }
+    if (parametros && ((novoRes.data ?? []) as unknown[]).length > 0) {
+      return { ok: false, message: MENSAGEM_PARAMETROS_DEPOIS_DO_NOVO_FATURAMENTO };
     }
   }
   if (
@@ -1376,11 +1387,10 @@ async function montarErrata(
   // No modelo mensal (decisão 078) a porta fecha por MÊS — a conferência
   // fica mais abaixo, quando os grupos das linhas já estão lidos.
   const mensal = planilha.modeloPlanilha === "mensal";
-  if (
-    !mensal &&
-    (await jobJaEnviadoParaFaturamento(supabase, jobId, session.activeTenant.id))
-  ) {
-    return { ok: false, message: MENSAGEM_JA_ENVIADO };
+  if (!mensal) {
+    // Decisão 265: a nota do Novo faturamento fecha a porta como o envio.
+    const porta = await jobJaEnviadoParaFaturamento(supabase, jobId, session.activeTenant.id);
+    if (porta) return { ok: false, message: mensagemDaPorta(porta) };
   }
 
   // ---- Estado atual do orçado do job ----

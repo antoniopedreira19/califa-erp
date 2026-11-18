@@ -1259,7 +1259,9 @@ export function JobItemRealizadoTable({
         coluna === "quantidade_orcada" ||
         coluna === "dias_meses_orcado"
       ) {
-        return item.linha_vermelha ? null : "numero";
+        // O orçado do job de pagamentos fica sempre em zero: não há cliente
+        // (decisão 266).
+        return item.linha_vermelha || errata.pagamentos ? null : "numero";
       }
       // O Planejado não abre na errata desde a decisão 151 (07/10/2026);
       // a regra mora no rascunho, e a edição do financeiro também fecha.

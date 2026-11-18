@@ -151,7 +151,7 @@ export async function carregarDetalheDoJob(
     supabase
       .from("jobs")
       .select(
-        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, recebimento_previsto_por_mes, observacoes, responsavel_id, produtor_id, produtor_envia_pp, produtor_envia_pp_por, produtor_envia_pp_em, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, midia_system, midia_system_liberado_em, midia_system_liberado_por, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, devolvido_em, enviado_abertura_por, enviado_abertura_em, codigo_reservado, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), enviado_abertura_perfil:profiles!enviado_abertura_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome, investimento_interno), categoria:categorias_dominio!categoria_id(nome, modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, cambio_cotacao, cambio_venda, cambio_data, percentual_veiculo, base_honorarios), cliente_id, cliente:clientes!jobs_cliente_id_fkey(id, nome_fantasia, cnpj), projeto:projetos(id, codigo, nome, data_inicio_prevista, data_fim_prevista), " +
+        "id, tenant_id, empresa_id, codigo, nome, produto, cidade, de_pagamentos, data_inicio_prevista, data_fim_prevista, data_evento, data_prevista_faturamento, recebimento_previsto_por_mes, observacoes, responsavel_id, produtor_id, produtor_envia_pp, produtor_envia_pp_por, produtor_envia_pp_em, valor_total, faturamento_previsto, faturamento_save_previsto, valor_job_abertura, faturamento_previsto_abertura, abertura_em_revisao, abertura_revisao_desde, abertura_revisao_errata_id, midia_system, midia_system_liberado_em, midia_system_liberado_por, status, encerrado_em, encerrado_por, finalizado_em, faturamento_enviado_em, motivo_rejeicao, devolvido_em, enviado_abertura_por, enviado_abertura_em, codigo_reservado, projeto_id, orcamento_id, versao_orcamento_aprovada_id, regional_id, categoria_id, servico_id, competencia_trimestre, competencia_ano, custo_previsto_total, nome_financeiro, data_abertura_financeiro, aberto_por, created_at, updated_at, responsavel:profiles!responsavel_id(id, nome), produtor:profiles!produtor_id(id, nome), encerrado_por_perfil:profiles!encerrado_por(nome), enviado_abertura_perfil:profiles!enviado_abertura_por(nome), regional:regionais(id, nome), categoria:categorias_dominio!categoria_id(id, nome), servico:categorias_dominio!servico_id(id, nome), orcamento:orcamentos(id, codigo, nome, projeto_id, servico:categorias_dominio!servico_id(id, nome, investimento_interno), categoria:categorias_dominio!categoria_id(nome, modelo_planilha)), versao:versoes_orcamento!versao_orcamento_aprovada_id(id, numero_versao, nome, moeda, percentual_honorarios, percentual_imposto, percentual_int_taxes, int_transaction_costs, moeda_estrangeira, cambio_compra, cambio_cotacao, cambio_venda, cambio_data, percentual_veiculo, base_honorarios), cliente_id, cliente:clientes!jobs_cliente_id_fkey(id, nome_fantasia, cnpj), projeto:projetos(id, codigo, nome, data_inicio_prevista, data_fim_prevista), " +
           // Os parâmetros do job, quando o financeiro os alterou (decisão 224).
           SELECT_PARAMETROS_DO_JOB,
       )
@@ -1134,6 +1134,8 @@ export async function carregarDetalheDoJob(
     abertura_em_revisao: raw.abertura_em_revisao === true,
     abertura_revisao_desde: raw.abertura_revisao_desde ?? null,
     abertura_revisao_errata_id: raw.abertura_revisao_errata_id ?? null,
+    // Decisão 266: o job de pagamentos.
+    de_pagamentos: raw.de_pagamentos === true,
     // Decisão 216: o job Mídia System.
     midia_system: raw.midia_system === true,
     midia_system_liberado_em: raw.midia_system_liberado_em ?? null,
@@ -1458,16 +1460,8 @@ export async function carregarDetalheDoJob(
         .eq("id", idAutorEnvioFat)
         .maybeSingle<{ nome: string | null }>()
     : { data: null };
-  const etapasDoJob: EtapasDaFicha = {
-    enviadoAberturaEm: raw.enviado_abertura_em ?? raw.created_at ?? null,
-    enviadoAberturaPorNome:
-      (raw.enviado_abertura_perfil as { nome: string } | null)?.nome ?? null,
-    envioFaturamentoEm: ((ultimoEnvioFat as any)?.enviado_em as string | null) ?? null,
-    envioFaturamentoPorNome: autorEnvioFatRes.data?.nome ?? null,
-    encerradoEm: raw.encerrado_em ?? null,
-    encerradoPorNome:
-      (raw.encerrado_por_perfil as { nome: string } | null)?.nome ?? null,
-  };
+  // Decisão 265: as etapas (`etapasDoJob`) saem mais abaixo, depois das
+  // notas do Novo faturamento — sem envio, a etapa é a nota do financeiro.
 
   if (competenciasRes.error) {
     console.error("[job.competencias]", competenciasRes.error.message);
@@ -1517,7 +1511,14 @@ export async function carregarDetalheDoJob(
       : Promise.resolve(new Map<string, number>()),
     supabase
       .from("faturamentos")
-      .select("numero_nf, data_emissao, valor_total, mes_novo_faturamento, itens:faturamento_itens!inner(origem_id)")
+      .select(
+        "numero_nf, data_emissao, valor_total, mes_novo_faturamento, " +
+          // Decisão 265: quem emitiu e quando, para a etapa da ficha sem
+          // envio. `faturamentos` tem duas FKs para `profiles` (emissão e
+          // cancelamento): o hint é obrigatório.
+          "emitido_em, emissor:profiles!emitido_por(nome), " +
+          "itens:faturamento_itens!inner(origem_id)",
+      )
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "emitido")
       .eq("faturado_pelo_financeiro", true)
@@ -1526,19 +1527,47 @@ export async function carregarDetalheDoJob(
   if (notasDoFinanceiroRes.error) {
     console.error("[job.notas-do-financeiro]", notasDoFinanceiroRes.error.message);
   }
-  const notasDoFinanceiro: NotaDoFinanceiro[] = (
-    (notasDoFinanceiroRes.data ?? []) as unknown as Array<{
-      numero_nf: string;
-      data_emissao: string;
-      valor_total: number | string;
-      mes_novo_faturamento: string | null;
-    }>
-  ).map((n) => ({
+  const notasDoFinanceiroBrutas = (notasDoFinanceiroRes.data ?? []) as unknown as Array<{
+    numero_nf: string;
+    data_emissao: string;
+    valor_total: number | string;
+    mes_novo_faturamento: string | null;
+    emitido_em: string;
+    emissor: { nome: string | null } | null;
+  }>;
+  const notasDoFinanceiro: NotaDoFinanceiro[] = notasDoFinanceiroBrutas.map((n) => ({
     numero: n.numero_nf,
     dataEmissao: n.data_emissao,
     valor: Number(n.valor_total),
     mes: n.mes_novo_faturamento,
   }));
+
+  // As etapas da ficha com quando e quem (decisão 136).
+  // Decisão 265: o Novo faturamento substitui o envio. Sem envio nenhum e
+  // com nota do financeiro, a etapa é a primeira nota do Novo faturamento:
+  // quem emitiu e quando. Com envio, fica o envio mais recente, como antes
+  // (no mensal, os meses do Novo seguem na barra de faturamento).
+  const primeiraNotaDoFinanceiro =
+    envios.length === 0
+      ? ([...notasDoFinanceiroBrutas].sort((a, b) =>
+          String(a.emitido_em ?? "").localeCompare(String(b.emitido_em ?? "")),
+        )[0] ?? null)
+      : null;
+  const etapasDoJob: EtapasDaFicha = {
+    enviadoAberturaEm: raw.enviado_abertura_em ?? raw.created_at ?? null,
+    enviadoAberturaPorNome:
+      (raw.enviado_abertura_perfil as { nome: string } | null)?.nome ?? null,
+    envioFaturamentoEm: primeiraNotaDoFinanceiro
+      ? primeiraNotaDoFinanceiro.emitido_em
+      : (((ultimoEnvioFat as any)?.enviado_em as string | null) ?? null),
+    envioFaturamentoPorNome: primeiraNotaDoFinanceiro
+      ? (primeiraNotaDoFinanceiro.emissor?.nome ?? null)
+      : (autorEnvioFatRes.data?.nome ?? null),
+    faturadoPeloFinanceiro: primeiraNotaDoFinanceiro !== null,
+    encerradoEm: raw.encerrado_em ?? null,
+    encerradoPorNome:
+      (raw.encerrado_por_perfil as { nome: string } | null)?.nome ?? null,
+  };
   if (notasDasParcelasRes.error) {
     console.error("[job.notas-das-parcelas]", notasDasParcelasRes.error.message);
   }
@@ -1592,10 +1621,18 @@ export async function carregarDetalheDoJob(
   // do cabeçalho do job no financeiro, que é quem controla a nota.
   const faturamentoCompleto =
     faturaPorMes
-      ? todosOsMesesEnviados && saldoAFaturar <= 0.01
+      ? todosOsMesesEnviados &&
+        saldoAFaturar <= 0.01 &&
+        // Decisão 265: o mês do Novo faturamento abaixo do previsto deixa
+        // saldo com o financeiro, como o envio com parcela ainda sem nota.
+        faturamentoMensal.every((m) => !m.peloFinanceiro || m.situacao === "faturado")
       : faturamentoEnvioUnico !== null &&
         (faturamentoEnvioUnico.situacao === "sem_faturamento" ||
-          (envioFaturamento !== null && saldoAFaturar <= 0.01));
+          (envioFaturamento !== null && saldoAFaturar <= 0.01) ||
+          // Decisão 265: o Novo faturamento substitui o envio. Completo só
+          // quando cobre o previsto; abaixo dele sobra saldo com o
+          // financeiro, como o envio com parcela ainda sem nota.
+          faturamentoEnvioUnico.peloFinanceiro?.coberto === true);
 
   const ppsEmAberto = ppsDoJob
     .filter((pp) => PP_STATUS_EM_ABERTO.includes(pp.status))
@@ -1895,6 +1932,8 @@ export async function carregarDetalheDoJob(
     interno:
       (raw.orcamento as { servico?: { investimento_interno?: boolean } | null } | null)
         ?.servico?.investimento_interno === true,
+    // Decisão 266: o job de pagamentos (do Interno, só o "não fatura").
+    pagamentos: (raw as { de_pagamentos?: boolean }).de_pagamentos === true,
     portaisDoCliente,
     jobsDoProjeto,
     apresentacoesDoProjeto,

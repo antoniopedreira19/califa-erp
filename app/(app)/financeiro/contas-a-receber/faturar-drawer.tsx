@@ -18,9 +18,11 @@
  *
  * Seções na ordem do fluxo: 1 Cliente e job (ou Jobs nesta NF) · 2 Valor e
  * classificação (só a avulsa) · Nota fiscal · Parcelas do recebimento.
- * Empresa (gerencial), regional e cliente vêm do job e não se escolhem; a
- * avulsa pode se referir a um job, ou ser "Sem job" (cliente, empresa e
- * rateio como antes). O CNPJ do tomador é campo nas duas notas, com
+ * Empresa (gerencial), regional e cliente vêm do job e não se escolhem. O
+ * "+ Faturamento" (decisão 265) abre com o vínculo em cima: Job (o Novo
+ * faturamento, decisão 256), Save avulso ou "Sem job" (cliente, empresa e
+ * rateio como antes); a avulsa "referente a um job" saiu. O CNPJ do
+ * tomador é campo nas duas notas, com
  * "Tomador no exterior, sem CNPJ". A competência é o mês da emissão: não é
  * campo.
  *
@@ -102,6 +104,7 @@ import { NotaEmitidaDrawer } from "./nota-emitida-drawer";
 
 export type DrawerState =
   | { modo: "origem"; linhas: FaturamentoPendenteRow[] }
+  /** Decisão 265: o "+ Faturamento" — Job (o Novo faturamento), Save avulso ou Sem job. */
   | { modo: "avulso"; jobInicial?: string }
   /** Decisão 256: o financeiro fatura o job direto, no lugar do envio da produção. */
   | { modo: "adicional"; jobInicial?: string; valorInicial?: number; mesInicial?: string }
@@ -118,8 +121,8 @@ export interface InfoJob {
 
 /**
  * Decisão 184: um job no que o Faturar precisa dele — a nota de job sai na
- * empresa, na regional e para o cliente do job, e a avulsa referente a um
- * job também.
+ * empresa, na regional e para o cliente do job (no envio e no Novo
+ * faturamento).
  */
 export interface JobDoFaturar {
   id: string;
@@ -496,9 +499,15 @@ function FormularioDeFaturar({
   const router = useRouter();
   const cad = fiscal.cadastro;
 
-  // O novo faturamento usa o formulário da avulsa referente a um job,
-  // sem a escolha do vínculo e sem centro de custo: a nota é do job.
-  const adicional = state.modo === "adicional";
+  // Decisão 265: o "+ Faturamento" abre um formulário só, com o vínculo em
+  // cima — Job (o Novo faturamento da 256: a nota é do job e fecha o envio
+  // da produção), Save avulso ou Sem job. A avulsa "referente a um job"
+  // (184) saiu: extra de job ganha orçamento próprio. A linha do saldo do
+  // Novo faturamento abre direto no Job, sem a escolha.
+  // Decisão 247: "Save avulso" é a avulsa sem job cujo valor vira crédito
+  // do cliente, consumido depois nos jobs dele.
+  const [vinculoEscolhido, setVinculo] = React.useState<"job" | "save" | "sem_job">("job");
+  const adicional = state.modo === "adicional" || (state.modo === "avulso" && vinculoEscolhido === "job");
   const avulso = state.modo === "avulso" || adicional;
   const linhas = state.modo === "origem" ? state.linhas : [];
   const primeira = linhas[0] ?? null;
@@ -522,10 +531,7 @@ function FormularioDeFaturar({
   const nomeDoCliente = (id: string | null) => clientes.find((c) => c.id === id)?.nome ?? "—";
 
   // ---- Avulsa: cliente e job ------------------------------------------------
-  // Decisão 247: "Save avulso" é a avulsa sem job cujo valor vira crédito
-  // do cliente, consumido depois nos jobs dele.
-  const [vinculoEscolhido, setVinculo] = React.useState<"job" | "save" | "sem_job">("job");
-  const vinculo = adicional ? ("job" as const) : vinculoEscolhido;
+  const vinculo = state.modo === "adicional" ? ("job" as const) : vinculoEscolhido;
   const ehSave = avulso && vinculo === "save";
   const [jobRefId, setJobRefId] = React.useState(state.modo !== "origem" ? (state.jobInicial ?? "") : "");
   const [mesEscolhido, setMesEscolhido] = React.useState(state.modo === "adicional" ? (state.mesInicial ?? "") : "");
@@ -1049,7 +1055,7 @@ function FormularioDeFaturar({
   // ---- O que falta --------------------------------------------------------------
   const somaRateio = rateio.reduce((s, l) => s + l.percentual, 0);
   const pendencias: Array<{ rotulo: string; ok: boolean }> = [
-    ...(avulso && vinculo === "job" ? [{ rotulo: adicional ? "Job" : "Job de referência", ok: Boolean(jobRef) }] : []),
+    ...(adicional ? [{ rotulo: "Job", ok: Boolean(jobRef) }] : []),
     ...(mensal ? [{ rotulo: "Mês", ok: Boolean(mesSel) }] : []),
     ...(ehSave
       ? [
@@ -1176,12 +1182,9 @@ function FormularioDeFaturar({
           return itensDaLinha;
         });
 
-    // A avulsa referente a um job fica 100% na regional dele (decisão 184).
-    const rateioDaNota = !avulso || ehSave
-      ? []
-      : jobRef
-        ? [{ regional_id: jobRef.regional_id as string, percentual: 100 }]
-        : rateio;
+    // Só a avulsa "Sem job" leva rateio: a nota de job fica na regional do
+    // job, e o save avulso na do job que consumir (decisões 086 e 247).
+    const rateioDaNota = !avulso || ehSave || adicional ? [] : rateio;
 
     startTransition(async () => {
       const res = await emitirFaturamento({
@@ -1202,7 +1205,7 @@ function FormularioDeFaturar({
         anexo_nf_path: anexoPath,
         plano_conta_tipo_id: avulso && !adicional ? (ehSave ? (tipoReceita?.id ?? null) : avTipoId) : null,
         plano_conta_subtipo_id: avulso && !adicional ? (ehSave ? (subtipoSave?.id ?? null) : avSubtipoId) : null,
-        rateio: adicional ? [] : rateioDaNota,
+        rateio: rateioDaNota,
         // Decisão 256: a nota de job que o financeiro faturou sem o envio da produção.
         faturado_pelo_financeiro: adicional,
         recebidos_associados: recebidosAssociados.map((r) => r.id),
@@ -1218,7 +1221,9 @@ function FormularioDeFaturar({
         ),
         cnpj_tomador: ehBv || exterior ? null : cnpjTomador,
         tomador_exterior: !ehBv && exterior,
-        job_referencia_id: adicional ? null : (jobRef?.id ?? null),
+        // Decisão 265: a avulsa "referente a um job" saiu; a nota do job é a
+        // do Novo faturamento.
+        job_referencia_id: null,
         save_avulso: ehSave
           ? { nome: nomeSave.trim(), percentual_honorarios: pctSave, percentual_imposto: Number(impSave) }
           : null,
@@ -1252,7 +1257,7 @@ function FormularioDeFaturar({
         : avulso
         ? ehSave
           ? ` · save avulso “${nomeSave.trim()}” de ${clienteNome}, crédito de ${formatMoney(creditoSave)}`
-          : ` · avulso para ${clienteNome}${jobRef ? ` · ${jobRef.codigo}` : ""}`
+          : ` · avulso para ${clienteNome}`
         : jobsAtivos > 1
           ? ` cobrindo ${jobsAtivos} jobs de ${primeira?.contraparte_nome}`
           : ` · ${primeira?.codigo ?? ""}`;
@@ -1277,10 +1282,10 @@ function FormularioDeFaturar({
   }
 
   // ---- Textos -----------------------------------------------------------------
-  const titulo = adicional
+  const titulo = state.modo === "avulso"
+    ? "Faturamento"
+    : adicional
     ? "Novo faturamento"
-    : avulso
-    ? "Faturamento avulso"
     : loteDaNota
       ? loteDaNota.total > 1
         ? `Faturar a nota ${loteDaNota.ordem} de ${loteDaNota.total} do lote`
@@ -1288,7 +1293,9 @@ function FormularioDeFaturar({
       : notasAtivas > 1
         ? "Faturamento agrupado"
         : `Faturar ${primeira?.codigo ?? primeira?.descricao ?? ""}`;
-  const subtitulo = adicional
+  const subtitulo = state.modo === "avulso"
+    ? "Uma nota fiscal de um job, de um save avulso ou de uma receita que não é de job."
+    : adicional
     ? "O financeiro fatura o job direto, com o valor negociado, no lugar do envio da produção."
     : avulso
     ? "Nota fiscal que não consome saldo de faturamento de job."
@@ -1300,9 +1307,7 @@ function FormularioDeFaturar({
     : ehSave
     ? "Ao faturar, as parcelas desta NF entram em Títulos a Receber e o crédito vira save avulso do cliente, para consumir nos jobs dele."
     : avulso
-    ? `Ao faturar, as parcelas desta NF entram em Títulos a Receber como faturamento avulso${
-        jobRef ? `, sem consumir o saldo do ${jobRef.codigo}` : ", sem consumir saldo de nenhum job"
-      }.`
+    ? "Ao faturar, as parcelas desta NF entram em Títulos a Receber como faturamento avulso, sem consumir saldo de nenhum job."
     : `Ao faturar, cada job recebe a baixa do valor faturado — o que sobrar do saldo permanece aguardando faturamento — e as parcelas entram em Títulos a Receber vinculadas à mesma nota.${
         temAntes
           ? recebidosDaNf.length === 1
@@ -1599,19 +1604,17 @@ function FormularioDeFaturar({
   // de onde a nota vem (job, cliente); no meio, a caixa com a linha e o
   // valor; embaixo, só o que o avulso exige (centro de custo, rateio de
   // regional ou o cálculo do save).
-  const temQuemNoAvulso = vinculo === "job" ? Boolean(jobRef) : Boolean(clienteSemJob);
+  // Decisão 265: o bloco do avulso é só do Save avulso e do Sem job; o Job
+  // usa o bloco do Novo faturamento.
+  const temQuemNoAvulso = Boolean(clienteSemJob);
   const tituloDaLinhaAvulsa =
-    vinculo === "job"
-      ? (jobRef?.nome ?? "")
-      : vinculo === "save"
-        ? nomeSave.trim() || "Save avulso"
-        : `Faturamento avulso · ${nomeDoCliente(clienteSemJob || null)}`;
+    vinculo === "save"
+      ? nomeSave.trim() || "Save avulso"
+      : `Faturamento avulso · ${nomeDoCliente(clienteSemJob || null)}`;
   const detalheDaLinhaAvulsa =
-    vinculo === "job"
-      ? `${jobRef?.codigo ?? ""} · avulsa: não conta no faturamento do job`
-      : vinculo === "save"
-        ? `crédito do cliente ${avValor > 0 ? formatMoney(creditoSave) : "—"} · a NF sem imposto e sem honorários`
-        : `sem job · ${empresaSemJob ? nomeDaEmpresa(empresaSemJob) : "escolha a empresa"} · receita nas regionais do rateio`;
+    vinculo === "save"
+      ? `crédito do cliente ${avValor > 0 ? formatMoney(creditoSave) : "—"} · a NF sem imposto e sem honorários`
+      : `sem job · ${empresaSemJob ? nomeDaEmpresa(empresaSemJob) : "escolha a empresa"} · receita nas regionais do rateio`;
   const campoCentroDeCusto = (
     <Campo rotulo="Centro de custo" obrigatorio>
       <div className="grid grid-cols-2 gap-2">
@@ -1639,97 +1642,74 @@ function FormularioDeFaturar({
       </div>
     </Campo>
   );
+  // Decisão 265: o vínculo da nota, em cima do formulário do "+ Faturamento".
+  const seletorDoVinculo = (
+    <div className="flex flex-wrap items-center gap-3">
+      <Segmentado<"job" | "save" | "sem_job">
+        valor={vinculo}
+        opcoes={[
+          ["job", "Job"],
+          ["save", "Save avulso"],
+          ["sem_job", "Sem job"],
+        ]}
+        onChange={(v) => {
+          setVinculo(v);
+          setErro(null);
+        }}
+      />
+      <span className="text-[11.5px] text-muted-foreground">
+        {vinculo === "job"
+          ? "O financeiro fatura o job direto, com o valor negociado, no lugar do envio da produção."
+          : vinculo === "save"
+            ? "Vira crédito do cliente, consumido nos jobs dele."
+            : "Receita que não é de job."}
+      </span>
+    </div>
+  );
   const blocoAvulso = (
     <div className="space-y-3">
-      <div className="flex flex-wrap items-center gap-3">
-        <Segmentado<"job" | "save" | "sem_job">
-          valor={vinculo}
-          opcoes={[
-            ["job", "Referente a um job"],
-            ["save", "Save avulso"],
-            ["sem_job", "Sem job"],
-          ]}
-          onChange={(v) => {
-            setVinculo(v);
-            setErro(null);
-          }}
-        />
-        <span className="text-[11.5px] text-muted-foreground">
-          {vinculo === "job"
-            ? "Cliente, empresa e regional vêm do job; a nota não conta no faturamento dele."
-            : vinculo === "save"
-              ? "Vira crédito do cliente, consumido nos jobs dele."
-              : "Receita que não é de job."}
-        </span>
+      <div className={cn("grid items-end gap-x-5 gap-y-3.5", vinculo === "save" ? "grid-cols-3" : "grid-cols-2")}>
+        <Campo rotulo="Cliente" obrigatorio>
+          <Combobox
+            items={clientes.map((c) => ({ value: c.id, label: c.nome }))}
+            value={clienteSemJob || null}
+            onChange={(v) => setClienteSemJob(v ?? "")}
+            placeholder="Selecione o cliente"
+            buscaPlaceholder="Escreva o nome do cliente"
+            className={COMBOBOX_COMO_SELECT}
+          />
+        </Campo>
+        <Campo rotulo="Empresa (gerencial)" obrigatorio>
+          <Select value={empresaSemJob} onValueChange={setEmpresaSemJob}>
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione a empresa" />
+            </SelectTrigger>
+            <SelectContent>
+              {empresas.map((e) => (
+                <SelectItem key={e.id} value={e.id}>
+                  {e.nome}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Campo>
+        {vinculo === "save" && (
+          <Campo
+            rotulo="Nome do save"
+            obrigatorio
+            htmlFor="av-nome-save"
+          >
+            <Input
+              id="av-nome-save"
+              value={nomeSave}
+              onChange={(e) => setNomeSave(e.target.value)}
+              placeholder="Ex.: Verba PDV 2027"
+              maxLength={120}
+              disabled={pending}
+            />
+          </Campo>
+        )}
       </div>
-
-      {vinculo === "job" ? (
-        <div className="grid grid-cols-2 items-end gap-x-5">
-          <Campo rotulo="Job" obrigatorio>
-            <Combobox
-              items={jobs.map((j) => ({
-                value: j.id,
-                label: `${j.codigo} · ${j.nome}`,
-                descricao: `${nomeDoCliente(j.cliente_id)} · ${nomeDaEmpresa(j.empresa_id)} · ${nomeDaRegional(j.regional_id)}${
-                  j.encerrado ? " · encerrado" : ""
-                }`,
-                busca: `${j.codigo} ${j.nome} ${nomeDoCliente(j.cliente_id)}`,
-              }))}
-              value={jobRefId || null}
-              onChange={(v) => {
-                setJobRefId(v ?? "");
-                setErro(null);
-              }}
-              placeholder="Selecione o job a que a nota se refere"
-              buscaPlaceholder="Escreva o código, o nome ou o cliente"
-              className={COMBOBOX_COMO_SELECT}
-            />
-          </Campo>
-        </div>
-      ) : (
-        <div className={cn("grid items-end gap-x-5 gap-y-3.5", vinculo === "save" ? "grid-cols-3" : "grid-cols-2")}>
-          <Campo rotulo="Cliente" obrigatorio>
-            <Combobox
-              items={clientes.map((c) => ({ value: c.id, label: c.nome }))}
-              value={clienteSemJob || null}
-              onChange={(v) => setClienteSemJob(v ?? "")}
-              placeholder="Selecione o cliente"
-              buscaPlaceholder="Escreva o nome do cliente"
-              className={COMBOBOX_COMO_SELECT}
-            />
-          </Campo>
-          <Campo rotulo="Empresa (gerencial)" obrigatorio>
-            <Select value={empresaSemJob} onValueChange={setEmpresaSemJob}>
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione a empresa" />
-              </SelectTrigger>
-              <SelectContent>
-                {empresas.map((e) => (
-                  <SelectItem key={e.id} value={e.id}>
-                    {e.nome}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Campo>
-          {vinculo === "save" && (
-            <Campo
-              rotulo="Nome do save"
-              obrigatorio
-              htmlFor="av-nome-save"
-            >
-              <Input
-                id="av-nome-save"
-                value={nomeSave}
-                onChange={(e) => setNomeSave(e.target.value)}
-                placeholder="Ex.: Verba PDV 2027"
-                maxLength={120}
-                disabled={pending}
-              />
-            </Campo>
-          )}
-        </div>
-      )}
 
       {temQuemNoAvulso && (
         <div>
@@ -1774,15 +1754,6 @@ function FormularioDeFaturar({
       )}
 
       {/* O que só o avulso pede, embaixo da caixa (no envio, a faixa do job). */}
-      {vinculo === "job" && jobRef && (
-        <FaixaDoJob
-          itens={[
-            { rotulo: "Cliente", valor: nomeDoCliente(jobRef.cliente_id) },
-            { rotulo: "Empresa (gerencial)", valor: nomeDaEmpresa(jobRef.empresa_id) },
-            { rotulo: "Regional", valor: nomeDaRegional(jobRef.regional_id) },
-          ]}
-        />
-      )}
       {vinculo === "save" && clienteSemJob && (
         <>
           <div className="grid grid-cols-2 items-end gap-x-4 gap-y-3">
@@ -1865,7 +1836,17 @@ function FormularioDeFaturar({
     </div>
   );
 
-  const blocoClienteEJob = adicional ? blocoJobDoNovo : avulso ? blocoAvulso : (
+  const blocoDoFaturamento = adicional ? blocoJobDoNovo : blocoAvulso;
+  const blocoClienteEJob = avulso ? (
+    state.modo === "avulso" ? (
+      <div className="space-y-3">
+        {seletorDoVinculo}
+        {blocoDoFaturamento}
+      </div>
+    ) : (
+      blocoDoFaturamento
+    )
+  ) : (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-3">
         <div className="ml-auto">
