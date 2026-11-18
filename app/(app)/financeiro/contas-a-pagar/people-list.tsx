@@ -148,7 +148,91 @@ type AlocacaoItem = {
   percentual: string;
   empresa_nome: string;
   regional_nome: string;
+  usa_rateio_empresa: boolean;
 };
+
+/**
+ * Colapsa a lista de alocações por empresa, respeitando o modo de rateio.
+ * - Empresa em modo "rateio da empresa" (Hub): vira 1 linha "Empresa · Hub (soma%)".
+ * - Empresa com regionais explícitas: continua N linhas, uma por regional.
+ */
+function agruparAlocacaoParaExibicao(items: AlocacaoItem[]): Array<
+  | { kind: "hub"; empresa_id: string; empresa_nome: string; percentualTotal: number }
+  | {
+      kind: "detalhado";
+      empresa_id: string;
+      empresa_nome: string;
+      linhas: Array<{ regional_nome: string; percentual: string }>;
+    }
+> {
+  const porEmpresa = new Map<
+    string,
+    {
+      empresa_id: string;
+      empresa_nome: string;
+      usa_rateio_empresa: boolean;
+      linhas: Array<{ regional_nome: string; percentual: string }>;
+      percentualTotal: number;
+    }
+  >();
+  for (const a of items) {
+    const grupo = porEmpresa.get(a.empresa_id) ?? {
+      empresa_id: a.empresa_id,
+      empresa_nome: a.empresa_nome,
+      usa_rateio_empresa: a.usa_rateio_empresa,
+      linhas: [],
+      percentualTotal: 0,
+    };
+    grupo.linhas.push({ regional_nome: a.regional_nome, percentual: a.percentual });
+    grupo.percentualTotal += Number(a.percentual) || 0;
+    porEmpresa.set(a.empresa_id, grupo);
+  }
+  return Array.from(porEmpresa.values()).map((g) =>
+    g.usa_rateio_empresa
+      ? {
+          kind: "hub" as const,
+          empresa_id: g.empresa_id,
+          empresa_nome: g.empresa_nome,
+          percentualTotal: g.percentualTotal,
+        }
+      : {
+          kind: "detalhado" as const,
+          empresa_id: g.empresa_id,
+          empresa_nome: g.empresa_nome,
+          linhas: g.linhas,
+        },
+  );
+}
+
+function CelulaAlocacao({ alocacoes }: { alocacoes: AlocacaoItem[] }) {
+  if (alocacoes.length === 0) {
+    return <span className="text-muted-foreground/50">—</span>;
+  }
+  const grupos = agruparAlocacaoParaExibicao(alocacoes);
+  return (
+    <div className="flex flex-col gap-0.5">
+      {grupos.map((g) =>
+        g.kind === "hub" ? (
+          <span key={g.empresa_id} className="whitespace-nowrap">
+            {g.empresa_nome} · Hub
+            <span className="ml-1 text-muted-foreground/70 tabular-nums">
+              ({g.percentualTotal.toFixed(0)}%)
+            </span>
+          </span>
+        ) : (
+          g.linhas.map((l, idx) => (
+            <span key={`${g.empresa_id}-${idx}`} className="whitespace-nowrap">
+              {g.empresa_nome} · {l.regional_nome}
+              <span className="ml-1 text-muted-foreground/70 tabular-nums">
+                ({Number(l.percentual).toFixed(0)}%)
+              </span>
+            </span>
+          ))
+        ),
+      )}
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Conversão PeopleAprovarItem → FolhaLinhaFinanceiro para o drawer
@@ -438,20 +522,7 @@ export function PeopleList({
           <BadgeContratacao tipo={item.tipo_contratacao} />
         </td>
         <td className="px-4 py-3 text-xs text-muted-foreground">
-          {alocacoesLinha.length === 0 ? (
-            <span className="text-muted-foreground/50">—</span>
-          ) : (
-            <div className="flex flex-col gap-0.5">
-              {alocacoesLinha.map((a) => (
-                <span key={a.id} className="whitespace-nowrap">
-                  {a.empresa_nome} · {a.regional_nome}
-                  <span className="ml-1 text-muted-foreground/70 tabular-nums">
-                    ({Number(a.percentual).toFixed(0)}%)
-                  </span>
-                </span>
-              ))}
-            </div>
-          )}
+          <CelulaAlocacao alocacoes={alocacoesLinha} />
         </td>
         <td className="px-4 py-3">
           <BadgeNf anexada={item.nf_anexada} />
@@ -546,20 +617,7 @@ export function PeopleList({
           <BadgeContratacao tipo={first.tipo_contratacao} />
         </td>
         <td className="px-4 py-3 text-xs text-muted-foreground">
-          {alocacoesLinha.length === 0 ? (
-            <span className="text-muted-foreground/50">—</span>
-          ) : (
-            <div className="flex flex-col gap-0.5">
-              {alocacoesLinha.map((a) => (
-                <span key={a.id} className="whitespace-nowrap">
-                  {a.empresa_nome} · {a.regional_nome}
-                  <span className="ml-1 text-muted-foreground/70 tabular-nums">
-                    ({Number(a.percentual).toFixed(0)}%)
-                  </span>
-                </span>
-              ))}
-            </div>
-          )}
+          <CelulaAlocacao alocacoes={alocacoesLinha} />
         </td>
         <td className="px-4 py-3">
           <BadgeNf anexada={todasAnexadas} />

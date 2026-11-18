@@ -789,9 +789,42 @@ export default async function PedidosCompraFinanceiroPage({
       percentual: string;
       empresa_nome: string;
       regional_nome: string;
+      usa_rateio_empresa: boolean;
     }[]
   >();
   if (peopleLineIds.length > 0) {
+    // Busca o pacote vigente de cada colaborador pra saber quais (colab,
+    // empresa) estão em "rateio da empresa" (Hub). Isso enriquece cada
+    // linha de folhas_pagamento_alocacoes com a flag correspondente, pra
+    // a aba People colapsar N regionais numa pílula "Hub".
+    const peopleColabIds = Array.from(
+      new Set(peopleItems.map((i) => i.colaborador_id)),
+    );
+    const rateioEmpresaKeys = new Set<string>();
+    if (peopleColabIds.length > 0) {
+      const { data: pacotesData } = await supabase
+        .from("colaboradores_alocacoes")
+        .select(
+          "colaborador_id, itens:colaboradores_alocacoes_itens(empresa_id, usa_rateio_empresa)",
+        )
+        .eq("tenant_id", session.activeTenant.id)
+        .in("colaborador_id", peopleColabIds)
+        .is("data_fim", null);
+      for (const p of ((pacotesData ?? []) as any[])) {
+        for (const i of (p.itens ?? []) as { empresa_id: string; usa_rateio_empresa: boolean }[]) {
+          if (i.usa_rateio_empresa) {
+            rateioEmpresaKeys.add(`${p.colaborador_id}|${i.empresa_id}`);
+          }
+        }
+      }
+    }
+    // Index auxiliar: folha_id → colaborador_id. Precisamos pra cruzar
+    // a alocação (que só sabe empresa_id) com o pacote do colaborador.
+    const colabPorFolha = new Map<string, string>();
+    for (const i of peopleItems) {
+      colabPorFolha.set(i.linha_id, i.colaborador_id);
+    }
+
     const { data: alocData } = await supabase
       .from("folhas_pagamento_alocacoes")
       .select(
@@ -800,6 +833,10 @@ export default async function PedidosCompraFinanceiroPage({
       .eq("tenant_id", session.activeTenant.id)
       .in("folha_id", peopleLineIds);
     for (const a of ((alocData ?? []) as any[])) {
+      const colabId = colabPorFolha.get(a.folha_id);
+      const usaRateio = colabId
+        ? rateioEmpresaKeys.has(`${colabId}|${a.empresa_id}`)
+        : false;
       const lista = alocacoesPorFolha.get(a.folha_id) ?? [];
       lista.push({
         id: a.id,
@@ -808,6 +845,7 @@ export default async function PedidosCompraFinanceiroPage({
         percentual: String(a.percentual),
         empresa_nome: a.empresa?.nome_fantasia ?? "",
         regional_nome: a.regional?.nome ?? "",
+        usa_rateio_empresa: usaRateio,
       });
       alocacoesPorFolha.set(a.folha_id, lista);
     }
