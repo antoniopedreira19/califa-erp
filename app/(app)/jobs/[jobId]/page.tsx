@@ -645,6 +645,8 @@ export default async function JobDetailPage({
           <JobPPsSection
             pps={ppsDoJob}
             fornecedoresPorId={fornecedoresPorId}
+            codigoDoJob={job.codigo}
+            nomeDoJob={job.nome}
             editable={podeGerarPP && !comPedido && !emDecisao}
             podeEnviar={podeEnviarPP && !comPedido && !emDecisao}
             papelEnviaPP={papelEnviaPP && !comPedido && !emDecisao}

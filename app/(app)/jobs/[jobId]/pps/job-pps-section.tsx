@@ -25,6 +25,8 @@ import {
   FilePlus,
   Trash2,
   ChevronRight,
+  Loader2,
+  CheckSquare,
 } from "lucide-react";
 import {
   DescritivoPopover,
@@ -117,6 +119,9 @@ const PPTela = dynamic(
 interface Props {
   pps: PedidoCompraNaLista[];
   fornecedoresPorId: Record<string, string>;
+  /** Código e nome do job: vão no nome do arquivo do "Exportar" da aba. */
+  codigoDoJob: string;
+  nomeDoJob: string;
   /** GP responsável pelo job ou admin, com o job em estado editável. */
   /** Cancelar a PP e a trilha de ações. Desde 08/09/2026 vale também na
    *  pré-abertura, junto com gerar (decisão 056). */
@@ -483,6 +488,8 @@ function nomeDoArquivoDaLinha(pp: PedidoCompraNaLista, fornecedoresPorId: Record
 export function JobPPsSection({
   pps,
   fornecedoresPorId,
+  codigoDoJob,
+  nomeDoJob,
   editable,
   podeEnviar = false,
   papelEnviaPP,
@@ -515,6 +522,29 @@ export function JobPPsSection({
   const [busca, setBusca] = React.useState("");
   const [erro, setErro] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<string | null>(null);
+  /** "Exportar" da aba (18/11/2026): a tabela como a tela mostra, cada
+   *  parcela uma linha. O módulo do ExcelJS só carrega no clique. */
+  const [exportando, setExportando] = React.useState(false);
+  /** "Selecionar" da aba (18/11/2026): modo de seleção manual das linhas
+   *  para somar o total escolhido, no estilo das trilhas Faturamento /
+   *  Encerramento do rodapé do job. Guarda o id da LINHA (parcela ou PP
+   *  sem parcela), para a PP parcelada poder entrar por uma parcela só. */
+  const [modoSelecao, setModoSelecao] = React.useState(false);
+  const [selecionados, setSelecionados] = React.useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  function alternarSelecao(chave: string) {
+    setSelecionados((atual) => {
+      const novo = new Set(atual);
+      if (novo.has(chave)) novo.delete(chave);
+      else novo.add(chave);
+      return novo;
+    });
+  }
+  function sairDaSelecao() {
+    setModoSelecao(false);
+    setSelecionados(new Set());
+  }
   /** A rejeitada que vai ser reemitida (decisão 153): ela não se edita,
    *  é cancelada e volta como PP a emitir, com os mesmos dados. */
   const [ppRefazendo, setPpRefazendo] = React.useState<PedidoCompraNaLista | null>(
@@ -953,6 +983,83 @@ export function JobPPsSection({
     return { quantas: ids.size, valor, soComite };
   })();
 
+  /** Total das linhas marcadas em modo de seleção. Soma por parcela (não
+   *  por PP): a PP parcelada pode ter uma parcela só escolhida. Usa a chave
+   *  da LINHA — a mesma do `key` do `<tr>` — para o id "fantasma" das
+   *  linhas do Comitê (prefixo "comite-") não bater com PP real. */
+  const totalSelecionado = React.useMemo(() => {
+    if (!modoSelecao || selecionados.size === 0) {
+      return { quantas: 0, valor: 0 };
+    }
+    let valor = 0;
+    let quantas = 0;
+    for (const l of linhasBase) {
+      const chave = l.parcela?.id ?? l.pp.id;
+      if (!selecionados.has(chave)) continue;
+      quantas += 1;
+      valor += l.parcela ? Number(l.parcela.valor) : Number(l.pp.valor);
+    }
+    return { quantas, valor };
+  }, [modoSelecao, selecionados, linhasBase]);
+
+  /** "Exportar" da aba (18/11/2026): monta as linhas do xlsx a partir do
+   *  que a tela mostra agora e dispara o download. Usa `celula(...)` para
+   *  Origem, Fornecedor e Status, para o arquivo acompanhar os rótulos da
+   *  tabela sem duplicar regra de negócio. */
+  async function exportar() {
+    if (exportando || linhasVisiveis.length === 0) return;
+    setExportando(true);
+    setErro(null);
+    try {
+      const { baixarPPsEmExcel } = await import("./exportar-pps");
+      const linhas = linhasVisiveis.map((l) => {
+        const origem = celula(l, "origem");
+        const fornecedorCel = celula(l, "fornecedor");
+        const statusCel = celula(l, "status");
+        const paga = l.parcela ? l.parcela.pago_em : l.pp.pago_em;
+        const programada = l.parcela
+          ? l.parcela.data_pagamento
+          : l.pp.prazo_pagamento_financeiro;
+        let dataPagamento: string | null = null;
+        let situacaoPagamento = "";
+        if (paga) {
+          dataPagamento = paga;
+          situacaoPagamento = "paga";
+        } else if (programada && (l.pp.status === "aprovada" || l.pp.status === "pago")) {
+          dataPagamento = programada;
+          situacaoPagamento = "programada";
+        }
+        return {
+          codigo: l.pp.codigo,
+          parcela: l.total > 1 ? `${l.indice + 1}/${l.total}` : "",
+          bloco: origem.grupo ?? "",
+          item: origem.rotulo ?? "",
+          servico: l.pp.servico,
+          fornecedor: fornecedorCel.rotulo ?? "",
+          vencimento: l.parcela?.data_vencimento ?? l.pp.prazo_pagamento ?? null,
+          dataPagamento,
+          situacaoPagamento,
+          valor: l.parcela ? Number(l.parcela.valor) : Number(l.pp.valor),
+          status: statusCel.rotulo ?? "",
+        };
+      });
+      const filtrado =
+        filtro !== "todas" ||
+        algumFiltroDeColuna ||
+        busca.trim() !== "";
+      await baixarPPsEmExcel(linhas, {
+        codigoDoJob,
+        nomeDoJob,
+        filtrado,
+      });
+    } catch (e) {
+      console.error("[jobs.pps.exportar]", e);
+      setErro("Não foi possível gerar a planilha. Tente de novo.");
+    } finally {
+      setExportando(false);
+    }
+  }
+
   function handleCancelarConfirm() {
     if (!ppCancelando) return;
     const codigo = ppCancelando.codigo;
@@ -991,6 +1098,26 @@ export function JobPPsSection({
       style={{ paddingRight: 10 + larguraTrilha - AVANCO_NA_MARGEM }}
     >
       <div className="flex flex-wrap items-center gap-2">
+        {/* "Selecionar" (18/11/2026): no canto esquerdo da linha de ações,
+            abre as caixinhas de seleção na coluna Código e um rodapé
+            "TOTAL SELECIONADO" no estilo das trilhas Faturamento /
+            Encerramento, com a soma das linhas marcadas. */}
+        <button
+          type="button"
+          onClick={() => {
+            if (modoSelecao) sairDaSelecao();
+            else setModoSelecao(true);
+          }}
+          className={cn(
+            "inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-lg border bg-white px-3 text-[12px] font-semibold transition-colors",
+            modoSelecao
+              ? "border-california-red/40 text-california-red hover:bg-california-red/[0.06]"
+              : "border-border text-foreground hover:border-california-red/30 hover:bg-california-red/[0.06] hover:text-california-red",
+          )}
+        >
+          <CheckSquare className="h-3.5 w-3.5" />
+          {modoSelecao ? "Sair da seleção" : "Selecionar"}
+        </button>
         <BarraDeFiltros
           itens={CHIPS.map((c) => ({
             ...c,
@@ -1000,15 +1127,44 @@ export function JobPPsSection({
           filtro={filtro}
           onFiltro={setFiltro}
         />
-        {/* A busca geral fica, e cada coluna ganhou a sua (08/10/2026). */}
-        <div className="relative ml-auto">
-          <Search className="pointer-events-none absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-          <input
-            value={busca}
-            onChange={(e) => setBusca(e.target.value)}
-            placeholder="Buscar por código, item, bloco ou fornecedor"
-            className="h-8 w-[270px] rounded-lg border border-border bg-white pl-8 pr-3 text-xs outline-none focus:border-california-red/40"
-          />
+        {/* O "Exportar" entrou colado à esquerda da busca em 18/11/2026: a
+            tabela como a tela mostra, com o filtro ativo. Só ícone para não
+            empurrar a busca pra outra linha. */}
+        <div className="ml-auto flex items-center gap-2">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={exportar}
+                disabled={exportando || linhasVisiveis.length === 0}
+                className="inline-flex h-8 w-8 items-center justify-center rounded-lg border border-border bg-white text-california-red transition-colors hover:border-california-red/30 hover:bg-california-red/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Exportar Excel"
+              >
+                {exportando ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Download className="h-3.5 w-3.5" />
+                )}
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" align="end">
+              {linhasVisiveis.length === 0
+                ? "Nada para exportar"
+                : exportando
+                  ? "Exportando…"
+                  : `Exportar ${linhasVisiveis.length.toLocaleString("pt-BR")} ${linhasVisiveis.length === 1 ? "linha" : "linhas"} em Excel`}
+            </TooltipContent>
+          </Tooltip>
+          {/* A busca geral fica, e cada coluna ganhou a sua (08/10/2026). */}
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-3 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              value={busca}
+              onChange={(e) => setBusca(e.target.value)}
+              placeholder="Buscar por código, item, bloco ou fornecedor"
+              className="h-8 w-[270px] rounded-lg border border-border bg-white pl-8 pr-3 text-xs outline-none focus:border-california-red/40"
+            />
+          </div>
         </div>
       </div>
 
@@ -1057,6 +1213,11 @@ export function JobPPsSection({
                   mais o recuo. Origem, Serviço e Fornecedor dividem o
                   resto. Com porcentagens, a coluna Status sobrava vazia. */}
               <colgroup>
+                {/* 18/11/2026: coluna da caixinha de seleção (36 px) só
+                    aparece no "Selecionar", para não comer espaço fora
+                    dele. Como `table-fixed`, o layout respeita a diferença
+                    sem precisar remedir Origem / Serviço / Fornecedor. */}
+                {modoSelecao && <col className="w-[36px]" />}
                 <col className="w-[92px]" />
                 <col />
                 <col />
@@ -1069,6 +1230,40 @@ export function JobPPsSection({
               </colgroup>
               <thead>
                 <tr className="border-b border-border bg-muted/50 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  {modoSelecao && (
+                    <th className="pl-3 pr-1 py-2.5 text-left">
+                      <input
+                        type="checkbox"
+                        aria-label="Selecionar todas as linhas visíveis"
+                        className="h-3.5 w-3.5 cursor-pointer rounded border-border accent-california-red"
+                        checked={
+                          linhasVisiveis.length > 0 &&
+                          linhasVisiveis.every((l) =>
+                            selecionados.has(l.parcela?.id ?? l.pp.id),
+                          )
+                        }
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelecionados((atual) => {
+                              const novo = new Set(atual);
+                              for (const l of linhasVisiveis) {
+                                novo.add(l.parcela?.id ?? l.pp.id);
+                              }
+                              return novo;
+                            });
+                          } else {
+                            setSelecionados((atual) => {
+                              const novo = new Set(atual);
+                              for (const l of linhasVisiveis) {
+                                novo.delete(l.parcela?.id ?? l.pp.id);
+                              }
+                              return novo;
+                            });
+                          }
+                        }}
+                      />
+                    </th>
+                  )}
                   <th className="px-3.5 py-2.5 text-left">{titulo("codigo")}</th>
                   <th className="px-3.5 py-2.5 text-left">{titulo("origem")}</th>
                   <th className="px-3.5 py-2.5 text-left">{titulo("servico")}</th>
@@ -1084,7 +1279,7 @@ export function JobPPsSection({
                 {linhasVisiveis.length === 0 && (
                   <tr>
                     <td
-                      colSpan={9}
+                      colSpan={modoSelecao ? 10 : 9}
                       className="py-10 text-center text-sm text-muted-foreground"
                     >
                       Nenhuma PP com esse filtro.
@@ -1107,6 +1302,17 @@ export function JobPPsSection({
                       pp.status === "cancelada" && "opacity-60",
                     )}
                   >
+                    {modoSelecao && (
+                      <td className="pl-3 pr-1 py-2.5 align-middle">
+                        <input
+                          type="checkbox"
+                          aria-label={`Selecionar ${pp.codigo}`}
+                          className="h-3.5 w-3.5 cursor-pointer rounded border-border accent-california-red"
+                          checked={selecionados.has(chaveDaLinha)}
+                          onChange={() => alternarSelecao(chaveDaLinha)}
+                        />
+                      </td>
+                    )}
                     {/* A parcela desce para baixo do código: em linha, ela
                         empurrava a coluna e comia o espaço da origem. */}
                     <td
@@ -1354,7 +1560,10 @@ export function JobPPsSection({
               {linhasVisiveis.length > 0 && (
                 <tfoot>
                   <tr className="border-t border-border bg-muted/40">
-                    <td colSpan={6} className="px-3.5 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    <td
+                      colSpan={modoSelecao ? 7 : 6}
+                      className="px-3.5 py-2.5 text-right text-[10px] font-semibold uppercase tracking-wider text-muted-foreground"
+                    >
                       Total · {totalDaSelecao.quantas}{" "}
                       {totalDaSelecao.soComite
                         ? totalDaSelecao.quantas === 1 ? "PP a emitir" : "PPs a emitir"
@@ -1957,6 +2166,55 @@ export function JobPPsSection({
         pending={pending}
         onConfirm={excluirAEmitir}
       />
+
+      {/* "TOTAL SELECIONADO" (18/11/2026): trilha no estilo de Faturamento /
+          Encerramento do rodapé do job, mas da aba — só aparece no modo de
+          seleção. z-30 fica acima da <BarraAcoesJob> (z-20) do rodapé da
+          página: quem está selecionando foca na soma. */}
+      {modoSelecao && (
+        <div className="sticky bottom-0 z-30 -mx-1 flex flex-wrap items-center gap-4 rounded-t-2xl border border-b-0 border-california-red/30 bg-white/95 px-5 py-2.5 shadow-[0_-4px_16px_-8px_rgba(231,75,86,0.25)] backdrop-blur">
+          <span className="w-36 flex-none text-[10px] font-semibold uppercase tracking-wider text-california-red">
+            Total selecionado
+          </span>
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 text-xs text-muted-foreground">
+            {totalSelecionado.quantas === 0 ? (
+              <span>Marque as PPs para somar o total da seleção.</span>
+            ) : (
+              <>
+                <span className="inline-flex items-center rounded-full border border-california-red/30 bg-california-red/10 px-2.5 py-0.5 text-[10.5px] font-semibold uppercase tracking-wider text-california-red">
+                  {totalSelecionado.quantas.toLocaleString("pt-BR")}{" "}
+                  {totalSelecionado.quantas === 1 ? "linha" : "linhas"}
+                </span>
+                <span>
+                  Soma{" "}
+                  <strong className="font-mono text-sm font-bold text-foreground">
+                    {formatCurrency(totalSelecionado.valor, "BRL")}
+                  </strong>
+                  .
+                </span>
+              </>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {totalSelecionado.quantas > 0 && (
+              <button
+                type="button"
+                onClick={() => setSelecionados(new Set())}
+                className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[10px] border border-border bg-white px-3 text-xs font-semibold text-muted-foreground transition-colors hover:border-california-red/30 hover:text-california-red"
+              >
+                Limpar seleção
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={sairDaSelecao}
+              className="inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[10px] bg-california-red px-3.5 text-xs font-semibold text-white transition-colors hover:bg-california-red-hover"
+            >
+              Sair da seleção
+            </button>
+          </div>
+        </div>
+      )}
 
       {toast && (
         <div
