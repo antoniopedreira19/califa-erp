@@ -139,7 +139,12 @@ export default async function JobDetailPage({
   // da abertura, o orçamento voltou a "aprovado"; depois dela, o orçamento
   // aparece como "Cancelado". Quem chega por link antigo vai para lá.
   if (detalhe.job.status === "cancelado") {
-    redirect(`/orcamentos/${detalhe.raw.projeto_id}/${detalhe.raw.orcamento_id}`);
+    // O job de pagamentos (decisão 266) não tem orçamento à vista.
+    redirect(
+      detalhe.pagamentos
+        ? "/jobs"
+        : `/orcamentos/${detalhe.raw.projeto_id}/${detalhe.raw.orcamento_id}`,
+    );
   }
 
   const {
