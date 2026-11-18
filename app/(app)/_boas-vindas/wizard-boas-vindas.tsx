@@ -36,6 +36,7 @@ import {
 } from "@/lib/types";
 import { documentosObrigatorios } from "@/lib/perfil/documentos-obrigatorios";
 import { uploadDocumentoDoMeuPerfil } from "@/lib/perfil/upload-documento-cliente";
+import { isValidCpf, isValidCnpj } from "@/lib/utils";
 import {
   completarMeuPerfil,
   removerDocumentoDoMeuPerfil,
@@ -576,6 +577,7 @@ function Passo3DocsContato({
             onChange={(e) => atualizar("cpf", e.target.value)}
             placeholder="000.000.000-00"
           />
+          <AvisoDv valor={dados.cpf} validador={isValidCpf} rotulo="CPF" />
         </Campo>
         <Campo label="RG">
           <Input
@@ -693,6 +695,7 @@ function Passo4Profissional({
               onChange={(e) => atualizar("cnpj", e.target.value)}
               placeholder="00.000.000/0000-00"
             />
+            <AvisoDv valor={dados.cnpj} validador={isValidCnpj} rotulo="CNPJ" />
           </Campo>
           <Campo label="Razão social">
             <Input
@@ -1108,6 +1111,43 @@ function Campo({
         <p className="text-[11px] text-muted-foreground">{descricao}</p>
       )}
     </div>
+  );
+}
+
+/**
+ * Aviso de dígito verificador mal formado em CPF/CNPJ. Não bloqueia o
+ * avanço do wizard — só sinaliza visualmente. O RH precisa corrigir o
+ * cadastro quando o colaborador detectar e reportar.
+ *
+ * Só aparece quando:
+ *  - o campo tem conteúdo (não irrita quem ainda nem preencheu);
+ *  - tem a quantidade de dígitos esperada (11 pra CPF, 14 pra CNPJ);
+ *  - mas o DV não bate.
+ * Em qualquer outra condição (vazio, menos dígitos, mais dígitos) não
+ * mostra nada — a validação de formato o próprio schema de rascunho já
+ * cobre quando a pessoa tentar avançar.
+ */
+function AvisoDv({
+  valor,
+  validador,
+  rotulo,
+}: {
+  valor: string;
+  validador: (v: string) => boolean;
+  rotulo: string;
+}) {
+  const digitos = valor.replace(/\D/g, "");
+  const esperado = rotulo === "CPF" ? 11 : 14;
+  if (digitos.length !== esperado) return null;
+  if (validador(digitos)) return null;
+  return (
+    <p className="flex items-start gap-1 text-[11px] text-amber-700 mt-1">
+      <AlertCircle className="h-3 w-3 shrink-0 mt-[1px]" />
+      <span>
+        {rotulo} inválido (dígito verificador não bate). Se tiver certeza que
+        está certo, peça pro RH conferir o cadastro.
+      </span>
+    </p>
   );
 }
 

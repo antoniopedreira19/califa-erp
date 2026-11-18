@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isValidCpf, isValidCnpj, onlyDigits } from "@/lib/utils";
+import { onlyDigits } from "@/lib/utils";
 
 /**
  * Schema de rascunho do perfil do colaborador — usado pelo wizard de
@@ -27,11 +27,17 @@ const textoOpcional = (max: number) =>
     .nullable()
     .optional();
 
+// Rascunho aceita CPF/CNPJ só pelo tamanho — DV é verificado só no final,
+// quando a RPC `completar_meu_perfil_colaborador` roda. Motivo: muitos
+// cadastros vieram importados de planilha com DV digitado errado; se o
+// rascunho exigir DV válido, o colaborador trava já no passo 1 do wizard
+// sem entender o motivo (o CPF nem está na tela daquele passo). A validação
+// de DV volta no passo final com mensagem clara.
 const cpfOpcional = z
   .string()
   .transform(onlyDigits)
-  .refine((v) => v === "" || (v.length === 11 && isValidCpf(v)), {
-    message: "CPF inválido",
+  .refine((v) => v === "" || v.length === 11, {
+    message: "CPF deve ter 11 dígitos",
   })
   .transform((v) => (v === "" ? null : v))
   .nullable()
@@ -40,8 +46,8 @@ const cpfOpcional = z
 const cnpjOpcional = z
   .string()
   .transform(onlyDigits)
-  .refine((v) => v === "" || (v.length === 14 && isValidCnpj(v)), {
-    message: "CNPJ inválido",
+  .refine((v) => v === "" || v.length === 14, {
+    message: "CNPJ deve ter 14 dígitos",
   })
   .transform((v) => (v === "" ? null : v))
   .nullable()
