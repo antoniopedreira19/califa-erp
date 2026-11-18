@@ -807,11 +807,13 @@ export default async function PedidosCompraFinanceiroPage({
             .in("colaborador_id", peopleColabIds)
             .is("data_fim", null)
         : Promise.resolve({ data: [] as any[] | null }),
+      // Sem embed de empresas/regionais: a lista completa dos dois ja vem
+      // em empresasRes e regionaisRes no Promise.all principal. Resolvo o
+      // nome em memoria depois com dois Maps — payload do PostgREST fica
+      // bem menor e sem dois joins extras.
       supabase
         .from("folhas_pagamento_alocacoes")
-        .select(
-          "id, folha_id, empresa_id, regional_id, percentual, empresa:empresas(nome_fantasia), regional:regionais(nome)",
-        )
+        .select("id, folha_id, empresa_id, regional_id, percentual")
         .eq("tenant_id", session.activeTenant.id)
         .in("folha_id", peopleLineIds),
     ]);
@@ -829,6 +831,22 @@ export default async function PedidosCompraFinanceiroPage({
     for (const i of peopleItems) {
       colabPorFolha.set(i.linha_id, i.colaborador_id);
     }
+    // Lookup de nome por id — substitui os embeds removidos acima.
+    const empresaNomePorId = new Map<string, string>();
+    for (const e of (empresasRes.data ?? []) as Array<{
+      id: string;
+      nome_fantasia: string | null;
+      razao_social: string | null;
+    }>) {
+      empresaNomePorId.set(e.id, e.nome_fantasia ?? e.razao_social ?? "");
+    }
+    const regionalNomePorId = new Map<string, string>();
+    for (const r of (regionaisRes.data ?? []) as Array<{
+      id: string;
+      nome: string;
+    }>) {
+      regionalNomePorId.set(r.id, r.nome);
+    }
 
     for (const a of ((alocRes.data ?? []) as any[])) {
       const colabId = colabPorFolha.get(a.folha_id);
@@ -841,8 +859,8 @@ export default async function PedidosCompraFinanceiroPage({
         empresa_id: a.empresa_id,
         regional_id: a.regional_id,
         percentual: String(a.percentual),
-        empresa_nome: a.empresa?.nome_fantasia ?? "",
-        regional_nome: a.regional?.nome ?? "",
+        empresa_nome: empresaNomePorId.get(a.empresa_id) ?? "",
+        regional_nome: regionalNomePorId.get(a.regional_id) ?? "",
         usa_rateio_empresa: usaRateio,
       });
       alocacoesPorFolha.set(a.folha_id, lista);
