@@ -81,17 +81,17 @@ export async function resolverDecimoTerceiroLinha(
   escopoId: string,
   escopo: "decimo_terceiro_p1" | "decimo_terceiro_p2",
 ): Promise<EscopoResolvido | null> {
-  // O join Supabase retorna `folhas_decimo_terceiro` como objeto aninhado.
+  // O join Supabase retorna `decimo_terceiro_folhas` como objeto aninhado.
   // A interface SupabaseQueryClient usa `Record<string,unknown>`, então o cast
   // para `any` aqui é necessário — o schema garante a FK.
   const { data } = await supabase
     .from("decimo_terceiro_linhas")
-    .select("colaborador_id, folha_id, folhas_decimo_terceiro!inner(ano)")
+    .select("colaborador_id, folha_id, decimo_terceiro_folhas!inner(ano)")
     .eq("id", escopoId)
     .eq("tenant_id", tenantId)
     .maybeSingle();
   if (!data) return null;
-  const folha = (data as any).folhas_decimo_terceiro as { ano: number } | null;
+  const folha = (data as any).decimo_terceiro_folhas as { ano: number } | null;
   if (!folha) return null;
   return {
     colaboradorId: data.colaborador_id as string,
