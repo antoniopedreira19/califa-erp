@@ -250,6 +250,11 @@ function LinhaSolicitacao({
   const criadoEm = r.created_at
     ? new Date(r.created_at).toLocaleDateString("pt-BR")
     : "—";
+  // Abono puro (avulso/excepcional) é venda de dias, nao descanso — nao
+  // tem periodo pra exibir. Abono_combinado mistura venda + descanso e
+  // mantém o periodo.
+  const abonoPuro =
+    r.tipo === "abono_avulso" || r.tipo === "abono_excepcional";
 
   return (
     <tr
@@ -286,9 +291,13 @@ function LinhaSolicitacao({
         )}
       </Td>
       <Td>
-        <p className="text-sm text-foreground">
-          {inicio} <span className="text-muted-foreground">→</span> {fim}
-        </p>
+        {abonoPuro ? (
+          <p className="text-sm text-muted-foreground">—</p>
+        ) : (
+          <p className="text-sm text-foreground">
+            {inicio} <span className="text-muted-foreground">→</span> {fim}
+          </p>
+        )}
       </Td>
       <Td align="center">
         <p className="text-sm font-semibold text-foreground">{r.dias}</p>
