@@ -1220,14 +1220,28 @@ async function fecharParcela(
     return { ok: false, message: "Nenhuma linha gerada para enviar ao financeiro." };
   }
 
-  const { error: errInsert } = await supabase
+  const { data: folhasInseridas, error: errInsert } = await supabase
     .from("folhas_pagamento")
-    .insert(linhasFolhaPagamento);
+    .insert(linhasFolhaPagamento)
+    .select("id");
   if (errInsert) {
     return {
       ok: false,
       message: `Falha ao enviar ao financeiro: ${errInsert.message}`,
     };
+  }
+
+  // Replica a alocacao vigente do colaborador em folhas_pagamento_alocacoes.
+  // Sem isso, o 13º nao entra no DRE regional nem aparece a alocacao na aba
+  // People do financeiro. A RPC é idempotente (segunda chamada vira no-op).
+  for (const f of folhasInseridas ?? []) {
+    const { error: errAloc } = await supabase.rpc(
+      "replicar_alocacao_para_folha",
+      { p_folha_id: f.id },
+    );
+    if (errAloc) {
+      console.error("[13.fechar_parcela.replicar_aloc]", errAloc.message);
+    }
   }
 
   // Atualiza status da folha
@@ -1551,6 +1565,18 @@ export async function lancarAdiantamentoDecimoTerceiro(input: {
   // quando precisa combinar status.
   const folhaPagamentoId = folhasInseridas[0].id;
   const idsFolhasCriadas = folhasInseridas.map((f) => f.id);
+
+  // Replica a alocacao vigente do colaborador em folhas_pagamento_alocacoes
+  // pra cada folha criada (pode ser 1 ou 2 no híbrido).
+  for (const id of idsFolhasCriadas) {
+    const { error: errAloc } = await supabase.rpc(
+      "replicar_alocacao_para_folha",
+      { p_folha_id: id },
+    );
+    if (errAloc) {
+      console.error("[13o.adiantamento.replicar_aloc]", errAloc.message);
+    }
+  }
 
   // 4) Atualiza o adiantamento com o folha_pagamento_id.
   const { error: errUpdAd } = await supabase

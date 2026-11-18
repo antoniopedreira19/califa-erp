@@ -329,6 +329,16 @@ export async function criarFolhasDePagamentoDeFerias(opts: {
     if (nova) {
       criadas.push(nova.id as string);
       existentesSet.add(chave); // evita duplicar na mesma chamada se chamar 2x
+      // Replica a alocacao vigente do colaborador: sem isso, a folha de
+      // férias não entra no DRE regional e a aba People do financeiro
+      // mostra "—" na coluna Alocação. A RPC é idempotente.
+      const { error: errAloc } = await supabase.rpc(
+        "replicar_alocacao_para_folha",
+        { p_folha_id: nova.id as string },
+      );
+      if (errAloc) {
+        console.error("[ferias.criar_folha.replicar_aloc]", errAloc.message);
+      }
     }
   }
 

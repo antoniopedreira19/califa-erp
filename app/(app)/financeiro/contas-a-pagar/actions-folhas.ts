@@ -447,10 +447,12 @@ export async function aprovarLinhaFolha(
   let salarioFinal = (centavos(folha.salario_base) / 100).toFixed(2);
   let alocacoesFinal = alocAtuais;
 
-  // Férias e 13° não têm alocação por regional — só folha mensal exige.
-  // Quando exigeAlocacao=false: pula validação de alocação vazia e pula
-  // delete/insert em folhas_pagamento_alocacoes (nada a persistir).
-  const exigeAlocacao = folha.tipo === "salario";
+  // Toda folha (salario, ferias, 13º parcelas e adiantamento) tem rateio
+  // regional: a RPC `replicar_alocacao_para_folha` espelha o pacote
+  // vigente do colaborador no snapshot (ADR em aberto 18/11/2026). A aba
+  // People do financeiro mostra a alocação e permite editar antes da
+  // aprovação pros 4 tipos.
+  const exigeAlocacao = true;
 
   // 4) Aplica edições (se houve de verdade — comparação numérica)
   if (parsedEdicoes?.success) {
