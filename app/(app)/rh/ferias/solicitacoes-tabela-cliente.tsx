@@ -280,11 +280,15 @@ function LinhaSolicitacao({
         {r.alocacao_empresa ? (
           <>
             <p className="text-xs text-foreground">{r.alocacao_empresa}</p>
-            {r.alocacao_regional && (
+            {r.alocacao_usa_rateio_empresa ? (
+              <p className="text-[10px] text-muted-foreground mt-0.5">
+                Hub
+              </p>
+            ) : r.alocacao_regional ? (
               <p className="text-[10px] text-muted-foreground mt-0.5">
                 {r.alocacao_regional}
               </p>
-            )}
+            ) : null}
           </>
         ) : (
           <p className="text-xs text-muted-foreground">—</p>

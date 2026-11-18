@@ -26,6 +26,9 @@ export type SolicitacaoRow = {
   observacao: string | null;
   alocacao_empresa: string | null;
   alocacao_regional: string | null;
+  // true quando a alocação vigente usa o rateio padrão da empresa (modelo "Hub").
+  // Nesse caso regional_id = null e a UI mostra "Hub" no lugar da regional.
+  alocacao_usa_rateio_empresa: boolean;
 };
 
 /**
@@ -88,7 +91,7 @@ export async function AbaFluxo({ tenantId }: { tenantId: string }) {
         // regional_id) + FK composto fk_alocacao_regional_pertence_empresa.
         // Sem a dica !nome_da_fk o PostgREST retorna empresa/regional como
         // null em silêncio (idem bug do 13º e de rh/colaboradores/[id]).
-        "colaborador_id, empresa_id, regional_id, data_inicio, empresa:empresas!colaboradores_alocacoes_empresa_id_fkey(nome_fantasia), regional:regionais!colaboradores_alocacoes_regional_id_fkey(nome)",
+        "colaborador_id, empresa_id, regional_id, usa_rateio_empresa, data_inicio, empresa:empresas!colaboradores_alocacoes_empresa_id_fkey(nome_fantasia), regional:regionais!colaboradores_alocacoes_regional_id_fkey(nome)",
       )
       .eq("tenant_id", tenantId)
       .in("colaborador_id", colabIdsSeguro)
@@ -104,6 +107,7 @@ export async function AbaFluxo({ tenantId }: { tenantId: string }) {
   type AlocRow = {
     colaborador_id: string;
     data_inicio: string | null;
+    usa_rateio_empresa: boolean | null;
     empresa:
       | { nome_fantasia: string | null }
       | { nome_fantasia: string | null }[]
@@ -112,7 +116,7 @@ export async function AbaFluxo({ tenantId }: { tenantId: string }) {
   };
   const alocacoesPorColab = new Map<
     string,
-    { empresa: string | null; regional: string | null }
+    { empresa: string | null; regional: string | null; usaRateio: boolean }
   >();
   const alocacoesOrdenadas = ((alocacoesRes.data ?? []) as AlocRow[]).sort(
     (a, b) => (b.data_inicio ?? "").localeCompare(a.data_inicio ?? ""),
@@ -124,6 +128,7 @@ export async function AbaFluxo({ tenantId }: { tenantId: string }) {
     alocacoesPorColab.set(a.colaborador_id, {
       empresa: emp?.nome_fantasia ?? null,
       regional: reg?.nome ?? null,
+      usaRateio: a.usa_rateio_empresa === true,
     });
   }
 
@@ -149,6 +154,7 @@ export async function AbaFluxo({ tenantId }: { tenantId: string }) {
       observacao: l.observacao,
       alocacao_empresa: alocacao?.empresa ?? null,
       alocacao_regional: alocacao?.regional ?? null,
+      alocacao_usa_rateio_empresa: alocacao?.usaRateio ?? false,
     };
   });
 
