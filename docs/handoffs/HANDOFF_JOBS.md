@@ -6863,3 +6863,5 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - **Ficha e Equipe:** envio para abertura "Não se aplica · criado pelo financeiro", sem a linha do orçamento aprovado e sem link para o projeto; sem GP e sem produtor, e a Equipe não oferece troca.
 - **Conferido no Sandbox:** TES-1039/26 na lista de Jobs do GP, item de R$ 1.500,00 corrigido para R$ 1.800,00 e a linha vermelha "Frete de material" salvos direto (nenhuma errata), e o formulário da PP com o planejado de R$ 1.800,00.
 - **Fica de fora:** no PDF da PP, a assinatura do GP sai em branco.
+- **PP e Comitê (Tiago, 18/11):** a regra do Comitê vale como no Interno. Com o orçado zero, a PP de item com planejado vai ao Comitê; a da linha vermelha, não; o administrador aprova direto. Conferido na versão publicada: produtor lança o item sem errata, PP-00957 ao Comitê, aprovada, gerada pelo produtor e enviada pelo GP.
+- **Voltar:** no job de pagamentos o "Voltar" leva à lista de Jobs, nunca ao orçamento escondido (antes abria o orçamento com "Editar" e "Duplicar").

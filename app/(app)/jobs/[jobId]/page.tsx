@@ -245,8 +245,12 @@ export default async function JobDetailPage({
   // ele leva à página anterior. Isto é só a reserva, para quando não há
   // página anterior (link colado, aba nova): a lista para quem veio com
   // `?from=jobs`, o orçamento para os outros.
+  // O job de pagamentos (decisão 266) não tem orçamento à vista: a reserva
+  // é sempre a lista.
   const reservaDoVoltar =
-    fromParam === "jobs" ? "/jobs" : `/orcamentos/${raw.projeto_id}/${raw.orcamento_id}`;
+    fromParam === "jobs" || detalhe.pagamentos
+      ? "/jobs"
+      : `/orcamentos/${raw.projeto_id}/${raw.orcamento_id}`;
 
   // Sem largura própria: tela principal ocupa a largura do layout (decisão 085).
   // O selo do cabeçalho: "Em faturamento" é o aberto com o envio completo

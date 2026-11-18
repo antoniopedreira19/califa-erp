@@ -6107,3 +6107,4 @@ motivo ficava no fim da janela, depois do Descritivo.
 ## ⚠️ Nota de 2026-11-18 — o projeto do job de pagamentos fica fora de Orçamentos (decisão 266)
 
 - O job de pagamentos, criado pelo financeiro, tem um projeto e um orçamento aprovado e vazio, que ancoram a planilha do job. Os dois não aparecem em Orçamentos (`projetos.de_pagamentos`), e o serviço e a categoria Pagamentos não aparecem para escolha nos formulários de orçamento nem em Cadastros › Categorias.
+- **Fechado de vez (18/11):** as páginas de Orçamentos desse projeto redirecionam para a visão agregada dos jobs (`orcamentos/[projetoId]/layout.tsx`), as ações de orçamento recusam o projeto e o gatilho `guarda_orcamento_de_pagamentos` (migration `20261118700002`) recusa orçamento novo nele fora da função de criação.
