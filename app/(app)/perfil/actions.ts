@@ -10,6 +10,7 @@ import type {
   TipoContratacao,
 } from "@/lib/types";
 import { solicitarFeriasSchema } from "@/lib/ferias/solicitar-ferias-schema";
+import { normalizarChavePix, type PixTipo } from "@/lib/perfil/pix";
 
 type ActionResult =
   | { ok: true; id: string }
@@ -279,6 +280,17 @@ export async function editarMeuPerfil(
     };
   }
   const dados = normalizarVazios(parsed.data);
+
+  // CHECK colaboradores_pix_formato exige E.164 pra telefone e só dígitos
+  // pra CPF/CNPJ. Normaliza antes do UPDATE pra aceitar o que o usuário
+  // digita com máscara.
+  if ("pix_chave" in dados) {
+    const tipo = (dados.pix_tipo ?? null) as PixTipo | null;
+    (dados as Record<string, unknown>).pix_chave = normalizarChavePix(
+      tipo,
+      (dados as Record<string, unknown>).pix_chave as string | null,
+    );
+  }
 
   const supabase = createClient();
 

@@ -27,6 +27,7 @@ import {
   perfilRascunhoSchema,
   type PerfilRascunho,
 } from "@/lib/perfil/schema";
+import { normalizarChavePix, type PixTipo } from "@/lib/perfil/pix";
 import type {
   Colaborador,
   ColaboradorDocumento,
@@ -98,6 +99,14 @@ export async function salvarRascunhoDoMeuPerfil(
   }
 
   const dados = removerUndefineds(parsed.data);
+
+  // O CHECK colaboradores_pix_formato exige E.164 pra telefone e só dígitos
+  // pra CPF/CNPJ. O usuário digita com máscara — normaliza aqui pra não
+  // esbarrar no constraint. Só mexe quando a chave veio no payload.
+  if ("pix_chave" in dados) {
+    const tipo = (dados.pix_tipo ?? null) as PixTipo | null;
+    dados.pix_chave = normalizarChavePix(tipo, dados.pix_chave as string | null);
+  }
 
   const supabase = createClient();
   const { error } = await supabase.rpc("atualizar_meu_perfil_colaborador", {
