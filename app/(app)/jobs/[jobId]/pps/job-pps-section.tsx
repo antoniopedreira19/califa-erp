@@ -545,6 +545,20 @@ export function JobPPsSection({
     setModoSelecao(false);
     setSelecionados(new Set());
   }
+  /** Avisa <BarraAcoesJob> para sair e voltar em fade: enquanto a pessoa
+   *  escolhe PPs, quem fala no rodapé é o "Total selecionado". O evento
+   *  volta a "false" ao desmontar (troca de aba ou saída do job), para a
+   *  barra reaparecer sem precisar da gente. */
+  React.useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("job-barra-acoes-escondida", { detail: modoSelecao }),
+    );
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent("job-barra-acoes-escondida", { detail: false }),
+      );
+    };
+  }, [modoSelecao]);
   /** A rejeitada que vai ser reemitida (decisão 153): ela não se edita,
    *  é cancelada e volta como PP a emitir, com os mesmos dados. */
   const [ppRefazendo, setPpRefazendo] = React.useState<PedidoCompraNaLista | null>(

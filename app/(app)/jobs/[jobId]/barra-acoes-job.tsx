@@ -9,7 +9,7 @@ import Link from "next/link";
 import { FileText, Send } from "lucide-react";
 import type { ItemPlanilhaJob, JobStatus } from "@/lib/types";
 import { jobStatusLabel } from "@/lib/types";
-import { formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import {
   Tooltip,
   TooltipContent,
@@ -268,20 +268,27 @@ export function BarraAcoesJob({
   // Enquanto a errata está aberta quem fala no rodapé é a barra dela: o
   // design tem UMA barra com três estados, não duas empilhadas.
   const errataAberta = useModoErrataAtivo();
+  /** Modo de seleção da aba PPs (18/11/2026): a barra sai e volta em fade
+   *  para quem está escolhendo PPs focar no "Total selecionado". O evento
+   *  vem do <JobPPsSection>. */
+  const escondida = useBarraEscondidaPelaSelecao();
+
   if (errataAberta) return null;
 
   if (cancelamentoPendente) {
     return (
-      <div className="sticky bottom-0 z-20 -mx-1 flex flex-wrap items-center justify-between gap-4 rounded-t-2xl border border-b-0 border-border bg-white/95 px-5 py-2 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <span className="text-xs text-muted-foreground">
-            Cancelamento aguardando o financeiro, na Abertura de Job.
-          </span>
-          <span className="text-xs text-muted-foreground">
-            Faturamento e encerramento voltam se o pedido for retirado ou recusado.
-          </span>
+      <EnvelopeBarra escondida={escondida}>
+        <div className="sticky bottom-0 z-20 -mx-1 flex flex-wrap items-center justify-between gap-4 rounded-t-2xl border border-b-0 border-border bg-white/95 px-5 py-2 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="text-xs text-muted-foreground">
+              Cancelamento aguardando o financeiro, na Abertura de Job.
+            </span>
+            <span className="text-xs text-muted-foreground">
+              Faturamento e encerramento voltam se o pedido for retirado ou recusado.
+            </span>
+          </div>
         </div>
-      </div>
+      </EnvelopeBarra>
     );
   }
 
@@ -294,15 +301,17 @@ export function BarraAcoesJob({
 
   if (!duasTrilhas) {
     return (
-      <div className="sticky bottom-0 z-20 -mx-1 flex flex-wrap items-center justify-between gap-4 rounded-t-2xl border border-b-0 border-border bg-white/95 px-5 py-2 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur">
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          {linhasAntesDaAbertura(status, orcamentoHref).map((linha, i) => (
-            <span key={i} className="text-xs text-muted-foreground">
-              {linha}
-            </span>
-          ))}
+      <EnvelopeBarra escondida={escondida}>
+        <div className="sticky bottom-0 z-20 -mx-1 flex flex-wrap items-center justify-between gap-4 rounded-t-2xl border border-b-0 border-border bg-white/95 px-5 py-2 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur">
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+            {linhasAntesDaAbertura(status, orcamentoHref).map((linha, i) => (
+              <span key={i} className="text-xs text-muted-foreground">
+                {linha}
+              </span>
+            ))}
+          </div>
         </div>
-      </div>
+      </EnvelopeBarra>
     );
   }
 
@@ -344,45 +353,93 @@ export function BarraAcoesJob({
   // 14/09/2026) é a trilha de faturamento, com a de encerramento abaixo.
   if (faturamentoPorMes && faturamentoMensal.length > 0) {
     return (
-      <BarraFaturamentoMensal
-        jobId={jobId}
-        jobCodigo={jobCodigo}
-        meses={faturamentoMensal}
-        podeEnviar={podeEnviarFaturamentoMensal}
-        bloqueio={bloqueioFaturamento}
-        portais={portais}
-        contextoDoEnvio={contextoDoEnvio}
-        moeda={moeda}
-        trilhaEncerramento={trilhaEncerramento}
-        jobEncerrado={status === "encerrado" || status === "finalizado"}
-        // Mídia Off (decisão 167): o último envio encerra o job, e as
-        // pendências do encerramento travam esse envio.
-        encerraComOUltimoMes={
-          encerraComOUltimoMes && fechamento
-            ? { pendencias: pendenciasDoEncerramento(fechamento, saves, aberturaEmRevisao, true) }
-            : null
-        }
-      />
+      <EnvelopeBarra escondida={escondida}>
+        <BarraFaturamentoMensal
+          jobId={jobId}
+          jobCodigo={jobCodigo}
+          meses={faturamentoMensal}
+          podeEnviar={podeEnviarFaturamentoMensal}
+          bloqueio={bloqueioFaturamento}
+          portais={portais}
+          contextoDoEnvio={contextoDoEnvio}
+          moeda={moeda}
+          trilhaEncerramento={trilhaEncerramento}
+          jobEncerrado={status === "encerrado" || status === "finalizado"}
+          // Mídia Off (decisão 167): o último envio encerra o job, e as
+          // pendências do encerramento travam esse envio.
+          encerraComOUltimoMes={
+            encerraComOUltimoMes && fechamento
+              ? { pendencias: pendenciasDoEncerramento(fechamento, saves, aberturaEmRevisao, true) }
+              : null
+          }
+        />
+      </EnvelopeBarra>
     );
   }
 
   return (
-    <div className="sticky bottom-0 z-20 -mx-1 rounded-t-2xl border border-b-0 border-border bg-white/95 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur">
-      <TrilhaFaturamentoUnico
-        jobId={jobId}
-        jobCodigo={jobCodigo}
-        faturamento={faturamentoEnvioUnico}
-        podeEnviarFaturamento={podeEnviarFaturamento && bloqueioFaturamento === null}
-        bloqueio={bloqueioFaturamento}
-        faturamentoPrevisto={faturamentoPrevisto}
-        faturamentoSavePrevisto={faturamentoSavePrevisto}
-        pagoSoPorSave={pagoSoPorSave}
-        dataPrevistaFaturamento={dataPrevistaFaturamento}
-        portais={portais}
-        contextoDoEnvio={contextoDoEnvio}
-        moeda={moeda}
-      />
-      {trilhaEncerramento}
+    <EnvelopeBarra escondida={escondida}>
+      <div className="sticky bottom-0 z-20 -mx-1 rounded-t-2xl border border-b-0 border-border bg-white/95 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur">
+        <TrilhaFaturamentoUnico
+          jobId={jobId}
+          jobCodigo={jobCodigo}
+          faturamento={faturamentoEnvioUnico}
+          podeEnviarFaturamento={podeEnviarFaturamento && bloqueioFaturamento === null}
+          bloqueio={bloqueioFaturamento}
+          faturamentoPrevisto={faturamentoPrevisto}
+          faturamentoSavePrevisto={faturamentoSavePrevisto}
+          pagoSoPorSave={pagoSoPorSave}
+          dataPrevistaFaturamento={dataPrevistaFaturamento}
+          portais={portais}
+          contextoDoEnvio={contextoDoEnvio}
+          moeda={moeda}
+        />
+        {trilhaEncerramento}
+      </div>
+    </EnvelopeBarra>
+  );
+}
+
+/** Evento global que a aba PPs dispara ao entrar/sair do modo de
+ *  seleção (18/11/2026). Fica no `window` porque a <JobPPsSection>
+ *  vive dentro de <JobTabs>, e os dois componentes só se encontram no
+ *  <BarraAcoesJob> pelo DOM. */
+const EVENTO_ESCONDIDA = "job-barra-acoes-escondida";
+
+function useBarraEscondidaPelaSelecao(): boolean {
+  const [escondida, setEscondida] = React.useState(false);
+  React.useEffect(() => {
+    function onEvento(e: Event) {
+      const detail = (e as CustomEvent<boolean>).detail;
+      setEscondida(detail === true);
+    }
+    window.addEventListener(EVENTO_ESCONDIDA, onEvento);
+    return () => window.removeEventListener(EVENTO_ESCONDIDA, onEvento);
+  }, []);
+  return escondida;
+}
+
+/** Fade suave da barra quando a aba PPs entra no modo "Selecionar":
+ *  `opacity` + `pointer-events`, para o layout do rodapé (o sticky
+ *  bottom-0) seguir reservando o espaço e a transição não tremer.
+ *  Transform ficou de fora de propósito: criaria um novo containing
+ *  block e tiraria o grude do sticky lá dentro. */
+function EnvelopeBarra({
+  escondida,
+  children,
+}: {
+  escondida: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        "transition-opacity duration-300 ease-out",
+        escondida && "pointer-events-none opacity-0",
+      )}
+      aria-hidden={escondida}
+    >
+      {children}
     </div>
   );
 }
