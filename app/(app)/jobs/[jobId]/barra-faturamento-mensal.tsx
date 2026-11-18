@@ -19,7 +19,7 @@
 
 import * as React from "react";
 import { ChevronDown, ChevronUp, FileText } from "lucide-react";
-import { formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import type { MesDeFaturamento } from "@/lib/calculos/faturamento-por-mes";
 import { nomeDoMes, rotuloMes } from "@/lib/calculos/meses-trimestre";
 import {
@@ -117,6 +117,12 @@ interface Props {
    *  Always On, que encerram em separado (decisão 087). Obrigatória: campo
    *  opcional em prop é como regra nova some calada (CLAUDE.md). */
   encerraComOUltimoMes: { pendencias: string[] } | null;
+  /** Fade controlado pelo <BarraAcoesJob>: modo "Selecionar" da aba PPs
+   *  esconde a barra pra quem está escolhendo focar no "Total selecionado".
+   *  Vem como classe para ir no próprio sticky (um wrapper tira a altura e
+   *  o `bottom-0` para de colar na base do viewport). */
+  classesDoFade?: string;
+  escondida?: boolean;
 }
 
 export function BarraFaturamentoMensal({
@@ -131,6 +137,8 @@ export function BarraFaturamentoMensal({
   trilhaEncerramento,
   jobEncerrado = false,
   encerraComOUltimoMes,
+  classesDoFade,
+  escondida = false,
 }: Props) {
   const [aberta, setAberta] = React.useState(false);
   const [envioAberto, setEnvioAberto] = React.useState<MesDeFaturamento | null>(
@@ -239,7 +247,13 @@ export function BarraFaturamentoMensal({
         } · ${formatCurrency(somaEnviada, moeda)} de ${formatCurrency(total, moeda)} na fila.`;
 
   return (
-    <div className="sticky bottom-0 z-20 -mx-1 rounded-t-2xl border border-b-0 border-border bg-white/95 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur">
+    <div
+      className={cn(
+        "sticky bottom-0 z-20 -mx-1 rounded-t-2xl border border-b-0 border-border bg-white/95 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur",
+        classesDoFade,
+      )}
+      aria-hidden={escondida}
+    >
       {aberta && (
         <div className="max-h-[50vh] overflow-y-auto border-b border-border px-5 pb-2 pt-3">
           <div className="mb-1 flex flex-wrap items-center justify-between gap-3">

@@ -270,25 +270,31 @@ export function BarraAcoesJob({
   const errataAberta = useModoErrataAtivo();
   /** Modo de seleção da aba PPs (18/11/2026): a barra sai e volta em fade
    *  para quem está escolhendo PPs focar no "Total selecionado". O evento
-   *  vem do <JobPPsSection>. */
+   *  vem do <JobPPsSection>. Aplicado DIRETO no sticky bottom-0 — um
+   *  wrapper em volta tira a altura do sticky e ele perde o grude. */
   const escondida = useBarraEscondidaPelaSelecao();
+  const classesDoFade = fadeDaSelecao(escondida);
 
   if (errataAberta) return null;
 
   if (cancelamentoPendente) {
     return (
-      <EnvelopeBarra escondida={escondida}>
-        <div className="sticky bottom-0 z-20 -mx-1 flex flex-wrap items-center justify-between gap-4 rounded-t-2xl border border-b-0 border-border bg-white/95 px-5 py-2 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur">
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="text-xs text-muted-foreground">
-              Cancelamento aguardando o financeiro, na Abertura de Job.
-            </span>
-            <span className="text-xs text-muted-foreground">
-              Faturamento e encerramento voltam se o pedido for retirado ou recusado.
-            </span>
-          </div>
+      <div
+        className={cn(
+          "sticky bottom-0 z-20 -mx-1 flex flex-wrap items-center justify-between gap-4 rounded-t-2xl border border-b-0 border-border bg-white/95 px-5 py-2 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur",
+          classesDoFade,
+        )}
+        aria-hidden={escondida}
+      >
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <span className="text-xs text-muted-foreground">
+            Cancelamento aguardando o financeiro, na Abertura de Job.
+          </span>
+          <span className="text-xs text-muted-foreground">
+            Faturamento e encerramento voltam se o pedido for retirado ou recusado.
+          </span>
         </div>
-      </EnvelopeBarra>
+      </div>
     );
   }
 
@@ -301,17 +307,21 @@ export function BarraAcoesJob({
 
   if (!duasTrilhas) {
     return (
-      <EnvelopeBarra escondida={escondida}>
-        <div className="sticky bottom-0 z-20 -mx-1 flex flex-wrap items-center justify-between gap-4 rounded-t-2xl border border-b-0 border-border bg-white/95 px-5 py-2 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur">
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            {linhasAntesDaAbertura(status, orcamentoHref).map((linha, i) => (
-              <span key={i} className="text-xs text-muted-foreground">
-                {linha}
-              </span>
-            ))}
-          </div>
+      <div
+        className={cn(
+          "sticky bottom-0 z-20 -mx-1 flex flex-wrap items-center justify-between gap-4 rounded-t-2xl border border-b-0 border-border bg-white/95 px-5 py-2 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur",
+          classesDoFade,
+        )}
+        aria-hidden={escondida}
+      >
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+          {linhasAntesDaAbertura(status, orcamentoHref).map((linha, i) => (
+            <span key={i} className="text-xs text-muted-foreground">
+              {linha}
+            </span>
+          ))}
         </div>
-      </EnvelopeBarra>
+      </div>
     );
   }
 
@@ -353,50 +363,54 @@ export function BarraAcoesJob({
   // 14/09/2026) é a trilha de faturamento, com a de encerramento abaixo.
   if (faturamentoPorMes && faturamentoMensal.length > 0) {
     return (
-      <EnvelopeBarra escondida={escondida}>
-        <BarraFaturamentoMensal
-          jobId={jobId}
-          jobCodigo={jobCodigo}
-          meses={faturamentoMensal}
-          podeEnviar={podeEnviarFaturamentoMensal}
-          bloqueio={bloqueioFaturamento}
-          portais={portais}
-          contextoDoEnvio={contextoDoEnvio}
-          moeda={moeda}
-          trilhaEncerramento={trilhaEncerramento}
-          jobEncerrado={status === "encerrado" || status === "finalizado"}
-          // Mídia Off (decisão 167): o último envio encerra o job, e as
-          // pendências do encerramento travam esse envio.
-          encerraComOUltimoMes={
-            encerraComOUltimoMes && fechamento
-              ? { pendencias: pendenciasDoEncerramento(fechamento, saves, aberturaEmRevisao, true) }
-              : null
-          }
-        />
-      </EnvelopeBarra>
+      <BarraFaturamentoMensal
+        jobId={jobId}
+        jobCodigo={jobCodigo}
+        meses={faturamentoMensal}
+        podeEnviar={podeEnviarFaturamentoMensal}
+        bloqueio={bloqueioFaturamento}
+        portais={portais}
+        contextoDoEnvio={contextoDoEnvio}
+        moeda={moeda}
+        trilhaEncerramento={trilhaEncerramento}
+        jobEncerrado={status === "encerrado" || status === "finalizado"}
+        // Mídia Off (decisão 167): o último envio encerra o job, e as
+        // pendências do encerramento travam esse envio.
+        encerraComOUltimoMes={
+          encerraComOUltimoMes && fechamento
+            ? { pendencias: pendenciasDoEncerramento(fechamento, saves, aberturaEmRevisao, true) }
+            : null
+        }
+        classesDoFade={classesDoFade}
+        escondida={escondida}
+      />
     );
   }
 
   return (
-    <EnvelopeBarra escondida={escondida}>
-      <div className="sticky bottom-0 z-20 -mx-1 rounded-t-2xl border border-b-0 border-border bg-white/95 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur">
-        <TrilhaFaturamentoUnico
-          jobId={jobId}
-          jobCodigo={jobCodigo}
-          faturamento={faturamentoEnvioUnico}
-          podeEnviarFaturamento={podeEnviarFaturamento && bloqueioFaturamento === null}
-          bloqueio={bloqueioFaturamento}
-          faturamentoPrevisto={faturamentoPrevisto}
-          faturamentoSavePrevisto={faturamentoSavePrevisto}
-          pagoSoPorSave={pagoSoPorSave}
-          dataPrevistaFaturamento={dataPrevistaFaturamento}
-          portais={portais}
-          contextoDoEnvio={contextoDoEnvio}
-          moeda={moeda}
-        />
-        {trilhaEncerramento}
-      </div>
-    </EnvelopeBarra>
+    <div
+      className={cn(
+        "sticky bottom-0 z-20 -mx-1 rounded-t-2xl border border-b-0 border-border bg-white/95 shadow-[0_-4px_16px_-8px_rgba(0,0,0,0.12)] backdrop-blur",
+        classesDoFade,
+      )}
+      aria-hidden={escondida}
+    >
+      <TrilhaFaturamentoUnico
+        jobId={jobId}
+        jobCodigo={jobCodigo}
+        faturamento={faturamentoEnvioUnico}
+        podeEnviarFaturamento={podeEnviarFaturamento && bloqueioFaturamento === null}
+        bloqueio={bloqueioFaturamento}
+        faturamentoPrevisto={faturamentoPrevisto}
+        faturamentoSavePrevisto={faturamentoSavePrevisto}
+        pagoSoPorSave={pagoSoPorSave}
+        dataPrevistaFaturamento={dataPrevistaFaturamento}
+        portais={portais}
+        contextoDoEnvio={contextoDoEnvio}
+        moeda={moeda}
+      />
+      {trilhaEncerramento}
+    </div>
   );
 }
 
@@ -419,28 +433,13 @@ function useBarraEscondidaPelaSelecao(): boolean {
   return escondida;
 }
 
-/** Fade suave da barra quando a aba PPs entra no modo "Selecionar":
- *  `opacity` + `pointer-events`, para o layout do rodapé (o sticky
- *  bottom-0) seguir reservando o espaço e a transição não tremer.
- *  Transform ficou de fora de propósito: criaria um novo containing
- *  block e tiraria o grude do sticky lá dentro. */
-function EnvelopeBarra({
-  escondida,
-  children,
-}: {
-  escondida: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      className={cn(
-        "transition-opacity duration-300 ease-out",
-        escondida && "pointer-events-none opacity-0",
-      )}
-      aria-hidden={escondida}
-    >
-      {children}
-    </div>
+/** Classes do fade — vão NO sticky, não num wrapper em volta: um `<div>`
+ *  no meio do sticky e o pai dele perdem altura e o `bottom-0` para de
+ *  colar na base do viewport. */
+function fadeDaSelecao(escondida: boolean): string {
+  return cn(
+    "transition-opacity duration-300 ease-out",
+    escondida && "pointer-events-none opacity-0",
   );
 }
 
