@@ -154,6 +154,10 @@ export default async function PedidosCompraFinanceiroPage({
     faturamentoDosJobs,
     ppsDeOutrasEmpresasRes,
     tomadoresDosDesembolsos,
+    // Paralelizadas no Promise.all principal (antes rodavam em série depois
+    // do `await Promise.all`, somando 2 round-trips desnecessários).
+    faturasAbertasRes,
+    faturasFechadasPagasRes,
   ] = await Promise.all([
     // Página a página (15/11/2026): o PostgREST corta em 1.000 linhas sem
     // aviso, e com 1.045 PPs enviadas as 45 mais antigas sumiam da lista —
@@ -446,6 +450,27 @@ export default async function PedidosCompraFinanceiroPage({
         ),
     // Os CNPJs tomadores, para a tela do desembolso mostrar o da NF (decisão 264).
     carregarTomadores(supabase, session.activeTenant.id),
+    // Faturas abertas+fechadas: entram no Promise.all principal pra sair da
+    // fila sequencial. Embed é pesado (3 tabelas aninhadas) mas o tenant
+    // tem poucas faturas vivas — a dor estava no serial, não no volume.
+    supabase
+      .from("faturas_cartao")
+      .select(
+        "id, codigo, cartao_credito_id, competencia_fechamento, data_vencimento, " +
+          "status, valor_cobrado, itens:contas_avulsas(valor, status, natureza), " +
+          "cartao:cartoes_credito!inner(empresa_id), " +
+          "parcelas_pp:pedidos_compra_parcelas(valor, pago_em), " +
+          "lancamentos:lancamentos_financeiros!fatura_cartao_id(valor, natureza, papel_na_fatura)",
+      )
+      .eq("tenant_id", session.activeTenant.id)
+      .in("status", ["aberta", "fechada"])
+      .order("competencia_fechamento", { ascending: true }),
+    // Faturas fechadas+pagas: viram títulos em Títulos a Pagar.
+    supabase
+      .from("faturas_cartao")
+      .select(SELECT_FATURA_DO_TITULO)
+      .eq("tenant_id", session.activeTenant.id)
+      .in("status", ["fechada", "paga"]),
   ]);
 
   if (error) console.error("[financeiro.pp.list]", error.message);
@@ -508,37 +533,10 @@ export default async function PedidosCompraFinanceiroPage({
   //
   // A soma vem dos ITENS que apontam para a fatura, e não de uma coluna
   // guardada: enquanto a fatura está aberta o time ainda lança e remaneja,
-  // e um total gravado envelheceria a cada mexida.
-  const { data: faturasAbertasRes } = await supabase
-    .from("faturas_cartao")
-    .select(
-      "id, codigo, cartao_credito_id, competencia_fechamento, data_vencimento, " +
-        "status, valor_cobrado, itens:contas_avulsas(valor, status, natureza), " +
-        // A empresa do cartão decide quais regionais podem ratear o ajuste
-        // do fechamento (decisão 084).
-        "cartao:cartoes_credito!inner(empresa_id), " +
-        // A fatura tem duas fontes de item desde 29/08/2026: conta avulsa
-        // e parcela de PP aprovada no cartão. Somar só a primeira faria a
-        // faixa não bater com a tabela.
-        "parcelas_pp:pedidos_compra_parcelas(valor, pago_em), " +
-        // Desde a 093 o item confirmado na baixa JÁ é lançamento na fatura
-        // aberta (papel item/ajuste). Sem esta perna a faixa dizia "0 itens"
-        // para uma fatura com compra dentro, e o fechamento abria com a
-        // soma errada.
-        "lancamentos:lancamentos_financeiros!fatura_cartao_id(valor, natureza, papel_na_fatura)",
-    )
-    .eq("tenant_id", session.activeTenant.id)
-    // Fechada entra junto: ela ainda mora na aba Cartão, com o botão de
-    // reabrir. A paga não — essa vive em Títulos a Pagar, e desfazê-la é
-    // estorno da baixa, não reabertura (29/08/2026).
-    .in("status", ["aberta", "fechada"])
-    // Ordem de competência: quando um cartão tem mais de uma aberta — a
-    // compra que chegou depois do fechamento e rolou para a seguinte —, a
-    // que fecha primeiro é a que o financeiro fecha primeiro.
-    .order("competencia_fechamento", { ascending: true });
-
+  // e um total gravado envelheceria a cada mexida. A query entrou no
+  // Promise.all principal — só montamos o shape aqui.
   const faturasDoCartao: FaturaDoCartao[] = (
-    (faturasAbertasRes ?? []) as any[]
+    (faturasAbertasRes.data ?? []) as any[]
   ).map((f) => {
     const todos = (f.itens ?? []) as Array<{
       valor: number;
@@ -612,15 +610,11 @@ export default async function PedidosCompraFinanceiroPage({
   // (28/08/2026).
   //
   // Só fechada e paga: a fatura ABERTA ainda recebe compra, e não faz
-  // sentido oferecer baixa de um valor que ainda vai mudar.
-  const { data: faturasRes, error: faturasErr } = await supabase
-    .from("faturas_cartao")
-    .select(SELECT_FATURA_DO_TITULO)
-    .eq("tenant_id", session.activeTenant.id)
-    .in("status", ["fechada", "paga"]);
-
-  if (faturasErr) {
-    console.error("[contas-a-pagar.faturas-cartao]", faturasErr.message);
+  // sentido oferecer baixa de um valor que ainda vai mudar. A query
+  // entrou no Promise.all principal.
+  const faturasRes = { data: faturasFechadasPagasRes.data };
+  if (faturasFechadasPagasRes.error) {
+    console.error("[contas-a-pagar.faturas-cartao]", faturasFechadasPagasRes.error.message);
   }
 
   // Títulos a pagar — a visão unificada (PP, avulso, recorrência, folha,
@@ -634,7 +628,7 @@ export default async function PedidosCompraFinanceiroPage({
     estornos: estornosRes.data,
     desembolsos: desembolsosTitulosRes.data,
     devolucoes: devolucoesRes.data,
-    faturas: faturasRes,
+    faturas: faturasRes.data,
     remessasItens: remessasItensRes.data,
     tipos: tiposRes.data,
     subtipos: subtiposRes.data,
@@ -800,21 +794,32 @@ export default async function PedidosCompraFinanceiroPage({
     const peopleColabIds = Array.from(
       new Set(peopleItems.map((i) => i.colaborador_id)),
     );
-    const rateioEmpresaKeys = new Set<string>();
-    if (peopleColabIds.length > 0) {
-      const { data: pacotesData } = await supabase
-        .from("colaboradores_alocacoes")
+    // As duas queries de People (pacote vigente + alocações da folha)
+    // rodam em paralelo — são independentes.
+    const [pacotesRes, alocRes] = await Promise.all([
+      peopleColabIds.length > 0
+        ? supabase
+            .from("colaboradores_alocacoes")
+            .select(
+              "colaborador_id, itens:colaboradores_alocacoes_itens(empresa_id, usa_rateio_empresa)",
+            )
+            .eq("tenant_id", session.activeTenant.id)
+            .in("colaborador_id", peopleColabIds)
+            .is("data_fim", null)
+        : Promise.resolve({ data: [] as any[] | null }),
+      supabase
+        .from("folhas_pagamento_alocacoes")
         .select(
-          "colaborador_id, itens:colaboradores_alocacoes_itens(empresa_id, usa_rateio_empresa)",
+          "id, folha_id, empresa_id, regional_id, percentual, empresa:empresas(nome_fantasia), regional:regionais(nome)",
         )
         .eq("tenant_id", session.activeTenant.id)
-        .in("colaborador_id", peopleColabIds)
-        .is("data_fim", null);
-      for (const p of ((pacotesData ?? []) as any[])) {
-        for (const i of (p.itens ?? []) as { empresa_id: string; usa_rateio_empresa: boolean }[]) {
-          if (i.usa_rateio_empresa) {
-            rateioEmpresaKeys.add(`${p.colaborador_id}|${i.empresa_id}`);
-          }
+        .in("folha_id", peopleLineIds),
+    ]);
+    const rateioEmpresaKeys = new Set<string>();
+    for (const p of ((pacotesRes.data ?? []) as any[])) {
+      for (const i of (p.itens ?? []) as { empresa_id: string; usa_rateio_empresa: boolean }[]) {
+        if (i.usa_rateio_empresa) {
+          rateioEmpresaKeys.add(`${p.colaborador_id}|${i.empresa_id}`);
         }
       }
     }
@@ -825,14 +830,7 @@ export default async function PedidosCompraFinanceiroPage({
       colabPorFolha.set(i.linha_id, i.colaborador_id);
     }
 
-    const { data: alocData } = await supabase
-      .from("folhas_pagamento_alocacoes")
-      .select(
-        "id, folha_id, empresa_id, regional_id, percentual, empresa:empresas(nome_fantasia), regional:regionais(nome)",
-      )
-      .eq("tenant_id", session.activeTenant.id)
-      .in("folha_id", peopleLineIds);
-    for (const a of ((alocData ?? []) as any[])) {
+    for (const a of ((alocRes.data ?? []) as any[])) {
       const colabId = colabPorFolha.get(a.folha_id);
       const usaRateio = colabId
         ? rateioEmpresaKeys.has(`${colabId}|${a.empresa_id}`)
