@@ -175,7 +175,7 @@ export function QuadroNfLinha({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           {valorFormatado ? (
-            <p className="text-2xl font-bold tracking-tight text-foreground tabular-nums">
+            <p className="text-base font-semibold tracking-tight text-foreground tabular-nums">
               {valorOculto ? "R$ ●●●●●●" : valorFormatado}
             </p>
           ) : (
