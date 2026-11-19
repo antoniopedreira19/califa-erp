@@ -672,28 +672,35 @@ export function TitulosPagarList({
       return [`${origemCnab}:${t.alvo.id}`];
     }),
   );
-  // Só habilita a remessa quando TODOS os selecionados têm correspondente
-  // CNAB. Se algum não tem (destinatário sem chave/banco, ou lote mistura
-  // com um tipo que não entra em remessa), desabilita com título explicativo.
+  // Monta o subset que vai pra remessa: cruza com `cnabTitulos` por
+  // (origemTipo, origemId). O que não bate (ex.: PP de verba cujo
+  // destinatário ainda não tem PIX/banco cadastrado) fica de fora
+  // silenciosamente; se ao abrir o diálogo nenhum sobrou, o botão fica
+  // desabilitado — senão, abre com o que deu. Ser menos rígido aqui é
+  // melhor UX do que travar o clique inteiro.
   const titulosParaRemessa =
     cnabTitulos?.filter((t) =>
       chavesCnabDosSelecionados.has(`${t.origemTipo}:${t.origemId}`),
     ) ?? [];
-  const todosSelecionadosEstaoEmCnab =
-    selecionados.length > 0 &&
-    titulosParaRemessa.length === chavesCnabDosSelecionados.size;
+  const faltamNoCnab =
+    chavesCnabDosSelecionados.size - titulosParaRemessa.length;
+  const semNenhumElegivel =
+    selecionados.length > 0 && titulosParaRemessa.length === 0;
   const remessaDesabilitada =
     !canGerarRemessa ||
     !cnabContas ||
     cnabContas.length === 0 ||
-    !todosSelecionadosEstaoEmCnab;
+    selecionados.length === 0 ||
+    semNenhumElegivel;
   const remessaTitle = !canGerarRemessa
     ? "Sem permissão pra gerar remessa"
     : !cnabContas || cnabContas.length === 0
       ? "Nenhuma conta Santander configurada"
-      : !todosSelecionadosEstaoEmCnab
-        ? "Alguns dos marcados não têm dados pra remessa (PIX/banco do destinatário) ou não entram em CNAB"
-        : "Gerar remessa Santander com os títulos marcados";
+      : semNenhumElegivel
+        ? "Nenhum dos marcados entra em CNAB (destinatário sem PIX/banco, PP por boleto/guia/link ou fora da vw_a_pagar)"
+        : faltamNoCnab > 0
+          ? `Gerar remessa com os marcados — ${faltamNoCnab} fora por falta de dados de pagamento`
+          : "Gerar remessa Santander com os títulos marcados";
 
   // Faixa de resumo — sobre a base bruta (todos os status), não sobre o
   // recorte do chip: é panorama do caixa. O corte de "mês" segue o mês
