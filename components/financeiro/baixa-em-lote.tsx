@@ -37,7 +37,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
-import { AlertCircle, AlertTriangle, ArrowRightLeft, CreditCard, Eye, Info } from "lucide-react";
+import { AlertCircle, AlertTriangle, ArrowRightLeft, CreditCard, Eye, Info, Landmark } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -297,6 +297,9 @@ export function BarraDeSelecao({
   totais,
   saldoDepois,
   onVerNoExtrato,
+  onRemessa,
+  remessaDesabilitada,
+  remessaTitle,
 }: {
   itens: TituloParaLote[];
   onLimpar: () => void;
@@ -310,6 +313,16 @@ export function BarraDeSelecao({
   /** "Ver no Extrato antes": os marcados aparecem no Extrato como
    *  previstos, sem gravar nada (decisão 195). */
   onVerNoExtrato?: () => void;
+  /** "Remessa Santander" ao lado de "Dar baixa": abre a exportação CNAB
+   *  apenas com os títulos marcados. Hoje só a lista de Contas a Pagar ›
+   *  Títulos a Pagar passa essa prop. */
+  onRemessa?: () => void;
+  /** Quando `onRemessa` é fornecido mas a ação não pode ser executada
+   *  (sem conta Santander, sem permissão, seleção mista com título que
+   *  não gera remessa). Mostra o botão em disabled com o `remessaTitle`
+   *  explicando o porquê. */
+  remessaDesabilitada?: boolean;
+  remessaTitle?: string;
 }) {
   if (itens.length === 0) return null;
   // Sai o que se paga (títulos a pagar e impostos); entra o que se recebe.
@@ -368,6 +381,18 @@ export function BarraDeSelecao({
           <CreditCard className="h-3.5 w-3.5" />
           {itens.length === 1 ? "Dar baixa" : `Dar baixa em ${itens.length}`}
         </button>
+        {onRemessa && (
+          <button
+            type="button"
+            onClick={onRemessa}
+            disabled={remessaDesabilitada}
+            title={remessaTitle ?? "Gerar remessa Santander com os títulos marcados"}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/20 bg-white/5 px-3.5 py-2 text-xs font-semibold text-white transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/5"
+          >
+            <Landmark className="h-3.5 w-3.5" />
+            Remessa Santander
+          </button>
+        )}
       </div>
     </div>
   );

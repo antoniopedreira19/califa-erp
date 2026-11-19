@@ -99,6 +99,7 @@ import {
   motivoForaDoLoteAPagar,
   paraOLoteAPagar,
 } from "../conciliacao/alvos-da-baixa";
+import { ExportarRemessaCnabDialog } from "./remessa-cnab-dialog";
 
 // ---------------------------------------------------------------------------
 // Tipo da linha
@@ -402,6 +403,13 @@ interface Props {
    *  renderizado ao lado do "+ Lançamento Avulso" na toolbar. Módulo
    *  pgto-remessa. */
   exportarRemessaBotao?: React.ReactNode;
+  /** Mesmos dados que alimentam `exportarRemessaBotao`, repassados pra
+   *  cá pra abrir um 2º diálogo de remessa (só com os títulos marcados
+   *  no sticky) a partir da seleção em lote. Opcional pra manter
+   *  compatibilidade com outros callers (ex.: testes). */
+  cnabContas?: import("./remessa-cnab-dialog").ContaSantanderElegivel[];
+  cnabTitulos?: import("./remessa-cnab-dialog").TituloElegivelParaRemessa[];
+  canGerarRemessa?: boolean;
   /** Quem aprova folha pode devolver o título de folha para a aprovação
    *  (decisão 132). Obrigatório: a página decide, a lista não adivinha. */
   podeDevolverFolha: boolean;
@@ -431,6 +439,9 @@ export function TitulosPagarList({
   faturasNaBaixa,
   ultimasRetencoes,
   exportarRemessaBotao,
+  cnabContas,
+  cnabTitulos,
+  canGerarRemessa = false,
   podeDevolverFolha,
   hoje,
   nomesDasEmpresas,
@@ -632,6 +643,57 @@ export function TitulosPagarList({
     .filter((r) => selecao.marcado(chaveDoLoteAPagar(r)))
     .map(paraOLoteAPagar)
     .filter((t): t is TituloParaLote => t !== null);
+
+  // Remessa Santander a partir do sticky: abre o mesmo diálogo de exportar
+  // CNAB, mas só com os títulos que estão marcados agora. Guardamos o
+  // subset como snapshot (filtrado a cada clique no botão) e remontamos
+  // o diálogo via `key` pra zerar o estado interno dele.
+  const [remessaDoSticky, setRemessaDoSticky] = React.useState<{
+    key: number;
+    titulos: NonNullable<typeof cnabTitulos>;
+  } | null>(null);
+
+  // Mapeamento entre a origem da baixa em lote (`pp|avulso|recorrencia|folha`)
+  // e a origem CNAB (`pp|avulsa|recorrente|folha`): só os `TituloParaLote`
+  // do módulo "pagar" podem virar remessa, e só se a origem casar.
+  const CNAB_ORIGEM_DO_LOTE: Record<
+    OrigemPagarNoLote,
+    import("./remessa-cnab-dialog").TituloElegivelParaRemessa["origemTipo"]
+  > = {
+    pp: "pp",
+    avulso: "avulsa",
+    recorrencia: "recorrente",
+    folha: "folha",
+  };
+  const chavesCnabDosSelecionados = new Set(
+    selecionados.flatMap((t) => {
+      if (t.alvo.modulo !== "pagar") return [];
+      const origemCnab = CNAB_ORIGEM_DO_LOTE[t.alvo.origem];
+      return [`${origemCnab}:${t.alvo.id}`];
+    }),
+  );
+  // Só habilita a remessa quando TODOS os selecionados têm correspondente
+  // CNAB. Se algum não tem (destinatário sem chave/banco, ou lote mistura
+  // com um tipo que não entra em remessa), desabilita com título explicativo.
+  const titulosParaRemessa =
+    cnabTitulos?.filter((t) =>
+      chavesCnabDosSelecionados.has(`${t.origemTipo}:${t.origemId}`),
+    ) ?? [];
+  const todosSelecionadosEstaoEmCnab =
+    selecionados.length > 0 &&
+    titulosParaRemessa.length === chavesCnabDosSelecionados.size;
+  const remessaDesabilitada =
+    !canGerarRemessa ||
+    !cnabContas ||
+    cnabContas.length === 0 ||
+    !todosSelecionadosEstaoEmCnab;
+  const remessaTitle = !canGerarRemessa
+    ? "Sem permissão pra gerar remessa"
+    : !cnabContas || cnabContas.length === 0
+      ? "Nenhuma conta Santander configurada"
+      : !todosSelecionadosEstaoEmCnab
+        ? "Alguns dos marcados não têm dados pra remessa (PIX/banco do destinatário) ou não entram em CNAB"
+        : "Gerar remessa Santander com os títulos marcados";
 
   // Faixa de resumo — sobre a base bruta (todos os status), não sobre o
   // recorte do chip: é panorama do caixa. O corte de "mês" segue o mês
@@ -1035,7 +1097,31 @@ export function TitulosPagarList({
         itens={selecionados}
         onLimpar={selecao.limpar}
         onBaixar={() => setLoteAberto(true)}
+        onRemessa={
+          cnabContas && cnabTitulos
+            ? () =>
+                setRemessaDoSticky({
+                  key: Date.now(),
+                  titulos: titulosParaRemessa,
+                })
+            : undefined
+        }
+        remessaDesabilitada={remessaDesabilitada}
+        remessaTitle={remessaTitle}
       />
+
+      {remessaDoSticky && cnabContas && (
+        <ExportarRemessaCnabDialog
+          key={remessaDoSticky.key}
+          contasSantander={cnabContas}
+          titulos={remessaDoSticky.titulos}
+          canGerar={canGerarRemessa}
+          abrirAoMontar
+          preMarcarTodos
+          semTrigger
+          onFechar={() => setRemessaDoSticky(null)}
+        />
+      )}
 
       <p className="flex items-center gap-2 text-xs text-muted-foreground">
         <Info className="h-3.5 w-3.5" />

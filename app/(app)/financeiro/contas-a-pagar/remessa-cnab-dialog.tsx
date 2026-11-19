@@ -223,6 +223,17 @@ interface Props {
   /** Já abre montado (a conciliação lê os títulos no clique e só então
    *  monta o diálogo, decisão 195). */
   abrirAoMontar?: boolean;
+  /** Ao abrir, pré-marca todos os títulos elegíveis (PIX ou banco). Usado
+   *  quando a tela abre o diálogo com um subset já escolhido (ex.: sticky
+   *  da seleção em Contas a Pagar), pra não obrigar o usuário a clicar
+   *  "Marcar todos" de novo. */
+  preMarcarTodos?: boolean;
+  /** Esconde o DialogTrigger interno quando o diálogo é controlado por
+   *  fora — evita um segundo botão "Exportar remessa Santander" na DOM. */
+  semTrigger?: boolean;
+  /** Avisa quem monta quando o usuário fechou o diálogo — serve pra
+   *  desmontar a instância aberta pelo sticky. */
+  onFechar?: () => void;
 }
 
 export function ExportarRemessaCnabDialog({
@@ -230,6 +241,9 @@ export function ExportarRemessaCnabDialog({
   titulos,
   canGerar,
   abrirAoMontar = false,
+  preMarcarTodos = false,
+  semTrigger = false,
+  onFechar,
 }: Props) {
   const router = useRouter();
   const [open, setOpen] = React.useState(abrirAoMontar);
@@ -275,9 +289,22 @@ export function ExportarRemessaCnabDialog({
     setSucesso(null);
     setContaId(contasSantander[0]?.id ?? "");
     setDataPagamento(hoje());
-    setSelecionados(new Set());
     setFormaPorTitulo(new Map());
     setOrigemFiltro("todas");
+    // Abriu pelo sticky com pré-seleção: já marca os títulos que vieram.
+    // Os não-elegíveis (sem PIX e sem banco) ficam fora da marca automática;
+    // vão pra lista de rejeitados ao gerar, com o motivo específico.
+    if (preMarcarTodos) {
+      setSelecionados(
+        new Set(
+          titulos
+            .filter((t) => t.temPix || t.temBanco)
+            .map((t) => `${t.origemTipo}:${t.origemId}`),
+        ),
+      );
+    } else {
+      setSelecionados(new Set());
+    }
   }
 
   /** Trocar o filtro desmarca o que ficou escondido: o arquivo leva só o
@@ -297,6 +324,7 @@ export function ExportarRemessaCnabDialog({
   function handleOpenChange(next: boolean) {
     if (next) reset();
     setOpen(next);
+    if (!next) onFechar?.();
   }
 
   function toggleTitulo(chave: string) {
@@ -382,25 +410,27 @@ export function ExportarRemessaCnabDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger asChild>
-        <button
-          type="button"
-          disabled={!habilitado}
-          title={
-            !canGerar
-              ? "Sem permissão"
-              : contasSantander.length === 0
-                ? "Nenhuma conta Santander configurada"
-                : semTitulos
-                  ? "Nenhum título a pagar disponível"
-                  : "Exportar remessa Santander"
-          }
-          className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-california-red bg-white px-4 py-2 text-sm font-semibold text-california-red transition-colors hover:bg-california-red hover:text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:text-california-red"
-        >
-          <Landmark className="h-4 w-4" />
-          Exportar remessa Santander
-        </button>
-      </DialogTrigger>
+      {!semTrigger && (
+        <DialogTrigger asChild>
+          <button
+            type="button"
+            disabled={!habilitado}
+            title={
+              !canGerar
+                ? "Sem permissão"
+                : contasSantander.length === 0
+                  ? "Nenhuma conta Santander configurada"
+                  : semTitulos
+                    ? "Nenhum título a pagar disponível"
+                    : "Exportar remessa Santander"
+            }
+            className="inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-california-red bg-white px-4 py-2 text-sm font-semibold text-california-red transition-colors hover:bg-california-red hover:text-white disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white disabled:hover:text-california-red"
+          >
+            <Landmark className="h-4 w-4" />
+            Exportar remessa Santander
+          </button>
+        </DialogTrigger>
+      )}
       <DialogContent className="max-w-5xl p-0 gap-0">
         <DialogHeader className="border-b border-border p-6">
           <DialogTitle className="flex items-center gap-2">

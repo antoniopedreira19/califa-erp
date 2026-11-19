@@ -1041,6 +1041,9 @@ export default async function PedidosCompraFinanceiroPage({
                   canGerar={canGerarRemessa}
                 />
               }
+              cnabContas={contasSantander}
+              cnabTitulos={titulosCnab}
+              canGerarRemessa={canGerarRemessa}
             />
           }
           titulosAPagarCount={titulosAPagarCount}
