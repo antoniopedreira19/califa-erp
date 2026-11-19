@@ -179,6 +179,21 @@ Isso resolve a pendência P2.
   - Total do recibo = férias + 1/3 + abono.
   - **Não há 13º nos lançamentos de férias para PJ** — PJ recebe 13º equivalente em pagamento próprio, não integrado às férias.
 
+#### 4.6.1 Regra do 1/3 por tipo de lançamento (doutrina PJ California)
+
+O 1/3 constitucional entra no total, na NF e no `salario_base` da folha de pagamento conforme a tabela abaixo. A fonte-verdade é `lib/ferias/calcular-valores.ts` e `lib/ferias/criar-folhas-pagamento.ts`; qualquer novo consumer (modal, PDF, trigger de conta avulsa) tem que seguir a mesma regra.
+
+| Tipo                     | 1/3 incide sobre         | NF emitida pelo colaborador        | `salario_base` da folha            |
+|--------------------------|--------------------------|------------------------------------|------------------------------------|
+| `usufruto`               | `valor_ferias`           | `valor_ferias + valor_um_terco`    | `valor_ferias + valor_um_terco`    |
+| `abono_combinado`        | **só** `valor_ferias`    | NF usufruto: `valor_ferias + valor_um_terco`; NF abono: `valor_abono` | Idem (2 folhas) |
+| `abono_avulso`           | `valor_abono`            | `valor_abono + valor_um_terco`     | `valor_abono + valor_um_terco`     |
+| `abono_excepcional`      | `valor_abono`            | `valor_abono + valor_um_terco`     | `valor_abono + valor_um_terco`     |
+
+**Nota — `abono_combinado` segue a doutrina CLT**: o abono pecuniário dentro de um bloco de férias **não** gera 1/3 (CLT art. 143 — a venda não é rendimento constitucional). A regra `valor_um_terco = valor_ferias / 3` está travada por teste em `lib/ferias/calcular-valores.test.ts`.
+
+**Nota — `abono_avulso` / `abono_excepcional` são modelo PJ California**: venda de dias sem passar pelo bloco de férias, decisão de produto da agência (ver §4.4). Como o colaborador PJ não tem rendimento regido pela CLT, o 1/3 incide sobre o abono também — e por isso entra na NF e no `salario_base`. Alinhado em 2026-11-19 depois que a NF estava aparecendo R$ 777,78 menor que o `salario_base` da folha.
+
 ## 5. Fluxo operacional
 
 ### 5.1 Papéis envolvidos
