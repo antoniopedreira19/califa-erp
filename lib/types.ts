@@ -4454,7 +4454,8 @@ export type FormaPagamento =
   | "pix"
   | "transferencia"
   | "boleto"
-  | "cartao_credito";
+  | "cartao_credito"
+  | "debito_automatico";
 
 export const formaPagamentoLabel = (f: FormaPagamento): string =>
   ({
@@ -4462,6 +4463,7 @@ export const formaPagamentoLabel = (f: FormaPagamento): string =>
     transferencia: "Transferência",
     boleto: "Boleto",
     cartao_credito: "Cartão de Crédito",
+    debito_automatico: "Débito Automático",
   })[f];
 
 export type BandeiraCartao =

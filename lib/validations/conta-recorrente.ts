@@ -14,7 +14,13 @@ const mes1a12 = z.number().int().min(1).max(12);
  */
 function aplicarRefinementFormaPagamentoRecorrente<
   T extends {
-    forma_pagamento: "pix" | "transferencia" | "boleto" | "cartao_credito" | null;
+    forma_pagamento:
+      | "pix"
+      | "transferencia"
+      | "boleto"
+      | "cartao_credito"
+      | "debito_automatico"
+      | null;
     cartao_credito_id: string | null;
   },
 >(data: T, ctx: z.RefinementCtx) {

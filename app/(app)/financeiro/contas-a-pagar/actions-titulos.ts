@@ -174,7 +174,7 @@ const aprovarSchema = z
      * forma é escolhida na baixa, uma parcela por vez.
      */
     forma_pagamento: z
-      .enum(["pix", "transferencia", "boleto", "cartao_credito"])
+      .enum(["pix", "transferencia", "boleto", "cartao_credito", "debito_automatico"])
       .nullable()
       .default(null),
     cartao_credito_id: z
@@ -681,7 +681,7 @@ const baixaSchema = z
     // e o dialog esconde o campo. Para as demais origens, superRefine
     // abaixo exige que venha preenchido.
     forma_pagamento: z
-      .enum(["pix", "transferencia", "boleto", "cartao_credito"])
+      .enum(["pix", "transferencia", "boleto", "cartao_credito", "debito_automatico"])
       .nullable(),
     cartao_credito_id: z
       .string()

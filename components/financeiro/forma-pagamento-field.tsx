@@ -64,6 +64,7 @@ const FORMAS: FormaPagamento[] = [
   "transferencia",
   "boleto",
   "cartao_credito",
+  "debito_automatico",
 ];
 
 const FORMAS_SEM_CARTAO = FORMAS.filter((f) => f !== "cartao_credito");

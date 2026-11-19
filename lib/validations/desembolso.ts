@@ -88,7 +88,10 @@ export const aprovarDesembolsoSchema = z
     // pode dizer na aprovação por onde o desembolso vai sair. Cartão aqui
     // não amarra a fatura — isso acontece na baixa; serve para pré-preencher
     // a baixa e para a previsão de caixa cair no vencimento da fatura.
-    forma_pagamento: z.enum(["pix", "transferencia", "boleto", "cartao_credito"]).nullable().optional(),
+    forma_pagamento: z
+      .enum(["pix", "transferencia", "boleto", "cartao_credito", "debito_automatico"])
+      .nullable()
+      .optional(),
     cartao_credito_id: z.string().uuid().nullable().optional(),
   })
   .superRefine((v, ctx) => {

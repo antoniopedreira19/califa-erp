@@ -260,7 +260,9 @@ export const baixaEmLoteSchema = z
     conta_bancaria_id: z.string().uuid("Escolha a conta bancária.").nullable(),
     /** Obrigatória quando há título a pagar. O cartão só com títulos a
      *  pagar que aceitam cartão (decisão 197). */
-    forma_pagamento: z.enum(["pix", "transferencia", "boleto", "cartao_credito"]).nullable(),
+    forma_pagamento: z
+      .enum(["pix", "transferencia", "boleto", "cartao_credito", "debito_automatico"])
+      .nullable(),
     /** O cartão do lote, quando a forma é cartão. */
     cartao_credito_id: z.string().uuid().nullable().default(null),
     /** A fatura de todos, quando a forma é cartão: o dia 1 da competência
@@ -408,7 +410,12 @@ export type ChamadaDaBaixa =
         conta_bancaria_id: string | null;
         plano_conta_tipo_id: string;
         plano_conta_subtipo_id: string;
-        forma_pagamento: "pix" | "transferencia" | "boleto" | "cartao_credito";
+        forma_pagamento:
+          | "pix"
+          | "transferencia"
+          | "boleto"
+          | "cartao_credito"
+          | "debito_automatico";
         cartao_credito_id: string | null;
         fatura_competencia: string | null;
         valor_baixa: number;

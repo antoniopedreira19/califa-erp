@@ -16,7 +16,13 @@ import { aprovarDesembolsoComData } from "./actions";
 import { Dica, brl, dataBr } from "./comum";
 
 const DECIDIR = "decidir";
-type Forma = "" | "pix" | "transferencia" | "boleto" | "cartao_credito";
+type Forma =
+  | ""
+  | "pix"
+  | "transferencia"
+  | "boleto"
+  | "cartao_credito"
+  | "debito_automatico";
 
 export function AprovarDesembolsoDialog({
   open,

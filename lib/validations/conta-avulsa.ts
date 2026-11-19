@@ -8,6 +8,7 @@ export const formaPagamentoEnum = z.enum([
   "transferencia",
   "boleto",
   "cartao_credito",
+  "debito_automatico",
 ]);
 
 const linhasDoRateio = z.array(
@@ -62,7 +63,12 @@ export const rateioSchema = linhasDoRateio
  */
 function aplicarRefinementFormaPagamento<
   T extends {
-    forma_pagamento: "pix" | "transferencia" | "boleto" | "cartao_credito";
+    forma_pagamento:
+      | "pix"
+      | "transferencia"
+      | "boleto"
+      | "cartao_credito"
+      | "debito_automatico";
     cartao_credito_id: string | null;
     data_prevista_pagamento: string | null;
   },
