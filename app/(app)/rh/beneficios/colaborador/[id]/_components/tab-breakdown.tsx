@@ -1,10 +1,18 @@
-import type { BeneficioCustoMensalLinha, BeneficioModoCusteio } from "@/lib/types";
+import type { BeneficioCustoMensalLinha } from "@/lib/types";
 
-const MODO_LABEL: Record<BeneficioModoCusteio, string> = {
-  rateado: "Rateado 60/40",
-  integral_empresa: "Integral empresa",
-  integral_empresa_com_upgrade: "Integral + upgrade",
-};
+function rotuloModo(linha: BeneficioCustoMensalLinha): string {
+  switch (linha.modo_custeio) {
+    case "rateado": {
+      const empresa = Number(linha.percentual_empresa_titular) || 0;
+      const colab = Math.max(0, 100 - empresa);
+      return `Rateado ${empresa}/${colab}`;
+    }
+    case "integral_empresa":
+      return "Integral empresa";
+    case "integral_empresa_com_upgrade":
+      return "Integral + upgrade";
+  }
+}
 
 const MESES = [
   "janeiro", "fevereiro", "março", "abril", "maio", "junho",
@@ -102,7 +110,7 @@ export function TabBreakdown({
                     )}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    {MODO_LABEL[l.modo_custeio]}
+                    {rotuloModo(l)}
                   </td>
                   <td className="px-4 py-3 text-center tabular-nums">
                     {l.idade_titular}

@@ -6307,6 +6307,7 @@ export interface BeneficioCustoMensalLinha {
   beneficio_nome: string;
   beneficio_tipo: BeneficioTipo;
   modo_custeio: BeneficioModoCusteio;
+  percentual_empresa_titular: number;
   idade_titular: number;
   valor_integral_titular: number;
   valor_empresa_titular: number;
