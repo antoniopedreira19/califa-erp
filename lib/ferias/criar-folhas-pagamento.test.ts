@@ -62,7 +62,7 @@ test("pj + usufruto → 1 folha california usufruto", () => {
 // PJ puro — tipo abono_avulso
 // ---------------------------------------------------------------------------
 
-test("pj + abono_avulso → 1 folha california abono", () => {
+test("pj + abono_avulso → 1 folha california abono (inclui 1/3)", () => {
   const result = decidirFolhasAInserir({
     tipo: "abono_avulso",
     tipoContratacao: "pj",
@@ -73,14 +73,16 @@ test("pj + abono_avulso → 1 folha california abono", () => {
   assert.equal(result.length, 1);
   assert.equal(result[0].origem, "california");
   assert.equal(result[0].tipo_folha_ferias, "abono");
-  assert.equal(result[0].salario_base, "1000.00");
+  // valor_abono + valor_um_terco = 1000 + 333.33 = 1333.33 (PJ California:
+  // abono avulso gera 1/3, NF e salario_base casam com o total recebido)
+  assert.equal(result[0].salario_base, "1333.33");
 });
 
 // ---------------------------------------------------------------------------
 // PJ puro — tipo abono_excepcional
 // ---------------------------------------------------------------------------
 
-test("pj + abono_excepcional → 1 folha california abono", () => {
+test("pj + abono_excepcional → 1 folha california abono (inclui 1/3)", () => {
   const result = decidirFolhasAInserir({
     tipo: "abono_excepcional",
     tipoContratacao: "pj",
@@ -91,7 +93,8 @@ test("pj + abono_excepcional → 1 folha california abono", () => {
   assert.equal(result.length, 1);
   assert.equal(result[0].origem, "california");
   assert.equal(result[0].tipo_folha_ferias, "abono");
-  assert.equal(result[0].salario_base, "1000.00");
+  // Idem abono_avulso: salario_base = valor_abono + valor_um_terco = 1333.33
+  assert.equal(result[0].salario_base, "1333.33");
 });
 
 // ---------------------------------------------------------------------------

@@ -151,7 +151,13 @@ export function ModalDetalheSolicitacao({ row, onFechar, onSucesso }: Props) {
       row.tipo === "abono_avulso" ||
       row.tipo === "abono_excepcional"
     ) {
-      nfs.push({ rotulo: "NF de abono", valor: v.valor_abono });
+      // Abono avulso/excepcional (modelo PJ California): colaborador recebe
+      // valor_abono + 1/3. A NF precisa casar com o total, senão fica menor
+      // do que o salario_base da folha.
+      nfs.push({
+        rotulo: "NF de abono",
+        valor: v.valor_abono + v.valor_um_terco,
+      });
     } else if (row.tipo === "abono_combinado") {
       nfs.push({
         rotulo: "NF de férias (usufruto + 1/3)",
@@ -452,6 +458,12 @@ function BlocoValores({
           <LinhaValor
             label={`Abono (${tipo === "abono_combinado" ? diasAbono : dias} dia${(tipo === "abono_combinado" ? diasAbono : dias) === 1 ? "" : "s"} × diário)`}
             valor={valores.valor_abono}
+          />
+        )}
+        {(tipo === "abono_avulso" || tipo === "abono_excepcional") && (
+          <LinhaValor
+            label="1/3 constitucional"
+            valor={valores.valor_um_terco}
           />
         )}
       </div>

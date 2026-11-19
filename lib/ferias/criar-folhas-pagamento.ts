@@ -72,9 +72,17 @@ export function decidirFolhasAInserir(params: {
       }
       case "abono_avulso":
       case "abono_excepcional": {
+        // Abono avulso/excepcional (modelo PJ California): colaborador
+        // recebe valor_abono + 1/3. A NF deste tipo precisa casar com
+        // esse total, então salario_base inclui o 1/3 constitucional.
+        // (Diferente do abono em abono_combinado, que segue CLT clássico
+        // e NÃO gera 1/3 sobre o abono — só sobre a parte folga.)
+        const base = (
+          valoresCalifornia.valor_abono + valoresCalifornia.valor_um_terco
+        ).toFixed(2);
         inserts.push({
           origem: "california",
-          salario_base: valoresCalifornia.valor_abono.toFixed(2),
+          salario_base: base,
           tipo_folha_ferias: "abono",
         });
         break;
