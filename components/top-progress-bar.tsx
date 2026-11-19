@@ -30,11 +30,20 @@ export function TopProgressBar() {
   const hideTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
+  // Rede de segurança: se um start() disparar e a navegação nunca terminar
+  // (ex.: router.push pra mesma URL, lib que chama pushState sem mudar
+  // pathname/search), o useEffect de [pathname, searchParams] não re-roda e
+  // a barra ficaria presa. Esse timeout força stop() depois de X ms.
+  const safetyRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const stop = React.useCallback(() => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
       timerRef.current = null;
+    }
+    if (safetyRef.current) {
+      clearTimeout(safetyRef.current);
+      safetyRef.current = null;
     }
     setProgress(100);
     if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
@@ -48,6 +57,7 @@ export function TopProgressBar() {
     // Já estava rodando (navegação encadeada): reseta e dispara de novo.
     if (timerRef.current) clearInterval(timerRef.current);
     if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
+    if (safetyRef.current) clearTimeout(safetyRef.current);
     setVisible(true);
     setProgress(15);
     let p = 15;
@@ -58,7 +68,8 @@ export function TopProgressBar() {
       p = p + Math.max(0.5, resta * 0.08);
       setProgress(Math.min(p, 85));
     }, 200);
-  }, []);
+    safetyRef.current = setTimeout(stop, 10000);
+  }, [stop]);
 
   // Captura cliques em links internos e navegações programáticas.
   React.useEffect(() => {
@@ -90,15 +101,30 @@ export function TopProgressBar() {
       start();
     }
 
-    // Patch leve de history.pushState/replaceState pra pegar router.push
+    // Patch leve de history.pushState/replaceState pra pegar router.push.
+    // Só dispara start() quando a URL alvo é diferente da atual — libs que
+    // usam replaceState só pra sincronizar query/hash sem trocar rota (ex.:
+    // trocar aba via ?aba=...) não devem acender a barra.
     const originalPush = history.pushState.bind(history);
     const originalReplace = history.replaceState.bind(history);
+    function urlMudou(args: Parameters<typeof history.pushState>): boolean {
+      const alvo = args[2];
+      if (alvo == null) return false;
+      const atual = window.location.pathname + window.location.search;
+      try {
+        const resolvida = new URL(String(alvo), window.location.href);
+        const destino = resolvida.pathname + resolvida.search;
+        return destino !== atual;
+      } catch {
+        return String(alvo) !== atual;
+      }
+    }
     history.pushState = (...args) => {
-      start();
+      if (urlMudou(args)) start();
       return originalPush(...args);
     };
     history.replaceState = (...args) => {
-      start();
+      if (urlMudou(args)) start();
       return originalReplace(...args);
     };
 
@@ -122,6 +148,7 @@ export function TopProgressBar() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
       if (hideTimeoutRef.current) clearTimeout(hideTimeoutRef.current);
+      if (safetyRef.current) clearTimeout(safetyRef.current);
     };
   }, []);
 
