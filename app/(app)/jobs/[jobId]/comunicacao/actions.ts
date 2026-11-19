@@ -87,9 +87,10 @@ export async function marcarChatLido(jobId: string): Promise<Result> {
       tenant_id: session.activeTenant.id,
       job_id: jobId,
       profile_id: session.profile.id,
+      escopo: "geral",
       lida_ate: new Date().toISOString(),
     },
-    { onConflict: "job_id,profile_id" },
+    { onConflict: "job_id,profile_id,escopo" },
   );
 
   if (error) {
