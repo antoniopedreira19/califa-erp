@@ -28,6 +28,15 @@ export interface EntradaDaRemessa {
   retencoesDaAprovacao: unknown[] | null;
   /** `vw_a_pagar` de saída. */
   aPagar: unknown[] | null;
+  /** Extras por título: a empresa e as regionais do rateio, pra o filtro
+   *  do diálogo. Chave `${origemTipo}:${origemId}` (ex.: `pp:uuid-abc`).
+   *  Opcional: quando ausente, o diálogo não oferece esses filtros. */
+  extrasPorTitulo?: Record<
+    string,
+    { empresaId: string | null; regionais: string[] }
+  >;
+  /** Mapa id → nome das empresas, pra o rótulo dos chips do filtro. */
+  nomesDeEmpresa?: Record<string, string>;
 }
 
 export function montarDadosDaRemessa(e: EntradaDaRemessa): {
@@ -180,6 +189,10 @@ export function montarDadosDaRemessa(e: EntradaDaRemessa): {
         origemTipo === "pp"
           ? retencoesPelaAprovacao(bruto, aliquotasPorParcela.get(row.origem_id) ?? null)
           : { retido: 0, liquido: bruto };
+      const extraDoTitulo = e.extrasPorTitulo?.[`${origemTipo}:${row.origem_id}`];
+      const empresaId = extraDoTitulo?.empresaId ?? null;
+      const empresaNome = empresaId ? (e.nomesDeEmpresa?.[empresaId] ?? null) : null;
+      const regionais = extraDoTitulo?.regionais ?? [];
       const linha: TituloElegivelParaRemessa = {
         origemTipo,
         origemId: row.origem_id,
@@ -192,6 +205,9 @@ export function montarDadosDaRemessa(e: EntradaDaRemessa): {
         // Fora do cadastro, só o meio da PP vale: a forma fica fixa.
         temPix: fora ? !!pixFora : destinatario.temPix,
         temBanco: fora ? !!contaFora : destinatario.temBanco,
+        empresaId,
+        empresaNome,
+        regionais,
         pix: fora ? pixFora : destinatario.pix,
         conta: fora ? contaFora : destinatario.conta,
         foraDoCadastro: fora,

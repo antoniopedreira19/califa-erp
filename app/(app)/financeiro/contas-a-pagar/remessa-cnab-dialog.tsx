@@ -21,6 +21,7 @@ import {
   Download,
   Landmark,
   Loader2,
+  Search,
 } from "lucide-react";
 import {
   Dialog,
@@ -87,6 +88,13 @@ export interface TituloElegivelParaRemessa {
   /** Indicação visual — o gerador vai revalidar. */
   temPix: boolean;
   temBanco: boolean;
+  /** Empresa do título, pra o filtro do diálogo. Null quando a montagem
+   *  não recebeu o mapa (caller opcional). */
+  empresaId: string | null;
+  empresaNome: string | null;
+  /** Regionais do rateio do título (0..N). Vazio quando a montagem não
+   *  recebeu o mapa, ou quando o título é 100% "Hub" sem detalhamento. */
+  regionais: string[];
   /**
    * Decisão 137: para onde o arquivo paga, na coluna "Dados de
    * pagamento" — a chave e a conta do cadastro do destinatário, que é o
@@ -234,6 +242,11 @@ interface Props {
   /** Avisa quem monta quando o usuário fechou o diálogo — serve pra
    *  desmontar a instância aberta pelo sticky. */
   onFechar?: () => void;
+  /** Catálogos para os filtros do topo da tabela. Quando ausentes, o
+   *  diálogo só oferece a busca por texto — mantém compat com callers
+   *  que ainda não passam esses dados (conciliação, etc.). */
+  empresasDisponiveis?: Array<{ id: string; nome: string }>;
+  regionaisDisponiveis?: Array<{ nome: string }>;
 }
 
 export function ExportarRemessaCnabDialog({
@@ -244,6 +257,8 @@ export function ExportarRemessaCnabDialog({
   preMarcarTodos = false,
   semTrigger = false,
   onFechar,
+  empresasDisponiveis,
+  regionaisDisponiveis,
 }: Props) {
   const router = useRouter();
   const [open, setOpen] = React.useState(abrirAoMontar);
@@ -272,16 +287,29 @@ export function ExportarRemessaCnabDialog({
   const [origemFiltro, setOrigemFiltro] = React.useState<"todas" | CnabOrigemTipo>(
     "todas",
   );
+  /** Filtros adicionais do topo da tabela — busca textual e recorte por
+   *  empresa/regional. Catálogos vêm pelas props do caller. */
+  const [busca, setBusca] = React.useState("");
+  const [empresaFiltro, setEmpresaFiltro] = React.useState<string>("todas");
+  const [regionalFiltro, setRegionalFiltro] = React.useState<string>("todas");
 
   const podeAbrir = canGerar && contasSantander.length > 0;
 
   const origensPresentes = ORDEM_ORIGEM.filter((o) =>
     titulos.some((t) => t.origemTipo === o),
   );
-  const visiveis =
-    origemFiltro === "todas"
-      ? titulos
-      : titulos.filter((t) => t.origemTipo === origemFiltro);
+  const buscaNorm = busca.trim().toLowerCase();
+  const visiveis = titulos.filter((t) => {
+    if (origemFiltro !== "todas" && t.origemTipo !== origemFiltro) return false;
+    if (empresaFiltro !== "todas" && t.empresaId !== empresaFiltro) return false;
+    if (regionalFiltro !== "todas" && !t.regionais.includes(regionalFiltro))
+      return false;
+    if (buscaNorm) {
+      const alvo = `${t.destinatarioNome} ${t.descricao}`.toLowerCase();
+      if (!alvo.includes(buscaNorm)) return false;
+    }
+    return true;
+  });
 
   function reset() {
     setError(null);
@@ -291,6 +319,9 @@ export function ExportarRemessaCnabDialog({
     setDataPagamento(hoje());
     setFormaPorTitulo(new Map());
     setOrigemFiltro("todas");
+    setBusca("");
+    setEmpresaFiltro("todas");
+    setRegionalFiltro("todas");
     // Abriu pelo sticky com pré-seleção: já marca os títulos que vieram.
     // Os não-elegíveis (sem PIX e sem banco) ficam fora da marca automática;
     // vão pra lista de rejeitados ao gerar, com o motivo específico.
@@ -431,8 +462,8 @@ export function ExportarRemessaCnabDialog({
           </button>
         </DialogTrigger>
       )}
-      <DialogContent className="max-w-5xl p-0 gap-0">
-        <DialogHeader className="border-b border-border p-6">
+      <DialogContent className="max-w-5xl p-0 gap-0 max-h-[90vh] flex flex-col">
+        <DialogHeader className="border-b border-border p-6 shrink-0">
           <DialogTitle className="flex items-center gap-2">
             <Landmark className="h-4 w-4 text-california-red" />
             Exportar remessa CNAB Santander
@@ -444,9 +475,9 @@ export function ExportarRemessaCnabDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col">
+        <div className="flex flex-col flex-1 min-h-0">
           {sucesso ? (
-            <div className="p-6 space-y-5">
+            <div className="p-6 space-y-5 overflow-auto flex-1 min-h-0">
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
                 <p className="text-sm font-semibold text-emerald-800">
                   Arquivo gerado com sucesso.
@@ -504,39 +535,39 @@ export function ExportarRemessaCnabDialog({
               )}
             </div>
           ) : (
-            <div className="p-6 space-y-5">
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="conta_bancaria">Conta de débito</Label>
-                  <Select value={contaId} onValueChange={setContaId}>
-                    <SelectTrigger id="conta_bancaria">
-                      <SelectValue placeholder="Selecione" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {contasSantander.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.nome} — Ag. {c.agencia} / Cc.{" "}
-                          {c.numero_conta}-{c.numero_conta_dv}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+            <>
+              <div className="shrink-0 p-6 pb-4 space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="conta_bancaria">Conta de débito</Label>
+                    <Select value={contaId} onValueChange={setContaId}>
+                      <SelectTrigger id="conta_bancaria">
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {contasSantander.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.nome} — Ag. {c.agencia} / Cc.{" "}
+                            {c.numero_conta}-{c.numero_conta_dv}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Data de pagamento</Label>
+                    <DatePicker
+                      name="data_pagamento_visual"
+                      defaultValue={dataPagamento}
+                      onDateChange={(d) =>
+                        setDataPagamento(
+                          d ? d.toISOString().slice(0, 10) : hoje(),
+                        )
+                      }
+                    />
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label>Data de pagamento</Label>
-                  <DatePicker
-                    name="data_pagamento_visual"
-                    defaultValue={dataPagamento}
-                    onDateChange={(d) =>
-                      setDataPagamento(
-                        d ? d.toISOString().slice(0, 10) : hoje(),
-                      )
-                    }
-                  />
-                </div>
-              </div>
 
-              <div className="space-y-2">
                 {origensPresentes.length > 1 && (
                   <div className="flex flex-wrap items-center gap-1.5">
                     {(["todas", ...origensPresentes] as const).map((o) => {
@@ -564,6 +595,54 @@ export function ExportarRemessaCnabDialog({
                     })}
                   </div>
                 )}
+
+                {/* Busca por texto + filtros empresa/regional. Empresa e
+                    regional só aparecem quando o caller forneceu os
+                    catálogos — a conciliação, por exemplo, não os passa
+                    ainda, e ali continuamos só com a busca livre. */}
+                <div className="grid gap-2 md:grid-cols-[1fr_auto_auto] md:items-center">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <input
+                      type="text"
+                      value={busca}
+                      onChange={(e) => setBusca(e.target.value)}
+                      placeholder="Buscar por fornecedor ou descrição..."
+                      className="w-full h-9 rounded-md border border-border bg-background pl-9 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-california-red/20"
+                    />
+                  </div>
+                  {empresasDisponiveis && empresasDisponiveis.length > 0 && (
+                    <Select value={empresaFiltro} onValueChange={setEmpresaFiltro}>
+                      <SelectTrigger className="h-9 min-w-[180px]">
+                        <SelectValue placeholder="Empresa" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todas">Todas as empresas</SelectItem>
+                        {empresasDisponiveis.map((e) => (
+                          <SelectItem key={e.id} value={e.id}>
+                            {e.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                  {regionaisDisponiveis && regionaisDisponiveis.length > 0 && (
+                    <Select value={regionalFiltro} onValueChange={setRegionalFiltro}>
+                      <SelectTrigger className="h-9 min-w-[160px]">
+                        <SelectValue placeholder="Regional" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="todas">Todas as regionais</SelectItem>
+                        {regionaisDisponiveis.map((r) => (
+                          <SelectItem key={r.nome} value={r.nome}>
+                            {r.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+
                 <div className="flex items-center justify-between">
                   <Label>Títulos disponíveis ({visiveis.length})</Label>
                   <div className="flex items-center gap-2 text-xs">
@@ -584,10 +663,13 @@ export function ExportarRemessaCnabDialog({
                     </button>
                   </div>
                 </div>
+              </div>
 
+              <div className="flex-1 min-h-0 overflow-auto px-6 pb-4">
                 {visiveis.length === 0 ? (
                   <div className="rounded-xl border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
-                    Nenhum título a pagar disponível pra remessa nesta conta.
+                    Nenhum título a pagar disponível pra remessa com esses
+                    filtros.
                   </div>
                 ) : (
                   <div className="overflow-hidden rounded-xl border border-border">
@@ -692,28 +774,33 @@ export function ExportarRemessaCnabDialog({
                   </div>
                 )}
 
-                {selecionados.size > 0 && (
-                  <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2 text-sm">
-                    <span className="text-muted-foreground">
-                      {selecionados.size} título(s) selecionado(s)
-                    </span>
-                    <span className="font-semibold tabular-nums">
-                      {formatBRL(totalSelecionado)}
-                    </span>
-                  </div>
-                )}
               </div>
 
-              {error && (
-                <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red">
-                  <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                  <span>{error}</span>
+              {(selecionados.size > 0 || error) && (
+                <div className="shrink-0 border-t border-border px-6 py-2 space-y-2">
+                  {selecionados.size > 0 && (
+                    <div className="flex items-center justify-between rounded-lg bg-muted/50 px-3 py-2 text-sm">
+                      <span className="text-muted-foreground">
+                        {selecionados.size} título(s) selecionado(s)
+                      </span>
+                      <span className="font-semibold tabular-nums">
+                        {formatBRL(totalSelecionado)}
+                      </span>
+                    </div>
+                  )}
+                  {error && (
+                    <div className="flex items-start gap-2 rounded-xl border border-california-red/20 bg-california-red/5 px-4 py-3 text-sm text-california-red">
+                      <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                      <span>{error}</span>
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
+            </>
           )}
+        </div>
 
-          <div className="flex items-center justify-end gap-3 border-t border-border p-4">
+        <div className="flex items-center justify-end gap-3 border-t border-border p-4 shrink-0">
             <button
               type="button"
               onClick={() => setOpen(false)}
@@ -741,7 +828,6 @@ export function ExportarRemessaCnabDialog({
                 )}
               </button>
             )}
-          </div>
         </div>
       </DialogContent>
     </Dialog>

@@ -410,6 +410,8 @@ interface Props {
   cnabContas?: import("./remessa-cnab-dialog").ContaSantanderElegivel[];
   cnabTitulos?: import("./remessa-cnab-dialog").TituloElegivelParaRemessa[];
   canGerarRemessa?: boolean;
+  cnabEmpresas?: Array<{ id: string; nome: string }>;
+  cnabRegionais?: Array<{ nome: string }>;
   /** Quem aprova folha pode devolver o título de folha para a aprovação
    *  (decisão 132). Obrigatório: a página decide, a lista não adivinha. */
   podeDevolverFolha: boolean;
@@ -442,6 +444,8 @@ export function TitulosPagarList({
   cnabContas,
   cnabTitulos,
   canGerarRemessa = false,
+  cnabEmpresas,
+  cnabRegionais,
   podeDevolverFolha,
   hoje,
   nomesDasEmpresas,
@@ -1139,6 +1143,8 @@ export function TitulosPagarList({
           preMarcarTodos
           semTrigger
           onFechar={() => setRemessaDoSticky(null)}
+          empresasDisponiveis={cnabEmpresas}
+          regionaisDisponiveis={cnabRegionais}
         />
       )}
 

@@ -949,11 +949,44 @@ export default async function PedidosCompraFinanceiroPage({
     tela = { cartaoId: cartaoSelId, competencia: chave, extrato, faturas: faturasSel };
   }
 
+  // Disparadas antes (ver acima): correram junto das leituras do meio.
+  const [fiscalDaAprovacao, extrasProntos] = await Promise.all([fiscalDaAprovacaoPromise, extrasDaPlanilha]);
+
   // -------------------------------------------------------------------
   // CNAB: dados pra o Dialog de "Exportar remessa Santander" — a montagem
   // mora em `titulos-da-remessa.ts` desde 21/10/2026 (decisão 195): a aba
   // Títulos da conciliação abre o mesmo diálogo.
   // -------------------------------------------------------------------
+  // Mapa `${origemCnab}:${id}` → { empresaId, regionais[] } que alimenta
+  // os filtros (empresa / regional) do diálogo. Puxamos `empresa_id` do
+  // próprio título e as regionais do `extras.rateio` já carregado pra a
+  // planilha. Origem do título na baixa em lote (`pp|avulso|recorrencia|
+  // folha|desembolso`) traduz pra origem CNAB abaixo.
+  const PAGAR_PARA_CNAB_TOPO: Record<string, string> = {
+    pp: "pp",
+    avulso: "avulsa",
+    recorrencia: "recorrente",
+    folha: "folha",
+    desembolso: "desembolso",
+  };
+  const extrasPorTituloCnab: Record<
+    string,
+    { empresaId: string | null; regionais: string[] }
+  > = {};
+  for (const t of titulosNaoCartao) {
+    const origemCnab = PAGAR_PARA_CNAB_TOPO[t.origem];
+    if (!origemCnab) continue;
+    const chaveCnab = `${origemCnab}:${t.id}`;
+    const chaveExtras = `pagar|${t.origem}|${t.id}`;
+    const rateio = extrasProntos.rateio[chaveExtras] ?? [];
+    extrasPorTituloCnab[chaveCnab] = {
+      empresaId: t.empresa_id,
+      regionais: rateio.map((r) => r.regional),
+    };
+  }
+  const nomesDeEmpresaCnab = Object.fromEntries(
+    empresasList.map((e) => [e.id, e.nome]),
+  );
   const { contasSantander, titulosCnab } = montarDadosDaRemessa({
     contas: (contasRes.data ?? []) as ContaBancaria[],
     fornecedores: fornecedoresRes.data,
@@ -961,12 +994,23 @@ export default async function PedidosCompraFinanceiroPage({
     pps: rows,
     retencoesDaAprovacao: retencoesDaAprovacaoRes.data,
     aPagar: cnabAPagarRes.data,
+    extrasPorTitulo: extrasPorTituloCnab,
+    nomesDeEmpresa: nomesDeEmpresaCnab,
   });
 
-  const canGerarRemessa = pode(session.activeRole, "financeiro.contas_pagar");
+  // Catálogos dos filtros: só as empresas e regionais que aparecem em
+  // algum título a pagar — nada de "escolha regional que não tem nada".
+  const empresasPresentesNaRemessa = (() => {
+    const ids = new Set(titulosCnab.map((t) => t.empresaId).filter((x): x is string => !!x));
+    return empresasList.filter((e) => ids.has(e.id));
+  })();
+  const regionaisPresentesNaRemessa = (() => {
+    const nomes = new Set<string>();
+    for (const t of titulosCnab) for (const r of t.regionais) nomes.add(r);
+    return [...nomes].sort((a, b) => a.localeCompare(b, "pt-BR")).map((nome) => ({ nome }));
+  })();
 
-  // Disparadas antes (ver acima): correram junto das leituras do meio.
-  const [fiscalDaAprovacao, extrasProntos] = await Promise.all([fiscalDaAprovacaoPromise, extrasDaPlanilha]);
+  const canGerarRemessa = pode(session.activeRole, "financeiro.contas_pagar");
 
   return (
     // O provider liga a lista de PPs ao seletor de empresas do cabeçalho:
@@ -1039,11 +1083,15 @@ export default async function PedidosCompraFinanceiroPage({
                   contasSantander={contasSantander}
                   titulos={titulosCnab}
                   canGerar={canGerarRemessa}
+                  empresasDisponiveis={empresasPresentesNaRemessa}
+                  regionaisDisponiveis={regionaisPresentesNaRemessa}
                 />
               }
               cnabContas={contasSantander}
               cnabTitulos={titulosCnab}
               canGerarRemessa={canGerarRemessa}
+              cnabEmpresas={empresasPresentesNaRemessa}
+              cnabRegionais={regionaisPresentesNaRemessa}
             />
           }
           titulosAPagarCount={titulosAPagarCount}
