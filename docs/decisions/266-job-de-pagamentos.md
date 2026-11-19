@@ -12,7 +12,7 @@ Há pagamentos que não pertencem a um job de cliente: acertos de coisas que já
 
 1. **Botão "Criar Job de Pagamentos"** em Financeiro › Abertura de Job › **Visualizar Jobs**, ao lado dos filtros. O "Exportar" desce para a linha da busca.
 2. **O formulário** (pop-up), na ordem do protótipo:
-   - **Nome do job** · **Projeto unificado** (escolher um existente ou criar um novo, como na abertura) · **Abertura** (hoje, fixa);
+   - **Nome do job** · **Projeto unificado** (escolher um existente ou criar um novo, como na abertura: o "+" ao lado do campo reserva o projeto novo depois de conferir o nome, o lápis troca o nome e o ✕ limpa; o novo nasce com o job e fica quando a empresa muda — Tiago, 19/11/2026) · **Abertura** (hoje, fixa);
    - **Código** (o próximo da sigla do cliente, previsto) · **Serviço** "Pagamentos" (fixo, "Sem faturamento.") · **Categoria** "Pagamentos" (fixa);
    - **Empresa** ("É também o cliente do job.") · **Regional** (as da empresa) · **Competência** (trimestre e ano);
    - **Descritivo do Job**, obrigatório: o motivo da abertura.

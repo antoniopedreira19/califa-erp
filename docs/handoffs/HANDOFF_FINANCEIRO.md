@@ -9204,3 +9204,11 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Causa:** `proxima_fatura_cartao` lia o cartão como o usuário. O cartão de teste "ZZ Teste Empresa Teste" ficou no tenant da produção com a empresa que foi para o Sandbox: ninguém da produção o enxerga, a função levantava exceção e derrubava a `vw_fluxo_caixa` (e as views do fluxo por job) inteira. Não veio da decisão 265: a view anterior falhava igual.
 - **Correção:** a função lê o cartão como dona (`security definer`), migration `20261118400004`. Conferido como o usuário da produção: a view responde em 1,6 s, as views por job voltaram, e o fluxo mostra os títulos das NFs 6376, 6468 e 6475 e só o saldo de R$ 20.741,02 do AMB-1058/26 como previsão.
 - **Pendente:** o cartão certo das 5 PPs da produção no cartão de teste (PP-00044, PP-00210, PP-00397, PP-00824, PP-00950).
+
+
+## ⚠️ Nota de 2026-11-19 — o "+" do Projeto unificado no Criar Job de Pagamentos (decisão 266)
+
+- **Pedido do Tiago:** criar o projeto unificado pelo pop-up, como na abertura de job, sem precisar escolher um que já existe.
+- **Agora:** ao lado do campo, o "+" abre "Criar projeto para este job" (nome conferido na hora, "Criar e vincular"); com o projeto escolhido vira lápis (o novo troca o nome reservado; o que já existe é renomeado na hora, para todos os jobs dele); o ✕ do campo limpa e devolve o "+". O "Criar projeto …" da busca da lista confere o nome do mesmo jeito. Trocar a empresa tira só o projeto de outra empresa; o novo fica.
+- **Conferido no Sandbox:** nome repetido recusado ("Já existe um projeto com este nome…"), lápis, ✕, busca, e o TES-1040/26 criado com o projeto novo F-0039/26.
+
