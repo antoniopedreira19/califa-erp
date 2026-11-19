@@ -165,17 +165,30 @@ export function elegivelDoLote(t: TituloParaLote): ElegivelDoLote {
  *  lote, na lista como ela está na tela (filtros valendo), com a origem de
  *  cada um: a seleção leva uma origem só (revisão da decisão 140,
  *  05/10/2026). */
-export function useSelecao(elegiveis: readonly ElegivelDoLote[]) {
+export function useSelecao(
+  elegiveis: readonly ElegivelDoLote[],
+  opts?: {
+    /** Universo estável: todos os títulos que podem ser marcados na base
+     *  (independente dos filtros da tela). Quando vem, o effect que
+     *  limpa a seleção só tira o que sumiu desse universo — baixado,
+     *  por exemplo —, preservando quem só sumiu por um filtro de busca.
+     *  Sem ele, o comportamento histórico fica: filtro tira da seleção. */
+    universoEstavel?: readonly ElegivelDoLote[];
+  },
+) {
   const [sel, setSel] = React.useState<Set<string>>(() => new Set());
-  const chave = elegiveis.map((e) => e.chave).join("|");
-  // Título que saiu da lista (baixado, filtrado) sai da seleção.
+  const aceitosDoEffect = opts?.universoEstavel ?? elegiveis;
+  const chave = aceitosDoEffect.map((e) => e.chave).join("|");
+  // Título que saiu do universo (baixado, deletado) sai da seleção. Quando
+  // `universoEstavel` não é passado, cai no comportamento histórico: o
+  // filtro visual também remove da seleção.
   React.useEffect(() => {
-    const aceitos = new Set(elegiveis.map((e) => e.chave));
+    const aceitos = new Set(aceitosDoEffect.map((e) => e.chave));
     setSel((prev) => {
       const n = new Set([...prev].filter((id) => aceitos.has(id)));
       return n.size === prev.size ? prev : n;
     });
-    // `chave` resume `elegiveis`, que é um array novo a cada renderização.
+    // `chave` resume `aceitosDoEffect`, que é um array novo a cada render.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chave]);
   // Uma origem por lote (revisão da decisão 140, 05/10/2026).

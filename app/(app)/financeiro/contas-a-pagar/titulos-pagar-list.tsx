@@ -628,18 +628,30 @@ export function TitulosPagarList({
   const filtrados = colunas.visiveis;
 
   // Baixa em lote (pedido do Tiago, 02/10/2026): marcar vários títulos da
-  // lista e dar baixa de uma vez. A seleção vale para o que está na tela:
-  // o título que some do filtro, ou que foi pago, sai dela sozinho. Uma
-  // origem por lote (revisão da decisão 140, 05/10/2026).
+  // lista e dar baixa de uma vez. "Marcar todos" do cabeçalho segue os
+  // visíveis; mas a seleção em si é preservada entre filtros — o
+  // universo estável abaixo garante que só baixados (que saem do rowsBruto)
+  // tirem a marca. Uma origem por lote (revisão da decisão 140, 05/10/2026).
   const elegiveis = filtrados.flatMap((l) => {
     const r = tituloDe(l);
     const t = motivoForaDoLoteAPagar(r) === null ? paraOLoteAPagar(r) : null;
     return t ? [elegivelDoLote(t)] : [];
   });
-  const selecao = useSelecao(elegiveis);
+  const universoDaSelecao = React.useMemo(
+    () =>
+      rowsBruto.flatMap((r) => {
+        const t = motivoForaDoLoteAPagar(r) === null ? paraOLoteAPagar(r) : null;
+        return t ? [elegivelDoLote(t)] : [];
+      }),
+    [rowsBruto],
+  );
+  const selecao = useSelecao(elegiveis, { universoEstavel: universoDaSelecao });
   const [loteAberto, setLoteAberto] = React.useState(false);
-  const selecionados = filtrados
-    .map(tituloDe)
+  // Os selecionados vêm do rowsBruto (não de `filtrados`), pra que o
+  // sticky conte os marcados escondidos pelo filtro — senão o botão "Dar
+  // baixa em N" mentiria e o fluxo "marca, busca outro, marca" do Tiago
+  // perderia o primeiro.
+  const selecionados = rowsBruto
     .filter((r) => selecao.marcado(chaveDoLoteAPagar(r)))
     .map(paraOLoteAPagar)
     .filter((t): t is TituloParaLote => t !== null);
