@@ -128,14 +128,35 @@ interface PropsDaLeitura {
   aoLadoDoPainel?: number;
 }
 
+/** Fila de aprovação em lote (pedido do Tiago em 20/11/2026). Quando a
+ *  lista passa estas props, a PP tela mostra uma faixa no topo com "PP X
+ *  de N", avança sozinha pra próxima ao aprovar e expõe os botões
+ *  "Pular essa" e "Sair da fila". Só o financeiro recebe, e só quando a
+ *  lista iniciou o lote — a abertura solta (clique na linha) não entra. */
+interface PropsDaFila {
+  posicaoNaFila?: { atual: number; total: number } | null;
+  /** Chamado quando a PP corrente foi aprovada e a lista deve ir para a
+   *  próxima. A lista é quem troca `pp` e esvazia a fila ao fim. */
+  onAvancarFila?: () => void;
+  /** Fecha a PP corrente sem aprovar e abre a próxima da fila. */
+  onPularDaFila?: () => void;
+  /** Interrompe o lote mas mantém a PP corrente aberta. */
+  onSairDaFila?: () => void;
+}
+
 export function PPTela(
   props: {
     pp: PPRow | null;
     open: boolean;
     onOpenChange: (aberto: boolean) => void;
-  } & (PropsDoFinanceiro | PropsDaLeitura),
+  } & (PropsDoFinanceiro | PropsDaLeitura) &
+    PropsDaFila,
 ) {
   const { pp, open, onOpenChange } = props;
+  const posicaoNaFila = props.posicaoNaFila ?? null;
+  const onAvancarFila = props.onAvancarFila;
+  const onPularDaFila = props.onPularDaFila;
+  const onSairDaFila = props.onSairDaFila;
   /** Null na leitura da produção: sem aprovação, rejeição nem reprovação. */
   const financeiro = props.somenteLeitura ? null : props;
   const aoLadoDoPainel = props.somenteLeitura ? (props.aoLadoDoPainel ?? null) : null;
@@ -396,7 +417,14 @@ export function PPTela(
     setAprovarAberto(false);
     setToast(mensagem);
     router.refresh();
-    setTimeout(() => onOpenChange(false), 1200);
+    // Em fila de aprovação a tela NÃO fecha: a lista troca a `pp` pra
+    // próxima e o toast dá o retorno visual. Fora da fila, fecha depois
+    // de 1200 ms (comportamento antigo).
+    if (onAvancarFila && posicaoNaFila) {
+      setTimeout(() => onAvancarFila(), 600);
+    } else {
+      setTimeout(() => onOpenChange(false), 1200);
+    }
   }
 
   function handleConfirmarReprovar() {
@@ -491,13 +519,49 @@ export function PPTela(
               onClick={() => onOpenChange(false)}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/20",
-                financeiro && "ml-auto",
+                financeiro && !posicaoNaFila && "ml-auto",
               )}
             >
               <X className="h-3 w-3" />
               Fechar
             </button>
           </div>
+
+          {/* Faixa da fila de aprovação em lote: mora logo abaixo do título
+              pra o financeiro saber, a cada PP, em qual está e quantas
+              faltam. "Pular essa" fecha sem aprovar e abre a próxima;
+              "Sair da fila" interrompe o lote mas mantém esta PP aberta. */}
+          {posicaoNaFila && (
+            <div className="mb-3 flex flex-wrap items-center gap-3 rounded-lg border border-emerald-300/40 bg-emerald-500/10 px-3 py-2 text-xs text-white">
+              <span className="font-semibold">
+                Fila de aprovação · PP {posicaoNaFila.atual} de {posicaoNaFila.total}
+              </span>
+              <span className="h-3 w-px bg-white/25" />
+              <span className="text-white/75">
+                Aprovar esta avança para a próxima automaticamente.
+              </span>
+              <div className="ml-auto flex items-center gap-2">
+                {onPularDaFila && posicaoNaFila.atual < posicaoNaFila.total && (
+                  <button
+                    type="button"
+                    onClick={onPularDaFila}
+                    className="inline-flex items-center gap-1 rounded-md border border-white/30 bg-white/10 px-2.5 py-1 font-semibold text-white transition-colors hover:bg-white/20"
+                  >
+                    Pular essa
+                  </button>
+                )}
+                {onSairDaFila && (
+                  <button
+                    type="button"
+                    onClick={onSairDaFila}
+                    className="inline-flex items-center gap-1 rounded-md border border-white/30 bg-white/10 px-2.5 py-1 font-semibold text-white transition-colors hover:bg-white/20"
+                  >
+                    Sair da fila
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {erro && (
             <div className="mb-3 flex items-start gap-2 rounded-lg border border-california-red/50 bg-california-red/15 p-3 text-sm text-white">

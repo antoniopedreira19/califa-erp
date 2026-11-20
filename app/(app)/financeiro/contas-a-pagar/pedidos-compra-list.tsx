@@ -39,6 +39,11 @@ import type { FiscalDaAprovacaoPP } from "@/lib/fiscal/aprovacao-da-pp";
 import type { NotasFiscaisDaLinhaPP, RegimeDoFornecedorDaPP } from "@/lib/fiscal/nf-da-pp";
 import { PPTela } from "./pp-tela";
 import {
+  BarraDeSelecaoPPs,
+  CaixaDaLinhaPPs,
+  CaixaDoCabecalhoPPs,
+} from "./_components/barra-de-selecao-pps";
+import {
   ultimoEnvioDaPP,
   ultimoEnvioDaPrestacao,
   type EnvioDaPP,
@@ -299,9 +304,18 @@ function formatDate(iso: string | null): string {
  *  Faturamento, Status e o ícone saíam da tela. A ordem segue a do
  *  cabeçalho: no filtro de prestações, Comprovado e Saldo entram no lugar
  *  de Parcela e Prazo original, logo depois do Valor. */
-function ColunasDasPPs({ prestacoes }: { prestacoes: boolean }) {
+function ColunasDasPPs({
+  prestacoes,
+  comCheckbox,
+}: {
+  prestacoes: boolean;
+  /** Primeira coluna extra, estreita, pra caixa de seleção da aprovação em
+   *  lote. Só aparece na aba "Em avaliação". */
+  comCheckbox: boolean;
+}) {
   return (
     <colgroup>
+      {comCheckbox && <col className="w-[44px]" />}
       {/* Código, com Verba/Reembolso embaixo. A urgência não tem selo na
           linha: ela mora na seção "Urgentes" (16/11/2026). */}
       <col className="w-[112px]" />
@@ -442,7 +456,18 @@ function StatusDaPrestacao({ r }: { r: PPRow }) {
  *  prestação; Status = o andamento. As colunas que repetiriam a linha de
  *  cima ficam vazias. Clicar abre a mesma tela da PP, que mostra os
  *  comprovantes. */
-function LinhaDaPrestacao({ r, onAbrir }: { r: PPRow; onAbrir: () => void }) {
+function LinhaDaPrestacao({
+  r,
+  onAbrir,
+  comCheckbox,
+}: {
+  r: PPRow;
+  onAbrir: () => void;
+  /** Mantém o alinhamento com o `<colgroup>` quando a aba "Em avaliação"
+   *  adiciona a coluna da caixa de seleção. A linha da prestação em si
+   *  não aceita seleção — a aprovação em lote é da PP, não da prestação. */
+  comCheckbox: boolean;
+}) {
   const pr = r.prestacao;
   const sobra = Number(pr?.valor_devolvido ?? 0);
   return (
@@ -458,6 +483,7 @@ function LinhaDaPrestacao({ r, onAbrir }: { r: PPRow; onAbrir: () => void }) {
       }}
       className="cursor-pointer border-b border-border bg-muted/25 transition-colors last:border-0 hover:bg-accent/40 focus-visible:bg-accent/40 focus-visible:outline-none"
     >
+      {comCheckbox && <td className="px-2 py-2.5" />}
       <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs font-bold text-california-red/70">
         <span>{r.codigo}</span>
         <span className="mt-1 flex">
@@ -736,6 +762,18 @@ export function PedidosCompraList({
   const [ppSelecionada, setPpSelecionada] = React.useState<PPRow | null>(null);
   /** Decisão 257: a PP cuja linha abre na Planilha Interna do job. */
   const [planilhaDe, setPlanilhaDe] = React.useState<PPRow | null>(null);
+  // Aprovação em lote (pedido do Tiago em 20/11/2026): seleção com caixa
+  // por linha + sticky "Seguir para aprovação" só na aba "Em avaliação". O
+  // sticky abre a PRIMEIRA PP; as demais viram fila na PP tela, que avança
+  // sozinha a cada aprovação. A seleção vem do `rowsPorRegional` bruto pra
+  // não zerar quando o usuário mexe em busca/filtro de coluna — como a
+  // `BarraDeSelecao` de Títulos a Pagar.
+  const [selecionadas, setSelecionadas] = React.useState<Set<string>>(new Set());
+  const [filaDaAprovacao, setFilaDaAprovacao] = React.useState<string[]>([]);
+  /** Quantas PPs o usuário escolheu quando clicou "Seguir para aprovação" —
+   *  pra calcular a posição atual ("PP 2 de 7") sem perder referência quando
+   *  a fila esvazia. Null fora do modo fila. */
+  const [tamanhoInicialDaFila, setTamanhoInicialDaFila] = React.useState<number | null>(null);
 
   // Regional recorta o universo ANTES das contagens de status, senão os
   // chips mostram números que não batem com o que o usuário vê na tabela.
@@ -843,6 +881,126 @@ export function PedidosCompraList({
     [regionais],
   );
 
+  // Seleção em lote: só vale na aba "Em avaliação". Em outras abas a caixa
+  // some e a seleção zera, pra não aprovar uma PP já paga por engano.
+  const emAvaliacao = filtro === "em_avaliacao";
+  React.useEffect(() => {
+    if (!emAvaliacao && selecionadas.size > 0) setSelecionadas(new Set());
+  }, [emAvaliacao, selecionadas.size]);
+
+  /** Linhas selecionadas na ordem que aparecem (urgentes primeiro). A soma
+   *  usa `rowsPorRegional` como universo — a seleção sobrevive a busca e
+   *  filtro de coluna, como em Títulos. */
+  const linhasSelecionadas = React.useMemo(() => {
+    if (selecionadas.size === 0) return [] as PPRow[];
+    const indice = new Map(rowsPorRegional.map((r) => [r.id, r]));
+    const ordenadas: PPRow[] = [];
+    for (const r of urgentes) if (selecionadas.has(r.id)) ordenadas.push(r);
+    for (const r of demais) if (selecionadas.has(r.id)) ordenadas.push(r);
+    // PPs selecionadas e escondidas pelo filtro das colunas ou pela busca
+    // continuam no total, pra o usuário não perder o que marcou.
+    for (const id of selecionadas) {
+      if (ordenadas.some((r) => r.id === id)) continue;
+      const r = indice.get(id);
+      if (r) ordenadas.push(r);
+    }
+    return ordenadas;
+  }, [selecionadas, rowsPorRegional, urgentes, demais]);
+
+  const totalSelecionado = React.useMemo(
+    () => linhasSelecionadas.reduce((s, r) => s + r.valor, 0),
+    [linhasSelecionadas],
+  );
+
+  /** Caixa do cabeçalho: só marca/desmarca as linhas de "Em avaliação"
+   *  visíveis na tela. Prestação em avaliação não entra: o botão abre o
+   *  fluxo de APROVAÇÃO DA PP, não da prestação. */
+  const idsEmAvaliacaoVisiveis = React.useMemo(
+    () => filtrados.filter((r) => r.status === "em_avaliacao").map((r) => r.id),
+    [filtrados],
+  );
+  const todasMarcadas =
+    idsEmAvaliacaoVisiveis.length > 0 &&
+    idsEmAvaliacaoVisiveis.every((id) => selecionadas.has(id));
+  const algumasMarcadas =
+    !todasMarcadas && idsEmAvaliacaoVisiveis.some((id) => selecionadas.has(id));
+
+  function alternarLinha(id: string) {
+    setSelecionadas((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  }
+  function alternarTodas() {
+    setSelecionadas((s) => {
+      const n = new Set(s);
+      if (todasMarcadas) {
+        for (const id of idsEmAvaliacaoVisiveis) n.delete(id);
+      } else {
+        for (const id of idsEmAvaliacaoVisiveis) n.add(id);
+      }
+      return n;
+    });
+  }
+
+  function seguirParaAprovacao() {
+    if (linhasSelecionadas.length === 0) return;
+    const [primeira, ...resto] = linhasSelecionadas;
+    setTamanhoInicialDaFila(linhasSelecionadas.length);
+    setFilaDaAprovacao(resto.map((r) => r.id));
+    setPpSelecionada(primeira);
+  }
+
+  /** Chamado pela PP tela quando a PP corrente foi aprovada e ainda há
+   *  fila: troca para a próxima e tira a atual da seleção. Quando a fila
+   *  acaba, fecha a tela e volta a lista ao normal. */
+  function avancarFila() {
+    if (!ppSelecionada) return;
+    const atualId = ppSelecionada.id;
+    const indice = new Map(rowsPorRegional.map((r) => [r.id, r]));
+    const proximo = filaDaAprovacao.find((id) => indice.has(id));
+    setSelecionadas((s) => {
+      const n = new Set(s);
+      n.delete(atualId);
+      return n;
+    });
+    if (proximo) {
+      setFilaDaAprovacao((fila) => fila.filter((id) => id !== proximo));
+      setPpSelecionada(indice.get(proximo) ?? null);
+    } else {
+      setFilaDaAprovacao([]);
+      setTamanhoInicialDaFila(null);
+      setPpSelecionada(null);
+    }
+  }
+
+  /** "Sair da fila" na faixa: fecha o modo fila mas mantém a PP corrente
+   *  aberta pra o usuário terminar de olhar. A seleção original fica
+   *  preservada — basta clicar "Seguir para aprovação" de novo. */
+  function sairDaFila() {
+    setFilaDaAprovacao([]);
+    setTamanhoInicialDaFila(null);
+  }
+
+  /** "Pular essa" na faixa: fecha a PP corrente sem aprovar e abre a
+   *  próxima. A PP pulada sai da seleção pra não voltar no próximo
+   *  "Seguir". */
+  function pularAtualDaFila() {
+    if (!ppSelecionada) return;
+    avancarFila();
+  }
+
+  const posicaoNaFila = React.useMemo(() => {
+    if (tamanhoInicialDaFila === null) return null;
+    // Já consumidas = total - restantes - 1 (a atual).
+    const atual = tamanhoInicialDaFila - filaDaAprovacao.length;
+    return { atual, total: tamanhoInicialDaFila };
+  }, [tamanhoInicialDaFila, filaDaAprovacao.length]);
+
+  const totalColunas = 11 + (emAvaliacao ? 1 : 0);
+
   return (
     <div className="space-y-4">
       {/* Cabeçalho no padrão de Recorrências: chips + busca numa linha só.
@@ -914,9 +1072,19 @@ export function PedidosCompraList({
           é absoluto: sem ele, a página inteira ganhava rolagem lateral. */}
       <div className="relative overflow-x-auto rounded-2xl border border-border bg-card shadow-soft">
         <table className="w-full min-w-[1520px] table-fixed text-sm">
-          <ColunasDasPPs prestacoes={prestacoes} />
+          <ColunasDasPPs prestacoes={prestacoes} comCheckbox={emAvaliacao} />
           <thead>
             <tr className="border-b border-border bg-muted/30 text-left text-xs uppercase tracking-wider text-muted-foreground">
+              {emAvaliacao && (
+                <th className="px-2 py-3 text-center">
+                  <CaixaDoCabecalhoPPs
+                    todas={todasMarcadas}
+                    algumas={algumasMarcadas}
+                    onAlternar={alternarTodas}
+                    desabilitada={idsEmAvaliacaoVisiveis.length === 0}
+                  />
+                </th>
+              )}
               <th className="px-4 py-3 font-semibold">{colunas.titulo("codigo")}</th>
               {/* Decisão 257: Valor, Parcela, Fornecedor, Prazo original,
                   Enviada por, Job, Abertura do job, Faturamento e Status; a
@@ -945,14 +1113,14 @@ export function PedidosCompraList({
                 títulos, para desfazer. */}
             {doTopo.length > 0 && filtrados.length === 0 && (
               <tr>
-                <td colSpan={11} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={totalColunas} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   Nenhum Pedido de Produção com esse filtro.
                 </td>
               </tr>
             )}
             {doTopo.length === 0 && (
               <tr>
-                <td colSpan={11} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                <td colSpan={totalColunas} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   {rows.length === 0
                     ? "Nenhum Pedido de Produção emitido ainda."
                     : "Nenhum Pedido de Produção encontrado com esses filtros."}
@@ -966,7 +1134,7 @@ export function PedidosCompraList({
               {i === 0 && urgentes.length > 0 && (
                 <tr className="border-b border-border bg-california-red/[0.07]">
                   <td
-                    colSpan={11}
+                    colSpan={totalColunas}
                     className="border-l-[3px] border-l-california-red px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider text-california-red"
                   >
                     Urgentes · {urgentes.length}
@@ -976,7 +1144,7 @@ export function PedidosCompraList({
               {i === urgentes.length && urgentes.length > 0 && (
                 <tr className="border-b border-border bg-muted/30">
                   <td
-                    colSpan={11}
+                    colSpan={totalColunas}
                     className="px-4 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground"
                   >
                     Demais PPs
@@ -998,6 +1166,19 @@ export function PedidosCompraList({
                   i < urgentes.length && "bg-california-red/[0.04]",
                 )}
               >
+                {emAvaliacao && (
+                  <td
+                    className="px-2 py-3 text-center"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    {r.status === "em_avaliacao" && (
+                      <CaixaDaLinhaPPs
+                        marcada={selecionadas.has(r.id)}
+                        onAlternar={() => alternarLinha(r.id)}
+                      />
+                    )}
+                  </td>
+                )}
                 <td
                   className={cn(
                     "px-4 py-3 font-mono text-xs font-bold text-california-red",
@@ -1171,13 +1352,27 @@ export function PedidosCompraList({
               {/* Decisão 257: a prestação de contas é outra linha da mesma PP,
                   logo embaixo. */}
               {filtro !== "prestacoes" && temLinhaDaPrestacao(r) && (
-                <LinhaDaPrestacao r={r} onAbrir={() => setPpSelecionada(r)} />
+                <LinhaDaPrestacao
+                  r={r}
+                  onAbrir={() => setPpSelecionada(r)}
+                  comCheckbox={emAvaliacao}
+                />
               )}
               </React.Fragment>
             ))}
           </tbody>
         </table>
       </div>
+
+      {/* Sticky da aprovação em lote. Só aparece na aba "Em avaliação" e
+          com pelo menos uma PP marcada. "Seguir para aprovação" abre a
+          primeira; a fila continua na PP tela. */}
+      <BarraDeSelecaoPPs
+        quantidade={linhasSelecionadas.length}
+        total={totalSelecionado}
+        onLimpar={() => setSelecionadas(new Set())}
+        onSeguir={seguirParaAprovacao}
+      />
 
       {/* Clicar na linha abre a TELA da PP — pedido, documento e dossiê
           lado a lado —, e não mais um drawer que obrigava a abrir a
@@ -1187,13 +1382,25 @@ export function PedidosCompraList({
         pp={ppSelecionada}
         open={ppSelecionada !== null}
         onOpenChange={(open) => {
-          if (!open) setPpSelecionada(null);
+          if (!open) {
+            setPpSelecionada(null);
+            // Fechar no X zera a fila: se o usuário interrompeu, retomar
+            // acidentalmente seria confuso. A seleção original permanece.
+            if (filaDaAprovacao.length > 0) {
+              setFilaDaAprovacao([]);
+              setTamanhoInicialDaFila(null);
+            }
+          }
         }}
         tenantId={tenantId}
         cartoes={cartoes}
         tipos={tipos}
         subtipos={subtipos}
         fiscal={fiscal}
+        posicaoNaFila={posicaoNaFila}
+        onAvancarFila={posicaoNaFila ? avancarFila : undefined}
+        onPularDaFila={posicaoNaFila ? pularAtualDaFila : undefined}
+        onSairDaFila={posicaoNaFila ? sairDaFila : undefined}
       />
 
       {/* Decisão 257: a Planilha Interna do job, com a linha da PP na borda
