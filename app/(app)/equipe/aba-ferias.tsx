@@ -1,3 +1,4 @@
+import { Palmtree } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import type { FeriasLancamentoTipo } from "@/lib/types";
 import { CardPendenteAprovacao } from "./card-pendente-aprovacao";
@@ -21,48 +22,150 @@ type Pendente = {
   colaboradores: { nome: string } | null;
 };
 
+type EmFerias = {
+  id: string;
+  data_inicio: string;
+  data_fim: string;
+  tipo: FeriasLancamentoTipo;
+  colaborador_id: string;
+  colaboradores: { nome: string } | null;
+};
+
+function fmtData(iso: string): string {
+  return new Date(iso + "T00:00:00").toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+  });
+}
+
 export async function AbaFerias() {
   const supabase = createClient();
 
-  // A RLS `ferias_lancamentos_lider_select` filtra pros liderados do caller.
-  const { data: pendentesRes } = await supabase
-    .from("colaboradores_ferias_lancamentos")
-    .select(
-      "id, data_inicio, data_fim, dias, dias_abono, tipo, observacao, colaborador_id, colaboradores!inner(nome)",
-    )
-    .eq("status", "aguardando_gestor")
-    .order("created_at", { ascending: true });
+  const hoje = new Date();
+  const hojeISO = hoje.toISOString().slice(0, 10);
+  const daqui30 = new Date(hoje);
+  daqui30.setDate(hoje.getDate() + 30);
+  const daqui30ISO = daqui30.toISOString().slice(0, 10);
 
-  const pendentes = (pendentesRes ?? []) as unknown as Pendente[];
+  // A RLS `ferias_lancamentos_lider_select` filtra pros liderados do caller.
+  // Puxa pendentes de aprovação + quem tá fora agora ou vai sair nos próximos 30 dias.
+  const [pendentesRes, emFeriasRes] = await Promise.all([
+    supabase
+      .from("colaboradores_ferias_lancamentos")
+      .select(
+        "id, data_inicio, data_fim, dias, dias_abono, tipo, observacao, colaborador_id, colaboradores!inner(nome)",
+      )
+      .eq("status", "aguardando_gestor")
+      .order("created_at", { ascending: true }),
+    supabase
+      .from("colaboradores_ferias_lancamentos")
+      .select(
+        "id, data_inicio, data_fim, tipo, colaborador_id, colaboradores!inner(nome)",
+      )
+      .in("status", ["aprovado", "nf_anexada", "enviado_financeiro", "concluido"])
+      .lte("data_inicio", daqui30ISO)
+      .gte("data_fim", hojeISO)
+      .order("data_inicio", { ascending: true }),
+  ]);
+
+  const pendentes = (pendentesRes.data ?? []) as unknown as Pendente[];
+  const emFerias = (emFeriasRes.data ?? []) as unknown as EmFerias[];
 
   return (
-    <section>
-      <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-        Aguardando sua aprovação
-      </h2>
-      <div className="mt-3 space-y-3">
-        {pendentes.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-border bg-card/40 p-6 text-center text-sm text-muted-foreground">
-            Nenhuma solicitação aguardando você no momento.
+    <div className="space-y-6">
+      {emFerias.length > 0 && (
+        <section>
+          <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            De férias agora e em breve
+          </h2>
+          <div className="mt-3 overflow-x-auto rounded-xl border border-border bg-card">
+            <table className="w-full table-fixed">
+              <colgroup>
+                <col style={{ width: 320 }} />
+                <col style={{ width: 160 }} />
+                <col style={{ width: 240 }} />
+                <col />
+              </colgroup>
+              <thead className="border-b border-border bg-muted/40 text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium">Colaborador</th>
+                  <th className="px-4 py-3 text-left font-medium">Tipo</th>
+                  <th className="px-4 py-3 text-left font-medium">Período</th>
+                  <th className="px-4 py-3 text-left font-medium">Situação</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {emFerias.map((e) => {
+                  const inicio = e.data_inicio;
+                  const fim = e.data_fim;
+                  const estaFora = inicio <= hojeISO && fim >= hojeISO;
+                  const situacao = estaFora
+                    ? `Volta em ${fmtData(fim)}`
+                    : `Sai em ${fmtData(inicio)}`;
+                  return (
+                    <tr key={e.id}>
+                      <td className="px-4 py-3 align-middle text-sm">
+                        <div className="flex items-center gap-2">
+                          {estaFora ? (
+                            <Palmtree className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+                          ) : null}
+                          <span>{e.colaboradores?.nome ?? "—"}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 align-middle text-sm">
+                        {TIPO_LABEL[e.tipo]}
+                      </td>
+                      <td className="px-4 py-3 align-middle text-sm">
+                        {fmtData(inicio)} – {fmtData(fim)}
+                      </td>
+                      <td className="px-4 py-3 align-middle text-sm">
+                        <span
+                          className={
+                            estaFora
+                              ? "font-medium text-emerald-700"
+                              : "text-muted-foreground"
+                          }
+                        >
+                          {situacao}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
-        ) : (
-          pendentes.map((p) => (
-            <CardPendenteAprovacao
-              key={p.id}
-              lancamento={{
-                id: p.id,
-                colaboradorNome: p.colaboradores?.nome ?? "—",
-                dataInicio: p.data_inicio,
-                dataFim: p.data_fim,
-                dias: p.dias,
-                diasAbono: p.dias_abono ?? 0,
-                tipoLabel: TIPO_LABEL[p.tipo],
-                observacao: p.observacao,
-              }}
-            />
-          ))
-        )}
-      </div>
-    </section>
+        </section>
+      )}
+
+      <section>
+        <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+          Aguardando sua aprovação
+        </h2>
+        <div className="mt-3 space-y-3">
+          {pendentes.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border bg-card/40 p-6 text-center text-sm text-muted-foreground">
+              Nenhuma solicitação aguardando você no momento.
+            </div>
+          ) : (
+            pendentes.map((p) => (
+              <CardPendenteAprovacao
+                key={p.id}
+                lancamento={{
+                  id: p.id,
+                  colaboradorNome: p.colaboradores?.nome ?? "—",
+                  dataInicio: p.data_inicio,
+                  dataFim: p.data_fim,
+                  dias: p.dias,
+                  diasAbono: p.dias_abono ?? 0,
+                  tipoLabel: TIPO_LABEL[p.tipo],
+                  observacao: p.observacao,
+                }}
+              />
+            ))
+          )}
+        </div>
+      </section>
+    </div>
   );
 }
