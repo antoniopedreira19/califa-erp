@@ -30,6 +30,7 @@ import { emitiNfDeFerias, tipoContratacaoLabel } from "@/lib/types";
 import type { SolicitacaoRow } from "./aba-fluxo";
 import {
   aprovarLancamento,
+  aprovarLancamentoOverrideRh,
   reprovarLancamento,
   previewValoresFerias,
   enviarProFinanceiro,
@@ -60,6 +61,8 @@ export function ModalDetalheSolicitacao({ row, onFechar, onSucesso }: Props) {
   const [erroCalc, setErroCalc] = React.useState<string | null>(null);
   const [modoReprovar, setModoReprovar] = React.useState(false);
   const [motivo, setMotivo] = React.useState("");
+  const [modoOverride, setModoOverride] = React.useState(false);
+  const [motivoOverride, setMotivoOverride] = React.useState("");
   const [enviando, setEnviando] = React.useState(false);
   const [erro, setErro] = React.useState<string | null>(null);
 
@@ -110,6 +113,21 @@ export function ModalDetalheSolicitacao({ row, onFechar, onSucesso }: Props) {
     onSucesso();
   }
 
+  async function handleOverride() {
+    setEnviando(true);
+    setErro(null);
+    const res = await aprovarLancamentoOverrideRh({
+      lancamentoId: row.id,
+      motivo: motivoOverride, // pode ser string vazia; schema normaliza pra null
+    });
+    setEnviando(false);
+    if (!res.ok) {
+      setErro(res.message);
+      return;
+    }
+    onSucesso();
+  }
+
   async function handleEnviarFinanceiro() {
     setEnviando(true);
     setErro(null);
@@ -123,6 +141,7 @@ export function ModalDetalheSolicitacao({ row, onFechar, onSucesso }: Props) {
   }
 
   const pendente = row.status === "pendente_aprovacao";
+  const aguardandoGestor = row.status === "aguardando_gestor";
   const podeEnviarFinanceiro = row.status === "nf_anexada";
   const regimeLabel = tipoContratacaoLabel(row.tipo_contratacao);
   const inicio = new Date(row.data_inicio + "T00:00:00").toLocaleDateString(
@@ -309,7 +328,63 @@ export function ModalDetalheSolicitacao({ row, onFechar, onSucesso }: Props) {
         </div>
 
         {/* Rodapé — botões */}
-        {!pendente ? (
+        {aguardandoGestor && modoOverride ? (
+          <>
+            <div className="space-y-2">
+              <Label htmlFor="motivo-override">
+                Motivo
+                <span className="text-xs text-muted-foreground ml-2">
+                  (opcional)
+                </span>
+              </Label>
+              <Textarea
+                id="motivo-override"
+                value={motivoOverride}
+                onChange={(e) => setMotivoOverride(e.target.value)}
+                placeholder="Ex.: líder viajou, destravando o colaborador."
+                rows={3}
+                maxLength={500}
+              />
+            </div>
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setModoOverride(false);
+                  setMotivoOverride("");
+                }}
+                disabled={enviando}
+              >
+                Voltar
+              </Button>
+              <Button
+                onClick={handleOverride}
+                disabled={enviando || carregando}
+                className="bg-emerald-600 hover:bg-emerald-700"
+              >
+                {enviando && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
+                Confirmar aprovação
+              </Button>
+            </DialogFooter>
+          </>
+        ) : aguardandoGestor ? (
+          <DialogFooter>
+            <div className="mr-auto flex items-center gap-2 text-xs text-muted-foreground">
+              <Info className="h-3.5 w-3.5" />
+              Esta solicitação aguarda a aprovação do líder direto. Use o
+              override só se precisar destravar.
+            </div>
+            <Button
+              onClick={() => setModoOverride(true)}
+              disabled={enviando || carregando}
+              variant="outline"
+              className="hover:bg-amber-50 hover:text-amber-900 hover:border-amber-300"
+            >
+              <Check className="h-4 w-4 mr-1" />
+              Aprovar no lugar do líder
+            </Button>
+          </DialogFooter>
+        ) : !pendente ? (
           <DialogFooter className="gap-2 sm:gap-2">
             <Link
               href={`/rh/ferias/${row.colaborador_id}`}
