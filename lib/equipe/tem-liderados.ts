@@ -9,30 +9,34 @@ export function resolveFlagTemLiderados(
   return Array.isArray(data) && data.length > 0;
 }
 
-/** True se o profile (pelo `profileId`) é líder direto de pelo menos 1
- *  colaborador do tenant. Usado no layout pra decidir se o item "Equipe"
- *  aparece na sidebar.
+/** True se o profile (pelo `profileId`) é líder (um dos N) de pelo menos
+ *  1 colaborador. Usado no layout pra decidir se o item "Equipe" aparece
+ *  na sidebar.
  *
- *  Índice parcial `idx_colaboradores_lider_id` cobre essa query
- *  (migration 20260929120922). RLS de `colaboradores` permite leitura
- *  pra admin/rh/próprio, mas não pro líder — e nem precisa: a query só
- *  conta rows onde `lider_id = profileId`, e o server usa o client
- *  padrão em contexto de layout, que roda com a sessão do usuário. Se
- *  a RLS bloquear, retorna NULL → `resolveFlagTemLiderados` → false.
+ *  Query olha `colaboradores_lideres` (tabela N:N) e usa a policy RLS
+ *  `colab_lideres_select_proprio` — que libera leitura quando o caller
+ *  é o próprio líder. A policy filtra por `lider_id = auth.uid()`, então
+ *  mesmo sem acesso de admin/rh o caller enxerga as suas próprias linhas.
  *
- *  Como a sidebar cai pra "não é líder" por default se a query falha,
- *  isso é fail-closed e é o comportamento desejado.
+ *  `tenantId` segue na assinatura por contrato com o layout, mas NÃO é
+ *  usado na query — a tabela N:N não tem `tenant_id` direto (vem via
+ *  `colaboradores`). Dois tenants distintos com o mesmo profileId são
+ *  impossíveis na prática (profile é global). Se virar necessário,
+ *  juntar via `colaboradores` por `tenant_id`.
+ *
+ *  Fail-closed: query vazia ou com erro → `resolveFlagTemLiderados` → false.
  */
 export async function temLiderados(
   supabase: SupabaseClient,
   profileId: string,
-  tenantId: string,
+  _tenantId: string,
 ): Promise<boolean> {
   const { data } = await supabase
-    .from("colaboradores")
-    .select("id")
+    .from("colaboradores_lideres")
+    .select("colaborador_id")
     .eq("lider_id", profileId)
-    .eq("tenant_id", tenantId)
     .limit(1);
-  return resolveFlagTemLiderados(data);
+  return resolveFlagTemLiderados(
+    (data ?? null) as { id: string }[] | null,
+  );
 }
