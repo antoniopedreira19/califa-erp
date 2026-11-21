@@ -5510,7 +5510,8 @@ export type FolhaLinhaStatus =
   | "enviada"
   | "aprovada"
   | "pendente_correcao"
-  | "paga";
+  | "paga"
+  | "cancelada_rescisao";
 
 export function folhaLinhaStatusLabel(s: FolhaLinhaStatus): string {
   switch (s) {
@@ -5524,6 +5525,8 @@ export function folhaLinhaStatusLabel(s: FolhaLinhaStatus): string {
       return "Pendente";
     case "paga":
       return "Paga";
+    case "cancelada_rescisao":
+      return "Cancelada por rescisão";
   }
 }
 

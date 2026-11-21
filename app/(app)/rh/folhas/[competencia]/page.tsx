@@ -77,7 +77,10 @@ export default async function FolhaCompetenciaPage({
   const [linhasRes, empresasRes, regionaisRes, linhasPrevRes, rateiosRes] = await Promise.all(
     [
       // Folha Mensal lista APENAS tipo='salario'. Férias e 13 têm fluxos
-      // próprios e não devem aparecer aqui.
+      // próprios e não devem aparecer aqui. Linhas com status
+      // `cancelada_rescisao` também somem — foram inativadas pela
+      // rescisão do colaborador e tratam-se via página de TRCT; manter
+      // na listagem inflava total, contagem e tabs.
       supabase
         .from("folhas_pagamento")
         .select(
@@ -87,6 +90,7 @@ export default async function FolhaCompetenciaPage({
         .eq("competencia_ano", ano)
         .eq("competencia_mes", mes)
         .eq("tipo", "salario")
+        .neq("status", "cancelada_rescisao")
         .order("created_at", { ascending: true }),
       supabase
         .from("empresas")
@@ -106,7 +110,8 @@ export default async function FolhaCompetenciaPage({
         .eq("tenant_id", session.activeTenant.id)
         .eq("competencia_ano", prev.ano)
         .eq("competencia_mes", prev.mes)
-        .eq("tipo", "salario"),
+        .eq("tipo", "salario")
+        .neq("status", "cancelada_rescisao"),
       // Rateio padrão por empresa do ANO da competência. Usado pra detectar
       // "Hub" quando a alocação de uma linha bate exatamente com o padrão.
       supabase
@@ -324,7 +329,10 @@ export default async function FolhaCompetenciaPage({
     pendente_correcao: 0,
     paga: 0,
   };
-  for (const l of linhas) contagem[l.status] += 1;
+  for (const l of linhas) {
+    if (l.status === "cancelada_rescisao") continue;
+    contagem[l.status] += 1;
+  }
 
   const linhasPrev = (linhasPrevRes.data ?? []) as {
     salario_base: string | number;

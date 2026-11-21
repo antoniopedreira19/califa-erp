@@ -31,7 +31,8 @@ export async function GET(req: NextRequest) {
       .select("competencia_ano, competencia_mes, status")
       .eq("tenant_id", session.activeTenant.id)
       .eq("colaborador_id", colaboradorId)
-      .eq("origem", "california"),
+      .eq("origem", "california")
+      .neq("status", "cancelada_rescisao"),
     supabase
       .from("colaboradores_nf_anexos")
       .select("id, competencia_ano, competencia_mes, arquivo_nome, uploaded_at")

@@ -49,7 +49,8 @@ export default async function FolhasPage() {
     .from("folhas_pagamento")
     .select("competencia_ano, competencia_mes, status, salario_base")
     .eq("tenant_id", session.activeTenant.id)
-    .eq("tipo", "salario");
+    .eq("tipo", "salario")
+    .neq("status", "cancelada_rescisao");
 
   if (error) {
     console.error("[rh.folhas.page]", error.message);

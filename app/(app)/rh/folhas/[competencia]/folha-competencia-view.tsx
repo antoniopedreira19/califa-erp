@@ -76,9 +76,14 @@ export type FolhaLinha = {
   tem_nf: boolean;
 };
 
-export type ContagemStatus = Record<FolhaLinhaStatus, number>;
+export type ContagemStatus = Record<
+  Exclude<FolhaLinhaStatus, "cancelada_rescisao">,
+  number
+>;
 
-type StatusFiltro = "todos" | FolhaLinhaStatus;
+// `cancelada_rescisao` nunca é exibido nessa tela — a query do servidor
+// filtra na origem. Mantido fora das abas pra não aparecer na nav.
+type StatusFiltro = "todos" | Exclude<FolhaLinhaStatus, "cancelada_rescisao">;
 const SENTINEL_TODAS_REGIONAIS = "__todas__";
 
 const TABS: Array<{ key: StatusFiltro; label: string }> = [
@@ -519,12 +524,15 @@ function SeloNfAnexada({
 }
 
 function BadgeStatus({ status }: { status: FolhaLinhaStatus }) {
+  // `cancelada_rescisao` nunca deveria chegar aqui — a query da folha
+  // mensal filtra na origem — mas o tipo exige o mapa completo.
   const cores: Record<FolhaLinhaStatus, string> = {
     rascunho: "bg-muted text-muted-foreground",
     enviada: "bg-blue-50 text-blue-700",
     aprovada: "bg-emerald-50 text-emerald-700",
     pendente_correcao: "bg-california-red/10 text-california-red",
     paga: "bg-emerald-600 text-white",
+    cancelada_rescisao: "bg-muted text-muted-foreground line-through",
   };
   return (
     <span

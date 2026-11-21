@@ -70,7 +70,8 @@ export default async function AdiantamentosPage({ params }: Props) {
       .select("id, status, origem, salario_base, decimo_terceiro_adiantamento_id")
       .eq("tenant_id", session.activeTenant.id)
       .eq("tipo", "decimo_terceiro_adiantamento")
-      .in("decimo_terceiro_adiantamento_id", adiantIds);
+      .in("decimo_terceiro_adiantamento_id", adiantIds)
+      .neq("status", "cancelada_rescisao");
     for (const f of folhasRows ?? []) {
       if (!f.decimo_terceiro_adiantamento_id) continue;
       const arr = folhasPorAdiant.get(f.decimo_terceiro_adiantamento_id) ?? [];
