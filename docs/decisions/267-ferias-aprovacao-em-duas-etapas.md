@@ -58,3 +58,31 @@ Férias ganha **duas etapas de aprovação em série**:
 - `docs/modulos/rh/25-ferias.md` §F16 atualizado.
 - `docs/superpowers/specs/2026-11-21-ferias-aprovacao-lider-e-pagina-equipe-design.md` — design doc completo.
 - 3 planos de execução em `docs/superpowers/plans/` (PR 1 fundação, PR 2 fluxo do líder, PR 3 override + UI do RH + docs).
+
+---
+
+## Addendum 2026-11-21 (noite) — Evolução pra N líderes
+
+A decisão simplificadora original era 1 líder por colaborador. Na mesma sessão descobrimos que a Agência tem casos reais de 2 líderes (operacional + funcional). Decisão: **qualquer um dos N aprova/reprova** — primeiro a agir destrava / encerra.
+
+### Mudanças técnicas
+
+- Nova tabela `colaboradores_lideres (colaborador_id, lider_id, created_at)` com PK composta. Backfill de 207 linhas a partir dos `lider_id` atuais.
+- `colaboradores.lider_id` vira **cache do primeiro líder** (MIN `created_at`), sincronizado por trigger `AFTER INSERT/DELETE`. Removido no Passo 2 (futuro), quando confirmarmos que nenhum consumidor legado quebra.
+- Policies RLS `ferias_lancamentos_lider_select`, `ferias_periodos_lider_select` e `ferias_lancamentos_lider_update` reescritas pra `EXISTS` na tabela nova.
+- View `vw_equipe_do_lider` reescrita.
+- Guards das actions do líder (`aprovarLancamentoComoLider`, `reprovarLancamentoComoLider`) aceitam "sou um dos líderes".
+- UI de cadastro (`/rh/colaboradores/[id]`) ganha lista de chips removíveis + Combobox pra adicionar.
+- Trigger `BEFORE INSERT` rejeita auto-liderança (`colaboradores.user_id = lider_id`).
+
+### Alternativas consideradas (noite)
+
+- **Array `colaboradores.lideres uuid[]`.** Descartada: não há FK em elemento de array; `ANY()` em RLS fica feio e perde índice.
+- **Remover `lider_id` no mesmo PR.** Descartada por risco: 10 arquivos no código consomem o campo direto; migrar tudo num só passo aumenta risco de slip. Preferimos cache sincronizado e limpeza gradual.
+- **Papéis diferenciados (principal / funcional / substituto).** Descartada: os 2 casos reais da Agência são "paralelos iguais" — qualquer um aprova. Se amanhã precisar, adiciona coluna `tipo` sem migration estrutural.
+
+### Arquivos novos
+
+- Spec: `docs/superpowers/specs/2026-11-21-ferias-multiplos-lideres-design.md`.
+- Plano: `docs/superpowers/plans/2026-11-21-ferias-multiplos-lideres-passo-1.md`.
+- Migrations: `20261122100001_colaboradores_lideres_tabela_e_sync` + `20261122100002_colaboradores_lideres_fix_auto_lideranca`.

@@ -19,10 +19,16 @@
 Desde 2026-11-21, o fluxo de aprovação passa por **duas etapas em série**:
 
 1. **Colaborador solicita** em `/perfil`. O status inicial é decidido pelo helper `decidirStatusInicialSolicitacao`:
-   - Com `lider_id` definido no cadastro: nasce em **`aguardando_gestor`** (etapa 1 do líder).
-   - Sem `lider_id`: pula direto pra **`pendente_aprovacao`** (fluxo antigo do RH, preservado).
-2. **Líder aprova via `/equipe`** (tab Férias). UPDATE grava `aprovado_pelo_lider_por` + `aprovado_pelo_lider_em`; status vai pra `pendente_aprovacao`. Audit: `ferias.lancamento.aprovado_lider`. **Reprovação** pelo líder encerra o fluxo: status `reprovado` + `motivo_reprovacao`; o colaborador abre nova solicitação se quiser (não há "reenviar"). Audit: `ferias.lancamento.reprovado_lider`.
+   - Com pelo menos 1 líder em `colaboradores_lideres`: nasce em **`aguardando_gestor`** (etapa 1 do líder).
+   - Sem nenhum líder: pula direto pra **`pendente_aprovacao`** (fluxo antigo do RH, preservado).
+2. **Um dos líderes aprova via `/equipe`** (tab Férias). Qualquer um dos N líderes libera a etapa; o primeiro a aprovar destrava. UPDATE grava `aprovado_pelo_lider_por` + `aprovado_pelo_lider_em`; status vai pra `pendente_aprovacao`. Audit: `ferias.lancamento.aprovado_lider`. **Reprovação** por qualquer um dos líderes encerra o fluxo: status `reprovado` + `motivo_reprovacao`; o colaborador abre nova solicitação se quiser (não há "reenviar"). Audit: `ferias.lancamento.reprovado_lider`.
 3. **RH aprova via `/rh/ferias/solicitacoes`** — fluxo existente, sem mudança: calcula valores (PJ/CLT_RECIBO), cria folhas, audit `ferias.lancamento.aprovado`.
+
+### Modelo N:N de líderes (desde 21/11/2026 noite)
+
+Um colaborador pode ter **N líderes** cadastrados em `colaboradores_lideres` (PK composta `(colaborador_id, lider_id)`). A coluna `colaboradores.lider_id` continua existindo como **cache do primeiro líder** (MIN `created_at`), sincronizado por trigger `AFTER INSERT/DELETE` — usado por código legado que ainda lê o campo direto. Removido no Passo 2 (futuro).
+
+Policies RLS do PR anterior foram reescritas pra olhar `EXISTS` na tabela nova. A view `vw_equipe_do_lider` idem. Ver [ADR 267](../../decisions/267-ferias-aprovacao-em-duas-etapas.md) §Addendum e [spec](../../superpowers/specs/2026-11-21-ferias-multiplos-lideres-design.md).
 
 ### Override do RH
 
