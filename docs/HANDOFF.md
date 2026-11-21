@@ -101,9 +101,16 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 20261027900001  freelancers_rls_gp_responsavel_le
 20261028110001  13_nf_fundacao_schema
 20261028110002  13_nf_atualizar_views
+20261121000001  backfill_colaboradores_lider_id_planilha_califa   (cobertura 34% → 93%)
+20261121200001  ferias_enum_aguardando_gestor
+20261121200002  ferias_lancamentos_campos_aprovacao_lider
+20261121200003  ferias_lancamentos_e_periodos_policy_lider
+20261121200004  vw_equipe_do_lider
+20261121200005  vw_equipe_do_lider_gating_embutido                (fix: WHERE auth.uid() embutido)
+20261121300001  ferias_lancamentos_update_policy_lider            (fix: UPDATE pro líder)
 ```
 
-Última: `20261028110002`.
+Última: `20261121300001`.
 
 Migration removida do repo em 2026-09-23 (regionais GERAL aposentadas): `20260916000004_rh_regional_geral.sql`.
 
@@ -113,6 +120,7 @@ Ordem: mais recente primeiro. Cada linha aponta para um arquivo em `docs/handoff
 
 | Data | Entrega | Handoff |
 |---|---|---|
+| 2026-11-21 | Férias com aprovação em duas etapas (líder → RH): página `/equipe` nova na sidebar, override do RH, backfill de 34% → 93% de `lider_id`, ADR 267 | [2026-11-21-ferias-fluxo-lider-rh.md](handoffs/2026-11-21-ferias-fluxo-lider-rh.md) |
 | 2026-10-28 | 13° no quadro de NF + adiantamento: parcelas PJ/CLT/híbrido no quadro de NF, adiantamentos com fluxo completo (anexar → aprovar → título), excluir adiantamento com 3 estados, People atualizado | [2026-10-28-13o-nf-fluxo.md](handoffs/2026-10-28-13o-nf-fluxo.md) |
 | 2026-10-21 | 13º Salário end-to-end (criação com snapshot, breakdown híbrido CLT_recibo, adiantamentos durante o ano, fechar parcelas integrado ao fluxo de folha mensal, tabelas 10/2026 + Lei 15.270, histórico por colaborador; dec 219/220/221) | [2026-10-21-decimo-terceiro.md](handoffs/2026-10-21-decimo-terceiro.md) |
 | 2026-10-27 | Férias de ponta a ponta (abono combinado real, clt_recibo híbrido na parte RPA, UI compartilhada /perfil↔RH) + folha prevista no fluxo de caixa (dec 218) + mês seguinte nasce sozinho; rescisões alinhadas pra próxima sessão | [2026-10-27-ferias-fluxo-completo-e-folha-prevista.md](handoffs/2026-10-27-ferias-fluxo-completo-e-folha-prevista.md) |
