@@ -67,18 +67,29 @@ export async function aprovarLancamentoComoLider(
     };
   }
 
-  const { error } = await supabase
+  // `.select().single()` serve de guard-rail: se a RLS filtrar o UPDATE
+  // (nenhuma linha afetada), `single()` retorna erro em vez de silenciar.
+  const { data: atualizado, error } = await supabase
     .from("colaboradores_ferias_lancamentos")
     .update({
       status: "pendente_aprovacao",
       aprovado_pelo_lider_por: session.profile.id,
       aprovado_pelo_lider_em: new Date().toISOString(),
     })
-    .eq("id", lancamentoId);
+    .eq("id", lancamentoId)
+    .select("id")
+    .single();
 
-  if (error) {
-    console.error("[equipe.aprovarComoLider]", error.message);
-    return { ok: false, message: "Falha ao aprovar: " + error.message };
+  if (error || !atualizado) {
+    console.error(
+      "[equipe.aprovarComoLider]",
+      error?.message ?? "update filtrado pela RLS",
+    );
+    return {
+      ok: false,
+      message:
+        "Falha ao aprovar" + (error?.message ? ": " + error.message : "."),
+    };
   }
 
   await logAuditEvent({
@@ -145,7 +156,7 @@ export async function reprovarLancamentoComoLider(
     };
   }
 
-  const { error } = await supabase
+  const { data: atualizado, error } = await supabase
     .from("colaboradores_ferias_lancamentos")
     .update({
       status: "reprovado",
@@ -153,11 +164,20 @@ export async function reprovarLancamentoComoLider(
       aprovado_pelo_lider_em: new Date().toISOString(),
       motivo_reprovacao: motivo,
     })
-    .eq("id", lancamentoId);
+    .eq("id", lancamentoId)
+    .select("id")
+    .single();
 
-  if (error) {
-    console.error("[equipe.reprovarComoLider]", error.message);
-    return { ok: false, message: "Falha ao reprovar: " + error.message };
+  if (error || !atualizado) {
+    console.error(
+      "[equipe.reprovarComoLider]",
+      error?.message ?? "update filtrado pela RLS",
+    );
+    return {
+      ok: false,
+      message:
+        "Falha ao reprovar" + (error?.message ? ": " + error.message : "."),
+    };
   }
 
   await logAuditEvent({
