@@ -330,10 +330,31 @@ export async function editarColaborador(
   return { ok: true, id };
 }
 
+type EncerrarPendenciasPayload = {
+  folhas_canceladas: number;
+  decimo_terceiro_linhas_deletadas: number;
+  decimo_terceiro_linhas_preservadas: number;
+  ferias_periodos_encerrados: number;
+  ferias_lancamentos_cancelados: number;
+};
+
+export type InativarColaboradorResult =
+  | {
+      ok: true;
+      id: string;
+      resumo: EncerrarPendenciasPayload & { auth_banido: boolean };
+    }
+  | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
+
+// Banimento efetivamente permanente (~100 anos). Supabase Auth exige um
+// `ban_duration` relativo — não há sentinela "forever". Reativação limpa
+// com 'none'.
+const BAN_DURATION_FOREVER = "876000h";
+
 export async function inativarColaborador(
   id: string,
   dataEncerramento: string,
-): Promise<ActionResult> {
+): Promise<InativarColaboradorResult> {
   const session = await requireSession();
   const gate = await checarPermissao(session, "rh.colaboradores.editar");
   if (!gate.ok) return gate;
@@ -342,33 +363,109 @@ export async function inativarColaborador(
     return { ok: false, message: "Data de encerramento inválida." };
   }
 
+  const tenantId = session.activeTenant.id;
   const supabase = createClient();
-  const { error } = await supabase
+
+  // Carrega user_id antes do UPDATE pra saber se precisa banir no Auth.
+  const { data: colab, error: selErr } = await supabase
+    .from("colaboradores")
+    .select("id, user_id")
+    .eq("id", id)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+
+  if (selErr || !colab) {
+    return { ok: false, message: "Colaborador não encontrado." };
+  }
+
+  const { error: updErr } = await supabase
     .from("colaboradores")
     .update({
       status: "inativo",
       data_encerramento: dataEncerramento,
     })
     .eq("id", id)
-    .eq("tenant_id", session.activeTenant.id);
+    .eq("tenant_id", tenantId);
 
-  if (error) {
-    console.error("[rh.colaborador.inativar]", error.message);
+  if (updErr) {
+    console.error("[rh.colaborador.inativar]", updErr.message);
     return { ok: false, message: "Não foi possível inativar o colaborador." };
+  }
+
+  const { data: resumoRaw, error: rpcErr } = await supabase.rpc(
+    "encerrar_pendencias_rescisao",
+    {
+      p_tenant_id: tenantId,
+      p_colaborador_id: id,
+      p_data_encerramento: dataEncerramento,
+    },
+  );
+
+  if (rpcErr) {
+    // UPDATE já persistiu — o lado "em andamento" fica para retomada
+    // manual. Logamos pro RH saber. Não revertemos a inativação porque
+    // o estado "inativo sem limpeza" ainda é mais seguro que "ativo".
+    console.error("[rh.colaborador.inativar.rpc]", rpcErr.message);
+  }
+
+  const resumo = (resumoRaw as EncerrarPendenciasPayload | null) ?? {
+    folhas_canceladas: 0,
+    decimo_terceiro_linhas_deletadas: 0,
+    decimo_terceiro_linhas_preservadas: 0,
+    ferias_periodos_encerrados: 0,
+    ferias_lancamentos_cancelados: 0,
+  };
+
+  // Bane o usuário de Auth se houver vínculo. Mantém o registro em
+  // auth.users pra preservar histórico de login — só impedimos novas
+  // sessões e derrubamos as ativas.
+  let authBanido = false;
+  if (colab.user_id) {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+      console.error(
+        "[rh.colaborador.inativar.auth] SUPABASE_SERVICE_ROLE_KEY ausente — login do colaborador NÃO foi bloqueado.",
+      );
+    } else {
+      const service = createServiceClient();
+      const { error: banErr } = await service.auth.admin.updateUserById(
+        colab.user_id as string,
+        { ban_duration: BAN_DURATION_FOREVER },
+      );
+      if (banErr) {
+        console.error("[rh.colaborador.inativar.auth.ban]", banErr.message);
+      } else {
+        authBanido = true;
+        const { error: signOutErr } = await service.auth.admin.signOut(
+          colab.user_id as string,
+          "global",
+        );
+        if (signOutErr) {
+          console.error(
+            "[rh.colaborador.inativar.auth.signout]",
+            signOutErr.message,
+          );
+        }
+      }
+    }
   }
 
   await logAuditEvent({
     acao: "colaborador.inativado",
-    tenantId: session.activeTenant.id,
+    tenantId,
     entidadeTipo: "colaborador",
     entidadeId: id,
-    metadata: { data_encerramento: dataEncerramento },
+    metadata: {
+      data_encerramento: dataEncerramento,
+      ...resumo,
+      auth_banido: authBanido,
+      user_id: colab.user_id,
+    },
   });
 
   revalidatePath("/rh");
   revalidatePath("/rh/colaboradores");
   revalidatePath(`/rh/colaboradores/${id}`);
-  return { ok: true, id };
+  return { ok: true, id, resumo: { ...resumo, auth_banido: authBanido } };
 }
 
 /**
@@ -455,7 +552,20 @@ export async function reativarColaborador(
   const gate = await checarPermissao(session, "rh.colaboradores.editar");
   if (!gate.ok) return gate;
 
+  const tenantId = session.activeTenant.id;
   const supabase = createClient();
+
+  const { data: colab, error: selErr } = await supabase
+    .from("colaboradores")
+    .select("id, user_id")
+    .eq("id", id)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+
+  if (selErr || !colab) {
+    return { ok: false, message: "Colaborador não encontrado." };
+  }
+
   const { error } = await supabase
     .from("colaboradores")
     .update({
@@ -463,18 +573,39 @@ export async function reativarColaborador(
       data_encerramento: null,
     })
     .eq("id", id)
-    .eq("tenant_id", session.activeTenant.id);
+    .eq("tenant_id", tenantId);
 
   if (error) {
     console.error("[rh.colaborador.reativar]", error.message);
     return { ok: false, message: "Não foi possível reativar o colaborador." };
   }
 
+  // Desbane o usuário de Auth se tinha ficado banido pela rescisão. O
+  // Auth usa 'none' pra remover o banimento. Lançamentos cancelados
+  // ficam como estão — reversão é manual caso-a-caso.
+  let authDesbanido = false;
+  if (colab.user_id && process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const service = createServiceClient();
+    const { error: unbanErr } = await service.auth.admin.updateUserById(
+      colab.user_id as string,
+      { ban_duration: "none" },
+    );
+    if (unbanErr) {
+      console.error("[rh.colaborador.reativar.auth]", unbanErr.message);
+    } else {
+      authDesbanido = true;
+    }
+  }
+
   await logAuditEvent({
     acao: "colaborador.reativado",
-    tenantId: session.activeTenant.id,
+    tenantId,
     entidadeTipo: "colaborador",
     entidadeId: id,
+    metadata: {
+      auth_desbanido: authDesbanido,
+      user_id: colab.user_id,
+    },
   });
 
   revalidatePath("/rh");

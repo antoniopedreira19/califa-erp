@@ -36,13 +36,45 @@ export function CardDados({ colaborador, niveis, lideres, pendencia }: Props) {
   function handleConfirm() {
     if (!confirmando) return;
     startTransition(async () => {
-      const res =
-        confirmando === "inativar"
-          ? await inativarColaborador(
-              colaborador.id,
-              new Date().toISOString().slice(0, 10),
-            )
-          : await reativarColaborador(colaborador.id);
+      if (confirmando === "inativar") {
+        const res = await inativarColaborador(
+          colaborador.id,
+          new Date().toISOString().slice(0, 10),
+        );
+        if (!res.ok) {
+          alert(res.message);
+          return;
+        }
+        const partes: string[] = [];
+        if (res.resumo.folhas_canceladas > 0) {
+          partes.push(
+            `${res.resumo.folhas_canceladas} linha(s) de folha canceladas`,
+          );
+        }
+        if (res.resumo.decimo_terceiro_linhas_deletadas > 0) {
+          partes.push("13º do ano removido");
+        }
+        if (res.resumo.ferias_periodos_encerrados > 0) {
+          partes.push(
+            `${res.resumo.ferias_periodos_encerrados} período(s) de férias encerrado(s)`,
+          );
+        }
+        if (res.resumo.ferias_lancamentos_cancelados > 0) {
+          partes.push(
+            `${res.resumo.ferias_lancamentos_cancelados} solicitação(ões) de férias cancelada(s)`,
+          );
+        }
+        if (res.resumo.auth_banido) {
+          partes.push("acesso ao sistema bloqueado");
+        }
+        if (partes.length > 0) {
+          alert(`Colaborador inativado.\n\n${partes.join("\n")}`);
+        }
+        setConfirmando(null);
+        router.refresh();
+        return;
+      }
+      const res = await reativarColaborador(colaborador.id);
       if (!res.ok) {
         alert(res.message);
         return;
@@ -138,8 +170,8 @@ export function CardDados({ colaborador, niveis, lideres, pendencia }: Props) {
           }
           description={
             confirmando === "inativar"
-              ? "Colaborador sai do quadro ativo e recebe hoje como data de encerramento. Histórico salarial e alocações são preservados."
-              : "Colaborador volta ao quadro ativo. Data de encerramento é limpa."
+              ? "Hoje vira a data de encerramento. Acesso ao sistema é bloqueado. Folhas em andamento, 13º não pago e férias não gozadas são encerrados. O histórico já pago é preservado."
+              : "Colaborador volta ao quadro ativo e acesso ao sistema é restaurado. Lançamentos cancelados pela rescisão não voltam automaticamente."
           }
           confirmLabel={confirmando === "inativar" ? "Inativar" : "Reativar"}
           onConfirm={handleConfirm}
