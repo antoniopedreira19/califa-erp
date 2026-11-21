@@ -184,10 +184,16 @@ function tipoLabel(t: FeriasLancamentoTipo): string {
 }
 
 function BadgeStatus({ status }: { status: FeriasLancamentoStatus }) {
+  // PR 1 do fluxo líder->RH: fallback neutro pra `aguardando_gestor`,
+  // tratado como "pendente" nesta tela enquanto o PR 2 não distingue.
   const map: Record<
     FeriasLancamentoStatus,
     { label: string; cls: string }
   > = {
+    aguardando_gestor: {
+      label: "Pendente",
+      cls: "bg-amber-100 text-amber-900",
+    },
     pendente_aprovacao: {
       label: "Pendente",
       cls: "bg-amber-100 text-amber-900",

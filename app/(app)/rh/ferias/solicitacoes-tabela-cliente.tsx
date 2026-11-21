@@ -369,10 +369,17 @@ function Td({
 /* ------------------------- Helpers visuais ------------------------- */
 
 function BadgeStatus({ status }: { status: FeriasLancamentoStatus }) {
+  // PR 1 do fluxo líder->RH: fallback neutro pra `aguardando_gestor`,
+  // tratado como "Pendente" na tabela enquanto o PR 2 não separa.
   const map: Record<
     FeriasLancamentoStatus,
     { label: string; cls: string; dot: string }
   > = {
+    aguardando_gestor: {
+      label: "Pendente",
+      cls: "bg-amber-100 text-amber-900",
+      dot: "bg-amber-500",
+    },
     pendente_aprovacao: {
       label: "Pendente",
       cls: "bg-amber-100 text-amber-900",

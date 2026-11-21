@@ -5743,11 +5743,14 @@ export type FeriasLancamentoTipo =
   | "abono_excepcional";
 
 /** Status do lançamento. Fluxo real:
- *    pendente_aprovacao → aprovado → nf_anexada → enviado_financeiro → concluido.
+ *    aguardando_gestor → pendente_aprovacao → aprovado → nf_anexada → enviado_financeiro → concluido.
  *  Alternativas: reprovado, cancelado.
+ *  `aguardando_gestor` nasce quando o colaborador tem líder direto
+ *  (etapa 1 do fluxo em duas aprovações — ver 20261121200001).
  *  `aguardando_financeiro` existe no enum mas é valor morto desde
  *  20261026700007 — nada escreve nele (ver 20261113300001). */
 export type FeriasLancamentoStatus =
+  | "aguardando_gestor"
   | "pendente_aprovacao"
   | "aguardando_financeiro"
   | "aprovado"
@@ -5780,6 +5783,14 @@ export interface ColaboradorFeriasLancamento {
   aprovado_em: string | null;
   motivo_reprovacao: string | null;
   observacao: string | null;
+  /** Profile do líder direto que aprovou a etapa 1. NULL em lançamentos
+   *  legados ou em "lançar direto" do RH. */
+  aprovado_pelo_lider_por: string | null;
+  aprovado_pelo_lider_em: string | null;
+  /** True quando o RH aprovou a etapa 1 no lugar do líder (override). */
+  aprovacao_lider_override: boolean;
+  /** Motivo opcional do override do RH. UI não exige. */
+  motivo_override_lider: string | null;
   /** True quando RH lança sem passar pelo fluxo de solicitação do colaborador
    *  (ex: histórico, excepcionalidade). Rastro de auditoria. */
   lancado_direto_por_rh: boolean;

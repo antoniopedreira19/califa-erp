@@ -391,10 +391,17 @@ function CardSolicitacaoAtiva({
   );
   const fim = new Date(l.data_fim + "T00:00:00").toLocaleDateString("pt-BR");
 
+  // PR 1 do fluxo líder->RH: fallback neutro pra `aguardando_gestor`.
+  // PR 2 vai distinguir ("aguardando líder [nome]").
   const statusInfo: Record<
     FeriasLancamentoStatus,
     { label: string; cls: string; hint: string }
   > = {
+    aguardando_gestor: {
+      label: "Pendente aprovação",
+      cls: "bg-amber-100 text-amber-900 border-amber-300",
+      hint: "Aguardando aprovação.",
+    },
     pendente_aprovacao: {
       label: "Pendente aprovação",
       cls: "bg-amber-100 text-amber-900 border-amber-300",

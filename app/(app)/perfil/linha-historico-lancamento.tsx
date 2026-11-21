@@ -139,7 +139,14 @@ function tipoLabel(t: FeriasLancamentoTipo): string {
 }
 
 function BadgeStatusLancamento({ status }: { status: FeriasLancamentoStatus }) {
+  // PR 1 do fluxo líder->RH: `aguardando_gestor` nasceu no enum mas ainda
+  // ninguém escreve nele. Fallback neutro espelhando `pendente_aprovacao`
+  // enquanto o PR 2 não introduz o tratamento próprio.
   const map: Record<FeriasLancamentoStatus, { label: string; cls: string }> = {
+    aguardando_gestor: {
+      label: "Aguardando aprovação",
+      cls: "bg-amber-100 text-amber-900",
+    },
     pendente_aprovacao: {
       label: "Aguardando aprovação",
       cls: "bg-amber-100 text-amber-900",
