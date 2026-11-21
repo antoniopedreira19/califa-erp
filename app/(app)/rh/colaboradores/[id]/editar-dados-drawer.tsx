@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Pencil } from "lucide-react";
+import { AlertCircle, Pencil, X } from "lucide-react";
 import {
   Dialog,
   DialogTrigger,
@@ -35,10 +35,13 @@ export function EditarDadosDrawer({
   colaborador,
   niveis,
   lideres,
+  lideresAtuais,
 }: {
   colaborador: Colaborador;
   niveis: Pick<Nivel, "id" | "codigo" | "descricao">[];
   lideres: LiderOption[];
+  /** IDs dos líderes atuais do colaborador (N:N). */
+  lideresAtuais: string[];
 }) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
@@ -54,9 +57,11 @@ export function EditarDadosDrawer({
   const [nivelSel, setNivelSel] = React.useState<string>(
     colaborador.nivel_id ?? NONE_SENTINEL,
   );
-  const [liderSel, setLiderSel] = React.useState<string>(
-    colaborador.lider_id ?? NONE_SENTINEL,
-  );
+  const [lideresSel, setLideresSel] = React.useState<string[]>(lideresAtuais);
+  // Guarda pra adicionar um novo líder via Combobox; reseta quando seleciona.
+  const [liderParaAdicionar, setLiderParaAdicionar] = React.useState<
+    string | null
+  >(null);
   const [cpf, setCpf] = React.useState<string>(colaborador.cpf ?? "");
   const [cnpj, setCnpj] = React.useState<string>(colaborador.cnpj ?? "");
   const [telefone, setTelefone] = React.useState<string>(
@@ -76,7 +81,8 @@ export function EditarDadosDrawer({
       // Reset ao estado do colaborador
       setTipoContratacao(colaborador.tipo_contratacao);
       setNivelSel(colaborador.nivel_id ?? NONE_SENTINEL);
-      setLiderSel(colaborador.lider_id ?? NONE_SENTINEL);
+      setLideresSel(lideresAtuais);
+      setLiderParaAdicionar(null);
       setCpf(colaborador.cpf ?? "");
       setCnpj(colaborador.cnpj ?? "");
       setTelefone(colaborador.telefone ?? "");
@@ -97,8 +103,11 @@ export function EditarDadosDrawer({
     formData.set("data_admissao", dataAdmissao);
     if (nivelSel === NONE_SENTINEL) formData.delete("nivel_id");
     else formData.set("nivel_id", nivelSel);
-    if (liderSel === NONE_SENTINEL) formData.delete("lider_id");
-    else formData.set("lider_id", liderSel);
+    // Envia lista N:N. `lider_id` legado fica fora pra actions usarem
+    // apenas a lista nova; se vazia, o colab fica sem líder.
+    formData.delete("lider_id");
+    formData.delete("lider_ids[]");
+    for (const id of lideresSel) formData.append("lider_ids[]", id);
 
     startTransition(async () => {
       const res = await editarColaborador(colaborador.id, formData);
@@ -245,16 +254,59 @@ export function EditarDadosDrawer({
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="lider_id">Líder direto</Label>
+              <div className="space-y-2 md:col-span-2">
+                <Label>Líderes diretos</Label>
+                <p className="text-xs text-muted-foreground">
+                  Qualquer um dos líderes pode aprovar/reprovar as férias.
+                </p>
+                {lideresSel.length > 0 ? (
+                  <div className="flex flex-wrap gap-1.5">
+                    {lideresSel.map((id) => {
+                      const l = lideres.find((x) => x.id === id);
+                      const label = l?.nome ?? "Líder desconhecido";
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-xs"
+                        >
+                          {label}
+                          <button
+                            type="button"
+                            aria-label={`Remover ${label}`}
+                            onClick={() =>
+                              setLideresSel((prev) =>
+                                prev.filter((x) => x !== id),
+                              )
+                            }
+                            className="rounded-full p-0.5 hover:bg-background"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground italic">
+                    Sem líder — as férias deste colaborador vão direto pro RH.
+                  </p>
+                )}
                 <Combobox
-                  id="lider_id"
-                  ariaLabel="Líder direto"
+                  id="lider_novo"
+                  ariaLabel="Adicionar líder"
                   className={COMBOBOX_COMO_SELECT}
-                  items={lideres.map((l) => ({ value: l.id, label: l.nome }))}
-                  value={liderSel === NONE_SENTINEL ? null : liderSel}
-                  onChange={(v) => setLiderSel(v ?? NONE_SENTINEL)}
-                  placeholder="Sem líder"
+                  items={lideres
+                    .filter((l) => !lideresSel.includes(l.id))
+                    .map((l) => ({ value: l.id, label: l.nome }))}
+                  value={liderParaAdicionar}
+                  onChange={(v) => {
+                    if (!v) return;
+                    setLideresSel((prev) =>
+                      prev.includes(v) ? prev : [...prev, v],
+                    );
+                    setLiderParaAdicionar(null);
+                  }}
+                  placeholder="Adicionar líder…"
                   buscaPlaceholder="Buscar por nome..."
                   limpavel
                 />

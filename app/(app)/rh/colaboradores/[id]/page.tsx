@@ -406,6 +406,15 @@ export default async function ColaboradorDetalhePage({
     .slice()
     .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR"));
 
+  // Líderes atuais do colaborador (N:N). A policy RLS libera leitura
+  // pra admin/rh (via `colab_lideres_admin_rh`) ou pro próprio colaborador.
+  const { data: lideresAtuaisRes } = await supabase
+    .from("colaboradores_lideres")
+    .select("lider_id")
+    .eq("colaborador_id", params.id);
+  const lideresAtuais = ((lideresAtuaisRes ?? []) as { lider_id: string }[])
+    .map((r) => r.lider_id);
+
   // "Corrigir salário" (sobrescreve vigente sem gerar histórico) é operação
   // sensível — era só admin, mas RH precisa pra ajustar digitação sem poluir
   // a timeline com uma "mudança" que não aconteceu.
@@ -485,6 +494,7 @@ export default async function ColaboradorDetalhePage({
               regionais={regionais}
               niveis={niveis}
               lideres={lideres}
+              lideresAtuais={lideresAtuais}
               pendencia={pendenciasPorCard.dados}
             />
             <CardDadosBancarios

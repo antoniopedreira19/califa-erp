@@ -23,10 +23,12 @@ type Props = {
   regionais: { id: string; nome: string; empresa_id: string }[];
   niveis: Pick<Nivel, "id" | "codigo" | "descricao">[];
   lideres: { id: string; nome: string }[];
+  /** IDs dos profiles que são líderes atuais do colaborador (N:N). */
+  lideresAtuais: string[];
   pendencia?: NivelPendencia;
 };
 
-export function CardDados({ colaborador, niveis, lideres, pendencia }: Props) {
+export function CardDados({ colaborador, niveis, lideres, lideresAtuais, pendencia }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [confirmando, setConfirmando] = React.useState<
@@ -99,6 +101,7 @@ export function CardDados({ colaborador, niveis, lideres, pendencia }: Props) {
             colaborador={colaborador}
             niveis={niveis}
             lideres={lideres}
+            lideresAtuais={lideresAtuais}
           />
           <button
             type="button"
