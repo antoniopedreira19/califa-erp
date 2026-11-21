@@ -62,7 +62,7 @@ export default async function ColaboradorFeriasPage({
       supabase
         .from("colaboradores_ferias_lancamentos")
         .select(
-          "id, periodo_id, tipo, dias, dias_abono, data_inicio, data_fim, status, observacao, lancado_direto_por_rh, valor_total",
+          "id, periodo_id, tipo, dias, dias_abono, data_inicio, data_fim, status, observacao, lancado_direto_por_rh, valor_total, aprovado_por, aprovado_em, aprovado_pelo_lider_por, aprovado_pelo_lider_em, aprovacao_lider_override, motivo_override_lider",
         )
         .eq("colaborador_id", params.id)
         .eq("tenant_id", tenantId)
@@ -107,6 +107,25 @@ export default async function ColaboradorFeriasPage({
   };
   const periodos = (periodosRes.data ?? []) as ColaboradorFeriasPeriodo[];
   const lancamentos = (lancsRes.data ?? []) as ColaboradorFeriasLancamento[];
+
+  // Nomes dos aprovadores (RH e líder) pros rastros na timeline do card.
+  const aprovadoresIds = Array.from(
+    new Set(
+      lancamentos
+        .flatMap((l) => [l.aprovado_por, l.aprovado_pelo_lider_por])
+        .filter((v): v is string => Boolean(v)),
+    ),
+  );
+  const { data: aprovadoresRes } = aprovadoresIds.length
+    ? await supabase
+        .from("profiles")
+        .select("id, nome")
+        .in("id", aprovadoresIds)
+    : { data: [] as Array<{ id: string; nome: string }> };
+  const nomesAprovadores = new Map<string, string>();
+  for (const p of aprovadoresRes ?? []) {
+    nomesAprovadores.set(p.id, p.nome);
+  }
   const salario = salarioRes.data as {
     valor: string | number | null;
     valor_recibo: string | number | null;
@@ -285,6 +304,7 @@ export default async function ColaboradorFeriasPage({
                 key={l.id}
                 lancamento={l}
                 nf={nfsPorLanc.get(l.id) ?? null}
+                nomesAprovadores={nomesAprovadores}
               />
             ))}
           </div>
@@ -382,9 +402,11 @@ function CardVazioProximoPeriodo({
 function CardSolicitacaoAtiva({
   lancamento: l,
   nf,
+  nomesAprovadores,
 }: {
   lancamento: ColaboradorFeriasLancamento;
   nf: { id: string; arquivo_nome: string; uploaded_at: string } | null;
+  nomesAprovadores: Map<string, string>;
 }) {
   const inicio = new Date(l.data_inicio + "T00:00:00").toLocaleDateString(
     "pt-BR",
@@ -526,9 +548,75 @@ function CardSolicitacaoAtiva({
         </div>
       ) : null}
 
+      <TimelineAprovacoes lancamento={l} nomesAprovadores={nomesAprovadores} />
+
       {si.hint && (
         <p className="mt-2 text-xs text-muted-foreground">{si.hint}</p>
       )}
+    </div>
+  );
+}
+
+/** Rastro de aprovação em duas etapas (líder, depois RH) + override.
+ *  Mostra até 2 linhas:
+ *    - Etapa 1: "Aprovado pelo líder [nome] em …" ou "RH aprovou no lugar
+ *      do líder em …" (quando `aprovacao_lider_override`).
+ *    - Etapa 2: "Aprovado pelo RH em …" sempre que `aprovado_por` existe.
+ *  Quando nenhum dos dois existe, não renderiza nada (lançamento ainda
+ *  nas etapas iniciais, ou importado/legado sem rastro). */
+function TimelineAprovacoes({
+  lancamento: l,
+  nomesAprovadores,
+}: {
+  lancamento: ColaboradorFeriasLancamento;
+  nomesAprovadores: Map<string, string>;
+}) {
+  const fmt = (iso: string) =>
+    new Date(iso).toLocaleDateString("pt-BR") +
+    " às " +
+    new Date(iso).toLocaleTimeString("pt-BR", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+  const temLider = Boolean(l.aprovado_pelo_lider_por && l.aprovado_pelo_lider_em);
+  const temOverride = l.aprovacao_lider_override;
+  const temRh = Boolean(l.aprovado_por && l.aprovado_em);
+  if (!temLider && !temOverride && !temRh) return null;
+
+  const nomeLider =
+    (l.aprovado_pelo_lider_por && nomesAprovadores.get(l.aprovado_pelo_lider_por)) ||
+    "líder";
+  const nomeRh =
+    (l.aprovado_por && nomesAprovadores.get(l.aprovado_por)) || "RH";
+
+  return (
+    <div className="mt-3 space-y-1 border-t border-border/70 pt-3 text-xs text-muted-foreground">
+      {temOverride ? (
+        <>
+          <p>
+            <strong>RH aprovou no lugar do líder</strong>
+            {l.aprovado_em ? <> em {fmt(l.aprovado_em)}</> : null}.
+          </p>
+          {l.motivo_override_lider ? (
+            <p className="pl-2 italic">Motivo: {l.motivo_override_lider}</p>
+          ) : null}
+        </>
+      ) : temLider ? (
+        <p>
+          Aprovado pelo líder <strong>{nomeLider}</strong>
+          {l.aprovado_pelo_lider_em ? (
+            <> em {fmt(l.aprovado_pelo_lider_em)}</>
+          ) : null}
+          .
+        </p>
+      ) : null}
+      {temRh && !temOverride ? (
+        <p>
+          Aprovado pelo RH (<strong>{nomeRh}</strong>)
+          {l.aprovado_em ? <> em {fmt(l.aprovado_em)}</> : null}.
+        </p>
+      ) : null}
     </div>
   );
 }
