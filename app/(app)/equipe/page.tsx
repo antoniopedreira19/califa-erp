@@ -6,6 +6,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { temLiderados } from "@/lib/equipe/tem-liderados";
 import { KpiCardsEquipe } from "./kpi-cards-equipe";
 import { EquipeTabs } from "./equipe-tabs";
+import { AbaEquipe } from "./aba-equipe";
 
 export const dynamic = "force-dynamic";
 
@@ -74,7 +75,7 @@ export default async function EquipePage() {
 
       <EquipeTabs
         badgeFerias={nAguardando}
-        equipeContent={<PlaceholderAba texto="Lista do time entra na Task 5." />}
+        equipeContent={<AbaEquipe />}
         feriasContent={
           <PlaceholderAba texto="Solicitações e histórico entram na Task 6." />
         }
