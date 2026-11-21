@@ -21,6 +21,7 @@ type Props = {
 };
 
 const ORDEM_STATUS: Partial<Record<FeriasLancamentoStatus, number>> = {
+  aguardando_gestor: 0,
   pendente_aprovacao: 1,
   aprovado: 2,
   nf_anexada: 3,
@@ -32,6 +33,7 @@ const ORDEM_STATUS: Partial<Record<FeriasLancamentoStatus, number>> = {
 
 type FiltroStatus =
   | "todos"
+  | "aguardando_gestor"
   | "pendente_aprovacao"
   | "aprovado"
   | "nf_anexada"
@@ -44,6 +46,11 @@ const FILTROS: Array<{
   cor: string;
 }> = [
   { key: "todos", label: "Todas", cor: "bg-muted text-muted-foreground" },
+  {
+    key: "aguardando_gestor",
+    label: "Aguardando líder",
+    cor: "bg-amber-100 text-amber-900",
+  },
   {
     key: "pendente_aprovacao",
     label: "Pendentes",
@@ -82,6 +89,7 @@ export function SolicitacoesTabelaCliente({ rows }: Props) {
   const contagens = React.useMemo(() => {
     const m: Record<FiltroStatus, number> = {
       todos: rows.length,
+      aguardando_gestor: 0,
       pendente_aprovacao: 0,
       aprovado: 0,
       nf_anexada: 0,

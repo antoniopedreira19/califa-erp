@@ -24,6 +24,11 @@ export type SolicitacaoRow = {
   aprovado_em: string | null;
   motivo_reprovacao: string | null;
   observacao: string | null;
+  // Rastros da etapa 1 (líder) — fluxo de duas etapas, PR 2+3.
+  aprovado_pelo_lider_por: string | null;
+  aprovado_pelo_lider_em: string | null;
+  aprovacao_lider_override: boolean;
+  motivo_override_lider: string | null;
   alocacao_empresa: string | null;
   alocacao_regional: string | null;
   // true quando a alocação vigente usa o rateio padrão da empresa (modelo "Hub").
@@ -47,7 +52,7 @@ export async function AbaFluxo({ tenantId }: { tenantId: string }) {
   const { data: lancs } = await supabase
     .from("colaboradores_ferias_lancamentos")
     .select(
-      "id, colaborador_id, tipo, dias, dias_abono, data_inicio, data_fim, status, lancado_direto_por_rh, created_at, aprovado_em, motivo_reprovacao, observacao",
+      "id, colaborador_id, tipo, dias, dias_abono, data_inicio, data_fim, status, lancado_direto_por_rh, created_at, aprovado_em, motivo_reprovacao, observacao, aprovado_pelo_lider_por, aprovado_pelo_lider_em, aprovacao_lider_override, motivo_override_lider",
     )
     .eq("tenant_id", tenantId)
     .eq("lancado_direto_por_rh", false)
@@ -69,6 +74,10 @@ export async function AbaFluxo({ tenantId }: { tenantId: string }) {
       | "aprovado_em"
       | "motivo_reprovacao"
       | "observacao"
+      | "aprovado_pelo_lider_por"
+      | "aprovado_pelo_lider_em"
+      | "aprovacao_lider_override"
+      | "motivo_override_lider"
     >
   >;
 
@@ -152,6 +161,10 @@ export async function AbaFluxo({ tenantId }: { tenantId: string }) {
       aprovado_em: l.aprovado_em,
       motivo_reprovacao: l.motivo_reprovacao,
       observacao: l.observacao,
+      aprovado_pelo_lider_por: l.aprovado_pelo_lider_por,
+      aprovado_pelo_lider_em: l.aprovado_pelo_lider_em,
+      aprovacao_lider_override: l.aprovacao_lider_override ?? false,
+      motivo_override_lider: l.motivo_override_lider,
       alocacao_empresa: alocacao?.empresa ?? null,
       alocacao_regional: alocacao?.regional ?? null,
       alocacao_usa_rateio_empresa: alocacao?.usaRateio ?? false,
