@@ -54,21 +54,23 @@ export async function aprovarLancamentoComoLider(
     };
   }
 
-  const { data: colab } = await supabase
-    .from("colaboradores")
-    .select("id, lider_id")
-    .eq("id", lanc.colaborador_id)
+  // Guard: o caller é um dos N líderes deste colaborador?
+  // Tabela `colaboradores_lideres` tem policy que libera leitura pro
+  // próprio líder; se não há linha, não é líder.
+  const { data: vinculo } = await supabase
+    .from("colaboradores_lideres")
+    .select("lider_id")
+    .eq("colaborador_id", lanc.colaborador_id)
+    .eq("lider_id", session.profile.id)
     .maybeSingle();
 
-  if (!colab || colab.lider_id !== session.profile.id) {
+  if (!vinculo) {
     return {
       ok: false,
-      message: "Você não é o líder direto deste colaborador.",
+      message: "Você não é um dos líderes deste colaborador.",
     };
   }
 
-  // `.select().single()` serve de guard-rail: se a RLS filtrar o UPDATE
-  // (nenhuma linha afetada), `single()` retorna erro em vez de silenciar.
   const { data: atualizado, error } = await supabase
     .from("colaboradores_ferias_lancamentos")
     .update({
@@ -97,7 +99,7 @@ export async function aprovarLancamentoComoLider(
     tenantId: session.activeTenant.id,
     entidadeTipo: "ferias_lancamento",
     entidadeId: lancamentoId,
-    metadata: { colaborador_id: colab.id },
+    metadata: { colaborador_id: lanc.colaborador_id },
   });
 
   revalidatePath("/equipe");
@@ -143,16 +145,18 @@ export async function reprovarLancamentoComoLider(
     };
   }
 
-  const { data: colab } = await supabase
-    .from("colaboradores")
-    .select("id, lider_id")
-    .eq("id", lanc.colaborador_id)
+  // Guard: o caller é um dos N líderes deste colaborador?
+  const { data: vinculo } = await supabase
+    .from("colaboradores_lideres")
+    .select("lider_id")
+    .eq("colaborador_id", lanc.colaborador_id)
+    .eq("lider_id", session.profile.id)
     .maybeSingle();
 
-  if (!colab || colab.lider_id !== session.profile.id) {
+  if (!vinculo) {
     return {
       ok: false,
-      message: "Você não é o líder direto deste colaborador.",
+      message: "Você não é um dos líderes deste colaborador.",
     };
   }
 
@@ -185,7 +189,7 @@ export async function reprovarLancamentoComoLider(
     tenantId: session.activeTenant.id,
     entidadeTipo: "ferias_lancamento",
     entidadeId: lancamentoId,
-    metadata: { colaborador_id: colab.id, motivo },
+    metadata: { colaborador_id: lanc.colaborador_id, motivo },
   });
 
   revalidatePath("/equipe");
