@@ -66,6 +66,11 @@ export function CardDados({ colaborador, niveis, lideres, lideresAtuais, pendenc
             `${res.resumo.ferias_lancamentos_cancelados} solicitação(ões) de férias cancelada(s)`,
           );
         }
+        if (res.resumo.liderados_que_perderam_lider > 0) {
+          partes.push(
+            `${res.resumo.liderados_que_perderam_lider} liderado(s) agora sem este líder`,
+          );
+        }
         if (res.resumo.auth_banido) {
           partes.push("acesso ao sistema bloqueado");
         }

@@ -417,7 +417,10 @@ export type InativarColaboradorResult =
   | {
       ok: true;
       id: string;
-      resumo: EncerrarPendenciasPayload & { auth_banido: boolean };
+      resumo: EncerrarPendenciasPayload & {
+        auth_banido: boolean;
+        liderados_que_perderam_lider: number;
+      };
     }
   | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
 
@@ -524,6 +527,28 @@ export async function inativarColaborador(
     }
   }
 
+  // Remove o ex-colaborador como líder de todos os liderados dele. Ele
+  // foi banido do Auth, não consegue mais logar — manter como líder só
+  // trava pedidos de férias no fluxo lider->RH. A trigger de sync
+  // recalcula o cache `colaboradores.lider_id` de cada liderado (aponta
+  // pro próximo líder, ou NULL se era o único). Se o liderado vira "sem
+  // líder", novas solicitações caem direto no RH.
+  let liderados_que_perderam_lider = 0;
+  if (colab.user_id) {
+    const { count, error: delLiderErr } = await supabase
+      .from("colaboradores_lideres")
+      .delete({ count: "exact" })
+      .eq("lider_id", colab.user_id);
+    if (delLiderErr) {
+      console.error(
+        "[rh.colaborador.inativar.lideres]",
+        delLiderErr.message,
+      );
+    } else {
+      liderados_que_perderam_lider = count ?? 0;
+    }
+  }
+
   await logAuditEvent({
     acao: "colaborador.inativado",
     tenantId,
@@ -534,13 +559,26 @@ export async function inativarColaborador(
       ...resumo,
       auth_banido: authBanido,
       user_id: colab.user_id,
+      liderados_que_perderam_lider,
     },
   });
 
   revalidatePath("/rh");
   revalidatePath("/rh/colaboradores");
   revalidatePath(`/rh/colaboradores/${id}`);
-  return { ok: true, id, resumo: { ...resumo, auth_banido: authBanido } };
+  // `/equipe` dos ex-liderados: se tinham só esse líder, o item some da
+  // sidebar do liderado — não dá pra revalidar pra cada um, mas o layout
+  // já roda `temLiderados` no próximo request.
+  revalidatePath("/equipe");
+  return {
+    ok: true,
+    id,
+    resumo: {
+      ...resumo,
+      auth_banido: authBanido,
+      liderados_que_perderam_lider,
+    },
+  };
 }
 
 /**
