@@ -8,10 +8,53 @@
 >
 > **Evoluções pós-implementação:**
 > - **Fluxo de 5 etapas da solicitação** (pendente → aprovado → NF anexada → enviado financeiro → concluído) documentado em [`41-ferias-fluxo-solicitacao.md`](41-ferias-fluxo-solicitacao.md). **Leia esse doc antes de mexer em qualquer coisa do subsistema.**
+> - **Aprovação em duas etapas (líder, depois RH)** desde 2026-11-21 — ver §F16 abaixo e o [ADR 267](../../decisions/267-ferias-aprovacao-em-duas-etapas.md).
 > - Notificações de férias removidas em 2026-10-03 (ver [handoff](../../handoffs/2026-10-03-perfil-redesign-e-cleanup-notificacoes.md)). Vão renascer no [hub central de notificações](../../pendencias/hub-central-notificacoes.md).
 > - Sócios excluídos do subsistema por migration `20261002000012`.
 > - Import histórico documentado em [`40-historico-ferias-importado.md`](40-historico-ferias-importado.md).
 > - Trigger de geração de períodos corrigida em 2026-10-03 (migration `20261003000002`) — ver §F15 "Alteração de data de admissão".
+
+## F16. Aprovação em duas etapas (líder → RH)
+
+Desde 2026-11-21, o fluxo de aprovação passa por **duas etapas em série**:
+
+1. **Colaborador solicita** em `/perfil`. O status inicial é decidido pelo helper `decidirStatusInicialSolicitacao`:
+   - Com `lider_id` definido no cadastro: nasce em **`aguardando_gestor`** (etapa 1 do líder).
+   - Sem `lider_id`: pula direto pra **`pendente_aprovacao`** (fluxo antigo do RH, preservado).
+2. **Líder aprova via `/equipe`** (tab Férias). UPDATE grava `aprovado_pelo_lider_por` + `aprovado_pelo_lider_em`; status vai pra `pendente_aprovacao`. Audit: `ferias.lancamento.aprovado_lider`. **Reprovação** pelo líder encerra o fluxo: status `reprovado` + `motivo_reprovacao`; o colaborador abre nova solicitação se quiser (não há "reenviar"). Audit: `ferias.lancamento.reprovado_lider`.
+3. **RH aprova via `/rh/ferias/solicitacoes`** — fluxo existente, sem mudança: calcula valores (PJ/CLT_RECIBO), cria folhas, audit `ferias.lancamento.aprovado`.
+
+### Override do RH
+
+Quando o líder trava (viajou, saiu da empresa, não responde), o RH assume. No modal de detalhe de uma solicitação em `aguardando_gestor`, aparece o botão **"Aprovar no lugar do líder"**. Abre uma textarea opcional pro motivo; o UPDATE grava `aprovacao_lider_override = true` + `motivo_override_lider` (nullable; pode ficar NULL quando o RH não preencheu). Audit: `ferias.lancamento.override_lider_rh` com `metadata.lider_esperado_id` e `metadata.motivo`.
+
+### Página `/equipe`
+
+Sidebar mostra o item "Equipe" **só pra quem tem pelo menos 1 liderado** em `colaboradores.lider_id` (gated no server via `temLiderados`). A página tem:
+- **Tab Equipe:** lista dos liderados via `vw_equipe_do_lider` (view com gating por `auth.uid()` embutido; sem salário, CPF ou outros campos sensíveis).
+- **Tab Férias:** no topo, as solicitações em `aguardando_gestor` do próprio time; embaixo, histórico recente dos liderados.
+
+### Timeline em `/rh/ferias/[id]`
+
+Cada lançamento mostra até 2 linhas de rastro:
+- Etapa 1: "Aprovado pelo líder [nome] em …" ou (se `aprovacao_lider_override`) "RH aprovou no lugar do líder em …".
+- Etapa 2: "Aprovado pelo RH ([nome]) em …" sempre que `aprovado_por` existe (exceto quando foi override, pra não duplicar).
+
+### "Lançar direto" do RH
+
+Continua pulando ambas as etapas: entra direto como `aprovado` com `lancado_direto_por_rh = true`. Vale pros casos em que a solicitação nasceu fora do sistema.
+
+### Backfill da base
+
+Em 21/11/2026, migration `20261121000001` subiu a cobertura de `lider_id` de 33,7% pra 93,2% (207/222 colabs do tenant principal). Os 15 restantes são os 3 do topo da pirâmide (sem líder por decisão da planilha) + casos de borda — caem no fallback "sem líder direto pro RH" até o RH definir.
+
+### Migrations da entrega
+
+- `20261121200001_ferias_enum_aguardando_gestor` — valor novo no enum.
+- `20261121200002_ferias_lancamentos_campos_aprovacao_lider` — 4 colunas novas + índice parcial.
+- `20261121200003_ferias_lancamentos_e_periodos_policy_lider` — RLS SELECT pro líder.
+- `20261121200004_vw_equipe_do_lider` + `20261121200005_vw_equipe_do_lider_gating_embutido` — view não-PII.
+- `20261121300001_ferias_lancamentos_update_policy_lider` — RLS UPDATE pro líder.
 
 ## F15. Alteração de data de admissão (regra da trigger)
 
