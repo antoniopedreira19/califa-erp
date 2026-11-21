@@ -449,7 +449,8 @@ export async function efetivar(id: string): Promise<ActionResult> {
       rg: c.rg,
       funcao: c.cargo,
       nivel_id: c.nivel_id,
-      lider_id: c.lider_id,
+      // lider_id NÃO é gravado direto — a trigger sincroniza a partir de
+      // `colaboradores_lideres` que escrevemos logo após este INSERT.
       data_nascimento: c.data_nascimento,
       area: c.area,
       data_admissao: c.data_admissao,
@@ -483,6 +484,21 @@ export async function efetivar(id: string): Promise<ActionResult> {
     };
   }
   const colaboradorId = colab.id;
+
+  // 1a. Líder (contratação carrega 1 só). Grava na tabela N:N; a trigger
+  //     sincroniza `colaboradores.lider_id` como cache do primeiro.
+  if (c.lider_id) {
+    const { error: liderErr } = await supabase
+      .from("colaboradores_lideres")
+      .insert({ colaborador_id: colaboradorId, lider_id: c.lider_id });
+    if (liderErr) {
+      console.error(
+        "[rh.contratacao.efetivar.lider]",
+        liderErr.message,
+      );
+      // Não derruba a efetivação — RH completa depois no drawer.
+    }
+  }
 
   // 2. Alocação vigente — usa hierarquia nova (itens) via alterarAlocacao.
   const alocResult = await alterarAlocacao(colaboradorId, {

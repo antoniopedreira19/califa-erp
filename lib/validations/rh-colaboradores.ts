@@ -76,6 +76,9 @@ export const colaboradorSchema = z
       .trim()
       .optional()
       .transform((v) => (v && v.length > 0 ? v : null)),
+    // Lista N:N (Passo 1 da entrega de 21/11). `lider_id` acima fica como
+    // legado — se vier só `lider_id`, as actions convertem pra array.
+    lider_ids: z.array(z.string().uuid()).default([]),
     data_admissao: z
       .string()
       .trim()

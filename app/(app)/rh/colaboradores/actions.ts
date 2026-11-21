@@ -63,6 +63,10 @@ export async function criarColaborador(
   const gate = await checarPermissao(session, "rh.colaboradores.editar");
   if (!gate.ok) return gate;
 
+  const liderIdsRaw = formData
+    .getAll("lider_ids[]")
+    .map((v) => v.toString())
+    .filter((v) => v.length > 0);
   const colaboradorParsed = colaboradorSchema.safeParse({
     nome: formData.get("nome")?.toString() ?? "",
     email: formData.get("email")?.toString() ?? "",
@@ -73,6 +77,7 @@ export async function criarColaborador(
     funcao: formData.get("funcao")?.toString() ?? "",
     nivel_id: formData.get("nivel_id")?.toString() ?? "",
     lider_id: formData.get("lider_id")?.toString() ?? "",
+    lider_ids: liderIdsRaw,
     data_admissao: formData.get("data_admissao")?.toString() ?? "",
   });
   if (!colaboradorParsed.success) {
@@ -82,6 +87,15 @@ export async function criarColaborador(
       fieldErrors: colaboradorParsed.error.flatten().fieldErrors,
     };
   }
+
+  // Compatibilidade: se vier só `lider_id` legado (sem `lider_ids[]`),
+  // trata como lista de 1 elemento.
+  const liderIdsEfetivos =
+    colaboradorParsed.data.lider_ids.length > 0
+      ? colaboradorParsed.data.lider_ids
+      : colaboradorParsed.data.lider_id
+        ? [colaboradorParsed.data.lider_id]
+        : [];
 
   const alocacaoParsed = alocacaoInicialSchema.safeParse({
     empresa_id: formData.get("empresa_id")?.toString() ?? "",
@@ -113,7 +127,8 @@ export async function criarColaborador(
 
   const supabase = createClient();
 
-  // 1) Insere colaborador
+  // 1) Insere colaborador (sem lider_id — a trigger sincroniza a partir
+  //    da tabela N:N `colaboradores_lideres` que escrevemos em seguida).
   const { data: colabData, error: colabError } = await supabase
     .from("colaboradores")
     .insert({
@@ -126,7 +141,6 @@ export async function criarColaborador(
       cnpj: colaboradorParsed.data.cnpj,
       funcao: colaboradorParsed.data.funcao,
       nivel_id: colaboradorParsed.data.nivel_id,
-      lider_id: colaboradorParsed.data.lider_id,
       data_admissao: colaboradorParsed.data.data_admissao,
       status: "ativo",
       created_by: session.profile.id,
@@ -140,6 +154,21 @@ export async function criarColaborador(
   }
 
   const colaboradorId = colabData.id;
+
+  // 1a) Líderes (N:N). Dedup e insert. Trigger sincroniza `colaboradores.lider_id`.
+  if (liderIdsEfetivos.length > 0) {
+    const dedup = Array.from(new Set(liderIdsEfetivos));
+    const { error: liderErr } = await supabase
+      .from("colaboradores_lideres")
+      .insert(
+        dedup.map((lider_id) => ({ colaborador_id: colaboradorId, lider_id })),
+      );
+    if (liderErr) {
+      console.error("[rh.colaborador.criar.lideres]", liderErr.message);
+      // Não derruba a criação; o cadastro pode seguir sem líder e ser
+      // completado depois no drawer.
+    }
+  }
   const service = createServiceClient();
 
   // 2) Alocação inicial vigente — usa hierarquia nova (itens) via alterarAlocacao.
@@ -269,6 +298,10 @@ export async function editarColaborador(
   const gate = await checarPermissao(session, "rh.colaboradores.editar");
   if (!gate.ok) return gate;
 
+  const liderIdsRaw = formData
+    .getAll("lider_ids[]")
+    .map((v) => v.toString())
+    .filter((v) => v.length > 0);
   const parsed = colaboradorSchema.safeParse({
     nome: formData.get("nome")?.toString() ?? "",
     email: formData.get("email")?.toString() ?? "",
@@ -279,6 +312,7 @@ export async function editarColaborador(
     funcao: formData.get("funcao")?.toString() ?? "",
     nivel_id: formData.get("nivel_id")?.toString() ?? "",
     lider_id: formData.get("lider_id")?.toString() ?? "",
+    lider_ids: liderIdsRaw,
     data_admissao: formData.get("data_admissao")?.toString() ?? "",
   });
   if (!parsed.success) {
@@ -289,7 +323,17 @@ export async function editarColaborador(
     };
   }
 
+  // Lista efetiva: priorize `lider_ids[]`; se vazio, cai pro `lider_id` legado.
+  const liderIdsEfetivos =
+    parsed.data.lider_ids.length > 0
+      ? parsed.data.lider_ids
+      : parsed.data.lider_id
+        ? [parsed.data.lider_id]
+        : [];
+
   const supabase = createClient();
+  // UPDATE do colaborador — não tocamos mais em `lider_id` direto; a
+  // trigger de sync cuida disso quando mexemos na tabela N:N abaixo.
   const { error } = await supabase
     .from("colaboradores")
     .update({
@@ -301,7 +345,6 @@ export async function editarColaborador(
       cnpj: parsed.data.cnpj,
       funcao: parsed.data.funcao,
       nivel_id: parsed.data.nivel_id,
-      lider_id: parsed.data.lider_id,
       data_admissao: parsed.data.data_admissao,
     })
     .eq("id", id)
@@ -310,6 +353,38 @@ export async function editarColaborador(
   if (error) {
     console.error("[rh.colaborador.editar]", error.message);
     return { ok: false, message: mapColaboradorDbError(error.message) };
+  }
+
+  // Sincroniza líderes (N:N): diff entre atual e desejado.
+  const { data: atuaisRes } = await supabase
+    .from("colaboradores_lideres")
+    .select("lider_id")
+    .eq("colaborador_id", id);
+  const idsAtuais = new Set(
+    (atuaisRes ?? []).map((r) => (r as { lider_id: string }).lider_id),
+  );
+  const idsNovos = new Set(liderIdsEfetivos);
+
+  const paraRemover = [...idsAtuais].filter((x) => !idsNovos.has(x));
+  if (paraRemover.length > 0) {
+    const { error: delErr } = await supabase
+      .from("colaboradores_lideres")
+      .delete()
+      .eq("colaborador_id", id)
+      .in("lider_id", paraRemover);
+    if (delErr) {
+      console.error("[rh.colaborador.editar.lideres.remover]", delErr.message);
+    }
+  }
+
+  const paraInserir = [...idsNovos].filter((x) => !idsAtuais.has(x));
+  if (paraInserir.length > 0) {
+    const { error: insErr } = await supabase
+      .from("colaboradores_lideres")
+      .insert(paraInserir.map((lider_id) => ({ colaborador_id: id, lider_id })));
+    if (insErr) {
+      console.error("[rh.colaborador.editar.lideres.inserir]", insErr.message);
+    }
   }
 
   await logAuditEvent({
