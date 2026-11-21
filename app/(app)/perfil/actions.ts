@@ -10,6 +10,7 @@ import type {
   TipoContratacao,
 } from "@/lib/types";
 import { solicitarFeriasSchema } from "@/lib/ferias/solicitar-ferias-schema";
+import { decidirStatusInicialSolicitacao } from "@/lib/ferias/decidir-status-inicial-solicitacao";
 import { normalizarChavePix, type PixTipo } from "@/lib/perfil/pix";
 
 type ActionResult =
@@ -150,7 +151,9 @@ export async function solicitarFerias(input: unknown): Promise<ActionResult> {
       data_fim: dados.data_fim,
       dias,
       dias_abono: dados.dias_abono,
-      status: "pendente_aprovacao",
+      // Com líder: nasce em `aguardando_gestor` (etapa 1 — líder aprova).
+      // Sem líder: pula direto pra `pendente_aprovacao` (RH aprova).
+      status: decidirStatusInicialSolicitacao({ liderId: colab.lider_id }),
       solicitado_por: session.profile.id,
       observacao: dados.observacao || null,
       lancado_direto_por_rh: false,
