@@ -1,0 +1,174 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { requireSession } from "@/lib/auth/session";
+import { logAuditEvent } from "@/lib/auth/audit";
+import { createClient } from "@/lib/supabase/server";
+import {
+  aprovarComoLiderSchema,
+  reprovarComoLiderSchema,
+} from "@/lib/ferias/aprovar-como-lider-schema";
+
+type ActionResult =
+  | { ok: true; id: string }
+  | {
+      ok: false;
+      message: string;
+      fieldErrors?: Record<string, string[]>;
+    };
+
+/** Aprova a etapa 1 (líder) de uma solicitação de férias em
+ *  `aguardando_gestor`. Após a aprovação, o lançamento vai pra
+ *  `pendente_aprovacao` — fluxo normal do RH a partir daí. */
+export async function aprovarLancamentoComoLider(
+  input: unknown,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const parsed = aprovarComoLiderSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: "Dados inválidos.",
+      fieldErrors: parsed.error.flatten().fieldErrors as Record<
+        string,
+        string[]
+      >,
+    };
+  }
+  const { lancamentoId } = parsed.data;
+
+  const supabase = createClient();
+
+  const { data: lanc } = await supabase
+    .from("colaboradores_ferias_lancamentos")
+    .select("id, tenant_id, colaborador_id, status")
+    .eq("id", lancamentoId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+
+  if (!lanc) return { ok: false, message: "Lançamento não encontrado." };
+  if (lanc.status !== "aguardando_gestor") {
+    return {
+      ok: false,
+      message: "Esta solicitação não está mais aguardando sua aprovação.",
+    };
+  }
+
+  const { data: colab } = await supabase
+    .from("colaboradores")
+    .select("id, lider_id")
+    .eq("id", lanc.colaborador_id)
+    .maybeSingle();
+
+  if (!colab || colab.lider_id !== session.profile.id) {
+    return {
+      ok: false,
+      message: "Você não é o líder direto deste colaborador.",
+    };
+  }
+
+  const { error } = await supabase
+    .from("colaboradores_ferias_lancamentos")
+    .update({
+      status: "pendente_aprovacao",
+      aprovado_pelo_lider_por: session.profile.id,
+      aprovado_pelo_lider_em: new Date().toISOString(),
+    })
+    .eq("id", lancamentoId);
+
+  if (error) {
+    console.error("[equipe.aprovarComoLider]", error.message);
+    return { ok: false, message: "Falha ao aprovar: " + error.message };
+  }
+
+  await logAuditEvent({
+    acao: "ferias.lancamento.aprovado_lider",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "ferias_lancamento",
+    entidadeId: lancamentoId,
+    metadata: { colaborador_id: colab.id },
+  });
+
+  revalidatePath("/equipe");
+  revalidatePath("/rh/ferias");
+  return { ok: true, id: lancamentoId };
+}
+
+/** Reprova (na etapa 1 — líder) uma solicitação em `aguardando_gestor`.
+ *  Grava o motivo no campo compartilhado `motivo_reprovacao` e marca
+ *  `aprovado_pelo_lider_*` como rastro de quem decidiu. O colaborador
+ *  abre nova solicitação se quiser; não há "reenviar". */
+export async function reprovarLancamentoComoLider(
+  input: unknown,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const parsed = reprovarComoLiderSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message: "Dados inválidos.",
+      fieldErrors: parsed.error.flatten().fieldErrors as Record<
+        string,
+        string[]
+      >,
+    };
+  }
+  const { lancamentoId, motivo } = parsed.data;
+
+  const supabase = createClient();
+
+  const { data: lanc } = await supabase
+    .from("colaboradores_ferias_lancamentos")
+    .select("id, tenant_id, colaborador_id, status")
+    .eq("id", lancamentoId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+
+  if (!lanc) return { ok: false, message: "Lançamento não encontrado." };
+  if (lanc.status !== "aguardando_gestor") {
+    return {
+      ok: false,
+      message: "Esta solicitação não está mais aguardando sua aprovação.",
+    };
+  }
+
+  const { data: colab } = await supabase
+    .from("colaboradores")
+    .select("id, lider_id")
+    .eq("id", lanc.colaborador_id)
+    .maybeSingle();
+
+  if (!colab || colab.lider_id !== session.profile.id) {
+    return {
+      ok: false,
+      message: "Você não é o líder direto deste colaborador.",
+    };
+  }
+
+  const { error } = await supabase
+    .from("colaboradores_ferias_lancamentos")
+    .update({
+      status: "reprovado",
+      aprovado_pelo_lider_por: session.profile.id,
+      aprovado_pelo_lider_em: new Date().toISOString(),
+      motivo_reprovacao: motivo,
+    })
+    .eq("id", lancamentoId);
+
+  if (error) {
+    console.error("[equipe.reprovarComoLider]", error.message);
+    return { ok: false, message: "Falha ao reprovar: " + error.message };
+  }
+
+  await logAuditEvent({
+    acao: "ferias.lancamento.reprovado_lider",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "ferias_lancamento",
+    entidadeId: lancamentoId,
+    metadata: { colaborador_id: colab.id, motivo },
+  });
+
+  revalidatePath("/equipe");
+  revalidatePath("/rh/ferias");
+  return { ok: true, id: lancamentoId };
+}
