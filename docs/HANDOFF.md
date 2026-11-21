@@ -108,9 +108,12 @@ Admin cadastrado: `antonio@pevetech.com.br` (role `administrador` no tenant `age
 20261121200004  vw_equipe_do_lider
 20261121200005  vw_equipe_do_lider_gating_embutido                (fix: WHERE auth.uid() embutido)
 20261121300001  ferias_lancamentos_update_policy_lider            (fix: UPDATE pro líder)
+20261121400001  backfill_pendentes_para_aguardando_gestor         (6 pendentes antigas entram no fluxo novo)
+20261122100001  colaboradores_lideres_tabela_e_sync               (N:N + trigger + policies/view reescritas)
+20261122100002  colaboradores_lideres_fix_auto_lideranca          (fix: CHECK inválido vira trigger)
 ```
 
-Última: `20261121300001`.
+Última: `20261122100002`.
 
 Migration removida do repo em 2026-09-23 (regionais GERAL aposentadas): `20260916000004_rh_regional_geral.sql`.
 
@@ -120,6 +123,7 @@ Ordem: mais recente primeiro. Cada linha aponta para um arquivo em `docs/handoff
 
 | Data | Entrega | Handoff |
 |---|---|---|
+| 2026-11-21 | Colaborador pode ter N líderes; qualquer um aprova. Tabela N:N + trigger de sync + policies/view reescritas + drawer com chips | [2026-11-21-ferias-n-lideres-por-colaborador.md](handoffs/2026-11-21-ferias-n-lideres-por-colaborador.md) |
 | 2026-11-21 | Férias com aprovação em duas etapas (líder → RH): página `/equipe` nova na sidebar, override do RH, backfill de 34% → 93% de `lider_id`, ADR 267 | [2026-11-21-ferias-fluxo-lider-rh.md](handoffs/2026-11-21-ferias-fluxo-lider-rh.md) |
 | 2026-10-28 | 13° no quadro de NF + adiantamento: parcelas PJ/CLT/híbrido no quadro de NF, adiantamentos com fluxo completo (anexar → aprovar → título), excluir adiantamento com 3 estados, People atualizado | [2026-10-28-13o-nf-fluxo.md](handoffs/2026-10-28-13o-nf-fluxo.md) |
 | 2026-10-21 | 13º Salário end-to-end (criação com snapshot, breakdown híbrido CLT_recibo, adiantamentos durante o ano, fechar parcelas integrado ao fluxo de folha mensal, tabelas 10/2026 + Lei 15.270, histórico por colaborador; dec 219/220/221) | [2026-10-21-decimo-terceiro.md](handoffs/2026-10-21-decimo-terceiro.md) |
