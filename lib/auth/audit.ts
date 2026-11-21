@@ -465,6 +465,7 @@ export type AuditAction =
   | "ferias.lancamento.aprovado"
   | "ferias.lancamento.aprovado_lider"
   | "ferias.lancamento.reprovado_lider"
+  | "ferias.lancamento.override_lider_rh"
   | "ferias.lancamento.enviado_financeiro"
   | "ferias.lancamento.reprovado"
   | "ferias.lancamento.cancelado_pelo_rh"

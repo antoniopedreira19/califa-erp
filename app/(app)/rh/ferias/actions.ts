@@ -13,6 +13,12 @@ import {
 } from "@/lib/ferias/calcular-valores";
 import { criarFolhasDePagamentoDeFerias } from "@/lib/ferias/criar-folhas-pagamento";
 import {
+  calcularValoresParaAprovar,
+  dispararFolhasPagamento,
+  type LancamentoParaAprovar,
+} from "@/lib/ferias/aprovar-ferias-fluxo-financeiro";
+import { overrideLiderRhSchema } from "@/lib/ferias/override-lider-rh-schema";
+import {
   gerarReciboFeriasPdf,
   type FormatoRecibo,
 } from "@/lib/pdf/recibo-ferias";
@@ -168,16 +174,18 @@ export async function aprovarLancamento(
     return { ok: false, message: "Colaborador não encontrado." };
   }
 
-  const valores = await calcularValoresLancamentoAuto(
-    lanc.colaborador_id,
-    lanc.data_inicio,
-    (colabParaValores as {
-      tipo_contratacao: import("@/lib/types").TipoContratacao;
-    }).tipo_contratacao,
-    lanc.tipo as FeriasLancamentoTipo,
-    lanc.dias,
-    (lanc as { dias_abono?: number }).dias_abono ?? 0,
-  );
+  const tipoContratacao = (colabParaValores as {
+    tipo_contratacao: TipoContratacao;
+  }).tipo_contratacao;
+
+  const valores = await calcularValoresParaAprovar({
+    colaboradorId: lanc.colaborador_id,
+    dataInicio: lanc.data_inicio,
+    tipoContratacao,
+    tipo: lanc.tipo as FeriasLancamentoTipo,
+    dias: lanc.dias,
+    diasAbono: (lanc as { dias_abono?: number }).dias_abono ?? 0,
+  });
 
   const updatePayload: Record<string, unknown> = {
     status: "aprovado",
@@ -203,32 +211,13 @@ export async function aprovarLancamento(
     return { ok: false, message: "Falha ao aprovar: " + updErr.message };
   }
 
-  // Cria folha(s) de pagamento. Lançamento retroativo é pulado.
-  const colabInfo = await supabase
-    .from("colaboradores")
-    .select("id, tipo_contratacao")
-    .eq("id", lanc.colaborador_id)
-    .maybeSingle();
-  let aviso: string | undefined;
-  if (colabInfo.data) {
-    const resFolhas = await criarFolhasDePagamentoDeFerias({
-      lancamento: lanc,
-      colaborador: colabInfo.data as {
-        id: string;
-        tipo_contratacao: TipoContratacao;
-      },
-      actorUserId: session.profile.id,
-    });
-    if (resFolhas.erro) {
-      // Lançamento já foi aprovado (UPDATE acima). Expomos o erro de folha
-      // como aviso pro RH não ficar com um lançamento aprovado órfão de
-      // folhas e sem perceber.
-      console.error("[rh.ferias.aprovar.folhas]", resFolhas.erro);
-      aviso =
-        "Lançamento aprovado, mas falhou ao gerar folhas de pagamento: " +
-        resFolhas.erro +
-        ". Avise o administrador do sistema.";
-    }
+  const { aviso } = await dispararFolhasPagamento({
+    lancamento: lanc as LancamentoParaAprovar,
+    colaborador: { id: lanc.colaborador_id, tipo_contratacao: tipoContratacao },
+    actorUserId: session.profile.id,
+  });
+  if (aviso) {
+    console.error("[rh.ferias.aprovar.folhas]", aviso);
   }
 
   await logAuditEvent({
@@ -245,6 +234,122 @@ export async function aprovarLancamento(
 
   revalidatePath("/rh/ferias");
   revalidatePath("/perfil");
+  revalidatePath("/financeiro/contas-a-pagar");
+  return { ok: true, id: lanc.id, aviso };
+}
+
+// ---------- Aprovar no lugar do líder (override do RH) ----------
+
+/** RH destrava uma solicitação em `aguardando_gestor` quando o líder
+ *  não aprova em tempo útil. Pula a etapa 1 (líder), marca
+ *  `aprovacao_lider_override = true` + `motivo_override_lider` (opcional)
+ *  e segue direto pro mesmo cálculo de valores + criação de folhas que
+ *  `aprovarLancamento` faz. Audit separa com acao
+ *  `ferias.lancamento.override_lider_rh`. */
+export async function aprovarLancamentoOverrideRh(
+  input: unknown,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const bloqueio = assertRh(session.activeRole);
+  if (bloqueio) return bloqueio;
+
+  const parsed = overrideLiderRhSchema.safeParse(input);
+  if (!parsed.success) {
+    return {
+      ok: false,
+      message:
+        parsed.error.flatten().fieldErrors.motivo?.[0] ??
+        parsed.error.flatten().fieldErrors.lancamentoId?.[0] ??
+        "Dados inválidos.",
+    };
+  }
+  const { lancamentoId, motivo } = parsed.data;
+
+  const tenantId = session.activeTenant.id;
+  const lanc = await carregarLancamento(lancamentoId, tenantId);
+  if (!lanc) return { ok: false, message: "Lançamento não encontrado." };
+  if (lanc.status !== "aguardando_gestor") {
+    return {
+      ok: false,
+      message:
+        "Essa solicitação não está mais aguardando o líder — recarregue a lista.",
+    };
+  }
+
+  const supabase = createClient();
+
+  // Guardar o líder esperado pro audit, mesmo que vazio
+  const { data: colab } = await supabase
+    .from("colaboradores")
+    .select("tipo_contratacao, lider_id")
+    .eq("id", lanc.colaborador_id)
+    .maybeSingle();
+  if (!colab) {
+    return { ok: false, message: "Colaborador não encontrado." };
+  }
+  const tipoContratacao = (colab as { tipo_contratacao: TipoContratacao })
+    .tipo_contratacao;
+  const liderEsperadoId = (colab as { lider_id: string | null }).lider_id;
+
+  const valores = await calcularValoresParaAprovar({
+    colaboradorId: lanc.colaborador_id,
+    dataInicio: lanc.data_inicio,
+    tipoContratacao,
+    tipo: lanc.tipo as FeriasLancamentoTipo,
+    dias: lanc.dias,
+    diasAbono: (lanc as { dias_abono?: number }).dias_abono ?? 0,
+  });
+
+  const updatePayload: Record<string, unknown> = {
+    status: "aprovado",
+    aprovado_por: session.profile.id,
+    aprovado_em: new Date().toISOString(),
+    aprovacao_lider_override: true,
+    motivo_override_lider: motivo,
+    motivo_reprovacao: null,
+  };
+  if (valores) {
+    updatePayload.valor_base_remuneracao = valores.valor_base_remuneracao;
+    updatePayload.valor_ferias = valores.valor_ferias;
+    updatePayload.valor_um_terco = valores.valor_um_terco;
+    updatePayload.valor_abono = valores.valor_abono;
+    updatePayload.valor_total = valores.valor_total;
+  }
+
+  const { error: updErr } = await supabase
+    .from("colaboradores_ferias_lancamentos")
+    .update(updatePayload)
+    .eq("id", lancamentoId);
+
+  if (updErr) {
+    console.error("[rh.ferias.override]", updErr.message);
+    return { ok: false, message: "Falha ao aprovar: " + updErr.message };
+  }
+
+  const { aviso } = await dispararFolhasPagamento({
+    lancamento: lanc as LancamentoParaAprovar,
+    colaborador: { id: lanc.colaborador_id, tipo_contratacao: tipoContratacao },
+    actorUserId: session.profile.id,
+  });
+  if (aviso) {
+    console.error("[rh.ferias.override.folhas]", aviso);
+  }
+
+  await logAuditEvent({
+    acao: "ferias.lancamento.override_lider_rh",
+    tenantId,
+    entidadeTipo: "ferias_lancamento",
+    entidadeId: lanc.id,
+    metadata: {
+      colaborador_id: lanc.colaborador_id,
+      lider_esperado_id: liderEsperadoId,
+      motivo,
+    },
+  });
+
+  revalidatePath("/rh/ferias");
+  revalidatePath("/perfil");
+  revalidatePath("/equipe");
   revalidatePath("/financeiro/contas-a-pagar");
   return { ok: true, id: lanc.id, aviso };
 }
