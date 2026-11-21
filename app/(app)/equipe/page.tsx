@@ -7,6 +7,7 @@ import { temLiderados } from "@/lib/equipe/tem-liderados";
 import { KpiCardsEquipe } from "./kpi-cards-equipe";
 import { EquipeTabs } from "./equipe-tabs";
 import { AbaEquipe } from "./aba-equipe";
+import { AbaFerias } from "./aba-ferias";
 
 export const dynamic = "force-dynamic";
 
@@ -76,18 +77,8 @@ export default async function EquipePage() {
       <EquipeTabs
         badgeFerias={nAguardando}
         equipeContent={<AbaEquipe />}
-        feriasContent={
-          <PlaceholderAba texto="Solicitações e histórico entram na Task 6." />
-        }
+        feriasContent={<AbaFerias />}
       />
-    </div>
-  );
-}
-
-function PlaceholderAba({ texto }: { texto: string }) {
-  return (
-    <div className="rounded-xl border border-dashed border-border bg-card/40 p-8 text-center text-sm text-muted-foreground">
-      {texto}
     </div>
   );
 }
