@@ -344,3 +344,24 @@ confirmação deixa de valer e a nota volta a ser comparada com o PDF. O
 "Editar registro" continua sendo o caminho quando o cadastro é que está
 errado. RPC `confirmar_registro_da_nota`, migration `20261123800009`.
 
+## Leitura v4: o texto do PDF como segunda leitura (23/11/2026)
+
+Pedido do Tiago depois que a leitura por imagem errou o ano em 3 notas e
+trocou dígitos de CNPJ em 8.
+
+- A leitura por imagem (IA) continua em todo PDF; para foto, cupom e PDF
+  sem texto, segue sendo a única fonte.
+- Quando o PDF tem texto selecionável, número, emissão, valor e CNPJ do
+  emitente saem dos rótulos do layout, sem IA (`lib/ia/texto-da-nf.ts`):
+  DANFSe v2.0 ("Número da NFS-e", nunca o "Número da DPS"; "Data e Hora da
+  Emissão da NFS-e"; "Valor da Operação / Serviço"; CNPJ do prestador),
+  NFS-e municipais e DANFE.
+- As duas concordam → normal. Discordam → vale o texto, e a nota guarda em
+  que discordaram ("as leituras discordaram; valeu o texto"). Sem texto →
+  vale a imagem, e a divergência aparece como "só pela leitura da imagem —
+  pode ser erro de leitura; confira o PDF".
+- A releitura reaproveita a leitura por imagem do cache (sem custo); se a
+  IA falhar e o texto trouxer os campos, vale o texto.
+- Migration `20261123800010` (colunas `leitura_imagem`, `leitura_texto`,
+  `leitura_texto_bruto`, `leitura_discordancias`, `leitura_so_imagem`).
+

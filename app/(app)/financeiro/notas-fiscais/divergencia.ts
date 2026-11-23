@@ -25,6 +25,19 @@ export function linhasDaDivergencia(n: NotaTomada): string[] {
   return out;
 }
 
+const CAMPO: Record<string, string> = { numero: "número", emitente: "CNPJ do emitente", emissao: "emissão", valor: "valor" };
+
+/** De onde veio a comparação: só a imagem (pode ser erro de leitura) ou o texto do PDF. */
+export function origemDaLeitura(n: NotaTomada): string | null {
+  if (n.leitura.divergencias.length === 0 && n.leitura.discordancias.length === 0) return null;
+  const partes: string[] = [];
+  if (n.leitura.soImagem && n.leitura.divergencias.length > 0)
+    partes.push("Só pela leitura da imagem (o PDF não tem texto): pode ser erro de leitura. Confira o PDF.");
+  if (n.leitura.discordancias.length > 0)
+    partes.push(`A leitura da imagem e a do texto do PDF discordaram em ${n.leitura.discordancias.map((d) => CAMPO[d]).join(", ")}: valeu o texto.`);
+  return partes.length ? partes.join(" ") : null;
+}
+
 /** O PDF é de outra nota (outro número ou outro emitente): a leitura não vale para esta. */
 export const pdfDeOutraNota = (n: NotaTomada) => n.leitura.divergencias.includes("numero") || n.leitura.divergencias.includes("emitente");
 

@@ -28,7 +28,7 @@ import { Selo, dataBR, moeda } from "./comum";
 import { OrigemSelo } from "./aba-tomadas";
 import { confirmarRegistroDaNota, urlDoAnexoDaNota } from "./actions";
 import { lerEmLotes } from "./leitura-das-notas";
-import { linhasDaDivergencia, pdfDeOutraNota } from "./divergencia";
+import { linhasDaDivergencia, origemDaLeitura, pdfDeOutraNota } from "./divergencia";
 
 const LARGURA_DO_PAINEL = 620;
 
@@ -307,6 +307,11 @@ export function NotaTomadaDrawer({ nota, onClose }: { nota: NotaTomada; onClose:
                     {l}
                   </p>
                 ))}
+                {nota.leitura.soImagem && (
+                  <p className="text-[12px] font-semibold">
+                    Só pela leitura da imagem (o PDF não tem texto): pode ser erro de leitura. Confira o PDF.
+                  </p>
+                )}
                 <p className="text-[12px]">
                   {nota.leitura.divergencias.includes("emitente")
                     ? "O PDF foi emitido por outro CNPJ: confira o documento com quem o enviou (o emitente não se corrige no controle de notas)."
@@ -363,6 +368,9 @@ export function NotaTomadaDrawer({ nota, onClose }: { nota: NotaTomada; onClose:
                   </div>
                 )}
               </div>
+            )}
+            {nota.leitura.discordancias.length > 0 && nota.leitura.divergencias.length === 0 && (
+              <p className="text-[12px] text-muted-foreground">{origemDaLeitura(nota)}</p>
             )}
             {erroDaLeitura && (
               <p className="flex items-start gap-1.5 text-[12px] text-california-red">

@@ -41,7 +41,7 @@ import { NotaTomadaDrawer } from "./nota-tomada-drawer";
 import { NavegadorDePeriodo, janelaInicial, naJanela, type Janela } from "./navegacao";
 import { AlternarVisao, FECHO, IMPOSTOS_DAS_TOMADAS, TabelaDosImpostos, impostosDaTomada } from "./impostos";
 import { BotaoLerNotas } from "./leitura-das-notas";
-import { dadosDoPdf, linhasDaDivergencia, pdfDeOutraNota } from "./divergencia";
+import { dadosDoPdf, linhasDaDivergencia, origemDaLeitura, pdfDeOutraNota } from "./divergencia";
 import { alterarRegistroDasNotas } from "./actions";
 import {
   ConfirmarEdicaoDialog,
@@ -532,6 +532,7 @@ function LinhaTomada({ n, onVer, edicao }: { n: NotaTomada; onVer: () => void; e
                   {linhasDaDivergencia(n).map((l) => (
                     <p key={l}>{l}</p>
                   ))}
+                  {origemDaLeitura(n) && <p className="mt-1 text-[11.5px] font-semibold">{origemDaLeitura(n)}</p>}
                   <p className="mt-1 text-[11.5px] opacity-80">
                     {n.leitura.divergencias.includes("emitente")
                       ? "Emitente diferente: confira o documento com quem o enviou."
