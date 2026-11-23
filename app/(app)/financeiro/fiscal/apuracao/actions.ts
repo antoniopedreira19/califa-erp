@@ -22,6 +22,8 @@ import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { carregarFatosFiscais, type FatosDoBanco } from "@/lib/fiscal/apuracao-fatos";
 import { calcularApuracao, estadoDaGuia, type Guia } from "@/lib/fiscal/apuracao";
+import { rateioPorGerencial } from "@/lib/fiscal/rateio-gerencial";
+import { carregarRegrasDoRateio, regrasDoCnpj } from "@/lib/fiscal/rateio-gerencial-dados";
 import { montarPedidoDeAprovacao, type EntradaDaAprovacao } from "./aprovacao";
 import { hojeEmSaoPaulo } from "./dados";
 
@@ -107,11 +109,31 @@ const aprovarSchema = z.object({
   juros_pct: z.array(z.number().finite().nullable()).max(3).nullable().default(null),
   /** O anexo já enviado ao bucket `impostos` pelo navegador. */
   guia_path: z.string().min(3).max(500).nullable().default(null),
+  /**
+   * Decisão 277: o valor de cada empresa gerencial (o da contabilidade); as
+   * regionais dividem pela receita, no servidor. Nulo = o rateio do sistema.
+   */
+  rateio_gerencial: z
+    .array(
+      z.object({
+        empresa_id: z.string().uuid(),
+        valor: z.number().finite().positive("Cada empresa gerencial do rateio precisa de valor."),
+        regional_id: z.string().uuid().nullable(),
+      }),
+    )
+    .max(20)
+    .nullable()
+    .default(null),
+  /** Decisão 277: o saldo credor que a contabilidade levou para o mês seguinte (PIS/COFINS não cumulativos). */
+  saldo_credor_contabil: z.number().finite().min(0, "O saldo credor não pode ser negativo.").max(1e11).nullable().default(null),
 });
+
+/** A guia de PIS ou COFINS não cumulativos: a única com saldo credor. */
+const temSaldoCredor = (chave: string) => /^(pis|cofins)\|/.test(chave);
 
 export async function aprovarGuia(
   input: unknown,
-): Promise<{ ok: true; aprovacaoId: string; titulos: number } | Err> {
+): Promise<{ ok: true; aprovacaoId: string; titulos: number; aviso: string | null } | Err> {
   const parsed = aprovarSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Entrada inválida." };
   const v = parsed.data;
@@ -135,8 +157,25 @@ export async function aprovarGuia(
   } catch (e) {
     return { ok: false, message: `Não foi possível recalcular a apuração: ${e instanceof Error ? e.message : String(e)}` };
   }
-  const g = r.guias.find((x) => x.chave === v.chave);
-  if (!g) return { ok: false, message: "Esta guia não está mais na apuração. Atualize a página." };
+  const calculada = r.guias.find((x) => x.chave === v.chave);
+  if (!calculada) return { ok: false, message: "Esta guia não está mais na apuração. Atualize a página." };
+  if (v.saldo_credor_contabil !== null && !temSaldoCredor(v.chave)) {
+    return { ok: false, message: "Só a guia de PIS ou COFINS não cumulativos tem saldo credor." };
+  }
+
+  // Decisão 277: o rateio por empresa gerencial (o da contabilidade), com as regionais pela receita.
+  let g = calculada;
+  if (v.rateio_gerencial && v.valor_guia > 0) {
+    let regras;
+    try {
+      regras = await carregarRegrasDoRateio(supabase, tenantId);
+    } catch (e) {
+      return { ok: false, message: `Não foi possível ler as empresas do rateio: ${e instanceof Error ? e.message : String(e)}` };
+    }
+    const rateio = rateioPorGerencial(v.rateio_gerencial, calculada.rateio, regrasDoCnpj(regras, calculada.empresa_contabil_id), v.valor_guia);
+    if (!rateio.ok) return rateio;
+    g = { ...calculada, rateio: rateio.rateio };
+  }
 
   const montagem = pedidoDa(r, g, {
     valor_guia: v.valor_guia,
@@ -154,8 +193,46 @@ export async function aprovarGuia(
   });
   if (error) return { ok: false, message: mensagemDoBanco(error.message) };
 
+  // O saldo da contabilidade vai na aprovação recém-criada (à parte: pode ser informado depois também).
+  let aviso: string | null = null;
+  if (v.saldo_credor_contabil !== null && Math.abs(v.saldo_credor_contabil - calculada.saldo_credor_gerado) >= 0.01) {
+    const s = await supabase.rpc("definir_saldo_credor_contabil", {
+      p_tenant_id: tenantId,
+      p_chave: v.chave,
+      p_valor: v.saldo_credor_contabil,
+    });
+    if (s.error) aviso = `A guia foi aprovada, mas o saldo credor da contabilidade não foi gravado (${s.error.message}). Informe de novo na guia.`;
+  }
+
   revalidatePath(CAMINHO);
-  return { ok: true, aprovacaoId: String(data), titulos: montagem.pedido.p_titulos.length };
+  return { ok: true, aprovacaoId: String(data), titulos: montagem.pedido.p_titulos.length, aviso };
+}
+
+// ---------------------------------------------------------------------------
+// O saldo credor da contabilidade, depois da aprovação (decisão 277)
+// ---------------------------------------------------------------------------
+
+const saldoSchema = z.object({
+  chave: z.string().min(3).max(300),
+  /** Nulo volta ao saldo calculado. */
+  valor: z.number().finite().min(0, "O saldo credor não pode ser negativo.").max(1e11).nullable(),
+});
+
+export async function informarSaldoCredorDaContabilidade(input: unknown): Promise<{ ok: true } | Err> {
+  const parsed = saldoSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Entrada inválida." };
+  const v = parsed.data;
+  if (!temSaldoCredor(v.chave)) return { ok: false, message: "Só a guia de PIS ou COFINS não cumulativos tem saldo credor." };
+  const gate = await checarGate("fiscal.saldo_credor_contabil", v.chave);
+  if (!gate.ok) return gate;
+  const { error } = await gate.supabase.rpc("definir_saldo_credor_contabil", {
+    p_tenant_id: gate.session.activeTenant.id,
+    p_chave: v.chave,
+    p_valor: v.valor,
+  });
+  if (error) return { ok: false, message: mensagemDoBanco(error.message) };
+  revalidatePath(CAMINHO);
+  return { ok: true };
 }
 
 // ---------------------------------------------------------------------------

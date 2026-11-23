@@ -1,10 +1,10 @@
 # 277 — A Apuração por CNPJ e o ajuste pela contabilidade (o 4º trimestre inteiro no sistema)
 
 **Data:** 2026-11-23
-**Status:** aceita. Entrega 1 (Apuração por CNPJ) implementada em 23/11/2026; entregas 2 e 3 a fazer.
+**Status:** aceita. Implementadas em 23/11/2026: a entrega 1 (Apuração por CNPJ) e a entrega 2a (saldo credor da contabilidade, rateio por gerencial na aprovação e a regional da nota avulsa). Faltam a 2b (Guia da contabilidade) e a 3 (guia já paga pela planilha).
 **Quem decidiu:** Tiago, em 23/11/2026, sobre o protótipo do Fiscal (versões 6 a 8): "Acho que podemos agrupar os impostos de cada um dos CNPJs, ou separá-los em filtros"; "Ambos"; sobre a função de ajuste, "precisamos incluir uma função onde podemos ajustar a apuração para o valor real dependendo do envio da contabilidade, até tudo estar sendo lançado pelo sistema"; "precisamos fechar 4T com tudo no sistema batendo com a planilha"; "o rateio dos impostos entre as regionais deverá ser feito por percentual da receita (fora o caso de Hitlab, que se trata de Hitlab, e GoCrazy, que corresponderá a São Sebastião da California)"; e "ok" às recomendações.
 **Revê:** a [181](181-empresas-de-teste-e-apuracao-por-vencimento.md) (a lista única por vencimento com o seletor de CNPJ) e a [183](183-a-apurar-na-lista-e-conta-da-empresa-teste-presumido.md) (a coluna CNPJ das linhas "A apurar").
-**Migration:** nenhuma na entrega 1.
+**Migration:** nenhuma na entrega 1; `20261123400002_saldo_credor_da_contabilidade.sql` na 2a.
 
 ## 1. A Apuração por CNPJ (entrega 1, implementada)
 
@@ -39,6 +39,27 @@ As regras combinadas para lançar os impostos que foram pagos fora do sistema, a
 
 O inventário das 52 guias do 4º trimestre (de 01/10 a 31/12, com o valor por gerencial) foi lido da planilha de 23/11. Ele fica fora do git, por ter os valores do financeiro.
 
+## 3. Entrega 2a (implementada)
+
+- **Saldo credor da contabilidade.**
+  - `fiscal_aprovacoes.saldo_credor_contabil` guarda o saldo.
+  - A RPC `definir_saldo_credor_contabil(tenant, chave, valor)` grava ou limpa o saldo. Ela só aceita admin e financeiro, só a guia de PIS ou COFINS não cumulativos já aprovada, e registra auditoria (`fiscal.saldo_credor_contabil`).
+  - Ao aprovar, o campo "Saldo credor para o mês seguinte (contabilidade)" aparece no painel. Na guia já aprovada, o saldo se informa ou se corrige depois, com a opção de voltar ao calculado.
+  - O motor (`calcularApuracao`) faz o mês seguinte partir do saldo da contabilidade, e a memória diz "o saldo que a contabilidade levou do mês anterior". A linha mostra "saldo credor R$ X (contabilidade)".
+- **Rateio por empresa gerencial na aprovação.**
+  - O painel tem o valor de cada gerencial (a sugestão vem do rateio do sistema) e, abaixo, as regionais pela regra.
+  - O servidor confere e monta o rateio com `rateioPorGerencial` (`lib/fiscal/rateio-gerencial.ts`). As regras vêm do banco, por `carregarRegrasDoRateio`:
+    - a regional padrão do CNPJ (`empresas_contabeis.regional_padrao_id`; a GoCrazy aponta para SS) leva a parte da gerencial do CNPJ inteira;
+    - a empresa de uma regional só vai inteira para ela;
+    - sem receita no período, a regional é escolhida;
+    - a parte sem regional da receita fica fora da divisão.
+  - O "Aprovar pelo calculado" (o lote) continua com o rateio do sistema.
+- **A nota avulsa entra pelo rateio de regionais dela** (`faturamentos_regionais`, decisão 086). Até aqui ela caía na empresa, sem regional. Isso pesava porque as notas da planilha carregadas pela 276 são avulsas, com a regional do job da planilha.
+- **Conferido no Sandbox** (Empresa Teste), pela tela, logado como admin:
+  - A COFINS de outubro foi confirmada com o saldo da contabilidade de R$ 1.000,00 (o calculado era R$ 1.368,00). A COFINS de novembro passou a partir dele: o apurado foi de R$ 4.780,24 para R$ 5.148,24.
+  - A COFINS de novembro foi aprovada com R$ 4.000,00 na Empresa Teste (pela receita, regional Teste) e R$ 1.148,24 na Agência California (sem receita no CNPJ, regional escolhida). O título nasceu com essas duas partes.
+  - Testes do fiscal: 189 passando, incluindo o motor, a nota avulsa e as regras do rateio. `tsc`, lint e build limpos.
+
 ## Arquivos (entrega 1)
 
 - `app/(app)/financeiro/fiscal/apuracao/aba-apuracao.tsx`: botões de CNPJ, blocos, faixa, lote por CNPJ, coluna Local e larguras.
@@ -53,3 +74,13 @@ O inventário das 52 guias do 4º trimestre (de 01/10 a 31/12, com o valor por g
   - O "Aprovar" do bloco da GoCrazy lista só as guias dela. Foi cancelado, sem aprovar.
   - Nenhuma célula passa da coluna.
 - `tsc`, lint, os 181 testes do fiscal e o build.
+
+## Arquivos (entrega 2a)
+
+- `supabase/migrations/20261123400002_saldo_credor_da_contabilidade.sql`.
+- `lib/fiscal/apuracao.ts` (+ teste): `AprovacaoFiscal.saldo_credor_contabil` e o saldo do mês seguinte.
+- `lib/fiscal/apuracao-fatos.ts` (+ teste): o saldo da aprovação e a nota avulsa pelas regionais dela.
+- `lib/fiscal/rateio-gerencial.ts` (+ teste) e `lib/fiscal/rateio-gerencial-dados.ts`: a regra e as regras lidas do banco.
+- `app/(app)/financeiro/fiscal/apuracao/actions.ts`: `aprovarGuia` com `rateio_gerencial` e `saldo_credor_contabil`; `informarSaldoCredorDaContabilidade`.
+- `app/(app)/financeiro/fiscal/apuracao/rateio-por-gerencial.tsx`, `memoria-dialog.tsx`, `aba-apuracao.tsx`, `dados.ts`, `aprovacao.ts`; `lib/types.ts`.
+

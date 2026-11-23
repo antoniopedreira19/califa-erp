@@ -25,8 +25,11 @@
  * - **Aprovações:** `fiscal_aprovacoes`.
  *
  * Limites conhecidos (a próxima entrega trata): o estorno parcial do valor
- * de uma baixa (`*_estorno`) não reduz o bruto aqui; a nota de BV e a avulsa
- * não sabem a regional (o rateio dela cai na empresa, sem regional).
+ * de uma baixa (`*_estorno`) não reduz o bruto aqui; a nota de BV não sabe
+ * a regional (o rateio dela cai na empresa, sem regional). A avulsa entra
+ * pelo rateio de regionais dela (`faturamentos_regionais`, decisão 086; aqui
+ * desde a 277 — a nota da planilha da 276 é avulsa e leva a regional do job
+ * da planilha); sem rateio, cai na empresa, sem regional.
  */
 import { carregarMutuosDoIof } from "./iof-mutuo-dados";
 import type { MutuoDoIof } from "./iof-mutuo";
@@ -106,6 +109,8 @@ interface NotaDoBanco {
   descricao: string | null;
   empresa: Nome;
   itens: Array<{ origem_tipo: string; origem_id: string | null; valor: number | string }> | null;
+  /** O rateio de regionais da nota avulsa (decisão 086). */
+  regionais: Array<{ regional_id: string; percentual: number | string; regional: { nome: string } | null }> | null;
 }
 
 interface RecebimentoDoBanco {
@@ -158,6 +163,7 @@ interface AprovacaoDoBanco {
   diferenca: boolean;
   compensacoes_usadas: unknown;
   cotas: unknown;
+  saldo_credor_contabil: number | string | null;
 }
 
 const SELECT_JOB =
@@ -187,7 +193,8 @@ export async function carregarFatosFiscais(supabase: SupabaseClient, tenantId: s
       .from("faturamentos")
       .select(
         "id, numero_nf, data_emissao, valor_total, valor_deducoes, estabelecimento_id, fiscal_cnae_id, emitido_em, empresa_id, descricao, " +
-          "empresa:empresas(nome_fantasia, razao_social), itens:faturamento_itens(origem_tipo, origem_id, valor)",
+          "empresa:empresas(nome_fantasia, razao_social), itens:faturamento_itens(origem_tipo, origem_id, valor), " +
+          "regionais:faturamentos_regionais(regional_id, percentual, regional:regionais(nome))",
       )
       .eq("tenant_id", tenantId)
       .eq("status", "emitido")
@@ -220,7 +227,7 @@ export async function carregarFatosFiscais(supabase: SupabaseClient, tenantId: s
       .not("registrada_em", "is", null),
     supabase
       .from("fiscal_aprovacoes")
-      .select("chave, data, valor_calculado, valor_guia, diferenca, compensacoes_usadas, cotas")
+      .select("chave, data, valor_calculado, valor_guia, diferenca, compensacoes_usadas, cotas, saldo_credor_contabil")
       .eq("tenant_id", tenantId)
       .order("aprovada_em"),
   ]);
@@ -296,39 +303,44 @@ export function montarFatos(e: {
   const notas: NotaSaidaFiscal[] = e.notas.map((n) => {
     const valor = Number(n.valor_total);
     const porJob = new Map<string, JobDoFato & { valor: number }>();
-    for (const i of n.itens ?? []) {
-      const v = Number(i.valor);
-      if (!Number.isFinite(v) || v <= 0) continue;
-      const j = i.origem_id && (i.origem_tipo === "job" || i.origem_tipo === "save") ? jobPorId.get(i.origem_id) : undefined;
-      const fato: JobDoFato = j
-        ? jobDoFato(j)
-        : {
-            // Nota avulsa ou de BV: a empresa gerencial da nota, sem job.
-            job_id: `nota:${n.id}`,
-            codigo: "Avulso",
-            nome: n.descricao?.trim() || `NF ${n.numero_nf}`,
-            empresa_id: n.empresa_id,
-            empresa_nome: nomeDa(n.empresa),
-            regional_id: null,
-            regional_nome: null,
-          };
+    const somar = (fato: JobDoFato, v: number) => {
       const atual = porJob.get(fato.job_id);
       if (atual) atual.valor = Math.round((atual.valor + v) * 100) / 100;
       else porJob.set(fato.job_id, { ...fato, valor: v });
-    }
-    const jobs = [...porJob.values()];
-    if (jobs.length === 0) {
-      jobs.push({
-        job_id: `nota:${n.id}`,
+    };
+    // Nota avulsa ou de BV: a empresa gerencial da nota, sem job; na avulsa,
+    // uma parte por regional do rateio dela (decisão 277).
+    const rateioAvulsa = (n.regionais ?? [])
+      .map((r) => ({ id: r.regional_id, nome: r.regional?.nome ?? null, pct: Number(r.percentual) }))
+      .filter((r) => r.pct > 0);
+    const somarSemJob = (v: number) => {
+      const base = {
         codigo: "Avulso",
         nome: n.descricao?.trim() || `NF ${n.numero_nf}`,
         empresa_id: n.empresa_id,
         empresa_nome: nomeDa(n.empresa),
-        regional_id: null,
-        regional_nome: null,
-        valor,
+      };
+      if (!rateioAvulsa.length) {
+        somar({ ...base, job_id: `nota:${n.id}`, regional_id: null, regional_nome: null }, v);
+        return;
+      }
+      const somaPct = rateioAvulsa.reduce((s, r) => s + r.pct, 0);
+      let resto = v;
+      rateioAvulsa.forEach((r, k) => {
+        const parte = k === rateioAvulsa.length - 1 ? Math.round(resto * 100) / 100 : Math.round(((v * r.pct) / somaPct) * 100) / 100;
+        resto = Math.round((resto - parte) * 100) / 100;
+        if (parte > 0) somar({ ...base, job_id: `nota:${n.id}:${r.id}`, regional_id: r.id, regional_nome: r.nome }, parte);
       });
+    };
+    for (const i of n.itens ?? []) {
+      const v = Number(i.valor);
+      if (!Number.isFinite(v) || v <= 0) continue;
+      const j = i.origem_id && (i.origem_tipo === "job" || i.origem_tipo === "save") ? jobPorId.get(i.origem_id) : undefined;
+      if (j) somar(jobDoFato(j), v);
+      else somarSemJob(v);
     }
+    if (porJob.size === 0) somarSemJob(valor);
+    const jobs = [...porJob.values()];
     return {
       id: n.id,
       numero: n.numero_nf,
@@ -461,6 +473,7 @@ export function montarFatos(e: {
     diferenca: a.diferenca,
     compensacoes_usadas: Array.isArray(a.compensacoes_usadas) ? (a.compensacoes_usadas as string[]) : [],
     cotas: Array.isArray(a.cotas) ? (a.cotas as Cota[]) : null,
+    saldo_credor_contabil: a.saldo_credor_contabil === null || a.saldo_credor_contabil === undefined ? null : Number(a.saldo_credor_contabil),
   }));
 
   return { cadastro: e.cadastro, fatos: { notas, recebimentos, notasFornecedor, mutuos: e.mutuos }, aprovacoes };

@@ -454,6 +454,7 @@ function simular(hoje: DataSimulada) {
       diferenca: false,
       compensacoes_usadas: g.compensacoes?.map((x) => x.id) ?? [],
       cotas: g.cotas ?? null,
+      saldo_credor_contabil: null,
     };
     aprovacoes.push(a);
     titulos.push(...titulosDaAprovacao(g, a).map((t) => ({ ...t, chave: g.chave })));
@@ -470,6 +471,7 @@ function simular(hoje: DataSimulada) {
         diferenca: true,
         compensacoes_usadas: [],
         cotas: null,
+        saldo_credor_contabil: null,
       };
       aprovacoes.push(a);
       titulos.push(...titulosDaAprovacao(g, a).map((t) => ({ ...t, chave: g.chave })));
@@ -620,31 +622,31 @@ const ESPERADO: Record<DataSimulada, GuiaEsperada[]> = {
  * diferença de 05/12 é calculada já com a aprovação de 03/01 da mesma guia.
  */
 const APROVACOES_DO_PROTOTIPO: AprovacaoFiscal[] = [
-  { chave: "iss|ca-ssa|2026-10", data: "2026-11-03", valor_calculado: 3500, valor_guia: 3500, diferenca: false, compensacoes_usadas: [], cotas: null },
-  { chave: "iss|hit|2026-10", data: "2026-11-03", valor_calculado: 80000, valor_guia: 80000, diferenca: false, compensacoes_usadas: [], cotas: null },
-  { chave: "iss|ca-for|2026-10", data: "2026-11-08", valor_calculado: 2400, valor_guia: 2400, diferenca: false, compensacoes_usadas: [], cotas: null },
-  { chave: "iss|ca-sp|2026-10", data: "2026-11-08", valor_calculado: 0, valor_guia: 0, diferenca: false, compensacoes_usadas: [], cotas: null },
-  { chave: "iss|gc|2026-10", data: "2026-11-21", valor_calculado: 1600, valor_guia: 1600, diferenca: false, compensacoes_usadas: [], cotas: null },
-  { chave: "cofins|california|2026-10", data: "2026-11-23", valor_calculado: 10336, valor_guia: 10336, diferenca: false, compensacoes_usadas: [], cotas: null },
-  { chave: "cofins|gocrazy|2026-10", data: "2026-11-23", valor_calculado: 2964, valor_guia: 2964, diferenca: false, compensacoes_usadas: [], cotas: null },
-  { chave: "pis|california|2026-10", data: "2026-11-23", valor_calculado: 2244, valor_guia: 2244, diferenca: false, compensacoes_usadas: [], cotas: null },
-  { chave: "pis|gocrazy|2026-10", data: "2026-11-23", valor_calculado: 643.5, valor_guia: 643.5, diferenca: false, compensacoes_usadas: [], cotas: null },
-  { chave: "iss|ca-ssa|2026-11", data: "2026-12-05", valor_calculado: 500, valor_guia: 500, diferenca: false, compensacoes_usadas: ["rec-rc4"], cotas: null },
-  { chave: "iss|hit|2026-11", data: "2026-12-05", valor_calculado: 2000, valor_guia: 2000, diferenca: false, compensacoes_usadas: [], cotas: null },
-  { chave: "issret|ca-ssa|2026-11", data: "2026-12-05", valor_calculado: 1500, valor_guia: 1500, diferenca: false, compensacoes_usadas: [], cotas: null },
-  { chave: "csrf|california|2026-11", data: "2026-12-16", valor_calculado: 558, valor_guia: 558, diferenca: false, compensacoes_usadas: [], cotas: null },
-  { chave: "irrf|california|2026-11", data: "2026-12-16", valor_calculado: 180, valor_guia: 180, diferenca: false, compensacoes_usadas: [], cotas: null },
-  { chave: "cofins_cum|california|2026-11", data: "2026-12-22", valor_calculado: 1650, valor_guia: 1650, diferenca: false, compensacoes_usadas: [], cotas: null },
-  { chave: "cofins|california|2026-11", data: "2026-12-22", valor_calculado: 0, valor_guia: 0, diferenca: false, compensacoes_usadas: [], cotas: null },
-  { chave: "cofins|hitlab|2026-11", data: "2026-12-22", valor_calculado: 25200, valor_guia: 25200, diferenca: false, compensacoes_usadas: [], cotas: null },
-  { chave: "pis_cum|california|2026-11", data: "2026-12-22", valor_calculado: 357.5, valor_guia: 357.5, diferenca: false, compensacoes_usadas: [], cotas: null },
-  { chave: "pis|california|2026-11", data: "2026-12-22", valor_calculado: 0, valor_guia: 0, diferenca: false, compensacoes_usadas: [], cotas: null },
-  { chave: "pis|hitlab|2026-11", data: "2026-12-22", valor_calculado: 5460, valor_guia: 5460, diferenca: false, compensacoes_usadas: [], cotas: null },
-  { chave: "iss|ca-ssa|2026-12", data: "2027-01-03", valor_calculado: 2900, valor_guia: 2900, diferenca: false, compensacoes_usadas: [], cotas: null },
-  { chave: "iss|ca-ssa|2026-10", data: "2026-12-05", valor_calculado: 3740, valor_guia: 240, diferenca: true, compensacoes_usadas: [], cotas: null },
-  { chave: "pis|california|2026-10", data: "2026-12-05", valor_calculado: 2442, valor_guia: 198, diferenca: true, compensacoes_usadas: [], cotas: null },
-  { chave: "cofins|california|2026-10", data: "2026-12-05", valor_calculado: 11248, valor_guia: 912, diferenca: true, compensacoes_usadas: [], cotas: null },
-  { chave: "iss|ca-ssa|2026-12", data: "2026-12-05", valor_calculado: 500, valor_guia: -2400, diferenca: true, compensacoes_usadas: [], cotas: null },
+  { chave: "iss|ca-ssa|2026-10", data: "2026-11-03", valor_calculado: 3500, valor_guia: 3500, diferenca: false, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "iss|hit|2026-10", data: "2026-11-03", valor_calculado: 80000, valor_guia: 80000, diferenca: false, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "iss|ca-for|2026-10", data: "2026-11-08", valor_calculado: 2400, valor_guia: 2400, diferenca: false, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "iss|ca-sp|2026-10", data: "2026-11-08", valor_calculado: 0, valor_guia: 0, diferenca: false, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "iss|gc|2026-10", data: "2026-11-21", valor_calculado: 1600, valor_guia: 1600, diferenca: false, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "cofins|california|2026-10", data: "2026-11-23", valor_calculado: 10336, valor_guia: 10336, diferenca: false, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "cofins|gocrazy|2026-10", data: "2026-11-23", valor_calculado: 2964, valor_guia: 2964, diferenca: false, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "pis|california|2026-10", data: "2026-11-23", valor_calculado: 2244, valor_guia: 2244, diferenca: false, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "pis|gocrazy|2026-10", data: "2026-11-23", valor_calculado: 643.5, valor_guia: 643.5, diferenca: false, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "iss|ca-ssa|2026-11", data: "2026-12-05", valor_calculado: 500, valor_guia: 500, diferenca: false, compensacoes_usadas: ["rec-rc4"], cotas: null, saldo_credor_contabil: null },
+  { chave: "iss|hit|2026-11", data: "2026-12-05", valor_calculado: 2000, valor_guia: 2000, diferenca: false, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "issret|ca-ssa|2026-11", data: "2026-12-05", valor_calculado: 1500, valor_guia: 1500, diferenca: false, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "csrf|california|2026-11", data: "2026-12-16", valor_calculado: 558, valor_guia: 558, diferenca: false, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "irrf|california|2026-11", data: "2026-12-16", valor_calculado: 180, valor_guia: 180, diferenca: false, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "cofins_cum|california|2026-11", data: "2026-12-22", valor_calculado: 1650, valor_guia: 1650, diferenca: false, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "cofins|california|2026-11", data: "2026-12-22", valor_calculado: 0, valor_guia: 0, diferenca: false, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "cofins|hitlab|2026-11", data: "2026-12-22", valor_calculado: 25200, valor_guia: 25200, diferenca: false, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "pis_cum|california|2026-11", data: "2026-12-22", valor_calculado: 357.5, valor_guia: 357.5, diferenca: false, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "pis|california|2026-11", data: "2026-12-22", valor_calculado: 0, valor_guia: 0, diferenca: false, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "pis|hitlab|2026-11", data: "2026-12-22", valor_calculado: 5460, valor_guia: 5460, diferenca: false, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "iss|ca-ssa|2026-12", data: "2027-01-03", valor_calculado: 2900, valor_guia: 2900, diferenca: false, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "iss|ca-ssa|2026-10", data: "2026-12-05", valor_calculado: 3740, valor_guia: 240, diferenca: true, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "pis|california|2026-10", data: "2026-12-05", valor_calculado: 2442, valor_guia: 198, diferenca: true, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "cofins|california|2026-10", data: "2026-12-05", valor_calculado: 11248, valor_guia: 912, diferenca: true, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
+  { chave: "iss|ca-ssa|2026-12", data: "2026-12-05", valor_calculado: 500, valor_guia: -2400, diferenca: true, compensacoes_usadas: [], cotas: null, saldo_credor_contabil: null },
 ];
 
 /** As complementares vencem na data legal da guia original (decisão 145; no protótipo, 5 dias depois da aprovação). */
@@ -936,6 +938,7 @@ const aprovacao = (chave: string, data: string, valor: number, extra: Partial<Ap
   diferenca: false,
   compensacoes_usadas: [],
   cotas: null,
+  saldo_credor_contabil: null,
   ...extra,
 });
 
@@ -1101,6 +1104,35 @@ describe("casos de borda", () => {
     assert.equal(dezembro.saldo_credor_gerado, 0);
     assert.equal(dezembro.memoria.at(-1)?.rotulo, "Saldo credor de novembro/2026");
     assert.equal(guiaDe(guias, "cofins|california|2026-12").apurado, 4560); // 7.600 − 3.040
+  });
+
+  test("o saldo credor informado pela contabilidade na aprovação vale no lugar do calculado (decisão 277)", () => {
+    const fatos: FatosFiscais = {
+      mutuos: [],
+      notas: [notaDeTeste({ id: "n1", emissao: "2026-10-10", valor: 10000 }), notaDeTeste({ id: "n2", emissao: "2026-11-10", valor: 100000 })],
+      recebimentos: [],
+      notasFornecedor: [nfDeTeste({ id: "c1", emissao: "2026-10-15", valor: 50000 })],
+    };
+    const aprovacao: AprovacaoFiscal = {
+      chave: "pis|california|2026-10",
+      data: "2026-11-20",
+      valor_calculado: 0,
+      valor_guia: 0,
+      diferenca: false,
+      compensacoes_usadas: [],
+      cotas: null,
+      saldo_credor_contabil: 200,
+    };
+    const guias = calcularApuracao(CAD, fatos, "2026-12-06", [aprovacao]);
+    // Outubro calculou R$ 660 de saldo; a contabilidade levou R$ 200.
+    assert.equal(guiaDe(guias, "pis|california|2026-10").saldo_credor_gerado, 660);
+    const novembro = guiaDe(guias, "pis|california|2026-11");
+    const saldo = novembro.memoria.find((m) => m.grupo === "saldo");
+    assert.equal(saldo?.valor, -200);
+    assert.equal(saldo?.detalhe, "o saldo que a contabilidade levou do mês anterior");
+    assert.equal(novembro.apurado, 1450); // 1.650 − 200
+    // A COFINS, sem saldo da contabilidade, segue o calculado.
+    assert.equal(guiaDe(guias, "cofins|california|2026-11").memoria.find((m) => m.grupo === "saldo")?.valor, -3040);
   });
 
   test("cotas do IRPJ/CSLL: 1, 2 ou 3 parcelas, e a 3ª com a Selic vigente no cadastro", () => {

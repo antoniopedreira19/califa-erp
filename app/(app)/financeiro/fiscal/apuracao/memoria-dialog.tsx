@@ -25,7 +25,9 @@ import { createClient } from "@/lib/supabase/client";
 import type { CadastroFiscal } from "@/lib/fiscal/cadastro";
 import { vencimentoDaComplementar, type Cota, type ItemMemoria } from "@/lib/fiscal/apuracao";
 import { dataBr, r2 } from "@/lib/fiscal/datas";
-import { aprovarGuia, urlDaGuiaAprovada } from "./actions";
+import { aprovarGuia, informarSaldoCredorDaContabilidade, urlDaGuiaAprovada } from "./actions";
+import { gerenciaisDaBase, rateioPorGerencial, type ParteDaGerencial, type RegrasDoRateio } from "@/lib/fiscal/rateio-gerencial";
+import { RateioPorGerencial } from "./rateio-por-gerencial";
 import { JUSTIFICATIVA_MINIMA, calculadoParaAGuia, cotasDaAprovacao } from "./aprovacao";
 import type { EstabelecimentoDaTela, GuiaDaTela, PJDaTela } from "./dados";
 import { Nota, fimDoPeriodo, moeda, pct, situacaoDa } from "./ui";
@@ -66,7 +68,13 @@ export function MemoriaDialog({
   onClose,
   onAprovada,
   aprovarEmCurso,
+  regrasDoRateio,
+  gerencialDoCnpj,
 }: {
+  /** Decisão 277: as empresas gerenciais e a regra das regionais para esta guia. */
+  regrasDoRateio: RegrasDoRateio;
+  /** A empresa gerencial do CNPJ: a sugestão do rateio quando a guia não tem receita. */
+  gerencialDoCnpj: string | null;
   /**
    * A guia em curso desta PJ se aprova antes do fechamento, com confirmação:
    * só nas PJs de teste (decisão 181). O servidor confere de novo.
@@ -109,6 +117,14 @@ export function MemoriaDialog({
     if (!diferenca) setValorGuia(calculado);
   }, [calculado, diferenca]);
   const dif = r2(valorGuia - calculado);
+  // Decisão 277: o rateio por empresa gerencial (o da contabilidade) e, no PIS e na
+  // COFINS não cumulativos, o saldo credor que a contabilidade levou para o mês seguinte.
+  const [partes, setPartes] = React.useState<ParteDaGerencial[]>(() => gerenciaisDaBase(g.rateio, calculado, gerencialDoCnpj));
+  const temSaldo = !diferenca && (g.codigo === "6912" || g.codigo === "5856");
+  const [saldoContabil, setSaldoContabil] = React.useState<number>(g.saldo_credor_gerado);
+  const saldoMudou = temSaldo && Math.abs(saldoContabil - g.saldo_credor_gerado) >= 0.01;
+  const pedeMotivo = Math.abs(dif) >= 0.01 || saldoMudou;
+  const comRateio = !diferenca && valorGuia > 0;
 
   const cotas: Cota[] = React.useMemo(
     () =>
@@ -145,11 +161,16 @@ export function MemoriaDialog({
       setPerguntarAntecipada(true);
       return;
     }
-    if (Math.abs(dif) >= 0.01 && justificativa.trim().length < JUSTIFICATIVA_MINIMA) {
-      setErro(
-        `Explique a diferença entre a guia da contabilidade e o valor calculado (mínimo ${JUSTIFICATIVA_MINIMA} caracteres).`,
-      );
+    if (pedeMotivo && justificativa.trim().length < JUSTIFICATIVA_MINIMA) {
+      setErro(`Explique a diferença entre a contabilidade e o calculado (mínimo ${JUSTIFICATIVA_MINIMA} caracteres).`);
       return;
+    }
+    if (comRateio) {
+      const conferido = rateioPorGerencial(partes, g.rateio, regrasDoRateio, valorGuia);
+      if (!conferido.ok) {
+        setErro(conferido.message);
+        return;
+      }
     }
     setEnviando(true);
     setErro(null);
@@ -176,6 +197,8 @@ export function MemoriaDialog({
         cota_unica: cotaUnica,
         juros_pct: g.periodo === "trimestral" ? jurosPct : null,
         guia_path: guiaPath,
+        rateio_gerencial: comRateio ? partes : null,
+        saldo_credor_contabil: saldoMudou ? saldoContabil : null,
       });
     } catch {
       r = { ok: false, message: "Não foi possível falar com o servidor. Tente de novo." };
@@ -188,14 +211,15 @@ export function MemoriaDialog({
       return;
     }
     setEnviando(false);
+    const aviso = r.aviso ? ` ${r.aviso}` : "";
     onAprovada(
-      r.titulos > 0
+      (r.titulos > 0
         ? `${g.titulo} de ${g.rotulo_competencia} ${diferenca ? "· diferença aprovada" : "aprovado"}. ${
             r.titulos === 1 ? "Título criado" : `${r.titulos} títulos criados`
           } em Impostos a Pagar.`
         : diferenca
           ? `${g.titulo} de ${g.rotulo_competencia}: saldo registrado, sem valor a pagar.`
-          : `${g.titulo} de ${g.rotulo_competencia} confirmado sem valor a pagar.`,
+          : `${g.titulo} de ${g.rotulo_competencia} confirmado sem valor a pagar.`) + aviso,
     );
   }
 
@@ -397,6 +421,14 @@ export function MemoriaDialog({
                     </p>
                   </div>
                 ))}
+                {(g.codigo === "6912" || g.codigo === "5856") && aprovacao && (
+                  <SaldoDaContabilidade
+                    chave={g.chave}
+                    calculado={g.saldo_credor_gerado}
+                    informado={aprovacao.saldo_credor_contabil}
+                    onSalvo={(texto) => onAprovada(texto)}
+                  />
+                )}
                 <Link
                   href="/financeiro/fiscal?aba=impostos"
                   prefetch={false}
@@ -476,7 +508,25 @@ export function MemoriaDialog({
                   </p>
                 </div>
 
-                {Math.abs(dif) >= 0.01 && (
+                {temSaldo && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold">Saldo credor para o mês seguinte (contabilidade)</label>
+                    <MoneyInput
+                      value={saldoContabil}
+                      onValueChange={(v) => {
+                        setSaldoContabil(v);
+                        setErro(null);
+                      }}
+                    />
+                    <p className={cn("text-[11.5px]", saldoMudou ? "font-semibold text-amber-700" : "text-muted-foreground")}>
+                      {saldoMudou
+                        ? `O sistema calculou ${moeda(g.saldo_credor_gerado)}. O mês seguinte parte de ${moeda(saldoContabil)}.`
+                        : `Igual ao calculado (${moeda(g.saldo_credor_gerado)}). Se a contabilidade levou outro saldo, informe aqui: o mês seguinte parte dele.`}
+                    </p>
+                  </div>
+                )}
+
+                {pedeMotivo && (
                   <div className="space-y-1.5">
                     <label className="text-xs font-semibold">
                       Por que a guia é diferente? <span className="text-california-red">*</span>
@@ -518,6 +568,19 @@ export function MemoriaDialog({
                       cada cota e, na baixa, vão para 11 · Despesa com Juros. Cota mínima de R$ 1.000; abaixo de R$ 2.000, cota única.
                     </p>
                   </div>
+                )}
+
+                {comRateio && (
+                  <RateioPorGerencial
+                    total={valorGuia}
+                    base={g.rateio}
+                    regras={regrasDoRateio}
+                    partes={partes}
+                    onChange={(p) => {
+                      setPartes(p);
+                      setErro(null);
+                    }}
+                  />
                 )}
 
                 <div className="space-y-1.5">
@@ -716,6 +779,69 @@ function CotasTabela({
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+
+/**
+ * O saldo credor que a contabilidade levou para o mês seguinte, na guia já
+ * aprovada (decisão 277): informar, corrigir ou voltar ao calculado.
+ */
+function SaldoDaContabilidade({
+  chave,
+  calculado,
+  informado,
+  onSalvo,
+}: {
+  chave: string;
+  calculado: number;
+  informado: number | null;
+  onSalvo: (texto: string) => void;
+}) {
+  const [valor, setValor] = React.useState<number>(informado ?? calculado);
+  const [enviando, setEnviando] = React.useState(false);
+  const [erro, setErro] = React.useState<string | null>(null);
+  async function salvar(v: number | null) {
+    if (enviando) return;
+    setEnviando(true);
+    setErro(null);
+    let r: Awaited<ReturnType<typeof informarSaldoCredorDaContabilidade>>;
+    try {
+      r = await informarSaldoCredorDaContabilidade({ chave, valor: v });
+    } catch {
+      r = { ok: false, message: "Não foi possível falar com o servidor. Tente de novo." };
+    }
+    setEnviando(false);
+    if (!r.ok) return setErro(r.message);
+    onSalvo(v === null ? "O mês seguinte volta a partir do saldo calculado." : `Saldo credor da contabilidade: ${moeda(v)}. O mês seguinte parte dele.`);
+  }
+  return (
+    <div className="space-y-1.5 rounded-lg border border-border p-3 text-[12.5px]">
+      <p className="font-semibold">Saldo credor para o mês seguinte</p>
+      <p className="text-muted-foreground">
+        Calculado: {moeda(calculado)}
+        {informado !== null && <> · informado pela contabilidade: <b className="font-mono text-foreground">{moeda(informado)}</b></>}
+      </p>
+      <div className="flex items-center gap-2">
+        <div className="w-40">
+          <MoneyInput value={valor} onValueChange={setValor} />
+        </div>
+        <button
+          type="button"
+          onClick={() => void salvar(valor)}
+          disabled={enviando}
+          className="rounded-lg border border-border bg-white px-3 py-1.5 text-[12px] font-semibold hover:border-california-red/50 hover:text-california-red disabled:opacity-60"
+        >
+          {enviando ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Salvar o saldo"}
+        </button>
+        {informado !== null && (
+          <button type="button" onClick={() => void salvar(null)} disabled={enviando} className="text-[12px] text-muted-foreground hover:underline">
+            Voltar ao calculado
+          </button>
+        )}
+      </div>
+      {erro && <p className="text-[12px] text-california-red">{erro}</p>}
     </div>
   );
 }

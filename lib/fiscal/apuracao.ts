@@ -178,6 +178,12 @@ export interface AprovacaoFiscal {
   compensacoes_usadas: string[];
   /** IRPJ/CSLL: as cotas aprovadas (`cotasDe` sobre o valor da guia). */
   cotas: Cota[] | null;
+  /**
+   * PIS/COFINS não cumulativos (decisão 277): o saldo credor que a
+   * contabilidade levou para o mês seguinte. Nulo = o mês seguinte parte do
+   * saldo calculado (`saldo_credor_gerado`).
+   */
+  saldo_credor_contabil: number | null;
 }
 
 export interface ItemMemoria {
@@ -889,6 +895,8 @@ function guiaPisCofins(
   tributo: "PIS" | "COFINS",
   parte: ParteDoPisCofins,
   saldoAnterior: number,
+  /** O saldo anterior veio da contabilidade (decisão 277), não do cálculo. */
+  saldoDaContabilidade = false,
 ): Guia | null {
   const fim = ultimoDiaDoMes(comp);
   const reg = regimeDaGuia(ctx.cad, pj, fim);
@@ -1009,7 +1017,11 @@ function guiaPisCofins(
     memoria.push({
       grupo: "saldo",
       rotulo: `${cumulativa ? "Saldo" : "Saldo credor"} de ${nomeDoMes(mesAnterior(comp))}`,
-      detalhe: cumulativa ? "retenção que passou do mês anterior" : "crédito que passou do mês anterior",
+      detalhe: cumulativa
+        ? "retenção que passou do mês anterior"
+        : saldoDaContabilidade
+          ? "o saldo que a contabilidade levou do mês anterior"
+          : "crédito que passou do mês anterior",
       valor: -saldoAnterior,
     });
   if (!memoria.length && !ctx.aprovada(chaveDoPisCofins(tributo, pj, comp, parte))) return null;
@@ -1677,6 +1689,8 @@ export function calcularApuracao(cad: CadastroFiscal, fatos: FatosFiscais, asOf:
   const competencias = competenciasAte(ctx.asOf);
   const out: Guia[] = [];
   const saldo = new Map<string, number>();
+  // Decisão 277: as chaves cujo saldo veio da contabilidade (na aprovação da guia).
+  const saldoContabil = new Set<string>();
   for (const comp of competencias) {
     for (const e of ctx.estabelecimentos) {
       // A compensação entra na primeira guia de ISS depois do recebimento que ainda não a usou.
@@ -1695,8 +1709,12 @@ export function calcularApuracao(cad: CadastroFiscal, fatos: FatosFiscais, asOf:
       for (const tributo of ["PIS", "COFINS"] as const) {
         for (const parte of partes) {
           const k = `${tributo}|${pj}|${parte}`;
-          const g = guiaPisCofins(ctx, pj, comp, tributo, parte, saldo.get(k) ?? 0);
-          saldo.set(k, g ? g.saldo_credor_gerado : 0);
+          const g = guiaPisCofins(ctx, pj, comp, tributo, parte, saldo.get(k) ?? 0, saldoContabil.has(k));
+          // O saldo informado pela contabilidade na aprovação vale no lugar do calculado.
+          const contabil = g && parte !== "cumulativa" ? aprovadas.get(g.chave)?.saldo_credor_contabil ?? null : null;
+          saldo.set(k, g ? contabil ?? g.saldo_credor_gerado : 0);
+          if (contabil !== null) saldoContabil.add(k);
+          else saldoContabil.delete(k);
           if (g) out.push(g);
         }
       }

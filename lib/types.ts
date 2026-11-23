@@ -6211,6 +6211,11 @@ export interface FiscalAprovacao {
   guia_path: string | null;
   aprovada_por: string;
   aprovada_em: string;
+  /**
+   * Decisão 277: o saldo credor de PIS/COFINS não cumulativos que a
+   * contabilidade levou para o mês seguinte. Nulo = vale o calculado.
+   */
+  saldo_credor_contabil: number | null;
 }
 
 export type OrigemImpostoAPagar = "apuracao" | "diferenca" | "avulso";

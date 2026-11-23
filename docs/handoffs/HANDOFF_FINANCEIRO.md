@@ -9345,3 +9345,10 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Larguras** refeitas pelo maior valor real de 23/11 (base do IOF R$ 46,5 mi, débito do IRPJ R$ 2,66 mi), que passavam da coluna.
 - **A fazer (277 §2):** entrega 2 (Guia da contabilidade, saldo credor da contabilidade, rateio por gerencial e regionais pela receita) e entrega 3 (guia já paga ligada às linhas da planilha, DARF opcional). Depois, as 52 guias do 4º trimestre conferidas com a planilha.
 
+## ⚠️ Nota de 2026-11-23 — o ajuste pela contabilidade na aprovação (decisão 277, entrega 2a)
+
+- **Saldo credor da contabilidade:** `fiscal_aprovacoes.saldo_credor_contabil` + RPC `definir_saldo_credor_contabil` (migration 20261123400002). Informado na aprovação do PIS/COFINS não cumulativos ou depois, na guia aprovada; o mês seguinte parte dele (`calcularApuracao`).
+- **Rateio por empresa gerencial** no painel da aprovação: o valor de cada gerencial e as regionais pela regra de `lib/fiscal/rateio-gerencial.ts` (receita da competência; regional padrão do CNPJ — GoCrazy → SS; empresa de uma regional só; sem receita, regional escolhida). O lote "pelo calculado" segue com o rateio do sistema.
+- **Nota avulsa** entra no rateio pelas regionais dela (`faturamentos_regionais`), não mais "sem regional".
+- Conferido no Sandbox (Empresa Teste): saldo da contabilidade gravado e usado em novembro; título com rateio em duas gerenciais. Faltam a 2b (Guia da contabilidade) e a 3 (guia já paga pela planilha).
+

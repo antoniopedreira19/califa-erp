@@ -210,6 +210,8 @@ export function montarPedidoDeAprovacao(e: {
     diferenca,
     compensacoes_usadas: compensacoes,
     cotas,
+    // O saldo da contabilidade se grava depois, à parte (definir_saldo_credor_contabil).
+    saldo_credor_contabil: null,
   };
   const titulos = titulosDaAprovacao(g, aprovacao);
 

@@ -146,6 +146,7 @@ const notaDeSaida = (id: string, emissao: string) => ({
   descricao: null,
   empresa: { nome_fantasia: "Hitlab", razao_social: null },
   itens: [],
+  regionais: null as Array<{ regional_id: string; percentual: string; regional: { nome: string } | null }> | null,
 });
 
 const recebimento = (id: string, nota: string, data: string, retido: Array<{ imposto: string; valor: string }> = []) => ({
@@ -208,3 +209,42 @@ test("a nota registrada por PP que não é verba, sem anexo que conte, continua 
   ]);
   assert.equal(notas.length, 0);
 });
+
+// ---------------------------------------------------------------------------
+// Decisão 277: a nota avulsa entra pelo rateio de regionais dela
+// ---------------------------------------------------------------------------
+
+test("a nota avulsa se divide pelas regionais do rateio dela; sem rateio, fica sem regional", () => {
+  const comRateio = {
+    ...notaDeSaida("av1", "2026-10-10"),
+    regionais: [
+      { regional_id: "ne", percentual: "60.00", regional: { nome: "NE" } },
+      { regional_id: "sp", percentual: "40.00", regional: { nome: "SP" } },
+    ],
+  };
+  const semRateio = notaDeSaida("av2", "2026-10-11");
+  const { fatos } = montarFatos({
+    cadastro: CADASTRO,
+    notas: [comRateio, semRateio],
+    jobs: [],
+    recebimentos: [],
+    notasFornecedor: [],
+    mutuos: [],
+    pagamentos: [],
+    aprovacoes: [],
+  });
+  const av1 = fatos.notas.find((n) => n.id === "av1")!;
+  assert.deepEqual(
+    av1.jobs.map((j) => [j.regional_id, j.regional_nome, j.valor]),
+    [
+      ["ne", "NE", 6000],
+      ["sp", "SP", 4000],
+    ],
+  );
+  const av2 = fatos.notas.find((n) => n.id === "av2")!;
+  assert.deepEqual(
+    av2.jobs.map((j) => [j.regional_id, j.valor]),
+    [[null, 10000]],
+  );
+});
+
