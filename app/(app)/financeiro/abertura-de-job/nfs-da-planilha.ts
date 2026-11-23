@@ -8,14 +8,15 @@
  * job aberto com o nome de um deles (escolhido na lista ou digitado igual)
  * recebe as NFs: cada uma vira Novo faturamento dele
  * (`passar_nf_da_planilha_ao_job`), com registro da passagem. No job mensal,
- * o mês é o anterior ao da emissão (Tiago, 23/11/2026).
+ * o mês é o anterior ao da emissão; se ele não é do job, o da emissão (Tiago,
+ * 23/11/2026).
  *
  * Só a nota de um job da planilha só passa sozinha; a de vários jobs fica
  * como está (é avulsa e continua no Contas a Receber).
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { lerFaturamentoMensalPeloJob } from "@/lib/data/faturamento-mensal";
-import { mesDaNotaMensal, nomeComparavel } from "@/lib/calculos/nfs-da-planilha";
+import { mesDaNotaNoJob, nomeComparavel } from "@/lib/calculos/nfs-da-planilha";
 
 export interface JobDaPlanilhaComNf {
   chave: string;
@@ -106,12 +107,13 @@ export async function passarNfsDaPlanilhaAoJob(
     let mes: string | null = null;
     let previsto: number | null = null;
     if (mensal.mensal) {
-      mes = mesDaNotaMensal(n.data_emissao);
-      const doMes = (mensal.meses ?? []).find((m) => m.mes === mes);
-      if (!doMes) {
+      const meses = mensal.meses ?? [];
+      mes = mesDaNotaNoJob(n.data_emissao, meses.map((m) => m.mes));
+      const doMes = mes ? meses.find((m) => m.mes === mes) : undefined;
+      if (!mes || !doMes) {
         saida.recusadas.push({
           numero_nf: n.numero_nf,
-          motivo: `o mês ${mes.slice(5, 7)}/${mes.slice(0, 4)} não é do job`,
+          motivo: "nem o mês anterior ao da emissão nem o da emissão são do job",
         });
         continue;
       }
