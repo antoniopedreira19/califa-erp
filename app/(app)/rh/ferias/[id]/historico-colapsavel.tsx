@@ -137,7 +137,7 @@ function LinhaLancamento({ lanc: l }: { lanc: Lanc }) {
             {l.dias_abono > 0 && (
               <>
                 {" "}
-                · {diasFolga} folga + {l.dias_abono} abono
+                · {diasFolga} férias + {l.dias_abono} abono
               </>
             )}
             {l.lancado_direto_por_rh && <> · lançado pelo RH</>}
@@ -176,7 +176,7 @@ function isObsImport(obs: string | null): boolean {
 }
 
 function tipoLabel(t: FeriasLancamentoTipo): string {
-  if (t === "usufruto") return "Férias (dias de folga)";
+  if (t === "usufruto") return "Férias";
   if (t === "abono_combinado") return "Férias + abono combinado";
   if (t === "abono_avulso") return "Abono avulso";
   if (t === "abono_excepcional") return "Abono excepcional";

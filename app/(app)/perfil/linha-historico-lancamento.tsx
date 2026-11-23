@@ -128,7 +128,7 @@ export function LinhaHistoricoLancamento({ lancamento: l }: Props) {
 function tipoLabel(t: FeriasLancamentoTipo): string {
   switch (t) {
     case "usufruto":
-      return "Férias (dias de folga)";
+      return "Férias";
     case "abono_combinado":
       return "Abono combinado";
     case "abono_avulso":

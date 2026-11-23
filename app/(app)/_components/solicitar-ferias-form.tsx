@@ -369,7 +369,7 @@ export function SolicitarFeriasForm({
           {tipo === "usufruto" && (
             <>
               <p className="font-medium">
-                {qtdDias} {qtdDias === 1 ? "dia" : "dias"} de folga
+                {qtdDias} {qtdDias === 1 ? "dia" : "dias"} de férias
               </p>
               {saldoDisponivel > 0 && (
                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -391,7 +391,7 @@ export function SolicitarFeriasForm({
           {tipo === "abono_combinado" && diasAbono > 0 && (
             <>
               <p className="font-medium">
-                {qtdDias} dias de folga + {diasAbono} vendidos ={" "}
+                {qtdDias} dias de férias + {diasAbono} vendidos ={" "}
                 {diasConsumidosDoSaldo} dias
               </p>
               {saldoDisponivel > 0 && (
