@@ -9238,4 +9238,4 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
   - o Desfazer cancela o recebimento;
   - o internacional só traz a data e a conta (editáveis), registra como antes e se concilia depois, pela sugestão.
 - **Confirmado pelo Tiago:** pagamento e recebimento avulso continuam sem job.
-- Sem migration.
+- Sem migration. Conferido no Sandbox: Conta Teste 253, linha de R$ 1.500,00 de 06/11, TET-1002/26, registrar e conciliar, e o Desfazer, que cancelou o recebimento.

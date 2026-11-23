@@ -125,3 +125,11 @@ cliente entra pelo recebimento antes da NF ou pela baixa da NF.
 
 Sem migration.
 
+**Conferido no Sandbox (23/11/2026, como admin@sandbox.local, servidor local):**
+- linha de R$ 1.500,00 de 06/11 da Conta Teste 253, pelo "Lançar avulso" › cartão "Recebimento antes da NF";
+- TET-1002/26 (nota do envio), centro 01 · Receita;
+- o formulário veio com 06/11/2026, a Conta Teste 253 e R$ 1.500,00, sem edição;
+- "Registrar e conciliar" gravou o recebimento (aguardando, 06/11, na nota do envio) e conciliou a linha (`avulso`);
+- o Desfazer cancelou o recebimento ("Conciliação com o banco desfeita") e a linha voltou a pendente;
+- nada ficou gravado, e o console e o servidor ficaram sem erro.
+
