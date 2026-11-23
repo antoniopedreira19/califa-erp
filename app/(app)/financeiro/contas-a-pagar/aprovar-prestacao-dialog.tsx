@@ -8,8 +8,10 @@
  * trás. O que se decide é se aprova e, havendo saldo, quando o dinheiro
  * deve voltar: essa data vira a do estorno de verba em Títulos a Pagar.
  *
- * Decisão 189: as NFs da prestação vão para o cadastro de notas do fiscal
- * na aprovação, com o emitente procurado (ou cadastrado) pelo CNPJ. O
+ * Decisão 189: as NFs da prestação vão para o fiscal na aprovação, com o
+ * emitente procurado (ou cadastrado) pelo CNPJ. Desde a decisão 269 elas
+ * já entram no cadastro de notas no ENVIO (com o saldo da nota conferido);
+ * a aprovação acha a nota ligada e a registra. O
  * crédito de PIS/COFINS segue a regra da PP normal — automático, e o
  * financeiro só o tira, com motivo. Fatura e cupom não entram no cadastro.
  */

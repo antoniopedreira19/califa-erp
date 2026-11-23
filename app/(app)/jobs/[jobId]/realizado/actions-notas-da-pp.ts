@@ -34,8 +34,9 @@ export interface NotaExistente {
   /** O financeiro já registrou (a nota já está na Apuração). */
   registrada: boolean;
   /** Os documentos não cancelados que a nota cobre (sem o que está sendo
-   *  editado): as PPs e, desde a decisão 264, os pedidos de desembolso. */
-  pps: Array<{ id: string; codigo: string; valor_na_pp: number | null; status: string; tipo: "pp" | "desembolso" }>;
+   *  editado): as PPs, os pedidos de desembolso (decisão 264) e as
+   *  prestações da verba enviadas ou aprovadas (decisão 269). */
+  pps: Array<{ id: string; codigo: string; valor_na_pp: number | null; status: string; tipo: "pp" | "desembolso" | "prestacao" }>;
 }
 
 const entrada = z.object({
@@ -87,7 +88,8 @@ export async function buscarNotasDoFornecedor(
         codigo: p.codigo,
         valor_na_pp: p.valor_na_pp === null ? null : Number(p.valor_na_pp),
         status: p.status,
-        tipo: p.tipo === "desembolso" ? ("desembolso" as const) : ("pp" as const),
+        // Decisão 269: a NF da prestação da verba entra no cadastro no envio.
+        tipo: p.tipo === "desembolso" ? ("desembolso" as const) : p.tipo === "prestacao" ? ("prestacao" as const) : ("pp" as const),
       })),
     })),
   };

@@ -9220,3 +9220,11 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Agora:** "Parcial" quando as notas somam menos que o previsto (R$ 0,05 de tolerância; no mensal, o que já foi enviado ou faturado pelo financeiro). Ordem: Inadimplente > Parcial > Faturado > Recebido. "Liquidado" passa a "Recebido".
 - **Onde:** selo do cabeçalho do job no financeiro (com a dica "Faturado parcialmente: R$ X de R$ Y · falta R$ Z"), filtros e resumo da Abertura › Abertos (filtro "Parcial" entre Faturado e Recebido), coluna "Faturamento do job" das PPs do Contas a Pagar e a exportação da Abertura. Barra da produção e Contas a Receber ficam como estão.
 - **Conferido no Sandbox:** TES-1006/26 "Parcial" antes e depois da baixa do título da NF 248 (R$ 80.000,00). Sem migration.
+
+## ⚠️ Nota de 2026-11-23 — a NF da prestação da verba entra no cadastro de notas no envio (decisão 269, revê a 189)
+
+- No envio (e no reenvio) da prestação ao financeiro, cada NF dos documentos é ligada à nota do cadastro único (fornecedor pelo CNPJ do emitente, nota pelo fornecedor + número), como na PP e no desembolso. Antes, só na aprovação.
+- O saldo da nota soma também as prestações enviadas e aprovadas: passou da nota, o envio é recusado com a mensagem de onde ela já está. A correção de uma NF pelo financeiro religa e confere de novo. A aprovação continua igual (acha a nota e a registra).
+- A lista de usos da nota mostra "PP-xxxxx · prestação" com `tipo` = `prestacao`; o anexo da PP não oferece corrigir a prestação.
+- As 9 NFs das prestações que estavam em avaliação na produção foram ligadas na migration `20261123300001` (a `20261123300002` só acerta o rótulo).
+- **Conferido no Sandbox:** reenvio da prestação da PP-00951 com NF pelo produtor (nota no cadastro) e o aviso "Esta NF já está em PP-00951 · prestação" no formulário do desembolso do GP; saldo e correção testados no banco em transação desfeita.
