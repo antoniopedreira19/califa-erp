@@ -55,11 +55,13 @@ export function ModalNovoDependente({
   onOpenChange,
   colaboradorId,
   vinculosAtivos,
+  onSucesso,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   colaboradorId: string;
   vinculosAtivos: VinculoDoColaborador[];
+  onSucesso?: (nome: string) => void;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -139,7 +141,9 @@ export function ModalNovoDependente({
         return;
       }
 
+      const nomeCriado = nome.trim();
       onOpenChange(false);
+      onSucesso?.(nomeCriado);
       router.refresh();
     });
   }

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, UserPlus } from "lucide-react";
+import { useEffect, useState } from "react";
+import { CheckCircle, Plus, UserPlus } from "lucide-react";
 import { SeletorCompetenciaInline } from "./seletor-competencia-inline";
 import { ModalNovoVinculo } from "./modal-novo-vinculo";
 import { ModalNovoDependente } from "./modal-novo-dependente";
@@ -32,6 +32,13 @@ export function AcoesColaborador({
 }) {
   const [modalVinculoAberto, setModalVinculoAberto] = useState(false);
   const [modalDepAberto, setModalDepAberto] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(t);
+  }, [toast]);
 
   const faltaCadastro = !colaboradorTemCpf || !colaboradorTemDataNasc;
   const tooltipFalta = faltaCadastro
@@ -77,7 +84,17 @@ export function AcoesColaborador({
         onOpenChange={setModalDepAberto}
         colaboradorId={colaboradorId}
         vinculosAtivos={vinculosAtivos}
+        onSucesso={(nome) =>
+          setToast(`Dependente ${nome} cadastrado com sucesso.`)
+        }
       />
+
+      {toast && (
+        <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-elevated">
+          <CheckCircle className="h-4 w-4" />
+          {toast}
+        </div>
+      )}
     </>
   );
 }
