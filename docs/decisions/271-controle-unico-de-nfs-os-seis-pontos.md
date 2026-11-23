@@ -9,7 +9,7 @@ implementado (decisão [269](269-nf-da-prestacao-entra-no-cadastro-no-envio.md))
 os pontos 1, 2 e 6 e a seção Notas Fiscais aguardam a implementação; o
 ponto 5 vai junto com a revisão das retenções; o ponto 4 não pede nada.
 **Quem decidiu:** Tiago, sobre o protótipo "Notas Fiscais" da Central
-Financeira (v3 a v13, 23/11/2026), com um seletor por ponto:
+Financeira (v3 a v14, 23/11/2026), com um seletor por ponto:
 https://claude.ai/artifact/2JLetfAPvFHaNr9kZJKX5f.
 **Relaciona-se com:** [152](152-nf-do-fornecedor-com-cadastro-proprio.md)
 (cadastro único de notas), [189](189-prestacao-de-contas-da-verba-documento-a-documento.md)
@@ -51,7 +51,8 @@ período, por CNPJ e por coluna. O **Valor vem logo depois da NF**.
 
 Sem "De" e "Até". No lugar, **‹ Novembro de 2026 ›** com **Mês, Trimestre,
 Ano e Tudo**: as setas andam um mês, um trimestre ou um ano, "Este mês"
-volta ao atual, e **Tudo** mostra todas as notas, sem período. Escolhido
+volta ao atual, e **Tudo** mostra todas as notas, sem período. As duas abas
+**abrem em Tudo** (pedido do Tiago); o recorte é escolha de quem olha. Escolhido
 pelo Tiago entre três formas (abrir no pendente sem data, como os Títulos
 a Pagar; este navegador; e o De/Até de antes). Na implementação, o "Tudo"
 das Emitidas inclui o histórico da planilha (3.674 notas em 23/11): a lista
