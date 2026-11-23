@@ -4,8 +4,8 @@
  * Quem decide a conta é a categoria do ORÇAMENTO de origem (decisão 072),
  * e as condições da mídia — honorários, imposto, base e a parte do veículo
  * — são as da versão aprovada. Quem lê: a abertura do financeiro (custo
- * previsto), o envio do faturamento de cada mês e o encerramento junto com
- * o último envio.
+ * previsto), o envio do faturamento de cada mês e a PP do repasse (a nota
+ * do veículo, entrega 3).
  *
  * Sem `"use server"`: é leitura, chamada de dentro das actions e das
  * páginas.
@@ -78,15 +78,15 @@ const AINDA_NAO_DISPONIVEL = {
   errata: "A errata do job de Mídia Off ainda não está disponível: chega com a errata da veiculação.",
   alteracao:
     "O orçado do job de Mídia Off ainda não se edita por aqui: chega com a errata da veiculação.",
-  pp: "A PP do job de Mídia Off ainda não está disponível: chega com a PP do repasse ao veículo.",
 } as const;
 
 /**
- * O que o job de Mídia Off ainda não tem (decisão 167, entrega 2): errata,
- * edição do orçado pelo financeiro e PP. A tela do job não oferece nenhum
- * dos três — a planilha da mídia é só leitura —, e esta trava segura a
- * action chamada por fora dela. Devolve a mensagem da recusa, ou `null`
- * para seguir. Leitura que falha recusa: a action não sabe a conta do job.
+ * O que o job de Mídia Off ainda não tem (decisão 167): errata e edição do
+ * orçado pelo financeiro. A PP do repasse saiu daqui na entrega 3. A tela do
+ * job não oferece nenhum dos dois — a planilha da mídia é só leitura —, e
+ * esta trava segura a action chamada por fora dela. Devolve a mensagem da
+ * recusa, ou `null` para seguir. Leitura que falha recusa: a action não sabe
+ * a conta do job.
  */
 export async function travaDoJobDeMidia(
   supabase: SupabaseClient,

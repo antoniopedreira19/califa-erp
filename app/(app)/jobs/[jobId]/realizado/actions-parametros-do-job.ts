@@ -41,7 +41,7 @@ import {
   cotacaoValida,
   vendaDaCotacao,
 } from "@/lib/calculos/excecao-fechamento";
-import { parametrosDaVersao } from "@/lib/calculos/midia-off";
+import { parametrosDaVersao, planejadoDaLinhaMidia } from "@/lib/calculos/midia-off";
 import { distribuirDelta as distribuir, emReais as dinheiro } from "@/lib/calculos/alteracao-financeiro";
 import { configDaPlanilha } from "@/app/(app)/_planilha/modelo-planilha";
 import {
@@ -402,6 +402,34 @@ export async function alterarParametrosDoJob(
     };
   }
 
+  // Mídia Off (decisão 167, entrega 3): o planejado da linha é a nota do
+  // veículo. Com o job na fila, a parte do veículo nova leva o planejado
+  // junto; depois da abertura o planejado é o da abertura (decisão 151) e
+  // não muda — a trava do A · Repasse lê a nota pelos parâmetros de hoje
+  // (`alvoDoRepasse`), e não pelo planejado gravado.
+  let linhasDaMidia: Array<Record<string, unknown>> = [];
+  if (midiaOff && naFila && para.percentual_veiculo !== atual.percentual_veiculo) {
+    const { data: linhas, error: linhasErr } = await supabase
+      .from("jobs_itens_orcado")
+      .select("id, tipo_custo, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado")
+      .eq("job_id", jobId)
+      .eq("tenant_id", tenantId)
+      .eq("linha_vermelha", false);
+    if (linhasErr) {
+      console.error("[parametros-do-job.linhas-da-midia]", linhasErr.message);
+      return { ok: false, message: "Não foi possível ler a planilha do job agora. Tente de novo." };
+    }
+    const paramsNovos = parametrosDaVersao(para);
+    linhasDaMidia = ((linhas ?? []) as any[]).map((l) => ({
+      id: l.id,
+      tipo_custo: l.tipo_custo,
+      valor_unitario_orcado: Number(l.valor_unitario_orcado ?? 0),
+      quantidade_orcada: Number(l.quantidade_orcada ?? 0),
+      dias_meses_orcado: Number(l.dias_meses_orcado ?? 0),
+      ...planejadoDaLinhaMidia(l, paramsNovos),
+    }));
+  }
+
   const foto = (ls: Array<{ data_prevista: string; valor: number }>): PrevisaoDaAlteracao[] =>
     ls.map((l) => ({ data_prevista: l.data_prevista, valor: l.valor }));
   const fotoEnvio = (e: EnvioLido): EnvioDaAlteracao => ({
@@ -433,7 +461,7 @@ export async function alterarParametrosDoJob(
         },
         parametros: { de: atual, para },
         itens: [],
-        linhas: [],
+        linhas: linhasDaMidia,
         envios: [...enviosNovos.values()].map((e) => ({ id: e.id, valor_faturado: e.valor_faturado })),
         parcelas_envio: [...enviosNovos.values()].flatMap((e) =>
           e.parcelas.map((x) => ({ id: x.id, valor: x.valor })),

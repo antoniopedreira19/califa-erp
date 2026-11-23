@@ -1,7 +1,7 @@
 # 167 — Job da Mídia Off, entrega 2: abrir e faturar por mês, e o último envio encerra o job
 
 **Data:** 2026-10-13
-**Status:** aceita e implementada (13/10/2026).
+**Status:** aceita e implementada (13/10/2026). Regras 6, 7 e 8 revistas pela [273](273-midia-off-pp-do-repasse-e-encerramento.md) em 23/11/2026 (entrega 3).
 **Quem decidiu:** Tiago, em 07 e 13/10/2026, sobre o plano do job em quatro entregas e o protótipo da entrega 2 (https://claude.ai/artifact/FrKQYCiCbjGtPyQ2TAveyR).
 **Continua:** a [147](147-planilha-midia-off.md) (a planilha e a conta da mídia, até a aprovação) e a [150](150-cadastro-de-veiculos.md) (o veículo).
 **Segue o modelo de:** a [078](078-orcamento-mensal-fee-e-always-on.md) e a [149](149-envio-para-abertura-por-tipo-de-job.md) (Fee e Always On: um envio de faturamento e uma data de recebimento por mês).
@@ -58,7 +58,10 @@ veiculados). A 2 sobe sozinha (Tiago, 07/10/2026, opção 1a).
    no mês em que começa (147). Antes disso o mês aparece "Em veiculação",
    com a data em que o envio libera. O servidor confere a data de novo no
    envio (`enviarJobParaFaturamento`).
-6. **O envio do último mês encerra o job junto** (Tiago, 07/10/2026; um
+6. ~~**O envio do último mês encerra o job junto**~~ — **revista pela 273
+   (23/11/2026):** o job de mídia encerra pelo "Enviar job para
+   encerramento", depois da veiculação e com as PPs do repasse pagas. O
+   texto abaixo é o da entrega 2. (Tiago, 07/10/2026; um
    botão só). Quando falta um mês só, o botão vira "Enviar {mês} e encerrar
    o job", e o envio só passa sem pendência de encerramento — a mesma régua
    do "Enviar para encerramento". A trilha "Encerramento" da Mídia Off não
@@ -67,14 +70,16 @@ veiculados). A 2 sobe sozinha (Tiago, 07/10/2026, opção 1a).
    grava `finalizado`. Se o encerramento falhar depois do envio (alguém
    emitiu uma PP entre as duas conferências), o envio fica e a trilha volta
    a mostrar o botão de encerrar.
-7. **Consequência aceita (Tiago, 13/10/2026, opção a):** linha em
+7. **Consequência aceita (Tiago, 13/10/2026, opção a)** — desde a 273 a
+   linha tem a PP do repasse e fecha na nota do veículo: linha em
    A · Repasse sem a PP do repasse é pendência de encerramento ("N linhas
    A · Repasse sem a PP do repasse"). Até a entrega 3, um job com Repasse
    abre e fatura, mas **não envia o último mês**. Job só com A · Direto
    fecha o ciclo nesta entrega.
 8. **O que o job de Mídia Off ainda não tem**, travado na tela e no
-   servidor: errata (entrega 5), "Editar orçado" do financeiro (entrega 5),
-   PP (entrega 3) e a exportação da planilha interna do job.
+   servidor: errata (entrega 5), "Editar orçado" do financeiro (entrega 5)
+   e a exportação da planilha interna do job. A PP chegou na entrega 3
+   (273, 23/11/2026).
 9. **Custo realizado** (Tiago, 13/10/2026, "Nota do veículo"): no
    A · Direto, a nota do veículo — o mesmo critério do A nacional, que
    espelha o planejado; no A · Repasse, as PPs do repasse (zero até a

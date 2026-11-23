@@ -99,7 +99,8 @@ import {
   vencimentoAceitaEnvio,
 } from "@/lib/calculos/janelas-pagamento";
 import { carregarFeriadosNacionais } from "@/lib/data/feriados-nacionais";
-import { travaDoJobDeMidia } from "@/lib/data/midia-do-job";
+import { lerMidiaDoJob } from "@/lib/data/midia-do-job";
+import { alvoDoRepasse } from "@/lib/calculos/midia-off";
 import { envioDispensaNf, midiaSystemDoJob } from "@/lib/calculos/midia-system";
 import {
   DESGASTE_POR_KM_PADRAO,
@@ -1181,28 +1182,40 @@ async function barrarARComOrcadoEmAberto(
     em_save: boolean;
     total_orcado: number;
   },
+  jobId: string,
 ): Promise<Err | null> {
   if (!exigeSomaIgualAoOrcado(item.tipo_custo, item.em_save)) return null;
 
-  const { data } = await supabase
-    .from("pedidos_compra")
-    .select("valor, status")
-    .eq("item_realizado_id", item.id)
-    .eq("tenant_id", tenantId);
+  // Mídia Off (decisão 167, entrega 3): o repasse fecha a nota do veículo,
+  // não o negociado inteiro.
+  const [lida, { data }] = await Promise.all([
+    lerMidiaDoJob(supabase, tenantId, jobId),
+    supabase
+      .from("pedidos_compra")
+      .select("valor, status")
+      .eq("item_realizado_id", item.id)
+      .eq("tenant_id", tenantId),
+  ]);
+  if (!lida.ok) return { ok: false, message: "Não foi possível conferir o job. Tente de novo." };
+  const alvo = alvoDoRepasse(item.total_orcado, lida.midia);
 
   const soma = somaDasPPsNaoCanceladas(
     (data ?? []).map((pp) => ({ valor: Number(pp.valor), status: pp.status })),
   );
-  const falta = faltaParaFecharOOrcado(soma, item.total_orcado);
+  const falta = faltaParaFecharOOrcado(soma, alvo);
   if (falta <= 0) return null;
 
   return {
     ok: false,
-    message:
-      `Em custo A · Repasse as PPs precisam fechar o orçado do item antes de ir ao financeiro. ` +
-      `"${item.item_nome}" tem ${formatarBRL(soma)} em PPs de um orçado de ` +
-      `${formatarBRL(item.total_orcado)} — faltam ${formatarBRL(falta)}. ` +
-      `Gere as PPs que faltam e envie todas juntas.`,
+    message: lida.midia
+      ? `Em A · Repasse as PPs precisam fechar a nota do veículo antes de ir ao financeiro. ` +
+        `"${item.item_nome}" tem ${formatarBRL(soma)} em PPs de uma nota de ` +
+        `${formatarBRL(alvo)} — faltam ${formatarBRL(falta)}. ` +
+        `Gere as PPs que faltam e envie todas juntas.`
+      : `Em custo A · Repasse as PPs precisam fechar o orçado do item antes de ir ao financeiro. ` +
+        `"${item.item_nome}" tem ${formatarBRL(soma)} em PPs de um orçado de ` +
+        `${formatarBRL(item.total_orcado)} — faltam ${formatarBRL(falta)}. ` +
+        `Gere as PPs que faltam e envie todas juntas.`,
   };
 }
 
@@ -1733,9 +1746,6 @@ async function reservarPedidoCompraImpl(
   if (!gate.ok) return gate;
 
   const { job, session, item, supabase } = gate;
-
-  const travaMidia = await travaDoJobDeMidia(supabase, session.activeTenant.id, job.id, "pp");
-  if (travaMidia) return { ok: false, message: travaMidia };
 
   // Linha com save não gera PP (decisão 099). Barrar já na reserva evita o
   // upload de anexos de uma PP que não vai existir.
@@ -3483,6 +3493,7 @@ export async function enviarPedidoCompraAoFinanceiro(
     supabase,
     session.activeTenant.id,
     item,
+    job.id,
   );
   if (bloqueioAR) return bloqueioAR;
 
@@ -3913,9 +3924,6 @@ export async function salvarPPAEmitir(
   if (await ppAguardandoComite(supabase, tenantId, id)) {
     return { ok: false, message: "A PP está aguardando aprovação do Comitê. Cancele o envio para editar." };
   }
-
-  const travaMidia = await travaDoJobDeMidia(supabase, tenantId, job.id, "pp");
-  if (travaMidia) return { ok: false, message: travaMidia };
 
   const comSave = await barrarPPEmLinhaComSave(supabase, tenantId, item);
   if (comSave) return comSave;
@@ -5185,12 +5193,10 @@ async function editarPPGeradaImpl(
   const { item, job } = gate;
 
   // As mesmas portas da geração: o job na pré-abertura ou devolvido só
-  // aceita PP a emitir, o job de mídia não tem PP pela planilha, e a linha
-  // com save não recebe PP (decisão 099).
+  // aceita PP a emitir, e a linha com save não recebe PP (decisão 099). O
+  // job de Mídia Off tem PP desde a entrega 3 da decisão 167.
   const travada = geracaoTravadaPeloJob(job.status);
   if (travada) return { ok: false, message: travada };
-  const travaMidia = await travaDoJobDeMidia(supabase, tenantId, job.id, "pp");
-  if (travaMidia) return { ok: false, message: travaMidia };
   const comSave = await barrarPPEmLinhaComSave(supabase, tenantId, item);
   if (comSave) return comSave;
 

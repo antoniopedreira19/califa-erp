@@ -160,6 +160,8 @@ import type {
 import { LinkSaidaDeModulo } from "@/components/financeiro/link-saida-de-modulo";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PlanilhaMidiaDoJob } from "./planilha-midia-do-job";
+import { alvoDoRepasse, decomposicaoDoRepasse, nomeDoMesMidia } from "@/lib/calculos/midia-off";
+import type { SugestaoDaPP } from "./gerar-pp-drawer";
 import type { MidiaDoDetalhe } from "../carregar-detalhe";
 import { useProtegerSaida } from "@/components/voltar/estado";
 import {
@@ -848,6 +850,23 @@ function PlanilhaDoJob({
   // botão "Concluir PPs" da barra. O servidor refaz esta lista antes de
   // gravar; aqui ela serve para contar, listar no aviso e apagar o botão
   // quando não sobrou ninguém.
+  // Decisão 167, entrega 3: a linha de mídia não tem "item" — o nome dela
+  // no painel de PPs, no formulário e no Comitê é praça e veículo (o meio
+  // já vai no grupo). `null` fora da Mídia Off.
+  const nomeDaLinhaMidia = React.useMemo(() => {
+    if (!midia) return null;
+    const veiculo = new Map(midia.veiculos.map((v) => [v.id, v.nome]));
+    const nomes = new Map(
+      midia.linhas.map((l) => [
+        l.id,
+        [l.item?.trim() || null, l.praca, l.fornecedor_id ? veiculo.get(l.fornecedor_id) : null]
+          .filter(Boolean)
+          .join(" · ") || "Linha de mídia",
+      ]),
+    );
+    return (id: string) => nomes.get(id) ?? "Linha de mídia";
+  }, [midia]);
+
   const itensEmAberto: ItemEmAberto[] = React.useMemo(() => {
     const lista: ItemEmAberto[] = [];
     for (const item of itens) {
@@ -859,14 +878,15 @@ function PlanilhaDoJob({
 
       const pps = ppsPorItemId.get(realizado.id) ?? [];
       const emPPs = somaDasPPsNaoCanceladas(pps);
-      // `A · Repasse` só fecha com as PPs cobrindo o orçado (decisão 062):
-      // o botão mostra quanto falta e o deixa de fora do lote.
+      // `A · Repasse` só fecha com as PPs cobrindo o orçado (decisão 062) —
+      // na Mídia Off, a nota do veículo (decisão 167, entrega 3): o botão
+      // mostra quanto falta e o deixa de fora do lote.
       const faltaAR = exigeSomaIgualAoOrcado(item.tipo_custo, item.em_save === true)
-        ? faltaParaFecharOOrcado(emPPs, Number(item.total_orcado ?? 0))
+        ? faltaParaFecharOOrcado(emPPs, alvoDoRepasse(item.total_orcado, midia?.params ?? null))
         : 0;
       lista.push({
         itemRealizadoId: realizado.id,
-        nome: item.item,
+        nome: nomeDaLinhaMidia ? nomeDaLinhaMidia(item.id) : item.item,
         situacao:
           pps.length === 0
             ? "nenhuma PP"
@@ -876,7 +896,7 @@ function PlanilhaDoJob({
       });
     }
     return lista;
-  }, [itens, realizadosMap, ppsPorItemId, versao.moeda]);
+  }, [itens, realizadosMap, ppsPorItemId, versao.moeda, midia, nomeDaLinhaMidia]);
 
   const [confirmando, setConfirmando] = React.useState(false);
   const [salvando, setSalvando] = React.useState(false);
@@ -1791,6 +1811,9 @@ function PlanilhaDoJob({
     /** Na vista Total a linha do mês fecha o topo do card (decisão 219,
      *  revista em 30/10/2026): o card perde os cantos e a borda de cima. */
     colada = false,
+    /** Mídia Off (decisão 167, entrega 3): a planilha da mídia no lugar da
+     *  tabela, sem o card — ela tem os dela. */
+    corpoDaMidia: ((calhaDaLinha: (itemId: string) => React.ReactNode) => React.ReactNode) | null = null,
   ) {
     // Só a tabela esconde as canceladas: as contas (meses, Totais) seguem
     // com a lista inteira — a cancelada é zero dos dois lados.
@@ -1807,25 +1830,7 @@ function PlanilhaDoJob({
       tentativaNoMesEnviado && tentouNoMes === mesId
         ? meses.find((m) => m.id === mesId)
         : undefined;
-    return (
-      <>
-      {mesDoAviso && (
-        <AvisoDoMesEnviado mes={mesDoAviso.mes} onFechar={() => setTentouNoMes(null)} />
-      )}
-      <div
-        className={cn(
-          "rounded-2xl border border-border bg-card shadow-soft",
-          colada && "rounded-t-none border-t-0",
-        )}
-        onClickCapture={
-          tentativaNoMesEnviado
-            ? (e) => {
-                // Recolher um grupo não é tentativa de errata.
-                if (!(e.target as HTMLElement).closest("button")) setTentouNoMes(mesId);
-              }
-            : undefined
-        }
-      >
+    const elemento = (
         <JobItemRealizadoTable
           jobId={job.id}
           ppsNasLinhas={ppsNasLinhas}
@@ -1900,10 +1905,68 @@ function PlanilhaDoJob({
           orcadoVisivel={orcadoVisivel}
           rentabPlanejadaVisivel={rentabPlanejada}
           rentabRealizadaVisivel={rentabRealizada}
+          corpoDaMidia={corpoDaMidia}
+          nomeDaLinhaMidia={nomeDaLinhaMidia}
+          sugestaoDaPP={midia ? sugestaoDaPPDoRepasse : null}
         />
+    );
+    if (corpoDaMidia) return elemento;
+    return (
+      <>
+      {mesDoAviso && (
+        <AvisoDoMesEnviado mes={mesDoAviso.mes} onFechar={() => setTentouNoMes(null)} />
+      )}
+      <div
+        className={cn(
+          "rounded-2xl border border-border bg-card shadow-soft",
+          colada && "rounded-t-none border-t-0",
+        )}
+        onClickCapture={
+          tentativaNoMesEnviado
+            ? (e) => {
+                // Recolher um grupo não é tentativa de errata.
+                if (!(e.target as HTMLElement).closest("button")) setTentouNoMes(mesId);
+              }
+            : undefined
+        }
+      >
+        {elemento}
       </div>
       </>
     );
+  }
+
+  /** Decisão 167, entrega 3: a PP NOVA do repasse já vem com o veículo da
+   *  linha, o serviço e o que falta para a nota do veículo — a nota inteira
+   *  na primeira PP, decomposta na quantidade e nos períodos da linha. Só
+   *  na linha A · Repasse que ainda não fechou a nota. */
+  function sugestaoDaPPDoRepasse(itemId: string): SugestaoDaPP | null {
+    if (!midia) return null;
+    const l = midia.linhas.find((x) => x.id === itemId);
+    if (!l || l.tipo_custo !== "AR") return null;
+    const realizado = realizadosMap.get(itemId);
+    const pps = realizado ? (ppsPorItemId.get(realizado.id) ?? []) : [];
+    const falta = faltaParaFecharOOrcado(
+      somaDasPPsNaoCanceladas(pps),
+      alvoDoRepasse(l.total_orcado, midia.params),
+    );
+    if (falta <= 0) return null;
+    const primeira = pps.length === 0;
+    const partes = decomposicaoDoRepasse(
+      falta,
+      primeira ? Number(l.quantidade_orcada ?? 0) : 1,
+      primeira ? Number(l.dias_meses_orcado ?? 0) : 1,
+    );
+    const grupo = grupos.find((g) => g.id === l.grupo_id);
+    const mes = grupo?.mes_id ? meses.find((m) => m.id === grupo.mes_id)?.mes : undefined;
+    const servico = [
+      `Veiculação${mes ? ` de ${nomeDoMesMidia(mes).toLowerCase()}` : ""}`,
+      grupo?.nome,
+      l.praca,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    return { fornecedorId: l.fornecedor_id ?? null, servico, ...partes };
   }
 
   function cardDeTotais(
@@ -1984,10 +2047,15 @@ function PlanilhaDoJob({
     const peloFinanceiro = faturamentoMensal.filter((m) => m.envio === null && m.peloFinanceiro).length;
     const textoPeloFinanceiro =
       peloFinanceiro > 0 ? ` · ${peloFinanceiro} faturado${peloFinanceiro === 1 ? "" : "s"} pelo financeiro` : "";
+    // A planilha da mídia entra pela tabela do job (entrega 3): ela segue
+    // dona do painel de PPs, do formulário e do Comitê, e entrega a calha
+    // de cada linha.
     return (
       <div className="flex flex-col gap-4">
       {linhaDeParametros}
+      {tabela(gruposDaPlanilha, undefined, false, null, false, (calhaDaLinha) => (
       <PlanilhaMidiaDoJob
+        calha={(l) => calhaDaLinha(l.id)}
         job={job}
         nomeJob={nomeJob}
         versao={versao}
@@ -2033,6 +2101,7 @@ function PlanilhaDoJob({
               : `${enviados} de ${comFaturamento} ${comFaturamento === 1 ? "mês enviado" : "meses enviados"}${textoPeloFinanceiro}`
         }
       />
+      ))}
       </div>
     );
   }

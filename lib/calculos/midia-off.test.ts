@@ -13,8 +13,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  alvoDoRepasse,
   comAContaDaMidia,
   composicao,
+  decomposicaoDoRepasse,
+  planejadoDaLinhaMidia,
+  ultimaVeiculacaoDaCampanha,
   contaDaLinha,
   desembolsoDaMidia,
   diaSeguinte,
@@ -279,4 +283,39 @@ test("os campos planos do job pela conta da mídia", () => {
   assert.equal(t.deducoesDoResultado, t.imposto);
   assert.equal(t.intTaxes, 0);
   assert.equal(t.outro, "fica");
+});
+
+// ---- Entrega 3 da decisão 167: a PP do repasse ---------------------------
+
+test("planejado da linha do job: a parte do veículo no unitário", () => {
+  const p = planejadoDaLinhaMidia(
+    { valor_unitario_orcado: 2500, quantidade_orcada: 4, dias_meses_orcado: 2 },
+    P20,
+  );
+  assert.deepEqual(p, { valor_unitario_planejado: 2000, quantidade_planejada: 4, dias_meses_planejado: 2 });
+  // Seis casas: 80% de 1.234,56 não pode virar centavo a mais.
+  const q = planejadoDaLinhaMidia(
+    { valor_unitario_orcado: 1234.56, quantidade_orcada: 3, dias_meses_orcado: 1 },
+    P20,
+  );
+  assert.equal(q.valor_unitario_planejado, 987.648);
+});
+
+test("alvo do repasse: a nota do veículo na mídia, o orçado no nacional", () => {
+  assert.equal(alvoDoRepasse(20000, P20), 16000);
+  assert.equal(alvoDoRepasse("20000", null), 20000);
+  assert.equal(alvoDoRepasse(null, P20), 0);
+});
+
+test("PP do repasse pré-preenchida: decompõe só quando fecha no centavo", () => {
+  assert.deepEqual(decomposicaoDoRepasse(16000, 4, 2), { unitario: 2000, quantidade: 4, dm: 2 });
+  // 1.000 em 3 não fecha no centavo: vai inteiro, 1 × 1.
+  assert.deepEqual(decomposicaoDoRepasse(1000, 3, 1), { unitario: 1000, quantidade: 1, dm: 1 });
+  // Quantidade ou períodos zerados contam como 1.
+  assert.deepEqual(decomposicaoDoRepasse(500, 0, 0), { unitario: 500, quantidade: 1, dm: 1 });
+});
+
+test("fim da campanha: a maior última veiculação entre os meses", () => {
+  assert.equal(ultimaVeiculacaoDaCampanha(["2026-11-20", null, "2026-12-31"]), "2026-12-31");
+  assert.equal(ultimaVeiculacaoDaCampanha([null, null]), null);
 });

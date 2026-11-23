@@ -797,8 +797,9 @@ export default async function JobDetailPage({
         faturamentoPorMes={
           detalhe.modeloPlanilha === "mensal" || detalhe.modeloPlanilha === "midia_off"
         }
-        // Mídia Off (decisão 167): o envio do último mês encerra o job.
-        encerraComOUltimoMes={detalhe.midia !== null}
+        // Mídia Off (decisão 167): encerra pelo botão de sempre, depois da
+        // veiculação e com as PPs do repasse pagas (entrega 3).
+        midiaOff={detalhe.midia !== null}
         faturamentoMensal={detalhe.faturamentoMensal}
         podeEnviarFaturamentoMensal={detalhe.podeEnviarFaturamentoMensal}
         faturamentoEnvioUnico={detalhe.faturamentoEnvioUnico}

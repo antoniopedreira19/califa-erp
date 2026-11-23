@@ -6851,7 +6851,7 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 ## ⚠️ Nota de 2026-11-18 — o Novo faturamento substitui o envio na produção também (decisão 265, seção 7)
 
 - **Envio em lote:** o mês já faturado pelo financeiro não é mais proposto (antes o lote inteiro falhava).
-- **Mídia Off:** o mês faturado pelo financeiro conta como enviado, então o envio do último mês pelo GP encerra o job. O Novo faturamento em si nunca encerra o job.
+- **Mídia Off:** o mês faturado pelo financeiro conta como enviado. O Novo faturamento nunca encerra o job; desde a 273 (23/11/2026) o envio do último mês pelo GP também não — o job de mídia encerra pelo botão de sempre.
 - **Envio recusado:** o GP que tenta enviar um job (ou mês) já faturado pelo financeiro recebe a mensagem certa, não a genérica.
 - **Cancelar job:** o job faturado pelo financeiro não se cancela pelo sistema.
 - **Ficha do job:** a etapa do envio mostra "Faturado pelo financeiro", com quem e quando.
@@ -6865,3 +6865,14 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - **Fica de fora:** no PDF da PP, a assinatura do GP sai em branco.
 - **PP e Comitê (Tiago, 18/11):** a regra do Comitê vale como no Interno. Com o orçado zero, a PP de item com planejado vai ao Comitê; a da linha vermelha, não; o administrador aprova direto. Conferido na versão publicada: produtor lança o item sem errata, PP-00957 ao Comitê, aprovada, gerada pelo produtor e enviada pelo GP.
 - **Voltar:** no job de pagamentos o "Voltar" leva à lista de Jobs, nunca ao orçamento escondido (antes abria o orçamento com "Editar" e "Duplicar"); o job de pagamentos cancelado também vai para a lista, e não para o orçamento.
+
+
+## ⚠️ Nota de 2026-11-23 — Mídia Off, entrega 3: a PP do repasse e o encerramento depois da veiculação (decisão 273)
+
+- **PP do repasse:** a linha A · Repasse da planilha da mídia tem a calha com "Gerar PP" / "PPs · N", a mesma PP do nacional (painel, formulário, revisão, envio, Comitê). O A · Direto não tem PP; o BV sai da linha (por veículo e mês, entrega 4).
+- **PP nova preenchida:** veículo da linha, serviço "Veiculação de {mês} · {meio · formato} · {praça}", o que falta para a nota do veículo (decomposto em unitário × quantidade × períodos quando fecha no centavo) e "Sim, é a última". Tudo editável.
+- **A · Repasse fecha na nota do veículo** (negociado × a parte do veículo do job), e não no negociado — na conclusão do item e no envio ao financeiro. O planejado da linha do job de mídia passou a ser a nota (gravado na abertura; backfill `20261123500001` nas 5 linhas do Sandbox).
+- **Encerramento:** o envio do último mês não encerra mais o job. A Mídia Off encerra pelo "Enviar job para encerramento", que espera a veiculação da campanha terminar ("Campanha no ar até 31/12/2026") e as PPs do repasse pagas. A mesma régua no botão, na home do GP, na lista de Jobs e no servidor. A barra de faturamento perdeu o "Enviar e encerrar".
+- **Combo da PP:** os veículos das linhas entram na lista de fornecedores do job (decisão 255), para a PP nascer com o veículo escolhido.
+- **Conferido no Sandbox:** TES-1026/26 — PP-00958 de R$ 16.000,00 gerada pela calha, linha concluída, "PPs · 1" com ✓, trilha "Campanha no ar até 31/12/2026 · 1 PP em aberto (PP-00958)"; TES-1025/26 (nacional) com a calha de sempre.
+- **Fica de fora:** envio e pagamento da PP do repasse não percorridos (pedem a NF); no PDF da PP da mídia a célula "Item" fica de fora (a linha não tem item; o serviço leva a descrição); entregas 4 e 5.

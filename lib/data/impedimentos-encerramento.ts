@@ -9,6 +9,8 @@ import {
 import { TIPOS_QUE_GERAM_PP } from "@/lib/calculos/pps-item";
 import { devolucaoDaVerba, prestacaoDaVerba } from "@/lib/data/prestacao-da-verba";
 import { midiaPendenteNoEncerramento } from "@/lib/calculos/midia-system";
+import { ultimaVeiculacaoDaCampanha, ultimaVeiculacaoDoMes } from "@/lib/calculos/midia-off";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 
 /**
  * O que impede o encerramento de um job AGORA. Vazio = pode encerrar.
@@ -37,6 +39,10 @@ import { midiaPendenteNoEncerramento } from "@/lib/calculos/midia-system";
  * O FATURAMENTO não entra (decisão 087): faturamento e encerramento correm
  * separados, e o job sem nada a faturar finaliza só com o encerramento.
  *
+ * No job de Mídia Off (decisão 167, entrega 3), também a veiculação: o job
+ * não encerra antes do dia seguinte à última veiculação da campanha. A PP
+ * do repasse paga já vem pela regra das PPs em aberto.
+ *
  * Leitura que falhou trava a mais, nunca a menos.
  */
 export interface ImpedimentosEncerramento {
@@ -61,9 +67,20 @@ export interface ImpedimentosEncerramento {
    *  recusa. */
   savesNaoEnviados: { item: string; comRecusa: boolean }[];
   revisaoDaAberturaPendente: boolean;
+  /** Mídia Off (decisão 167, entrega 3): a campanha ainda está no ar — o
+   *  último dia de veiculação, `YYYY-MM-DD`; `"nao_conferida"` quando a
+   *  leitura falhou. `null`: já terminou, ou o job não é de mídia. */
+  veiculacaoAte: string | "nao_conferida" | null;
 }
 
 /** Nenhum impedimento: o job pode ser enviado para encerramento. */
+/** A frase da trava da veiculação, para o botão e para a recusa. */
+export function textoDaVeiculacao(ate: string | "nao_conferida"): string {
+  if (ate === "nao_conferida") return "não foi possível conferir a veiculação da campanha";
+  const [a, m, d] = ate.split("-");
+  return `a campanha está no ar até ${d}/${m}/${a}`;
+}
+
 export function podeEncerrar(imp: ImpedimentosEncerramento): boolean {
   return (
     imp.ppsEmAberto.length === 0 &&
@@ -75,7 +92,8 @@ export function podeEncerrar(imp: ImpedimentosEncerramento): boolean {
     imp.savesAguardando.length === 0 &&
     imp.consumosAguardando.length === 0 &&
     imp.savesNaoEnviados.length === 0 &&
-    !imp.revisaoDaAberturaPendente
+    !imp.revisaoDaAberturaPendente &&
+    imp.veiculacaoAte === null
   );
 }
 
@@ -91,6 +109,7 @@ function vazio(): ImpedimentosEncerramento {
     consumosAguardando: [],
     savesNaoEnviados: [],
     revisaoDaAberturaPendente: false,
+    veiculacaoAte: null,
   };
 }
 
@@ -121,6 +140,7 @@ export async function impedimentosDosJobs(
     linhasComSaveRes,
     aEmitirRes,
     auditoriaRes,
+    veiculacaoRes,
   ] = await Promise.all([
     supabase
       .from("jobs")
@@ -202,6 +222,19 @@ export async function impedimentosDosJobs(
       .eq("tenant_id", tenantId)
       .in("job_id", jobIds)
       .eq("sem_nf_na_auditoria", true),
+    // As datas de veiculação (decisão 167, entrega 3): só a linha de Mídia
+    // Off tem inserções por dia ou fim de período. O mês da linha é o do
+    // agrupamento da versão (a âncora, decisão 162).
+    supabase
+      .from("jobs_itens_orcado")
+      .select(
+        "job_id, insercoes_por_dia, data_fim, " +
+          "grupo:versoes_orcamento_grupos!jobs_itens_orcado_grupo_id_fkey(mes:versoes_orcamento_meses!versoes_orcamento_grupos_mes_da_mesma_versao_fkey(mes))",
+      )
+      .eq("tenant_id", tenantId)
+      .in("job_id", jobIds)
+      .is("cancelada_em", null)
+      .or("insercoes_por_dia.not.is.null,data_fim.not.is.null"),
   ]);
 
   const de = (jobId: string | null | undefined) =>
@@ -369,6 +402,31 @@ export async function impedimentosDosJobs(
       if (naoEnviado) {
         de(l.job_id)?.savesNaoEnviados.push({ item: l.item, comRecusa: comRecusa.has(l.id) });
       }
+    }
+  }
+
+  // A veiculação da Mídia Off. Leitura que falhou trava todos, como as
+  // outras — o job nacional não tem linha com data, e destrava na próxima.
+  if (veiculacaoRes.error) {
+    console.error("[impedimentos.veiculacao]", veiculacaoRes.error.message);
+    for (const imp of mapa.values()) imp.veiculacaoAte = "nao_conferida";
+  } else {
+    const porJob = new Map<string, (string | null)[]>();
+    for (const l of (veiculacaoRes.data ?? []) as any[]) {
+      const grupo = Array.isArray(l.grupo) ? l.grupo[0] : l.grupo;
+      const mesDoGrupo = Array.isArray(grupo?.mes) ? grupo.mes[0] : grupo?.mes;
+      const mes = (mesDoGrupo?.mes as string | undefined) ?? (l.data_fim as string | null) ?? null;
+      if (!mes) continue;
+      const ultima = ultimaVeiculacaoDoMes(mes, [
+        { insercoes_por_dia: l.insercoes_por_dia ?? null, data_fim: l.data_fim ?? null },
+      ]);
+      porJob.set(l.job_id, [...(porJob.get(l.job_id) ?? []), ultima]);
+    }
+    const hoje = hojeEmSaoPauloIso();
+    for (const [jobId, datas] of porJob) {
+      const ultima = ultimaVeiculacaoDaCampanha(datas);
+      const imp = de(jobId);
+      if (imp && ultima && hoje <= ultima) imp.veiculacaoAte = ultima;
     }
   }
 

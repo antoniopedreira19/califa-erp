@@ -94,6 +94,7 @@ import {
   fechamentoDosItens,
   realizadoDaLinhaMidia,
   parametrosDaVersao,
+  ultimaVeiculacaoDaCampanha,
   type ParametrosMidia,
 } from "@/lib/calculos/midia-off";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
@@ -736,12 +737,15 @@ export async function carregarDetalheDoJob(
   // da planilha de 12/11/2026). Vêm só os que aparecem no job — nas PPs,
   // nas PPs a emitir e nos BVs —, que dão nome às linhas e abrem o combo; o
   // combo da PP e o do BV buscam o resto no servidor enquanto se digita.
+  // Na Mídia Off, também os veículos das linhas: a PP do repasse nasce com
+  // o veículo escolhido (decisão 167, entrega 3), e o combo precisa dele.
   const idsDoJob = Array.from(
     new Set(
       [
         ...((ppsRes.data ?? []) as any[]),
         ...((aEmitirRes.data ?? []) as any[]),
         ...((bvsRes.data ?? []) as any[]),
+        ...((veiculosRes.data ?? []) as any[]),
       ]
         .map((r) => r.fornecedor_id as string | null)
         .filter((id): id is string => Boolean(id)),
@@ -1664,8 +1668,14 @@ export async function carregarDetalheDoJob(
 
   // PPs a emitir que ninguém gerou nem excluiu (decisão 153): travam o
   // encerramento, pelo nome do item.
+  // A linha de Mídia Off não tem "item" (decisão 167): vale a praça.
+  const pracaDaLinha = new Map(
+    ((itensRes.data ?? []) as any[]).map((it) => [it.id as string, (it.praca as string | null) ?? null]),
+  );
+  const nomeDaLinha = (it: ItemPlanilhaJob) =>
+    it.item?.trim() || pracaDaLinha.get(it.id) || "Linha de mídia";
   const itemDoRealizado = new Map(
-    itens.map((it) => [realizadosMap.get(it.id)?.id ?? "", it.item]),
+    itens.map((it) => [realizadosMap.get(it.id)?.id ?? "", nomeDaLinha(it)]),
   );
   const ppsAEmitir = [...aEmitirPorItemId.entries()].flatMap(([realizadoId, lista]) =>
     lista.map(() => ({ item: itemDoRealizado.get(realizadoId) ?? "Item da planilha" })),
@@ -1683,12 +1693,19 @@ export async function carregarDetalheDoJob(
         itemPrecisaDeConclusao(it.tipo_custo, it.em_save === true) &&
         realizadosMap.get(it.id)?.pps_concluidas_em == null,
     )
-    .map((it) => ({ item: it.item }));
+    .map((it) => ({ item: nomeDaLinha(it) }));
 
   // O fechamento do job (decisão 087): o que ainda trava o envio para
   // encerramento, o que falta faturar (aviso, não trava) e, depois de
   // encerrado, quem enviou e quando. Existe para todo job que já passou pela
   // abertura — o encerramento não espera mais o envio para faturamento.
+  // Mídia Off (decisão 167, entrega 3): o job não encerra com a campanha no
+  // ar — a mesma conta de `impedimentosDosJobs`, pelas datas dos meses.
+  const fimDaCampanha = paramsMidia
+    ? ultimaVeiculacaoDaCampanha(faturamentoMensal.map((m) => m.ultimaVeiculacao))
+    : null;
+  const veiculacaoAte =
+    fimDaCampanha && hojeEmSaoPauloIso() <= fimDaCampanha ? fimDaCampanha : null;
   const fechamento: FechamentoDoJob | null =
     job.status === "aberto" ||
     job.status === "em_producao" ||
@@ -1701,6 +1718,7 @@ export async function carregarDetalheDoJob(
           nfsDaAuditoria,
           bvsEmAberto,
           itensSemMarcacao,
+          veiculacaoAte,
           semEnvio:
             !faturaPorMes &&
             envioFaturamento === null &&

@@ -9,15 +9,18 @@
  * está o faturamento dele (em veiculação até tal dia, a enviar, na fila,
  * faturado).
  *
- * Fora daqui, por enquanto: a PP do repasse (entrega 3), AP e PI
- * (entrega 4), e a errata e o realizado — inserção que não foi ao ar,
- * compensação, cancelamento da veiculação (entrega 5).
+ * Desde a entrega 3, cada linha A · Repasse tem na calha a PP do repasse
+ * (`calha`, desenhada pela tabela do job, que é dona das PPs).
+ *
+ * Fora daqui, por enquanto: AP, PI, NF e BV do veículo no mês (entrega 4),
+ * e o realizado — encerrar antes, estender (entrega 5).
  */
 
 import type { ReactNode } from "react";
 import { ClipboardList } from "lucide-react";
 import { nomeVersao } from "@/lib/nome-versao";
 import { PlanilhaMidiaOff } from "@/app/(app)/orcamentos/[projetoId]/[orcId]/midia/planilha-midia";
+import type { LinhaMidia } from "@/lib/calculos/midia-off";
 import type { VersaoOrcamentoGrupo, VersaoOrcamentoMes } from "@/lib/types";
 import type { MidiaDoDetalhe } from "../carregar-detalhe";
 
@@ -34,6 +37,7 @@ export function PlanilhaMidiaDoJob({
   detalheDoMes,
   detalheCampanha,
   noLugar = false,
+  calha = null,
 }: {
   job: { id: string; projeto_id: string; orcamento_id: string };
   nomeJob: string;
@@ -53,6 +57,8 @@ export function PlanilhaMidiaDoJob({
   /** A planilha em pop-up da abertura do job (19/10/2026): a régua troca de
    *  mês aqui mesmo, sem navegar. */
   noLugar?: boolean;
+  /** A calha de cada linha: a PP do repasse (entrega 3). */
+  calha?: ((l: LinhaMidia) => ReactNode) | null;
 }) {
   return (
     <div className="space-y-6">
@@ -76,7 +82,7 @@ export function PlanilhaMidiaDoJob({
         params={midia.params}
         mesPedido={mesPedido}
         readOnly
-        doJob={{ hrefBase: hrefPlanilha, detalheDoMes, detalheCampanha, noLugar }}
+        doJob={{ hrefBase: hrefPlanilha, detalheDoMes, detalheCampanha, noLugar, calha }}
       />
     </div>
   );

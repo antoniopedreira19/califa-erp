@@ -50,7 +50,7 @@ import {
   useArrastoDeLinhas,
 } from "@/app/(app)/_planilha/arrastar-linha";
 import { destinoPorTecla } from "@/lib/calculos/ordem-itens";
-import { GerarPPDrawer } from "./gerar-pp-drawer";
+import { GerarPPDrawer, type SugestaoDaPP } from "./gerar-pp-drawer";
 import { useCustosDoSocio } from "./custo-do-socio";
 import {
   MSG_AR_JOB_FATURADO,
@@ -329,6 +329,18 @@ interface Props {
   orcadoVisivel?: boolean;
   rentabPlanejadaVisivel?: boolean;
   rentabRealizadaVisivel?: boolean;
+  /** Decisão 167, entrega 3: no job de Mídia Off a planilha é a da mídia.
+   *  A tabela não se desenha — no lugar dela vai o que `corpoDaMidia`
+   *  devolver —, mas segue dona do painel de PPs, do formulário, da ficha,
+   *  da prestação e do Comitê: a planilha da mídia recebe a calha de cada
+   *  linha (`calhaDaLinha`, pelo id da cópia) e a PP do repasse é a mesma
+   *  PP do nacional. */
+  corpoDaMidia?: ((calhaDaLinha: (itemId: string) => React.ReactNode) => React.ReactNode) | null;
+  /** O nome da linha de mídia no painel e no formulário: a linha não tem
+   *  "item" — é praça, veículo e meio. */
+  nomeDaLinhaMidia?: ((itemId: string) => string) | null;
+  /** O que a PP NOVA do repasse já traz preenchido (`null`: nada). */
+  sugestaoDaPP?: ((itemId: string) => SugestaoDaPP | null) | null;
 }
 
 /** Quem decide o conteúdo da calha é a coluna Tipo:
@@ -814,6 +826,9 @@ export function JobItemRealizadoTable({
   orcadoVisivel = true,
   rentabPlanejadaVisivel = false,
   rentabRealizadaVisivel = false,
+  corpoDaMidia = null,
+  nomeDaLinhaMidia = null,
+  sugestaoDaPP = null,
 }: Props) {
   // Decisão 236: os custos pagos pelo sócio (a Robotech, nos jobs da
   // Ventura) abrem nas sublinhas da linha, depois das PPs.
@@ -1396,6 +1411,35 @@ export function JobItemRealizadoTable({
     selecao.onKeyDown(e);
   }
 
+  /** Decisão 167, entrega 3: a calha de uma linha da planilha da mídia — só
+   *  a PP, e só no A · Repasse (o A · Direto o veículo fatura ao cliente).
+   *  A mesma pílula do nacional: "Gerar PP" / "PPs · N", o ✓ da conclusão,
+   *  o círculo das pendentes de envio. O BV da mídia é por veículo e mês, e
+   *  chega na entrega 4: não mora na linha. */
+  function calhaDaLinhaMidia(itemId: string): React.ReactNode {
+    if (!podeGerarPP) return null;
+    const item = todosOsItens.find((i) => i.id === itemId);
+    if (!item || item.cancelada_em || item.em_save || !tipoGeraDesembolso(item.tipo_custo)) return null;
+    const realizado = realizadosMap.get(item.id);
+    const realizadoId = realizado?.id ?? "";
+    if (!realizadoId) return null;
+    const ppsDoItem = ppsPorItemId.get(realizadoId) ?? [];
+    return (
+      <CalhaLinha
+        altura="h-full"
+        bv={null}
+        pp={{
+          itemRealizadoId: realizadoId,
+          pedidos: ppsDoItem,
+          pendentes: contarPendentes(ppsDoItem),
+          concluido: realizado?.pps_concluidas_em != null,
+          otimista: ppsDoItem.length > 0 ? null : ppsOtimistas.get(realizadoId) ?? null,
+          onAbrirPainel: abrirPainel,
+          travadaPor: motivoSemPPAtrasada(item.tipo_custo),
+        }}
+      />
+    );
+  }
 
   return (
     <>
@@ -1439,6 +1483,10 @@ export function JobItemRealizadoTable({
       {/* A faixa de erro que ficava aqui era do lançamento inline do
           realizado, que deixou de existir em 21/08/2026. Erro de PP e de
           BV vive no drawer que o produziu, junto do campo que o causou. */}
+      {corpoDaMidia ? (
+        corpoDaMidia(calhaDaLinhaMidia)
+      ) : (
+      <>
       <div
         ref={wrapperRef}
         // O card recebe as teclas da seleção; sem anel — a moldura da
@@ -2746,11 +2794,16 @@ export function JobItemRealizadoTable({
           )}
         </div>
       )}
+      </>
+      )}
 
       {(() => {
         const itemAtual = todosOsItens.find(
           (i) => (realizadosMap.get(i.id)?.id ?? "") === itemIdAtual,
         );
+        // A linha de mídia não tem "item": o nome vem de quem a desenha.
+        const nomeDoItemAtual =
+          itemAtual && nomeDaLinhaMidia ? nomeDaLinhaMidia(itemAtual.id) : (itemAtual?.item ?? "");
         // A referência do painel e do formulário é o PLANEJADO do item
         // (02/09/2026, decisão 039). Era o orçado; antes disso, o
         // realizado — que É a soma das PPs e se limitaria sozinho.
@@ -2806,7 +2859,7 @@ export function JobItemRealizadoTable({
             <PainelPPsItem
               open={painelOpen}
               onOpenChange={setPainelOpen}
-              itemNome={itemAtual?.item ?? ""}
+              itemNome={nomeDoItemAtual}
               grupoNome={
                 itemAtual ? grupoDoItem.get(itemAtual.id) ?? "" : ""
               }
@@ -2978,7 +3031,7 @@ export function JobItemRealizadoTable({
               fornecedores={fornecedores}
               empresas={empresas}
               defaultEmpresaId={jobEmpresaId}
-              itemDescricao={itemAtual?.item ?? ""}
+              itemDescricao={nomeDoItemAtual}
               valorPlanejado={planejadoAtual}
               valorOrcado={Number(itemAtual?.total_orcado ?? 0)}
               comiteDaPP={comiteDaPP}
@@ -3000,6 +3053,7 @@ export function JobItemRealizadoTable({
               tomadorPorEmpresa={tomadorPorEmpresa}
               cnpjPadraoDaPP={cnpjPadraoDaPP}
               midiaSystem={midiaSystem}
+              sugestao={itemAtual && sugestaoDaPP ? sugestaoDaPP(itemAtual.id) : null}
               onSuccess={(modo, id) => {
                 if (modo === "editada") {
                   setToast(`${id} atualizada. O PDF foi refeito com os dados novos.`);
@@ -3060,7 +3114,7 @@ export function JobItemRealizadoTable({
                 if (t) return `${t.nome} · ${t.cnpj}`;
                 return empresas.find((e) => e.id === ppVendo?.empresa_id)?.razao_social ?? "—";
               })()}
-              itemDescricao={itemAtual?.item ?? ""}
+              itemDescricao={nomeDoItemAtual}
               valorPlanejado={planejadoAtual}
               emPPsEmitidas={emPPs}
               tomadores={tomadoresDaNf}
@@ -3174,7 +3228,8 @@ export function JobItemRealizadoTable({
           const tomador = a
             ? tomadoresDaNf.find((t) => t.id === (a.dados.estabelecimento_id ?? cnpjPadraoDaPP))
             : undefined;
-          const nomeDoItem = itemDoComite?.item ?? "—";
+          const nomeDoItem =
+            (itemDoComite && nomeDaLinhaMidia ? nomeDaLinhaMidia(itemDoComite.id) : itemDoComite?.item) || "—";
           return (
             <>
               <BarraDeDecisaoDoComite

@@ -95,11 +95,12 @@ interface Props {
    *  o encerramento — a barra só explica; `enviarParaFaturamento` e
    *  `encerrarJob` refazem a conta no servidor. */
   savePorItem: Record<string, EstadoSaveDaLinha>;
-  /** Mídia Off (decisão 167): o envio do ÚLTIMO mês encerra o job junto
-   *  (Tiago, 13/10/2026). A trilha "Encerramento" deixa de ter botão e só
-   *  mostra as pendências, que travam esse último envio. Obrigatória:
-   *  opcional, uma regra nova sumiria calada (CLAUDE.md). */
-  encerraComOUltimoMes: boolean;
+  /** Mídia Off (decisão 167): o job encerra pelo botão de sempre, depois
+   *  da veiculação e com as PPs do repasse pagas (entrega 3 — até ali o
+   *  envio do último mês encerrava junto). Muda o texto da linha A ·
+   *  Repasse sem PP e o da barra de faturamento. Obrigatória: opcional,
+   *  uma regra nova sumiria calada (CLAUDE.md). */
+  midiaOff: boolean;
   /** O job tem pedido de cancelamento no financeiro (decisão 169): a barra
    *  vira uma linha só, como antes da abertura — faturamento e encerramento
    *  esperam a decisão. Os gatilhos do banco recusam os dois de novo. */
@@ -262,7 +263,7 @@ export function BarraAcoesJob({
   totais,
   podeEncerrar,
   savePorItem,
-  encerraComOUltimoMes,
+  midiaOff,
   cancelamentoPendente,
 }: Props) {
   // Enquanto a errata está aberta quem fala no rodapé é a barra dela: o
@@ -337,7 +338,7 @@ export function BarraAcoesJob({
       podeEncerrar={podeEncerrar}
       saves={saves}
       aberturaEmRevisao={aberturaEmRevisao}
-      junto={encerraComOUltimoMes}
+      midiaOff={midiaOff}
       pagamentosAtrasados={pagamentosAtrasadosLiberados}
     />
   );
@@ -374,13 +375,7 @@ export function BarraAcoesJob({
         moeda={moeda}
         trilhaEncerramento={trilhaEncerramento}
         jobEncerrado={status === "encerrado" || status === "finalizado"}
-        // Mídia Off (decisão 167): o último envio encerra o job, e as
-        // pendências do encerramento travam esse envio.
-        encerraComOUltimoMes={
-          encerraComOUltimoMes && fechamento
-            ? { pendencias: pendenciasDoEncerramento(fechamento, saves, aberturaEmRevisao, true) }
-            : null
-        }
+        midiaOff={midiaOff}
         classesDoFade={classesDoFade}
         escondida={escondida}
       />
@@ -684,7 +679,7 @@ function TrilhaEncerramento({
   podeEncerrar,
   saves,
   aberturaEmRevisao,
-  junto,
+  midiaOff,
   pagamentosAtrasados,
 }: {
   jobId: string;
@@ -699,9 +694,8 @@ function TrilhaEncerramento({
    *  enviadas (decisão 099 §17). */
   saves: PendenciasDeSave;
   aberturaEmRevisao: boolean;
-  /** Mídia Off (decisão 167): o job encerra junto com o envio do último
-   *  mês — a trilha só mostra as pendências. */
-  junto: boolean;
+  /** Mídia Off (decisão 167): a linha A · Repasse sem PP diz o nome dela. */
+  midiaOff: boolean;
 }) {
   const [aberto, setAberto] = React.useState(false);
   const encerrado = status === "encerrado" || status === "finalizado";
@@ -725,7 +719,7 @@ function TrilhaEncerramento({
           <TextoTrilha>
             {fechamento.encerradoEm ? (
               <>
-                {junto ? "Encerrado com o envio do último mês, em" : "Enviado para encerramento em"}{" "}
+                Enviado para encerramento em{" "}
                 <strong className={MONO}>
                   {new Date(fechamento.encerradoEm).toLocaleDateString("pt-BR")}
                 </strong>
@@ -750,12 +744,8 @@ function TrilhaEncerramento({
     );
   }
 
-  const partes = pendenciasDoEncerramento(fechamento, saves, aberturaEmRevisao, junto);
+  const partes = pendenciasDoEncerramento(fechamento, saves, aberturaEmRevisao, midiaOff);
   const liberado = partes.length === 0;
-  // Mídia Off: o encerramento sai com o envio do último mês, e a trilha não
-  // tem botão — a não ser que todos os meses já tenham ido e o job, por
-  // algum motivo, não tenha encerrado (o caminho de volta).
-  const semBotao = junto && fechamento.mesesSemEnvio.length > 0;
 
   const botao = (
     <button
@@ -775,7 +765,7 @@ function TrilhaEncerramento({
         rotulo="Encerramento"
         separada
         acoes={
-          !podeEncerrar || semBotao ? null : liberado ? (
+          !podeEncerrar ? null : liberado ? (
             botao
           ) : (
             <Tooltip>
@@ -799,16 +789,14 @@ function TrilhaEncerramento({
           </span>
         )}
         <TextoTrilha>
-          {semBotao
-            ? liberado
-              ? "Nenhuma pendência: o job encerra junto com o envio do último mês."
-              : `${maiuscula(partes.join(" · "))}. O job encerra junto com o envio do último mês.`
-            : liberado
-              ? "Nenhuma PP em aberto, nenhum BV a receber, todos os itens marcados."
-              : `${maiuscula(partes.join(" · "))}.`}
+          {liberado
+            ? midiaOff
+              ? "Veiculação terminada, PPs do repasse pagas, nenhum BV a receber."
+              : "Nenhuma PP em aberto, nenhum BV a receber, todos os itens marcados."
+            : `${maiuscula(partes.join(" · "))}.`}
         </TextoTrilha>
       </TrilhaBarra>
-      {liberado && !semBotao && (
+      {liberado && (
         <EnviarEncerramentoDialog
           jobId={jobId}
           jobCodigo={jobCodigo}
@@ -824,19 +812,22 @@ function TrilhaEncerramento({
 }
 
 /**
- * O que ainda trava o encerramento, em frases — a trilha "Encerramento" e,
- * na Mídia Off (decisão 167), o envio do último mês, que encerra junto.
- * `junto`: na mídia, o item de custo sem a marca é a linha A · Repasse sem
- * a PP do repasse (entrega 3).
+ * O que ainda trava o encerramento, em frases — a trilha "Encerramento".
+ * `midiaOff` (decisão 167, entrega 3): a campanha no ar vem primeiro, e o
+ * item de custo sem a marca é a linha A · Repasse sem a PP do repasse.
  */
 function pendenciasDoEncerramento(
   fechamento: FechamentoDoJob,
   saves: PendenciasDeSave,
   aberturaEmRevisao: boolean,
-  junto: boolean,
+  midiaOff: boolean,
 ): string[] {
-  const { ppsEmAberto, ppsAEmitir, verbasEmAberto, nfsDaAuditoria, bvsEmAberto, itensSemMarcacao } = fechamento;
+  const { ppsEmAberto, ppsAEmitir, verbasEmAberto, nfsDaAuditoria, bvsEmAberto, itensSemMarcacao, veiculacaoAte } =
+    fechamento;
   const partes: string[] = [];
+  if (veiculacaoAte) {
+    partes.push(`campanha no ar até ${veiculacaoAte.split("-").reverse().join("/")}`);
+  }
   if (ppsEmAberto.length > 0) {
     partes.push(
       `${ppsEmAberto.length === 1 ? "1 PP em aberto" : `${ppsEmAberto.length} PPs em aberto`} (${codigos(ppsEmAberto.map((p) => p.codigo))})`,
@@ -864,10 +855,10 @@ function pendenciasDoEncerramento(
   }
   if (itensSemMarcacao.length > 0) {
     partes.push(
-      junto
+      midiaOff
         ? itensSemMarcacao.length === 1
-          ? "1 linha A · Repasse sem a PP do repasse"
-          : `${itensSemMarcacao.length} linhas A · Repasse sem a PP do repasse`
+          ? "1 linha A · Repasse com a PP do repasse por fechar"
+          : `${itensSemMarcacao.length} linhas A · Repasse com a PP do repasse por fechar`
         : itensSemMarcacao.length === 1
           ? "1 item de custo ainda não disse se sai mais PP"
           : `${itensSemMarcacao.length} itens de custo ainda não disseram se sai mais PP`,

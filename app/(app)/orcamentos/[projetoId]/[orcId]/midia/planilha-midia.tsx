@@ -54,6 +54,7 @@ import {
   ControleDaGrade,
   DicasDaPlanilha,
   PR_CALHA_MIDIA,
+  PR_CALHA_MIDIA_DO_JOB,
   ProvedorDaPlanilha,
   SecaoGrade,
   SecaoPeriodo,
@@ -105,6 +106,9 @@ interface Props {
      *  "Abrir mês" trocam de mês aqui mesmo, sem navegar, a partir da
      *  Campanha. */
     noLugar?: boolean;
+    /** A calha de cada linha (decisão 167, entrega 3): a PP do repasse,
+     *  desenhada pela tabela do job, que é dona das PPs. `null`: sem calha. */
+    calha?: ((l: LinhaMidia) => React.ReactNode) | null;
   } | null;
 }
 
@@ -496,6 +500,7 @@ export function PlanilhaMidiaOff({
     fecharPreenchimento: () => setPreenchendo(null),
     veiculos,
     abrirVeiculo,
+    calhaDoJob: doJob?.calha ?? null,
   };
 
   /** Os formatos que a versão já usa no meio: o do meio e o das linhas. */
@@ -724,7 +729,7 @@ export function PlanilhaMidiaOff({
                 <h2 className="text-xl font-semibold tracking-tight">Campanha</h2>
                 <span className="text-[13px] text-muted-foreground">{dados.length === 1 ? "1 mês" : `${dados.length} meses`}</span>
               </div>
-              <div className={cn("space-y-6", PR_CALHA_MIDIA)}>
+              <div className={cn("space-y-6", doJob?.calha ? PR_CALHA_MIDIA_DO_JOB : PR_CALHA_MIDIA)}>
                 {/* A barra de abas por meio também na Campanha: com um meio
                     escolhido, os meses empilhados mostram só ele, e a escolha
                     vale ao trocar de mês na régua. */}
@@ -806,7 +811,7 @@ export function PlanilhaMidiaOff({
                   />
                 )}
               </div>
-              <div className={cn("space-y-6", PR_CALHA_MIDIA)}>
+              <div className={cn("space-y-6", doJob?.calha ? PR_CALHA_MIDIA_DO_JOB : PR_CALHA_MIDIA)}>
                 {/* As abas dentro do mês: a régua escolhe o mês; as abas
                     filtram os meios dele. Sem "Resumo": ele mora na
                     Campanha. */}

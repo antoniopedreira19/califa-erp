@@ -414,6 +414,76 @@ export function notaDoVeiculo(negociado: number | string | null, p: ParametrosMi
 }
 
 /**
+ * O planejado da linha do JOB de Mídia Off (decisão 167, entrega 3): a nota
+ * do veículo, decomposta como a PP a lê — unitário × quantidade × períodos.
+ * É contra ele que a PP do repasse se mede: o "Planejado do item" do painel
+ * e do formulário, o aviso de PP acima do planejado e a trava do A · Repasse
+ * (`alvoDoRepasse`). A parte do veículo vai no unitário; quantidade e
+ * períodos ficam os do orçado, e o total (coluna gerada no banco) fecha com
+ * a nota. Seis casas no unitário: 80% de R$ 1.234,56 é R$ 987,648, e o
+ * ponto flutuante não pode virar centavo a mais na quantidade.
+ */
+export function planejadoDaLinhaMidia(
+  l: {
+    valor_unitario_orcado: number | string | null;
+    quantidade_orcada: number | string | null;
+    dias_meses_orcado: number | string | null;
+  },
+  p: ParametrosMidia,
+): { valor_unitario_planejado: number; quantidade_planejada: number; dias_meses_planejado: number } {
+  const unitario = (Number(l.valor_unitario_orcado ?? 0) * p.veiculo) / 100;
+  return {
+    valor_unitario_planejado: Math.round(unitario * 1e6) / 1e6,
+    quantidade_planejada: Number(l.quantidade_orcada ?? 0),
+    dias_meses_planejado: Number(l.dias_meses_orcado ?? 0),
+  };
+}
+
+/**
+ * Quanto as PPs de uma linha A · Repasse precisam somar antes de o item
+ * fechar (decisão 062): o orçado no nacional, a nota do veículo na Mídia
+ * Off (decisão 167, entrega 3) — o veículo recebe a nota, e o resto do
+ * negociado são os honorários e o que fica com o cliente. A nota sai dos
+ * parâmetros de HOJE do job (o financeiro pode mudar a parte do veículo,
+ * decisão 224), e não do planejado gravado na abertura.
+ */
+export function alvoDoRepasse(
+  totalOrcado: number | string | null,
+  midia: ParametrosMidia | null,
+): number {
+  return midia ? notaDoVeiculo(totalOrcado, midia) : Number(totalOrcado ?? 0);
+}
+
+/**
+ * Como a PP nova do repasse já vem preenchida (decisão 167, entrega 3):
+ * o valor que falta para a nota do veículo, decomposto na quantidade e nos
+ * períodos da linha quando o unitário fecha no centavo; senão, numa
+ * parcela só (1 × 1), para a soma nunca ficar meio centavo abaixo da nota.
+ */
+export function decomposicaoDoRepasse(
+  valor: number,
+  quantidade: number,
+  periodos: number,
+): { unitario: number; quantidade: number; dm: number } {
+  const q = quantidade > 0 ? quantidade : 1;
+  const d = periodos > 0 ? periodos : 1;
+  const unitario = Math.round((valor / (q * d)) * 100) / 100;
+  if (Math.abs(unitario * q * d - valor) < 0.005) return { unitario, quantidade: q, dm: d };
+  return { unitario: Math.round(valor * 100) / 100, quantidade: 1, dm: 1 };
+}
+
+/**
+ * A última veiculação da campanha inteira: a maior entre os meses. O job de
+ * Mídia Off não encerra antes do dia seguinte a ela (decisão 167, entrega
+ * 3). `null` sem data nenhuma.
+ */
+export function ultimaVeiculacaoDaCampanha(porMes: ReadonlyArray<string | null>): string | null {
+  let ultima: string | null = null;
+  for (const d of porMes) if (d && (ultima === null || d > ultima)) ultima = d;
+  return ultima;
+}
+
+/**
  * O custo REALIZADO de uma linha do job de Mídia Off (Tiago, 13/10/2026):
  * no A · Direto, a nota do veículo — o mesmo critério do A nacional, que
  * espelha o planejado; no A · Repasse, as PPs do repasse (entrega 3).

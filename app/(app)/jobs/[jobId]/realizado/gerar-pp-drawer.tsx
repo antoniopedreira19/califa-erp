@@ -298,10 +298,24 @@ interface Props {
   /** Decisão 216: com o job Mídia System em auditoria, os anexos não são
    *  exigidos no envio. */
   midiaSystem: MidiaSystemDoJob | null;
+  /** Decisão 167, entrega 3: a PP NOVA do repasse da Mídia Off já vem com o
+   *  veículo da linha, o serviço e o que falta para a nota do veículo — e
+   *  marcada como a última do item. Tudo editável. Só vale para a PP nova:
+   *  a PP a emitir e a PP gerada abrem como foram salvas. */
+  sugestao?: SugestaoDaPP | null;
   /** "salva": guardou a PP a emitir. "revisar": guardou e o painel abre a
    *  revisão antes de gerar (o "Gerar PP"). "editada": salvou a edição da
    *  PP gerada — o segundo argumento é o código dela. */
   onSuccess?: (modo: "salva" | "revisar" | "editada", idOuCodigo: string) => void;
+}
+
+/** O que a PP nova traz preenchido (decisão 167, entrega 3). */
+export interface SugestaoDaPP {
+  fornecedorId: string | null;
+  servico: string;
+  unitario: number;
+  quantidade: number;
+  dm: number;
 }
 
 /** O teto do servidor (decisão 077, pergunta 7a): 1 a 6 nos botões e
@@ -455,6 +469,7 @@ export function GerarPPDrawer({
   tomadores,
   cnpjPadraoDaPP,
   midiaSystem,
+  sugestao = null,
   onSuccess,
 }: Props) {
   const editando = aEmitirEditando !== null;
@@ -947,6 +962,17 @@ export function GerarPPDrawer({
     setDm("");
     setEspecificacoes("");
     setParcelas([]);
+    // Decisão 167, entrega 3: a PP do repasse da Mídia Off nasce com o
+    // veículo, o serviço e o valor da nota. O mesmo efeito zerou a
+    // resposta da última PP lá em cima; aqui ela vem "sim".
+    if (sugestao) {
+      setFornecedorId(sugestao.fornecedorId ?? "");
+      setServico(sugestao.servico);
+      setUnitario(formatUnitario(sugestao.unitario));
+      setQuantidade(formatFator(sugestao.quantidade));
+      setDm(formatFator(sugestao.dm));
+      setUltimaPP(true);
+    }
 
     // Reserva pp_id + upload_prefix
     (async () => {

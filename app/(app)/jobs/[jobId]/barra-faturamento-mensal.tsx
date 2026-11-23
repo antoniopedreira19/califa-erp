@@ -47,7 +47,7 @@ function diaSeguinteBr(iso: string): string {
 
 /** `encerra`: só Mídia Off — este é o envio que encerra o job, com as
  *  pendências de encerramento (vazia = liberado). `null` nos outros. */
-function detalheDoMes(m: MesDeFaturamento, moeda: string, encerra: string[] | null): string {
+function detalheDoMes(m: MesDeFaturamento, moeda: string): string {
   const envio = m.envio;
   // Decisão 256: o mês que o financeiro faturou pelo Novo faturamento.
   if (!envio && m.peloFinanceiro) {
@@ -62,11 +62,6 @@ function detalheDoMes(m: MesDeFaturamento, moeda: string, encerra: string[] | nu
   if (!envio) {
     if (m.situacao === "em_veiculacao" && m.ultimaVeiculacao) {
       return `A veiculação de ${nomeDoMes(m.mes)} vai até ${dataBr(m.ultimaVeiculacao)}: o envio libera em ${diaSeguinteBr(m.ultimaVeiculacao)}.`;
-    }
-    if (encerra) {
-      return encerra.length > 0
-        ? `Último mês: o envio encerra o job, que ainda tem pendência: ${listaPtBr(encerra)}.`
-        : "Último mês: o envio para faturamento também encerra o job.";
     }
     return m.situacao === "sem_faturamento"
       ? "Este mês não tem faturamento na planilha: não há o que enviar."
@@ -111,12 +106,11 @@ interface Props {
   trilhaEncerramento?: React.ReactNode;
   /** Job já encerrado: os meses ainda se enviam, mas nada mais se edita. */
   jobEncerrado?: boolean;
-  /** Mídia Off (decisão 167): o envio que deixa todos os meses enviados
-   *  ENCERRA o job junto (Tiago, 13/10/2026), e só sai sem pendência de
-   *  encerramento — elas vêm aqui (vazia = liberado). `null` no Fee e no
-   *  Always On, que encerram em separado (decisão 087). Obrigatória: campo
+  /** Mídia Off (decisão 167): cada mês vai depois da veiculação dele. O
+   *  job encerra pela trilha "Encerramento", como os outros (entrega 3 —
+   *  até ali o envio do último mês encerrava junto). Obrigatória: campo
    *  opcional em prop é como regra nova some calada (CLAUDE.md). */
-  encerraComOUltimoMes: { pendencias: string[] } | null;
+  midiaOff: boolean;
   /** Fade controlado pelo <BarraAcoesJob>: modo "Selecionar" da aba PPs
    *  esconde a barra pra quem está escolhendo focar no "Total selecionado".
    *  Vem como classe para ir no próprio sticky (um wrapper tira a altura e
@@ -136,7 +130,7 @@ export function BarraFaturamentoMensal({
   moeda,
   trilhaEncerramento,
   jobEncerrado = false,
-  encerraComOUltimoMes,
+  midiaOff,
   classesDoFade,
   escondida = false,
 }: Props) {
@@ -155,52 +149,11 @@ export function BarraFaturamentoMensal({
   // O botão da barra recolhida é sempre o do mês mais antigo ainda a
   // enviar (design aprovado em 14/09/2026).
   const proximo = meses.find((m) => m.situacao === "a_enviar") ?? null;
-  // Mídia Off: o envio que deixa todos os meses com faturamento enviados é
-  // o que encerra o job — qualquer que seja a ordem dos envios.
-  // Decisão 265: o mês faturado pelo financeiro (Novo faturamento) conta
-  // como enviado nos OUTROS meses; ele mesmo nunca encerra o job — quem
-  // encerra é o envio do GP que fecha o último mês que falta.
-  const encerraNoEnvio = (m: MesDeFaturamento) =>
-    encerraComOUltimoMes !== null &&
-    m.envio === null &&
-    !m.peloFinanceiro &&
-    m.faturamento > 0 &&
-    meses.every((o) => o === m || o.envio !== null || o.peloFinanceiro || o.faturamento <= 0);
-  const pendenciasDoMes = (m: MesDeFaturamento) =>
-    encerraNoEnvio(m) ? (encerraComOUltimoMes?.pendencias ?? []) : [];
   const podeEnviarMes = (m: MesDeFaturamento) =>
-    podeEnviar &&
-    !bloqueio &&
-    m.situacao === "a_enviar" &&
-    m.faturamento > 0 &&
-    pendenciasDoMes(m).length === 0;
-  // O mês que encerra travado pelas pendências: o botão aparece apagado,
-  // com o motivo, em vez de sumir.
-  const travadoPeloEncerramento = (m: MesDeFaturamento) =>
-    podeEnviar && !bloqueio && m.situacao === "a_enviar" && pendenciasDoMes(m).length > 0;
+    podeEnviar && !bloqueio && m.situacao === "a_enviar" && m.faturamento > 0;
 
   function rotuloDoBotao(m: MesDeFaturamento, contorno: boolean): string {
-    const nome = nomeDoMes(m.mes);
-    if (encerraNoEnvio(m)) return contorno ? "Enviar e encerrar" : `Enviar ${nome} e encerrar o job`;
-    return contorno ? "Enviar faturamento" : `Enviar faturamento de ${nome}`;
-  }
-
-  function botaoTravado(m: MesDeFaturamento, contorno: boolean) {
-    return (
-      <button
-        key={`travado-${m.mesId}-${contorno ? "linha" : "barra"}`}
-        type="button"
-        disabled
-        title={`O envio encerra o job, que ainda tem pendência: ${listaPtBr(pendenciasDoMes(m))}.`}
-        className={
-          contorno
-            ? "inline-flex h-8 cursor-not-allowed items-center gap-1.5 whitespace-nowrap rounded-[10px] border border-border bg-white px-3 text-xs font-semibold text-muted-foreground opacity-60"
-            : "inline-flex h-9 cursor-not-allowed items-center gap-2 whitespace-nowrap rounded-[10px] bg-california-red px-4 text-[13px] font-semibold text-white opacity-50"
-        }
-      >
-        {rotuloDoBotao(m, contorno)}
-      </button>
-    );
+    return contorno ? "Enviar faturamento" : `Enviar faturamento de ${nomeDoMes(m.mes)}`;
   }
 
   function botaoEnviar(m: MesDeFaturamento, contorno: boolean) {
@@ -220,8 +173,7 @@ export function BarraFaturamentoMensal({
         rotuloBotao={rotuloDoBotao(m, contorno)}
         botaoContorno={contorno}
         jobEncerrado={jobEncerrado}
-        encerraOJob={encerraNoEnvio(m)}
-        midiaOff={encerraComOUltimoMes !== null}
+        midiaOff={midiaOff}
       />
     );
   }
@@ -230,19 +182,13 @@ export function BarraFaturamentoMensal({
   // o que enviar, e a frase não pode pedir envio.
   const nadaAFaturar =
     meses.length > 0 && meses.every((m) => m.situacao === "sem_faturamento");
-  const comFaturamento = meses.filter((m) => m.faturamento > 0).length;
-  const proximoTravado = proximo && travadoPeloEncerramento(proximo) ? proximo : null;
   const resumo = nadaAFaturar
     ? "Este job não tem faturamento previsto: não há nota a emitir."
-    : encerraComOUltimoMes && jobEncerrado && enviados.length === comFaturamento
-      ? `Todos os meses enviados · ${formatCurrency(somaEnviada, moeda)} · o job encerrou com o último envio.`
-      : proximoTravado
-        ? `${nomeDoMes(proximoTravado.mes).charAt(0).toUpperCase()}${nomeDoMes(proximoTravado.mes).slice(1)} é o último mês: o envio encerra o job, que ainda tem pendência: ${listaPtBr(pendenciasDoMes(proximoTravado))}.`
-        : enviados.length === 0
-          ? encerraComOUltimoMes
-            ? "Envie cada mês depois que a veiculação dele termina. O último envio encerra o job."
-            : "Envie cada mês quando o cliente validar."
-          : `${enviados.length} de ${meses.length} ${
+    : enviados.length === 0
+      ? midiaOff
+        ? "Envie cada mês depois que a veiculação dele termina."
+        : "Envie cada mês quando o cliente validar."
+      : `${enviados.length} de ${meses.length} ${
           meses.length === 1 ? "mês enviado" : "meses enviados"
         } · ${formatCurrency(somaEnviada, moeda)} de ${formatCurrency(total, moeda)} na fila.`;
 
@@ -284,7 +230,7 @@ export function BarraFaturamentoMensal({
                 </span>
                 <ChipSituacao situacao={m.situacao} />
                 <span className="min-w-0 flex-1 text-xs text-muted-foreground">
-                  {detalheDoMes(m, moeda, encerraNoEnvio(m) ? pendenciasDoMes(m) : null)}
+                  {detalheDoMes(m, moeda)}
                 </span>
                 {m.envio ? (
                   <button
@@ -297,8 +243,6 @@ export function BarraFaturamentoMensal({
                   </button>
                 ) : podeEnviarMes(m) ? (
                   botaoEnviar(m, true)
-                ) : travadoPeloEncerramento(m) ? (
-                  botaoTravado(m, true)
                 ) : null}
               </li>
             ))}
@@ -327,7 +271,6 @@ export function BarraFaturamentoMensal({
               )}
             </button>
             {proximo && podeEnviarMes(proximo) && botaoEnviar(proximo, false)}
-            {proximoTravado && botaoTravado(proximoTravado, false)}
           </>
         }
       >

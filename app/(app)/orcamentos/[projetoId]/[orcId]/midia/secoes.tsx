@@ -42,6 +42,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calha, LinhaDaCalha, usePosicoesDaCalha, type PosicoesCalha } from "@/app/(app)/_planilha/calha";
+import { LARGURA_CALHA } from "@/app/(app)/_planilha/calha-acoes";
 import {
   DicasDeTeclado,
   useSelecaoPlanilha,
@@ -107,6 +108,10 @@ export interface ApiDaPlanilha {
   veiculos: VeiculoDaLista[];
   /** Abre o cadastro: novo (com o nome da busca) ou a edição do escolhido. */
   abrirVeiculo: (linhaId: string, nomeInicial?: string) => void;
+  /** A calha da linha na planilha do JOB (decisão 167, entrega 3): a PP do
+   *  repasse, desenhada por quem conhece as PPs. `null` no orçamento e
+   *  onde a linha não tem o que mostrar. */
+  calhaDoJob: ((l: LinhaMidia) => React.ReactNode) | null;
 }
 
 /** A seleção de dias da grade: um retângulo dentro de UM meio de UM mês —
@@ -1041,6 +1046,9 @@ const VAGA_CALHA = "w-[26px]";
  *  (duplicar e lixeira). Quem envolve os meios usa esta classe. */
 export const PR_CALHA_MIDIA = "pr-[64px]";
 
+/** No job, a calha da PP do repasse tem a largura da calha nacional. */
+export const PR_CALHA_MIDIA_DO_JOB = "pr-[116px]";
+
 function LixeiraDaLinha({ linha, meio }: { linha: LinhaMidia; meio: string }) {
   const api = useApi();
   const [perguntando, setPerguntando] = React.useState(false);
@@ -1144,7 +1152,24 @@ function CalhaDoMeio({
   mesNome: string;
 }) {
   const api = useApi();
-  if (api.readOnly) return null;
+  if (api.readOnly) {
+    // No job, só leitura: a calha é a da PP do repasse (entrega 3), na
+    // largura da calha da planilha nacional.
+    const calhaDoJob = api.calhaDoJob;
+    if (!calhaDoJob) return null;
+    return (
+      <Calha className={cn("pointer-events-none absolute left-full top-0 ml-2.5", LARGURA_CALHA)}>
+        {linhas.map((l) => {
+          const conteudo = calhaDoJob(l);
+          return conteudo ? (
+            <LinhaDaCalha key={l.id} posicao={posicoes[`l:${l.id}`]}>
+              {conteudo}
+            </LinhaDaCalha>
+          ) : null;
+        })}
+      </Calha>
+    );
+  }
   return (
     <Calha>
       {onRemover && (

@@ -34,6 +34,8 @@ import {
   somaDasPPsNaoCanceladas,
 } from "@/lib/calculos/pps-item";
 import type { TipoCusto } from "@/lib/types";
+import { alvoDoRepasse } from "@/lib/calculos/midia-off";
+import { lerMidiaDoJob } from "@/lib/data/midia-do-job";
 
 /** Uma âncora de item que ainda não disse se sai mais PP dela. */
 export interface ItemSemConclusao {
@@ -41,8 +43,9 @@ export interface ItemSemConclusao {
   nome: string;
   tipoCusto: TipoCusto;
   emSave: boolean;
-  /** O orçado da CÓPIA do job — é contra ele que o `AR` fecha (062). */
-  totalOrcado: number;
+  /** Contra o que o `AR` fecha (062): o orçado da CÓPIA do job, ou a nota
+   *  do veículo na Mídia Off (decisão 167, entrega 3). */
+  alvoDoRepasse: number;
 }
 
 /**
@@ -54,21 +57,25 @@ export async function lerItensSemConclusao(
   tenantId: string,
   jobId: string,
 ): Promise<ItemSemConclusao[] | null> {
-  const { data, error } = await supabase
-    .from("jobs_itens_realizado")
-    .select(
-      "id, copia:jobs_itens_orcado!inner(item, tipo_custo, em_save, total_orcado)",
-    )
-    .eq("tenant_id", tenantId)
-    .eq("job_id", jobId)
-    .is("pps_concluidas_em", null)
-    .in("copia.tipo_custo", TIPOS_QUE_GERAM_PP)
-    .eq("copia.em_save", false);
+  const [{ data, error }, lida] = await Promise.all([
+    supabase
+      .from("jobs_itens_realizado")
+      .select(
+        "id, copia:jobs_itens_orcado!inner(item, tipo_custo, em_save, total_orcado)",
+      )
+      .eq("tenant_id", tenantId)
+      .eq("job_id", jobId)
+      .is("pps_concluidas_em", null)
+      .in("copia.tipo_custo", TIPOS_QUE_GERAM_PP)
+      .eq("copia.em_save", false),
+    lerMidiaDoJob(supabase, tenantId, jobId),
+  ]);
 
   if (error) {
     console.error("[item.conclusao.pendentes]", error.message);
     return null;
   }
+  if (!lida.ok) return null;
 
   return ((data ?? []) as any[]).map((linha) => {
     const copia = Array.isArray(linha.copia) ? linha.copia[0] : linha.copia;
@@ -77,7 +84,7 @@ export async function lerItensSemConclusao(
       nome: (copia?.item as string) ?? "Item",
       tipoCusto: copia?.tipo_custo as TipoCusto,
       emSave: copia?.em_save === true,
-      totalOrcado: Number(copia?.total_orcado ?? 0),
+      alvoDoRepasse: alvoDoRepasse(copia?.total_orcado ?? 0, lida.midia),
     };
   });
 }
@@ -105,7 +112,7 @@ export async function itensSemConclusaoDoJob(
         nome: "Itens de custo (não foi possível conferir; tente de novo)",
         tipoCusto: "B",
         emSave: false,
-        totalOrcado: 0,
+        alvoDoRepasse: 0,
       },
     ]
   );
@@ -143,7 +150,7 @@ export async function faltaDosARsSemFechar(
 
   if (error) {
     console.error("[item.conclusao.ar]", error.message);
-    for (const i of ars) faltas.set(i.itemRealizadoId, i.totalOrcado);
+    for (const i of ars) faltas.set(i.itemRealizadoId, i.alvoDoRepasse);
     return faltas;
   }
 
@@ -157,7 +164,7 @@ export async function faltaDosARsSemFechar(
   for (const i of ars) {
     const falta = faltaParaFecharOOrcado(
       somaDasPPsNaoCanceladas(ppsPorItem.get(i.itemRealizadoId) ?? []),
-      i.totalOrcado,
+      i.alvoDoRepasse,
     );
     if (falta > 0) faltas.set(i.itemRealizadoId, falta);
   }
@@ -241,11 +248,18 @@ export async function aplicarConclusaoDoItem(
       copia &&
       exigeSomaIgualAoOrcado(copia.tipo_custo, copia.em_save === true)
     ) {
-      const { data: pps } = await supabase
-        .from("pedidos_compra")
-        .select("valor, status")
-        .eq("item_realizado_id", itemRealizadoId)
-        .eq("tenant_id", tenantId);
+      // Mídia Off (decisão 167, entrega 3): o repasse fecha a nota do
+      // veículo, não o negociado inteiro.
+      const [{ data: pps }, lida] = await Promise.all([
+        supabase
+          .from("pedidos_compra")
+          .select("valor, status")
+          .eq("item_realizado_id", itemRealizadoId)
+          .eq("tenant_id", tenantId),
+        lerMidiaDoJob(supabase, tenantId, jobId),
+      ]);
+      if (!lida.ok) return { ok: false, message: "Não foi possível conferir o job. Tente de novo." };
+      const alvo = alvoDoRepasse(copia.total_orcado, lida.midia);
 
       const soma = somaDasPPsNaoCanceladas(
         ((pps ?? []) as any[]).map((pp) => ({
@@ -253,19 +267,18 @@ export async function aplicarConclusaoDoItem(
           status: pp.status as string,
         })),
       );
-      const falta = faltaParaFecharOOrcado(
-        soma,
-        Number(copia.total_orcado ?? 0),
-      );
+      const falta = faltaParaFecharOOrcado(soma, alvo);
       if (falta > 0) {
         const brl = (n: number) =>
           n.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
         return {
           ok: false,
-          message:
-            `Em custo A · Repasse o item só fecha quando as PPs cobrem o orçado. ` +
-            `"${itemNome}" tem ${brl(soma)} em PPs de um orçado de ` +
-            `${brl(Number(copia.total_orcado ?? 0))} — faltam ${brl(falta)}.`,
+          message: lida.midia
+            ? `Em A · Repasse o item só fecha quando as PPs cobrem a nota do veículo. ` +
+              `"${itemNome}" tem ${brl(soma)} em PPs de uma nota de ${brl(alvo)} — faltam ${brl(falta)}.`
+            : `Em custo A · Repasse o item só fecha quando as PPs cobrem o orçado. ` +
+              `"${itemNome}" tem ${brl(soma)} em PPs de um orçado de ` +
+              `${brl(alvo)} — faltam ${brl(falta)}.`,
         };
       }
     }

@@ -186,7 +186,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 164 | [Verba de Alimentação e Verba de Transporte, com titular do RH, freela ou terceiro](164-verbas-de-alimentacao-e-transporte.md) | 2026-10-09 |
 | 165 | [Filtro e ordem pelo título da coluna, como no Excel, nas listas do ERP](165-filtro-por-coluna-nas-listas.md) | 2026-10-09 |
 | 166 | [Regime tributário (Real e Presumido separados) e CNAE obrigatórios no fornecedor, e a PP travada para cadastro incompleto](166-regime-e-cnae-do-fornecedor.md) | 2026-10-09 |
-| 167 | [Job da Mídia Off, entrega 2: abrir e faturar por mês, e o último envio encerra o job](167-job-da-midia-off-abrir-e-faturar.md) | 2026-10-13 |
+| 167 | [Job da Mídia Off, entrega 2: abrir e faturar por mês, e o último envio encerra o job](167-job-da-midia-off-abrir-e-faturar.md) (encerramento revisto pela 273) | 2026-10-13 |
 | 168 | [Produtor Responsável só lista quem tem o papel Produtor, e GP e Produtor aceitam digitação](168-produtor-responsavel-so-papel-produtor.md) | 2026-10-13 |
 | 169 | [Cancelamento de job aberto: a produção pede, o financeiro decide na Abertura de Job](169-cancelamento-de-job-aberto.md) | 2026-10-13 |
 | 170 | [GP só quem pode ser GP: lista do projeto, lista do orçamento e trava no envio para abertura](170-gp-so-quem-pode-ser-gp.md) | 2026-10-13 |
@@ -284,6 +284,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 269 | [A NF da prestação de contas da verba entra no cadastro de notas no envio](269-nf-da-prestacao-entra-no-cadastro-no-envio.md) | 2026-11-23 |
 | 271 | [O controle único de NFs: a seção Notas Fiscais e os seis pontos](271-controle-unico-de-nfs-os-seis-pontos.md) | 2026-11-23 |
 | 272 | [Recorrências: uma lista só, a conta que varia e o custo fixo reconhecido no banco](272-recorrencias-lista-unica-e-conta-que-varia.md) | 2026-11-23 |
+| 273 | [Mídia Off, entrega 3: a PP do repasse e o encerramento depois da veiculação](273-midia-off-pp-do-repasse-e-encerramento.md) | 2026-11-23 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a

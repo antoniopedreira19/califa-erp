@@ -48,6 +48,11 @@ export interface FechamentoDoJob {
   bvsEmAberto: { item: string; situacao: string }[];
   /** Itens de custo que ainda não disseram se sai mais PP (decisão 052). */
   itensSemMarcacao: { item: string }[];
+  /** Mídia Off (decisão 167, entrega 3): a campanha ainda no ar — o último
+   *  dia de veiculação. Trava: o job encerra no dia seguinte. `null` fora
+   *  da mídia ou com a veiculação terminada. Obrigatório: a origem que não
+   *  tem o dado manda `null`. */
+  veiculacaoAte: string | null;
   /** Job normal ainda não enviado para faturamento. Não trava. */
   semEnvio: boolean;
   /** Mensal: os meses ainda por enviar, pelo nome. Não travam. */
@@ -87,7 +92,8 @@ export function pendenciasDoFechamento(f: FechamentoDoJob): number {
     f.verbasEmAberto.length +
     f.nfsDaAuditoria.length +
     f.bvsEmAberto.length +
-    f.itensSemMarcacao.length
+    f.itensSemMarcacao.length +
+    (f.veiculacaoAte !== null ? 1 : 0)
   );
 }
 
@@ -151,6 +157,7 @@ export function EnviarEncerramentoDialog({
     nfsDaAuditoria,
     bvsEmAberto,
     itensSemMarcacao,
+    veiculacaoAte,
     semEnvio,
     mesesSemEnvio,
     faturamentoTodoEnviado,
@@ -191,10 +198,7 @@ export function EnviarEncerramentoDialog({
   const descricao =
     modo === "enviar"
       ? "Confira o fechamento antes de enviar. Depois do envio o job vira histórico: nada mais é editado, nenhuma PP é gerada e nenhum BV é lançado."
-      : `${
-          // Mídia Off (decisão 167): o job encerra com o envio do último mês.
-          totais.midia ? "Encerrado com o envio do último mês para faturamento, em" : "Enviado para encerramento em"
-        } ${dataBrDeInstante(fechamento.encerradoEm)}${
+      : `Enviado para encerramento em ${dataBrDeInstante(fechamento.encerradoEm)}${
           fechamento.encerradoPorNome ? ` por ${fechamento.encerradoPorNome}` : ""
         }. O job é histórico: estes números não mudam mais.`;
 
@@ -228,6 +232,12 @@ export function EnviarEncerramentoDialog({
                 <p className="font-semibold text-california-red">
                   Este job ainda não pode ser enviado para encerramento.
                 </p>
+                {veiculacaoAte && (
+                  <p className="text-muted-foreground">
+                    A campanha está no ar até {veiculacaoAte.split("-").reverse().join("/")}: o
+                    envio para encerramento libera no dia seguinte.
+                  </p>
+                )}
                 {ppsEmAberto.length > 0 && (
                   <p className="text-muted-foreground">
                     {ppsEmAberto.length === 1

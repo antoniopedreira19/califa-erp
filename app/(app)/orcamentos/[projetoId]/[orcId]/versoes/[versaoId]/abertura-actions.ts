@@ -31,6 +31,7 @@ import {
   comAContaDaMidia,
   fechamentoDosItens,
   parametrosDaVersao,
+  planejadoDaLinhaMidia,
 } from "@/lib/calculos/midia-off";
 import { formatCurrency } from "@/lib/utils";
 import { cancelarAprovacaoVersao } from "../actions";
@@ -1105,6 +1106,10 @@ async function tentarEnviarJobParaAbertura(
         valor_unitario_planejado: i.valor_unitario_planejado,
         quantidade_planejada: i.quantidade_planejada,
         dias_meses_planejado: i.dias_meses_planejado,
+        // Mídia Off (decisão 167, entrega 3): a versão não tem planejado
+        // (resposta 9 da planilha); no job ele é a nota do veículo, que é o
+        // que a PP do repasse paga.
+        ...(paramsMidia ? planejadoDaLinhaMidia(i, paramsMidia) : {}),
         // O BV que o planejado deduz vem CONGELADO da aprovação. Editar o
         // BV depois, na planilha do job, não mexe aqui — o compromisso do
         // planejado fecha neste ponto (docs/decisions/022).

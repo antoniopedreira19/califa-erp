@@ -13,16 +13,12 @@ import {
 } from "@/lib/validations/envio-faturamento";
 import { contatosDeCobrancaDoJob } from "@/lib/data/contatos-cobranca";
 import {
-  comMaiuscula,
   conferirEnvioDoJob,
   mensagemJaEnviado,
 } from "@/lib/faturamento/conferir-envio-do-job";
 import { diaSeguinte, limitesDoMes, mesEmVeiculacao } from "@/lib/calculos/midia-off";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { lerUltimaVeiculacaoDoMes } from "@/lib/data/midia-do-job";
-import { mesesEnviadosDoJob } from "@/lib/data/envio-faturamento";
-import { impedimentosDosJobs } from "@/lib/data/impedimentos-encerramento";
-import { encerrarJob } from "./actions-encerramento";
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -144,17 +140,16 @@ function dataBr(iso: string): string {
 }
 
 /**
- * As duas travas do envio de um mês da Mídia Off (decisão 167):
+ * A trava do envio de um mês da Mídia Off (decisão 167): o mês só vai ao
+ * faturamento no dia seguinte à última veiculação dele — a maior data com
+ * inserção na grade, ou o fim do período, que pode cair no mês seguinte.
  *
- * 1. o mês só vai ao faturamento no dia seguinte à última veiculação dele
- *    — a maior data com inserção na grade, ou o fim do período, que pode
- *    cair no mês seguinte;
- * 2. o envio do ÚLTIMO mês que falta encerra o job junto, e por isso só
- *    passa sem pendência de encerramento — a mesma régua do botão
- *    "Enviar para encerramento".
+ * O envio do último mês encerrava o job junto (entrega 2) até a entrega 3
+ * (23/11/2026): o job de mídia agora encerra pelo "Enviar para
+ * encerramento" de sempre, que espera a veiculação terminar e as PPs do
+ * repasse pagas (`impedimentosDosJobs`).
  *
- * Devolve a recusa (texto da tela + motivo da auditoria) ou se o envio
- * encerra o job.
+ * Devolve a recusa (texto da tela + motivo da auditoria), ou `null`.
  */
 async function conferirEnvioDoMesDaMidia(
   supabase: ReturnType<typeof createClient>,
@@ -164,26 +159,21 @@ async function conferirEnvioDoMesDaMidia(
     versaoAprovadaId: string;
     mes: string;
     nomeMes: string;
-    mesesComFaturamento: string[];
   },
-): Promise<{ recusa: string; motivo: string } | { encerra: boolean }> {
-  const [ultima, mesesFechados] = await Promise.all([
-    lerUltimaVeiculacaoDoMes(supabase, p.tenantId, p.jobId, p.versaoAprovadaId, p.mes),
-    // Decisão 265: o mês faturado pelo financeiro (Novo faturamento) conta
-    // como enviado. O Novo nunca encerra o job sozinho: quem encerra é o
-    // envio do GP que fecha o último mês que falta.
-    mesesEnviadosDoJob(supabase, p.jobId, p.tenantId).catch((e: Error) => {
-      console.error("[job.enviarFaturamento.midia]", e.message);
-      return null;
-    }),
-  ]);
-  if (ultima === undefined || mesesFechados === null) {
+): Promise<{ recusa: string; motivo: string } | null> {
+  const ultima = await lerUltimaVeiculacaoDoMes(
+    supabase,
+    p.tenantId,
+    p.jobId,
+    p.versaoAprovadaId,
+    p.mes,
+  );
+  if (ultima === undefined) {
     return {
       recusa: "Não foi possível conferir a veiculação do mês. Tente de novo.",
       motivo: "leitura_da_veiculacao",
     };
   }
-
   if (mesEmVeiculacao(p.mes, ultima, hojeEmSaoPauloIso())) {
     const fim = ultima ?? limitesDoMes(p.mes).fim;
     return {
@@ -191,68 +181,7 @@ async function conferirEnvioDoMesDaMidia(
       motivo: "mes_em_veiculacao",
     };
   }
-
-  const enviados = new Set([...mesesFechados].map((m) => m.slice(0, 10)));
-  const encerra = p.mesesComFaturamento.every(
-    (m) => m.slice(0, 10) === p.mes.slice(0, 10) || enviados.has(m.slice(0, 10)),
-  );
-  if (!encerra) return { encerra: false };
-
-  const imp = (await impedimentosDosJobs(supabase, p.tenantId, [p.jobId])).get(p.jobId);
-  if (!imp) {
-    return {
-      recusa: "Não foi possível conferir as pendências do job. Tente de novo.",
-      motivo: "leitura_dos_impedimentos",
-    };
-  }
-  const partes: string[] = [];
-  const conta = (n: number, um: string, varios: string) => (n === 1 ? `1 ${um}` : `${n} ${varios}`);
-  if (imp.ppsEmAberto.length > 0) {
-    partes.push(
-      `${conta(imp.ppsEmAberto.length, "PP em aberto", "PPs em aberto")} (${imp.ppsEmAberto.map((x) => x.codigo).join(", ")})`,
-    );
-  }
-  if (imp.ppsAEmitir.length > 0) {
-    partes.push(conta(imp.ppsAEmitir.length, "PP a emitir", "PPs a emitir"));
-  }
-  if (imp.verbasEmAberto.length > 0) {
-    partes.push(conta(imp.verbasEmAberto.length, "verba não concluída", "verbas não concluídas"));
-  }
-  if (imp.nfsDaAuditoria.length > 0) {
-    partes.push(conta(imp.nfsDaAuditoria.length, "PP sem NF da Mídia System", "PPs sem NF da Mídia System"));
-  }
-  if (imp.bvsEmAberto.length > 0) {
-    partes.push(conta(imp.bvsEmAberto.length, "BV não recebido", "BVs não recebidos"));
-  }
-  if (imp.itensSemMarcacao.length > 0) {
-    partes.push(
-      conta(
-        imp.itensSemMarcacao.length,
-        "linha A · Repasse sem a PP do repasse",
-        "linhas A · Repasse sem a PP do repasse",
-      ),
-    );
-  }
-  if (imp.savesAguardando.length > 0) {
-    partes.push(conta(imp.savesAguardando.length, "save aguardando aprovação", "saves aguardando aprovação"));
-  }
-  if (imp.consumosAguardando.length > 0) {
-    partes.push(
-      conta(imp.consumosAguardando.length, "consumo de save aguardando aprovação", "consumos de save aguardando aprovação"),
-    );
-  }
-  if (imp.savesNaoEnviados.length > 0) {
-    partes.push(conta(imp.savesNaoEnviados.length, "save ainda não enviado", "saves ainda não enviados"));
-  }
-  if (imp.revisaoDaAberturaPendente) partes.push("revisão da abertura pendente no financeiro");
-
-  if (partes.length > 0) {
-    return {
-      recusa: `${comMaiuscula(p.nomeMes)} é o último mês: o envio encerra o job, que ainda tem pendência: ${partes.join("; ")}.`,
-      motivo: "encerramento_com_pendencia",
-    };
-  }
-  return { encerra: true };
+  return null;
 }
 
 /**
@@ -326,19 +255,16 @@ export async function enviarJobParaFaturamento(
   }
   const { job, mes, nomeMes, valor, valorSave } = conf;
 
-  // Mídia Off (decisão 167): a veiculação do mês, e o envio que deixa todos
-  // os meses enviados ENCERRA o job junto (Tiago, 13/10/2026).
-  let encerraOJob = false;
-  if (conf.paramsMidia && mes && conf.porMes) {
+  // Mídia Off (decisão 167): o mês só vai depois da veiculação dele.
+  if (conf.paramsMidia && mes) {
     const recusa = await conferirEnvioDoMesDaMidia(supabase, {
       tenantId: session.activeTenant.id,
       jobId,
       versaoAprovadaId: job.versao_orcamento_aprovada_id,
       mes,
       nomeMes: nomeMes ?? mes,
-      mesesComFaturamento: conf.porMes.filter((m) => m.faturamento > 0.004).map((m) => m.mes),
     });
-    if ("recusa" in recusa) {
+    if (recusa) {
       await logAuditEvent({
         acao: "acao_negada",
         tenantId: session.activeTenant.id,
@@ -348,7 +274,6 @@ export async function enviarJobParaFaturamento(
       });
       return { ok: false, message: recusa.recusa };
     }
-    encerraOJob = recusa.encerra;
   }
 
   // A soma das notas fecha contra o valor RELIDO, não contra o que o
@@ -506,16 +431,6 @@ export async function enviarJobParaFaturamento(
   revalidatePath("/financeiro/abertura-de-job");
   revalidatePath(`/financeiro/jobs/${jobId}`);
   revalidatePath("/financeiro/contas-a-receber");
-
-  // Mídia Off: o envio do último mês encerra o job junto (decisão 167). As
-  // pendências já foram conferidas acima; o `encerrarJob` refaz a conta e,
-  // com todo o faturamento enviado, o banco grava `finalizado`. Se ele
-  // recusar (alguém emitiu uma PP entre as duas leituras), o envio fica e a
-  // trilha "Encerramento" volta a mostrar o botão — todos os meses enviados.
-  if (encerraOJob) {
-    const r = await encerrarJob(jobId);
-    if (!r.ok) console.error("[job.enviarFaturamento.encerrar]", r.message);
-  }
 
   return { ok: true, id: envioId as string };
 }

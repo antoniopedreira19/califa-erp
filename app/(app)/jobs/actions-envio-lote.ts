@@ -327,8 +327,8 @@ export async function carregarEnvioEmLote(jobIds: string[]): Promise<CarregarLot
   const jobs = [...lidos].sort((a, b) => (ordem.get(a.id) ?? 0) - (ordem.get(b.id) ?? 0));
   const foraDoLote: DadosDoLote["foraDoLote"] = [];
 
-  // Mídia Off fica fora: o envio dela tem as travas da veiculação e o
-  // encerramento junto do último mês (decisão 167), só pela página do job.
+  // Mídia Off fica fora: o envio dela tem a trava da veiculação do mês
+  // (decisão 167), só pela página do job.
   const modelo = (j: JobLido) => j.orcamento?.categoria?.modelo_planilha ?? null;
   const candidatos = jobs.filter((j) => {
     if (modelo(j) === "midia_off") {

@@ -11,9 +11,9 @@
  * faturamento DO MÊS no modelo mensal —; e se o job (ou o mês) já foi
  * enviado. O valor nunca vem do navegador.
  *
- * As travas próprias da Mídia Off (veiculação do mês e encerramento junto
- * do último mês, decisão 167) ficam na action do job, que é a única porta
- * da Mídia Off — o lote não aceita Mídia Off.
+ * A trava própria da Mídia Off (a veiculação do mês, decisão 167) fica na
+ * action do job, que é a única porta da Mídia Off — o lote não aceita
+ * Mídia Off.
  *
  * Não grava nada. Quando a recusa merece auditoria (`acao_negada`), devolve
  * o motivo e os detalhes; quem chama registra, com a ação tentada dele.

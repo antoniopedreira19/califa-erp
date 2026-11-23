@@ -12,7 +12,11 @@ import {
   JOB_STATUS_ABERTO,
   type JobStatus,
 } from "@/lib/types";
-import { impedimentosDosJobs } from "@/lib/data/impedimentos-encerramento";
+import {
+  impedimentosDosJobs,
+  podeEncerrar,
+  textoDaVeiculacao,
+} from "@/lib/data/impedimentos-encerramento";
 
 export type ActionResult =
   | { ok: true; id: string; status: JobStatus }
@@ -85,19 +89,10 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
     null;
   if (!imp) return { ok: false, message: "Não foi possível conferir o job. Tente de novo." };
 
-  if (
-    imp.ppsEmAberto.length > 0 ||
-    imp.ppsAEmitir.length > 0 ||
-    imp.verbasEmAberto.length > 0 ||
-    imp.nfsDaAuditoria.length > 0 ||
-    imp.bvsEmAberto.length > 0 ||
-    imp.itensSemMarcacao.length > 0 ||
-    imp.savesAguardando.length > 0 ||
-    imp.consumosAguardando.length > 0 ||
-    imp.savesNaoEnviados.length > 0 ||
-    imp.revisaoDaAberturaPendente
-  ) {
+  if (!podeEncerrar(imp)) {
     const partes: string[] = [];
+    // Mídia Off (decisão 167, entrega 3): a campanha no ar vem primeiro.
+    if (imp.veiculacaoAte !== null) partes.push(textoDaVeiculacao(imp.veiculacaoAte));
     if (imp.ppsEmAberto.length > 0) {
       partes.push(
         `${imp.ppsEmAberto.length} ${imp.ppsEmAberto.length === 1 ? "PP em aberto" : "PPs em aberto"} (${imp.ppsEmAberto
@@ -177,9 +172,13 @@ export async function encerrarJob(jobId: string): Promise<ActionResult> {
         consumos_aguardando: imp.consumosAguardando.length,
         saves_nao_enviados: imp.savesNaoEnviados.length,
         revisao_da_abertura_pendente: imp.revisaoDaAberturaPendente,
+        veiculacao_ate: imp.veiculacaoAte,
       },
     });
     const comoResolver: string[] = [];
+    if (imp.veiculacaoAte !== null && imp.veiculacaoAte !== "nao_conferida") {
+      comoResolver.push("O envio para encerramento libera no dia seguinte ao fim da veiculação.");
+    }
     if (imp.ppsEmAberto.length > 0 || imp.bvsEmAberto.length > 0) {
       comoResolver.push("Dê baixa nos documentos antes.");
     }
