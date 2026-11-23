@@ -94,8 +94,10 @@ import {
   fechamentoDosItens,
   realizadoDaLinhaMidia,
   parametrosDaVersao,
+  infoDoRealizado,
   listaDoQueFalta,
   situacaoDoRepasse,
+  type InfoDoRealizado,
   ultimaVeiculacaoDaCampanha,
   veiculosNoMes,
   type ParametrosMidia,
@@ -105,6 +107,7 @@ import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import type { VersaoOrcamentoItem } from "@/lib/types";
 import { SELECT_PARAMETROS_DO_JOB, comParametrosDoJob } from "@/lib/data/parametros-do-job";
 import { lerDocumentosDaMidia } from "@/lib/data/midia-do-job";
+import type { RegistroDoRealizado } from "./realizado/realizado-da-midia";
 import type { DocumentoDaMidia } from "@/lib/midia/documentos";
 
 /** Mídia Off (decisão 167): o que a planilha de mídia do job precisa — as
@@ -123,6 +126,16 @@ export interface MidiaDoDetalhe {
   /** O que trava o envio de cada mês, por veículo: "Veículo (AP, PI e
    *  NF)". A barra de faturamento lê daqui; o servidor refaz a conta. */
   faltaPorMes: Record<string, string[]>;
+  /** Planejado e realizado (decisão 275): o que mudou em cada linha, o
+   *  planejado inicial (as linhas da versão aprovada) e o registro. */
+  realizado: {
+    info: Record<string, InfoDoRealizado>;
+    iniciais: Array<{ tipo_custo: string; total_orcado: number }>;
+    registros: RegistroDoRealizado[];
+    /** Quando cada linha de extensão nasceu (AP e PI de antes não a
+     *  cobrem). */
+    extensaoEm: Record<string, string>;
+  };
 }
 
 /**
@@ -228,6 +241,8 @@ export async function carregarDetalheDoJob(
     meiosDaVersaoRes,
     veiculosRes,
     documentosDaMidia,
+    iniciaisDaMidiaRes,
+    alteracoesDaMidiaRes,
     apresentacoesDoProjeto,
     custosDoSocioRes,
     socioDaEmpresaRes,
@@ -518,6 +533,26 @@ export async function carregarDetalheDoJob(
       : Promise.resolve({ data: [], error: null }),
     // AP, PI e NF do veículo no mês (decisão 274).
     ehMidiaOff ? lerDocumentosDaMidia(supabase, session.activeTenant.id, jobId) : Promise.resolve([]),
+    // O planejado inicial da mídia (decisão 275): as linhas da versão
+    // aprovada — a cópia do job é a campanha como está.
+    ehMidiaOff
+      ? supabase
+          .from("versoes_orcamento_itens")
+          .select("id, tipo_custo, valor_unitario_orcado, quantidade_orcada, dias_meses_orcado, total_orcado, insercoes_por_dia, data_inicio, data_fim")
+          .eq("versao_orcamento_id", raw.versao_orcamento_aprovada_id)
+          .eq("tenant_id", session.activeTenant.id)
+      : Promise.resolve({ data: [], error: null }),
+    // E o registro: cada encerramento e cada extensão.
+    ehMidiaOff
+      ? supabase
+          .from("jobs_midia_alteracoes")
+          .select(
+            "id, tipo, data, motivo, created_at, autor:profiles!created_by(nome), linhas:jobs_midia_alteracoes_linhas(job_item_orcado_id, depois, negociado_antes, negociado_depois)",
+          )
+          .eq("job_id", jobId)
+          .eq("tenant_id", session.activeTenant.id)
+          .order("created_at", { ascending: false })
+      : Promise.resolve({ data: [], error: null }),
     // As apresentações do projeto, no card PROJETO da ficha (decisão 213).
     listarApresentacoesDoProjeto(supabase, session.activeTenant.id, raw.projeto_id),
     // Decisão 236: os custos pagos pelo sócio (a Robotech, nos jobs da
@@ -1283,10 +1318,21 @@ export async function carregarDetalheDoJob(
   );
   // Mídia Off (decisão 167): o custo planejado são as notas dos veículos; o
   // realizado é a nota no A · Direto e as PPs do repasse no A · Repasse
-  // (Tiago, 13/10/2026). A mídia ainda não tem BV.
-  const custoPlanejadoJob = fechamentoMidiaJob
-    ? fechamentoMidiaJob.custoPlanejado
-    : blocosDoJob.planejado.bruto;
+  // (Tiago, 13/10/2026). Desde a entrega 5 (decisão 275) o planejado é o
+  // INICIAL — as notas da versão aprovada —, e o cabeçalho se divide como
+  // na errata quando a veiculação mudou.
+  const realizadoMidia = paramsMidia ? realizadoDaMidia(paramsMidia) : null;
+  const inicialMidia =
+    realizadoMidia && paramsMidia ? fechamentoDosItens(realizadoMidia.iniciais, paramsMidia) : null;
+  const aberturaMidia =
+    inicialMidia && realizadoMidia && realizadoMidia.registros.length > 0
+      ? { valorJob: inicialMidia.valorJob, deducoes: inicialMidia.imposto }
+      : null;
+  const custoPlanejadoJob = inicialMidia
+    ? inicialMidia.custoPlanejado
+    : fechamentoMidiaJob
+      ? fechamentoMidiaJob.custoPlanejado
+      : blocosDoJob.planejado.bruto;
   const custoRealizadoJob = paramsMidia
     ? itens.reduce(
         (s, it) =>
@@ -1302,7 +1348,14 @@ export async function carregarDetalheDoJob(
       )
     : blocosDoJob.realizado.bruto;
   const bvPlanejadoJob = fechamentoMidiaJob ? 0 : blocosDoJob.planejado.deducaoBv;
-  const bvRealizadoJob = fechamentoMidiaJob ? 0 : blocosDoJob.realizado.deducaoBv;
+  // Mídia Off (decisão 274): o BV do veículo entra no realizado quando é
+  // recebido, líquido do imposto dele (o protótipo aprovado).
+  const bvRealizadoJob = fechamentoMidiaJob
+    ? Object.values(bvsPorItem)
+        .flat()
+        .filter((b) => b.situacao === "recebido")
+        .reduce((s, b) => s + Number(b.valor ?? 0) * (1 - Number(b.percentual_imposto ?? 0) / 100), 0)
+    : blocosDoJob.realizado.deducaoBv;
 
   const threadChat = montarThreadChat(
     {
@@ -1895,6 +1948,7 @@ export async function carregarDetalheDoJob(
             tipo: it.tipo_custo as string,
             negociado: Number(it.total_orcado ?? 0),
             meio: meioDoGrupo.get(it._grupo) ?? null,
+            extensaoEm: it.midia_extensao_id ? (it.created_at as string) : null,
             repasse:
               it.tipo_custo === "AR"
                 ? situacaoDoRepasse(r ? (ppsPorItemId.get(r.id) ?? []) : [], r?.pps_concluidas_em != null)
@@ -1908,6 +1962,76 @@ export async function carregarDetalheDoJob(
     return porMes;
   }
   const veiculosPorMesDaMidia = paramsMidia ? veiculosDaMidiaPorMes(paramsMidia) : {};
+
+  // Planejado e realizado (decisão 275): a linha de hoje contra a dela na
+  // versão aprovada; a extensão não tem planejado inicial.
+  if (iniciaisDaMidiaRes.error) console.error("[job.midia.iniciais]", iniciaisDaMidiaRes.error.message);
+  if (alteracoesDaMidiaRes.error) console.error("[job.midia.alteracoes]", alteracoesDaMidiaRes.error.message);
+  function realizadoDaMidia(p: ParametrosMidia): MidiaDoDetalhe["realizado"] {
+    const inicialDe = new Map(((iniciaisDaMidiaRes.data ?? []) as any[]).map((i) => [i.id as string, i]));
+    const alteracoes = (alteracoesDaMidiaRes.data ?? []) as any[];
+    const veiculoDe = new Map(
+      (veiculosRes.data ?? []).filter((v) => v.veiculo).map((v) => [v.fornecedor_id, v.veiculo!.nome]),
+    );
+    const linhasDoJob = (itensRes.data ?? []) as any[];
+    const nomeDaLinha = (id: string) => {
+      const l = linhasDoJob.find((x) => x.id === id);
+      if (!l) return "Linha";
+      return [l.item?.trim() || null, l.praca, l.fornecedor_id ? veiculoDe.get(l.fornecedor_id) : null]
+        .filter(Boolean)
+        .join(" · ") || "Linha de mídia";
+    };
+    // O encerramento mais recente que alcançou cada linha (o rótulo da grade).
+    const encerradaEm = new Map<string, string>();
+    for (const a of [...alteracoes].reverse()) {
+      if (a.tipo !== "encerramento") continue;
+      for (const l of a.linhas ?? []) encerradaEm.set(l.job_item_orcado_id, String(a.data).slice(0, 10));
+    }
+    const info: Record<string, InfoDoRealizado> = {};
+    const iniciais: Array<{ tipo_custo: string; total_orcado: number }> = [];
+    const extensaoEm: Record<string, string> = {};
+    for (const l of linhasDoJob) {
+      if (l.midia_extensao_id) {
+        extensaoEm[l.id] = l.created_at;
+        info[l.id] = infoDoRealizado(l, null, null, p);
+        continue;
+      }
+      const ini = l.item_versao_id ? inicialDe.get(l.item_versao_id) : null;
+      const inicial = ini ?? l;
+      iniciais.push({ tipo_custo: inicial.tipo_custo, total_orcado: Number(inicial.total_orcado ?? 0) });
+      info[l.id] = infoDoRealizado(l, inicial, encerradaEm.get(l.id) ?? null, p);
+    }
+    const dataBr = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+    const registros: RegistroDoRealizado[] = alteracoes.map((a) => {
+      const linhas = (a.linhas ?? []) as any[];
+      const autor = Array.isArray(a.autor) ? a.autor[0] : a.autor;
+      const soma = (k: string) => linhas.reduce((s2, l) => s2 + Number(l[k] ?? 0), 0);
+      let detalhe = linhas.map((l) => nomeDaLinha(l.job_item_orcado_id)).join("; ");
+      if (a.tipo === "extensao" && linhas[0]) {
+        const d = linhas[0].depois ?? {};
+        const qt = d.insercoes_por_dia
+          ? Object.values(d.insercoes_por_dia as Record<string, number>).reduce((x: number, n) => x + Number(n), 0)
+          : 0;
+        detalhe += d.insercoes_por_dia
+          ? ` · +${qt} ${qt === 1 ? "inserção" : "inserções"}`
+          : d.data_inicio && d.data_fim
+            ? ` · ${dataBr(d.data_inicio)} a ${dataBr(d.data_fim)}`
+            : "";
+      }
+      return {
+        id: a.id,
+        tipo: a.tipo,
+        data: String(a.data).slice(0, 10),
+        detalhe,
+        motivo: a.motivo ?? null,
+        de: a.tipo === "extensao" ? null : Math.round(soma("negociado_antes") * 100) / 100,
+        para: Math.round(soma("negociado_depois") * 100) / 100,
+        em: String(a.created_at).slice(0, 10),
+        porNome: autor?.nome ?? null,
+      };
+    });
+    return { info, iniciais, registros, extensaoEm };
+  }
   const midia: MidiaDoDetalhe | null = paramsMidia
     ? {
         params: paramsMidia,
@@ -1963,6 +2087,7 @@ export async function carregarDetalheDoJob(
         ],
         veiculosPorMes: veiculosPorMesDaMidia,
         documentosFalharam: documentosDaMidia === undefined,
+        realizado: realizadoMidia!,
         faltaPorMes: Object.fromEntries(
           Object.entries(veiculosPorMesDaMidia).map(([mes, vs]) => [
             mes,
@@ -2050,6 +2175,8 @@ export async function carregarDetalheDoJob(
     faturamentoMensal,
     totaisJob,
     custoPlanejadoJob,
+    // A abertura da mídia, para o cabeçalho se dividir (decisão 275).
+    aberturaMidia,
     custoRealizadoJob,
     bvPlanejadoJob,
     bvRealizadoJob,

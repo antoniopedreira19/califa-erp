@@ -77,9 +77,10 @@ veiculados). A 2 sobe sozinha (Tiago, 07/10/2026, opção 1a).
    abre e fatura, mas **não envia o último mês**. Job só com A · Direto
    fecha o ciclo nesta entrega.
 8. **O que o job de Mídia Off ainda não tem**, travado na tela e no
-   servidor: errata (entrega 5), "Editar orçado" do financeiro (entrega 5)
-   e a exportação da planilha interna do job. A PP chegou na entrega 3
-   (273, 23/11/2026).
+   servidor: errata, "Editar orçado" do financeiro e a exportação da
+   planilha interna do job. A PP chegou na entrega 3 (273, 23/11/2026); a
+   entrega 5 (275, 23/11/2026) trouxe encerrar antes e estender a
+   veiculação SEM errata — a errata da mídia segue fora.
 9. **Custo realizado** (Tiago, 13/10/2026, "Nota do veículo"): no
    A · Direto, a nota do veículo — o mesmo critério do A nacional, que
    espelha o planejado; no A · Repasse, as PPs do repasse (zero até a

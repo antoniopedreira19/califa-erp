@@ -286,6 +286,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 272 | [Recorrências: uma lista só, a conta que varia e o custo fixo reconhecido no banco](272-recorrencias-lista-unica-e-conta-que-varia.md) | 2026-11-23 |
 | 273 | [Mídia Off, entrega 3: a PP do repasse e o encerramento depois da veiculação](273-midia-off-pp-do-repasse-e-encerramento.md) | 2026-11-23 |
 | 274 | [Mídia Off, entrega 4: os veículos do mês (AP, PI, NF e BV)](274-midia-off-veiculos-do-mes.md) | 2026-11-23 |
+| 275 | [Mídia Off, entrega 5: planejado e realizado (encerrar antes, estender)](275-midia-off-planejado-e-realizado.md) | 2026-11-23 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a

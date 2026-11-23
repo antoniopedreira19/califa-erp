@@ -112,4 +112,5 @@ para `profiles` (como as tabelas vizinhas do job). Aditivas.
   view é do financeiro; fica para combinar.
 - O sistema não impede a veiculação sem AP e PI (ela acontece fora dele):
   trava o envio do mês.
-- Entrega 5 (visão única, encerrar antes, estender; AP e PI da extensão).
+- A entrega 5 (visão única, encerrar antes, estender; AP e PI da extensão)
+  saiu na [275](275-midia-off-planejado-e-realizado.md).

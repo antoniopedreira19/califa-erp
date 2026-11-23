@@ -161,7 +161,16 @@ import { LinkSaidaDeModulo } from "@/components/financeiro/link-saida-de-modulo"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PlanilhaMidiaDoJob } from "./planilha-midia-do-job";
 import { VeiculosDoMes, type BvDoVeiculo } from "./veiculos-do-mes";
-import { alvoDoRepasse, decomposicaoDoRepasse, nomeDoMesMidia } from "@/lib/calculos/midia-off";
+import {
+  alvoDoRepasse,
+  decomposicaoDoRepasse,
+  fechamentoDosItens,
+  nomeDoMesMidia,
+  notaDoVeiculo,
+  ultimaVeiculacaoDaCampanha,
+} from "@/lib/calculos/midia-off";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
+import { RealizadoDaMidia, type LinhaDoRealizado } from "./realizado-da-midia";
 import type { SugestaoDaPP } from "./gerar-pp-drawer";
 import type { MidiaDoDetalhe } from "../carregar-detalhe";
 import { useProtegerSaida } from "@/components/voltar/estado";
@@ -2075,6 +2084,12 @@ function PlanilhaDoJob({
                 : null
           }
           leituraFalhou={midia.documentosFalharam}
+          notaPlanejada={(v) =>
+            v.linhaIds.reduce((s, id) => {
+              const plan = midia.realizado.info[id]?.contaPlanejada;
+              return s + (plan ? notaDoVeiculo(plan.totalNegociado, midia.params) : 0);
+            }, 0)
+          }
           podeAnexar={podeAnexarDocumentosDaMidia}
           bv={{
             doVeiculo: bvDoVeiculo,
@@ -2091,6 +2106,65 @@ function PlanilhaDoJob({
         />
       );
     };
+    // Planejado e realizado (decisão 275): o card acima da planilha.
+    const mesDoGrupoMidia = new Map(
+      grupos.map((g) => [g.id, meses.find((m) => m.id === g.mes_id)?.mes?.slice(0, 10) ?? null]),
+    );
+    const meioDoGrupoMidia = new Map(grupos.map((g) => [g.id, g.meio ?? g.nome]));
+    const linhasDoRealizado: LinhaDoRealizado[] = midia.linhas.flatMap((l) => {
+      const mes = mesDoGrupoMidia.get(l.grupo_id);
+      if (!mes) return [];
+      return [
+        {
+          id: l.id,
+          nome: nomeDaLinhaMidia ? nomeDaLinhaMidia(l.id) : l.item,
+          meio: meioDoGrupoMidia.get(l.grupo_id) ?? "",
+          mes,
+          tipo: l.tipo_custo,
+          extensao: !!midia.realizado.extensaoEm[l.id],
+          emPPs: (() => {
+            const r = realizadosMap.get(l.id);
+            return r ? somaDasPPsNaoCanceladas(ppsPorItemId.get(r.id) ?? []) : 0;
+          })(),
+          valor_unitario_orcado: Number(l.valor_unitario_orcado ?? 0),
+          quantidade_orcada: Number(l.quantidade_orcada ?? 0),
+          dias_meses_orcado: Number(l.dias_meses_orcado ?? 0),
+          total_orcado: Number(l.total_orcado ?? 0),
+          insercoes_por_dia: (l.insercoes_por_dia as Record<string, number> | null) ?? null,
+          data_inicio: l.data_inicio ?? null,
+          data_fim: l.data_fim ?? null,
+        },
+      ];
+    });
+    const fecharMidia = (ls: Array<{ tipo: string; total_orcado: number }>) =>
+      fechamentoDosItens(
+        ls.map((l) => ({ tipo_custo: l.tipo, total_orcado: l.total_orcado })),
+        midia.params,
+      );
+    const mesesEnviadosMidia = faturamentoMensal
+      .filter((m) => m.envio !== null || m.peloFinanceiro)
+      .map((m) => m.mes.slice(0, 10));
+    const cardDoRealizado = (
+      <RealizadoDaMidia
+        jobId={job.id}
+        jobCodigo={job.codigo}
+        linhas={linhasDoRealizado}
+        registros={midia.realizado.registros}
+        inicial={fechamentoDosItens(midia.realizado.iniciais, midia.params)}
+        atual={fecharMidia(linhasDoRealizado)}
+        fechar={fecharMidia}
+        meses={meses.map((m) => m.mes.slice(0, 10))}
+        mesesEnviados={mesesEnviadosMidia}
+        fimDaVeiculacao={ultimaVeiculacaoDaCampanha(faturamentoMensal.map((m) => m.ultimaVeiculacao))}
+        hoje={hojeEmSaoPauloIso()}
+        travadoPor={
+          job.status === "aberto" || job.status === "em_producao"
+            ? null
+            : "A veiculação só muda com o job aberto."
+        }
+        podeMexer={podeAcoes}
+      />
+    );
     const enviados = faturamentoMensal.filter((m) => m.envio !== null).length;
     const comFaturamento = faturamentoMensal.filter((m) => m.faturamento > 0.004).length;
     // Decisão 256: o mês do Novo faturamento fecha sem envio da produção.
@@ -2107,6 +2181,8 @@ function PlanilhaDoJob({
       <PlanilhaMidiaDoJob
         calha={(l) => calhaDaLinha(l.id)}
         veiculosDoMes={(mes) => veiculosDoMesDaMidia(mes)}
+        realizado={(id) => midia.realizado.info[id] ?? null}
+        cardDoRealizado={cardDoRealizado}
         job={job}
         nomeJob={nomeJob}
         versao={versao}

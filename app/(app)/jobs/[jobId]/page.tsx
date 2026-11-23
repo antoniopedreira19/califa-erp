@@ -183,6 +183,7 @@ export default async function JobDetailPage({
     totaisJob,
     custoPlanejadoJob,
     custoRealizadoJob,
+    aberturaMidia,
     bvPlanejadoJob,
     bvRealizadoJob,
     podeEditarRealizado,
@@ -361,7 +362,7 @@ export default async function JobDetailPage({
                 // Só o valor do job de hoje (volta atrás da decisão 151, em
                 // 15/10/2026): o da abertura fica no card de Erratas e no
                 // histórico da planilha.
-                abertura={null}
+                abertura={aberturaMidia}
                 custoPlanejado={custoPlanejadoJob}
                 custoRealizado={custoRealizadoJob}
                 bvRealizado={bvRealizadoJob}

@@ -33,6 +33,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { CalhaAcoes } from "@/app/(app)/_planilha/calha-acoes";
+import { corDoDelta } from "@/app/(app)/_planilha/blocos";
 import { acaoBv } from "@/app/(app)/_bv/bv-action-button";
 import { BvDialog, type FornecedorOpcao } from "@/app/(app)/_bv/bv-dialog";
 import type { BvSituacao, ChaveBvNoDialog, ItemBv, ItemPlanilhaJob } from "@/lib/types";
@@ -91,6 +92,9 @@ export interface PropsDosVeiculos {
   enviado: { em: string | null } | null;
   /** A leitura dos documentos falhou: nada se anexa, e o envio trava. */
   leituraFalhou: boolean;
+  /** A nota do veículo no planejado inicial (decisão 275); a extensão
+   *  não entra. */
+  notaPlanejada: (v: Veiculo) => number;
   podeAnexar: boolean;
   /** BV: o que a tela do job sabe para abrir o formulário de sempre. */
   bv: {
@@ -473,6 +477,7 @@ export function VeiculosDoMes({
   nomeDoVeiculo,
   enviado,
   leituraFalhou,
+  notaPlanejada,
   podeAnexar,
   bv,
 }: PropsDosVeiculos) {
@@ -554,13 +559,20 @@ export function VeiculosDoMes({
                     <span className="text-[11.5px] text-muted-foreground">Não anexado</span>
                   );
                 }
+                // Decisão 275: o documento de antes da extensão não a cobre.
+                const antes = tipo === "ap" ? v.apAntesDaExtensao : v.piAntesDaExtensao;
                 return (
-                  <ChipDoc
-                    rotulo={doc.numero}
-                    aviso={false}
-                    titulo={doc.nomeArquivo}
-                    onClick={() => setAberto({ tipo, veiculo: v })}
-                  />
+                  <div className="space-y-1">
+                    <ChipDoc
+                      rotulo={doc.numero}
+                      aviso={antes}
+                      titulo={antes ? `Anexado antes da extensão: anexe o ${tipo.toUpperCase()} da extensão.` : doc.nomeArquivo}
+                      onClick={() => setAberto({ tipo, veiculo: v })}
+                    />
+                    {antes && editavel && (
+                      <BotaoAnexar rotulo="Da extensão" onClick={() => setAberto({ tipo, veiculo: v })} />
+                    )}
+                  </div>
                 );
               };
               const doBv = bv.doVeiculo(v);
@@ -590,10 +602,16 @@ export function VeiculosDoMes({
                     </div>
                   </td>
                   <td className={cn(cel, "text-right font-mono text-[11.5px] text-muted-foreground")}>
-                    {v.nota ? brl(v.nota) : "—"}
+                    {notaPlanejada(v) ? brl(notaPlanejada(v)) : "—"}
                   </td>
-                  <td className={cn(cel, "text-right font-mono text-[11.5px] font-semibold text-foreground")}>
-                    {brl(v.nota)}
+                  <td className={cn(cel, "text-right font-mono text-[11.5px]")}>
+                    <div className="font-semibold text-foreground">{brl(v.nota)}</div>
+                    {(() => {
+                      const delta = Math.round((v.nota - notaPlanejada(v)) * 100) / 100;
+                      return delta !== 0 ? (
+                        <div className={cn("text-[10.5px] font-semibold", corDoDelta(delta))}>{comSinal(delta)}</div>
+                      ) : null;
+                    })()}
                   </td>
                   <td className={cel}>{slot("ap")}</td>
                   <td className={cel}>{slot("pi")}</td>

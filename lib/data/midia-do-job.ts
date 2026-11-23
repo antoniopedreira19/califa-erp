@@ -228,7 +228,7 @@ export async function lerFaltaDosVeiculosNoMes(
       .returns<{ id: string; mes_id: string | null; meio: string | null }[]>(),
     supabase
       .from("jobs_itens_orcado")
-      .select("id, grupo_id, fornecedor_id, tipo_custo, total_orcado, ordem")
+      .select("id, grupo_id, fornecedor_id, tipo_custo, total_orcado, ordem, midia_extensao_id, created_at")
       .eq("job_id", jobId)
       .eq("tenant_id", tenantId)
       .is("cancelada_em", null)
@@ -240,6 +240,8 @@ export async function lerFaltaDosVeiculosNoMes(
           fornecedor_id: string | null;
           tipo_custo: string;
           total_orcado: number | string | null;
+          midia_extensao_id: string | null;
+          created_at: string;
         }[]
       >(),
     supabase
@@ -283,6 +285,7 @@ export async function lerFaltaDosVeiculosNoMes(
         tipo: l.tipo_custo,
         negociado: Number(l.total_orcado ?? 0),
         meio: grupoDoMes.get(l.grupo_id) ?? null,
+        extensaoEm: l.midia_extensao_id ? l.created_at : null,
         repasse:
           l.tipo_custo === "AR"
             ? situacaoDoRepasse(

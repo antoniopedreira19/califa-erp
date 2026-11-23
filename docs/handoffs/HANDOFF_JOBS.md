@@ -6887,3 +6887,16 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - **BV do veículo no mês:** o formulário e o fluxo do BV de hoje (lançar e confirmar: administrador e GP; recebido na baixa do financeiro), já com o veículo escolhido (`fornecedorPadrao` no `BvDialog`). Trava o encerramento até recebido.
 - **Conferido no Sandbox:** TES-1026/26 — novembro com AP, PI e NF anexados pelo GP (NF com aviso de −R$ 320,00), envio liberado; produtor trocou o AP, removeu e reanexou o PI; dezembro (já faturado) em consulta e com BV de R$ 960,00 lançado.
 - **Fica de fora:** o texto do formulário do BV é o nacional ("a planilha desconta o bruto do realizado"); o BV de mídia aparece "BV — " sem nome na fila do financeiro (view do financeiro); entrega 5.
+
+
+## ⚠️ Nota de 2026-11-23 — Mídia Off, entrega 5: planejado e realizado (decisão 275)
+
+- **Visão única (opção A):** a planilha do job mostra a campanha como está — a linha que mudou em laranja, com o inicial riscado; inserção cortada e fim planejado riscados; a extensão em linha vermelha "Extensão". O planejado inicial é a versão aprovada.
+- **Card "Planejado e realizado"** acima da planilha: valor do job, faturamento e resultado (inicial → atual), "Encerrar veiculação antes", "Estender veiculação" e o registro de cada mudança. O cabeçalho do job se divide em inicial e atual.
+- **Encerrar antes:** grade perde as inserções depois do dia; período encurta, com o proporcional sugerido e editável. Aviso (sem trava) quando a PP do repasse já passa da nota que fica.
+- **Estender:** linha nova no unitário da de origem, no mês dela ou nos dois seguintes; o mês novo entra na versão aprovada e no job. AP e PI de antes da extensão não a cobrem ("AP da extensão").
+- **Mês enviado não muda; motivo opcional; administrador e GP.** Nada passa pela errata.
+- **Financeiro:** espelhos do job, previsão de recebimento do mês (e a do mês novo) e previsão de impostos acompanham a diferença sozinhos, sem revisão da abertura (Tiago, "Ajusta sozinha").
+- **Banco:** `jobs_midia_alteracoes`, `jobs_midia_alteracoes_linhas`, `jobs_itens_orcado.midia_extensao_id` e `registrar_alteracao_da_midia` (migration `20261123500004`).
+- **Conferido no Sandbox:** TES-1026/26 — novembro encerrado em 05/11 numa linha (R$ 7.700 → R$ 3.300, previsão de novembro R$ 1.601,60 → R$ 1.144,00) e outdoor estendido para 01–15/01/2027 (janeiro novo, previsão em 10/02/2027 de R$ 8.748,39).
+- **Fica de fora:** a data do job não acompanha a extensão; o texto de ajuda do cabeçalho dividido é o do nacional ("antes das erratas"); contrato do veículo.

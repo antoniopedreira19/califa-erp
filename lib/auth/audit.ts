@@ -106,6 +106,9 @@ export type AuditAction =
   | "midia_documento.anexado"
   | "midia_documento.trocado"
   | "midia_documento.removido"
+  // Mídia Off (decisão 275): encerrar a veiculação antes e estender.
+  | "midia.veiculacao_encerrada"
+  | "midia.veiculacao_estendida"
   | "categoria.criada"
   | "categoria.editada"
   | "categoria.inativada"
