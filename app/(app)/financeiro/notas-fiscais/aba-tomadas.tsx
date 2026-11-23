@@ -535,7 +535,7 @@ function LinhaTomada({ n, onVer, edicao }: { n: NotaTomada; onVer: () => void; e
                   <p className="mt-1 text-[11.5px] opacity-80">
                     {n.leitura.divergencias.includes("emitente")
                       ? "Emitente diferente: confira o documento com quem o enviou."
-                      : "Corrija pelo “Editar registro” (botão “Usar os dados do PDF”)."}
+                      : "Corrija pelo “Editar registro” (botão “Usar os dados do PDF”) ou, se a leitura errou, use “O registro está certo” no painel da nota."}
                   </p>
                 </TooltipContent>
               </Tooltip>
@@ -546,7 +546,8 @@ function LinhaTomada({ n, onVer, edicao }: { n: NotaTomada; onVer: () => void; e
                   <FilePenLine className="h-3.5 w-3.5 shrink-0 text-amber-600" aria-label="Registro alterado" />
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-xs">
-                  Registro alterado em {new Date(ultima.em).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
+                  {ultima.tipo === "confirmacao" ? "Registro confirmado contra o PDF em " : "Registro alterado em "}
+                  {new Date(ultima.em).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })}
                   {ultima.por ? ` por ${ultima.por}` : ""}: {ultima.motivo}
                 </TooltipContent>
               </Tooltip>

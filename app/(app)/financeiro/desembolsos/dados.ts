@@ -229,6 +229,7 @@ export async function carregarPedidosDeDesembolso(
       .from("notas_fiscais_fornecedor_alteracoes")
       .select("documentos, motivo, alterada_em, antes, depois, por:profiles!notas_fiscais_fornecedor_alteracoes_alterada_por_fkey(nome)")
       .eq("tenant_id", tenantId)
+      .eq("tipo", "alteracao")
       .contains("documentos", [{ tipo: "desembolso" }])
       .order("alterada_em")
       .returns<AlteracaoDaNota[]>();

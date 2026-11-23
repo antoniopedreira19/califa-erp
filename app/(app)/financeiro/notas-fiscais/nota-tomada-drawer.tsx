@@ -26,7 +26,7 @@ import { cn, formatCnpj, formatDocumento } from "@/lib/utils";
 import { ROTULO_DA_ORIGEM, type DocumentoDaNota, type NotaTomada } from "./dados";
 import { Selo, dataBR, moeda } from "./comum";
 import { OrigemSelo } from "./aba-tomadas";
-import { urlDoAnexoDaNota } from "./actions";
+import { confirmarRegistroDaNota, urlDoAnexoDaNota } from "./actions";
 import { lerEmLotes } from "./leitura-das-notas";
 import { linhasDaDivergencia, pdfDeOutraNota } from "./divergencia";
 
@@ -44,6 +44,29 @@ export function NotaTomadaDrawer({ nota, onClose }: { nota: NotaTomada; onClose:
   const [erro, setErro] = React.useState<string | null>(null);
   const [lendo, setLendo] = React.useState(false);
   const [erroDaLeitura, setErroDaLeitura] = React.useState<string | null>(null);
+  // "O registro está certo": o motivo e o estado do envio.
+  const [confirmando, setConfirmando] = React.useState(false);
+  const [motivoDaConfirmacao, setMotivoDaConfirmacao] = React.useState("");
+  const [gravandoConfirmacao, setGravandoConfirmacao] = React.useState(false);
+  const [erroDaConfirmacao, setErroDaConfirmacao] = React.useState<string | null>(null);
+
+  async function confirmarRegistro() {
+    if (motivoDaConfirmacao.trim().length < 10) {
+      setErroDaConfirmacao("Escreva o motivo (pelo menos 10 caracteres).");
+      return;
+    }
+    setGravandoConfirmacao(true);
+    setErroDaConfirmacao(null);
+    const r = await confirmarRegistroDaNota(nota.id, motivoDaConfirmacao);
+    setGravandoConfirmacao(false);
+    if (!r.ok) {
+      setErroDaConfirmacao(r.message);
+      return;
+    }
+    setConfirmando(false);
+    setMotivoDaConfirmacao("");
+    router.refresh();
+  }
   const [isPending, startTransition] = React.useTransition();
   const [visualizando, setVisualizando] = React.useState<{ pp: PPRow; estabelecimentos: EstabelecimentoDaNota[]; id: string } | null>(null);
   const [visorAberto, setVisorAberto] = React.useState(false);
@@ -289,8 +312,56 @@ export function NotaTomadaDrawer({ nota, onClose }: { nota: NotaTomada; onClose:
                     ? "O PDF foi emitido por outro CNPJ: confira o documento com quem o enviou (o emitente não se corrige no controle de notas)."
                     : pdfDeOutraNota(nota)
                       ? "Se o PDF está certo, corrija o registro no “Editar registro” (botão “Usar os dados do PDF”). Se o PDF está errado, troque o anexo no documento."
-                      : "Corrija o registro no “Editar registro” (botão “Usar os dados do PDF”)."}
+                      : "Corrija o registro no “Editar registro” (botão “Usar os dados do PDF”)."}{" "}
+                  Se você conferiu o PDF e quem errou foi a leitura, use “O registro está certo”.
                 </p>
+                {!confirmando ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmando(true);
+                      setErroDaConfirmacao(null);
+                    }}
+                    className="mt-1 inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-[#92400e] transition-colors hover:border-amber-500"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />O registro está certo
+                  </button>
+                ) : (
+                  <div className="mt-1.5 space-y-1.5 rounded-md border border-amber-200 bg-white p-2.5 text-foreground">
+                    <label htmlFor="motivo-confirmacao" className="text-[12px] font-semibold">
+                      Motivo <span className="text-california-red">*</span>
+                    </label>
+                    <textarea
+                      id="motivo-confirmacao"
+                      value={motivoDaConfirmacao}
+                      onChange={(e) => setMotivoDaConfirmacao(e.target.value)}
+                      rows={2}
+                      disabled={gravandoConfirmacao}
+                      placeholder="Ex.: conferido no PDF, a emissão é 22/10/2026; a leitura errou o ano."
+                      className="w-full resize-none rounded-md border border-border px-2 py-1.5 text-[12.5px] outline-none focus:border-california-red"
+                    />
+                    {erroDaConfirmacao && <p className="text-[12px] text-california-red">{erroDaConfirmacao}</p>}
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setConfirmando(false)}
+                        disabled={gravandoConfirmacao}
+                        className="rounded-md px-2.5 py-1.5 text-[12px] font-semibold text-muted-foreground hover:bg-muted"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={confirmarRegistro}
+                        disabled={gravandoConfirmacao}
+                        className="inline-flex items-center gap-1.5 rounded-md bg-california-red px-3 py-1.5 text-[12px] font-bold text-white hover:bg-california-red/90 disabled:opacity-60"
+                      >
+                        {gravandoConfirmacao && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                        Confirmar o registro
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
             {erroDaLeitura && (
@@ -367,6 +438,11 @@ export function NotaTomadaDrawer({ nota, onClose }: { nota: NotaTomada; onClose:
               <div className="overflow-hidden rounded-xl border border-border">
                 {nota.alteracoes.map((alt, i) => (
                   <div key={alt.em + i} className={cn("space-y-1 px-3.5 py-2.5 text-[12.5px]", i > 0 && "border-t border-border")}>
+                    {alt.tipo === "confirmacao" && (
+                      <p className="flex items-center gap-1.5 text-[12px] font-semibold text-emerald-700">
+                        <CheckCircle2 className="h-3.5 w-3.5" />O registro está certo (o PDF foi lido errado)
+                      </p>
+                    )}
                     <p className="flex flex-wrap items-baseline gap-x-2">
                       <span className="font-semibold">{alt.por ?? "Financeiro"}</span>
                       <span className="font-mono text-[11.5px] text-muted-foreground">

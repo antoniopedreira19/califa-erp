@@ -515,6 +515,7 @@ export type AuditAction =
   // Decisão 271: a leitura ampliada da NF tomada (Notas Fiscais › Tomadas).
   | "nota_fiscal.leitura_ampliada"
   | "nota_fiscal.registro_alterado"
+  | "nota_fiscal.registro_confirmado"
   // Leitura do anexo logo que ele sobe (decisão 192): o tipo,
   // o número e os dados do documento. Mesma metadata, mais `tipo_lido`.
   | "pp.anexo.lido_por_ia"

@@ -6148,6 +6148,8 @@ export interface NotaFiscalFornecedorAlteracao {
   depois: { numero: string; data_emissao: string; valor: number; tomador_estabelecimento_id: string | null; tomador: string | null };
   /** A nota que já existia com o número novo, à qual esta foi juntada. */
   juntada_com: string | null;
+  /** "alteracao": o registro mudou; "confirmacao": "O registro está certo" (o PDF foi lido errado). */
+  tipo: "alteracao" | "confirmacao";
   documentos: Array<{ tipo: "pp" | "desembolso" | "prestacao"; id: string; codigo: string; pp_id?: string }>;
   motivo: string;
   alterada_por: string;

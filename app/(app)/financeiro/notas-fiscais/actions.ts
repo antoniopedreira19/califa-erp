@@ -264,3 +264,36 @@ export async function alterarRegistroDasNotas(
   return { ok: true, notas: (r.notas ?? []).length, avisos, trocas };
 }
 
+/**
+ * "O registro está certo" (decisão 271): o financeiro confirma, com motivo,
+ * que a divergência com o PDF é erro da leitura. A divergência sai, a
+ * confirmação fica no histórico da nota, e a mesma leitura não volta a acusar.
+ */
+export async function confirmarRegistroDaNota(
+  notaId: string,
+  motivo: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const session = await requireSession();
+  if (session.activeRole !== "administrador" && session.activeRole !== "financeiro") {
+    return { ok: false, message: "Só o financeiro e o administrador confirmam o registro das notas." };
+  }
+  if (!/^[0-9a-f-]{36}$/i.test(notaId)) return { ok: false, message: "Nota inválida. Recarregue a tela." };
+  if (motivo.trim().length < 10) return { ok: false, message: "Escreva o motivo (pelo menos 10 caracteres)." };
+  const supabase = createClient();
+  const { error } = await supabase.rpc("confirmar_registro_da_nota", { p_nota_id: notaId, p_motivo: motivo.trim() });
+  if (error) {
+    console.error("[notas-fiscais.confirmar_registro]", error.message);
+    const limpa = error.message.replace(/^.*?(?:ERROR|erro):\s*/i, "").trim();
+    return { ok: false, message: limpa && !/[_"]/.test(limpa) ? limpa : "Não foi possível confirmar o registro. Tente de novo." };
+  }
+  await logAuditEvent({
+    acao: "nota_fiscal.registro_confirmado",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "nota_fiscal_fornecedor",
+    entidadeId: notaId,
+    metadata: { motivo: motivo.trim(), papel: session.activeRole, decisao: 271 },
+  });
+  revalidatePath("/financeiro/notas-fiscais");
+  return { ok: true };
+}
+

@@ -498,6 +498,8 @@ export interface AlteracaoDoRegistro {
   mudancas: string[];
   /** Juntada à nota que já existia com o número novo (6b). */
   juntada: boolean;
+  /** "confirmacao": "O registro está certo" — o PDF foi lido errado, o registro ficou. */
+  tipo: "alteracao" | "confirmacao";
 }
 
 export type TabelaDoAnexo = "pedidos_compra_anexos" | "desembolsos_anexos" | "pp_verba_prestacoes_anexos";
@@ -633,7 +635,7 @@ export async function carregarTomadas(supabase: Supabase, tenantId: string): Pro
     todasAsLinhas<Linha>((de, ate) =>
       supabase
         .from("notas_fiscais_fornecedor_alteracoes")
-        .select("id, nota_fiscal_id, antes, depois, juntada_com, motivo, alterada_em, por:profiles!notas_fiscais_fornecedor_alteracoes_alterada_por_fkey(nome)")
+        .select("id, nota_fiscal_id, tipo, antes, depois, juntada_com, motivo, alterada_em, por:profiles!notas_fiscais_fornecedor_alteracoes_alterada_por_fkey(nome)")
         .eq("tenant_id", tenantId)
         .not("nota_fiscal_id", "is", null)
         .order("alterada_em", { ascending: false })
@@ -657,8 +659,9 @@ export async function carregarTomadas(supabase: Supabase, tenantId: string): Pro
       em: a.alterada_em,
       por: a.por?.nome ?? null,
       motivo: a.motivo,
-      mudancas: mudancasDoRegistro(a.antes ?? {}, a.depois ?? {}),
+      mudancas: a.tipo === "confirmacao" ? leituraConfirmada(a.antes ?? {}, a.depois ?? {}) : mudancasDoRegistro(a.antes ?? {}, a.depois ?? {}),
       juntada: Boolean(a.juntada_com),
+      tipo: a.tipo === "confirmacao" ? "confirmacao" : "alteracao",
     });
     alteracoesPorNota.set(a.nota_fiscal_id, lista);
   }
@@ -848,6 +851,17 @@ const dataDe = (v: unknown) => {
   const [a, m, d] = String(v ?? "").slice(0, 10).split("-");
   return a && m && d ? `${d}/${m}/${a}` : "—";
 };
+
+/** Na confirmação: o que o PDF trazia × o registro que ficou. */
+export function leituraConfirmada(pdf: Linha, registro: Linha): string[] {
+  const out: string[] = [];
+  const div = (pdf.divergencias ?? []) as string[];
+  if (div.includes("numero")) out.push(`Número: PDF lido ${pdf.numero ?? "—"} · registro ${registro.numero ?? "—"}`);
+  if (div.includes("emitente")) out.push(`Emitente: PDF lido ${pdf.cnpj ?? "—"}`);
+  if (div.includes("emissao")) out.push(`Emissão: PDF lido ${dataDe(pdf.data_emissao)} · registro ${dataDe(registro.data_emissao)}`);
+  if (div.includes("valor")) out.push(`Valor: PDF lido ${brl(pdf.valor)} · registro ${brl(registro.valor)}`);
+  return out;
+}
 
 /** O de → para de uma alteração do registro, como o painel mostra. */
 export function mudancasDoRegistro(antes: Linha, depois: Linha): string[] {

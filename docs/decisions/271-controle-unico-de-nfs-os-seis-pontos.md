@@ -333,3 +333,14 @@ municipal e duas apólices de seguro). Em aberto também: a PP-00123 pagou
 R$ 250 de uma NF de R$ 2.500 e a PP-00137 cobre R$ 1.200 de uma NF de
 R$ 2.400.
 
+## "O registro está certo" (23/11/2026)
+
+Para quando quem errou foi a leitura, não o cadastro (o PDF diz 2026 e a IA
+leu 2016). No aviso de divergência do painel da nota, o financeiro confirma
+com motivo: a divergência sai, a confirmação fica no histórico da nota
+(o que o PDF trazia × o registro mantido), e a releitura que trouxer o mesmo
+PDF não volta a acusar. Se o número, a emissão ou o valor mudarem depois, a
+confirmação deixa de valer e a nota volta a ser comparada com o PDF. O
+"Editar registro" continua sendo o caminho quando o cadastro é que está
+errado. RPC `confirmar_registro_da_nota`, migration `20261123800009`.
+
