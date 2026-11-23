@@ -9302,3 +9302,11 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Banco:** `notas_fiscais_fornecedor_alteracoes` + RPC `alterar_registro_das_notas` (migration `20261123800004`); `_desfazer_registro_das_notas` chamado nas duas reversões e o `corrigir_notas_fiscais_da_pp` levando desembolso e prestação (migration `20261123800005`).
 - **PP:** `seguirDocumentoNasPPs` (em `actions-pp.ts`) refaz o CNPJ e o PDF de cada PP da nota depois de gravar.
 - **Em aberto:** as 4 notas registradas sem documento aprovado (de antes da mudança na reversão) — corrigir pede o OK do Tiago.
+
+## ⚠️ Nota de 2026-11-23 — Mídia Off: encerrar a veiculação antes e estender mexem na previsão (decisão 275)
+
+- **O que muda para o financeiro:** quando o GP encerra uma veiculação antes do fim ou estende, os espelhos do job (`valor_total`, `faturamento_previsto`) passam a ser os de hoje; os da abertura não mudam.
+- **Previsão de recebimento:** o mês muda pela diferença do faturamento dele (`jobs_previsao_recebimento`, como na edição do orçado pelo financeiro, decisão 224). A extensão para mês novo cria a previsão dele, no mesmo dia e na mesma distância do último mês.
+- **Previsão de impostos:** muda pela diferença do imposto do job, espalhada pelas parcelas. A de desembolso não acompanha.
+- **Sem revisão da abertura** e sem travar o envio (Tiago, 23/11/2026, "Ajusta sozinha"). Quem fez e quando fica no registro do job (`jobs_midia_alteracoes`) e na auditoria (`midia.veiculacao_encerrada` / `midia.veiculacao_estendida`).
+- **Conferido no Sandbox:** TES-1026/26 — novembro R$ 1.601,60 → R$ 1.144,00; janeiro/2027 criado em 10/02/2027 com R$ 8.748,39.
