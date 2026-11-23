@@ -274,8 +274,8 @@ export async function montarLinhasDeLancamentos(
         documentoFiscal(r.pedido_compra?.anexos)?.path ??
         documentoFiscal(r.desembolso?.anexos)?.path ??
         documentoFiscal(r.conta_avulsa?.anexos)?.path ??
-        r.titulo?.faturamento?.anexo_nf_path ??
-        null,
+        // A NF da planilha sem PDF tem o caminho vazio (decisão 276).
+        (r.titulo?.faturamento?.anexo_nf_path || null),
       // A transferência não tem plano: não é receita nem despesa.
       tipo_codigo: r.plano_contas_tipos?.codigo ?? "",
       tipo_nome:

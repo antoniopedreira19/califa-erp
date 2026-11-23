@@ -49,6 +49,7 @@ import {
   type PreviaDaTrocaDoInterno,
 } from "@/lib/data/troca-do-interno";
 import type { FaturamentoDoMes } from "@/lib/calculos/faturamento-por-mes";
+import { passarNfsDaPlanilhaAoJob } from "./nfs-da-planilha";
 
 export type ActionResult =
   | {
@@ -1042,12 +1043,47 @@ export async function abrirJobNoFinanceiro(
     },
   });
 
+  // Decisão 276: as NFs presas ao job da planilha com este nome passam para
+  // o job, agora que ele está aberto e com as previsões gravadas. A recusa
+  // de uma NF não desfaz a abertura: vira o aviso do fim.
+  const nfsDaPlanilha = await passarNfsDaPlanilhaAoJob(
+    supabase,
+    session.activeTenant.id,
+    jobId,
+    parsed.data.nome_financeiro,
+  );
+  if (nfsDaPlanilha.passadas.length > 0 || nfsDaPlanilha.recusadas.length > 0) {
+    await logAuditEvent({
+      acao: "job.nfs_da_planilha_passadas",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "job",
+      entidadeId: jobId,
+      metadata: {
+        decisao: 276,
+        nome_financeiro: parsed.data.nome_financeiro,
+        passadas: nfsDaPlanilha.passadas,
+        recusadas: nfsDaPlanilha.recusadas,
+      },
+    });
+    revalidatePath("/financeiro/contas-a-receber");
+  }
+
   revalidatePath("/financeiro");
   revalidatePath("/financeiro/abertura-de-job");
   revalidatePath(`/financeiro/abertura-de-job/${jobId}`);
   revalidatePath(`/jobs/${jobId}`);
   revalidatePath("/jobs");
   revalidatePath(`/orcamentos/${job.projeto_id}/${job.orcamento_id}`);
+
+  if (nfsDaPlanilha.recusadas.length > 0) {
+    const lista = nfsDaPlanilha.recusadas.map((r) => `NF ${r.numero_nf} (${r.motivo})`).join("; ");
+    return {
+      ok: false,
+      message: `O job foi aberto, mas ${
+        nfsDaPlanilha.recusadas.length === 1 ? "uma NF da planilha não passou" : `${nfsDaPlanilha.recusadas.length} NFs da planilha não passaram`
+      } para ele: ${lista}. Elas continuam no Contas a Receber, presas ao job da planilha.`,
+    };
+  }
 
   if (!saves.ok) {
     await logAuditEvent({

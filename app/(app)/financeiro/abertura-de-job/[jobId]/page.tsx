@@ -26,6 +26,7 @@ import {
   trimestreDe,
 } from "../curva";
 import { AberturaForm } from "./abertura-form";
+import { lerJobsDaPlanilhaComNf } from "../nfs-da-planilha";
 import { carregarOpcoesDoRegistro } from "@/lib/data/opcoes-do-registro";
 import { lerFaturamentoMensalPeloJob } from "@/lib/data/faturamento-mensal";
 import { lerFechamentoMidiaDoJob } from "@/lib/data/midia-do-job";
@@ -157,6 +158,7 @@ export default async function AbrirJobNoFinanceiroPage({
     prazosDoJob,
     saves,
     midiaDoJob,
+    jobsDaPlanilha,
   ] = await Promise.all([
     jobDaFila,
     // Escopo 'orcamento': a categoria do job é a que a produção escolheu
@@ -203,6 +205,9 @@ export default async function AbrirJobNoFinanceiroPage({
     // Mídia Off (decisão 167): custo previsto e planejado pela conta da
     // mídia. Nulo nos outros modelos.
     lerFechamentoMidiaDoJob(supabase, tenantId, params.jobId),
+    // Decisão 276: os jobs da planilha com NF esperando, para a sugestão do
+    // nome do job (as NFs passam para o job aberto com o nome de um deles).
+    lerJobsDaPlanilhaComNf(supabase),
   ]);
 
   if (!daFila || !detalhe) notFound();
@@ -399,6 +404,7 @@ export default async function AbrirJobNoFinanceiroPage({
             agoraLabel={formatDataHoraBr(agora)}
             // A aprovação de save é da página do job aberto (decisão 099).
             aprovacaoSave={null}
+            jobsDaPlanilha={jobsDaPlanilha}
           />
         }
         info={

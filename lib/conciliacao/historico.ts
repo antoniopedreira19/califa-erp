@@ -45,6 +45,10 @@ export interface HistoricoDoMotor {
   /** Só na previsão com a data ajustada pela conciliação (decisão 254): a
    *  data que a planilha tem. Quem lê do banco manda sempre (nulo, sem ajuste). */
   dataDaPlanilha?: string | null;
+  /** Decisão 276: os números de NF que a linha cita (descrição, documento,
+   *  observação e parcela), para a linha da NF lançada no sistema dar lugar
+   *  ao título dela. Vazio quando não cita nenhuma. */
+  nfs: string[];
 }
 
 /** O imposto retido na fonte pelo cliente (IR, CSLL, PIS, COFINS, ISS): a

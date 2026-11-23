@@ -156,6 +156,8 @@ export type AuditAction =
   | "projeto_financeiro.codigo_trocado"
   | "job.abertura_aprovada"
   | "job.aberto_no_financeiro"
+  // Decisão 276: as NFs presas ao job da planilha que passaram (ou não) ao job aberto.
+  | "job.nfs_da_planilha_passadas"
   // Edição do registro da abertura de um job já aberto ("Editar
   // registro"). Separada de `aberto_no_financeiro` de propósito: a
   // abertura acontece uma vez, a edição quantas forem precisas, e o
@@ -378,6 +380,8 @@ export type AuditAction =
   | "contas_pagar.baixa_lote_cartao"
   | "faturamento.emitido"
   | "faturamento.cancelado"
+  // Decisão 276: o PDF anexado depois à NF que entrou pela planilha sem ele.
+  | "faturamento.pdf_anexado"
   | "titulo.baixado"
   | "titulo.baixa_estornada"
   | "titulo.previsao_repactuada"

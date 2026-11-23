@@ -137,6 +137,8 @@ import { nomeDaPagina } from "@/lib/voltar";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ExcecaoNaConfirmacao } from "@/app/(app)/_planilha/excecao-no-fechamento";
 import { CampoMidiaSystem, type MidiaSystemNaAbertura } from "./campo-midia-system";
+import type { JobDaPlanilhaComNf } from "../nfs-da-planilha";
+import { nomeComparavel, sugestoesDoNome } from "@/lib/calculos/nfs-da-planilha";
 
 interface CategoriaOption {
   id: string;
@@ -374,6 +376,12 @@ interface Props {
    */
   aprovacaoSave: AprovacaoDeSave | null;
   /**
+   * Decisão 276: os jobs da planilha com NF esperando. Na abertura, o campo
+   * do nome sugere esses jobs enquanto se digita; abrir o job com o nome de
+   * um deles passa as NFs para ele. Fora da fila, `[]`.
+   */
+  jobsDaPlanilha: JobDaPlanilhaComNf[];
+  /**
    * Os saves que vieram com o job (decisão 155, 07/10/2026): o bloco
    * "Saves deste job". Na abertura o financeiro marca "Aprovar save
    * gerado" e "Aprovar consumo de save", e abrir o job aprova os pedidos
@@ -520,6 +528,7 @@ export function AberturaForm({
   revisao = null,
   linhasDaRevisao,
   aprovacaoSave,
+  jobsDaPlanilha,
   saves,
   opcoesDoRegistro,
   midiaSystem: midiaSystemInfo,
@@ -611,6 +620,9 @@ export function AberturaForm({
   // salvar uma edição ou revisão sem retocar o campo apagava o nome do
   // financeiro (AMB-1019/26 e ANI-1002/26 em 07/10/2026).
   const [nome, setNome] = React.useState(() => nomeDoJobNoFinanceiro(job));
+  // Decisão 276: a sugestão dos jobs da planilha com NF, só na abertura.
+  const [sugestoesAbertas, setSugestoesAbertas] = React.useState(false);
+  const [sugestaoAtiva, setSugestaoAtiva] = React.useState(0);
   // Chega com a categoria que a produção deu ao job no orçamento — o
   // financeiro confere e pode trocar. Só pré-seleciona o que está na
   // lista: categoria inativada desde o envio deixa o campo vazio, e aí o
@@ -1057,6 +1069,13 @@ export function AberturaForm({
   // de origem for). Só a abertura marca; nos outros modos o bloco é leitura.
   const linhasDeSave = saves?.linhas ?? [];
   const savesNaAbertura = modo === "abertura" && linhasDeSave.length > 0;
+  // Decisão 276: o job da planilha com o mesmo nome (as NFs dele passam para
+  // este job ao abrir) e as sugestões do que se digita.
+  const jobDaPlanilhaIgual =
+    modo === "abertura" ? (jobsDaPlanilha.find((j) => nomeComparavel(j.nome) === nomeComparavel(nome)) ?? null) : null;
+  const sugestoesDoJob = modo === "abertura" && !travado ? sugestoesDoNome(jobsDaPlanilha, nome) : [];
+  const deOutroCliente = (j: JobDaPlanilhaComNf) => Boolean(j.clienteId && job.cliente_id && j.clienteId !== job.cliente_id);
+  const rotuloDasNfs = (j: JobDaPlanilhaComNf) => `${j.qtdNfs === 1 ? "1 NF" : `${j.qtdNfs} NFs`} · ${formatCurrency(j.valor)}`;
   const resumoSaves = resumirSaves(linhasDeSave);
   const [aprovaGera, setAprovaGera] = React.useState(false);
   const [aprovaConsumo, setAprovaConsumo] = React.useState(false);
@@ -1948,22 +1967,96 @@ export function AberturaForm({
                 >
                   Nome do job <span className="text-california-red">*</span>
                 </label>
-                <input
-                  id="nome-financeiro"
-                  value={nome}
-                  onChange={(e) => setNome(e.target.value)}
-                  readOnly={travado}
-                  maxLength={200}
-                  className={cn(
-                    "h-[42px] rounded-lg border border-border bg-white px-3.5 text-[13.5px] font-medium outline-none focus:border-california-red/40",
-                    travado && "bg-muted/60 text-muted-foreground",
+                <div className="relative">
+                  <input
+                    id="nome-financeiro"
+                    value={nome}
+                    onChange={(e) => {
+                      setNome(e.target.value);
+                      setSugestoesAbertas(true);
+                      setSugestaoAtiva(0);
+                    }}
+                    onFocus={() => setSugestoesAbertas(true)}
+                    onBlur={() => setSugestoesAbertas(false)}
+                    onKeyDown={(e) => {
+                      if (!sugestoesAbertas || sugestoesDoJob.length === 0) return;
+                      if (e.key === "ArrowDown") {
+                        e.preventDefault();
+                        setSugestaoAtiva((i) => Math.min(i + 1, sugestoesDoJob.length - 1));
+                      } else if (e.key === "ArrowUp") {
+                        e.preventDefault();
+                        setSugestaoAtiva((i) => Math.max(i - 1, 0));
+                      } else if (e.key === "Enter") {
+                        e.preventDefault();
+                        setNome(sugestoesDoJob[Math.min(sugestaoAtiva, sugestoesDoJob.length - 1)].nome);
+                        setSugestoesAbertas(false);
+                      } else if (e.key === "Escape") {
+                        setSugestoesAbertas(false);
+                      }
+                    }}
+                    readOnly={travado}
+                    maxLength={200}
+                    autoComplete="off"
+                    role={modo === "abertura" ? "combobox" : undefined}
+                    aria-expanded={modo === "abertura" ? sugestoesAbertas && sugestoesDoJob.length > 0 : undefined}
+                    aria-controls={modo === "abertura" ? "sugestoes-nome-financeiro" : undefined}
+                    aria-autocomplete={modo === "abertura" ? "list" : undefined}
+                    className={cn(
+                      "h-[42px] w-full rounded-lg border border-border bg-white px-3.5 text-[13.5px] font-medium outline-none focus:border-california-red/40",
+                      travado && "bg-muted/60 text-muted-foreground",
+                    )}
+                  />
+                  {sugestoesAbertas && sugestoesDoJob.length > 0 && (
+                    <ul
+                      id="sugestoes-nome-financeiro"
+                      role="listbox"
+                      className="absolute left-0 right-0 top-[calc(100%+4px)] z-[70] max-h-72 overflow-y-auto rounded-lg border border-border bg-white py-1 shadow-lg"
+                    >
+                      <li className="px-3 pb-1 pt-1.5 text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Jobs da planilha com NF
+                      </li>
+                      {sugestoesDoJob.map((j, i) => (
+                        <li
+                          key={j.chave}
+                          role="option"
+                          aria-selected={i === sugestaoAtiva}
+                          onMouseDown={(e) => {
+                            // Antes do blur do campo, que fecharia a lista.
+                            e.preventDefault();
+                            setNome(j.nome);
+                            setSugestoesAbertas(false);
+                          }}
+                          onMouseEnter={() => setSugestaoAtiva(i)}
+                          className={cn("cursor-pointer px-3 py-2", i === sugestaoAtiva && "bg-muted")}
+                        >
+                          <div className="truncate text-[13px] font-medium">{j.nome}</div>
+                          <div className="text-[11px] text-muted-foreground">
+                            {rotuloDasNfs(j)}
+                            {deOutroCliente(j) ? " · de outro cliente" : ""}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
                   )}
-                />
-                <span className="text-[11px] text-muted-foreground">
-                  {travado ? "Este nome" : "Editável. Este nome"} vale no
-                  financeiro — a produção continua vendo o nome que ela
-                  cadastrou.
-                </span>
+                </div>
+                {jobDaPlanilhaIgual ? (
+                  <span
+                    className={cn(
+                      "text-[11px] text-pretty",
+                      deOutroCliente(jobDaPlanilhaIgual) ? "text-amber-700" : "text-emerald-700",
+                    )}
+                  >
+                    {deOutroCliente(jobDaPlanilhaIgual)
+                      ? `Este é o nome de um job da planilha com ${rotuloDasNfs(jobDaPlanilhaIgual)}, mas de outro cliente: as NFs não passam para este job.`
+                      : `Job da planilha com ${rotuloDasNfs(jobDaPlanilhaIgual)}: ao abrir, as NFs e os títulos passam para este job.`}
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-muted-foreground">
+                    {travado ? "Este nome" : "Editável. Este nome"} vale no
+                    financeiro — a produção continua vendo o nome que ela
+                    cadastrou.
+                  </span>
+                )}
               </div>
 
               {/* Projeto na visão do financeiro. Trocar aqui NÃO move o job
@@ -4221,6 +4314,9 @@ export function AberturaForm({
 
           <div className="flex flex-col gap-2.5 rounded-xl border border-border px-4 py-4">
             <ResumoLinha rotulo="Nome do job" valor={nome.trim()} />
+            {jobDaPlanilhaIgual && !deOutroCliente(jobDaPlanilhaIgual) && (
+              <ResumoLinha rotulo="NFs da planilha" valor={`${rotuloDasNfs(jobDaPlanilhaIgual)} passam para este job`} />
+            )}
             <ResumoLinha rotulo="Projeto unificado" valor={projetoResumo} />
             <ResumoLinha rotulo="Categoria" valor={categoriaNome} />
             <ResumoLinha rotulo="Serviço" valor={servicoNome} />

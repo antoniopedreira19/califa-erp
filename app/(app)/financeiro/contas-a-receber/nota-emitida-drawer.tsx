@@ -10,7 +10,8 @@
  */
 
 import * as React from "react";
-import { CheckCircle2, Eye, FileText, AlertCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { CheckCircle2, Eye, FileText, AlertCircle, Upload } from "lucide-react";
 import { Dialog, DrawerContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -23,7 +24,7 @@ import {
 } from "@/components/financeiro/info-faturamento-modal";
 import { rotuloDoCnae } from "@/lib/fiscal/calculos";
 import { rotuloDoEstabelecimento, type FiscalDoFaturar } from "@/lib/fiscal/faturar";
-import { urlAnexoNf } from "./actions";
+import { anexarPdfDaNota, uploadNfPdf, urlAnexoNf } from "./actions";
 import type { FaturadoRow } from "./faturamento-list";
 import type { InfoJob } from "./faturar-drawer";
 
@@ -50,6 +51,12 @@ export function NotaEmitidaDrawer({ nota, onClose, empresas, infoPorJob, fiscal 
   const [erro, setErro] = React.useState<string | null>(null);
   const [info, setInfo] = React.useState<InfoFaturamento | null>(null);
   const [pdfUrl, setPdfUrl] = React.useState<string | null>(null);
+  // Decisão 276: a NF da planilha pode ter entrado sem PDF (caminho vazio);
+  // o PDF se anexa aqui, uma vez.
+  const router = useRouter();
+  const [caminho, setCaminho] = React.useState(nota.anexo_nf_path);
+  const [anexando, setAnexando] = React.useState(false);
+  const arquivoRef = React.useRef<HTMLInputElement>(null);
 
   const estabDaNota = nota.estabelecimento_id
     ? (cad.estabelecimentos.find((e) => e.id === nota.estabelecimento_id) ?? null)
@@ -87,12 +94,36 @@ export function NotaEmitidaDrawer({ nota, onClose, empresas, infoPorJob, fiscal 
       setPdfUrl(null);
       return;
     }
-    const res = await urlAnexoNf(nota.anexo_nf_path);
+    const res = await urlAnexoNf(caminho);
     if (!res.ok) {
       setErro(res.message);
       return;
     }
     setPdfUrl(res.url);
+  }
+
+  async function anexarPdf(arquivo: File) {
+    setErro(null);
+    setAnexando(true);
+    try {
+      const form = new FormData();
+      form.append("file", arquivo);
+      const up = await uploadNfPdf(form);
+      if (!up.ok) {
+        setErro(up.message);
+        return;
+      }
+      const res = await anexarPdfDaNota({ faturamento_id: nota.faturamento_id, path: up.path });
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+      setCaminho(up.path);
+      router.refresh();
+    } finally {
+      setAnexando(false);
+      if (arquivoRef.current) arquivoRef.current.value = "";
+    }
   }
 
   return (
@@ -254,18 +285,44 @@ export function NotaEmitidaDrawer({ nota, onClose, empresas, infoPorJob, fiscal 
 
             <div className="space-y-1.5">
               <Label>Anexo da NF (PDF)</Label>
-              <div className="flex items-center gap-2.5 rounded-lg border border-border bg-muted/50 px-3 py-2.5 text-[12.5px]">
-                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
-                <span className="min-w-0 flex-1 truncate">NF-{nota.numero_nf}.pdf</span>
-                <button
-                  type="button"
-                  onClick={alternarPdf}
-                  className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-white px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors hover:border-california-red hover:text-california-red"
-                >
-                  <Eye className="h-3.5 w-3.5" />
-                  {pdfUrl ? "Ocultar NF" : "Visualizar NF"}
-                </button>
-              </div>
+              {caminho ? (
+                <div className="flex items-center gap-2.5 rounded-lg border border-border bg-muted/50 px-3 py-2.5 text-[12.5px]">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                  <span className="min-w-0 flex-1 truncate">NF-{nota.numero_nf}.pdf</span>
+                  <button
+                    type="button"
+                    onClick={alternarPdf}
+                    className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-white px-2.5 py-1.5 text-[11.5px] font-semibold transition-colors hover:border-california-red hover:text-california-red"
+                  >
+                    <Eye className="h-3.5 w-3.5" />
+                    {pdfUrl ? "Ocultar NF" : "Visualizar NF"}
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5 text-[12.5px] text-amber-900">
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                  <span className="min-w-0 flex-1 text-pretty">Sem PDF: esta NF entrou pela planilha do financeiro.</span>
+                  <input
+                    ref={arquivoRef}
+                    type="file"
+                    accept="application/pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      const arquivo = e.target.files?.[0];
+                      if (arquivo) void anexarPdf(arquivo);
+                    }}
+                  />
+                  <button
+                    type="button"
+                    disabled={anexando}
+                    onClick={() => arquivoRef.current?.click()}
+                    className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md border border-border bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-foreground transition-colors hover:border-california-red hover:text-california-red disabled:opacity-60"
+                  >
+                    <Upload className="h-3.5 w-3.5" />
+                    {anexando ? "Anexando…" : "Anexar PDF"}
+                  </button>
+                </div>
+              )}
               {pdfUrl && (
                 <iframe src={pdfUrl} title="PDF da nota fiscal" className="h-[260px] w-full rounded-xl border border-border" />
               )}

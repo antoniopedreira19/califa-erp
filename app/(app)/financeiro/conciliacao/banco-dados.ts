@@ -35,7 +35,8 @@ import type { ContextoDoMutuoNaConta, ParteDoMutuo } from "@/lib/financeiro/mutu
 import { contextoDoMutuoNaConta } from "../mutuos/dados";
 import { somaDias } from "@/lib/conciliacao/motor";
 import { contaTemNumero } from "@/lib/conciliacao/ofx";
-import { codigosDePp, eDePpPaga } from "@/lib/conciliacao/planilha-de-titulo";
+import { codigosDePp, eDeNfPaga, eDePpPaga, numerosDeNf } from "@/lib/conciliacao/planilha-de-titulo";
+import { ehRetencao } from "@/lib/conciliacao/historico";
 import { calcularSaldoAnterior } from "@/lib/calculos/saldo-conta";
 import { diaIsoBr, formatDiaBr } from "@/lib/formatar-data-hora";
 
@@ -311,6 +312,39 @@ async function ppsPagasDaPlanilha(supabase: Supabase, tenantId: string, itens: H
   return pagas;
 }
 
+/** As NFs pagas que a planilha cita no recebimento ou na retenção na fonte
+ *  (decisão 276): a linha delas não é oferecida nem proposta, como a de PP
+ *  paga. Paga = todos os títulos da NF pagos; o número que aparece em mais de
+ *  uma nota emitida só conta se todas estiverem pagas. */
+async function nfsPagasDaPlanilha(supabase: Supabase, tenantId: string, itens: HistoricoDoMotor[]): Promise<Set<string>> {
+  const numeros = [...new Set(itens.filter((h) => h.valor > 0 || ehRetencao(h)).flatMap((h) => h.nfs))];
+  const pagas = new Set<string>();
+  const abertas = new Set<string>();
+  const partes: string[][] = [];
+  for (let i = 0; i < numeros.length; i += 200) partes.push(numeros.slice(i, i + 200));
+  const res = await Promise.all(
+    partes.map((parte) =>
+      supabase
+        .from("faturamentos")
+        .select("numero_nf, titulos:titulos_receber(status)")
+        .eq("tenant_id", tenantId)
+        .eq("status", "emitido")
+        .in("numero_nf", parte),
+    ),
+  );
+  for (const r of res) {
+    if (r.error) console.error("[conciliacao.banco.nfs_pagas]", r.error.message);
+    for (const f of (r.data ?? []) as Array<{ numero_nf: string; titulos: Array<{ status: string }> | null }>) {
+      const numero = f.numero_nf.replace(/^0+/, "");
+      const titulos = (f.titulos ?? []).filter((t) => t.status !== "cancelado");
+      if (titulos.length > 0 && titulos.every((t) => t.status === "pago")) pagas.add(numero);
+      else abertas.add(numero);
+    }
+  }
+  for (const n of abertas) pagas.delete(n);
+  return pagas;
+}
+
 // ---------------------------------------------------------------------------
 // Os dias que o extrato cobre
 // ---------------------------------------------------------------------------
@@ -416,6 +450,9 @@ type CaudaCrua = {
   valor: string | number;
   job_nome: string | null;
   descricao: string | null;
+  documento: string | null;
+  observacao: string | null;
+  parcela: string | null;
   fornecedor: string | null;
   regional_nome: string | null;
   regional_todas: boolean | null;
@@ -716,7 +753,7 @@ export async function carregarBancoDaConciliacao(
           (de, ate) =>
             supabase
               .from("historico_movimentos")
-              .select("id, data, data_prevista, valor, job_nome, descricao, fornecedor, regional_nome, regional_todas, grupo, extrato_linha_id, subtipo:plano_contas_subtipos(nome), carga:historico_cargas!inner(tipo, situacao, planilha_versao)")
+              .select("id, data, data_prevista, valor, job_nome, descricao, documento, observacao, parcela, fornecedor, regional_nome, regional_todas, grupo, extrato_linha_id, subtipo:plano_contas_subtipos(nome), carga:historico_cargas!inner(tipo, situacao, planilha_versao)")
               .eq("tenant_id", tenantId)
               .eq("conta_bancaria_id", contaId)
               .in("carga.tipo", ["cauda", "previsao"])
@@ -770,6 +807,8 @@ export async function carregarBancoDaConciliacao(
       subtipo: (h as { subtipo?: { nome: string } | null }).subtipo?.nome ?? null,
       // Decisão 254: a data que a planilha tem, quando a tela ajustou a da previsão.
       dataDaPlanilha: h.data_prevista && h.data_prevista !== h.data ? h.data_prevista : null,
+      // Decisão 276: as NFs que a linha cita.
+      nfs: numerosDeNf([h.descricao, h.documento, h.observacao, h.parcela].filter(Boolean).join(" ")),
     };
     if (h.extrato_linha_id) {
       caudaPorLinha.set(h.extrato_linha_id, [...(caudaPorLinha.get(h.extrato_linha_id) ?? []), item]);
@@ -807,7 +846,7 @@ export async function carregarBancoDaConciliacao(
 
   // O mútuo e as baixas como o Extrato as mostra (decisão 243): juntos.
   const pendentesDaConta = linhas.filter((l) => !l.conciliada && !l.ignorada).map((l) => l.id);
-  const [mutuo, extratoPorLancamento, acertosRes, centrosRes, ppsPagas] = await Promise.all([
+  const [mutuo, extratoPorLancamento, acertosRes, centrosRes, ppsPagas, nfsPagas] = await Promise.all([
     contextoDoMutuoNaConta(
       supabase,
       tenantId,
@@ -826,6 +865,7 @@ export async function carregarBancoDaConciliacao(
       .eq("tenant_id", tenantId)
       .eq("conta_bancaria_id", contaId),
     ppsPagasDaPlanilha(supabase, tenantId, [...previsoes, ...historico]),
+    nfsPagasDaPlanilha(supabase, tenantId, [...previsoes, ...historico]),
   ]);
   // Só o acerto das linhas ainda em aberto (a conciliada não guarda acerto).
   const abertas = new Set(pendentesDaConta);
@@ -852,9 +892,10 @@ export async function carregarBancoDaConciliacao(
     acertos,
     centros,
     saldoSistemaNoFim: saldoNoFim === null ? null : r2(saldoNoFim),
-    // Revisão de 23/11/2026 (D2): a linha da planilha de PP já paga sai antes do motor e da tabela.
-    historico: historico.filter((h) => !eDePpPaga(h, ppsPagas)),
-    previsoes: previsoes.filter((h) => !eDePpPaga(h, ppsPagas)),
+    // Revisão de 23/11/2026 (D2): a linha da planilha de PP já paga sai antes do motor e da tabela;
+    // e a do recebimento de NF já paga (decisão 276).
+    historico: historico.filter((h) => !eDePpPaga(h, ppsPagas) && !eDeNfPaga({ valor: h.valor, nfs: h.nfs, retencao: ehRetencao(h) }, nfsPagas)),
+    previsoes: previsoes.filter((h) => !eDePpPaga(h, ppsPagas) && !eDeNfPaga({ valor: h.valor, nfs: h.nfs, retencao: ehRetencao(h) }, nfsPagas)),
     previsoesDesde,
     regionais: ((regionaisRes.data ?? []) as Array<{ id: string; nome: string; empresa_id: string }>).map((r) => ({
       id: r.id,

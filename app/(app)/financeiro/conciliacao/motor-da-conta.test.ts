@@ -328,10 +328,10 @@ test("as baixas da remessa: uma a uma, e o grupo só com a linha da soma (passo 
 test("a cauda do histórico (A6): do mesmo dia antes do título e pela soma do dia; a de outro dia não casa (decisão 254)", () => {
   const base = { lancamentos: [], remessasBaixadas: [], remessas: [], regras: [], periodos: [] };
   const cauda = [
-    { id: "h1", data: "2026-10-19", valor: -600, job: "Job Exemplo 3T", descricao: null, fornecedor: "Fornecedor 001 Exemplo" },
-    { id: "h2", data: "2026-10-17", valor: -250, job: "Job Exemplo 3T", descricao: null, fornecedor: "Fornecedor 002 Exemplo" },
-    { id: "h3", data: "2026-10-19", valor: 1000, job: "Job A 3T", descricao: null, fornecedor: "Cliente Exemplo" },
-    { id: "h4", data: "2026-10-19", valor: 2500.5, job: "Job B 3T", descricao: null, fornecedor: "CLIENTE EXEMPLO" },
+    { id: "h1", data: "2026-10-19", valor: -600, job: "Job Exemplo 3T", descricao: null, fornecedor: "Fornecedor 001 Exemplo", nfs: [] },
+    { id: "h2", data: "2026-10-17", valor: -250, job: "Job Exemplo 3T", descricao: null, fornecedor: "Fornecedor 002 Exemplo", nfs: [] },
+    { id: "h3", data: "2026-10-19", valor: 1000, job: "Job A 3T", descricao: null, fornecedor: "Cliente Exemplo", nfs: [] },
+    { id: "h4", data: "2026-10-19", valor: 2500.5, job: "Job B 3T", descricao: null, fornecedor: "CLIENTE EXEMPLO", nfs: [] },
   ];
   const { resultados } = conciliarConta(
     {
@@ -367,14 +367,14 @@ test("a cauda do histórico (A6): do mesmo dia antes do título e pela soma do d
 
 test("as previsões da planilha (decisões 232 e 254): depois da cauda, só a do dia; a única vai para Prontos", () => {
   const base = { lancamentos: [], remessasBaixadas: [], remessas: [], regras: [], periodos: [] };
-  const historico = [{ id: "h1", data: "2026-10-21", valor: -500, job: "Job Exemplo 3T", descricao: null, fornecedor: "Fornecedor 001 Exemplo" }];
+  const historico = [{ id: "h1", data: "2026-10-21", valor: -500, job: "Job Exemplo 3T", descricao: null, fornecedor: "Fornecedor 001 Exemplo", nfs: [] }];
   const previsoes = [
-    { id: "p1", data: "2026-10-28", valor: -500, job: "Job Exemplo 4T", descricao: null, fornecedor: "Fornecedor 001 Exemplo" },
-    { id: "p2", data: "2026-10-28", valor: 9000, job: "Job Exemplo 4T", descricao: null, fornecedor: "Cliente Exemplo" },
-    { id: "p3", data: "2026-10-28", valor: -750, job: null, descricao: "Custo fixo", fornecedor: null },
-    { id: "p4", data: "2026-10-28", valor: -750, job: null, descricao: "Custo fixo", fornecedor: null },
-    { id: "p5", data: "2026-11-20", valor: -1200, job: null, descricao: "Custo fixo", fornecedor: null },
-    { id: "p6", data: "2026-08-15", valor: 3300, job: "Job Antigo 2T", descricao: null, fornecedor: "Cliente Atrasado" },
+    { id: "p1", data: "2026-10-28", valor: -500, job: "Job Exemplo 4T", descricao: null, fornecedor: "Fornecedor 001 Exemplo", nfs: [] },
+    { id: "p2", data: "2026-10-28", valor: 9000, job: "Job Exemplo 4T", descricao: null, fornecedor: "Cliente Exemplo", nfs: [] },
+    { id: "p3", data: "2026-10-28", valor: -750, job: null, descricao: "Custo fixo", fornecedor: null, nfs: [] },
+    { id: "p4", data: "2026-10-28", valor: -750, job: null, descricao: "Custo fixo", fornecedor: null, nfs: [] },
+    { id: "p5", data: "2026-11-20", valor: -1200, job: null, descricao: "Custo fixo", fornecedor: null, nfs: [] },
+    { id: "p6", data: "2026-08-15", valor: 3300, job: "Job Antigo 2T", descricao: null, fornecedor: "Cliente Atrasado", nfs: [] },
   ];
   const dia = "2026-10-28";
   const { resultados } = conciliarConta(
@@ -420,10 +420,10 @@ test("as previsões da planilha (decisões 232 e 254): depois da cauda, só a do
 test("a soma do histórico só junta linhas do mesmo favorecido", () => {
   const base = { lancamentos: [], remessasBaixadas: [], remessas: [], regras: [], periodos: [] };
   const historico = [
-    { id: "h1", data: "2026-10-20", valor: -300, job: "Job A 3T", descricao: null, fornecedor: "Fornecedor 001 Exemplo" },
-    { id: "h2", data: "2026-10-20", valor: -120, job: "Job A 3T", descricao: null, fornecedor: "Fornecedor 002 Exemplo" },
-    { id: "h3", data: "2026-10-20", valor: -500, job: "Job B 3T", descricao: null, fornecedor: null },
-    { id: "h4", data: "2026-10-20", valor: -200, job: "Job B 3T", descricao: null, fornecedor: null },
+    { id: "h1", data: "2026-10-20", valor: -300, job: "Job A 3T", descricao: null, fornecedor: "Fornecedor 001 Exemplo", nfs: [] },
+    { id: "h2", data: "2026-10-20", valor: -120, job: "Job A 3T", descricao: null, fornecedor: "Fornecedor 002 Exemplo", nfs: [] },
+    { id: "h3", data: "2026-10-20", valor: -500, job: "Job B 3T", descricao: null, fornecedor: null, nfs: [] },
+    { id: "h4", data: "2026-10-20", valor: -200, job: "Job B 3T", descricao: null, fornecedor: null, nfs: [] },
   ];
   const { resultados } = conciliarConta(
     { ...base, historico, linhas: [linhaDoBanco("1", { valor: -420 }), linhaDoBanco("2", { valor: -700, ordem: 1 })] },
@@ -438,15 +438,15 @@ test("a soma do histórico só junta linhas do mesmo favorecido", () => {
 test("a retenção na fonte não paga saída; entra no recebimento do cliente, com a nota", () => {
   const base = { lancamentos: [], remessasBaixadas: [], remessas: [], regras: [], periodos: [] };
   const ret = (id: string, valor: number, imposto: string) => ({
-    id, data: "2026-10-01", valor, job: null, descricao: `Imposto retido na fonte ${imposto}`, fornecedor: "Cliente Exemplo",
+    id, data: "2026-10-01", valor, job: null, descricao: `Imposto retido na fonte ${imposto}`, fornecedor: "Cliente Exemplo", nfs: [],
   });
   const historico = [
-    { id: "n1", data: "2026-10-01", valor: 20000, job: "Job A 3T", descricao: "Nota 1", fornecedor: "Cliente Exemplo" },
+    { id: "n1", data: "2026-10-01", valor: 20000, job: "Job A 3T", descricao: "Nota 1", fornecedor: "Cliente Exemplo", nfs: [] },
     ret("r1", -300, "IRPJ"), ret("r2", -200, "CSLL"), ret("r3", -130, "PIS"), ret("r4", -600, "COFINS"), ret("r5", -1000, "ISS"),
-    { id: "n2", data: "2026-10-01", valor: 10000, job: "Job B 3T", descricao: "Nota 2", fornecedor: "Cliente Exemplo" },
+    { id: "n2", data: "2026-10-01", valor: 10000, job: "Job B 3T", descricao: "Nota 2", fornecedor: "Cliente Exemplo", nfs: [] },
     ret("r6", -150, "IRPJ"), ret("r7", -100, "CSLL"), ret("r8", -65, "PIS"), ret("r9", -300, "COFINS"), ret("r10", -500, "ISS"),
     // O "ISS retido" da folha de PJ é pagamento e casa pelo valor.
-    { id: "f1", data: "2026-10-01", valor: -2744, job: null, descricao: "ISS retido - salário diretor", fornecedor: "Colaborador 001 Exemplo" },
+    { id: "f1", data: "2026-10-01", valor: -2744, job: null, descricao: "ISS retido - salário diretor", fornecedor: "Colaborador 001 Exemplo", nfs: [] },
   ];
   const { resultados } = conciliarConta(
     {
@@ -500,9 +500,9 @@ test("a linha da regra do extrato não vai para a cauda do histórico", () => {
       regras: [regra] as never,
       periodos: [],
       historico: [
-        { id: "h1", data: "2026-10-19", valor: -4000, job: "Job Exemplo 3T", descricao: null, fornecedor: null },
-        { id: "h2", data: "2026-10-19", valor: -7000, job: "Job Exemplo 3T", descricao: null, fornecedor: null },
-        { id: "h3", data: "2026-10-19", valor: -11000, job: "Job Exemplo 3T", descricao: null, fornecedor: null },
+        { id: "h1", data: "2026-10-19", valor: -4000, job: "Job Exemplo 3T", descricao: null, fornecedor: null, nfs: [] },
+        { id: "h2", data: "2026-10-19", valor: -7000, job: "Job Exemplo 3T", descricao: null, fornecedor: null, nfs: [] },
+        { id: "h3", data: "2026-10-19", valor: -11000, job: "Job Exemplo 3T", descricao: null, fornecedor: null, nfs: [] },
       ],
       linhas: [linhaDoBanco("1", { valor: -11000, historico: "APLICACAO CONTAMAX" })],
     },

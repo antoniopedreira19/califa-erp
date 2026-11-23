@@ -9310,3 +9310,12 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Previsão de impostos:** muda pela diferença do imposto do job, espalhada pelas parcelas. A de desembolso não acompanha.
 - **Sem revisão da abertura** e sem travar o envio (Tiago, 23/11/2026, "Ajusta sozinha"). Quem fez e quando fica no registro do job (`jobs_midia_alteracoes`) e na auditoria (`midia.veiculacao_encerrada` / `midia.veiculacao_estendida`).
 - **Conferido no Sandbox:** TES-1026/26 — novembro R$ 1.601,60 → R$ 1.144,00; janeiro/2027 criado em 10/02/2027 com R$ 8.748,39.
+
+## ⚠️ Nota de 2026-11-23 — a NF presa ao job da planilha e a carga das NFs da planilha (decisão 276)
+
+- **Banco:** `faturamento_itens.job_planilha_chave/job_planilha_nome`, `faturamentos_passagens_da_planilha`, `jobs_da_planilha_com_nf`, `passar_nf_da_planilha_ao_job`, `_previsao_de_nf_lancada` na `vw_fluxo_caixa` e `emitir_faturamento` gravando as colunas (`20261123950001`); regra (c) de `_historico_previsoes_pagas` — a previsão REC e as retenções que citam a NF paga contam no DRE (`950002`); `anexar_pdf_da_nota` (`950003`); número 275 → 276 no texto aplicado (`950004`).
+- **Emissão:** `emitirFaturamento` aceita `job_planilha_chave/nome` nos itens e `sem_pdf` (só a NF da planilha); a NF antiga leva o CNAE mesmo antes do cadastro, sem CBS/IBS. Gaveta da NF: "Sem PDF" com "Anexar PDF"; o item aparece como "Job da planilha".
+- **Abertura:** sugestão do nome (`lib/calculos/nfs-da-planilha.ts`), linha "NFs da planilha" na confirmação e `passarNfsDaPlanilhaAoJob` (`abertura-de-job/nfs-da-planilha.ts`) depois de abrir; no mensal, o mês anterior ao da emissão.
+- **Conciliação:** regra 0 de `donosDaPlanilha` (a linha que cita a NF é do título) e `nfsPagasDaPlanilha` + `eDeNfPaga` em `banco-dados.ts`; `HistoricoDoMotor.nfs`.
+- **Carga (produção, 23/11):** 208 NFs (R$ 27,62 mi), 35 baixas e 32 linhas do banco trocadas da planilha para as baixas; DRE do 4T igual. Scripts em `tmp/nfs-planilha/` (fora do git). Conferido antes no Sandbox (TESTE-275A–G, TES-1012/26 aberto com o nome da planilha).
+- **Falta:** as 26 mensais fora dos meses do job (regra do mês), a segunda parte (20 recebidas antes de 03/11 e a 2ª parcela da NF 4946), e as listas a decidir (sem cliente, Saving, Ambev com o crédito do ISS, emissão em 2027, depósitos que pagam outras coisas).

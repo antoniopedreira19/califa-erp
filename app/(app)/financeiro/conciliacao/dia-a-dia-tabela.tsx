@@ -56,6 +56,7 @@ import { EditarDataPagamentoDialog } from "../contas-a-pagar/editar-data-pagamen
 import { EditarPrevisaoDialog } from "../contas-a-receber/editar-previsao-dialog";
 import { naOrdemDoExtrato, saldosDoExtrato, type SaldoBase } from "@/lib/conciliacao/dia-a-dia";
 import { donosDaPlanilha as donosPelaRegra } from "@/lib/conciliacao/planilha-de-titulo";
+import { ehRetencao } from "@/lib/conciliacao/historico";
 import type { EntradaDaBaixaEmLote } from "@/lib/financeiro/baixa-em-lote";
 import type { LancamentoSemLinha } from "./banco-dados";
 import { correcaoDaBaixaCabe, RETENCOES_COMUNS, retencaoQueExplica, type TituloDoMotor } from "@/lib/conciliacao/motor";
@@ -234,7 +235,8 @@ function donosDaPlanilha(itens: Candidato[]): Map<string, string> {
   const planilha = itens.filter((x): x is Extract<Candidato, { k: "planilha" }> => x.k === "planilha");
   const titulos = itens.filter((x): x is Extract<Candidato, { k: "titulo" }> => x.k === "titulo");
   return donosPelaRegra(
-    planilha.map((x) => ({ id: x.id, data: x.data, valor: x.valor, descricao: x.descricao, quem: x.quem })),
+    // Decisão 276: as NFs que a linha cita e se é retenção na fonte (a linha da NF lançada é do título dela).
+    planilha.map((x) => ({ id: x.id, data: x.data, valor: x.valor, descricao: x.descricao, quem: x.quem, nfs: x.h.nfs, retencao: ehRetencao(x.h) })),
     titulos.map((t) => ({ id: t.id, data: t.data, valor: t.valor, descricao: t.descricao, quem: t.quem, origem: String(t.t.origem), ref: t.t.ref })),
   );
 }
