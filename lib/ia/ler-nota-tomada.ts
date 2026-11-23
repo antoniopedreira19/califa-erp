@@ -230,7 +230,9 @@ export function leituraParaGravar(
   const divergencias: DivergenciaDoPdf[] = [];
   const chaveLida = chaveDoNumero(pdf.numero);
   const chaveDaNota = chaveDoNumero(nota.numero);
-  if (chaveLida && chaveDaNota && chaveLida !== chaveDaNota) divergencias.push("numero");
+  // Só o sufixo diferente ("459/NFE" × "459") não é outro número: compara também os dígitos.
+  const digitos = (v: string | null) => soDigitos(v).replace(/^0+/, "");
+  if (chaveLida && chaveDaNota && chaveLida !== chaveDaNota && digitos(pdf.numero) !== digitos(nota.numero)) divergencias.push("numero");
   const cnpjDaNota = soDigitos(nota.cnpjEmitente);
   if (pdf.cnpj && isValidCnpj(pdf.cnpj) && cnpjDaNota.length === 14 && pdf.cnpj !== cnpjDaNota) divergencias.push("emitente");
   if (pdf.emissao && pdf.emissao !== nota.emissao) divergencias.push("emissao");

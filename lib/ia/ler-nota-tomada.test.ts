@@ -69,6 +69,11 @@ test("número com pontos e zeros à esquerda é o mesmo número", () => {
   assert.deepEqual(r.leitura.divergencias, []);
 });
 
+test("o sufixo da série no número não é outro número", () => {
+  const r = leituraParaGravar({ ...base, numero_nf: "771/NFE" }, nota);
+  assert.deepEqual(r.leitura.divergencias, []);
+});
+
 test("competência fora do formato, alíquota absurda e emissão inválida viram nulo", () => {
   const r = leituraParaGravar(
     { ...base, competencia: "11/2026", data_emissao: "05/11/2026", retencoes: { ...base.retencoes, irrf: { aliquota: 150, valor: 45 } } },
