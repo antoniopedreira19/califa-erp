@@ -9327,7 +9327,8 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Mensais (regra nova do mês):** 12 emitidas, 10 baixas e 10 linhas do banco trocadas; DRE do 4T igual.
 - **Pelo envio do GP:** 15 NFs (R$ 697.296,17) faturadas pela parcela do envio; 7 baixas e 7 linhas do banco trocadas; DRE do 4T igual.
 - **Segunda parte (recebidas antes de 03/11):** 14 NFs (R$ 5,79 mi) e a 2ª parcela da 4946; 16 baixas pela data da planilha, 15 ligadas às linhas dela (decisão 270); DRE só no 4T de 2025 (+R$ 8.000 da 4946, que faltavam desde a primeira parte); Paypal zerado pela 6393.
-- **Falta:** as 2 do NOM-1001 e as 4 do AMB-1055 (mês), as 6 da segunda parte que ficaram para decidir (13, 5549, 2478–2480 e 6405), e as listas a decidir (sem cliente, Saving, Ambev com o crédito do ISS, emissão em 2027, depósitos que pagam outras coisas).
+- **Recomendações sem o financeiro:** 6485 do NOM-1001 pelo envio de novembro; cliente em 18 jobs da planilha (`20261123950005`) e 10 NFs emitidas (R$ 1,77 mi; a 29 da GoCrazy com a baixa de 01/09 ligada à planilha); DRE igual.
+- **Falta:** a 6384 do NOM-1001 (o envio de outubro é R$ 0,02 menor que a NF; o GP corrige o envio) e as 4 do AMB-1055 (mês); as 6 da segunda parte (13, 5549, 2478–2480 e 6405) e a 2327; Mercado Livre (EBAZAR × Mercado Pago), a 6235 (dois clientes) e os clientes sem cadastro; os 4 depósitos (6276/6280 com a 6046 do Saving, 6357 com a retenção que cita a 6156, 6151 antes do início); Saving, Ambev com o crédito do ISS, emissão em 2027 e as de vários jobs.
 
 ## ⚠️ Nota de 2026-11-23 — a emissão da NF 6479 corrigida (vencimento lançado na emissão)
 
