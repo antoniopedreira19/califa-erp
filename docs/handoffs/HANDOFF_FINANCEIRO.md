@@ -9282,6 +9282,6 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Tomadas** lê o cadastro único de notas e os anexos de PP, desembolso e prestação com `nota_fiscal_id`; reembolso fora.
 - **Lista em 200 linhas por vez** (`useLimiteDeLinhas` em `comum.tsx`): com "Tudo" as emitidas são ~3.680.
 - **Leitura da NF pela IA:** `lib/ia/ler-nota-tomada.ts` (schema estrito, recusa arquivo de outra nota ou outro emitente; 5 testes) e a Server Action `lerNotasTomadas` (4 notas por chamada, em paralelo; a página tem `maxDuration = 60`). Grava pela RPC `gravar_leitura_da_nota`. Localmente não lê: o `.env.local` não tem `OPENAI_API_KEY` (só a Vercel).
-- **Conferido:** produção em leitura (as duas abas, painéis, peso da página) e Sandbox (painéis, barra de leitura com a falha mostrada); a RPC testada como admin e como GP do Sandbox em transação desfeita. A leitura de verdade só pode ser conferida na versão publicada.
+- **Conferido:** produção em leitura (as duas abas, painéis, peso da página) e Sandbox (painéis, barra de leitura com a falha mostrada); a RPC testada como admin e como GP do Sandbox em transação desfeita. Na versão publicada, a leitura da NF 603 do Sandbox gravou e entrou na auditoria (~US$ 0,0006 por nota).
 - Migrations `20261123800001_nota_tomada_dados_da_leitura.sql` e `20261123800002_gravar_leitura_da_nota.sql`.
 

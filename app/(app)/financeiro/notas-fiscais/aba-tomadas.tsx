@@ -221,7 +221,7 @@ export function AbaTomadas({ dados, cnpjs, hoje }: { dados: DadosDasTomadas; cnp
         <BarraDosFiltrosDeColuna visiveis={visiveis.length} total={colunas.total} singular="nota" plural="notas" onLimpar={colunas.limpar} />
       )}
 
-      <BotaoLerNotas key={naoLidas.length === 0 ? "nada" : "ler"} ids={naoLidas} />
+      <BotaoLerNotas ids={naoLidas} />
 
       {visao === "impostos" ? (
         <TabelaDosImpostos
@@ -380,7 +380,12 @@ function LinhaTomada({ n, onVer }: { n: NotaTomada; onVer: () => void }) {
             </TooltipContent>
           </Tooltip>
         ) : (
-          <span className="font-sans text-muted-foreground">—</span>
+          <span
+            className="cursor-default font-sans text-muted-foreground"
+            title={n.leitura.lida ? "A NF não destaca retenção." : "A NF ainda não foi lida pela IA."}
+          >
+            —
+          </span>
         )}
       </TableCell>
       <TableCell>

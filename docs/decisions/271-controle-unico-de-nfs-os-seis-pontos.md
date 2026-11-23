@@ -185,7 +185,10 @@ Entrou a seção, sem o "Editar registro" (ponto 6), que vem em seguida.
   `gravar_leitura_da_nota`, só administrador e financeiro, só nestas
   colunas). Cada leitura entra na auditoria
   (`nota_fiscal.leitura_ampliada`, com tokens e custo) e no cache das
-  leituras pelo hash do arquivo.
+  leituras pelo hash do arquivo. Conferida na versão publicada em
+  23/11/2026, na NF 603 do Sandbox: ~1.000 tokens de entrada e ~130 de
+  saída, cerca de US$ 0,0006 por nota (as ~500 notas da produção dariam
+  uns US$ 0,30).
 
 Achados no dado, sem correção (produção só leitura):
 
