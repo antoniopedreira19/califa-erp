@@ -205,3 +205,61 @@ Precisa de service client pra ler `auth.users` (RLS bloqueia leitura comum).
 - **Fluxo de autoatendimento** (colaborador vê que não tem login, pede acesso ao RH). Pode entrar em release futuro.
 - **Múltiplos emails por colaborador** (ex. pessoal + corporativo). Hoje `colaboradores.email` é único; se precisar de dois, modelar depois.
 - **Expiração de convite**. Supabase controla isso internamente, mas não refletimos no card. Pode entrar no próximo iteração se tiver demanda.
+
+## 10. Liderança (`lider_id`) — a FK aponta pra `profiles`, não pra `colaboradores`
+
+Regra fundamental, fácil de esquecer e que já queimou tempo em query ad-hoc:
+
+```sql
+-- definição real da FK (pg_constraint):
+FOREIGN KEY (lider_id) REFERENCES profiles(id) ON DELETE SET NULL
+```
+
+**`colaboradores.lider_id` aponta pra `profiles(id)`**, não pra `colaboradores(id)`. Mesma coisa pra `colaboradores.created_by`. Já `colaboradores.user_id` aponta direto pra `auth.users(id)` (ver §3). As três FKs convivem porque:
+
+- `profiles` é **singular por pessoa** (PK = `auth.users.id`). Um Ícaro = um profile, não importa em quantos tenants ele exista.
+- `colaboradores` é **por tenant**. O mesmo Ícaro pode ter dois registros em `colaboradores` (um por tenant — ex. `California Sandbox` + `Agência California`), ambos apontando pro mesmo profile.
+- `lider_id` referenciar `profiles` mantém a relação estável mesmo que o colaborador líder exista em vários tenants ou nem tenha registro em `colaboradores` daquele tenant.
+
+### Pegadinha do JOIN
+
+Query ingênua devolve `lider_nome = NULL` **mesmo quando o `lider_id` está certo**:
+
+```sql
+-- ❌ ERRADO — join bate em PK que não é essa
+SELECT c.nome, l.nome AS lider_nome
+FROM colaboradores c
+LEFT JOIN colaboradores l ON l.id = c.lider_id;   -- l.* sempre NULL
+```
+
+O jeito certo:
+
+```sql
+-- ✅ CORRETO — lider_id é PK de profiles
+SELECT c.nome, p.nome AS lider_nome
+FROM colaboradores c
+LEFT JOIN profiles p ON p.id = c.lider_id
+WHERE c.tenant_id = :tenant;
+```
+
+### "Quem o Fulano lidera?"
+
+Pra listar liderados a partir de um colaborador (não de um profile), passe pelo `profiles.id` do líder — na prática, pelo `user_id` do registro de colaborador dele:
+
+```sql
+-- liderados diretos de um colaborador específico, no tenant corrente
+SELECT liderado.nome
+FROM colaboradores lider
+JOIN colaboradores liderado
+  ON liderado.lider_id = lider.user_id   -- user_id = profiles.id, por construção
+WHERE lider.id = :colaborador_id
+  AND liderado.tenant_id = lider.tenant_id
+  AND liderado.status = 'ativo';
+```
+
+Se o líder não tem `user_id` (nunca foi convidado/vinculado), ele **não pode** ser líder de ninguém — não existe linha em `profiles` pra apontar. Isso é intencional: líder precisa ter acesso ao sistema pra aprovar férias, abrir `/equipe`, etc.
+
+### Observações
+
+- **N líderes por colaborador**: desde 2026-11-21 existe a tabela `colaboradores_lideres` (PK composta `(colaborador_id, lider_id)`) usada pelo fluxo de férias. `colaboradores.lider_id` continua existindo como cache do primeiro líder, sincronizado por trigger. Ver [`25-ferias.md`](25-ferias.md) §"Múltiplos líderes".
+- **`profiles.id = auth.users.id`**: `profiles_id_fkey` em `pg_constraint` confirma. Ou seja, dar o `user_id` de um colaborador no `lider_id` de outro é equivalente a dar o `profiles.id` do primeiro.
