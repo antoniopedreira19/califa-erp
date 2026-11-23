@@ -79,12 +79,17 @@ export async function lerNotasTomadas(ids: string[]): Promise<{ ok: true; result
   const supabase = createClient();
   const resultado: ResultadoDaLeitura = { lidas: 0, divergentes: [], falhas: [] };
 
-  const { data: notas } = await supabase
-    .from("notas_fiscais_fornecedor")
-    .select("id, numero, valor, data_emissao, fornecedor:fornecedores(cpf_cnpj)")
-    .eq("tenant_id", tenantId)
-    .in("id", lote)
-    .returns<Array<{ id: string; numero: string; valor: number | string; data_emissao: string; fornecedor: { cpf_cnpj: string | null } | null }>>();
+  const [{ data: notas }, { data: estabelecimentos }] = await Promise.all([
+    supabase
+      .from("notas_fiscais_fornecedor")
+      .select("id, numero, valor, data_emissao, fornecedor:fornecedores(cpf_cnpj)")
+      .eq("tenant_id", tenantId)
+      .in("id", lote)
+      .returns<Array<{ id: string; numero: string; valor: number | string; data_emissao: string; fornecedor: { cpf_cnpj: string | null } | null }>>(),
+    supabase.from("fiscal_estabelecimentos").select("cnpj").eq("tenant_id", tenantId).returns<Array<{ cnpj: string | null }>>(),
+  ]);
+  // Os CNPJs das empresas do grupo: são o tomador, nunca o emitente pelo texto do PDF.
+  const proprios = new Set((estabelecimentos ?? []).map((e) => (e.cnpj ?? "").replace(/\D/g, "")).filter(Boolean));
 
   // As notas do lote em paralelo: a chamada cabe no tempo da página (60 s).
   await Promise.all(
@@ -104,7 +109,7 @@ export async function lerNotasTomadas(ids: string[]): Promise<{ ok: true; result
         const hash = createHash("sha256").update(arquivo).digest("hex");
         // A segunda leitura: o texto do PDF, quando ele tem texto (sem IA).
         const textoDoPdf = anexo.mimetype.startsWith("image/") ? null : await extrairTextoDoPdf(arquivo);
-        const porTexto = textoDoPdf ? lerPeloTexto(textoDoPdf) : null;
+        const porTexto = textoDoPdf ? lerPeloTexto(textoDoPdf, proprios) : null;
         // A leitura por imagem (IA), pelo cache quando o arquivo já foi lido.
         const { data: cache } = await supabase
           .from("nf_extracao_cache")
