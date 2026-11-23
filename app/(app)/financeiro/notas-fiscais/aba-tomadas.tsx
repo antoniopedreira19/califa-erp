@@ -443,7 +443,8 @@ export function AbaTomadas({ dados, cnpjs, hoje }: { dados: DadosDasTomadas; cnp
         />
       )}
 
-      {vendo && <NotaTomadaDrawer nota={vendo} onClose={() => setVendoId(null)} />}
+      {/* A chave zera o painel (o PDF aberto, a PP ao lado) quando a nota muda. */}
+      {vendo && <NotaTomadaDrawer key={vendo.id} nota={vendo} onClose={() => setVendoId(null)} />}
     </div>
   );
 }

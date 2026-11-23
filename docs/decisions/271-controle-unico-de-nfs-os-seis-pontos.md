@@ -310,3 +310,26 @@ liberou ("Sim, liberar"):
 
 Migration `20261123800008`. A nota sem documento ativo continua travada.
 
+### O que foi corrigido na produção (23/11/2026)
+
+Releitura das 508 notas na v3: 504 lidas, 30 com o PDF diferente do registro.
+Cada caso foi conferido no PDF antes de corrigir; as correções foram feitas
+pela tela ("Editar registro" → "Usar os dados do PDF"), com motivo:
+
+- **10 em avaliação:** as 7 NFs da prestação da PP-00455 (números "01" a
+  "11" digitados no lugar dos números reais, e a emissão), uma NF de 5
+  dígitos que era a 22 (PP-01150) e duas NFs da PP-00949 (valor bruto da
+  nota; o cadastro tinha o líquido, sem o IRRF de 1,5%).
+- **9 registradas** (depois da liberação): o número da DPS ou da chave de
+  acesso no lugar do número da NFS-e (PP-00271, PP-00269, PP-00282),
+  emissões (PP-00346, PP-00357, PP-00090, PP-00861, PP-00123) e valores
+  (PP-00137 e PP-00123).
+
+Ficaram 12, que dependem de decisão: o ano lido errado pela IA (3 notas; o
+cadastro está certo), PDF emitido por outro CNPJ que não o fornecedor do
+documento (PP-01434, PP-01465, PP-01423, PP-01233 e PP-00952), PDF de outro
+documento (PP-01367/PP-01368) e documentos que não são NF (uma guia
+municipal e duas apólices de seguro). Em aberto também: a PP-00123 pagou
+R$ 250 de uma NF de R$ 2.500 e a PP-00137 cobre R$ 1.200 de uma NF de
+R$ 2.400.
+
