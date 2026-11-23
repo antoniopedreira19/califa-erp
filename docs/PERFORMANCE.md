@@ -132,6 +132,8 @@
 | `can_access_empresa_regional((select auth.uid()), empresa_id, regional_id)` | a forma de quatro conjuntos da migration `20261120100001` (admin, membro sem regional, linha sem regional, par empresa/regional) |
 | `e_colega_de_tenant(id)` | `coalesce(id in (select colegas_de_tenant()), false)` |
 
+**Atenção em tabela com dado pessoal** (freelancers, colaboradores, folhas, NFs de colaborador…): `tenant_id in (select current_tenant_ids())` sozinho libera a leitura para qualquer membro do tenant, exatamente como `is_tenant_member`. Use a forma com papel (`current_tenant_ids_com_papel('administrador' | 'rh' | 'financeiro')`). O `scripts/check-rls.sh`, no pre-commit, barra as duas formas sozinhas, em `create policy` e em `alter policy`.
+
 O subselect que não cita a linha vira InitPlan e roda uma vez por consulta. Função que recebe coluna da linha continua por linha: troque por uma função que devolve o conjunto (como as acima) e compare a coluna com ele. Casos reais: [case study 4](#4-regras-de-leitura-checando-a-sessão-linha-por-linha-nov2026) e [case study 7](#7-lista-de-pps-do-contas-a-pagar-pagando-acesso-e-nomes-por-linha-nov2026).
 
 ### I) Server actions com N inserts em série

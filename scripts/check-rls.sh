@@ -13,6 +13,15 @@
 #   USING (is_tenant_admin(tenant_id) OR is_tenant_rh(tenant_id)
 #          OR is_tenant_financeiro(tenant_id))
 #
+# Desde 16/11/2026 (migrations 20261116990001 e 20261120100001, ver o caso 4
+# de docs/PERFORMANCE.md) as policies usam a forma de conjunto, que roda uma
+# vez por consulta e quer dizer a MESMA coisa:
+#   tenant_id IN (SELECT current_tenant_ids())        == is_tenant_member
+#   tenant_id IN (SELECT current_tenant_ids_com_papel('administrador'|'rh'|
+#                 'financeiro'))                      == is_tenant_admin/rh/financeiro
+# A trava reconhece as duas formas. Olha CREATE POLICY de SELECT/ALL e
+# ALTER POLICY com USING (o ALTER nao diz o comando; na duvida, confere).
+#
 # Se o caso novo for legitimamente "member", documente no proprio arquivo
 # com um comentario `-- rls-member-ok: motivo`.
 
@@ -46,16 +55,24 @@ for f in $FILES; do
   # `|| true` evita pipefail quando a migration nao tem CREATE POLICY
   # (ex: migrations so de funcoes/grants/indices). Sem isso, grep retorna
   # 1 por "no match" e `set -o pipefail` derruba o hook inteiro.
-  echo "$CONTENT" | { grep -oiE 'create policy [^;]+;' || true; } | while read -r POLICY; do
-    echo "$POLICY" | grep -qiE 'for (select|all)' || continue
+  echo "$CONTENT" | { grep -oiE '(create|alter) policy [^;]+;' || true; } | while read -r POLICY; do
+    if echo "$POLICY" | grep -qiE '^create'; then
+      echo "$POLICY" | grep -qiE 'for (select|all)' || continue
+    else
+      echo "$POLICY" | grep -qiE '[[:space:]]using[[:space:]]*\(' || continue
+    fi
     echo "$POLICY" | grep -qiE "$SENSIVEIS_REGEX" || continue
-    echo "$POLICY" | grep -qi 'is_tenant_member' || continue
-    if ! echo "$POLICY" | grep -qiE 'is_tenant_admin|is_tenant_rh|is_tenant_financeiro'; then
+    # Membro do tenant, nas duas formas. `current_tenant_ids()` com o "()"
+    # logo depois nao casa com `current_tenant_ids_com_papel(...)`.
+    echo "$POLICY" | grep -qiE 'is_tenant_member|current_tenant_ids\(\)' || continue
+    if ! echo "$POLICY" | grep -qiE "is_tenant_admin|is_tenant_rh|is_tenant_financeiro|current_tenant_ids_com_papel\([[:space:]]*'(administrador|rh|financeiro)'"; then
       {
         echo ""
         echo "BLOQUEADO: $f"
-        echo "  Policy de SELECT em entidade sensivel usando is_tenant_member sozinho."
-        echo "  Padrao correto: USING (is_tenant_admin(...) OR is_tenant_rh(...) OR is_tenant_financeiro(...))."
+        echo "  Policy de leitura em entidade sensivel liberada a qualquer membro do tenant"
+        echo "  (is_tenant_member ou current_tenant_ids() sozinho)."
+        echo "  Padrao correto: USING (is_tenant_admin(...) OR is_tenant_rh(...) OR is_tenant_financeiro(...)),"
+        echo "  ou a forma de conjunto: tenant_id IN (SELECT current_tenant_ids_com_papel('administrador'|'rh'|'financeiro'))."
         echo "  Se for intencional, adicione o comentario '-- rls-member-ok: <motivo>' no arquivo."
         echo "  Policy:"
         echo "$POLICY" | sed 's/^/    /' | fold -s -w 100
