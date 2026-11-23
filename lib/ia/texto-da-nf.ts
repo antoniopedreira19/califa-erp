@@ -38,15 +38,21 @@ export async function extrairTextoDoPdf(arquivo: Buffer): Promise<string | null>
   const pdfParse = require("pdf-parse") as (b: Buffer) => Promise<{ text: string }>;
   try {
     const { text } = await pdfParse(arquivo);
-    const limpo = normalizar(text ?? "");
+    const limpo = normalizarTextoDoPdf(text ?? "");
     return limpo.replace(/\s/g, "").length >= MINIMO_DE_TEXTO ? limpo : null;
   } catch {
     return null;
   }
 }
 
-function normalizar(t: string): string {
+/**
+ * O texto como vai para o banco: sem os caracteres de controle (o "\u0000"
+ * de alguns PDFs derruba a gravação: o jsonb não aceita) e com os espaços
+ * de cada linha reduzidos a um.
+ */
+export function normalizarTextoDoPdf(t: string): string {
   return t
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "")
     .replace(/ /g, " ")
     .replace(/[ \t]+/g, " ")
     .replace(/ *\n */g, "\n")

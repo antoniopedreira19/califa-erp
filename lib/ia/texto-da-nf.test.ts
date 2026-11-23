@@ -2,7 +2,7 @@
 // Textos sintéticos no formato dos layouts reais, com dados fictícios.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { chaveDeAcesso, lerPeloTexto } from "./texto-da-nf";
+import { chaveDeAcesso, lerPeloTexto, normalizarTextoDoPdf } from "./texto-da-nf";
 import { leituraParaGravar, type DadosBrutosNotaTomada } from "./ler-nota-tomada";
 
 
@@ -205,6 +205,14 @@ test("chave de acesso: número e CNPJ, com o dígito verificador conferido", () 
   // Um dígito trocado: não é chave.
   const errada = chaveNfse("0000000000028").replace(/^2927/, "2928");
   assert.equal(chaveDeAcesso(errada), null);
+});
+
+test("o texto do PDF sai sem caracteres de controle (o jsonb não aceita o nulo)", () => {
+  const sujo = "NOTA\u0000 FISCAL\u0007\n  Número   da Nota:\u001f 00000078\r\n";
+  const limpo = normalizarTextoDoPdf(sujo);
+  assert.equal(limpo, "NOTA FISCAL\nNúmero da Nota: 00000078");
+  assert.doesNotThrow(() => JSON.parse(JSON.stringify({ texto_bruto: limpo })));
+  assert.ok(!/[\u0000-\u0008]/.test(limpo));
 });
 
 test("sem rótulo de número: vale o da chave", () => {
