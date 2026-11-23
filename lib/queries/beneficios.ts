@@ -194,8 +194,8 @@ export interface DependenteComPlanos {
   id: string;
   nome: string;
   cpf: string;
-  data_nascimento: string;
-  parentesco: string;
+  data_nascimento: string | null;
+  parentesco: string | null;
   ativo: boolean;
   data_inicio: string;
   data_fim: string | null;
@@ -250,8 +250,8 @@ export async function listarDependentesDoColaborador(args: {
     id: string;
     nome: string;
     cpf: string;
-    data_nascimento: string;
-    parentesco: string;
+    data_nascimento: string | null;
+    parentesco: string | null;
     ativo: boolean;
     data_inicio: string;
     data_fim: string | null;

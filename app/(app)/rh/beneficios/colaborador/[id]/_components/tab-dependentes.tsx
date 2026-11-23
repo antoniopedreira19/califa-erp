@@ -26,7 +26,8 @@ import {
   removerDepDePlano,
 } from "@/lib/actions/beneficios/dependentes";
 
-const formatarData = (iso: string) => {
+const formatarData = (iso: string | null) => {
+  if (!iso) return "—";
   const [a, m, d] = iso.split("-");
   return `${d}/${m}/${a}`;
 };
@@ -184,14 +185,18 @@ function LinhaDependente({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="font-medium text-foreground">
-            {dependente.nome}{" "}
-            <span className="text-xs font-normal text-muted-foreground">
-              · {dependente.parentesco}
-            </span>
+            {dependente.nome}
+            {dependente.parentesco && (
+              <span className="text-xs font-normal text-muted-foreground">
+                {" "}· {dependente.parentesco}
+              </span>
+            )}
           </div>
           <div className="mt-0.5 text-xs text-muted-foreground">
-            CPF {formatarCpf(dependente.cpf)} · Nasc{" "}
-            {formatarData(dependente.data_nascimento)}
+            CPF {formatarCpf(dependente.cpf)}
+            {dependente.data_nascimento && (
+              <> · Nasc {formatarData(dependente.data_nascimento)}</>
+            )}
           </div>
         </div>
         {ativo && (
