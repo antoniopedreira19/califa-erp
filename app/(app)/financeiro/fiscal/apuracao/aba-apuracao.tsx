@@ -2,12 +2,14 @@
 
 /**
  * A aba Apuração da seção Fiscal (módulo fiscal, entrega 2; lista por
- * vencimento desde a decisão 181, 16/10/2026): todas as guias numa lista
- * só, na ordem de vencimento, com Competência (mês) e Trimestre em colunas,
+ * vencimento desde a decisão 181, 16/10/2026; por CNPJ desde a 277,
+ * 23/11/2026): um bloco por CNPJ — a faixa com CNPJ, regime, o que falta
+ * aprovar, o que vence primeiro e o "Aprovar" só daquele CNPJ — e, dentro
+ * dele, as guias na ordem de vencimento, com Competência (mês) e Trimestre em colunas,
  * débito, créditos, retido, apurado, guia aprovada e situação (em curso · a
  * aprovar · aprovada · diferença). A competência e a situação viram filtros
  * rápidos (padrão "Em aberto": o que ainda não foi aprovado), o CNPJ tem
- * atalho próprio (como a regional na aba PPs), e os títulos das colunas
+ * botões próprios (como a competência), e os títulos das colunas
  * filtram e ordenam. Clicar abre a memória de cálculo; "Aprovar" leva a guia
  * para Impostos a Pagar. Na PJ de teste, a guia em curso também se aprova,
  * com confirmação.
@@ -20,6 +22,8 @@ import {
   AlertTriangle,
   CalendarClock,
   CheckCheck,
+  ChevronDown,
+  ChevronRight,
   ClipboardCheck,
   Eye,
   Hourglass,
@@ -30,14 +34,14 @@ import {
 } from "lucide-react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { FAIXA_GRUPO_LISTA } from "@/app/(app)/_planilha/blocos";
 import type { CadastroFiscal } from "@/lib/fiscal/cadastro";
 import { trimestreDe } from "@/lib/fiscal/apuracao";
 import { dataBr, mesDe, nomeDoMes, proximoMes, r2 } from "@/lib/fiscal/datas";
 import { aprovarGuiasPeloCalculado } from "./actions";
 import type { DadosDaApuracao, EstabelecimentoDaTela, GuiaDaTela, PJDaTela } from "./dados";
 import { MemoriaDialog } from "./memoria-dialog";
-import { MultiSelectCnpjs } from "./multi-select-cnpjs";
-import { Nota, ResumoItem, moeda, nomeGuia, situacaoDa, somaGrupo } from "./ui";
+import { NomeDaGuia, Nota, ResumoItem, cnpjBr, moeda, nomeGuia, situacaoDa, somaGrupo, tituloPorExtenso } from "./ui";
 import { DialogoAApurar, ItemDoResumo, LinhaProjecao, projecoesDe, type Projecao } from "./a-apurar";
 import {
   BarraDosFiltrosDeColuna,
@@ -120,7 +124,7 @@ function colunasDaApuracao(
     {
       // Árvore PJ ▸ estabelecimento: a PJ marca as guias federais e as do ISS.
       chave: "cnpj",
-      rotulo: "CNPJ",
+      rotulo: "Local",
       tipo: "texto",
       rotuloSemGrupo: "(sem PJ)",
       celula: (g) => {
@@ -189,8 +193,13 @@ function colunasDaApuracao(
   ];
 }
 
-/** As larguras da tabela (`table-fixed`). */
-const LARGURAS = ["7%", "13.5%", "10%", "6.5%", "6.5%", "7.5%", "7%", "7%", "7%", "7.5%", "6.5%", "6.5%", "7.5%"];
+/**
+ * As larguras da tabela (`table-fixed`). Decisão 277: o CNPJ foi para a faixa
+ * do bloco e a coluna Local é curta; a largura passou para Base, Débito e
+ * Apurado, medidas pelo maior valor real (R$ 46.500.000,00 na base do IOF,
+ * R$ 2.661.685,92 no débito do IRPJ do 4º tri na tela de 1.616 px).
+ */
+const LARGURAS = ["7%", "12%", "8%", "6.5%", "6%", "9%", "8.5%", "7%", "7%", "9%", "6.5%", "6.5%", "7.5%"];
 
 function Chip({ ativo, onClick, n, children }: { ativo: boolean; onClick: () => void; n?: number; children: React.ReactNode }) {
   return (
@@ -276,21 +285,15 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
   const listaDoTopo = React.useMemo(() => porCnpj.filter(filtroDoMostrar), [porCnpj, filtroDoMostrar]);
   const colunasDaTabela = React.useMemo(() => colunasDaApuracao(pjPorId, estabPorId, ordemPj), [pjPorId, estabPorId, ordemPj]);
   const colunas = useFiltrosDeColuna(listaDoTopo, colunasDaTabela, { guardarEm: "fiscal-apuracao-vencimento" });
+  // Decisão 277: os blocos recolhidos e o "Aprovar" de um CNPJ só (nulo = todos).
+  const [recolhidos, setRecolhidos] = React.useState<Set<string>>(new Set());
+  const [loteDoCnpj, setLoteDoCnpj] = React.useState<string | null>(null);
   const [aApurarAberto, setAApurarAberto] = React.useState<Projecao | null>(null);
   const todasProjecoes = React.useMemo(() => projecoesDe(dados, pjPorId), [dados, pjPorId]);
 
   // Os chips de competência: os meses e os trimestres que têm guia.
   const meses = React.useMemo(() => [...new Set(guias.filter((g) => g.periodo === "mensal").map((g) => g.competencia))].sort(), [guias]);
   const trimestres = React.useMemo(() => [...new Set(guias.map(trimestreDaGuia))].sort(), [guias]);
-  const opcoesDeCnpj = React.useMemo(
-    () =>
-      pjs.map((p) => ({
-        id: p.id,
-        nome: p.nome,
-        cnpj: (p.matriz_id ? estabelecimentos.find((e) => e.id === p.matriz_id)?.cnpj : null) ?? "—",
-      })),
-    [pjs, estabelecimentos],
-  );
 
   /** O chip de competência põe o filtro na coluna Competência (mês) ou
    *  Trimestre: o trimestre traz também as guias mensais dos três meses. */
@@ -330,7 +333,8 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
   ];
   // Com ordem pelo título, as linhas "A apurar" ficam no fim; sem ela, entram pela data.
   if (!colunas.ordenacao) linhasDaTabela.sort((a, b) => a.v.localeCompare(b.v));
-  const aAprovar = lista.filter((g) => g.estado === "a_aprovar");
+  const aAprovarTodas = lista.filter((g) => g.estado === "a_aprovar");
+  const aAprovar = loteDoCnpj ? aAprovarTodas.filter((g) => g.empresa_contabil_id === loteDoCnpj) : aAprovarTodas;
   const pendentes = lista.filter((g) => g.estado === "a_aprovar" || g.estado === "diferenca");
   const totalAAprovar = r2(pendentes.reduce((s, g) => s + aAprovarDa(g), 0));
   const emCurso = lista.filter((g) => g.estado === "em_curso");
@@ -338,6 +342,17 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
   const proxima = [...pendentes].sort((a, b) => a.vencimento.localeCompare(b.vencimento))[0];
   const guiaAberta = aberta ? guias.find((g) => g.chave === aberta) ?? null : null;
   const contagem = (f: (g: GuiaDaTela) => boolean) => porCnpj.filter(f).length;
+  // Os botões de CNPJ contam pelo filtro "Mostrar", antes do recorte do CNPJ.
+  const comProjecoes = ["aberto", "a_apurar", "todas"].includes(mostrar);
+  const contagemDoCnpj = (pj: string) =>
+    ordenadas.filter((g) => g.empresa_contabil_id === pj && filtroDoMostrar(g)).length +
+    (comProjecoes ? todasProjecoes.filter((p) => p.pj === pj).length : 0);
+  const pjsComGuia = pjs.filter((p) => guias.some((g) => g.empresa_contabil_id === p.id) || todasProjecoes.some((x) => x.pj === p.id));
+  // Os blocos: as linhas por CNPJ, na ordem do cadastro; bloco vazio no filtro sai.
+  const pjDaLinha = (l: LinhaDaTabela) => (l.tipo === "guia" ? l.g.empresa_contabil_id : l.p.pj);
+  const blocos = pjs
+    .map((pj) => ({ pj, linhas: linhasDaTabela.filter((l) => pjDaLinha(l) === pj.id) }))
+    .filter((b) => b.linhas.length > 0);
 
   function nomeDoLocal(g: GuiaDaTela) {
     return g.estabelecimento_id ? estabPorId.get(g.estabelecimento_id)?.nome ?? g.local : pjPorId.get(g.empresa_contabil_id)?.nome ?? g.local;
@@ -417,9 +432,23 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
             ))}
           </div>
         </div>
-        <div className="ml-auto">
-          <MultiSelectCnpjs opcoes={opcoesDeCnpj} selecionados={cnpjs} onSelectionChange={setCnpjs} />
-        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">CNPJ</span>
+        <Chip ativo={cnpjs.length === 0} onClick={() => setCnpjs([])}>
+          Todos
+        </Chip>
+        {pjsComGuia.map((p) => (
+          <Chip
+            key={p.id}
+            ativo={cnpjs.length === 1 && cnpjs[0] === p.id}
+            onClick={() => setCnpjs(cnpjs.length === 1 && cnpjs[0] === p.id ? [] : [p.id])}
+            n={contagemDoCnpj(p.id)}
+          >
+            {p.nome}
+          </Chip>
+        ))}
       </div>
 
       <div className="flex flex-wrap items-center gap-4 rounded-xl border border-border bg-card px-4 py-2.5">
@@ -446,17 +475,18 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
             />
           </>
         )}
-        {aAprovar.length > 0 && (
+        {aAprovarTodas.length > 0 && (
           <button
             type="button"
             onClick={() => {
               setErroLote(null);
+              setLoteDoCnpj(null);
               setConfirmarLote(true);
             }}
             className="ml-auto inline-flex items-center gap-2 whitespace-nowrap rounded-lg border border-border bg-white px-3.5 py-1.5 text-sm font-semibold text-foreground transition-colors hover:border-california-red/50 hover:text-california-red"
           >
             <ListChecks className="h-4 w-4" />
-            Aprovar {aAprovar.length === 1 ? "a guia" : `as ${aAprovar.length} guias`} pelo valor calculado
+            Aprovar {aAprovarTodas.length === 1 ? "a guia" : `as ${aAprovarTodas.length} guias`} pelo valor calculado
           </button>
         )}
       </div>
@@ -510,21 +540,110 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
                 </td>
               </tr>
             )}
-            {linhasDaTabela.map((l) =>
-              l.tipo === "a_apurar" ? (
-                <LinhaProjecao key={l.p.chave} p={l.p} pj={pjPorId.get(l.p.pj)} onAbrir={() => setAApurarAberto(l.p)} />
-              ) : (
-                <LinhaGuia
-                  key={l.g.chave}
-                  g={l.g}
-                  hoje={dados.hoje}
-                  pj={pjPorId.get(l.g.empresa_contabil_id)}
-                  estab={l.g.estabelecimento_id ? estabPorId.get(l.g.estabelecimento_id) : undefined}
-                  aprovarEmCurso={aprovaEmCurso(l.g)}
-                  onAbrir={() => setAberta(l.g.chave)}
-                />
-              ),
-            )}
+            {blocos.map((b) => {
+              const recolhido = recolhidos.has(b.pj.id);
+              const guiasDoBloco = b.linhas.flatMap((l) => (l.tipo === "guia" ? [l.g] : []));
+              const pendentesDoBloco = guiasDoBloco.filter((g) => g.estado === "a_aprovar" || g.estado === "diferenca");
+              const aAprovarDoBloco = guiasDoBloco.filter((g) => g.estado === "a_aprovar");
+              const emCursoDoBloco = guiasDoBloco.filter((g) => g.estado === "em_curso");
+              const totalPendente = r2(pendentesDoBloco.reduce((s, g) => s + aAprovarDa(g), 0));
+              const totalEmCursoBloco = r2(emCursoDoBloco.reduce((s, g) => s + g.apurado, 0));
+              const aprovadoDoBloco = r2(guiasDoBloco.reduce((s, g) => s + valoresDaGuia(g).aprovado, 0));
+              const primeira = [...pendentesDoBloco].sort((x, y) => x.vencimento.localeCompare(y.vencimento))[0];
+              const dias = primeira ? diasEntre(dados.hoje, primeira.vencimento) : 0;
+              const matriz = matrizDa(b.pj.id, pjPorId, estabPorId);
+              const projecoesDoBloco = b.linhas.length - guiasDoBloco.length;
+              return (
+                <React.Fragment key={b.pj.id}>
+                  <tr
+                    className={cn(FAIXA_GRUPO_LISTA, "cursor-pointer")}
+                    title={recolhido ? "Abrir o bloco" : "Recolher o bloco"}
+                    onClick={() =>
+                      setRecolhidos((r) => {
+                        const n = new Set(r);
+                        if (n.has(b.pj.id)) n.delete(b.pj.id);
+                        else n.add(b.pj.id);
+                        return n;
+                      })
+                    }
+                  >
+                    <td colSpan={5} className="px-3 py-2.5">
+                      <div className="flex items-center gap-2">
+                        {recolhido ? (
+                          <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        ) : (
+                          <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                        )}
+                        <span className="text-[15px] font-bold">{b.pj.nome}</span>
+                        <span className="font-mono text-xs text-muted-foreground">{cnpjBr(matriz?.cnpj)}</span>
+                        <span className="text-xs text-muted-foreground">· {b.pj.rotulo_regime}</span>
+                      </div>
+                      {primeira && (
+                        <span
+                          className={cn(
+                            "ml-6 block text-[11px] font-semibold",
+                            dias < 0 ? "text-rose-700" : dias <= 5 ? "text-amber-700" : "text-muted-foreground",
+                          )}
+                        >
+                          Vence primeiro {dataBr(primeira.vencimento)} ·{" "}
+                          {dias < 0 ? `venceu há ${-dias} ${-dias === 1 ? "dia" : "dias"}` : dias === 0 ? "vence hoje" : `em ${dias} ${dias === 1 ? "dia" : "dias"}`} ·{" "}
+                          {tituloPorExtenso(primeira)}
+                        </span>
+                      )}
+                    </td>
+                    <td colSpan={4} className="px-3 py-2.5 text-right text-xs text-muted-foreground">
+                      {[
+                        pendentesDoBloco.length ? `${pendentesDoBloco.length} a aprovar` : null,
+                        emCursoDoBloco.length ? `${emCursoDoBloco.length} em curso (${moeda(totalEmCursoBloco)})` : null,
+                        projecoesDoBloco ? `${projecoesDoBloco} a apurar` : null,
+                        recolhido ? `${b.linhas.length} ${b.linhas.length === 1 ? "linha recolhida" : "linhas recolhidas"}` : null,
+                      ]
+                        .filter(Boolean)
+                        .join(" · ")}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono text-sm font-bold tabular-nums">
+                      {pendentesDoBloco.length ? moeda(totalPendente) : "—"}
+                      {pendentesDoBloco.length > 0 && <span className="block font-sans text-[10px] font-semibold text-amber-700">a aprovar</span>}
+                    </td>
+                    <td className="whitespace-nowrap px-3 py-2.5 text-right font-mono text-xs">{aprovadoDoBloco ? moeda(aprovadoDoBloco) : ""}</td>
+                    <td colSpan={2} className="px-2 py-2.5 text-center">
+                      {aAprovarDoBloco.length > 0 && (
+                        <button
+                          type="button"
+                          title={`Aprovar ${aAprovarDoBloco.length === 1 ? "a guia" : `as ${aAprovarDoBloco.length} guias`} de ${b.pj.nome} pelo valor calculado`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setErroLote(null);
+                            setLoteDoCnpj(b.pj.id);
+                            setConfirmarLote(true);
+                          }}
+                          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-border bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-foreground transition-colors hover:border-california-red/50 hover:text-california-red"
+                        >
+                          <ListChecks className="h-3.5 w-3.5" />
+                          Aprovar {aAprovarDoBloco.length === 1 ? "a guia" : `as ${aAprovarDoBloco.length}`} pelo calculado
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                  {!recolhido &&
+                    b.linhas.map((l) =>
+                      l.tipo === "a_apurar" ? (
+                        <LinhaProjecao key={l.p.chave} p={l.p} pj={pjPorId.get(l.p.pj)} semCnpj onAbrir={() => setAApurarAberto(l.p)} />
+                      ) : (
+                        <LinhaGuia
+                          key={l.g.chave}
+                          g={l.g}
+                          hoje={dados.hoje}
+                          pj={pjPorId.get(l.g.empresa_contabil_id)}
+                          estab={l.g.estabelecimento_id ? estabPorId.get(l.g.estabelecimento_id) : undefined}
+                          aprovarEmCurso={aprovaEmCurso(l.g)}
+                          onAbrir={() => setAberta(l.g.chave)}
+                        />
+                      ),
+                    )}
+                </React.Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -605,7 +724,7 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <CheckCheck className="h-5 w-5 text-california-red" />
-              Aprovar pelo valor calculado
+              Aprovar pelo valor calculado{loteDoCnpj ? ` · ${pjPorId.get(loteDoCnpj)?.nome ?? ""}` : ""}
             </DialogTitle>
             <DialogDescription>
               Use quando as guias da contabilidade batem com o sistema. Cada guia vira um imposto a pagar com o valor abaixo; guia sem valor só
@@ -736,6 +855,7 @@ function LinhaGuia({
 }: {
   g: GuiaDaTela;
   hoje: string;
+  /** O regime diz se a base do IRPJ/CSLL é presumida ou o lucro bruto. */
   pj: PJDaTela | undefined;
   estab: EstabelecimentoDaTela | undefined;
   /** Na PJ de teste, a guia em curso ganha o "Aprovar" de contorno. */
@@ -768,18 +888,10 @@ function LinhaGuia({
         )}
       </td>
       <td className="px-3 py-3">
-        <span className="font-semibold">
-          {g.titulo}
-          {g.codigo && <span className="ml-1.5 font-mono text-[11px] font-medium text-muted-foreground">DARF {g.codigo}</span>}
-        </span>
+        <NomeDaGuia g={g} />
       </td>
       <td className="px-3 py-3">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="truncate font-medium">{pj?.nome ?? "—"}</span>
-          <span className="truncate text-[11px] text-muted-foreground" title={pj?.como_apura ?? pj?.rotulo_regime}>
-            {estab ? `${estab.municipio}-${estab.uf}` : "federal"} · {pj?.rotulo_regime ?? ""}
-          </span>
-        </div>
+        <span className="truncate font-medium">{estab ? `${estab.municipio}-${estab.uf}` : "Federal"}</span>
       </td>
       <td className="px-2 py-3 text-center text-xs">
         {g.periodo === "mensal" ? mesCurto(g.competencia) : <span className="text-muted-foreground">—</span>}

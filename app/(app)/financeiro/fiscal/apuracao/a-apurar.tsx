@@ -18,7 +18,7 @@ import { codigoDarf } from "@/lib/fiscal/codigos-darf";
 import { dataBr, mesDe, r2 } from "@/lib/fiscal/datas";
 import type { BlocoAApurar, LinhaAApurar } from "@/lib/fiscal/a-apurar";
 import type { DadosDaApuracao, PJDaTela } from "./dados";
-import { moeda } from "./ui";
+import { NomeDaGuia, moeda } from "./ui";
 
 /** Um imposto que ainda vai nascer no recebimento: uma linha da lista. */
 export interface Projecao {
@@ -107,7 +107,18 @@ function PilulaAApurar() {
 }
 
 /** A linha do imposto a apurar, nas mesmas 13 colunas da lista. */
-export function LinhaProjecao({ p, pj, onAbrir }: { p: Projecao; pj: PJDaTela | undefined; onAbrir: () => void }) {
+export function LinhaProjecao({
+  p,
+  pj,
+  semCnpj,
+  onAbrir,
+}: {
+  p: Projecao;
+  pj: PJDaTela | undefined;
+  /** No bloco do CNPJ (decisão 277), a coluna mostra só o local. */
+  semCnpj: boolean;
+  onAbrir: () => void;
+}) {
   const parcelas = parcelasDe([p]);
   return (
     <tr onClick={onAbrir} className="cursor-pointer border-b border-border bg-sky-50/30 transition-colors last:border-0 hover:bg-accent/40">
@@ -117,19 +128,20 @@ export function LinhaProjecao({ p, pj, onAbrir }: { p: Projecao; pj: PJDaTela | 
         {p.cotas > 1 && <span className="block text-[10px] text-muted-foreground">1ª de {p.cotas} cotas</span>}
       </td>
       <td className="px-3 py-3">
-        <span className="font-semibold">
-          {p.titulo}
-          {p.codigo && <span className="ml-1.5 font-mono text-[11px] font-medium text-muted-foreground">DARF {p.codigo}</span>}
-        </span>
+        <NomeDaGuia g={p} />
         <span className="block truncate text-[11px] text-muted-foreground">
           {parcelas === 1 ? p.linhas[0]?.rotulo.split(" · ").slice(0, 2).join(" · ") : `${parcelas} parcelas a receber`}
         </span>
       </td>
       <td className="px-3 py-3">
-        <div className="flex min-w-0 flex-col gap-0.5">
-          <span className="truncate font-medium">{pj?.nome ?? "—"}</span>
-          <span className="truncate text-[11px] text-muted-foreground">federal · {pj?.rotulo_regime ?? ""}</span>
-        </div>
+        {semCnpj ? (
+          <span className="truncate font-medium">Federal</span>
+        ) : (
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <span className="truncate font-medium">{pj?.nome ?? "—"}</span>
+            <span className="truncate text-[11px] text-muted-foreground">federal · {pj?.rotulo_regime ?? ""}</span>
+          </div>
+        )}
       </td>
       <td className="px-2 py-3 text-center text-xs">{p.competencia ? mesCurto(p.competencia) : <span className="text-muted-foreground">—</span>}</td>
       <td className="px-2 py-3 text-center text-xs">

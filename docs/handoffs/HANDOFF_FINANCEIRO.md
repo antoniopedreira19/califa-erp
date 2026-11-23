@@ -9338,3 +9338,10 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **`vw_faturamento_pendente`:** o BV da linha sem item (Mídia Off) passa a se chamar "BV — praça · agrupamento · MM/AAAA" (o veículo já está na contraparte). Só a expressão da descrição do BV mudou; colunas, ordem, tipos e a parte do job ficaram idênticas (migration `20261123500005`, conferida com contagem, soma e hash antes e depois). O Tiago pediu a correção ("corrija") em 23/11/2026.
 - **`jobs.data_fim_prevista`:** a extensão da veiculação empurra o fim previsto do job até o último dia no ar dela (nunca encurta) — o calendário de jobs passa a mostrar a campanha inteira (migration `20261123500006`).
 - **Conferido no Sandbox:** TES-1026/26 — BV de R$ 960 na fila como "BV — Salvador/BA · OOH · Outdoor · 9 x 3 m (lona) · 12/2026"; PP-00958 do repasse aprovada e baixada; período do job 01/11/2026 → 22/01/2027.
+
+## ⚠️ Nota de 2026-11-23 — a Apuração por CNPJ (decisão 277, entrega 1)
+
+- **Apuração:** botões de CNPJ (no lugar do seletor) e um bloco por CNPJ, com a faixa do grupo (CNPJ, regime, vence primeiro, a aprovar, em curso, "Aprovar as N pelo calculado" só do CNPJ; clicar recolhe). A coluna CNPJ virou "Local" (município ou "Federal"). O imposto por extenso ("PIS não cumulativo", "COFINS não cumulativa") e o código do DARF numa linha menor, com a dica do que ele quer dizer (`NomeDaGuia`, `NOME_DO_CODIGO` em `apuracao/ui.tsx`).
+- **Larguras** refeitas pelo maior valor real de 23/11 (base do IOF R$ 46,5 mi, débito do IRPJ R$ 2,66 mi), que passavam da coluna.
+- **A fazer (277 §2):** entrega 2 (Guia da contabilidade, saldo credor da contabilidade, rateio por gerencial e regionais pela receita) e entrega 3 (guia já paga ligada às linhas da planilha, DARF opcional). Depois, as 52 guias do 4º trimestre conferidas com a planilha.
+

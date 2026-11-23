@@ -14,8 +14,55 @@ export const moeda = formatBRL;
 /** 1.65 → "1,65%". */
 export const pct = (v: number) => `${v.toLocaleString("pt-BR", { maximumFractionDigits: 4 })}%`;
 
-/** "Nome · DARF 2362". */
-export const nomeGuia = (g: Pick<GuiaDaTela, "titulo" | "codigo">) => `${g.titulo}${g.codigo ? ` · DARF ${g.codigo}` : ""}`;
+/** "PIS não cumulativo · DARF 6912": o nome por extenso (decisão 277) e o código. */
+export const nomeGuia = (g: Pick<GuiaDaTela, "titulo" | "codigo">) => `${tituloPorExtenso(g)}${g.codigo ? ` · DARF ${g.codigo}` : ""}`;
+
+/**
+ * O que cada código de DARF quer dizer (decisão 277): a dica do código na
+ * lista. O código é o número impresso na guia que diz à Receita qual imposto
+ * está sendo pago.
+ */
+export const NOME_DO_CODIGO: Record<string, string> = {
+  "6912": "PIS não cumulativo, do lucro real",
+  "5856": "COFINS não cumulativa, do lucro real",
+  "8109": "PIS cumulativo: lucro presumido e a receita do 12.08",
+  "2172": "COFINS cumulativa: lucro presumido e a receita do 12.08",
+  "0220": "IRPJ do lucro real, trimestral",
+  "6012": "CSLL do lucro real, trimestral",
+  "2089": "IRPJ do lucro presumido",
+  "2372": "CSLL do lucro presumido",
+  "5952": "PIS, COFINS e CSLL retidos de fornecedores",
+  "1708": "IRRF retido sobre serviços de fornecedores",
+  "1150": "IOF do mútuo entre empresas",
+};
+
+/** O nome da guia por extenso: "PIS" sozinho, no lucro real, é o não cumulativo. */
+export function tituloPorExtenso(g: Pick<GuiaDaTela, "titulo" | "codigo">) {
+  if (g.codigo === "6912") return "PIS não cumulativo";
+  if (g.codigo === "5856") return "COFINS não cumulativa";
+  return g.titulo;
+}
+
+/** O nome da guia na lista: por extenso, com o código do DARF numa linha menor e a explicação na dica. */
+export function NomeDaGuia({ g }: { g: Pick<GuiaDaTela, "titulo" | "codigo"> }) {
+  return (
+    <>
+      <span className="font-semibold">{tituloPorExtenso(g)}</span>
+      {g.codigo && (
+        <span
+          className="mt-0.5 block w-fit cursor-help font-mono text-[10.5px] text-muted-foreground"
+          title={`Código do DARF ${g.codigo}: ${NOME_DO_CODIGO[g.codigo] ?? "imposto federal"}. É o número impresso na guia que diz à Receita qual imposto está sendo pago.`}
+        >
+          DARF {g.codigo}
+        </span>
+      )}
+    </>
+  );
+}
+
+/** "19437976000154" → "19.437.976/0001-54". */
+export const cnpjBr = (c: string | null | undefined) =>
+  c && c.length === 14 ? `${c.slice(0, 2)}.${c.slice(2, 5)}.${c.slice(5, 8)}/${c.slice(8, 12)}-${c.slice(12)}` : c ?? "—";
 
 /** O último dia do período ("2026-10" → 31/10; "2026-T4" → 31/12). */
 export function fimDoPeriodo(periodo: "mensal" | "trimestral", competencia: string) {
