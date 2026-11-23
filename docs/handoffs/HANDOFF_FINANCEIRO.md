@@ -9326,7 +9326,8 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Carga (produção, 23/11):** 208 NFs (R$ 27,62 mi), 35 baixas e 32 linhas do banco trocadas da planilha para as baixas; DRE do 4T igual. Scripts em `tmp/nfs-planilha/` (fora do git). Conferido antes no Sandbox (TESTE-275A–G, TES-1012/26 aberto com o nome da planilha).
 - **Mensais (regra nova do mês):** 12 emitidas, 10 baixas e 10 linhas do banco trocadas; DRE do 4T igual.
 - **Pelo envio do GP:** 15 NFs (R$ 697.296,17) faturadas pela parcela do envio; 7 baixas e 7 linhas do banco trocadas; DRE do 4T igual.
-- **Falta:** as 2 do NOM-1001 e as 4 do AMB-1055 (mês), a segunda parte (20 recebidas antes de 03/11 e a 2ª parcela da NF 4946), e as listas a decidir (sem cliente, Saving, Ambev com o crédito do ISS, emissão em 2027, depósitos que pagam outras coisas).
+- **Segunda parte (recebidas antes de 03/11):** 14 NFs (R$ 5,79 mi) e a 2ª parcela da 4946; 16 baixas pela data da planilha, 15 ligadas às linhas dela (decisão 270); DRE só no 4T de 2025 (+R$ 8.000 da 4946, que faltavam desde a primeira parte); Paypal zerado pela 6393.
+- **Falta:** as 2 do NOM-1001 e as 4 do AMB-1055 (mês), as 6 da segunda parte que ficaram para decidir (13, 5549, 2478–2480 e 6405), e as listas a decidir (sem cliente, Saving, Ambev com o crédito do ISS, emissão em 2027, depósitos que pagam outras coisas).
 
 ## ⚠️ Nota de 2026-11-23 — a emissão da NF 6479 corrigida (vencimento lançado na emissão)
 
