@@ -67,6 +67,12 @@ function calcularDataFim(dataInicio: string, diasFolga: number): string {
   return ini.toISOString().slice(0, 10);
 }
 
+function hojeIso(): string {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString().slice(0, 10);
+}
+
 export function SolicitarFeriasForm({
   periodos,
   tipoContratacao,
@@ -144,11 +150,22 @@ export function SolicitarFeriasForm({
     setErros({});
 
     startTransition(async () => {
+      // Pra "Só venda" (abono_avulso), o colaborador não fica de férias —
+      // só vende dias. A data serve só pra determinar a competência da
+      // folha de pagamento, então vai com hoje (data_fim casa com qtdDias
+      // pra o server computar `dias = diasFolga` corretamente).
+      const inicioEnvio =
+        tipo === "abono_avulso" ? hojeIso() : dataInicio;
+      const fimEnvio =
+        tipo === "abono_avulso"
+          ? calcularDataFim(inicioEnvio, qtdDias)
+          : dataFimCalculada;
+
       const payload: SolicitarFeriasPayload = {
         tipo,
         periodo_id: tipo === "abono_avulso" ? null : periodoId || null,
-        data_inicio: dataInicio,
-        data_fim: dataFimCalculada,
+        data_inicio: inicioEnvio,
+        data_fim: fimEnvio,
         dias_abono: tipo === "abono_combinado" ? diasAbono : 0,
         observacao: observacao.trim() || null,
       };
@@ -177,7 +194,7 @@ export function SolicitarFeriasForm({
   const submitDesabilitado =
     pending ||
     qtdDias <= 0 ||
-    !dataInicio ||
+    (tipo !== "abono_avulso" && !dataInicio) ||
     (tipo === "abono_combinado" && diasAbono < 1) ||
     (tipo !== "abono_avulso" && !periodoId) ||
     excedeSaldo;
@@ -282,51 +299,67 @@ export function SolicitarFeriasForm({
         </div>
       )}
 
-      {/* Qtd dias + Data início + Data fim calculada */}
-      <div className="grid gap-4 sm:grid-cols-[1fr_1fr_1fr]">
-        <div className="space-y-1.5">
-          <Label htmlFor="sff-qtd-dias">{labelQtdDias}</Label>
-          <Input
-            id="sff-qtd-dias"
-            type="number"
-            min={1}
-            max={30}
-            value={qtdDias || ""}
-            onChange={(e) => setQtdDias(Number(e.target.value) || 0)}
-          />
-          {erros.data_fim && (
-            <p className="text-xs text-red-600">{erros.data_fim[0]}</p>
-          )}
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="sff-data-inicio">Data de início</Label>
-          <DatePicker
-            id="sff-data-inicio"
-            name="_sff_data_inicio"
-            defaultValue={dataInicio}
-            dateDisabled={dateDisabled}
-            onDateChange={(d) => {
-              setDataInicio(d ? d.toISOString().slice(0, 10) : "");
-            }}
-          />
-          {erros.data_inicio && (
-            <p className="text-xs text-red-600">{erros.data_inicio[0]}</p>
-          )}
-        </div>
-
-        <div className="space-y-1.5">
-          <Label htmlFor="sff-data-fim">Data de fim</Label>
-          <div
-            id="sff-data-fim"
-            className="flex h-10 items-center rounded-lg border border-border bg-muted/40 px-3 text-sm text-muted-foreground"
-          >
-            {dataFimCalculada
-              ? new Date(dataFimCalculada + "T00:00:00").toLocaleDateString("pt-BR")
-              : "—"}
+      {/* Qtd dias (+ datas, quando aplicável) */}
+      {tipo === "abono_avulso" ? (
+        <div className="grid gap-4 sm:grid-cols-[1fr_2fr]">
+          <div className="space-y-1.5">
+            <Label htmlFor="sff-qtd-dias">{labelQtdDias}</Label>
+            <Input
+              id="sff-qtd-dias"
+              type="number"
+              min={1}
+              max={30}
+              value={qtdDias || ""}
+              onChange={(e) => setQtdDias(Number(e.target.value) || 0)}
+            />
           </div>
         </div>
-      </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-[1fr_1fr_1fr]">
+          <div className="space-y-1.5">
+            <Label htmlFor="sff-qtd-dias">{labelQtdDias}</Label>
+            <Input
+              id="sff-qtd-dias"
+              type="number"
+              min={1}
+              max={30}
+              value={qtdDias || ""}
+              onChange={(e) => setQtdDias(Number(e.target.value) || 0)}
+            />
+            {erros.data_fim && (
+              <p className="text-xs text-red-600">{erros.data_fim[0]}</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="sff-data-inicio">Data de início</Label>
+            <DatePicker
+              id="sff-data-inicio"
+              name="_sff_data_inicio"
+              defaultValue={dataInicio}
+              dateDisabled={dateDisabled}
+              onDateChange={(d) => {
+                setDataInicio(d ? d.toISOString().slice(0, 10) : "");
+              }}
+            />
+            {erros.data_inicio && (
+              <p className="text-xs text-red-600">{erros.data_inicio[0]}</p>
+            )}
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor="sff-data-fim">Data de fim</Label>
+            <div
+              id="sff-data-fim"
+              className="flex h-10 items-center rounded-lg border border-border bg-muted/40 px-3 text-sm text-muted-foreground"
+            >
+              {dataFimCalculada
+                ? new Date(dataFimCalculada + "T00:00:00").toLocaleDateString("pt-BR")
+                : "—"}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Dias de abono — só pra abono_combinado */}
       {tipo === "abono_combinado" && (
@@ -364,7 +397,7 @@ export function SolicitarFeriasForm({
       </div>
 
       {/* Resumo */}
-      {qtdDias > 0 && dataInicio && (
+      {qtdDias > 0 && (tipo === "abono_avulso" || dataInicio) && (
         <div className="rounded-lg bg-muted/40 p-3 text-sm">
           {tipo === "usufruto" && (
             <>
