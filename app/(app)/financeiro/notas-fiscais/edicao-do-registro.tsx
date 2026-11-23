@@ -36,8 +36,14 @@ export interface EdicaoDaLinha {
 export type Edicoes = Record<string, EdicaoDaLinha>;
 export type CampoDaEdicao = "numero" | "emissao" | "valor" | "tomador";
 
-/** Só a nota em avaliação (ainda não registrada) se altera. */
-export const podeEditar = (n: NotaTomada) => n.situacao === "em_avaliacao" && !n.registrada_em;
+/**
+ * A nota em avaliação e a registrada se alteram (revisão de 23/11/2026: a
+ * registrada corrige número, emissão e valor; o CNPJ tomador fica). A nota
+ * sem documento ativo não se altera.
+ */
+export const podeEditar = (n: NotaTomada) => n.situacao === "em_avaliacao" || n.situacao === "registrada";
+/** Na nota registrada, o CNPJ tomador fica como o financeiro registrou. */
+export const tomadorTravado = (n: NotaTomada) => Boolean(n.registrada_em);
 
 export function edicaoInicial(n: NotaTomada): EdicaoDaLinha {
   return { numero: n.numero, emissao: n.data_emissao, valor: n.valor, tomadorId: n.tomador?.id ?? null };
@@ -109,7 +115,9 @@ export function analisar(n: NotaTomada, e: EdicaoDaLinha, notas: NotaTomada[], c
     if (outra) {
       const docs = outra.documentos.filter((d) => d.vale);
       const ondeEsta = docs.length ? docs.map((d) => d.codigo).join(", ") : "nenhum documento";
-      if (outra.registrada_em) {
+      if (n.registrada_em) {
+        erro = `A NF ${outra.numero} já existe neste emitente (${ondeEsta}). Uma nota registrada não se junta a outra: confira o número.`;
+      } else if (outra.registrada_em) {
         erro = `A NF ${outra.numero} já foi registrada pelo financeiro (${ondeEsta}): não dá para juntar a ela.`;
       } else {
         juntou = true;
@@ -159,9 +167,8 @@ export function FaixaDaEdicao() {
       <div className="space-y-0.5">
         <p className="font-semibold">Editando o registro das notas</p>
         <p>
-          Só as notas em avaliação (ainda não registradas) se alteram, e todos os documentos de cada uma acompanham. A nota registrada volta a se
-          alterar quando a aprovação do documento é revertida. É exceção: os dados vêm da leitura da NF. Nada é gravado até você salvar no rodapé
-          e confirmar com o motivo.
+          As notas em avaliação e as registradas se alteram, e todos os documentos de cada uma acompanham. Na registrada, o CNPJ tomador fica
+          como foi registrado. É exceção: os dados vêm da leitura da NF. Nada é gravado até você salvar no rodapé e confirmar com o motivo.
         </p>
         <p className="text-[12px]">
           Com a PP em avaliação, quem a enviou também corrige pelo “Corrigir a NF” da própria PP (lá sem motivo: é quem enviou, antes da

@@ -292,3 +292,21 @@ Mudou (`lib/ia/ler-nota-tomada.ts`, esquema v3, migration `20261123800006`):
   no "Editar registro", o "Usar os dados do PDF" (número, emissão e valor;
   o emitente continua voltando para quem enviou).
 
+## Revisão: o "Editar registro" corrige a nota registrada (23/11/2026)
+
+A releitura (v3) mostrou 12 notas registradas com número, emissão ou valor
+diferentes do PDF: o "Número da DPS" digitado no lugar do "Número da NFS-e"
+(DANFSe v2.0), a chave de acesso no lugar do número, o ano errado, o valor
+líquido no lugar do bruto. A regra da v8 mandava reverter a aprovação do
+documento, mas a maioria das PPs já está paga e não reverte. O Tiago
+liberou ("Sim, liberar"):
+
+- a nota registrada corrige **número, emissão e valor** pelo "Editar
+  registro", com o mesmo motivo, histórico e evento nos documentos; o
+  registro (quem, quando, em qual documento) continua;
+- o **CNPJ tomador** da registrada não muda (a célula não vira campo);
+- a registrada **não se junta** a outra nota: o número que já existe no
+  emitente é recusado.
+
+Migration `20261123800008`. A nota sem documento ativo continua travada.
+

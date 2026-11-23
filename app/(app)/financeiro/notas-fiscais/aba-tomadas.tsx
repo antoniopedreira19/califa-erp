@@ -50,6 +50,7 @@ import {
   analisar,
   edicaoInicial,
   podeEditar,
+  tomadorTravado,
   type Analise,
   type CampoDaEdicao,
   type EdicaoDaLinha,
@@ -509,9 +510,7 @@ function LinhaTomada({ n, onVer, edicao }: { n: NotaTomada; onVer: () => void; e
                   <Lock className="h-3 w-3 shrink-0 text-muted-foreground" />
                 </TooltipTrigger>
                 <TooltipContent side="top" className="max-w-xs">
-                  {n.situacao === "registrada"
-                    ? "Registrada pelo financeiro. Para corrigir, reverta a aprovação do documento: a nota volta a Em avaliação."
-                    : "Sem documento ativo: não se altera."}
+                  Sem documento ativo: não se altera.
                 </TooltipContent>
               </Tooltip>
             )}
@@ -620,7 +619,7 @@ function LinhaTomada({ n, onVer, edicao }: { n: NotaTomada; onVer: () => void; e
         )}
       </TableCell>
       <TableCell className={pinta("tomador")}>
-        {ed ? (
+        {ed && !tomadorTravado(n) ? (
           <>
             <Select value={ed.e.tomadorId ?? undefined} onValueChange={(v) => ed.onMudar({ tomadorId: v })}>
               <SelectTrigger className="h-8 px-2 text-[12px]" aria-label={`CNPJ tomador da NF ${n.numero}`}>
