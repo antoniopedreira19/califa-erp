@@ -6,6 +6,7 @@ import { carregarRegrasDoComite, SELECT_PEDIDO, type PedidoComNomes } from "@/li
 import { nomeDoCartaoCorporativo } from "@/lib/types";
 import { ModuloComite, type Aba } from "./modulo-comite";
 import type { CasoDoComite, MembroDoComite, UsuarioParaComite } from "./tipos";
+import { nomeDaLinhaDoJob } from "@/lib/calculos/midia-off";
 
 // Caixa de decisão: o que chega precisa aparecer na hora.
 export const dynamic = "force-dynamic";
@@ -53,7 +54,7 @@ export default async function ComitePage({
           "job:jobs!comite_pedidos_job_id_fkey(codigo, nome, projeto:projetos!jobs_projeto_id_fkey(nome), " +
           "cliente:clientes!jobs_cliente_id_fkey(nome_fantasia, razao_social), " +
           "empresa:empresas!jobs_empresa_id_fkey(nome_fantasia, razao_social), regional:regionais!jobs_regional_id_fkey(nome)), " +
-          "linha:jobs_itens_realizado!comite_pedidos_item_realizado_id_fkey(orcado:jobs_itens_orcado!jobs_itens_realizado_job_item_orcado_id_fkey(item)), " +
+          "linha:jobs_itens_realizado!comite_pedidos_item_realizado_id_fkey(orcado:jobs_itens_orcado!jobs_itens_realizado_job_item_orcado_id_fkey(item, praca, veiculo:fornecedores!fornecedor_id(nome))), " +
           "a_emitir:pedidos_compra_a_emitir!comite_pedidos_pp_a_emitir_id_fkey(servico, verba_producao, verba_titular_nome, cartao_corporativo, cartao_plataforma, " +
           "fornecedor:fornecedores!pedidos_compra_a_emitir_fornecedor_id_fkey(nome), " +
           "responsavel:profiles!pedidos_compra_a_emitir_responsavel_verba_id_fkey(nome))",
@@ -143,7 +144,9 @@ export default async function ComitePage({
         empresa: { nome_fantasia: string | null; razao_social: string } | null;
         regional: { nome: string } | null;
       } | null;
-      linha: { orcado: { item: string } | null } | null;
+      linha: {
+        orcado: { item: string; praca: string | null; veiculo: { nome: string } | null } | null;
+      } | null;
       a_emitir: {
         servico: string;
         verba_producao: boolean;
@@ -182,7 +185,17 @@ export default async function ComitePage({
       href: `/jobs/${p.job_id}?aba=planilha&comite=${p.id}&embutido=1`,
       jobCodigo: p.job?.codigo ?? "—",
       jobNome: p.job?.nome ?? "—",
-      item: p.linha?.orcado?.item ?? a?.servico ?? "—",
+      // Mídia Off: a linha não tem item; vale "praça · veículo".
+      item: p.linha?.orcado
+        ? nomeDaLinhaDoJob(
+            {
+              item: p.linha.orcado.item,
+              praca: p.linha.orcado.praca,
+              veiculo: p.linha.orcado.veiculo?.nome,
+            },
+            a?.servico ?? "—",
+          )
+        : (a?.servico ?? "—"),
       servico: a?.servico ?? "",
       fornecedor,
       valorPP: num(p.snapshot.valor) ?? 0,

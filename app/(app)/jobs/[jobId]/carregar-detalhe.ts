@@ -96,6 +96,7 @@ import {
   parametrosDaVersao,
   infoDoRealizado,
   listaDoQueFalta,
+  nomeDaLinhaDoJob,
   situacaoDoRepasse,
   type InfoDoRealizado,
   ultimaVeiculacaoDaCampanha,
@@ -760,6 +761,15 @@ export async function carregarDetalheDoJob(
   // desde 09/09/2026 — o item em negrito, o grupo na etiqueta abaixo.
   const grupoNomePorId = new Map(grupos.map((g) => [g.id, g.nome]));
   const itemPorId = new Map(itens.map((i) => [i.id, i]));
+  // Mídia Off: a linha não tem item; a origem é "praça · veículo".
+  const nomeDoVeiculo = new Map<string, string>(
+    ((veiculosRes.data ?? []) as any[])
+      .filter((v) => v.veiculo?.nome)
+      .map((v) => [v.fornecedor_id as string, v.veiculo.nome as string]),
+  );
+  const linhaCruaPorId = new Map<string, { praca: string | null; fornecedor_id: string | null }>(
+    ((itensRes.data ?? []) as any[]).map((it) => [it.id as string, it]),
+  );
   const grupoPorItemRealizadoId = new Map<string, string>();
   const itemPorItemRealizadoId = new Map<string, string>();
   for (const r of realizados) {
@@ -769,7 +779,17 @@ export async function carregarDetalheDoJob(
     if (!item) continue;
     const nome = grupoNomePorId.get(item.grupo_id);
     if (nome) grupoPorItemRealizadoId.set(r.id, nome);
-    if (item.item) itemPorItemRealizadoId.set(r.id, item.item);
+    // `ItemPlanilhaJob` não traz praça nem veículo: a linha crua traz.
+    const crua = linhaCruaPorId.get(item.id);
+    const origem = nomeDaLinhaDoJob(
+      {
+        item: item.item,
+        praca: crua?.praca ?? null,
+        veiculo: crua?.fornecedor_id ? nomeDoVeiculo.get(crua.fornecedor_id) : null,
+      },
+      "",
+    );
+    if (origem) itemPorItemRealizadoId.set(r.id, origem);
   }
 
   // O asterisco da decisão 067: quais fornecedores mudaram de conta

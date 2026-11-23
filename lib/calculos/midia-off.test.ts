@@ -13,6 +13,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  nomeDaLinhaDoJob,
   alvoDoRepasse,
   cortarLinha,
   diasEntre,
@@ -480,4 +481,19 @@ test("AP e PI de antes da extensão não a cobrem", () => {
   assert.equal(v.apAntesDaExtensao, true);
   assert.equal(v.piAntesDaExtensao, false);
   assert.deepEqual(v.falta, ["AP da extensão"]);
+});
+
+test("nomeDaLinhaDoJob: o item; sem item, praça · veículo (PDF da PP e avisos)", () => {
+  assert.equal(nomeDaLinhaDoJob({ item: "Diária de câmera", praca: "SP", veiculo: "X" }), "Diária de câmera");
+  assert.equal(nomeDaLinhaDoJob({ item: "  ", praca: "Salvador/BA", veiculo: "Veículo A" }), "Salvador/BA · Veículo A");
+  assert.equal(nomeDaLinhaDoJob({ item: null, praca: null, veiculo: "Veículo A" }), "Veículo A");
+  assert.equal(nomeDaLinhaDoJob({ item: null, praca: null, veiculo: null }), "Item");
+  assert.equal(nomeDaLinhaDoJob({}, "A linha"), "A linha");
+});
+
+test("decomposicaoDoRepasse: D/M fracionado da extensão não passa da nota (3 casas da PP)", () => {
+  // 15 dias de 31: D/M 0,96774… → 0,968 na PP daria R$ 7.744,00 > R$ 7.741,94.
+  assert.deepEqual(decomposicaoDoRepasse(7741.94, 4, 15 / 31), { unitario: 7741.94, quantidade: 1, dm: 1 });
+  // Meio mês que fecha em 3 casas segue decomposto.
+  assert.deepEqual(decomposicaoDoRepasse(4000, 4, 0.5), { unitario: 2000, quantidade: 4, dm: 0.5 });
 });

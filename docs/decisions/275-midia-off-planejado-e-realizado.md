@@ -5,7 +5,7 @@
 **Quem decidiu:** Tiago — 15/10/2026 (encerrar antes, opção 1c; realizado sem errata), 23/11/2026 (visão única, opção A; as cinco escolhas do protótipo confirmadas; a previsão do financeiro "ajusta sozinha"). Protótipo aprovado: https://claude.ai/artifact/B1GUS2L5Vw7WpeZwSsEH7J.
 **Continua:** a [274](274-midia-off-veiculos-do-mes.md) (entrega 4), a [273](273-midia-off-pp-do-repasse-e-encerramento.md) (entrega 3) e a [167](167-job-da-midia-off-abrir-e-faturar.md).
 **Segue o modelo de:** a [224](224-parametros-do-job-na-abertura.md) (a previsão acompanha a diferença do mês, como na edição do orçado pelo financeiro) e a [219](219-os-tres-meses-do-trimestre.md) (o mês novo entra na versão aprovada).
-**Migration:** `20261123500004_realizado_da_midia.sql`.
+**Migrations:** `20261123500004_realizado_da_midia.sql`; nas pendências de 23/11, `20261123500005_bv_da_midia_com_nome_na_fila.sql` e `20261123500006_data_do_job_acompanha_a_extensao.sql`.
 
 ## O que aconteceu
 
@@ -109,11 +109,45 @@ que cada linha é do job, e grava tudo numa transação. Aditiva.
   encerramento; TES-1027/26 (finalizado) com o card sem botões; TES-1025/26
   (nacional) sem mudança.
 
+## Pendências fechadas (23/11/2026, Tiago: "Confira, corrija e valide")
+
+Conferidas no Sandbox, no TES-1026/26:
+
+1. **BV de mídia sem nome na fila do financeiro** → "BV — praça ·
+   agrupamento · MM/AAAA" (migration `20261123500005`, só a descrição do
+   BV em `vw_faturamento_pendente`; contagem, soma e linhas da parte do job
+   e da do BV idênticas antes e depois). Na tela do Contas a Receber:
+   "BV — Salvador/BA · OOH · Outdoor · 9 x 3 m (lona) · 12/2026".
+2. **A data do job acompanha a extensão** (migration `20261123500006`):
+   `registrar_alteracao_da_midia` recebe o último dia no ar da extensão e
+   move `jobs.data_fim_prevista` só para frente. Encerrar antes não mexe na
+   data. Teste: extensão da TV de novembro para 20 e 22/01/2027 → período
+   01/11/2026 → 22/01/2027.
+3. **Textos do nacional:** o cabeçalho dividido diz "antes das mudanças da
+   veiculação" (`mudancaDepoisDaAbertura="veiculacao"` no
+   `ResumoResultado`); o BV do veículo diz que não desconta da planilha e
+   que o líquido entra no resultado realizado quando é recebido
+   (`daMidia` no `BvDialog`).
+4. **PP do repasse de ponta a ponta:** PP-00958 (R$ 16.000) enviada com a
+   NF pelo GP, aprovada e baixada pelo administrador; o veículo passou a
+   "Na PP do repasse (paga)" e a trilha do encerramento perdeu "1 PP em
+   aberto".
+5. **"Item" do PDF da PP:** sem item, "praça · veículo" (`nomeDaLinhaDoJob`),
+   também na origem da lista de PPs, no Comitê, na conclusão do item e nos
+   avisos do encerramento. PDF da PP-00959: "Item: Salvador/BA · Fornecedor
+   Teste".
+6. **Previsão de impostos sem mês:** conferido, fica como está. A previsão
+   de impostos da abertura é uma lista livre (data e valor), sem mês, e a
+   edição do financeiro (224) já espalha a diferença do mesmo jeito.
+
+**Achado no teste e corrigido:** a PP sugerida para a extensão de 15 dias
+num mês de 31 vinha com D/M 0,968 (a PP guarda 3 casas) e passava R$ 2,06
+da nota. `decomposicaoDoRepasse` agora faz a conta com as casas da PP e,
+quando não fecha no centavo, sugere valor × 1 × 1 (PP-00959: R$ 7.741,94).
+
 ## Em aberto
 
-- O texto de ajuda do cabeçalho dividido fala em "antes das erratas" (é o
-  do nacional).
-- A data do job (`data_fim_prevista`) não acompanha a extensão.
-- A previsão de impostos é espalhada pelas parcelas, sem olhar o mês (como
-  na edição do financeiro).
 - Contrato do veículo (Tiago: "para um momento seguinte").
+- O card "Erratas" do job de mídia diz que "alterações no orçado do job são
+  feitas pelo botão Editar planilha"; na mídia a mudança é pelo card
+  "Planejado e realizado".

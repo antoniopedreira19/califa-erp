@@ -9,8 +9,18 @@ import {
 import { TIPOS_QUE_GERAM_PP } from "@/lib/calculos/pps-item";
 import { devolucaoDaVerba, prestacaoDaVerba } from "@/lib/data/prestacao-da-verba";
 import { midiaPendenteNoEncerramento } from "@/lib/calculos/midia-system";
-import { ultimaVeiculacaoDaCampanha, ultimaVeiculacaoDoMes } from "@/lib/calculos/midia-off";
+import {
+  nomeDaLinhaDoJob,
+  ultimaVeiculacaoDaCampanha,
+  ultimaVeiculacaoDoMes,
+} from "@/lib/calculos/midia-off";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
+
+/** O nome da linha do job no aviso: o item; na Mídia Off, "praça · veículo". */
+function nomeDaCopia(copia: any): string {
+  const veiculo = Array.isArray(copia?.veiculo) ? copia.veiculo[0] : copia?.veiculo;
+  return nomeDaLinhaDoJob({ item: copia?.item, praca: copia?.praca, veiculo: veiculo?.nome });
+}
 
 /**
  * O que impede o encerramento de um job AGORA. Vazio = pode encerrar.
@@ -45,6 +55,7 @@ import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
  *
  * Leitura que falhou trava a mais, nunca a menos.
  */
+
 export interface ImpedimentosEncerramento {
   ppsEmAberto: { codigo: string; status: string }[];
   /** PPs a emitir que ninguém gerou nem excluiu (decisão 153), pelo item. */
@@ -171,7 +182,7 @@ export async function impedimentosDosJobs(
     // BV pendura na CÓPIA do job desde 27/08/2026. O `!inner` é filtro.
     supabase
       .from("itens_bv")
-      .select("situacao, copia:jobs_itens_orcado!inner(item, job_id)")
+      .select("situacao, copia:jobs_itens_orcado!inner(item, praca, job_id, veiculo:fornecedores!fornecedor_id(nome))")
       .eq("tenant_id", tenantId)
       .in("copia.job_id", jobIds)
       .in("situacao", BV_SITUACAO_EM_ABERTO),
@@ -179,7 +190,7 @@ export async function impedimentosDosJobs(
     // o marco, em linha que gera PP e não está em save.
     supabase
       .from("jobs_itens_realizado")
-      .select("job_id, copia:jobs_itens_orcado!inner(item, tipo_custo, em_save)")
+      .select("job_id, copia:jobs_itens_orcado!inner(item, praca, tipo_custo, em_save, veiculo:fornecedores!fornecedor_id(nome))")
       .eq("tenant_id", tenantId)
       .in("job_id", jobIds)
       .is("pps_concluidas_em", null)
@@ -205,7 +216,9 @@ export async function impedimentosDosJobs(
     // nome do item vem da linha da planilha, pela âncora do realizado.
     supabase
       .from("pedidos_compra_a_emitir")
-      .select("job_id, realizado:jobs_itens_realizado(copia:jobs_itens_orcado(item))")
+      .select(
+        "job_id, realizado:jobs_itens_realizado(copia:jobs_itens_orcado(item, praca, veiculo:fornecedores!fornecedor_id(nome)))",
+      )
       .eq("tenant_id", tenantId)
       .in("job_id", jobIds)
       .is("pp_id", null)
@@ -269,7 +282,7 @@ export async function impedimentosDosJobs(
     for (const a of (aEmitirRes.data ?? []) as any[]) {
       const realizado = Array.isArray(a.realizado) ? a.realizado[0] : a.realizado;
       const copia = Array.isArray(realizado?.copia) ? realizado.copia[0] : realizado?.copia;
-      de(a.job_id)?.ppsAEmitir.push({ item: (copia?.item as string) ?? "Item" });
+      de(a.job_id)?.ppsAEmitir.push({ item: nomeDaCopia(copia) });
     }
   }
 
@@ -317,7 +330,7 @@ export async function impedimentosDosJobs(
     for (const b of (bvsRes.data ?? []) as any[]) {
       const copia = Array.isArray(b.copia) ? b.copia[0] : b.copia;
       de(copia?.job_id)?.bvsEmAberto.push({
-        item: copia?.item ?? "Item",
+        item: nomeDaCopia(copia),
         situacao: b.situacao,
       });
     }
@@ -333,7 +346,7 @@ export async function impedimentosDosJobs(
   } else {
     for (const linha of (semMarcacaoRes.data ?? []) as any[]) {
       const copia = Array.isArray(linha.copia) ? linha.copia[0] : linha.copia;
-      de(linha.job_id)?.itensSemMarcacao.push({ item: (copia?.item as string) ?? "Item" });
+      de(linha.job_id)?.itensSemMarcacao.push({ item: nomeDaCopia(copia) });
     }
   }
 

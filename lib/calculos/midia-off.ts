@@ -633,18 +633,39 @@ export function listaDoQueFalta(xs: ReadonlyArray<string>): string {
 }
 
 /**
+ * O nome de uma linha do job para a PP (o "Item" do PDF) e para as
+ * mensagens: o item; na linha de Mídia Off, que não tem item (é praça,
+ * veículo e meio), "praça · veículo".
+ */
+export function nomeDaLinhaDoJob(
+  l: { item?: string | null; praca?: string | null; veiculo?: string | null },
+  padrao = "Item",
+): string {
+  const item = l.item?.trim();
+  if (item) return item;
+  const midia = [l.praca?.trim(), l.veiculo?.trim()].filter(Boolean).join(" · ");
+  return midia || padrao;
+}
+
+/**
  * Como a PP nova do repasse já vem preenchida (decisão 167, entrega 3):
  * o valor que falta para a nota do veículo, decomposto na quantidade e nos
  * períodos da linha quando o unitário fecha no centavo; senão, numa
  * parcela só (1 × 1), para a soma nunca ficar meio centavo abaixo da nota.
+ *
+ * A PP guarda quantidade e D/M com 3 casas: a conta é feita com eles já
+ * arredondados. A extensão de 15 dias em mês de 31 (D/M 0,96774…) virava
+ * 0,968 no formulário e passava R$ 2,06 da nota (23/11/2026).
  */
 export function decomposicaoDoRepasse(
   valor: number,
   quantidade: number,
   periodos: number,
 ): { unitario: number; quantidade: number; dm: number } {
-  const q = quantidade > 0 ? quantidade : 1;
-  const d = periodos > 0 ? periodos : 1;
+  const tres = (x: number) => Math.round(x * 1000) / 1000;
+  const q = quantidade > 0 ? tres(quantidade) : 1;
+  const d = periodos > 0 ? tres(periodos) : 1;
+  if (!(q > 0) || !(d > 0)) return { unitario: Math.round(valor * 100) / 100, quantidade: 1, dm: 1 };
   const unitario = Math.round((valor / (q * d)) * 100) / 100;
   if (Math.abs(unitario * q * d - valor) < 0.005) return { unitario, quantidade: q, dm: d };
   return { unitario: Math.round(valor * 100) / 100, quantidade: 1, dm: 1 };

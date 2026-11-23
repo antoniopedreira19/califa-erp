@@ -34,7 +34,7 @@ import {
   somaDasPPsNaoCanceladas,
 } from "@/lib/calculos/pps-item";
 import type { TipoCusto } from "@/lib/types";
-import { alvoDoRepasse } from "@/lib/calculos/midia-off";
+import { alvoDoRepasse, nomeDaLinhaDoJob } from "@/lib/calculos/midia-off";
 import { lerMidiaDoJob } from "@/lib/data/midia-do-job";
 
 /** Uma âncora de item que ainda não disse se sai mais PP dela. */
@@ -61,7 +61,7 @@ export async function lerItensSemConclusao(
     supabase
       .from("jobs_itens_realizado")
       .select(
-        "id, copia:jobs_itens_orcado!inner(item, tipo_custo, em_save, total_orcado)",
+        "id, copia:jobs_itens_orcado!inner(item, praca, tipo_custo, em_save, total_orcado, veiculo:fornecedores!fornecedor_id(nome))",
       )
       .eq("tenant_id", tenantId)
       .eq("job_id", jobId)
@@ -81,7 +81,12 @@ export async function lerItensSemConclusao(
     const copia = Array.isArray(linha.copia) ? linha.copia[0] : linha.copia;
     return {
       itemRealizadoId: linha.id as string,
-      nome: (copia?.item as string) ?? "Item",
+      // Mídia Off: a linha não tem item; vale "praça · veículo".
+      nome: nomeDaLinhaDoJob({
+        item: copia?.item,
+        praca: copia?.praca,
+        veiculo: (Array.isArray(copia?.veiculo) ? copia.veiculo[0] : copia?.veiculo)?.nome,
+      }),
       tipoCusto: copia?.tipo_custo as TipoCusto,
       emSave: copia?.em_save === true,
       alvoDoRepasse: alvoDoRepasse(copia?.total_orcado ?? 0, lida.midia),

@@ -165,6 +165,10 @@ interface Props {
   /** O fornecedor que o BV NOVO já traz escolhido. Mídia Off (decisão 274):
    *  o BV é do veículo no mês, e o veículo é ele. */
   fornecedorPadrao?: string | null;
+  /** O BV do veículo no mês, no job de Mídia Off (decisão 274): ele não
+   *  desconta da planilha — o líquido entra no resultado realizado do job
+   *  quando é recebido. Troca os textos que falam do desconto. */
+  daMidia?: boolean;
 }
 
 /** Aceita "1.234,56" e "1234.56". Vírgula presente ⇒ ponto é milhar.
@@ -287,6 +291,7 @@ export function BvDialog({
   podeConfirmar,
   adaptador,
   fornecedorPadrao = null,
+  daMidia = false,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -984,9 +989,19 @@ export function BvDialog({
                       ? situacaoAtual === "recebido"
                         ? "Já teve baixa no contas a receber — nada mais muda neste BV."
                         : "Já foi enviado ao financeiro — nada mais muda neste BV."
-                      : "É o que sobra da comissão depois do imposto. A planilha desconta o valor BRUTO do realizado."}
+                      : daMidia
+                        ? "É o que sobra da comissão depois do imposto. Na mídia, o BV não desconta da planilha: o líquido entra no resultado realizado do job quando é recebido."
+                        : "É o que sobra da comissão depois do imposto. A planilha desconta o valor BRUTO do realizado."}
                   </span>
-                  {somaQueDesconta > 0 && (
+                  {somaQueDesconta > 0 && daMidia ? (
+                    <span className="text-[11.5px] leading-relaxed text-muted-foreground">
+                      Este veículo no mês já tem{" "}
+                      <strong className="font-semibold text-foreground">
+                        {formatCurrency(somaQueDesconta, moeda)}
+                      </strong>{" "}
+                      em BVs confirmados ou recebidos.
+                    </span>
+                  ) : somaQueDesconta > 0 && (
                     <span className="text-[11.5px] leading-relaxed text-muted-foreground">
                       Este item já desconta{" "}
                       <strong className="font-semibold text-foreground">
@@ -1108,10 +1123,21 @@ export function BvDialog({
             <strong className="text-foreground">
               {formatCurrency(liquidoBv, moeda)}
             </strong>{" "}
-            depois dos impostos. Depois de confirmado, o BV passa a{" "}
-            <strong>Confirmado</strong>, é descontado do Realizado do item na
-            vista Líquido, e não pode mais ser editado nem removido — nem
-            aqui, nem no orçamento.
+            depois dos impostos.{" "}
+            {daMidia ? (
+              <>
+                Depois de confirmado, o BV passa a <strong>Confirmado</strong> e
+                não pode mais ser editado nem removido. O líquido entra no
+                resultado realizado do job quando o financeiro der baixa no
+                recebimento.
+              </>
+            ) : (
+              <>
+                Depois de confirmado, o BV passa a <strong>Confirmado</strong>,
+                é descontado do Realizado do item na vista Líquido, e não pode
+                mais ser editado nem removido — nem aqui, nem no orçamento.
+              </>
+            )}
           </>
         }
         confirmLabel="Confirmar envio"

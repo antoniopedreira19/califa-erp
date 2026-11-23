@@ -6900,3 +6900,12 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - **Banco:** `jobs_midia_alteracoes`, `jobs_midia_alteracoes_linhas`, `jobs_itens_orcado.midia_extensao_id` e `registrar_alteracao_da_midia` (migration `20261123500004`).
 - **Conferido no Sandbox:** TES-1026/26 — novembro encerrado em 05/11 numa linha (R$ 7.700 → R$ 3.300, previsão de novembro R$ 1.601,60 → R$ 1.144,00) e outdoor estendido para 01–15/01/2027 (janeiro novo, previsão em 10/02/2027 de R$ 8.748,39).
 - **Fica de fora:** a data do job não acompanha a extensão; o texto de ajuda do cabeçalho dividido é o do nacional ("antes das erratas"); contrato do veículo.
+
+## ⚠️ Nota de 2026-11-23 — Mídia Off: as pendências das entregas 3 a 5 fechadas (decisões 273, 274 e 275)
+
+- **Nome da linha de mídia** (que não tem item): "praça · veículo" (`nomeDaLinhaDoJob` em `lib/calculos/midia-off.ts`) no PDF da PP, na origem da lista de PPs, no Comitê, na conclusão do item e nos avisos do encerramento.
+- **A data do job acompanha a extensão:** `jobs.data_fim_prevista` vai até o último dia no ar da extensão, só para frente (migration `20261123500006`). Encerrar antes não mexe na data.
+- **Textos:** o cabeçalho dividido da mídia diz "antes das mudanças da veiculação"; o BV do veículo diz que não desconta da planilha (o líquido entra no resultado realizado quando é recebido).
+- **PP do repasse sugerida na extensão:** a conta respeita as 3 casas do D/M da PP; quando não fecha no centavo, vem valor × 1 × 1 (antes passava R$ 2,06 da nota).
+- **Conferido no Sandbox (TES-1026/26):** PP-00958 enviada com NF, aprovada e paga; BV de dezembro confirmado e na fila do financeiro com nome; extensão para 22/01/2027 mudou o período do job; PDF da PP-00959 com "Item: Salvador/BA · Fornecedor Teste".
+- **Ainda aberto:** contrato do veículo; o card "Erratas" da mídia ainda fala do "Editar planilha".

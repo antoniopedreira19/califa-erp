@@ -115,10 +115,13 @@ job de Mídia Off.
 
 ## Em aberto
 
-- O envio da PP do repasse ao financeiro e o pagamento não foram
-  percorridos no teste (pedem a NF). O envio usa a mesma trava da conclusão.
-- No PDF da PP da mídia a célula "Item" fica de fora: a linha de mídia não
-  tem item. O serviço leva o meio, o formato e a praça.
+- ~~O envio da PP do repasse ao financeiro e o pagamento não foram
+  percorridos no teste.~~ Percorridos em 23/11/2026 (PP-00958 do TES-1026/26:
+  envio com NF, aprovação e baixa) — ver "Pendências fechadas" na
+  [275](275-midia-off-planejado-e-realizado.md).
+- ~~No PDF da PP da mídia a célula "Item" fica de fora.~~ Corrigido em
+  23/11/2026: sem item, vale "praça · veículo" (`nomeDaLinhaDoJob`) — no
+  PDF, na origem da lista de PPs, no Comitê e nos avisos do encerramento.
 - O TES-1027/26 encerrou pela regra antiga (167 §6) e fica como está.
 - Entrega 5 (visão única, encerrar antes, estender). A entrega 4 (veículos
   do mês: AP, PI, NF e BV) saiu na [274](274-midia-off-veiculos-do-mes.md),

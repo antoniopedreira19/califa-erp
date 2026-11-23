@@ -20,6 +20,7 @@ import { createClient } from "@/lib/supabase/server";
 import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { jobAceitaGerarPP, type JobStatus } from "@/lib/types";
+import { nomeDaLinhaDoJob } from "@/lib/calculos/midia-off";
 import {
   aplicarConclusaoDoItem,
   faltaDosARsSemFechar,
@@ -59,6 +60,8 @@ async function gateDoJob(jobId: string) {
   return { ok: true as const, session, supabase };
 }
 
+type LinhaDoNome = { item: string; praca: string | null; veiculo: { nome: string } | null };
+
 async function gate(itemRealizadoId: string) {
   const session = await requireSession();
   const supabase = createClient();
@@ -88,11 +91,11 @@ async function gate(itemRealizadoId: string) {
     item.job_item_orcado_id
       ? supabase
           .from("jobs_itens_orcado")
-          .select("item")
+          .select("item, praca, veiculo:fornecedores!fornecedor_id(nome)")
           .eq("id", item.job_item_orcado_id)
           .eq("tenant_id", session.activeTenant.id)
-          .maybeSingle<{ item: string }>()
-      : Promise.resolve({ data: null as { item: string } | null }),
+          .maybeSingle<LinhaDoNome>()
+      : Promise.resolve({ data: null as LinhaDoNome | null }),
   ]);
 
   if (!job) return { ok: false as const, message: "Job não encontrado." };
@@ -121,7 +124,12 @@ async function gate(itemRealizadoId: string) {
     session,
     supabase,
     jobId: item.job_id,
-    itemNome: orcado?.item ?? "Item",
+    // Mídia Off: a linha não tem item; vale "praça · veículo".
+    itemNome: nomeDaLinhaDoJob({
+      item: orcado?.item,
+      praca: orcado?.praca,
+      veiculo: orcado?.veiculo?.nome,
+    }),
   };
 }
 

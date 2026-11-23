@@ -104,12 +104,14 @@ para `profiles` (como as tabelas vizinhas do job). Aditivas.
 
 ## Em aberto
 
-- **Texto do BV:** o formulário é o nacional e diz que "a planilha desconta
-  o valor bruto do realizado"; na planilha da mídia o BV não desconta (ele
-  entra na Rentabilidade, como o de todos os jobs).
-- **Fila de faturamento do financeiro:** o BV de mídia aparece como
-  "BV — " sem o nome da linha (a linha de mídia não tem item). Mexer na
-  view é do financeiro; fica para combinar.
+- ~~**Texto do BV.**~~ Corrigido em 23/11/2026: com `daMidia`, o
+  formulário diz que o BV não desconta da planilha e que o líquido entra no
+  resultado realizado quando é recebido.
+- ~~**Fila de faturamento do financeiro:** "BV — " sem nome.~~ Corrigido em
+  23/11/2026 (Tiago: "corrija"), migration
+  `20261123500005_bv_da_midia_com_nome_na_fila.sql`: sem item, a descrição
+  é "BV — praça · agrupamento · MM/AAAA" (o veículo já está na contraparte).
+  Só a expressão da descrição do BV mudou; a parte do job ficou idêntica.
 - O sistema não impede a veiculação sem AP e PI (ela acontece fora dele):
   trava o envio do mês.
 - A entrega 5 (visão única, encerrar antes, estender; AP e PI da extensão)

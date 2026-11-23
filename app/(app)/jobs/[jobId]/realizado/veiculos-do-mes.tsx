@@ -744,6 +744,7 @@ export function VeiculosDoMes({
               readOnly={!bv.podeLancar}
               podeConfirmar={bv.podeLancar && bv.podeConfirmar}
               fornecedorPadrao={bvAberto.veiculoId}
+              daMidia
             />
           );
         })()}

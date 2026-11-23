@@ -37,6 +37,7 @@ import {
   linhaDaExtensao,
   nomeDoMesMidia,
   planejadoDaLinhaMidia,
+  ultimaVeiculacaoDoMes,
   veiculaDepois,
   type ParametrosMidia,
 } from "@/lib/calculos/midia-off";
@@ -472,6 +473,9 @@ export async function estenderVeiculacao(
       espelhos: contas.espelhos,
       recebimento: contas.recebimento,
       impostos: contas.impostos,
+      // O fim previsto do job acompanha a extensão (só para frente; a
+      // função não encurta). Grade: o último dia com inserção; período: o fim.
+      data_fim_prevista: ultimaVeiculacaoDoMes(mes, [nova]),
     },
   });
   if (error) {
@@ -489,6 +493,7 @@ export async function estenderVeiculacao(
       mes,
       negociado: r2(nova.total),
       mes_novo: !c.linhas.some((l) => l.mes === mes),
+      no_ar_ate: ultimaVeiculacaoDoMes(mes, [nova]),
       faturamento_de: r2(contas.fatAntes),
       faturamento_para: r2(contas.fatDepois),
       motivo,

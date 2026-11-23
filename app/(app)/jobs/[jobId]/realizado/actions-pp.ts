@@ -100,7 +100,7 @@ import {
 } from "@/lib/calculos/janelas-pagamento";
 import { carregarFeriadosNacionais } from "@/lib/data/feriados-nacionais";
 import { lerMidiaDoJob } from "@/lib/data/midia-do-job";
-import { alvoDoRepasse } from "@/lib/calculos/midia-off";
+import { alvoDoRepasse, nomeDaLinhaDoJob } from "@/lib/calculos/midia-off";
 import { envioDispensaNf, midiaSystemDoJob } from "@/lib/calculos/midia-system";
 import {
   DESGASTE_POR_KM_PADRAO,
@@ -991,7 +991,8 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
   const buscaOrcado = supabase
     .from("jobs_itens_orcado")
     .select(
-      "id, item, total_orcado, total_planejado, quantidade_orcada, linha_vermelha, tipo_custo, em_save, cancelada_em",
+      // O veículo dá nome à linha de Mídia Off, que não tem item.
+      "id, item, praca, total_orcado, total_planejado, quantidade_orcada, linha_vermelha, tipo_custo, em_save, cancelada_em, veiculo:fornecedores!fornecedor_id(nome)",
     )
     .eq("tenant_id", session.activeTenant.id);
 
@@ -1014,7 +1015,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
   if ((orcado as any).cancelada_em) {
     return {
       ok: false,
-      message: `"${(orcado as any).item ?? "A linha"}" foi cancelada por errata e não recebe Pedido de Produção.`,
+      message: `"${nomeDaLinhaDoJob({ item: (orcado as any).item, praca: (orcado as any).praca, veiculo: (orcado as any).veiculo?.nome }, "A linha")}" foi cancelada por errata e não recebe Pedido de Produção.`,
     };
   }
 
@@ -1025,7 +1026,11 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
     item_id: ancora.item_id,
     job_item_orcado_id: (orcado as any).id as string,
     linha_vermelha: (orcado as any).linha_vermelha === true,
-    item_nome: ((orcado as any).item as string) ?? "Item",
+    item_nome: nomeDaLinhaDoJob({
+      item: (orcado as any).item,
+      praca: (orcado as any).praca,
+      veiculo: (orcado as any).veiculo?.nome,
+    }),
     total_planejado: Number((orcado as any).total_planejado ?? 0),
     total_orcado: Number(orcado.total_orcado ?? 0),
     total_realizado: Number(ancora.total_realizado ?? 0),
@@ -1470,10 +1475,18 @@ function seloPeloStatus(status: PPStatus, canceladaEm: string | null): SeloDaPP 
 
 /** Decisão 191: o nome do item da planilha, pela âncora do realizado, para
  *  quem relê a PP gravada e refaz o PDF. */
-const ITEM_DA_PP = "realizado:jobs_itens_realizado(copia:jobs_itens_orcado(item))";
-type ItemDaPPEmbutido = { copia: { item: string | null } | null } | null;
+const ITEM_DA_PP =
+  "realizado:jobs_itens_realizado(copia:jobs_itens_orcado(item, praca, veiculo:fornecedores!fornecedor_id(nome)))";
+type ItemDaPPEmbutido = {
+  copia: { item: string | null; praca?: string | null; veiculo?: { nome: string } | null } | null;
+} | null;
 function nomeDoItemDaPP(realizado: ItemDaPPEmbutido): string {
-  return realizado?.copia?.item ?? "Item";
+  // A linha de Mídia Off não tem item: "praça · veículo" (decisão 273).
+  return nomeDaLinhaDoJob({
+    item: realizado?.copia?.item,
+    praca: realizado?.copia?.praca,
+    veiculo: realizado?.copia?.veiculo?.nome,
+  });
 }
 
 async function renderizarDocumentoDaPP(args: {
