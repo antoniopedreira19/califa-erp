@@ -128,8 +128,11 @@
 | `is_tenant_admin(tenant_id)` | `tenant_id in (select current_tenant_ids_com_papel('administrador'))` |
 | `is_tenant_rh(tenant_id)` / `is_tenant_financeiro(tenant_id)` | idem, com `'rh'` / `'financeiro'` |
 | `session_role()` | `(select session_role())` |
+| `can_access_empresa_regional((select auth.uid()), empresa_id, NULL::uuid)` | `coalesce(empresa_id in (select empresas_com_acesso_de_admin()) or empresa_id in (select empresas_do_membro()), false)` |
+| `can_access_empresa_regional((select auth.uid()), empresa_id, regional_id)` | a forma de quatro conjuntos da migration `20261120100001` (admin, membro sem regional, linha sem regional, par empresa/regional) |
+| `e_colega_de_tenant(id)` | `coalesce(id in (select colegas_de_tenant()), false)` |
 
-O subselect que não cita a linha vira InitPlan e roda uma vez por consulta. Função que recebe coluna da linha (`can_access_empresa_regional(..., empresa_id, ...)`, `e_colega_de_tenant(id)`) continua por linha: evite em tabela grande ou troque por um conjunto. Caso real: [case study 4](#4-regras-de-leitura-checando-a-sessão-linha-por-linha-nov2026).
+O subselect que não cita a linha vira InitPlan e roda uma vez por consulta. Função que recebe coluna da linha continua por linha: troque por uma função que devolve o conjunto (como as acima) e compare a coluna com ele. Casos reais: [case study 4](#4-regras-de-leitura-checando-a-sessão-linha-por-linha-nov2026) e [case study 7](#7-lista-de-pps-do-contas-a-pagar-pagando-acesso-e-nomes-por-linha-nov2026).
 
 ### I) Server actions com N inserts em série
 
@@ -262,6 +265,16 @@ Case studies documentam decisões erradas. Sempre atualizar aqui quando algo tra
 **Fix:** migration `20261116990003_saldos_dos_dias_em_aberto_numa_passada.sql`. Cada fonte é lida uma vez, agrupada por dia, e cada dia soma o que veio até ele. Conferido em todos os 78 dias de extrato das 6 contas com importação: jsonb idêntico. Conta principal, 29 dias: 392 → 10 ms.
 
 **Aprendizado:** função que chama outra "por dia" (ou por item) dentro de um `lateral` repete o trabalho inteiro N vezes; calcule por conjunto. E CTE usada dentro de subconsulta correlacionada precisa de `as materialized`: sem isso o Postgres a reexecuta a cada linha (aqui, 96 ms em vez de 10).
+
+### 7. Lista de PPs do Contas a Pagar pagando acesso e nomes por linha (nov/2026)
+
+**Sintoma:** depois dos casos 4 a 6, a última rota lenta era a lista de PPs do financeiro (`SELECT_PP_DO_FINANCEIRO`, páginas de 1.000): ~200 chamadas por tarde, média 1,6 s, ~100 acima de 2 s.
+
+**Diagnóstico:** medida por partes, a PP sozinha custava 40 ms; os anexos com nota somavam +470 ms, os eventos +270 ms, o job +120 ms e os 8 nomes de pessoas +110 ms. Todos pagavam as duas checagens que o caso 4 deixou por linha: `can_access_empresa_regional` (PPs, jobs, projetos, orçamentos, lançamentos…) e `e_colega_de_tenant` (profiles, em todo embed de nome).
+
+**Fix:** migration `20261120100001_rls_acesso_empresa_e_colegas_uma_vez.sql`: 15 policies de SELECT passam a comparar a coluna com conjuntos calculados uma vez (funções novas `empresas_com_acesso_de_admin`, `empresas_do_membro`, `empresas_do_membro_sem_regional`, `empresas_e_regionais_do_membro`, `colegas_de_tenant`). Conferido antes de aplicar com os 210 usuários (406 mil linhas, zero divergências) e, para o vínculo por regional, que ninguém tem hoje, por tabela-verdade (81 combinações). Aplicada em 23/11 (prova refeita no dia com 213 usuários; depois de aplicar, mesma foto de quem vê o quê nas 15 tabelas). Lista de 1.000 PPs medida com as regras novas: ~1,07 s → 0,15 s (a PP sozinha 40 → 3 ms; com os anexos com nota 508 → 106 ms).
+
+**Aprendizado:** embed de nome (`responsavel:profiles!…(nome)`) parece barato, mas passa pela policy de `profiles` em cada linha; numa lista com 8 nomes por item, é a policy dela que pesa. Quando um caminho da regra não aparece nos dados reais, prove por tabela-verdade.
 
 ---
 
