@@ -19,7 +19,6 @@ type Pendente = {
   tipo: FeriasLancamentoTipo;
   observacao: string | null;
   colaborador_id: string;
-  colaboradores: { nome: string } | null;
 };
 
 type EmFerias = {
@@ -28,7 +27,6 @@ type EmFerias = {
   data_fim: string;
   tipo: FeriasLancamentoTipo;
   colaborador_id: string;
-  colaboradores: { nome: string } | null;
 };
 
 function fmtData(iso: string): string {
@@ -47,31 +45,37 @@ export async function AbaFerias() {
   daqui30.setDate(hoje.getDate() + 30);
   const daqui30ISO = daqui30.toISOString().slice(0, 10);
 
-  // A RLS `ferias_lancamentos_lider_select` filtra pros liderados do caller.
-  // Puxa pendentes de aprovação + quem tá fora agora ou vai sair nos próximos 30 dias.
-  const [pendentesRes, emFeriasRes] = await Promise.all([
+  // A RLS `ferias_lancamentos_lider_select` libera os lançamentos dos liderados
+  // do caller; o nome vem da `vw_equipe_do_lider` (SECURITY DEFINER-like) porque
+  // a RLS da `colaboradores` é admin+rh — embed direto zeraria o resultado pro
+  // gerente_producao.
+  const [pendentesRes, emFeriasRes, equipeRes] = await Promise.all([
     supabase
       .from("colaboradores_ferias_lancamentos")
       .select(
-        "id, data_inicio, data_fim, dias, dias_abono, tipo, observacao, colaborador_id, colaboradores!inner(nome)",
+        "id, data_inicio, data_fim, dias, dias_abono, tipo, observacao, colaborador_id",
       )
       .eq("status", "aguardando_gestor")
       .order("created_at", { ascending: true }),
     supabase
       .from("colaboradores_ferias_lancamentos")
-      .select(
-        "id, data_inicio, data_fim, tipo, colaborador_id, colaboradores!inner(nome)",
-      )
+      .select("id, data_inicio, data_fim, tipo, colaborador_id")
       .in("status", ["aprovado", "nf_anexada", "enviado_financeiro", "concluido"])
       // Abono puro (avulso/excepcional) é venda — não tira o colaborador de serviço.
       .in("tipo", ["usufruto", "abono_combinado"])
       .lte("data_inicio", daqui30ISO)
       .gte("data_fim", hojeISO)
       .order("data_inicio", { ascending: true }),
+    supabase.from("vw_equipe_do_lider").select("colaborador_id, nome"),
   ]);
 
-  const pendentes = (pendentesRes.data ?? []) as unknown as Pendente[];
-  const emFerias = (emFeriasRes.data ?? []) as unknown as EmFerias[];
+  const pendentes = (pendentesRes.data ?? []) as Pendente[];
+  const emFerias = (emFeriasRes.data ?? []) as EmFerias[];
+  const nomesPorId = new Map<string, string>(
+    (equipeRes.data ?? []).map(
+      (l: { colaborador_id: string; nome: string }) => [l.colaborador_id, l.nome],
+    ),
+  );
 
   return (
     <div className="space-y-6">
@@ -111,7 +115,7 @@ export async function AbaFerias() {
                           {estaFora ? (
                             <Palmtree className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
                           ) : null}
-                          <span>{e.colaboradores?.nome ?? "—"}</span>
+                          <span>{nomesPorId.get(e.colaborador_id) ?? "—"}</span>
                         </div>
                       </td>
                       <td className="px-4 py-3 align-middle text-sm">
@@ -155,7 +159,7 @@ export async function AbaFerias() {
                 key={p.id}
                 lancamento={{
                   id: p.id,
-                  colaboradorNome: p.colaboradores?.nome ?? "—",
+                  colaboradorNome: nomesPorId.get(p.colaborador_id) ?? "—",
                   dataInicio: p.data_inicio,
                   dataFim: p.data_fim,
                   dias: p.dias,
