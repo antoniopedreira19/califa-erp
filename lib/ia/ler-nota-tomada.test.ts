@@ -1,7 +1,7 @@
 // node --import tsx --test lib/ia/ler-nota-tomada.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { leituraParaGravar, type DadosBrutosNotaTomada } from "./ler-nota-tomada";
+import { cnaeLido, codigoServicoLido, leituraParaGravar, type DadosBrutosNotaTomada } from "./ler-nota-tomada";
 
 const vazia = { aliquota: null, valor: null };
 const base: DadosBrutosNotaTomada = {
@@ -10,6 +10,7 @@ const base: DadosBrutosNotaTomada = {
   valor_total: 3000,
   descricao_servico: "  Locação de   equipamentos de filmagem ",
   cnae: "7739-0/99",
+  codigo_servico: "17.06.01",
   municipio_prestacao: "São Paulo/SP",
   competencia: "2026-11",
   codigo_verificacao: "ABCD1234",
@@ -55,3 +56,32 @@ test("sem número ou CNPJ lidos, não recusa", () => {
   const r = leituraParaGravar({ ...base, numero_nf: null, cnpj_emissor: null }, nota);
   assert.ok(r.ok);
 });
+
+test("CNAE só no formato de CNAE; o item da LC 116 não é CNAE", () => {
+  assert.equal(cnaeLido("7739-0/99"), "7739-0/99");
+  assert.equal(cnaeLido("7739099"), "7739-0/99");
+  assert.equal(cnaeLido("77.39-0-99"), "7739-0/99");
+  assert.equal(cnaeLido("17.06.01 / -"), null);
+  assert.equal(cnaeLido("11.04.01 / 099"), null);
+  assert.equal(cnaeLido("17.06.01"), null);
+  assert.equal(cnaeLido(null), null);
+});
+
+test("código do serviço: item da LC 116 com ou sem subitem", () => {
+  assert.equal(codigoServicoLido("17.06.01 / -"), "17.06.01");
+  assert.equal(codigoServicoLido("11.04.01 / 099"), "11.04.01");
+  assert.equal(codigoServicoLido("1.03"), "01.03");
+  assert.equal(codigoServicoLido("Código 17.06"), "17.06");
+  assert.equal(codigoServicoLido("7739-0/99"), null);
+  assert.equal(codigoServicoLido("77.39-0-99"), null);
+  assert.equal(codigoServicoLido(null), null);
+});
+
+test("o código do serviço posto no CNAE vai para o lugar certo", () => {
+  const r = leituraParaGravar({ ...base, cnae: "17.06.01 / -", codigo_servico: null }, nota);
+  assert.ok(r.ok);
+  if (!r.ok) return;
+  assert.equal(r.leitura.cnae, null);
+  assert.equal(r.leitura.codigo_servico, "17.06.01");
+});
+

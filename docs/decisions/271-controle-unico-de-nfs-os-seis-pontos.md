@@ -189,6 +189,15 @@ Entrou a seção, sem o "Editar registro" (ponto 6), que vem em seguida.
   23/11/2026, na NF 603 do Sandbox: ~1.000 tokens de entrada e ~130 de
   saída, cerca de US$ 0,0006 por nota (as ~500 notas da produção dariam
   uns US$ 0,30).
+- **CNAE × código do serviço (esquema v2, 23/11/2026):** na primeira
+  leitura em lote da produção, parada em 30 notas, a IA gravou como CNAE o
+  código de tributação do serviço (item da LC 116, ex. "17.06.01 / -") em
+  17 delas; nenhuma tinha CNAE de verdade — a maior parte das NFS-e não
+  traz CNAE. A leitura passou a separar os dois: o CNAE só no formato de
+  CNAE (7 dígitos, "NNNN-N/NN"); o código do serviço em coluna própria
+  (`codigo_servico`, migration `20261123800003`), mostrado no painel e na
+  exportação. A nota lida com o esquema antigo (`leitura_modelo` termina em
+  `nota-tomada-v1`) volta a ser oferecida e a releitura grava por cima.
 
 Achados no dado, sem correção (produção só leitura):
 

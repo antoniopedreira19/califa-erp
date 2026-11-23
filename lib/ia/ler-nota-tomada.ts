@@ -14,8 +14,9 @@
 import type OpenAI from "openai";
 import { getOpenAIClient, MODELO_LEITURA_NF } from "./openai-client";
 import type { RetencaoDestacadaNaNf } from "@/lib/types";
+import { ESQUEMA_LEITURA_NOTA_TOMADA } from "./versao-nota-tomada";
 
-export const VERSAO_LEITURA_NOTA_TOMADA = `${MODELO_LEITURA_NF}|nota-tomada-v1`;
+export const VERSAO_LEITURA_NOTA_TOMADA = `${MODELO_LEITURA_NF}|${ESQUEMA_LEITURA_NOTA_TOMADA}`;
 
 type Imposto = RetencaoDestacadaNaNf["imposto"];
 const IMPOSTOS: Imposto[] = ["ISS", "IRRF", "PIS", "COFINS", "CSLL", "INSS"];
@@ -31,6 +32,7 @@ export interface DadosBrutosNotaTomada {
   valor_total: number | null;
   descricao_servico: string | null;
   cnae: string | null;
+  codigo_servico: string | null;
   municipio_prestacao: string | null;
   competencia: string | null;
   codigo_verificacao: string | null;
@@ -57,6 +59,7 @@ export const SCHEMA_NOTA_TOMADA = {
     "valor_total",
     "descricao_servico",
     "cnae",
+    "codigo_servico",
     "municipio_prestacao",
     "competencia",
     "codigo_verificacao",
@@ -70,7 +73,13 @@ export const SCHEMA_NOTA_TOMADA = {
     descricao_servico: { type: ["string", "null"] as const, description: "Resumo em 1 linha do serviço/produto da NF" },
     cnae: {
       type: ["string", "null"] as const,
-      description: "O CNAE que a nota informa, como está escrito (ex.: 7319-0/04). Null se a nota não traz CNAE",
+      description:
+        "Só o código que a nota rotula como CNAE (7 dígitos, ex.: 7319-0/04). NÃO é o código de tributação nem o item da lista de serviços (ex.: 17.06.01), que vai em codigo_servico. Null se a nota não traz CNAE",
+    },
+    codigo_servico: {
+      type: ["string", "null"] as const,
+      description:
+        "O código do serviço: o código de tributação nacional ou o item/subitem da lista de serviços da LC 116, como está escrito (ex.: 17.06.01 ou 17.06). Null se a nota não traz",
     },
     municipio_prestacao: {
       type: ["string", "null"] as const,
@@ -97,6 +106,7 @@ export const SCHEMA_NOTA_TOMADA = {
 
 const PROMPT = `Você está lendo o PDF de uma Nota Fiscal brasileira (NFS-e ou DANFE) emitida CONTRA a empresa que paga o serviço.
 Extraia os dados nos campos do schema. Use null quando não puder identificar com certeza — nunca invente, nunca chute.
+O CNAE (7 dígitos, ex. 7319-0/04) e o código do serviço (item da LC 116 ou código de tributação nacional, ex. 17.06.01) são campos diferentes: não preencha um com o outro.
 Nas retenções, preencha só o que a nota mostra como RETIDO na fonte (ISS retido, IRRF, PIS, COFINS, CSLL, INSS). Imposto apenas destacado ou informado, sem retenção, fica com valor null.
 Marque confianca_baixa=true se o documento estiver borrado, incompleto, cortado ou se houver qualquer dúvida relevante.`;
 
@@ -135,7 +145,10 @@ export async function lerNotaTomada(
 /** O que se grava na nota (formato da RPC `gravar_leitura_da_nota`). */
 export interface LeituraParaGravar {
   descricao_servico: string | null;
+  /** Só no formato de CNAE, "NNNN-N/NN". */
   cnae: string | null;
+  /** O código de tributação / item da LC 116, "NN.NN" ou "NN.NN.NN". */
+  codigo_servico: string | null;
   municipio_prestacao: string | null;
   /** "AAAA-MM". */
   competencia: string | null;
@@ -149,6 +162,23 @@ const texto = (v: string | null, max: number) => {
 };
 const numero = (v: number | null) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : null);
 const soDigitos = (s: string | null) => (s ?? "").replace(/\D/g, "");
+
+/** O CNAE só com 7 dígitos (a subclasse), no formato "NNNN-N/NN". */
+export function cnaeLido(v: string | null): string | null {
+  const t = (v ?? "").trim();
+  // O item da LC 116 ("17.06.01") também tem dígitos e pontos: não é CNAE.
+  if (!t || /^\d{1,2}\.\d{2}(\.\d{2})?(?![\d-])/.test(t)) return null;
+  const d = soDigitos(t);
+  return d.length === 7 ? `${d.slice(0, 4)}-${d.slice(4, 5)}/${d.slice(5)}` : null;
+}
+
+/** O código do serviço (item da LC 116 / tributação nacional): "NN.NN" ou "NN.NN.NN". */
+export function codigoServicoLido(v: string | null): string | null {
+  // Seguido de hífen é CNAE escrito com pontos ("77.39-0-99"), não item da LC 116.
+  const m = (v ?? "").match(/\b(\d{1,2})\.(\d{2})(?:\.(\d{2}))?(?![\d-])/);
+  if (!m) return null;
+  return [m[1].padStart(2, "0"), m[2], m[3]].filter(Boolean).join(".");
+}
 
 /**
  * Confere a leitura com a nota do cadastro e monta o que se grava. Recusa
@@ -182,7 +212,9 @@ export function leituraParaGravar(
     ok: true,
     leitura: {
       descricao_servico: texto(dados.descricao_servico, 300),
-      cnae: texto(dados.cnae, 40),
+      cnae: cnaeLido(dados.cnae),
+      // A v1 mostrou a IA pondo o código do serviço no CNAE: aproveita de lá.
+      codigo_servico: codigoServicoLido(dados.codigo_servico) ?? codigoServicoLido(dados.cnae),
       municipio_prestacao: texto(dados.municipio_prestacao, 80),
       competencia,
       codigo_verificacao: texto(dados.codigo_verificacao, 80),

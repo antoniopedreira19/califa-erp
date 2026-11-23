@@ -285,6 +285,7 @@ export function NotaTomadaDrawer({ nota, onClose }: { nota: NotaTomada; onClose:
                 valor={nota.leitura.cnae ?? (nota.leitura.cnaeDoCadastro ? `${nota.leitura.cnaeDoCadastro} (do cadastro do emitente)` : null)}
                 mono
               />
+              <DadoDaLeitura rotulo="Código do serviço" valor={nota.leitura.codigoServico} mono />
               <DadoDaLeitura rotulo="Regime do emitente" valor={REGIME[nota.fornecedor.regime ?? ""] ?? null} />
               <DadoDaLeitura rotulo="Município da prestação" valor={nota.leitura.municipio} />
               <DadoDaLeitura

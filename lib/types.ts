@@ -6112,6 +6112,8 @@ export interface NotaFiscalFornecedor {
   descricao_servico: string | null;
   /** O CNAE da própria nota (o do cadastro fica em `fornecedores.cnae`). */
   cnae: string | null;
+  /** O código de tributação do serviço / item da LC 116, da leitura da NF (decisão 271). */
+  codigo_servico: string | null;
   municipio_prestacao: string | null;
   /** Primeiro dia do mês de competência ("AAAA-MM-01"). */
   competencia: string | null;

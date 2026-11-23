@@ -20,6 +20,7 @@ import type { createClient } from "@/lib/supabase/server";
 import { todasAsLinhas } from "@/lib/supabase/todas-as-linhas";
 import type { FaturadoRow } from "@/app/(app)/financeiro/contas-a-receber/faturamento-list";
 import { recebimentoDaNota } from "@/app/(app)/financeiro/contas-a-receber/situacao-da-nota";
+import { leituraEAtual } from "@/lib/ia/versao-nota-tomada";
 
 type Supabase = ReturnType<typeof createClient>;
 // As linhas vêm de selects com embeds; o formato é conferido na montagem.
@@ -515,12 +516,14 @@ export interface NotaTomada {
 }
 
 export interface LeituraDaNota {
-  /** A leitura já rodou (`leitura_em`). */
+  /** A leitura já rodou, na versão atual do esquema (`leitura_modelo`). */
   lida: boolean;
   descricao: string | null;
   /** O CNAE da nota; sem ele, o do cadastro do emitente (`cnaeDoCadastro`). */
   cnae: string | null;
   cnaeDoCadastro: string | null;
+  /** O código de tributação do serviço / item da LC 116. */
+  codigoServico: string | null;
   municipio: string | null;
   /** "AAAA-MM". */
   competencia: string | null;
@@ -559,7 +562,7 @@ export async function carregarTomadas(supabase: Supabase, tenantId: string): Pro
         .select(
           `id, numero, data_emissao, valor, tomador_estabelecimento_id, registrada_em, registrada_na_pp_id, registrada_no_desembolso_id,
            iss_retido_aliquota, credito_pis_cofins_retirado, credito_pis_cofins_motivo,
-           leitura_em, cnae, descricao_servico, municipio_prestacao, competencia, codigo_verificacao, retencoes,
+           leitura_em, leitura_modelo, cnae, codigo_servico, descricao_servico, municipio_prestacao, competencia, codigo_verificacao, retencoes,
            fornecedor:fornecedores(id, nome, razao_social, cpf_cnpj, regime_tributario, cnae)`,
         )
         .eq("tenant_id", tenantId)
@@ -740,7 +743,9 @@ export async function carregarTomadas(supabase: Supabase, tenantId: string): Pro
           : documentos[0]?.origem === "prestacao"
             ? "na aprovação da prestação"
             : null;
-    const retencoes = ((n.retencoes ?? []) as Linha[]).map((r) => ({
+    // A leitura de outra versão do esquema não conta: a nota volta a ser lida.
+    const lida = Boolean(n.leitura_em) && leituraEAtual(n.leitura_modelo);
+    const retencoes: LeituraDaNota["retencoes"] = ((lida ? n.retencoes : null) ?? ([] as Linha[])).map((r: Linha) => ({
       imposto: String(r.imposto),
       aliquota: r.aliquota == null ? null : Number(r.aliquota),
       valor: Number(r.valor),
@@ -770,13 +775,14 @@ export async function carregarTomadas(supabase: Supabase, tenantId: string): Pro
       situacao: valem.length === 0 ? "sem_pp" : registradaEm ? "registrada" : "em_avaliacao",
       pagamento: { situacao: situacaoPag, pago, aPagar: Math.max(0, aPagar), proximo: proximos[0] ?? null },
       leitura: {
-        lida: Boolean(n.leitura_em),
-        descricao: n.descricao_servico ?? null,
-        cnae: n.cnae ?? null,
+        lida,
+        descricao: lida ? (n.descricao_servico ?? null) : null,
+        cnae: lida ? (n.cnae ?? null) : null,
         cnaeDoCadastro: n.fornecedor?.cnae ?? null,
-        municipio: n.municipio_prestacao ?? null,
-        competencia: n.competencia ? String(n.competencia).slice(0, 7) : null,
-        codigoVerificacao: n.codigo_verificacao ?? null,
+        codigoServico: lida ? (n.codigo_servico ?? null) : null,
+        municipio: lida ? (n.municipio_prestacao ?? null) : null,
+        competencia: lida && n.competencia ? String(n.competencia).slice(0, 7) : null,
+        codigoVerificacao: lida ? (n.codigo_verificacao ?? null) : null,
         retencoes,
         retido,
         liquido: r2(Number(n.valor) - retido),
