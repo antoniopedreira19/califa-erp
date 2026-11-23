@@ -112,13 +112,15 @@ const COLUNAS: ColunaFiltravel<Recorrencia>[] = [
 // 1.838, decisão 085). Ordem das PPs e dos Desembolsos: Código, Valor, …,
 // Status e as ações no fim. Como nas PPs, as colunas de formato conhecido têm
 // largura medida pelo maior conteúdo real (23/11/2026, com os 32 px de
-// margem): o plano de contas mais longo ("Manutenção e Conserto de
-// Equipamentos", 238 px), o selo "Aguardando conta" (140 px), "Encerrada"
-// (88 px), três botões de ação e os títulos VENCIMENTO e DOCUMENTOS com o
-// ícone do filtro. A Descrição (null) fica com o que sobra: 154 px nos
-// 1.614 px da caixa, e quebra em duas linhas com o resto na dica.
-const LARGURAS: Array<number | null> = [100, 130, null, 140, 140, 272, 136, 166, 144, 120, 118];
-const LARGURA_MINIMA_DA_DESCRICAO = 148;
+// margem): o selo "Aguardando conta" (140 px), "Encerrada" (88 px), três
+// botões de ação e os títulos VENCIMENTO e DOCUMENTOS com o ícone do filtro.
+// O Plano tem 200 px, por escolha do Tiago: cabem todos os nomes menos o mais
+// longo ("Manutenção e Conserto de Equipamentos", 239 px, 1 recorrência), que
+// se lê na dica. A Descrição (null) fica com o que sobra: 220 px nos 1.614 px
+// da caixa, e nunca menos que isso (a tabela rola antes); quebra em duas
+// linhas com o resto na dica.
+const LARGURAS: Array<number | null> = [100, 130, null, 140, 140, 200, 136, 166, 144, 120, 118];
+const LARGURA_MINIMA_DA_DESCRICAO = 220;
 const LARGURA_DA_TABELA = LARGURAS.reduce<number>((s, w) => s + (w ?? LARGURA_MINIMA_DA_DESCRICAO), 0);
 const ESTADOS_DO_TITULO: Estado[] = ["aguardando", "a_pagar", "atrasado", "sem_extrato", "a_conciliar", "pago", "previsto"];
 
