@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { irpjCsllAApurar, type BlocoAApurar, type IrpjCsllAApurar } from "@/lib/fiscal/a-apurar";
+import { carregarRegrasDoRateio, type RegrasDoRateioDoTenant } from "@/lib/fiscal/rateio-gerencial-dados";
 import { carregarBlocosAApurar } from "@/lib/fiscal/a-apurar-dados";
 import { carregarFatosFiscais } from "@/lib/fiscal/apuracao-fatos";
 import {
@@ -35,6 +36,8 @@ export interface AprovacaoDaTela {
   /** O nome do arquivo da guia anexada (o caminho fica no servidor). */
   guia_nome: string | null;
   autor: string;
+  /** Decisão 277: o saldo credor que a contabilidade levou para o mês seguinte (nulo = o calculado). */
+  saldo_credor_contabil: number | null;
 }
 
 export interface GuiaDaTela extends Guia {
@@ -103,6 +106,8 @@ export interface DadosDaApuracao {
   /** O que a prévia das cotas do IRPJ/CSLL precisa (vencimento e Selic estimada). */
   feriados: FiscalFeriado[];
   parametros: FiscalParametro[];
+  /** Decisão 277: as empresas gerenciais e as regras do rateio por CNPJ. */
+  regrasDoRateio: RegrasDoRateioDoTenant;
   /** Falha ao ler ou calcular (a aba mostra a mensagem em vez das guias). */
   erro: string | null;
 }
@@ -167,6 +172,7 @@ function vazio(tenantId: string, hoje: string, erro: string | null): DadosDaApur
     nfsDeFornecedor: 0,
     feriados: [],
     parametros: [],
+    regrasDoRateio: { empresas: [], regionalDoCnpj: {}, gerencialDoCnpj: {} },
     erro,
   };
 }
@@ -181,17 +187,18 @@ interface AprovacaoDoBanco {
   diferenca: boolean;
   guia_path: string | null;
   aprovada_por: string;
+  saldo_credor_contabil: number | string | null;
 }
 
 export async function carregarApuracao(supabase: SupabaseClient, tenantId: string): Promise<DadosDaApuracao> {
   const hoje = hojeEmSaoPaulo();
   try {
-    const [fatosDoBanco, empresasRes, aprovacoesRes, semCnpjRes, membrosRes] = await Promise.all([
+    const [fatosDoBanco, empresasRes, aprovacoesRes, semCnpjRes, membrosRes, regrasDoRateio] = await Promise.all([
       carregarFatosFiscais(supabase, tenantId),
       supabase.from("empresas_contabeis").select("id, razao_social, nome_fantasia, de_teste").eq("tenant_id", tenantId),
       supabase
         .from("fiscal_aprovacoes")
-        .select("id, chave, data, valor_calculado, valor_guia, justificativa, diferenca, guia_path, aprovada_por")
+        .select("id, chave, data, valor_calculado, valor_guia, justificativa, diferenca, guia_path, aprovada_por, saldo_credor_contabil")
         .eq("tenant_id", tenantId)
         .order("aprovada_em"),
       // Só a contagem: as notas de antes do módulo fiscal não dizem por qual CNPJ saíram.
@@ -204,6 +211,7 @@ export async function carregarApuracao(supabase: SupabaseClient, tenantId: strin
         .gte("data_emissao", INICIO),
       // O nome de quem aprovou: a lista de membros (a RLS de `profiles` só mostra o próprio).
       supabase.rpc("membros_ativos_do_tenant", { p_tenant_id: tenantId }),
+      carregarRegrasDoRateio(supabase, tenantId),
     ]);
     if (empresasRes.error) throw new Error(`[fiscal.apuracao.empresas] ${empresasRes.error.message}`);
     if (aprovacoesRes.error) throw new Error(`[fiscal.apuracao.aprovacoes] ${aprovacoesRes.error.message}`);
@@ -225,6 +233,7 @@ export async function carregarApuracao(supabase: SupabaseClient, tenantId: strin
         diferenca: a.diferenca,
         guia_nome: nomeDoArquivo(a.guia_path),
         autor: nomes.get(a.aprovada_por) ?? "—",
+        saldo_credor_contabil: a.saldo_credor_contabil === null ? null : Number(a.saldo_credor_contabil),
       });
       aprovacoesPorChave.set(a.chave, lista);
     }
@@ -285,6 +294,7 @@ export async function carregarApuracao(supabase: SupabaseClient, tenantId: strin
       ).length,
       feriados: cadastro.feriados,
       parametros: cadastro.parametros,
+      regrasDoRateio,
       erro: null,
     };
   } catch (e) {

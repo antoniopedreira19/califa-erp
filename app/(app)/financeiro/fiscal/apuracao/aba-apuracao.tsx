@@ -35,6 +35,7 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { FAIXA_GRUPO_LISTA } from "@/app/(app)/_planilha/blocos";
+import { regrasDoCnpj } from "@/lib/fiscal/rateio-gerencial-dados";
 import type { CadastroFiscal } from "@/lib/fiscal/cadastro";
 import { trimestreDe } from "@/lib/fiscal/apuracao";
 import { dataBr, mesDe, nomeDoMes, proximoMes, r2 } from "@/lib/fiscal/datas";
@@ -710,6 +711,8 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
           cadastroDasCotas={cadastroDasCotas}
           hoje={dados.hoje}
           aprovarEmCurso={aprovaEmCurso(guiaAberta)}
+          regrasDoRateio={regrasDoCnpj(dados.regrasDoRateio, guiaAberta.empresa_contabil_id)}
+          gerencialDoCnpj={dados.regrasDoRateio.gerencialDoCnpj[guiaAberta.empresa_contabil_id] ?? null}
           onClose={() => setAberta(null)}
           onAprovada={(texto) => {
             setAberta(null);
@@ -913,10 +916,20 @@ function LinhaGuia({
       <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-xs text-emerald-700">{retido ? moeda(retido) : "—"}</td>
       <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-sm font-bold tabular-nums">
         {moeda(g.apurado)}
-        {g.saldo_credor_gerado > 0 && (
-          <span className="block whitespace-normal font-sans text-[10px] font-semibold leading-tight text-sky-700">
-            saldo credor {moeda(g.saldo_credor_gerado)}
+        {/* Decisão 277: o saldo que a contabilidade levou vale no lugar do calculado. */}
+        {(original?.saldo_credor_contabil ?? null) !== null ? (
+          <span
+            className="block whitespace-normal font-sans text-[10px] font-semibold leading-tight text-sky-700"
+            title={`Informado pela contabilidade; o sistema calculou ${moeda(g.saldo_credor_gerado)}.`}
+          >
+            saldo credor {moeda(original!.saldo_credor_contabil!)} (contabilidade)
           </span>
+        ) : (
+          g.saldo_credor_gerado > 0 && (
+            <span className="block whitespace-normal font-sans text-[10px] font-semibold leading-tight text-sky-700">
+              saldo credor {moeda(g.saldo_credor_gerado)}
+            </span>
+          )
         )}
         {/* Só o valor a mais (ou a menos) desde a aprovação: a frase inteira
             passava da coluna. O sentido fica na dica. */}
