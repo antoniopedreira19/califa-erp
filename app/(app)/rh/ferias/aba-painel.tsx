@@ -129,12 +129,14 @@ export async function AbaPainel({ tenantId }: Props) {
       .eq("tenant_id", tenantId)
       .eq("status", "nf_anexada")
       .eq("lancado_direto_por_rh", false),
-    // Lançamentos ativos pra em_ferias / saindo / voltando
+    // Lançamentos ativos pra em_ferias / saindo / voltando.
+    // Abono puro (avulso/excepcional) é venda — não tira o colaborador de serviço.
     supabase
       .from("colaboradores_ferias_lancamentos")
       .select("colaborador_id, status, data_inicio, data_fim")
       .eq("tenant_id", tenantId)
       .eq("lancado_direto_por_rh", false)
+      .in("tipo", ["usufruto", "abono_combinado"])
       .in("status", ["aprovado", "nf_anexada", "enviado_financeiro", "concluido"]),
     // Períodos pra vencendo 30d / vencidas recentes
     // Puxamos todos vencidos+em_alerta e reduzimos em memória pra 1 por

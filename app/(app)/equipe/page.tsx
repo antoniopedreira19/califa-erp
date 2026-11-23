@@ -44,6 +44,7 @@ export default async function EquipePage() {
         .from("colaboradores_ferias_lancamentos")
         .select("id", { count: "exact", head: true })
         .eq("status", "aprovado")
+        .in("tipo", ["usufruto", "abono_combinado"])
         .lte("data_inicio", hoje)
         .gte("data_fim", hoje),
       supabase

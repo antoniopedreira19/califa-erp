@@ -86,9 +86,12 @@ export async function AbaQuadro({ tenantId, filtroInicial }: Props) {
       // pendente_aprovacao / aguardando_financeiro. Só considera lanç
       // que nasceu como solicitação (lancado_direto_por_rh=false) —
       // idêntico ao filtro usado no Dashboard e na tabela de Solicitações.
+      // As flags de "em férias" filtram também por tipo mais abaixo, mas
+      // pendente_aprovacao / aguardando_nf valem pra abono puro também —
+      // por isso puxa todos os tipos aqui e o filtro acontece no loop.
       supabase
         .from("colaboradores_ferias_lancamentos")
-        .select("colaborador_id, status, data_inicio, data_fim")
+        .select("colaborador_id, status, data_inicio, data_fim, tipo")
         .eq("tenant_id", tenantId)
         .eq("lancado_direto_por_rh", false),
     ]);
@@ -121,6 +124,7 @@ export async function AbaQuadro({ tenantId, filtroInicial }: Props) {
     status: string;
     data_inicio: string;
     data_fim: string;
+    tipo: string;
   }>;
 
   const periodosPorColab = new Map<string, PeriodoLite[]>();
@@ -168,12 +172,14 @@ export async function AbaQuadro({ tenantId, filtroInicial }: Props) {
     if (l.status === "nf_anexada") f.aguardando_financeiro = true;
     // Em férias agora = solicitação em qualquer status "ativo" com datas
     // contendo hoje (inclusive concluídas — colaborador continua fora até
-    // voltar; ver docs/modulos/rh/41-ferias-fluxo-solicitacao.md §2.3)
+    // voltar; ver docs/modulos/rh/41-ferias-fluxo-solicitacao.md §2.3).
+    // Abono puro (avulso/excepcional) é venda — não tira o colaborador de serviço.
     const ativoDeFerias =
-      l.status === "aprovado" ||
-      l.status === "nf_anexada" ||
-      l.status === "enviado_financeiro" ||
-      l.status === "concluido";
+      (l.tipo === "usufruto" || l.tipo === "abono_combinado") &&
+      (l.status === "aprovado" ||
+        l.status === "nf_anexada" ||
+        l.status === "enviado_financeiro" ||
+        l.status === "concluido");
     if (ativoDeFerias) {
       if (l.data_inicio <= hojeISO && l.data_fim >= hojeISO) {
         f.em_ferias_hoje = true;

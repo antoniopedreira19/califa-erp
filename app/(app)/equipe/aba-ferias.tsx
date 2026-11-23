@@ -63,6 +63,8 @@ export async function AbaFerias() {
         "id, data_inicio, data_fim, tipo, colaborador_id, colaboradores!inner(nome)",
       )
       .in("status", ["aprovado", "nf_anexada", "enviado_financeiro", "concluido"])
+      // Abono puro (avulso/excepcional) é venda — não tira o colaborador de serviço.
+      .in("tipo", ["usufruto", "abono_combinado"])
       .lte("data_inicio", daqui30ISO)
       .gte("data_fim", hojeISO)
       .order("data_inicio", { ascending: true }),

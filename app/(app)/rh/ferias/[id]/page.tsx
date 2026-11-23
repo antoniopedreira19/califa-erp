@@ -62,7 +62,7 @@ export default async function ColaboradorFeriasPage({
       supabase
         .from("colaboradores_ferias_lancamentos")
         .select(
-          "id, periodo_id, tipo, dias, dias_abono, data_inicio, data_fim, status, observacao, lancado_direto_por_rh, valor_total, aprovado_por, aprovado_em, aprovado_pelo_lider_por, aprovado_pelo_lider_em, aprovacao_lider_override, motivo_override_lider",
+          "id, periodo_id, tipo, dias, dias_abono, data_inicio, data_fim, status, observacao, lancado_direto_por_rh, valor_total, aprovado_por, aprovado_em, aprovado_pelo_lider_por, aprovado_pelo_lider_em, aprovacao_lider_override, motivo_override_lider, created_at",
         )
         .eq("colaborador_id", params.id)
         .eq("tenant_id", tenantId)
@@ -412,6 +412,11 @@ function CardSolicitacaoAtiva({
     "pt-BR",
   );
   const fim = new Date(l.data_fim + "T00:00:00").toLocaleDateString("pt-BR");
+  // Abono puro (avulso/excepcional) é venda de dias, não ausência — as datas
+  // data_inicio/data_fim do lançamento são sintéticas e induzem a erro.
+  // Mostra "Solicitado em" com created_at no lugar do período.
+  const abonoPuro = l.tipo === "abono_avulso" || l.tipo === "abono_excepcional";
+  const solicitadoEm = new Date(l.created_at).toLocaleDateString("pt-BR");
 
   const statusInfo: Record<
     FeriasLancamentoStatus,
@@ -491,11 +496,11 @@ function CardSolicitacaoAtiva({
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm mb-3">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-0.5">
-            Período
+            {abonoPuro ? "Solicitado em" : "Período"}
           </p>
           <p className="flex items-center gap-1.5">
             <CalendarDays className="h-3.5 w-3.5 text-muted-foreground" />
-            {inicio} → {fim}
+            {abonoPuro ? solicitadoEm : `${inicio} → ${fim}`}
           </p>
         </div>
         <div>
