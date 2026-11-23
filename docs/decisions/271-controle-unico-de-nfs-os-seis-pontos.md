@@ -365,3 +365,40 @@ trocou dígitos de CNPJ em 8.
 - Migration `20261123800010` (colunas `leitura_imagem`, `leitura_texto`,
   `leitura_texto_bruto`, `leitura_discordancias`, `leitura_so_imagem`).
 
+### A chave de acesso e os layouts que o primeiro leitor errava (23/11/2026)
+
+A primeira releitura das 512 notas com o texto (466 PDFs com texto, 45 só
+imagem) acusou 17 discordâncias, todas erro do leitor de texto, nenhuma da
+imagem:
+
+- **NFS-e de São Paulo (13 notas):** os rótulos vêm numa linha e os valores
+  na seguinte; o leitor pegou o número do RPS ("RPS Nº 14 Série 11") no
+  lugar do número da nota.
+- **DANFE (2 notas):** o "VALOR TOTAL DA NOTA" é o último rótulo da linha
+  do cálculo do imposto, e os valores vêm colados depois; o leitor pegou o
+  frete.
+- **CNPJ do tomador lido como emitente (2 notas):** em alguns layouts o
+  texto do PDF traz o bloco do tomador logo depois do rótulo "PRESTADOR".
+
+O que mudou (`lib/ia/texto-da-nf.ts`):
+
+- **A chave de acesso** é a primeira fonte do CNPJ do emitente e completa o
+  número: 44 dígitos na NF-e, 50 na NFS-e nacional (também o "Identificador
+  Nacional" das NFS-e municipais de São Paulo e outras), conferida pelo
+  dígito verificador (módulo 11). Estava em 440 dos 466 PDFs com texto; o
+  CNPJ dela bateu com o cadastro do fornecedor em 435 — as 5 diferenças são
+  os casos já conhecidos de PDF de outra empresa e os 2 MEIs cadastrados
+  pelo CPF. Município que numera com o ano na frente ("2026000000135" é a
+  nota 135): o ano sai.
+- **NFS-e de São Paulo:** o número (8 dígitos) colado na data da emissão,
+  depois dos rótulos; o "Nº … Série" só vale na DANFE.
+- **DANFE:** o canhoto ("EMISSÃO: … VALOR TOTAL: R$ …") dá emissão e total;
+  sem canhoto, o total é o último valor da linha do "VALOR TOTAL DA NOTA".
+- **DANFSe** com a data em traços ("28-09-2026") e com os rótulos juntos
+  antes dos valores.
+- **CNPJ pelos rótulos** (só sem chave): entre o "PRESTADOR" e o
+  "TOMADOR", e nunca o de uma empresa do grupo (`fiscal_estabelecimentos`).
+- O esquema da leitura passou a `nota-tomada-v5`: as notas lidas com o
+  leitor da v4 voltam a ser oferecidas para leitura. A imagem continua a da
+  v3 (cache, sem custo).
+

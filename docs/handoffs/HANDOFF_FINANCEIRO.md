@@ -9303,6 +9303,12 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **PP:** `seguirDocumentoNasPPs` (em `actions-pp.ts`) refaz o CNPJ e o PDF de cada PP da nota depois de gravar.
 - **Em aberto:** as 4 notas registradas sem documento aprovado (de antes da mudança na reversão) — corrigir pede o OK do Tiago.
 
+## ⚠️ Nota de 2026-11-23 — a leitura das NFs tomadas pelo texto do PDF (decisão 271, leitura v4)
+
+- **O quê:** além da leitura por imagem (IA), o texto do PDF (`pdf-parse`) dá número, emissão, valor e CNPJ do emitente sem IA (`lib/ia/texto-da-nf.ts`). A chave de acesso (44/50 dígitos, com DV) é a primeira fonte do CNPJ e completa o número; os rótulos cobrem DANFSe, NFS-e de São Paulo, NFS-e municipais e DANFE. Imagem e texto discordam → vale o texto e a nota guarda a discordância; sem texto → a divergência aparece como "só pela leitura da imagem".
+- **Banco:** `leitura_imagem`, `leitura_texto`, `leitura_texto_bruto`, `leitura_discordancias`, `leitura_so_imagem` (migration `20261123800010`). O texto bruto guardado serve para refazer os rótulos sem baixar o PDF de novo.
+- **Releitura:** o botão "Ler as N notas pela IA" relê tudo; a imagem vem do cache (`nf_extracao_cache`, esquema v3), sem custo.
+
 ## ⚠️ Nota de 2026-11-23 — Mídia Off: encerrar a veiculação antes e estender mexem na previsão (decisão 275)
 
 - **O que muda para o financeiro:** quando o GP encerra uma veiculação antes do fim ou estende, os espelhos do job (`valor_total`, `faturamento_previsto`) passam a ser os de hoje; os da abertura não mudam.
