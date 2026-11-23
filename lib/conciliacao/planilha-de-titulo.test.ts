@@ -8,7 +8,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { codigoDePp, donosDaPlanilha, nomesBatem, type LinhaDaPlanilha, type TituloEmAberto } from "./planilha-de-titulo";
+import { codigoDePp, codigosDePp, donosDaPlanilha, eDePpPaga, nomesBatem, type LinhaDaPlanilha, type TituloEmAberto } from "./planilha-de-titulo";
 
 const linha = (x: Partial<LinhaDaPlanilha> & { id: string }): LinhaDaPlanilha => ({
   data: "2026-11-12",
@@ -82,4 +82,29 @@ test("a linha que cita outra PP (já paga) não vai para a PP aberta do mesmo ti
 test("na dúvida nada se esconde: duas PPs ou duas linhas no mesmo par", () => {
   assert.equal(donosDaPlanilha([linha({ id: "h1" })], [pp({ id: "t1" }), pp({ id: "t2", ref: "PP-00700 1/1" })]).size, 0);
   assert.equal(donosDaPlanilha([linha({ id: "h1" }), linha({ id: "h2" })], [pp({ id: "t1" })]).size, 0);
+});
+
+test("todos os códigos de PP do texto, sem repetir", () => {
+  assert.deepEqual(codigosDePp("PP01028 PP01027 PP01021 - Reembolso"), ["PP-01028", "PP-01027", "PP-01021"]);
+  assert.deepEqual(codigosDePp("PP00460 e PP-460 - Diretora de arte"), ["PP-00460"]);
+  assert.deepEqual(codigosDePp("Controller"), []);
+  assert.deepEqual(codigosDePp(null), []);
+});
+
+test("a linha da planilha de PP já paga sai da lista (o caso da PP-00360, 23/11)", () => {
+  const pagas = new Set(["PP-00360", "PP-01028", "PP-00288"]);
+  assert.ok(eDePpPaga({ valor: -6000, descricao: "PP-00360 - Videomaker" }, pagas));
+  assert.ok(eDePpPaga({ valor: -6000, descricao: "PP00360 - Videomaker" }, pagas), "código sem hífen");
+  assert.ok(!eDePpPaga({ valor: -6000, descricao: "PP-00365 - Diretora de arte" }, pagas), "PP não paga");
+  assert.ok(!eDePpPaga({ valor: -6000, descricao: "PP 25684 - Despachante" }, pagas), "numeração antiga da planilha");
+  assert.ok(!eDePpPaga({ valor: -6000, descricao: "Locação de apartamento" }, pagas), "sem código");
+});
+
+test("fica a linha que cita PP paga mas é outro movimento", () => {
+  const pagas = new Set(["PP-00288", "PP-00446", "PP-01028"]);
+  assert.ok(!eDePpPaga({ valor: 5000, descricao: "Devolução de pagamento duplicado - PP00288" }, pagas), "entrada");
+  assert.ok(!eDePpPaga({ valor: -5000, descricao: "PAGAMENTO DUPLICADO - PP00288" }, pagas));
+  assert.ok(!eDePpPaga({ valor: -4800, descricao: "PAGO EM DUPLICIDADE?? CONFERIR - PP-00446" }, pagas));
+  assert.ok(!eDePpPaga({ valor: -5000, descricao: "PIX NÃO EFETUADO - PP00288" }, pagas));
+  assert.ok(!eDePpPaga({ valor: -2189.09, descricao: "PP01028 PP01020 - Reembolso" }, pagas), "uma das PPs citadas ainda está aberta");
 });

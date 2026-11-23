@@ -9247,3 +9247,11 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Fechamento:** a trava do mês fechado vale só a partir do início da conta; a baixa antiga entra mesmo com novembro fechado.
 - **Conciliação do histórico:** `ligarBaixaAoHistorico` (sem botão) liga a baixa antiga às linhas da planilha do mesmo dia, conta e valor. Ligada a linha do período ou da cauda, a baixa deixa de contar duas vezes no Extrato antes do início; ligada ao só DRE, a linha mostra a PP.
 - **Conferido no Sandbox:** PP-00102 baixada em 15/09 na Conta Teste 253 (início em 01/10), com a faixa e o rodapé novos. Migration `20261123600001_baixa_antes_do_inicio_da_conta.sql`.
+
+
+## ⚠️ Nota de 2026-11-23 — Conciliação: a linha da planilha de PP já paga não é mais oferecida (revisão da decisão 262, D2)
+
+- Paga a PP, a linha da planilha dela voltava a ser oferecida (e proposta pelo motor) para outra linha do banco de mesmo valor, e a PP contava duas vezes. Em 17/11 foram 19 linhas assim; os dados foram corrigidos em 23/11.
+- Agora a saída da planilha cujas PPs citadas estão todas pagas sai das previsões e da cauda no carregamento da conta (`banco-dados.ts`, `ppsPagasDaPlanilha`). Continuam a duplicidade, a devolução, o estorno, o PIX não efetuado, a linha com PP ainda aberta e a numeração antiga da planilha.
+- Código em `lib/conciliacao/planilha-de-titulo.ts` (`eDePpPaga`, 11 testes). Sem migration.
+- Em aberto: travar ou avisar a baixa à mão de PP cuja linha da planilha já está conciliada.

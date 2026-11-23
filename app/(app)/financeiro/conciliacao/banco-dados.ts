@@ -35,6 +35,7 @@ import type { ContextoDoMutuoNaConta, ParteDoMutuo } from "@/lib/financeiro/mutu
 import { contextoDoMutuoNaConta } from "../mutuos/dados";
 import { somaDias } from "@/lib/conciliacao/motor";
 import { contaTemNumero } from "@/lib/conciliacao/ofx";
+import { codigosDePp, eDePpPaga } from "@/lib/conciliacao/planilha-de-titulo";
 import { calcularSaldoAnterior } from "@/lib/calculos/saldo-conta";
 import { diaIsoBr, formatDiaBr } from "@/lib/formatar-data-hora";
 
@@ -289,6 +290,25 @@ async function quemDosDocumentos(supabase: Supabase, tenantId: string, docs: str
   for (const x of (e.data ?? []) as Array<{ cnpj: string; razao_social: string | null; nome_fantasia: string | null }>)
     out[digitos(x.cnpj)] = { nome: x.razao_social ?? x.nome_fantasia ?? "—", papel: "Empresa do grupo" };
   return out;
+}
+
+/** As PPs pagas que as saídas da planilha citam (revisão de 23/11/2026 da
+ *  decisão 262, D2): a linha da planilha delas não é oferecida nem proposta.
+ *  Só os códigos do sistema (PP-00001 a PP-09999); os de 5 dígitos ("PP 25684")
+ *  são da numeração antiga da planilha. Em partes, para a URL não crescer. */
+async function ppsPagasDaPlanilha(supabase: Supabase, tenantId: string, itens: HistoricoDoMotor[]): Promise<Set<string>> {
+  const codigos = [...new Set(itens.filter((h) => h.valor < 0).flatMap((h) => codigosDePp(h.descricao)))].filter((c) => Number(c.slice(3)) < 10000);
+  const pagas = new Set<string>();
+  const partes: string[][] = [];
+  for (let i = 0; i < codigos.length; i += 200) partes.push(codigos.slice(i, i + 200));
+  const res = await Promise.all(
+    partes.map((parte) => supabase.from("pedidos_compra").select("codigo").eq("tenant_id", tenantId).eq("status", "pago").in("codigo", parte)),
+  );
+  for (const r of res) {
+    if (r.error) console.error("[conciliacao.banco.pps_pagas]", r.error.message);
+    for (const x of (r.data ?? []) as Array<{ codigo: string }>) pagas.add(x.codigo);
+  }
+  return pagas;
 }
 
 // ---------------------------------------------------------------------------
@@ -787,7 +807,7 @@ export async function carregarBancoDaConciliacao(
 
   // O mútuo e as baixas como o Extrato as mostra (decisão 243): juntos.
   const pendentesDaConta = linhas.filter((l) => !l.conciliada && !l.ignorada).map((l) => l.id);
-  const [mutuo, extratoPorLancamento, acertosRes, centrosRes] = await Promise.all([
+  const [mutuo, extratoPorLancamento, acertosRes, centrosRes, ppsPagas] = await Promise.all([
     contextoDoMutuoNaConta(
       supabase,
       tenantId,
@@ -805,6 +825,7 @@ export async function carregarBancoDaConciliacao(
       .select("item, plano_conta_tipo_id, plano_conta_subtipo_id")
       .eq("tenant_id", tenantId)
       .eq("conta_bancaria_id", contaId),
+    ppsPagasDaPlanilha(supabase, tenantId, [...previsoes, ...historico]),
   ]);
   // Só o acerto das linhas ainda em aberto (a conciliada não guarda acerto).
   const abertas = new Set(pendentesDaConta);
@@ -831,8 +852,9 @@ export async function carregarBancoDaConciliacao(
     acertos,
     centros,
     saldoSistemaNoFim: saldoNoFim === null ? null : r2(saldoNoFim),
-    historico,
-    previsoes,
+    // Revisão de 23/11/2026 (D2): a linha da planilha de PP já paga sai antes do motor e da tabela.
+    historico: historico.filter((h) => !eDePpPaga(h, ppsPagas)),
+    previsoes: previsoes.filter((h) => !eDePpPaga(h, ppsPagas)),
     previsoesDesde,
     regionais: ((regionaisRes.data ?? []) as Array<{ id: string; nome: string; empresa_id: string }>).map((r) => ({
       id: r.id,

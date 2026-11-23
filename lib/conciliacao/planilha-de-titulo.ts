@@ -20,6 +20,10 @@
  *    Santos", e "Fulana Souza" não casa com "Fulana Lima"), a data prevista da
  *    PP a até 20 dias e uma única PP e uma única linha da planilha no par. Na
  *    dúvida, nada se esconde.
+ *
+ * E a linha da planilha de PP já paga (revisão de 23/11/2026, `eDePpPaga`):
+ * não há título em aberto para ficar no lugar dela, e ela sai da lista antes
+ * do motor e da tabela (`banco-dados.ts`).
  */
 
 export interface LinhaDaPlanilha {
@@ -58,6 +62,32 @@ export const normalizar = (s: string | null | undefined): string =>
 export function codigoDePp(texto: string | null | undefined): string | null {
   const m = (texto ?? "").match(/\bPP[\s-]?0*(\d{1,5})\b/i);
   return m ? `PP-${m[1].padStart(5, "0")}` : null;
+}
+
+/** Todos os códigos de PP do texto, sem repetir ("PP01028 PP01027 - Reembolso"). */
+export function codigosDePp(texto: string | null | undefined): string[] {
+  const vistos = new Set<string>();
+  for (const m of (texto ?? "").matchAll(/\bPP[\s-]?0*(\d{1,5})\b/gi)) vistos.add(`PP-${m[1].padStart(5, "0")}`);
+  return [...vistos];
+}
+
+/** O texto da planilha que registra outro movimento da PP, não o pagamento dela. */
+const OUTRO_MOVIMENTO = /DUPLIC|DEVOLU|ESTORN|N[AÃ]O\s+EFETUAD/i;
+
+/**
+ * A linha da planilha que é o pagamento de PP já paga no sistema (revisão de
+ * 23/11/2026). A PP paga sai da lista de títulos em aberto, e a linha da
+ * planilha dela voltava a ser oferecida — e proposta pelo motor — para outra
+ * linha do banco de mesmo valor: em 17/11, 19 linhas do banco foram ligadas à
+ * planilha de PPs que já estavam baixadas e conciliadas noutra linha, e a PP
+ * contou duas vezes. Sai da lista a saída cujas PPs citadas estão todas pagas;
+ * fica a que a planilha marca como duplicidade, devolução, estorno ou PIX não
+ * efetuado (é outro movimento, com linha do banco própria).
+ */
+export function eDePpPaga(linha: { valor: number; descricao: string | null }, pagas: ReadonlySet<string>): boolean {
+  if (linha.valor >= 0 || OUTRO_MOVIMENTO.test(linha.descricao ?? "")) return false;
+  const codigos = codigosDePp(linha.descricao);
+  return codigos.length > 0 && codigos.every((c) => pagas.has(c));
 }
 
 /** O titular da PP e o fornecedor da planilha são a mesma pessoa: em alguma

@@ -133,3 +133,51 @@ Sem migration.
 - o Desfazer cancelou o recebimento ("Conciliação com o banco desfeita") e a linha voltou a pendente;
 - nada ficou gravado, e o console e o servidor ficaram sem erro.
 
+
+## Revisão de 23/11/2026 — D2: a linha da planilha de PP já paga
+
+⚠️ **D2 ampliada (Tiago, 23/11/2026: "Sim, corrija").**
+
+**O caso.** A D2 esconde a linha da planilha de uma PP **em aberto**, e no
+lugar dela oferece a PP. Paga a PP, ela sai da lista de títulos, e a linha
+da planilha dela voltava a ser oferecida — e proposta pelo motor, que casa a
+previsão de mesmo valor no dia — para outra linha do banco de mesmo valor.
+No acerto de 17/11, 19 linhas do banco de 09 a 11/11 foram ligadas assim à
+planilha de PPs já baixadas e conciliadas noutra linha (PP-00360, PP-00365,
+PP-00496…). O caixa ficava certo, mas a PP contava duas vezes e outro item
+da planilha ficava sem realizar. Corrigido nos dados em 23/11 (8 religadas a
+um item livre de mesmo dia e valor, 11 voltaram a pendentes).
+
+**Agora** a saída da planilha cujas PPs citadas estão **todas pagas** (status
+"pago") não é oferecida nem proposta, em nenhum lugar da Conciliação: sai das
+previsões e da cauda já no carregamento da conta, antes do motor e da tabela.
+
+**Continua oferecida:**
+- a linha que a planilha marca como outro movimento da PP: duplicidade,
+  devolução, estorno ou PIX não efetuado ("PAGAMENTO DUPLICADO - PP00288",
+  "Devolução de pagamento duplicado…"), e toda entrada;
+- a que cita uma PP ainda aberta ao lado de PPs pagas ("PP01028 PP01020 -
+  Reembolso", com a PP-01020 aberta);
+- a que só cita a numeração antiga da planilha ("PP 25684", cinco dígitos);
+- a da PP paga em parte (a parcela aberta continua título e entra pela regra
+  de sempre).
+
+**No código:**
+- `lib/conciliacao/planilha-de-titulo.ts`: `codigosDePp` e `eDePpPaga`
+  (testes em `planilha-de-titulo.test.ts`);
+- `app/(app)/financeiro/conciliacao/banco-dados.ts`: `ppsPagasDaPlanilha`
+  busca as PPs pagas que a planilha da conta cita (só PP-00001 a PP-09999,
+  em partes de 200, junto das outras consultas da conta) e tira as linhas
+  delas de `previsoes` e `historico`.
+
+Sem migration.
+
+**Conferido (23/11, na produção, só leitura, California Santander):** as
+linhas da planilha das PPs pagas PP-00360, PP-00365, PP-00483, PP-00696 e
+PP-00384 não estão mais na página. Continuam: as sem título ("Locação de 106
+barricadas"), as devoluções, a do reembolso que cita a PP-01020 aberta e as
+da numeração antiga. Console e servidor sem erro novo.
+
+**Fica para decidir:** a baixa à mão, no Contas a Pagar, de PP cuja linha da
+planilha já está conciliada com o banco (o mesmo pagamento duas vezes, pelo
+outro lado: foram assim as 6 dobras de 19/11).
