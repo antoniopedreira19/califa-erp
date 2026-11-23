@@ -369,7 +369,12 @@ export async function listarJobsDoFinanceiro(
     const datas = datasPor.get(j.id);
     const impostoRealizado = impostoRealizadoPor.get(j.id) ?? 0;
     // Faturado o job, os impostos são os das notas (decisão 248).
-    const faturado = fat.situacao === "faturado" || fat.situacao === "liquidado" || fat.situacao === "inadimplente";
+    // Decisão 268: o "Parcial" também já tem nota; "Liquidado" virou "Recebido".
+    const faturado =
+      fat.situacao === "faturado" ||
+      fat.situacao === "parcial" ||
+      fat.situacao === "recebido" ||
+      fat.situacao === "inadimplente";
 
     return {
       id: j.id,

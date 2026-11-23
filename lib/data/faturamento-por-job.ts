@@ -6,6 +6,7 @@ import {
   type TituloDaNota,
 } from "@/lib/calculos/esteira-faturamento";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
+import { todasAsLinhas } from "@/lib/supabase/todas-as-linhas";
 
 /**
  * Onde cada job está na esteira do faturamento, para um lote de jobs.
@@ -52,6 +53,14 @@ export interface FaturamentoDoJob {
    *  decisão 248) e quantas notas emitidas ele tem. */
   data_primeira_nota: string | null;
   notas_emitidas: number;
+  /**
+   * Decisão 268: o previsto contra o qual se mede o "Parcial" — o do job no
+   * envio único (o valor do envio, ou o faturamento previsto quando o
+   * financeiro faturou pelo Novo faturamento); no mensal, o dos meses já
+   * enviados ou faturados pelo financeiro. Nulo sem nota. Com `valor`, dá o
+   * "R$ X de R$ Y · falta R$ Z" do selo.
+   */
+  valor_previsto: number | null;
 }
 
 /**
@@ -92,7 +101,7 @@ export async function notasEmitidasDosJobs(
   if (jobIds) itensQuery = itensQuery.in("origem_id", jobIds);
 
   // Título cancelado fica de fora: não é dinheiro a receber nem
-  // recebido, então não pesa em liquidado nem em inadimplente.
+  // recebido, então não pesa em recebido nem em inadimplente.
   const titulosQuery = () =>
     supabase
       .from("titulos_receber")
@@ -225,6 +234,20 @@ export async function faturamentoPorJob(
   // (decisão 256) fecham o mês como o envio do GP. Só as notas do mês
   // (`mes_novo_faturamento`) — a do job inteiro não é de mensal. Poucas
   // linhas, no índice parcial `idx_faturamentos_pelo_financeiro`.
+  // Decisão 268: o faturamento previsto de cada job, a régua do "Parcial"
+  // no envio único faturado pelo Novo faturamento (sem envio). Uma linha por
+  // job, lida inteira (`todasAsLinhas`): o tenant passa de mil jobs um dia.
+  const previstoDosJobs = todasAsLinhas<{ id: string; faturamento_previsto: number | string | null }>(
+    (de, ate) => {
+      let q = supabase
+        .from("jobs")
+        .select("id, faturamento_previsto")
+        .eq("tenant_id", tenantId)
+        .gt("faturamento_previsto", 0.004);
+      if (jobIds) q = q.in("id", jobIds);
+      return q.order("id").range(de, ate);
+    },
+  );
   let novoPorMesQuery = supabase
     .from("faturamentos")
     .select("mes_novo_faturamento, previsto_do_mes, itens:faturamento_itens!inner(origem_id)")
@@ -252,6 +275,7 @@ export async function faturamentoPorJob(
     consumosDecididosRes,
     semFaturamentoRes,
     novoPorMesRes,
+    previstoRes,
   ] = await Promise.all([
     enviosQuery,
     notasEmitidasDosJobs(tenantId, jobIds),
@@ -260,6 +284,7 @@ export async function faturamentoPorJob(
     consumosDecididosQuery,
     semFaturamentoQuery,
     novoPorMesQuery,
+    previstoDosJobs,
   ]);
 
   if (enviosRes.error) {
@@ -268,6 +293,12 @@ export async function faturamentoPorJob(
   if (novoPorMesRes.error) {
     console.error("[faturamento-por-job.novo_por_mes]", novoPorMesRes.error.message);
   }
+  if (previstoRes.error) {
+    console.error("[faturamento-por-job.previsto]", previstoRes.error.message);
+  }
+  const previstoPorJob = new Map<string, number>(
+    previstoRes.data.map((j) => [j.id, Number(j.faturamento_previsto ?? 0)]),
+  );
 
   // Um envio por job — ou um por mês nos jobs do modelo mensal (decisão
   // 078). Com vários, o valor enviado é a soma e a data é a do primeiro.
@@ -296,7 +327,7 @@ export async function faturamentoPorJob(
   // "enviado" do mês é o `previsto_do_mes` (o previsto que o mês tinha no
   // dia da nota), e não o valor da nota — a mesma régua do banco em
   // `job_faturamento_todo_enviado`. Com o valor da nota, todo Novo se
-  // cobriria sozinho e o job iria a "Liquidado" com o saldo do mês ainda
+  // cobriria sozinho e o job iria a "Recebido" com o saldo do mês ainda
   // na fila do financeiro; com o previsto, o Novo abaixo do previsto fica
   // como o envio com parcela sem nota: falta faturar. Várias notas no mesmo
   // mês (a do saldo) levam o maior previsto, como no banco.
@@ -388,7 +419,7 @@ export async function faturamentoPorJob(
     const envio = envioPorJob.get(jobId);
     const notas = notasPorJob.get(jobId) ?? [];
 
-    // Job mensal: só liquida com todos os meses enviados e as notas
+    // Job mensal: só fica recebido com todos os meses enviados e as notas
     // cobrindo tudo o que foi enviado.
     // Decisão 265: o mês fechado pelo Novo faturamento conta como mês
     // enviado, pelo previsto dele; o envio do mesmo mês (se houver) sai da
@@ -408,12 +439,26 @@ export async function faturamentoPorJob(
       (mensais < (mesesPorJob.get(jobId)?.size ?? 0) ||
         parteNasNotas < valorEnviado - 0.01);
 
+    // Decisão 268: "Parcial" quando as notas somam menos que o previsto
+    // (tolerância de R$ 0,05). No mensal, a régua é o que já foi enviado ou
+    // faturado pelo financeiro — mês ainda não enviado não é saldo. No envio
+    // único, o valor do envio (o previsto congelado no dia do envio) ou, sem
+    // envio, o faturamento previsto do job (Novo faturamento).
+    const previsto =
+      mensais > 0
+        ? valorEnviado
+        : envio && envio.valor > 0.004
+          ? envio.valor
+          : (previstoPorJob.get(jobId) ?? 0);
+    const parcial = notas.length > 0 && previsto > 0.004 && parteNasNotas < previsto - 0.05;
+
     const consolidado = consolidarNotasDoJob(
       notas,
       !!envio,
       hoje,
       nadaAFaturar.has(jobId) && !envio,
       faltaFaturar,
+      parcial,
     );
 
     mapa.set(jobId, {
@@ -429,6 +474,7 @@ export async function faturamentoPorJob(
           .filter((d): d is string => !!d)
           .sort()[0] ?? null,
       notas_emitidas: notas.length,
+      valor_previsto: notas.length > 0 ? Math.round(previsto * 100) / 100 : null,
     });
   }
 
@@ -445,4 +491,5 @@ export const FATURAMENTO_VAZIO: FaturamentoDoJob = {
   vencimento_em_aberto: null,
   data_primeira_nota: null,
   notas_emitidas: 0,
+  valor_previsto: null,
 };

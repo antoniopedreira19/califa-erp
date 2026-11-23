@@ -9212,3 +9212,11 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Agora:** ao lado do campo, o "+" abre "Criar projeto para este job" (nome conferido na hora, "Criar e vincular"); com o projeto escolhido vira lápis (o novo troca o nome reservado; o que já existe é renomeado na hora, para todos os jobs dele); o ✕ do campo limpa e devolve o "+". O "Criar projeto …" da busca da lista confere o nome do mesmo jeito. Trocar a empresa tira só o projeto de outra empresa; o novo fica.
 - **Conferido no Sandbox:** nome repetido recusado ("Já existe um projeto com este nome…"), lápis, ✕, busca, e o TES-1040/26 criado com o projeto novo F-0039/26.
 
+
+
+## ⚠️ Nota de 2026-11-22 — "Parcial" na situação do faturamento e "Liquidado" vira "Recebido" (decisão 268)
+
+- **Antes:** no envio único, o job faturado em parte (parcela do envio sem nota, ou Novo faturamento abaixo do previsto) saía "Faturado" e virava "Liquidado" com os títulos pagos, mesmo com saldo por faturar.
+- **Agora:** "Parcial" quando as notas somam menos que o previsto (R$ 0,05 de tolerância; no mensal, o que já foi enviado ou faturado pelo financeiro). Ordem: Inadimplente > Parcial > Faturado > Recebido. "Liquidado" passa a "Recebido".
+- **Onde:** selo do cabeçalho do job no financeiro (com a dica "Faturado parcialmente: R$ X de R$ Y · falta R$ Z"), filtros e resumo da Abertura › Abertos (filtro "Parcial" entre Faturado e Recebido), coluna "Faturamento do job" das PPs do Contas a Pagar e a exportação da Abertura. Barra da produção e Contas a Receber ficam como estão.
+- **Conferido no Sandbox:** TES-1006/26 "Parcial" antes e depois da baixa do título da NF 248 (R$ 80.000,00). Sem migration.

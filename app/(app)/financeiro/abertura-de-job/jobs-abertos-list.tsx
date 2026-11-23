@@ -40,20 +40,24 @@ const TODOS = "Todos";
  * Chips da esteira do faturamento. Cada job cai em exatamente um — a
  * decisão de 14/08/2026 foi trocar "Aguardando encerramento", que se
  * sobrepunha a "Faturado", pelos dois estados de dinheiro: recebido
- * (`Liquidado`) e vencido sem receber (`Inadimplente`).
+ * (`Recebido`, que até 22/11/2026 se chamava "Liquidado") e vencido sem
+ * receber (`Inadimplente`). Decisão 268: "Parcial", entre Faturado e
+ * Recebido, para o job com nota mas com saldo por faturar.
  */
 type Chip =
   | "todos"
   | "aguardando_faturamento"
   | "faturado"
-  | "liquidado"
+  | "parcial"
+  | "recebido"
   | "inadimplente";
 
 const CHIPS: { key: Chip; rotulo: string }[] = [
   { key: "todos", rotulo: "Todos" },
   { key: "aguardando_faturamento", rotulo: "Aguardando faturamento" },
   { key: "faturado", rotulo: "Faturado" },
-  { key: "liquidado", rotulo: "Liquidado" },
+  { key: "parcial", rotulo: "Parcial" },
+  { key: "recebido", rotulo: "Recebido" },
   { key: "inadimplente", rotulo: "Inadimplente" },
 ];
 
@@ -734,10 +738,10 @@ export function JobsAbertosList({
 
   const totalAguardando = soma(aguardandoFaturamento);
   const totalFaturado = soma((j) => !aguardandoFaturamento(j));
-  // Liquidado e inadimplente são recortes DENTRO do faturado. Só aparecem
+  // Recebido e inadimplente são recortes DENTRO do faturado. Só aparecem
   // quando existem — enquanto o módulo de recebimento não roda, a linha
-  // fica igual à do design.
-  const totalLiquidado = soma((j) => j.situacao_faturamento === "liquidado");
+  // fica igual à do design. (Recebido era "Liquidado" até a decisão 268.)
+  const totalRecebido = soma((j) => j.situacao_faturamento === "recebido");
   const totalInadimplente = soma(
     (j) => j.situacao_faturamento === "inadimplente",
   );
@@ -974,13 +978,13 @@ export function JobsAbertosList({
             {formatCurrency(totalAguardando)}
           </strong>
         </span>
-        {totalLiquidado > 0 && (
+        {totalRecebido > 0 && (
           <>
             <span className="h-3 w-px bg-[#dcdcdc]" />
             <span>
-              Liquidado{" "}
+              Recebido{" "}
               <strong className="tabular-nums text-emerald-700">
-                {formatCurrency(totalLiquidado)}
+                {formatCurrency(totalRecebido)}
               </strong>
             </span>
           </>

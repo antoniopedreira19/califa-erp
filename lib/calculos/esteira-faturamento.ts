@@ -8,7 +8,7 @@
  */
 
 /**
- * Onde o job está na esteira. Os seis estados são exclusivos entre si —
+ * Onde o job está na esteira. Os sete estados são exclusivos entre si —
  * cada job está em exatamente um.
  *
  * - `sem_faturamento`: o job não tem nada a faturar — faturamento previsto
@@ -17,17 +17,23 @@
  *   Não há envio nem nota; ele sai da esteira (decisão 105, 25/09/2026).
  * - `aguardando_envio`: a produção ainda não liberou o job.
  * - `enviado`: liberado, esperando o financeiro emitir a nota.
- * - `faturado`: nota emitida, dinheiro ainda dentro do prazo.
+ * - `faturado`: nota emitida cobrindo o job, dinheiro ainda dentro do prazo.
+ * - `parcial`: nota emitida, mas as notas somam menos que o previsto — o
+ *   envio único com parcela sem nota, o Novo faturamento abaixo do
+ *   previsto, ou, no mensal, mês enviado (ou faturado pelo financeiro) com
+ *   saldo. Vale mesmo com os títulos pagos (decisão 268).
  * - `inadimplente`: nota emitida e parcela vencida sem recebimento.
- * - `liquidado`: tudo recebido.
+ * - `recebido`: tudo faturado e recebido. Até 22/11/2026 chamava-se
+ *   `liquidado` (decisão 268).
  */
 export type SituacaoFaturamento =
   | "sem_faturamento"
   | "aguardando_envio"
   | "enviado"
   | "faturado"
+  | "parcial"
   | "inadimplente"
-  | "liquidado";
+  | "recebido";
 
 /** Título a receber, na forma mínima de que a classificação precisa. */
 export interface TituloDaNota {
@@ -63,6 +69,10 @@ export function classificarFaturamento(
    *  enviado ou não faturado inteiro. As notas emitidas até aqui podem estar
    *  todas pagas, mas o job não recebeu tudo: fica em `faturado`. */
   faltaFaturar = false,
+  /** Decisão 267: as notas somam menos que o previsto do job (no mensal,
+   *  que o dos meses enviados ou faturados pelo financeiro). Fica atrás só
+   *  do inadimplente: vale mesmo com os títulos pagos. */
+  parcial = false,
 ): SituacaoFaturamento {
   if (nadaAFaturar && !temNota) return "sem_faturamento";
   if (!temNota) return temEnvio ? "enviado" : "aguardando_envio";
@@ -71,10 +81,13 @@ export function classificarFaturamento(
 
   // Uma parcela vencida basta: o job inteiro está em atraso, mesmo que as
   // outras já tenham sido recebidas. Por isso `inadimplente` é testado
-  // antes de `liquidado`.
+  // antes de tudo. Depois, o `parcial` (decisão 268): com saldo por
+  // faturar, o job não é "faturado" nem "recebido", ainda que tudo o que já
+  // saiu em nota esteja pago.
   if (emAberto.some((t) => t.vencimento < hoje)) return "inadimplente";
+  if (parcial) return "parcial";
   if (titulos.length > 0 && emAberto.length === 0) {
-    return faltaFaturar ? "faturado" : "liquidado";
+    return faltaFaturar ? "faturado" : "recebido";
   }
 
   // Nota emitida e nada vencido. Inclui a nota cujas parcelas ainda não
@@ -141,6 +154,8 @@ export function consolidarNotasDoJob(
   hoje: string,
   nadaAFaturar = false,
   faltaFaturar = false,
+  /** Decisão 267: as notas somam menos que o previsto. */
+  parcial = false,
 ): NotasConsolidadas {
   const ordenadas = [...notas].sort(
     (a, b) =>
@@ -171,6 +186,7 @@ export function consolidarNotasDoJob(
       hoje,
       nadaAFaturar,
       faltaFaturar,
+      parcial,
     ),
     valor_faturado:
       ordenadas.length > 0

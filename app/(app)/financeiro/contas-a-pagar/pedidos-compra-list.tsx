@@ -381,8 +381,9 @@ const ORDEM_DO_FATURAMENTO: SituacaoFaturamento[] = [
   "aguardando_envio",
   "enviado",
   "faturado",
+  "parcial",
   "inadimplente",
-  "liquidado",
+  "recebido",
   "sem_faturamento",
 ];
 

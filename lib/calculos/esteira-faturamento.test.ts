@@ -97,13 +97,13 @@ test("NF agrupada: o recebido é rateado pela parte do job", () => {
   assert.ok(Math.abs(j29.valor_recebido + j33.valor_recebido - 72908.66) <= 0.01);
 });
 
-test("NF agrupada: só liquida quando todos os títulos da nota estão pagos", () => {
+test("NF agrupada: só fica recebido quando todos os títulos da nota estão pagos", () => {
   const pagos = [
     { valor: 72908.66, vencimento: "2026-08-10", status: "pago" },
     { valor: 72908.66, vencimento: "2026-09-10", status: "pago" },
   ];
   const j29 = consolidarNotasDoJob([agrupada(31919.72, pagos)], true, HOJE);
-  assert.equal(j29.situacao, "liquidado");
+  assert.equal(j29.situacao, "recebido");
   assert.equal(j29.valor_recebido, 31919.72);
   assert.equal(j29.vencimento_em_aberto, null);
 });
@@ -195,9 +195,9 @@ test("vencer hoje não é inadimplência (regra antiga preservada)", () => {
   );
 });
 
-test("job mensal com mês a faturar não liquida, mesmo com as notas pagas (078)", () => {
+test("job mensal com mês a faturar não fica recebido, mesmo com as notas pagas (078)", () => {
   const pago = [{ valor: 100, vencimento: "2026-10-20", status: "pago" }];
-  assert.equal(classificarFaturamento(true, true, pago, "2026-11-01"), "liquidado");
+  assert.equal(classificarFaturamento(true, true, pago, "2026-11-01"), "recebido");
   assert.equal(
     classificarFaturamento(true, true, pago, "2026-11-01", false, true),
     "faturado",
@@ -208,4 +208,55 @@ test("job mensal com mês a faturar não liquida, mesmo com as notas pagas (078)
     classificarFaturamento(true, true, vencido, "2026-11-01", false, true),
     "inadimplente",
   );
+});
+
+// ---- Decisão 268: o "Parcial" ----------------------------------------------
+// Ex.: TES-1006/26 no Sandbox — R$ 80.000,00 faturados de R$ 134.269,91.
+
+test("parcial: nota abaixo do previsto, título em aberto no prazo", () => {
+  const aberto = [{ valor: 80000, vencimento: "2026-12-15", status: "em_aberto" }];
+  assert.equal(
+    classificarFaturamento(true, false, aberto, "2026-11-22", false, false, true),
+    "parcial",
+  );
+});
+
+test("parcial: não vira recebido com o título pago, enquanto houver saldo", () => {
+  const pago = [{ valor: 80000, vencimento: "2026-12-15", status: "pago" }];
+  assert.equal(
+    classificarFaturamento(true, false, pago, "2026-11-22", false, false, true),
+    "parcial",
+  );
+  // Sem saldo, o mesmo título pago é recebido.
+  assert.equal(classificarFaturamento(true, false, pago, "2026-11-22"), "recebido");
+});
+
+test("parcial: título vencido ainda manda (inadimplente vem antes)", () => {
+  const vencido = [{ valor: 80000, vencimento: "2026-11-10", status: "em_aberto" }];
+  assert.equal(
+    classificarFaturamento(true, false, vencido, "2026-11-22", false, false, true),
+    "inadimplente",
+  );
+});
+
+test("parcial: sem nota continua enviado ou aguardando envio", () => {
+  assert.equal(classificarFaturamento(false, true, [], "2026-11-22", false, false, true), "enviado");
+  assert.equal(
+    classificarFaturamento(false, false, [], "2026-11-22", false, false, true),
+    "aguardando_envio",
+  );
+});
+
+test("parcial: a consolidação das notas repassa a marca", () => {
+  const nota: NotaDoJob = {
+    id: "nf-248",
+    numero: "248",
+    data_emissao: "2026-11-15",
+    valor_total: 80000,
+    parte_do_job: 80000,
+    titulos: [{ valor: 80000, vencimento: "2026-12-15", status: "em_aberto" }],
+  };
+  const r = consolidarNotasDoJob([nota], false, "2026-11-22", false, false, true);
+  assert.equal(r.situacao, "parcial");
+  assert.equal(r.valor_faturado, 80000);
 });

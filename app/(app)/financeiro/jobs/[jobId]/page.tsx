@@ -64,7 +64,7 @@ import {
 import { comOServicoDoJob, servicosDoOrcamentoQuery } from "@/lib/data/servicos";
 import { trimestreDe } from "../../abertura-de-job/curva";
 import { formatDataAsHoraBr, formatDataHoraBr } from "../../abertura-de-job/formatos";
-import { SITUACAO_META } from "../../abertura-de-job/situacao-faturamento";
+import { SITUACAO_META, dicaDaSituacao } from "../../abertura-de-job/situacao-faturamento";
 import { carregarLinhasDeFluxo, carregarPrazosDosJobs } from "./fluxo-do-job";
 import { FluxoCaixaJobs } from "@/components/financeiro/fluxo-caixa-jobs";
 import { JobFinanceiroTabs } from "./job-financeiro-tabs";
@@ -340,7 +340,8 @@ export default async function JobNoFinanceiroPage({
   // Agora é `faturamentoPorJob` com o filtro deste job: notas pelos itens
   // (decisão 075), envios por mês e o mensal que não liquida com mês por
   // faturar (decisão 078), e o job pago só por save (decisão 028 §11).
-  const situacao = (esteira.get(params.jobId) ?? FATURAMENTO_VAZIO).situacao;
+  const faturamentoDoJob = esteira.get(params.jobId) ?? FATURAMENTO_VAZIO;
+  const situacao = faturamentoDoJob.situacao;
 
   // ---- "Editar orçado" (decisão 115) ----
   // Administrador e financeiro, do job aberto até a primeira nota — mesmo
@@ -352,8 +353,9 @@ export default async function JobNoFinanceiroPage({
   const envioUnico = detalhe.faturamentoEnvioUnico;
   const temNotaEmitida =
     situacao === "faturado" ||
+    situacao === "parcial" ||
     situacao === "inadimplente" ||
-    situacao === "liquidado" ||
+    situacao === "recebido" ||
     (envioUnico?.faturado ?? 0) > 0.004;
   const edicaoDoFinanceiro: EdicaoDoFinanceiro | null =
     pode(session.activeRole, "jobs.editar_orcado_financeiro") &&
@@ -390,6 +392,8 @@ export default async function JobNoFinanceiroPage({
         }
       : null;
   const situacaoMeta = SITUACAO_META[situacao];
+  // Decisão 268: no "Parcial", quanto saiu em nota e quanto falta.
+  const dicaDoSelo = dicaDaSituacao(faturamentoDoJob);
 
   // ---- Formulário de abertura em leitura (ou em revisão) ----
   // O custo previsto é o da PLANILHA DE HOJE, não o que a abertura gravou
@@ -528,7 +532,10 @@ export default async function JobNoFinanceiroPage({
               <Badge className={cn("border", jobStatusBadgeClasses(statusExibido))}>
                 {jobStatusLabel(statusExibido)}
               </Badge>
-              <Badge className={cn("border", situacaoMeta.classes)}>
+              <Badge
+                className={cn("border", situacaoMeta.classes)}
+                title={dicaDoSelo ?? undefined}
+              >
                 {situacaoMeta.rotulo}
               </Badge>
               <SeloMidiaSystem midia={midiaDoJob} />

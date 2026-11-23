@@ -1,4 +1,5 @@
 import type { SituacaoFaturamento } from "@/lib/calculos/esteira-faturamento";
+import { formatCurrency } from "@/lib/utils";
 
 /**
  * Rótulo e cor de cada situação da esteira de faturamento.
@@ -13,8 +14,9 @@ export const SITUACAO_META: Record<
   SituacaoFaturamento,
   { rotulo: string; classes: string }
 > = {
-  liquidado: {
-    rotulo: "Liquidado",
+  // Decisão 268: era "Liquidado".
+  recebido: {
+    rotulo: "Recebido",
     classes: "border-emerald-200 bg-emerald-50 text-emerald-700",
   },
   // Inadimplente é o único estado que exige ação hoje — usa o vermelho da
@@ -26,6 +28,11 @@ export const SITUACAO_META: Record<
   faturado: {
     rotulo: "Faturado",
     classes: "border-blue-200 bg-blue-50 text-blue-700",
+  },
+  // Decisão 268: faturado em parte — a nota saiu, mas falta faturar.
+  parcial: {
+    rotulo: "Parcial",
+    classes: "border-indigo-200 bg-indigo-50 text-indigo-700",
   },
   enviado: {
     rotulo: "Enviado",
@@ -42,3 +49,17 @@ export const SITUACAO_META: Record<
     classes: "border-border bg-transparent text-muted-foreground",
   },
 };
+
+/**
+ * Decisão 268: a dica do selo "Parcial" — "Faturado parcialmente: R$ X de
+ * R$ Y · falta R$ Z". Nula fora do parcial ou sem os dois valores.
+ */
+export function dicaDaSituacao(f: {
+  situacao: SituacaoFaturamento;
+  valor: number | null;
+  valor_previsto: number | null;
+}): string | null {
+  if (f.situacao !== "parcial" || f.valor === null || f.valor_previsto === null) return null;
+  const falta = Math.max(0, Math.round((f.valor_previsto - f.valor) * 100) / 100);
+  return `Faturado parcialmente: ${formatCurrency(f.valor)} de ${formatCurrency(f.valor_previsto)} · falta ${formatCurrency(falta)}`;
+}

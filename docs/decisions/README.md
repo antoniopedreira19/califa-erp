@@ -280,6 +280,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 263 | [O envio em lote parecido com o envio de um job: cada nota num cartão, os jobs marcados na própria nota](263-envio-em-lote-como-o-envio-de-um-job.md) | 2026-11-16 |
 | 265 | ["+ Faturamento" com um formulário só: o Job é o Novo faturamento, e ele trava a planilha](265-mais-faturamento-um-formulario-so.md) | 2026-11-17 |
 | 266 | [Job de Pagamentos: o financeiro cria um job aberto, só para lançar custos](266-job-de-pagamentos.md) | 2026-11-18 |
+| 268 | ["Parcial" na situação do faturamento do job, e "Liquidado" vira "Recebido"](268-faturamento-parcial-e-recebido.md) | 2026-11-22 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -292,4 +293,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 267**. (A 264 existe na pasta e ainda não está nesta tabela.) (A 240 está em uso por outra frente, ainda sem arquivo neste índice.) (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 269**. (A 267 existe na pasta e ainda não está nesta tabela.) (A 264 existe na pasta e ainda não está nesta tabela.) (A 240 está em uso por outra frente, ainda sem arquivo neste índice.) (091 e 092 existem na pasta e ainda não estão nesta tabela.)
