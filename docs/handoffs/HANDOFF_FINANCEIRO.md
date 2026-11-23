@@ -9370,3 +9370,15 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Onde:** Impostos a Pagar (detalhes, e o link "Já foi paga e está no histórico da planilha?" na baixa); a caixa "Já foi paga" na Guia da contabilidade e no painel de aprovação (só guia de um título). A tela confere com as linhas de imposto do histórico na conta e no dia (`lib/fiscal/pago-no-historico.ts`; "PIS CRÉDITO" soma no "PIS").
 - **Status:** "Pago dd/mm · no histórico" na planilha de títulos (`LinhaDaPlanilha.pagoNoHistorico`, obrigatório; falso fora do imposto).
 - Conferido no Sandbox (marcar, desfazer, guia da contabilidade já paga, aprovação já paga; zero lançamentos). Próximo: as 52 guias do 4º trimestre, uma a uma com a planilha.
+
+## ⚠️ Nota de 2026-11-23 — a troca de carga do histórico preserva as ligações (fechamento do 3T)
+
+- Migration `20261123980001_troca_de_carga_preserva_ligacoes.sql`, aplicada:
+  `historico_concluir_carga` passa a ligação com a baixa
+  (`historico_movimento_baixas`) para a linha nova da versão seguinte, pela
+  digital, conta e valor ou pela herdeira pelo conteúdo, e recusa a troca se
+  alguma ligação ficaria sem linha (antes, sumia em cascata). A cauda herda a
+  ligação com o banco também pelo conteúdo, como as previsões. O retorno e a
+  auditoria ganham `baixas_herdadas`.
+- Motivo: unificar as cargas do histórico numa versão só para o fechamento
+  do 3T (decisão 211, seção de 23/11).

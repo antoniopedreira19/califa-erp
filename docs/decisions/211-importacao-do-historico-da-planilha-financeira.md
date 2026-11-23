@@ -19,7 +19,9 @@ Toda diferença entre o sistema e a planilha fica no registro
 `docs/divergencias-sistema-planilha.md` (02/11/2026), com o código DIV que
 aparece ao lado das frases desta decisão. As previsões da planilha entraram no
 sistema pela decisão 232 (02/11/2026): "Só o realizado" continua a visão padrão
-da DRE, e o seletor mostra também as previsões.
+da DRE, e o seletor mostra também as previsões. Revista em 23/11/2026 para o
+fechamento do 3T: as cinco cargas trocadas pela mesma versão da planilha, e o
+fechamento lê a DRE com previsões (seção "O fechamento do 3T").
 **Quem decidiu:** Tiago, no plano "Importação do histórico financeiro"
 (página privada de 25/10/2026), com as respostas D1, D2 e D3 dadas no mesmo
 dia: "Aprovo D1, D2 e D3 como você recomendou".
@@ -1760,3 +1762,55 @@ depois vamos preenchendo as lacunas por aqui". O Tiago traz os extratos atualiza
   termina em −R$ 2.385.446,73, onde novembro começa. A ContaMax fecha em
   R$ 414.229,23 na véspera e chega aos R$ 305.266,11 da lista. O Fundo Fixo
   (sem a marca) segue com os dois blocos.
+
+## O fechamento do 3T: as cargas numa versão só (23/11/2026)
+
+Pedido do Tiago (23/11): fechar o 3T como na planilha de fechamento, com a
+DRE do sistema igual à dela, e "unificar os lançamentos". Decidido no mesmo
+dia: **o fechamento lê a DRE "Com previsões"** (competência: o que o 3T ainda
+vai receber e pagar entra no trimestre), e todos os lançamentos do 3T já estão
+na planilha.
+
+- **O que separava o sistema da planilha:** as cargas vinham de três versões
+  (até 30/09 da de 25/10; outubro da de 01/11; previsões da de 22/11), e a
+  planilha seguiu mudando o 3T. Na versão de 23/11 (19:40), as abas DRE da
+  planilha financeira e do Fechamento são iguais em todas as linhas do 3T.
+- **A unificação:** as cinco cargas (1ª carga, 3T, a cauda e o só DRE de
+  outubro, as previsões desde 02/11) saem da mesma versão. A lista do só DRE
+  usa o id da linha, que muda entre versões: ela é refeita pela digital (e
+  pelo conteúdo: conta, data, valor e grupo, quando é única), e entra também
+  toda linha de outubro com efeito no DRE que a cauda não leva, para que
+  nada fique de fora do resultado.
+- **A troca preserva as ligações** (migration
+  `20261123980001_troca_de_carga_preserva_ligacoes.sql`): a ligação da linha
+  com a baixa do sistema (`historico_movimento_baixas`, decisão 270) passa para
+  a linha nova com a mesma digital, conta e valor, ou para a herdeira pelo
+  conteúdo; antes ela era apagada em cascata com a linha antiga. Se uma
+  ligação com baixa ficaria sem linha, a troca é recusada. A cauda passa a
+  herdar a ligação com o banco também pelo conteúdo, como as previsões
+  (20261115850002); a ligada sem herdeira continua a sair, para não contar
+  duas vezes.
+- **Simulado antes da carga:** com os cinco pacotes novos, a DRE de 2026 do
+  sistema (com previsões) é igual à planilha recalculada pela regra em todas
+  as células das quatro empresas. No 3T, CCH, Hitlab e Ventura batem com o
+  Fechamento ao centavo; a California fica R$ 4.800,00 abaixo (um lançamento
+  "CO  3T 2026", com espaço duplo, que a planilha não soma, DIV-015). As
+  outras diferenças do 3T ficam abaixo do lucro líquido e já estão no
+  registro: distribuição de lucro (DIV-001), empréstimo à Hitlab (DIV-007) e
+  o espaço sobrando em "CMH 3T 2026 " (DIV-015).
+- **Carregado em 23/11/2026 (20:28 a 20:33, pela tela, sessão do Tiago):**
+  1ª carga 56.716 movimentos, 3T 7.339, cauda 1.972, só DRE 409, previsões
+  4.524, todas da versão de 23/11 (19:40). As 60 ligações com baixa passaram
+  para as linhas novas. Previsões: 737 ligações com o banco herdadas pela
+  digital e 2 mantidas. Cauda: 1.598 pela digital e 53 pelo conteúdo; de
+  1.695 ligadas, ficam 1.642, e 53 linhas de outubro (antes do início das
+  contas, em 03/11) voltam a pendentes. Conferido no banco e na tela
+  (Relatórios › DRE do histórico, 2026, com previsões): no 3T, lucro líquido
+  de R$ 3.113.278,41 na California, R$ 723.917,99 na CCH, R$ 1.972.490,15 na
+  Hitlab e −R$ 161.017,15 na Ventura, iguais à simulação.
+- **Fica para o 4T:** as 2 previsões mantidas não estão na planilha de 23/11
+  e vêm de trocas anteriores: um crédito de R$ 254.003,51 em despesa
+  administrativa (4T, 03/11) e R$ 90,43 de receita da CCH (4T, 09/11, numa
+  linha do banco de R$ 2.490,21 que a planilha agora dá como R$ 2.399,78).
+  Na DRE do 4T elas tiram R$ 254.003,51 da despesa administrativa e põem
+  R$ 90,43 na receita da CCH, até a conciliação decidir.
