@@ -101,8 +101,19 @@ export async function criarDependente(
 
 const editarDepSchema = z.object({
   dependenteId: z.string().uuid(),
-  nome: z.string().min(2).max(200),
-  parentesco: z.string().min(1).max(50),
+  nome: z.string().min(2, "Nome é obrigatório.").max(200),
+  cpf: z
+    .string()
+    .transform(limparCpf)
+    .refine((v) => v.length === 11, "CPF precisa de 11 dígitos."),
+  dataNascimento: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data de nascimento inválida.")
+    .refine(
+      (v) => v <= new Date().toISOString().slice(0, 10),
+      "Data de nascimento não pode ser futura.",
+    ),
+  parentesco: z.string().min(1, "Parentesco é obrigatório.").max(50),
   observacao: z.string().max(500).optional().nullable(),
 });
 
@@ -117,29 +128,42 @@ export async function editarDependente(
   if (!parsed.success) {
     return { ok: false, message: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
+  const d = parsed.data;
 
   const supabase = createClient();
   const { error } = await supabase
     .from("dependentes")
     .update({
-      nome: parsed.data.nome,
-      parentesco: parsed.data.parentesco,
-      observacao: parsed.data.observacao || null,
+      nome: d.nome,
+      cpf: d.cpf,
+      data_nascimento: d.dataNascimento,
+      parentesco: d.parentesco,
+      observacao: d.observacao || null,
     })
-    .eq("id", parsed.data.dependenteId)
+    .eq("id", d.dependenteId)
     .eq("tenant_id", session.activeTenant.id);
 
-  if (error) return { ok: false, message: `Erro ao editar: ${error.message}` };
+  if (error) {
+    if (error.code === "23505") {
+      return {
+        ok: false,
+        message:
+          "Este CPF já está cadastrado como dependente de outro colaborador neste tenant.",
+      };
+    }
+    return { ok: false, message: `Erro ao editar: ${error.message}` };
+  }
 
   await logAuditEvent({
     acao: "beneficio.dependente.editado",
     tenantId: session.activeTenant.id,
     entidadeTipo: "dependente",
-    entidadeId: parsed.data.dependenteId,
+    entidadeId: d.dependenteId,
+    metadata: { parentesco: d.parentesco },
   });
 
   revalidatePath("/rh/beneficios");
-  return { ok: true, id: parsed.data.dependenteId };
+  return { ok: true, id: d.dependenteId };
 }
 
 const desativarDepSchema = z.object({

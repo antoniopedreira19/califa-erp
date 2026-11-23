@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, X } from "lucide-react";
+import { CheckCircle, Pencil, Plus, X } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -25,6 +25,7 @@ import {
   incluirDepEmPlano,
   removerDepDePlano,
 } from "@/lib/actions/beneficios/dependentes";
+import { ModalEditarDependente } from "./modal-editar-dependente";
 
 const formatarData = (iso: string | null) => {
   if (!iso) return "—";
@@ -52,6 +53,15 @@ export function TabDependentes({
     (d) => !d.ativo || d.data_fim !== null,
   );
 
+  const [editando, setEditando] = useState<DependenteComPlanos | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2600);
+    return () => clearTimeout(t);
+  }, [toast]);
+
   return (
     <div className="space-y-5">
       {ativos.length === 0 && inativos.length === 0 && (
@@ -71,6 +81,7 @@ export function TabDependentes({
                 key={d.id}
                 dependente={d}
                 vinculosAtivos={vinculosAtivos}
+                onEditar={() => setEditando(d)}
               />
             ))}
           </div>
@@ -88,10 +99,27 @@ export function TabDependentes({
                 key={d.id}
                 dependente={d}
                 vinculosAtivos={vinculosAtivos}
+                onEditar={null}
               />
             ))}
           </div>
         </section>
+      )}
+
+      <ModalEditarDependente
+        open={editando !== null}
+        onOpenChange={(o) => {
+          if (!o) setEditando(null);
+        }}
+        dependente={editando}
+        onSucesso={(nome) => setToast(`Dependente ${nome} atualizado.`)}
+      />
+
+      {toast && (
+        <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-elevated">
+          <CheckCircle className="h-4 w-4" />
+          {toast}
+        </div>
       )}
     </div>
   );
@@ -100,9 +128,11 @@ export function TabDependentes({
 function LinhaDependente({
   dependente,
   vinculosAtivos,
+  onEditar,
 }: {
   dependente: DependenteComPlanos;
   vinculosAtivos: VinculoDoColaborador[];
+  onEditar: (() => void) | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -200,14 +230,27 @@ function LinhaDependente({
           </div>
         </div>
         {ativo && (
-          <button
-            type="button"
-            onClick={desativar}
-            disabled={pending}
-            className="text-xs font-medium text-red-600 hover:underline"
-          >
-            Desativar
-          </button>
+          <div className="flex shrink-0 items-center gap-3 text-xs font-medium">
+            {onEditar && (
+              <button
+                type="button"
+                onClick={onEditar}
+                disabled={pending}
+                className="inline-flex items-center gap-1 text-muted-foreground hover:text-foreground"
+              >
+                <Pencil className="h-3 w-3" />
+                Editar
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={desativar}
+              disabled={pending}
+              className="text-red-600 hover:underline"
+            >
+              Desativar
+            </button>
+          </div>
         )}
       </div>
 
