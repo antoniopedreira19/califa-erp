@@ -55,7 +55,14 @@ import type {
   ImpostoDaLista,
 } from "./dados";
 import { formatDiaBr } from "@/lib/formatar-data-hora";
-import { AvisoDoPeriodoFechado, erroDoPeriodoFechado, usePeriodoFechado } from "@/components/financeiro/periodo-fechado";
+import {
+  AvisoAntesDoInicio,
+  AvisoDoPeriodoFechado,
+  antesDoInicioDaConta,
+  erroDoPeriodoFechado,
+  inicioDaConta,
+  usePeriodoFechado,
+} from "@/components/financeiro/periodo-fechado";
 
 // ---------------------------------------------------------------------------
 // Peças comuns
@@ -218,7 +225,11 @@ export function BaixaImpostoDialog({
 
   const contaEscolhida = contas.find((c) => c.id === conta) ?? null;
   // O fechamento da conciliação (decisão 205).
-  const fechadoAte = usePeriodoFechado(conta, data);
+  // Decisão 270: a data antes do início da conta no sistema vale (fora do
+  // saldo e da conciliação); o fechamento só trava a partir do início.
+  const inicio = inicioDaConta(contas, conta);
+  const antesDoInicio = antesDoInicioDaConta(data, inicio);
+  const fechadoAte = usePeriodoFechado(conta, data, inicio);
   const atrasado = Boolean(data) && data > t.vencimento;
   const diasDeAtraso = atrasado ? Math.round((Date.parse(data) - Date.parse(t.vencimento)) / 86400000) : 0;
   const total = r2(t.valor + multa);
@@ -263,7 +274,9 @@ export function BaixaImpostoDialog({
       guia.confirmar();
       comprovante.confirmar();
       onBaixado({
-        mensagem: `Baixa registrada: ${moeda(total)} saíram de ${nomeDaConta} em ${br(data)}. A linha já está na conciliação.`,
+        mensagem: antesDoInicio
+          ? `Baixa registrada: ${moeda(total)} saíram de ${nomeDaConta} em ${br(data)}, antes do início da conta. Fica a conciliar com o histórico da planilha.`
+          : `Baixa registrada: ${moeda(total)} saíram de ${nomeDaConta} em ${br(data)}. A linha já está na conciliação.`,
         pago_em: data,
         conta_bancaria_id: conta,
       });
@@ -287,6 +300,7 @@ export function BaixaImpostoDialog({
         <Resumo t={t} />
         {erro && <Erro>{erro}</Erro>}
         {fechadoAte && <AvisoDoPeriodoFechado ate={fechadoAte} contaNome={contaEscolhida?.nome ?? null} />}
+        {antesDoInicio && inicio && <AvisoAntesDoInicio inicio={inicio} />}
         <div className="space-y-3">
           <div className="grid grid-cols-2 items-start gap-3">
             <div className="space-y-1">

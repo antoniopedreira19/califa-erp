@@ -69,7 +69,14 @@ import {
   type UltimaRetencao,
 } from "@/components/financeiro/valor-da-baixa";
 import { NoFiscalDoRecebimento, useFiscalDaNota } from "@/components/financeiro/no-fiscal";
-import { AvisoDoPeriodoFechado, erroDoPeriodoFechado, usePeriodoFechado } from "@/components/financeiro/periodo-fechado";
+import {
+  AvisoAntesDoInicio,
+  AvisoDoPeriodoFechado,
+  antesDoInicioDaConta,
+  erroDoPeriodoFechado,
+  inicioDaConta,
+  usePeriodoFechado,
+} from "@/components/financeiro/periodo-fechado";
 
 export type EstiloDoResumo = "mono" | "mono_negrito" | "mono_pequeno" | "negrito";
 
@@ -271,8 +278,13 @@ function FormularioDaBaixa({
   // Módulo fiscal (entrega 2): a nota do título, para o bloco "No fiscal",
   // lida ao abrir (à parte: o diálogo não espera por ela).
   const fiscal = useFiscalDaNota(alvo.notaId);
-  // O fechamento da conciliação (decisão 205).
-  const fechadoAte = usePeriodoFechado(contaId, pagoEm);
+  // Decisão 270: a data antes do início da conta no sistema vale. A baixa
+  // vai para o período antes do início (fora do saldo e da conciliação) e
+  // espera a conciliação do histórico.
+  const inicio = inicioDaConta(contas, contaId);
+  const antesDoInicio = antesDoInicioDaConta(pagoEm, inicio);
+  // O fechamento da conciliação (decisão 205); antes do início da conta, não vale.
+  const fechadoAte = usePeriodoFechado(contaId, pagoEm, inicio);
 
   /**
    * Toda conta ativa entra, de qualquer empresa (decisão de 29/08/2026):
@@ -370,6 +382,7 @@ function FormularioDaBaixa({
       {fechadoAte && (
         <AvisoDoPeriodoFechado ate={fechadoAte} contaNome={contas.find((c) => c.id === contaId)?.nome ?? null} />
       )}
+      {antesDoInicio && inicio && <AvisoAntesDoInicio inicio={inicio} recebimento />}
       {dataDiferenteDoBanco && linhaDoBanco && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs leading-relaxed text-amber-900">
           A data é diferente da do banco. A baixa vale, mas o Extrato do sistema não bate com o do banco nesse dia:
@@ -514,9 +527,18 @@ function FormularioDaBaixa({
         <div className="flex items-start gap-2 rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
           <ArrowRightLeft className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-700" />
           <span>
-            Ao confirmar, o recebimento é registrado e enviado para a{" "}
-            <strong className="font-semibold text-foreground">Conciliação</strong> com
-            a conta e o centro de custo escolhidos.
+            {antesDoInicio ? (
+              <>
+                Ao confirmar, o recebimento é registrado e fica a conciliar com o{" "}
+                <strong className="font-semibold text-foreground">histórico da planilha</strong>.
+              </>
+            ) : (
+              <>
+                Ao confirmar, o recebimento é registrado e enviado para a{" "}
+                <strong className="font-semibold text-foreground">Conciliação</strong> com
+                a conta e o centro de custo escolhidos.
+              </>
+            )}
             {v.retem && v.retido > 0 && (
               <>
                 {" "}

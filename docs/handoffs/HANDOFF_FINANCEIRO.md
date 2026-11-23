@@ -9239,3 +9239,11 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
   - o internacional só traz a data e a conta (editáveis), registra como antes e se concilia depois, pela sugestão.
 - **Confirmado pelo Tiago:** pagamento e recebimento avulso continuam sem job.
 - Sem migration. Conferido no Sandbox: Conta Teste 253, linha de R$ 1.500,00 de 06/11, TET-1002/26, registrar e conciliar, e o Desfazer, que cancelou o recebimento.
+
+## ⚠️ Nota de 2026-11-23 — a baixa com data antes do início da conta (decisão 270, revê a 261)
+
+- **Antes:** toda baixa recusava data anterior ao início da conta no sistema ("Data do pagamento é anterior à data do saldo inicial da conta."). Para escapar do erro, o financeiro deu baixa com data de novembro em pagamentos de outubro (PP-00298, PP-00153, PP-00301), e o saldo do sistema ficou abaixo do banco.
+- **Agora:** o mesmo "Confirmar baixa" aceita a data antiga em todas as baixas (PP, avulsa, recorrência, título a receber, desembolso, estorno de verba, fatura, imposto, recebimento antes da NF, lote e estorno de baixa). O pop-up mostra a faixa âmbar "Pagamento antes do início da conta no sistema (dd/mm/aaaa): a baixa vai para o período antes do início e não muda o saldo nem a conciliação", e o rodapé diz que a baixa "fica a conciliar com o histórico da planilha". O saldo e a conciliação contam do início da conta; no Extrato contínuo a baixa entra antes do início e o ajuste de abertura se recalcula.
+- **Fechamento:** a trava do mês fechado vale só a partir do início da conta; a baixa antiga entra mesmo com novembro fechado.
+- **Conciliação do histórico:** `ligarBaixaAoHistorico` (sem botão) liga a baixa antiga às linhas da planilha do mesmo dia, conta e valor. Ligada a linha do período ou da cauda, a baixa deixa de contar duas vezes no Extrato antes do início; ligada ao só DRE, a linha mostra a PP.
+- **Conferido no Sandbox:** PP-00102 baixada em 15/09 na Conta Teste 253 (início em 01/10), com a faixa e o rodapé novos. Migration `20261123600001_baixa_antes_do_inicio_da_conta.sql`.

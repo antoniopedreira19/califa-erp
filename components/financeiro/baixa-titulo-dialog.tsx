@@ -102,7 +102,14 @@ import {
 import { parcelaDePPDaChave, type RetencaoDaAprovacao } from "@/lib/fiscal/retencao-da-aprovacao";
 import { NoFiscalDoPagamento, useFiscalDaParcela } from "@/components/financeiro/no-fiscal";
 import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field";
-import { AvisoDoPeriodoFechado, erroDoPeriodoFechado, usePeriodoFechado } from "@/components/financeiro/periodo-fechado";
+import {
+  AvisoAntesDoInicio,
+  AvisoDoPeriodoFechado,
+  antesDoInicioDaConta,
+  erroDoPeriodoFechado,
+  inicioDaConta,
+  usePeriodoFechado,
+} from "@/components/financeiro/periodo-fechado";
 
 export interface BaixaTituloAlvo {
   /** Identifica o título e as baixas dele: o formulário recomeça quando
@@ -460,9 +467,14 @@ function FormularioDaBaixa({
   const saiDaConta = Math.round((v.liquido + jurosDaBaixa) * 100) / 100;
   const naoBate = !!linhaDoBanco && !noCartao && Math.abs(saiDaConta - linhaDoBanco.valor) > 0.004;
   const dataDiferenteDoBanco = !!linhaDoBanco && !!pagoEm && pagoEm !== linhaDoBanco.data;
+  // Decisão 270: a data antes do início da conta no sistema vale. A baixa
+  // vai para o período antes do início (fora do saldo e da conciliação) e
+  // espera a conciliação do histórico. No cartão nada sai da conta agora.
+  const inicio = noCartao ? null : inicioDaConta(contas, contaId);
+  const antesDoInicio = antesDoInicioDaConta(pagoEm, inicio);
   // O fechamento da conciliação (decisão 205): no cartão nada sai da conta
-  // agora, e a trava não vale.
-  const fechadoAte = usePeriodoFechado(noCartao ? null : contaId, pagoEm);
+  // agora, e a trava não vale; antes do início da conta, também não.
+  const fechadoAte = usePeriodoFechado(noCartao ? null : contaId, pagoEm, inicio);
 
   function handleSubmit() {
     setErroLocal(null);
@@ -557,6 +569,7 @@ function FormularioDaBaixa({
       {fechadoAte && (
         <AvisoDoPeriodoFechado ate={fechadoAte} contaNome={contas.find((c) => c.id === contaId)?.nome ?? null} />
       )}
+      {antesDoInicio && inicio && <AvisoAntesDoInicio inicio={inicio} />}
       {dataDiferenteDoBanco && linhaDoBanco && (
         <Nota tom="ambar">
           A data é diferente da do banco ({formatarData(linhaDoBanco.data)}). A baixa vale, mas o Extrato do
@@ -909,6 +922,11 @@ function FormularioDaBaixa({
               </>
             ) : linhaDoBanco ? (
               <>Ao confirmar, a baixa entra no Extrato já conciliada com a linha do banco, com a data dela.</>
+            ) : antesDoInicio ? (
+              <>
+                Ao confirmar, o pagamento é registrado e fica a conciliar com o{" "}
+                <strong className="font-semibold text-foreground">histórico da planilha</strong>.
+              </>
             ) : (
               <>
                 Ao confirmar, o pagamento é registrado e enviado para a{" "}

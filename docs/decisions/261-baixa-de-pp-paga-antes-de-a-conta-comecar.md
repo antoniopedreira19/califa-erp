@@ -73,3 +73,11 @@ California Santander foi de R$ 2.378.067,84 para R$ 2.409.607,84, e 05/11
 voltou a bater com o banco.
 
 Migration `20261117100001_baixa_pelo_historico_parcial.sql`.
+
+## Revisão de 23/11/2026 — a baixa comum aceita a data antiga (decisão 270)
+
+⚠️ A baixa comum deixou de recusar a data antes do início da conta (decisão
+[270](270-baixa-antes-do-inicio-da-conta.md)): o financeiro dá a baixa pelo
+pop-up de sempre, e a ligação com a linha da planilha vem depois
+(`ligar_baixa_ao_historico`). Este caminho continua valendo e faz as duas
+coisas numa chamada; a liberação `app.baixa_pelo_historico` ficou sem efeito.

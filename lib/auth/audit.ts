@@ -296,6 +296,8 @@ export type AuditAction =
   // Decisão 261: a parcela paga antes de a conta começar no sistema, baixada
   // pela linha do histórico da planilha, na data e na conta dela.
   | "pedido_compra.parcela_paga_pelo_historico"
+  // Decisão 270: a baixa antes do início da conta ligada à linha da planilha.
+  | "lancamento_financeiro.ligado_ao_historico"
   // 18/08/2026: o estorno acompanhou a baixa e também virou por parcela.
   // `pedido_compra.baixa_estornada` (mais abaixo) é o registro histórico
   // do estorno da PP inteira, que existiu até aqui.

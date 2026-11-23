@@ -1040,7 +1040,14 @@ function Dialogos({
   const imposto = b?.l.lado === "imposto" ? b.l.t : null;
   const transferencia = b?.l.lado === "transferencia" ? b.l.t : null;
   const contasDoImposto = React.useMemo(
-    () => dados.contas.map((c) => ({ id: c.id, nome: c.nome, banco: c.banco, empresa_contabil_id: c.empresa_contabil_id })),
+    () =>
+      dados.contas.map((c) => ({
+        id: c.id,
+        nome: c.nome,
+        banco: c.banco,
+        empresa_contabil_id: c.empresa_contabil_id,
+        saldo_inicial_data: c.saldo_inicial_data,
+      })),
     [dados.contas],
   );
 

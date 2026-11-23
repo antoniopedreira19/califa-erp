@@ -81,7 +81,14 @@ import {
 } from "@/app/(app)/financeiro/actions-baixa-em-lote";
 import { AnexoCompacto, descartarAnexoImposto, nomeDoAnexo } from "@/components/financeiro/anexo-de-imposto";
 import { NoFiscalDoLote } from "@/components/financeiro/no-fiscal";
-import { AvisoDoPeriodoFechado, erroDoPeriodoFechado, usePeriodoFechado } from "@/components/financeiro/periodo-fechado";
+import {
+  AvisoAntesDoInicio,
+  AvisoDoPeriodoFechado,
+  antesDoInicioDaConta,
+  erroDoPeriodoFechado,
+  inicioDaConta,
+  usePeriodoFechado,
+} from "@/components/financeiro/periodo-fechado";
 
 // ---------------------------------------------------------------------------
 // O título, no formato do lote
@@ -477,7 +484,9 @@ type RetencoesDoLote =
   | { estado: "pronto"; aliquotas: Record<string, AliquotasDaAprovacao | null> }
   | { estado: "erro"; mensagem: string };
 
-type ContaDoLote = Pick<ContaBancaria, "id" | "nome" | "banco" | "ativo"> & {
+// `saldo_inicial_data`: o início da conta no sistema (decisão 270, o aviso da
+// data antes do início).
+type ContaDoLote = Pick<ContaBancaria, "id" | "nome" | "banco" | "ativo" | "saldo_inicial_data"> & {
   /** A PJ dona da conta — o aviso da guia de imposto de outra PJ. */
   empresa_contabil_id?: string | null;
 };
@@ -626,8 +635,13 @@ function FormularioDoLote({
     pagar.length > 0 && !podeCartao ? (pagar.find((t) => t.semCartao !== null)?.semCartao ?? null) : null;
   const noCartao = podeCartao && forma === "cartao_credito";
   const cartaoEscolhido = noCartao ? cartoes.find((c) => c.id === cartaoId) ?? null : null;
-  // O fechamento da conciliação (decisão 205): no cartão nada sai da conta.
-  const fechadoAte = usePeriodoFechado(noCartao ? null : conta, data);
+  // Decisão 270: a data antes do início da conta no sistema vale. As baixas
+  // vão para o período antes do início (fora do saldo e da conciliação).
+  const inicio = noCartao ? null : inicioDaConta(contas, conta);
+  const antesDoInicio = antesDoInicioDaConta(data, inicio);
+  // O fechamento da conciliação (decisão 205): no cartão nada sai da conta;
+  // antes do início da conta, a trava também não vale.
+  const fechadoAte = usePeriodoFechado(noCartao ? null : conta, data, inicio);
   const cartaoDaFatura = cartaoEscolhido
     ? {
         id: cartaoEscolhido.id,
@@ -876,7 +890,9 @@ function FormularioDoLote({
         onConcluido(
           naFatura
             ? `${n} ${n === 1 ? "item entrou" : "itens entraram"} ${naFatura}. Nada sai da conta bancária agora.`
-            : `${n} ${n === 1 ? "baixa registrada" : "baixas registradas"} em ${br(data)}, na conta ${nomeDaConta}. Cada uma vira um movimento na Conciliação.`,
+            : antesDoInicio
+              ? `${n} ${n === 1 ? "baixa registrada" : "baixas registradas"} em ${br(data)}, na conta ${nomeDaConta}, antes do início da conta: ${n === 1 ? "fica" : "ficam"} a conciliar com o histórico da planilha.`
+              : `${n} ${n === 1 ? "baixa registrada" : "baixas registradas"} em ${br(data)}, na conta ${nomeDaConta}. Cada uma vira um movimento na Conciliação.`,
         );
         return;
       }
@@ -925,6 +941,7 @@ function FormularioDoLote({
       )}
 
       {fechadoAte && <AvisoDoPeriodoFechado ate={fechadoAte} contaNome={contaEscolhida?.nome ?? null} />}
+      {antesDoInicio && inicio && <AvisoAntesDoInicio inicio={inicio} />}
 
       <div className="space-y-4">
         <div className={cn("grid gap-3", pagar.length ? "grid-cols-3" : "grid-cols-2")}>
@@ -1382,6 +1399,11 @@ function FormularioDoLote({
             <span>
               Ao confirmar, cada título vira um item da fatura do cartão e aparece no extrato dele, na aba{" "}
               <strong className="font-semibold text-foreground">Cartão</strong>.
+            </span>
+          ) : antesDoInicio ? (
+            <span>
+              Ao confirmar, cada baixa é registrada e fica a conciliar com o{" "}
+              <strong className="font-semibold text-foreground">histórico da planilha</strong>.
             </span>
           ) : (
             <span>

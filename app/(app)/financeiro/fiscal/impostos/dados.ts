@@ -103,6 +103,8 @@ export interface ContaDaBaixaDeImposto {
   banco: string;
   /** A PJ dona da conta — para o aviso "a guia é da X e a conta é da Y". */
   empresa_contabil_id: string;
+  /** O início da conta no sistema (decisão 270, o aviso da data antes do início). */
+  saldo_inicial_data: string;
 }
 
 /** Um CNPJ que pode receber um imposto avulso. */
@@ -343,7 +345,7 @@ export async function carregarImpostos(supabase: SupabaseClient, tenantId: strin
     // baixa no banco recusa, `_conta_da_baixa`).
     supabase
       .from("contas_bancarias")
-      .select("id, nome, banco, empresa_contabil_id")
+      .select("id, nome, banco, empresa_contabil_id, saldo_inicial_data")
       .eq("tenant_id", tenantId)
       .eq("ativo", true)
       .neq("tipo", "cartao_credito")

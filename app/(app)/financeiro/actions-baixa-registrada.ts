@@ -230,3 +230,58 @@ export async function estornarValorDaBaixa(input: unknown): Promise<Result> {
   revalidarBaixas();
   return { ok: true };
 }
+
+// ---------------------------------------------------------------------
+// Conciliar com o histórico (decisão 270)
+// ---------------------------------------------------------------------
+
+const ligarSchema = z.object({
+  lancamento_id: z.string().uuid(),
+  movimento_ids: z
+    .array(z.string().uuid())
+    .min(1, "Escolha as linhas da planilha que registram este pagamento."),
+});
+
+/**
+ * A conciliação do histórico (decisão 270, 23/11/2026): liga a baixa com data
+ * antes do início da conta às linhas da planilha que registram o mesmo
+ * pagamento (mesma conta, mesmo dia, mesma soma). Ligada a uma linha da
+ * carga do período ou da cauda, a baixa deixa de contar duas vezes no
+ * Extrato antes do início; ligada a uma do só DRE, a linha passa a mostrar a
+ * PP. As travas moram em `ligar_baixa_ao_historico`. Sem botão na tela por
+ * enquanto: a ligação é feita pela equipe, com a planilha do financeiro.
+ */
+export async function ligarBaixaAoHistorico(input: unknown): Promise<Result> {
+  const parsed = ligarSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Entrada inválida." };
+  }
+  const d = parsed.data;
+
+  const gate = await gateFinanceiro("lancamento_financeiro", d.lancamento_id, "lancamento_financeiro.ligado_ao_historico");
+  if (!gate.ok) return gate;
+
+  const { error } = await gate.supabase.rpc("ligar_baixa_ao_historico", {
+    p_lancamento_id: d.lancamento_id,
+    p_movimento_ids: d.movimento_ids,
+  });
+  if (error) {
+    console.error("[baixa.ligar_historico]", error.message);
+    return {
+      ok: false,
+      message: mensagemDoBanco(error.message, "Não foi possível ligar a baixa à planilha. Tente novamente."),
+    };
+  }
+
+  const session = await requireSession();
+  await logAuditEvent({
+    acao: "lancamento_financeiro.ligado_ao_historico",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "lancamento_financeiro",
+    entidadeId: d.lancamento_id,
+    metadata: { movimento_ids: d.movimento_ids },
+  });
+
+  revalidarBaixas();
+  return { ok: true };
+}
