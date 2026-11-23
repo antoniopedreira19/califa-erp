@@ -620,6 +620,7 @@ function eventosDo(d: PedidoDeDesembolso) {
   if (d.aprovado) ev.push({ em: d.aprovado.em, rotulo: "Aprovado", por: d.aprovado.por });
   if (d.cancelado) ev.push({ em: d.cancelado.em, rotulo: "Cancelado", por: d.cancelado.por, motivo: d.cancelado.motivo });
   if (d.pagoEm) ev.push({ em: d.pagoEm, rotulo: "Pago", por: null });
+  for (const c of d.nfCorrigida) ev.push({ em: c.em, rotulo: "NF corrigida no controle de notas", por: c.por, motivo: c.motivo });
   return ev.sort((a, b) => a.em.localeCompare(b.em));
 }
 

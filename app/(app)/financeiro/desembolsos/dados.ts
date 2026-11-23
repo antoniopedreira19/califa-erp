@@ -186,6 +186,7 @@ function montar(l: Linha): PedidoDeDesembolso {
         : null,
     pagoEm: l.pago_em,
     forma: l.forma_pagamento,
+    nfCorrigida: [],
   };
 }
 
@@ -194,6 +195,16 @@ function montar(l: Linha): PedidoDeDesembolso {
  * pessoa (o módulo Desembolsos); `empresaIds`, às empresas do filtro do
  * topo (o Contas a Pagar). A ordem é a do último envio, o mais novo antes.
  */
+/** Uma correção da NF no controle de notas (`notas_fiscais_fornecedor_alteracoes`). */
+type AlteracaoDaNota = {
+  documentos: Array<{ tipo: string; id: string }> | null;
+  motivo: string;
+  alterada_em: string;
+  antes: { numero?: string } | null;
+  depois: { numero?: string } | null;
+  por: { nome: string } | null;
+};
+
 export async function carregarPedidosDeDesembolso(
   supabase: SupabaseClient,
   tenantId: string,
@@ -210,7 +221,30 @@ export async function carregarPedidosDeDesembolso(
     console.error("[desembolsos.carregar]", error.message);
     return [];
   }
-  return (data ?? []).map(montar);
+  const pedidos = (data ?? []).map(montar);
+  // As correções da NF no controle de notas que citam um desembolso (ponto 6
+  // da decisão 271): o histórico do pedido mostra cada uma, com o motivo.
+  if (pedidos.length > 0) {
+    const { data: alteracoes, error: errAlt } = await supabase
+      .from("notas_fiscais_fornecedor_alteracoes")
+      .select("documentos, motivo, alterada_em, antes, depois, por:profiles!notas_fiscais_fornecedor_alteracoes_alterada_por_fkey(nome)")
+      .eq("tenant_id", tenantId)
+      .contains("documentos", [{ tipo: "desembolso" }])
+      .order("alterada_em")
+      .returns<AlteracaoDaNota[]>();
+    if (errAlt) console.error("[desembolsos.nf_corrigida]", errAlt.message);
+    const porId = new Map(pedidos.map((p) => [p.id, p]));
+    for (const a of alteracoes ?? []) {
+      const antes = a.antes ?? {};
+      const depois = a.depois ?? {};
+      const motivo = `NF ${antes.numero ?? ""}${depois.numero && depois.numero !== antes.numero ? ` → ${depois.numero}` : ""}. Motivo: ${a.motivo}`;
+      for (const d of a.documentos ?? []) {
+        const p = d.tipo === "desembolso" ? porId.get(d.id) : undefined;
+        if (p) p.nfCorrigida.push({ em: a.alterada_em, por: a.por?.nome ?? null, motivo });
+      }
+    }
+  }
+  return pedidos;
 }
 
 /** O que o formulário do pedido precisa: empresas, regionais, fornecedores,

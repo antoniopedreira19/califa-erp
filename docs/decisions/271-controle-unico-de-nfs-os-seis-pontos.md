@@ -8,8 +8,8 @@ retido, os dados da leitura da NF e a visão Impostos. O ponto 3 está
 implementado (decisão [269](269-nf-da-prestacao-entra-no-cadastro-no-envio.md));
 a seção Notas Fiscais está implementada desde 23/11/2026 (Emitidas,
 Tomadas, navegador de período, visão Impostos e a leitura da NF pela IA;
-ver "Implementação" no fim); os pontos 1, 2 e 6 ("Editar registro")
-aguardam a implementação; o ponto 5 vai junto com a revisão das retenções;
+ver "Implementação" no fim) e o ponto 6 ("Editar registro", com os ajustes
+4 e 6c) também, no mesmo dia; os pontos 1 e 2 aguardam a implementação; o ponto 5 vai junto com a revisão das retenções;
 o ponto 4 não pede nada.
 **Quem decidiu:** Tiago, sobre o protótipo "Notas Fiscais" da Central
 Financeira (v3 a v14, 23/11/2026), com um seletor por ponto:
@@ -216,4 +216,50 @@ Achados no dado, sem correção (produção só leitura):
   01/03/2027.
 - No Sandbox, 6 notas tomadas apontam para fornecedores da produção (sobra
   da mudança da Empresa Teste): o emitente aparece "—".
+
+## Implementação do ponto 6 (23/11/2026)
+
+- **"Editar registro"** na aba Tomadas, como no protótipo v8: só as notas em
+  avaliação ficam editáveis (as registradas com cadeado); número, emissão,
+  valor e CNPJ tomador viram campos; a célula alterada fica destacada com o
+  valor antigo riscado; embaixo da linha, o erro que impede salvar ou o que
+  acontece junto (junção, a PP que muda de CNPJ) e quem acompanha; rodapé
+  "Cancelar" / "Salvar alterações"; pop-up com o de → para e o motivo
+  obrigatório (10+ caracteres).
+- **Banco:** `notas_fiscais_fornecedor_alteracoes` (o registro de cada
+  alteração: de → para, motivo, documentos que acompanharam, quem e quando)
+  e a RPC `alterar_registro_das_notas`, só administrador e financeiro, só
+  nota não registrada. As cópias nos anexos da PP, do desembolso e da
+  prestação acompanham; a parte de cada documento (na prestação, o `valor`
+  do documento) não muda, e o saldo é conferido. Número que já existe no
+  mesmo emitente junta as duas notas (6b). A edição simultânea é barrada
+  pelo que a tela viu ao abrir ("a NF foi alterada por <nome> depois que
+  você abriu a edição"). Migration `20261123800004`.
+- **CNPJ da PP:** depois de gravar, cada PP da nota segue o CNPJ tomador e
+  tem o PDF refeito (`seguirDocumentoNasPPs`, revisão da 156) — também na
+  junção, quando a nota que já existia estava em outro CNPJ.
+- **Histórico:** "Alterações do registro" no painel da nota e o ícone na NF
+  da tabela; o evento "NF corrigida" com o motivo em cada PP (e na PP da
+  prestação); o desembolso mostra "NF corrigida no controle de notas" no
+  histórico dele.
+- **Ajuste 4:** reverter a aprovação de uma PP ou de um desembolso desfaz o
+  registro da nota (`_desfazer_registro_das_notas`): ela passa a outro
+  documento aprovado que a traga ou volta a "Em avaliação". As 4 notas
+  registradas sem documento aprovado de antes não foram mexidas (pedem o OK
+  do Tiago).
+- **6c:** o "Corrigir a NF" da PP passou a levar junto as cópias do
+  desembolso e da prestação, e a nota antiga que fica sem PP leva os outros
+  documentos para a corrigida (antes, um desembolso na nota antiga fazia a
+  correção falhar). Migration `20261123800005`.
+- **Conferido no Sandbox:** a NF 9156 da PP-00146 virou 9158 com outro valor
+  e outro CNPJ tomador (a PP mudou de CNPJ, evento e histórico gravados), e a
+  NF 7001 foi juntada à 9158 (as duas PPs na mesma nota, a PP-00146 de volta
+  ao CNPJ da linha). Erros na tela: valor abaixo das partes e junção que
+  estoura o saldo. No banco, em transação desfeita: conflito de edição, nota
+  registrada, GP sem permissão, motivo curto, reversão da PP-00110 desfazendo
+  o registro da NF 602 e o "Corrigir a NF" da versão nova.
+
+Das 32 notas da produção que a leitura recusou, 15 estão em avaliação e se
+corrigem pela tabela; 17 estão registradas e precisam da reversão da
+aprovação do documento antes.
 

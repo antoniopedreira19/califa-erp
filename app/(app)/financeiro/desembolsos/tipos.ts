@@ -69,6 +69,8 @@ export interface PedidoDeDesembolso {
   cancelado: { por: string | null; em: string; motivo: string } | null;
   pagoEm: string | null;
   forma: string | null;
+  /** As correções da NF feitas pelo financeiro no controle de notas (decisão 271, ponto 6). */
+  nfCorrigida: Array<{ em: string; por: string | null; motivo: string }>;
 }
 
 /** A alocação vigente de quem pede, no RH (a empresa e a regional que o pedido já traz). */

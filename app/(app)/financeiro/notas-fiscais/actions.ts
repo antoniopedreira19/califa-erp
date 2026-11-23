@@ -14,6 +14,7 @@ import { createClient } from "@/lib/supabase/server";
 import { custoEstimadoUsd } from "@/lib/ia/openai-client";
 import { VERSAO_LEITURA_NOTA_TOMADA, lerNotaTomada, leituraParaGravar, type DadosBrutosNotaTomada } from "@/lib/ia/ler-nota-tomada";
 import { NOTAS_POR_LEITURA, type TabelaDoAnexo } from "./dados";
+import { seguirDocumentoNasPPs } from "@/app/(app)/jobs/[jobId]/realizado/actions-pp";
 
 const BUCKET = "pedidos-compra";
 const TABELAS: readonly TabelaDoAnexo[] = ["pedidos_compra_anexos", "desembolsos_anexos", "pp_verba_prestacoes_anexos"];
@@ -170,3 +171,80 @@ async function anexoDaNota(supabase: Supabase, tenantId: string, notaId: string)
   }
   return null;
 }
+
+// ---------------------------------------------------------------------------
+// O "Editar registro" (decisão 271, ponto 6)
+// ---------------------------------------------------------------------------
+
+/** Uma nota alterada na tabela: os dados novos e o que a tela viu ao abrir a edição. */
+export interface AlteracaoDaNota {
+  nota_id: string;
+  numero: string;
+  data_emissao: string;
+  valor: number;
+  tomador_estabelecimento_id: string;
+  antes: { numero: string; data_emissao: string; valor: number; tomador_estabelecimento_id: string | null };
+}
+
+/**
+ * Grava a alteração do registro das notas (RPC `alterar_registro_das_notas`:
+ * confere o papel, a nota não registrada, a edição simultânea, junta o número
+ * que já existe e confere o saldo). Depois, se o CNPJ tomador mudou, a PP
+ * segue o CNPJ novo e o PDF é refeito; o que não seguir volta como aviso.
+ */
+export async function alterarRegistroDasNotas(
+  alteracoes: AlteracaoDaNota[],
+  motivo: string,
+): Promise<{ ok: true; notas: number; avisos: string[]; trocas: number } | { ok: false; message: string }> {
+  const session = await requireSession();
+  if (session.activeRole !== "administrador" && session.activeRole !== "financeiro") {
+    return { ok: false, message: "Só o financeiro e o administrador alteram o registro das notas." };
+  }
+  const uuid = /^[0-9a-f-]{36}$/i;
+  if (alteracoes.length === 0 || alteracoes.some((a) => !uuid.test(a.nota_id) || !uuid.test(a.tomador_estabelecimento_id))) {
+    return { ok: false, message: "Alteração inválida. Recarregue a tela." };
+  }
+  if (motivo.trim().length < 10) return { ok: false, message: "Escreva o motivo da alteração (pelo menos 10 caracteres)." };
+
+  const supabase = createClient();
+  const { data, error } = await supabase.rpc("alterar_registro_das_notas", {
+    p_alteracoes: alteracoes,
+    p_motivo: motivo.trim(),
+  });
+  if (error) {
+    console.error("[notas-fiscais.alterar_registro]", error.message);
+    const limpa = error.message.replace(/^.*?(?:ERROR|erro):\s*/i, "").trim();
+    return { ok: false, message: limpa && !/[_"]/.test(limpa) ? limpa : "Não foi possível alterar o registro. Tente de novo." };
+  }
+  const r = (data ?? {}) as { notas?: string[]; pps?: string[]; desembolsos?: string[]; tomador_mudou?: boolean };
+
+  let avisos: string[] = [];
+  let trocas = 0;
+  // A PP segue o CNPJ da nota (revisão da 156). Roda em todas as PPs da nota,
+  // não só quando o tomador desta linha mudou: na junção (6b), a nota que já
+  // existia pode estar em outro CNPJ. Na PP que já está no CNPJ certo, nada muda.
+  if ((r.pps ?? []).length > 0) {
+    const seguiu = await seguirDocumentoNasPPs(r.pps ?? []);
+    trocas = seguiu.trocas.length;
+    avisos = seguiu.avisos.map((m) => `A nota foi alterada, mas uma PP não mudou de CNPJ: ${m}`);
+  }
+
+  await logAuditEvent({
+    acao: "nota_fiscal.registro_alterado",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "nota_fiscal_fornecedor",
+    entidadeId: alteracoes[0].nota_id,
+    metadata: {
+      notas: alteracoes.map((a) => ({ nota_id: a.nota_id, antes: a.antes, depois: { numero: a.numero, data_emissao: a.data_emissao, valor: a.valor, tomador_estabelecimento_id: a.tomador_estabelecimento_id } })),
+      motivo: motivo.trim(),
+      pps: r.pps ?? [],
+      desembolsos: r.desembolsos ?? [],
+      pps_com_cnpj_trocado: trocas,
+      papel: session.activeRole,
+      decisao: 271,
+    },
+  });
+  revalidatePath("/financeiro/notas-fiscais");
+  return { ok: true, notas: (r.notas ?? []).length, avisos, trocas };
+}
+

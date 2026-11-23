@@ -485,6 +485,19 @@ export interface DocumentoDaNota {
   aPagar: number;
   proximo: string | null;
   anexo: { tabela: TabelaDoAnexo; id: string; nome: string } | null;
+  /** Na PP: o CNPJ dela (decisão 156), que segue o tomador da nota. */
+  cnpjDaPP: string | null;
+}
+
+/** Uma alteração do registro da nota pelo financeiro (decisão 271, ponto 6). */
+export interface AlteracaoDoRegistro {
+  em: string;
+  por: string | null;
+  motivo: string;
+  /** "Número: 03 → 1103", "Valor: R$ 1,00 → R$ 2,00"... */
+  mudancas: string[];
+  /** Juntada à nota que já existia com o número novo (6b). */
+  juntada: boolean;
 }
 
 export type TabelaDoAnexo = "pedidos_compra_anexos" | "desembolsos_anexos" | "pp_verba_prestacoes_anexos";
@@ -513,6 +526,8 @@ export interface NotaTomada {
   pagamento: { situacao: SituacaoDoPagamento; pago: number; aPagar: number; proximo: string | null };
   /** O que a leitura da NF traz (decisão 271). */
   leitura: LeituraDaNota;
+  /** As alterações do registro, da mais recente para a mais antiga. */
+  alteracoes: AlteracaoDoRegistro[];
 }
 
 export interface LeituraDaNota {
@@ -555,7 +570,7 @@ const ROTULO_DES: Record<string, [string, DocumentoDaNota["cor"]]> = {
 };
 
 export async function carregarTomadas(supabase: Supabase, tenantId: string): Promise<DadosDasTomadas> {
-  const [notasRes, estabRes, ppAnx, desAnx, preAnx] = await Promise.all([
+  const [notasRes, estabRes, ppAnx, desAnx, preAnx, alteracoesRes] = await Promise.all([
     todasAsLinhas<Linha>((de, ate) =>
       supabase
         .from("notas_fiscais_fornecedor")
@@ -576,7 +591,7 @@ export async function carregarTomadas(supabase: Supabase, tenantId: string): Pro
         .from("pedidos_compra_anexos")
         .select(
           `id, nota_fiscal_id, nf_valor_na_pp, arquivo_nome_original,
-           pedido:pedidos_compra(id, codigo, status, valor,
+           pedido:pedidos_compra(id, codigo, status, valor, estabelecimento_id,
              job:jobs(id, codigo, nome),
              parcelas:pedidos_compra_parcelas(valor, pago_em, data_pagamento, data_vencimento))`,
         )
@@ -610,14 +625,39 @@ export async function carregarTomadas(supabase: Supabase, tenantId: string): Pro
         .order("id")
         .range(de, ate),
     ),
+    // As alterações do registro (ponto 6). Poucas: só as correções do financeiro.
+    todasAsLinhas<Linha>((de, ate) =>
+      supabase
+        .from("notas_fiscais_fornecedor_alteracoes")
+        .select("id, nota_fiscal_id, antes, depois, juntada_com, motivo, alterada_em, por:profiles!notas_fiscais_fornecedor_alteracoes_alterada_por_fkey(nome)")
+        .eq("tenant_id", tenantId)
+        .not("nota_fiscal_id", "is", null)
+        .order("alterada_em", { ascending: false })
+        .order("id")
+        .range(de, ate),
+    ),
   ]);
   for (const [nome, r] of [
     ["notas", notasRes],
     ["pps", ppAnx],
     ["desembolsos", desAnx],
     ["prestacoes", preAnx],
+    ["alteracoes", alteracoesRes],
   ] as const)
     if (r.error) console.error(`[nf.tomadas.${nome}]`, r.error.message);
+
+  const alteracoesPorNota = new Map<string, AlteracaoDoRegistro[]>();
+  for (const a of (alteracoesRes.data ?? []) as Linha[]) {
+    const lista = alteracoesPorNota.get(a.nota_fiscal_id) ?? [];
+    lista.push({
+      em: a.alterada_em,
+      por: a.por?.nome ?? null,
+      motivo: a.motivo,
+      mudancas: mudancasDoRegistro(a.antes ?? {}, a.depois ?? {}),
+      juntada: Boolean(a.juntada_com),
+    });
+    alteracoesPorNota.set(a.nota_fiscal_id, lista);
+  }
 
   const estab = new Map(((estabRes.data ?? []) as Linha[]).map((e) => [e.id as string, e]));
   const docs = new Map<string, DocumentoDaNota[]>();
@@ -655,6 +695,7 @@ export async function carregarTomadas(supabase: Supabase, tenantId: string): Pro
       aPagar: p.status === "aprovada" ? r2(parte - pago) : 0,
       proximo: p.status === "aprovada" ? abertas[0] ?? null : null,
       anexo: { tabela: "pedidos_compra_anexos", id: a.id, nome: a.arquivo_nome_original },
+      cnpjDaPP: p.estabelecimento_id ?? null,
     });
   }
   for (const a of desAnx.data as Linha[]) {
@@ -686,6 +727,7 @@ export async function carregarTomadas(supabase: Supabase, tenantId: string): Pro
       aPagar: d.status === "aprovada" ? r2(parte - pago) : 0,
       proximo: d.status === "aprovada" ? abertas[0] ?? null : null,
       anexo: { tabela: "desembolsos_anexos", id: a.id, nome: a.arquivo_nome_original },
+      cnpjDaPP: null,
     });
   }
   for (const a of preAnx.data as Linha[]) {
@@ -711,6 +753,7 @@ export async function carregarTomadas(supabase: Supabase, tenantId: string): Pro
       aPagar: 0,
       proximo: null,
       anexo: { tabela: "pp_verba_prestacoes_anexos", id: a.id, nome: a.arquivo_nome_original },
+      cnpjDaPP: null,
     });
   }
 
@@ -787,10 +830,29 @@ export async function carregarTomadas(supabase: Supabase, tenantId: string): Pro
         retido,
         liquido: r2(Number(n.valor) - retido),
       },
+      alteracoes: alteracoesPorNota.get(n.id) ?? [],
     });
   }
 
-  return { notas, erro: Boolean(notasRes.error || ppAnx.error || desAnx.error || preAnx.error) };
+  return { notas, erro: Boolean(notasRes.error || ppAnx.error || desAnx.error || preAnx.error || alteracoesRes.error) };
+}
+
+const brl = (v: unknown) => Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+const dataDe = (v: unknown) => {
+  const [a, m, d] = String(v ?? "").slice(0, 10).split("-");
+  return a && m && d ? `${d}/${m}/${a}` : "—";
+};
+
+/** O de → para de uma alteração do registro, como o painel mostra. */
+export function mudancasDoRegistro(antes: Linha, depois: Linha): string[] {
+  const out: string[] = [];
+  if (antes.numero !== depois.numero) out.push(`Número: ${antes.numero ?? "—"} → ${depois.numero ?? "—"}`);
+  if (String(antes.data_emissao ?? "") !== String(depois.data_emissao ?? ""))
+    out.push(`Emissão: ${dataDe(antes.data_emissao)} → ${dataDe(depois.data_emissao)}`);
+  if (Math.abs(Number(antes.valor ?? 0) - Number(depois.valor ?? 0)) > 0.004) out.push(`Valor: ${brl(antes.valor)} → ${brl(depois.valor)}`);
+  if ((antes.tomador_estabelecimento_id ?? null) !== (depois.tomador_estabelecimento_id ?? null))
+    out.push(`CNPJ tomador: ${antes.tomador ?? "—"} → ${depois.tomador ?? "—"}`);
+  return out;
 }
 
 // ---------------------------------------------------------------------------

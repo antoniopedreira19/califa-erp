@@ -339,6 +339,34 @@ export function NotaTomadaDrawer({ nota, onClose }: { nota: NotaTomada; onClose:
             </div>
           )}
 
+          {/* Ponto 6: as correções do financeiro no registro desta nota. */}
+          {nota.alteracoes.length > 0 && (
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Alterações do registro</span>
+              <div className="overflow-hidden rounded-xl border border-border">
+                {nota.alteracoes.map((alt, i) => (
+                  <div key={alt.em + i} className={cn("space-y-1 px-3.5 py-2.5 text-[12.5px]", i > 0 && "border-t border-border")}>
+                    <p className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="font-semibold">{alt.por ?? "Financeiro"}</span>
+                      <span className="font-mono text-[11.5px] text-muted-foreground">
+                        {new Date(alt.em).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })} às {new Date(alt.em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}
+                      </span>
+                    </p>
+                    <ul className="space-y-0.5">
+                      {alt.mudancas.map((m) => (
+                        <li key={m} className="font-mono text-[12px]">
+                          {m}
+                        </li>
+                      ))}
+                      {alt.juntada && <li className="text-[12px]">Juntada à nota que já existia com esse número.</li>}
+                    </ul>
+                    <p className="text-[12px] text-muted-foreground">Motivo: {alt.motivo}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
           {(nota.credito_retirado || nota.iss_retido_aliquota != null) && (
             <div className="space-y-1.5 rounded-xl border border-border bg-muted/30 px-4 py-3">
               <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">No fiscal</span>

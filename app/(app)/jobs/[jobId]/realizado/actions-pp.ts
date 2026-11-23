@@ -3184,7 +3184,7 @@ async function seguirDocumentoNaPP(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
   ppId: string,
-  origem: "envio" | "pronta_para_envio" | "correcao_da_nf",
+  origem: "envio" | "pronta_para_envio" | "correcao_da_nf" | "controle_de_notas",
 ): Promise<{ ok: true; troca: TrocaDeEmissora | null } | { ok: false; message: string }> {
   const [ppRes, anexosRes] = await Promise.all([
     supabase
@@ -3324,6 +3324,32 @@ export async function seguirDocumentosDaNotaCorrigida(
     troca: principal.troca,
     aviso: falhas.length > 0 ? `A NF foi corrigida, mas outra PP com ela não mudou de empresa emissora: ${falhas[0]}` : null,
   };
+}
+
+/**
+ * Decisão 271, ponto 6: depois do "Editar registro" da seção Notas Fiscais, a
+ * empresa emissora segue o CNPJ tomador corrigido em cada PP da nota e o PDF
+ * é refeito (revisão da 156). A nota já está corrigida quando isto roda: a
+ * PP que não puder seguir volta como aviso, sem desfazer a correção.
+ */
+export async function seguirDocumentoNasPPs(
+  ppIds: string[],
+): Promise<{ trocas: Array<{ ppId: string; de: string | null; para: string }>; avisos: string[] }> {
+  const ids = ppIds.filter((id) => z.string().uuid().safeParse(id).success);
+  if (ids.length === 0) return { trocas: [], avisos: [] };
+  const session = await requireSession();
+  if (session.activeRole !== "administrador" && session.activeRole !== "financeiro") {
+    return { trocas: [], avisos: ["Só o financeiro e o administrador seguem a nota nas PPs."] };
+  }
+  const supabase = createClient();
+  const trocas: Array<{ ppId: string; de: string | null; para: string }> = [];
+  const avisos: string[] = [];
+  for (const id of ids) {
+    const r = await seguirDocumentoNaPP(supabase, session.activeTenant.id, id, "controle_de_notas");
+    if (!r.ok) avisos.push(r.message);
+    else if (r.troca) trocas.push({ ppId: id, ...r.troca });
+  }
+  return { trocas, avisos };
 }
 
 /**

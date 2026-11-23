@@ -6133,6 +6133,27 @@ export interface NotaFiscalFornecedor {
 }
 
 /** Decisão 271: uma retenção que a NF tomada destaca. */
+/**
+ * Uma alteração do registro de uma NF tomada pelo financeiro (decisão 271,
+ * ponto 6) — `notas_fiscais_fornecedor_alteracoes`, escrita só pela RPC
+ * `alterar_registro_das_notas`.
+ */
+export interface NotaFiscalFornecedorAlteracao {
+  id: string;
+  tenant_id: string;
+  /** Na junção (6b), passa para a nota que ficou. */
+  nota_fiscal_id: string | null;
+  fornecedor_id: string | null;
+  antes: { numero: string; data_emissao: string; valor: number; tomador_estabelecimento_id: string | null; tomador: string | null };
+  depois: { numero: string; data_emissao: string; valor: number; tomador_estabelecimento_id: string | null; tomador: string | null };
+  /** A nota que já existia com o número novo, à qual esta foi juntada. */
+  juntada_com: string | null;
+  documentos: Array<{ tipo: "pp" | "desembolso" | "prestacao"; id: string; codigo: string; pp_id?: string }>;
+  motivo: string;
+  alterada_por: string;
+  alterada_em: string;
+}
+
 export interface RetencaoDestacadaNaNf {
   imposto: "ISS" | "IRRF" | "PIS" | "COFINS" | "CSLL" | "INSS";
   aliquota: number | null;

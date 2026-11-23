@@ -9296,3 +9296,9 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Conferido** no Sandbox (criar, conta que varia com TD e débito automático, lançar a conta com fatura, editar com o título em aberto e mudança de dia, anexar e tirar documento, pausar, reativar, encerrar, link antigo, "Nova recorrência" da Conciliação) e nos testes de `lib/conciliacao/custo-fixo.test.ts` e do motor.
 - **Falta:** forma de pagamento das 96 ativas sem forma, marcar as que variam e os débitos automáticos, e o cadastro dos fornecedores pagos por PIX/TED.
 
+## ⚠️ Nota de 2026-11-23 — "Editar registro" das NFs tomadas (decisão 271, ponto 6)
+
+- **Tela:** botão "Editar registro" na aba Tomadas (`edicao-do-registro.tsx`): só nota em avaliação; número, emissão, valor e CNPJ tomador; rodapé + pop-up com motivo. Histórico no painel da nota, ícone na NF e "NF corrigida no controle de notas" no histórico do desembolso.
+- **Banco:** `notas_fiscais_fornecedor_alteracoes` + RPC `alterar_registro_das_notas` (migration `20261123800004`); `_desfazer_registro_das_notas` chamado nas duas reversões e o `corrigir_notas_fiscais_da_pp` levando desembolso e prestação (migration `20261123800005`).
+- **PP:** `seguirDocumentoNasPPs` (em `actions-pp.ts`) refaz o CNPJ e o PDF de cada PP da nota depois de gravar.
+- **Em aberto:** as 4 notas registradas sem documento aprovado (de antes da mudança na reversão) — corrigir pede o OK do Tiago.
