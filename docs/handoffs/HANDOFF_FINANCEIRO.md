@@ -9275,3 +9275,13 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Agora:** casa também baixa a baixa (mesma conta, dia da linha do banco e valor da baixa). `ligarBaixaAoHistorico` liga a baixa já conciliada às previsões da mesma conta de qualquer dia, quando a soma bate; a NF 6116 já está ligada. REC 4T voltou a 16.505.869,66; CO 4T −5.987.759,92; CF 4T −556.324,06.
 - Migration `20261123600006_previsao_paga_baixa_a_baixa_e_nf_liquida.sql`.
 
+## ⚠️ Nota de 2026-11-23 — a seção Notas Fiscais na Central Financeira (decisão 271)
+
+- **Nova tela:** `/financeiro/notas-fiscais`, abas Emitidas e Tomadas (`?aba=tomadas`), navegador de período abrindo em "Tudo", visão Impostos e exportação. Só administrador e financeiro.
+- **Emitidas** junta `faturamentos` e o histórico da planilha (cargas ativas); a nota nos dois (6116) sai uma vez, pela do sistema. O tipo `NotaEmitida` estende `FaturadoRow` para abrir o mesmo painel do Contas a Receber; o resumo da coluna é `recebimentoNaLista`.
+- **Tomadas** lê o cadastro único de notas e os anexos de PP, desembolso e prestação com `nota_fiscal_id`; reembolso fora.
+- **Lista em 200 linhas por vez** (`useLimiteDeLinhas` em `comum.tsx`): com "Tudo" as emitidas são ~3.680.
+- **Leitura da NF pela IA:** `lib/ia/ler-nota-tomada.ts` (schema estrito, recusa arquivo de outra nota ou outro emitente; 5 testes) e a Server Action `lerNotasTomadas` (4 notas por chamada, em paralelo; a página tem `maxDuration = 60`). Grava pela RPC `gravar_leitura_da_nota`. Localmente não lê: o `.env.local` não tem `OPENAI_API_KEY` (só a Vercel).
+- **Conferido:** produção em leitura (as duas abas, painéis, peso da página) e Sandbox (painéis, barra de leitura com a falha mostrada); a RPC testada como admin e como GP do Sandbox em transação desfeita. A leitura de verdade só pode ser conferida na versão publicada.
+- Migrations `20261123800001_nota_tomada_dados_da_leitura.sql` e `20261123800002_gravar_leitura_da_nota.sql`.
+

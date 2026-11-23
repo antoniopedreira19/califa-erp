@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { Landmark, Clock, ArrowRight, FileText, Handshake, Receipt, Scale, TrendingUp, Wallet, BookOpen, FolderKanban, PieChart, type LucideIcon } from "lucide-react";
+import { Landmark, Clock, ArrowRight, FileText, Files, Handshake, Receipt, Scale, TrendingUp, Wallet, BookOpen, FolderKanban, PieChart, type LucideIcon } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
@@ -89,6 +89,14 @@ export default async function CentralFinanceiraPage() {
         <Suspense fallback={<FinanceiroCard {...CARTAO_FISCAL} />}>
           <CartaoFiscal tenantId={session.activeTenant.id} />
         </Suspense>
+        {/* Decisão 271: o controle das notas emitidas e das tomadas, ao lado
+            do Fiscal. Sem contagem — não é fila. */}
+        <FinanceiroCard
+          href="/financeiro/notas-fiscais"
+          icon={Files}
+          title="Notas Fiscais"
+          description="As notas que os CNPJs do grupo emitem e as que eles tomam."
+        />
         <FinanceiroCard
           href="/financeiro/fluxo-caixa"
           icon={TrendingUp}

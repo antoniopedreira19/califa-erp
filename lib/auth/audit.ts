@@ -500,6 +500,8 @@ export type AuditAction =
   // chamada, hit ou miss do cache. Metadata guarda modelo, tokens,
   // custo estimado em USD e flag de confiança baixa.
   | "pp.anexo.nf_lida_por_ia"
+  // Decisão 271: a leitura ampliada da NF tomada (Notas Fiscais › Tomadas).
+  | "nota_fiscal.leitura_ampliada"
   // Leitura do anexo logo que ele sobe (decisão 192): o tipo,
   // o número e os dados do documento. Mesma metadata, mais `tipo_lido`.
   | "pp.anexo.lido_por_ia"

@@ -1,0 +1,172 @@
+"use server";
+
+/**
+ * Notas Fiscais (decisão 271): o endereço temporário do PDF de uma NF
+ * tomada, pelo anexo do documento que a traz (PP, desembolso ou prestação
+ * da verba), e a leitura ampliada da NF pela IA. Só o administrador e o
+ * financeiro abrem a seção; a leitura do anexo passa pela RLS de quem pede.
+ */
+import { createHash } from "node:crypto";
+import { revalidatePath } from "next/cache";
+import { requireSession } from "@/lib/auth/session";
+import { logAuditEvent } from "@/lib/auth/audit";
+import { createClient } from "@/lib/supabase/server";
+import { custoEstimadoUsd } from "@/lib/ia/openai-client";
+import { VERSAO_LEITURA_NOTA_TOMADA, lerNotaTomada, leituraParaGravar, type DadosBrutosNotaTomada } from "@/lib/ia/ler-nota-tomada";
+import { NOTAS_POR_LEITURA, type TabelaDoAnexo } from "./dados";
+
+const BUCKET = "pedidos-compra";
+const TABELAS: readonly TabelaDoAnexo[] = ["pedidos_compra_anexos", "desembolsos_anexos", "pp_verba_prestacoes_anexos"];
+
+export async function urlDoAnexoDaNota(
+  tabela: TabelaDoAnexo,
+  anexoId: string,
+): Promise<{ ok: true; url: string; imagem: boolean } | { ok: false; message: string }> {
+  const session = await requireSession();
+  if (session.activeRole !== "administrador" && session.activeRole !== "financeiro") {
+    return { ok: false, message: "Só o financeiro e o administrador abrem as notas." };
+  }
+  if (!TABELAS.includes(tabela) || !/^[0-9a-f-]{36}$/i.test(anexoId)) return { ok: false, message: "Anexo inválido." };
+  const supabase = createClient();
+  const { data: anexo } = await supabase
+    .from(tabela)
+    .select("arquivo_path, arquivo_mimetype")
+    .eq("id", anexoId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle<{ arquivo_path: string; arquivo_mimetype: string | null }>();
+  if (!anexo?.arquivo_path) return { ok: false, message: "Anexo não encontrado." };
+  const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(anexo.arquivo_path, 600);
+  if (error || !data?.signedUrl) {
+    console.error("[notas-fiscais.url-do-anexo]", error?.message);
+    return { ok: false, message: "Não foi possível abrir o arquivo. Tente de novo." };
+  }
+  return { ok: true, url: data.signedUrl, imagem: (anexo.arquivo_mimetype ?? "").startsWith("image/") };
+}
+
+// ---------------------------------------------------------------------------
+// A leitura ampliada da NF tomada (decisão 271)
+// ---------------------------------------------------------------------------
+
+export interface ResultadoDaLeitura {
+  lidas: number;
+  /** O arquivo não parecia ser a nota (número ou emitente diferentes). */
+  recusadas: Array<{ numero: string; motivo: string }>;
+  falhas: Array<{ numero: string; motivo: string }>;
+}
+
+/**
+ * Lê pela IA o arquivo de cada nota (o anexo do primeiro documento que a
+ * traz) e grava na nota a descrição, o CNAE, o município, a competência, o
+ * código de verificação e as retenções destacadas. Usa o cache das
+ * leituras (`nf_extracao_cache`) pelo hash do arquivo.
+ */
+export async function lerNotasTomadas(ids: string[]): Promise<{ ok: true; resultado: ResultadoDaLeitura } | { ok: false; message: string }> {
+  const session = await requireSession();
+  if (session.activeRole !== "administrador" && session.activeRole !== "financeiro") {
+    return { ok: false, message: "Só o financeiro e o administrador leem as notas." };
+  }
+  const lote = ids.filter((id) => /^[0-9a-f-]{36}$/i.test(id)).slice(0, NOTAS_POR_LEITURA);
+  const tenantId = session.activeTenant.id;
+  const supabase = createClient();
+  const resultado: ResultadoDaLeitura = { lidas: 0, recusadas: [], falhas: [] };
+
+  const { data: notas } = await supabase
+    .from("notas_fiscais_fornecedor")
+    .select("id, numero, fornecedor:fornecedores(cpf_cnpj)")
+    .eq("tenant_id", tenantId)
+    .in("id", lote)
+    .returns<Array<{ id: string; numero: string; fornecedor: { cpf_cnpj: string | null } | null }>>();
+
+  // As notas do lote em paralelo: a chamada cabe no tempo da página (60 s).
+  await Promise.all(
+    (notas ?? []).map(async (nota) => {
+      try {
+        const anexo = await anexoDaNota(supabase, tenantId, nota.id);
+        if (!anexo) {
+          resultado.falhas.push({ numero: nota.numero, motivo: "Nenhum documento traz o arquivo desta nota." });
+          return;
+        }
+        const { data: blob, error: errDownload } = await supabase.storage.from(BUCKET).download(anexo.path);
+        if (errDownload || !blob) {
+          resultado.falhas.push({ numero: nota.numero, motivo: "Não foi possível baixar o arquivo." });
+          return;
+        }
+        const arquivo = Buffer.from(await blob.arrayBuffer());
+        const hash = createHash("sha256").update(arquivo).digest("hex");
+        const { data: cache } = await supabase
+          .from("nf_extracao_cache")
+          .select("dados")
+          .eq("tenant_id", tenantId)
+          .eq("hash_sha256", hash)
+          .eq("modelo", VERSAO_LEITURA_NOTA_TOMADA)
+          .maybeSingle<{ dados: DadosBrutosNotaTomada }>();
+        let dados: DadosBrutosNotaTomada;
+        let tokensIn = 0;
+        let tokensOut = 0;
+        if (cache?.dados) {
+          dados = cache.dados;
+        } else {
+          const r = await lerNotaTomada(arquivo, anexo.mimetype);
+          dados = r.dados;
+          tokensIn = r.tokensIn;
+          tokensOut = r.tokensOut;
+          await supabase.from("nf_extracao_cache").insert({ tenant_id: tenantId, hash_sha256: hash, dados, modelo: VERSAO_LEITURA_NOTA_TOMADA });
+        }
+        const conferida = leituraParaGravar(dados, { numero: nota.numero, cnpjEmitente: nota.fornecedor?.cpf_cnpj ?? null });
+        if (!conferida.ok) {
+          resultado.recusadas.push({ numero: nota.numero, motivo: conferida.motivo });
+          return;
+        }
+        const { error } = await supabase.rpc("gravar_leitura_da_nota", {
+          p_nota_id: nota.id,
+          p_dados: conferida.leitura,
+          p_modelo: VERSAO_LEITURA_NOTA_TOMADA,
+        });
+        if (error) {
+          console.error("[notas-fiscais.leitura]", error.message);
+          resultado.falhas.push({ numero: nota.numero, motivo: "Não foi possível gravar a leitura." });
+          return;
+        }
+        resultado.lidas++;
+        await logAuditEvent({
+          acao: "nota_fiscal.leitura_ampliada",
+          tenantId,
+          entidadeTipo: "nota_fiscal_fornecedor",
+          entidadeId: nota.id,
+          metadata: {
+            numero: nota.numero,
+            arquivo_hash: hash,
+            cache_hit: !!cache?.dados,
+            modelo: VERSAO_LEITURA_NOTA_TOMADA,
+            tokens_in: tokensIn,
+            tokens_out: tokensOut,
+            custo_usd: custoEstimadoUsd(tokensIn, tokensOut),
+          },
+        });
+      } catch (err) {
+        console.error("[notas-fiscais.leitura]", err instanceof Error ? err.message : err);
+        resultado.falhas.push({ numero: nota.numero, motivo: "A leitura pela IA falhou." });
+      }
+    }),
+  );
+  revalidatePath("/financeiro/notas-fiscais");
+  return { ok: true, resultado };
+}
+
+type Supabase = ReturnType<typeof createClient>;
+
+/** O arquivo da nota: o anexo do primeiro documento que a traz (PP, desembolso, prestação). */
+async function anexoDaNota(supabase: Supabase, tenantId: string, notaId: string): Promise<{ path: string; mimetype: string } | null> {
+  for (const tabela of TABELAS) {
+    const { data } = await supabase
+      .from(tabela)
+      .select("arquivo_path, arquivo_mimetype")
+      .eq("tenant_id", tenantId)
+      .eq("nota_fiscal_id", notaId)
+      .order("created_at")
+      .limit(1)
+      .maybeSingle<{ arquivo_path: string; arquivo_mimetype: string | null }>();
+    if (data?.arquivo_path) return { path: data.arquivo_path, mimetype: data.arquivo_mimetype ?? "application/pdf" };
+  }
+  return null;
+}

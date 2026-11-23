@@ -6106,6 +6106,25 @@ export interface NotaFiscalFornecedor {
   criada_por: string | null;
   created_at: string;
   updated_at: string;
+  /** Decisão 271: o que a leitura ampliada da NF trouxe (nulo antes da leitura). */
+  leitura_em: string | null;
+  leitura_modelo: string | null;
+  descricao_servico: string | null;
+  /** O CNAE da própria nota (o do cadastro fica em `fornecedores.cnae`). */
+  cnae: string | null;
+  municipio_prestacao: string | null;
+  /** Primeiro dia do mês de competência ("AAAA-MM-01"). */
+  competencia: string | null;
+  codigo_verificacao: string | null;
+  /** As retenções destacadas na NF (conferência; o retido de fato fica na aprovação e na baixa). */
+  retencoes: RetencaoDestacadaNaNf[];
+}
+
+/** Decisão 271: uma retenção que a NF tomada destaca. */
+export interface RetencaoDestacadaNaNf {
+  imposto: "ISS" | "IRRF" | "PIS" | "COFINS" | "CSLL" | "INSS";
+  aliquota: number | null;
+  valor: number;
 }
 
 /**

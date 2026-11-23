@@ -6,8 +6,11 @@ v10): a aba "Recebidas" passou a "Tomadas", o ponto 6 é feito na própria
 tabela, as perguntas do ponto 6 foram respondidas e a tela ganhou CNAE,
 retido, os dados da leitura da NF e a visão Impostos. O ponto 3 está
 implementado (decisão [269](269-nf-da-prestacao-entra-no-cadastro-no-envio.md));
-os pontos 1, 2 e 6 e a seção Notas Fiscais aguardam a implementação; o
-ponto 5 vai junto com a revisão das retenções; o ponto 4 não pede nada.
+a seção Notas Fiscais está implementada desde 23/11/2026 (Emitidas,
+Tomadas, navegador de período, visão Impostos e a leitura da NF pela IA;
+ver "Implementação" no fim); os pontos 1, 2 e 6 ("Editar registro")
+aguardam a implementação; o ponto 5 vai junto com a revisão das retenções;
+o ponto 4 não pede nada.
 **Quem decidiu:** Tiago, sobre o protótipo "Notas Fiscais" da Central
 Financeira (v3 a v14, 23/11/2026), com um seletor por ponto:
 https://claude.ai/artifact/2JLetfAPvFHaNr9kZJKX5f.
@@ -136,12 +139,58 @@ protótipo v8 com o OK do Tiago ("Sim, fazer a v8"):
    alterada por <nome> depois que você abriu a edição" e nada é
    sobrescrito.
 
-Pendência no mesmo assunto: o texto da tela do desembolso "Registrada no
-controle de notas (Fiscal › Notas recebidas)" aponta para uma tela que não
-existe; passa a "Notas Fiscais › Tomadas" quando ela existir.
+Pendência no mesmo assunto (resolvida em 23/11/2026): o texto da tela do
+desembolso "Registrada no controle de notas (Fiscal › Notas recebidas)"
+apontava para uma tela que não existia; passou a "Central Financeira ›
+Notas Fiscais › Tomadas".
 
 ## Retrato de 23/11/2026 (produção)
 
 204 notas não registradas: 195 em PPs, 9 em prestações, nenhuma em
 desembolso; 75 notas estão em mais de um documento. A correção da NF da PP
 foi usada 2 vezes (a última em 26/10).
+
+## Implementação (23/11/2026)
+
+Entrou a seção, sem o "Editar registro" (ponto 6), que vem em seguida.
+
+- **Onde:** `app/(app)/financeiro/notas-fiscais/` e o card "Notas Fiscais"
+  na Central Financeira. Só o administrador e o financeiro abrem.
+- **Emitidas:** as notas do sistema (`faturamentos`) e as do histórico da
+  planilha (cargas ativas, decisão 211). O olho abre o mesmo painel do
+  Contas a Receber, em leitura; a nota do histórico não tem painel. A
+  nota que está nos dois (mesmo número e mesmo CNPJ emissor; em 23/11 só
+  a 6116 de 13/08/2026) aparece uma vez, pela do sistema.
+- **Tomadas:** as notas do cadastro único (decisão 152) com os documentos
+  que as trazem (PP, desembolso, prestação da verba); o desembolso de
+  reembolso fica fora (ponto 4) e a prestação só conta em avaliação ou
+  aprovada. O olho abre o painel da nota, com a PP ao lado ou o PDF do
+  anexo.
+- **A lista desenha 200 notas por vez** ("Mostrar mais 200" no pé). Com
+  "Tudo", as emitidas passam de 3.600 (o histórico): desenhar todas fazia
+  12,9 MB de página e 106 mil elementos. Os totais, os filtros, a busca e
+  a exportação continuam sobre todas as notas do filtro.
+- **A leitura da NF pela IA** (os dados da coluna "Da leitura da NF"):
+  descrição do serviço, CNAE, município da prestação, competência, código
+  de verificação e as retenções destacadas. O financeiro dispara pela
+  barra acima da tabela ("Ler as N notas pela IA", as notas da lista ainda
+  não lidas, de 4 em 4, com o progresso) ou pelo "Ler esta NF" no painel.
+  A leitura é recusada quando o arquivo traz outro número de nota ou outro
+  CNPJ de emitente. Nada é lido sozinho: as ~500 notas que já existem
+  esperam o financeiro disparar. Sem a leitura, o CNAE é o do cadastro do
+  emitente (com "*") e o retido fica em branco.
+- **Banco:** `20261123800001_nota_tomada_dados_da_leitura.sql` (as colunas
+  da leitura em `notas_fiscais_fornecedor`) e
+  `20261123800002_gravar_leitura_da_nota.sql` (a RPC
+  `gravar_leitura_da_nota`, só administrador e financeiro, só nestas
+  colunas). Cada leitura entra na auditoria
+  (`nota_fiscal.leitura_ampliada`, com tokens e custo) e no cache das
+  leituras pelo hash do arquivo.
+
+Achados no dado, sem correção (produção só leitura):
+
+- A NF 6479 (California · Salvador, R$ 300.000,00) está com emissão em
+  01/03/2027.
+- No Sandbox, 6 notas tomadas apontam para fornecedores da produção (sobra
+  da mudança da Empresa Teste): o emitente aparece "—".
+

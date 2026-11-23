@@ -556,7 +556,7 @@ function Dossie({
               </dl>
               <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
                 {nota?.registrada
-                  ? "Registrada no controle de notas (Fiscal › Notas recebidas)."
+                  ? "Registrada no controle de notas (Central Financeira › Notas Fiscais › Tomadas)."
                   : financeiro
                     ? "No cadastro de notas desde o envio. Confira com a nota ao lado: na aprovação, ela é registrada no controle de notas."
                     : "No cadastro de notas desde o envio. O financeiro confere na aprovação."}
