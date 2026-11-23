@@ -83,6 +83,14 @@ test("DANFE: Nº antes da série, data de emissão, valor total e o CNPJ antes d
   assert.deepEqual(lerPeloTexto(DANFE), { numero: "63", cnpj: "11222333000181", emissao: "2026-10-13", valor: 1878 });
 });
 
+test("DANFSe como o pdf-parse entrega: palavras dos rótulos coladas, data grudada na hora", () => {
+  const colado =
+    "N°NFS-e / CHAVENFS-e 28/ 2927408 DANFSev2.0 NÚMERODANFS-e 28 COMPETÊNCIADANFS-e 19/10/2026 DATAE HORADAEMISSÃODANFS-e 19/10/202611:50:50 " +
+    "NÚMERODADPS 11 SÉRIEDADPS 70000 EMITENTEDANFS-e Prestador SITUAÇÃODANFS-e NFS-e MEI FINALIDADE - PRESTADOR/ FORNECEDOR CNPJ/ CPF/ NIF 11.222.333/0001-81 " +
+    "TOMADOR/ ADQUIRENTE CNPJ/ CPF/ NIF 00.000.000/0001-91 VALORTOTALDANFS-e VALORDAOPERAÇÃO/ SERVIÇO R$5.000,00 VALORLÍQUIDODANFS-e R$5.000,00";
+  assert.deepEqual(lerPeloTexto(colado), { numero: "28", cnpj: "11222333000181", emissao: "2026-10-19", valor: 5000 });
+});
+
 test("CNPJ com dígito verificador errado não vale", () => {
   assert.equal(lerPeloTexto(DANFSE.replace("11.222.333/0001-81", "00.000.000/0001-00")).cnpj, null);
 });

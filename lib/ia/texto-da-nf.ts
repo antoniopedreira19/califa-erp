@@ -53,90 +53,87 @@ function normalizar(t: string): string {
     .trim();
 }
 
-const DATA_E_HORA = /(\d{2})\/(\d{2})\/(\d{4})\s+\d{2}:\d{2}/;
-const DATA = /(\d{2})\/(\d{2})\/(\d{4})/;
-const VALOR = /R?\$?\s*(\d{1,3}(?:\.\d{3})*,\d{2})/;
+// O pdf-parse cola as palavras dos rótulos ("NÚMERODANFS-e 28", "DATAE
+// HORADAEMISSÃODANFS-e 19/10/202611:50:50"): os rótulos são procurados no
+// texto compacto — sem espaços, sem acentos, em maiúsculas.
+const compactar = (t: string) =>
+  t
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toUpperCase()
+    .replace(/\s+/g, "");
+
+const VALOR = "(\\d{1,3}(?:\\.\\d{3})*,\\d{2})";
+const DATA = "(\\d{2})\\/(\\d{2})\\/(\\d{4})";
 const CNPJ = /\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/;
 
 const paraIso = (m: RegExpMatchArray | null) => {
   if (!m) return null;
   const [, d, mes, a] = m;
-  const iso = `${a}-${mes}-${d}`;
-  return Number(mes) >= 1 && Number(mes) <= 12 && Number(d) >= 1 && Number(d) <= 31 ? iso : null;
+  return Number(mes) >= 1 && Number(mes) <= 12 && Number(d) >= 1 && Number(d) <= 31 ? `${a}-${mes}-${d}` : null;
 };
 const paraNumero = (v: string | undefined) => (v ? Math.round(Number(v.replace(/\./g, "").replace(",", ".")) * 100) / 100 : null);
 
-/** O trecho logo depois do rótulo (no máximo `n` caracteres). */
-function depois(texto: string, rotulo: RegExp, n: number): string | null {
-  const m = rotulo.exec(texto);
-  return m ? texto.slice(m.index + m[0].length, m.index + m[0].length + n) : null;
-}
-
-function numeroPeloTexto(t: string): string | null {
-  // DANFSe v2.0: o valor vem logo depois do rótulo, ou na linha de baixo.
-  // O "Número da DPS" é outro número e nunca vale.
-  const nfse = depois(t, /N[úu]mero da NFS-?e\b/i, 160);
-  if (nfse) {
-    const m = /^[\s:]*(?:Compet[êe]ncia da NFS-?e\s*)?(?:Data e Hora da Emiss[ãa]o da NFS-?e\s*)?(\d{1,15})\b/i.exec(nfse);
+function numeroPeloTexto(c: string): string | null {
+  const regras = [
+    // DANFSe v2.0: "Número da NFS-e" — nunca o "Número da DPS".
+    /NUMERODANFS-?E:?(\d{1,15})/,
+    // NFS-e municipais: "Número da Nota: 00000078".
+    /NUMERODANOTA:?(\d{1,15})/,
+    // DANFE: "Nº 63 SÉRIE 1" / "Nº 000.003.107 Série 1".
+    /N[º°O]\.?:?(\d{1,3}(?:\.\d{3})+|\d{1,12})SERIE/,
+  ];
+  for (const r of regras) {
+    const m = r.exec(c);
     if (m) return m[1];
   }
-  // NFS-e municipais: "Número da Nota: 00000078".
-  const nota = depois(t, /N[úu]mero da Nota\b/i, 60);
-  if (nota) {
-    const m = /^[\s:]*(\d{1,15})\b/.exec(nota);
-    if (m) return m[1];
-  }
-  // DANFE: "Nº 63 SÉRIE 1" / "Nº 000.003.107 Série 1".
-  const danfe = /N[º°o]\.?\s*(\d{1,3}(?:\.\d{3})+|\d{1,12})\s*\n?\s*S[ÉE]RIE/i.exec(t);
-  if (danfe) return danfe[1];
   return null;
 }
 
-function emissaoPeloTexto(t: string): string | null {
-  // Com hora: a emissão de NFS-e (a competência não tem hora).
-  for (const rotulo of [/Data e Hora da Emiss[ãa]o da NFS-?e/i, /Data e Hora de Emiss[ãa]o/i]) {
-    const trecho = depois(t, rotulo, 240);
-    const iso = trecho ? paraIso(DATA_E_HORA.exec(trecho)) : null;
+function emissaoPeloTexto(c: string): string | null {
+  const regras = [
+    new RegExp(`DATAEHORADAEMISSAODANFS-?E:?${DATA}`),
+    new RegExp(`DATAEHORADEEMISSAO:?${DATA}`),
+    new RegExp(`DATAD[AE]EMISSAO:?${DATA}`),
+  ];
+  for (const r of regras) {
+    const iso = paraIso(r.exec(c));
     if (iso) return iso;
   }
-  // DANFE: "DATA DE EMISSÃO 13/10/2026" (sem hora).
-  const danfe = depois(t, /DATA D[AE] EMISS[ÃA]O/i, 40);
-  return danfe ? paraIso(DATA.exec(danfe)) : null;
+  return null;
 }
 
-function valorPeloTexto(t: string): number | null {
-  const rotulos = [
-    /VALOR TOTAL DA NOTA\s*=?/i,
-    /VALOR TOTAL DO SERVI[ÇC]O\s*=?/i,
-    /Valor da Opera[çc][ãa]o\s*\/\s*Servi[çc]o/i,
-    /Valor do Servi[çc]o/i,
-    /Valor dos Servi[çc]os/i,
+function valorPeloTexto(c: string): number | null {
+  const regras = [
+    new RegExp(`VALORTOTALDANOTA=?(?:R\\$)?${VALOR}`),
+    new RegExp(`VALORTOTALDOSERVICO=?(?:R\\$)?${VALOR}`),
+    new RegExp(`VALORDAOPERACAO\\/SERVICO(?:R\\$)?${VALOR}`),
+    new RegExp(`VALORDOSSERVICOS:?(?:R\\$)?${VALOR}`),
+    new RegExp(`VALORDOSERVICO:?(?:R\\$)?${VALOR}`),
   ];
-  for (const rotulo of rotulos) {
-    const trecho = depois(t, rotulo, 60);
-    const m = trecho ? VALOR.exec(trecho) : null;
-    const v = paraNumero(m?.[1]);
+  for (const r of regras) {
+    const v = paraNumero(r.exec(c)?.[1]);
     if (v !== null && v > 0) return v;
   }
   return null;
 }
 
-function cnpjPeloTexto(t: string): string | null {
+function cnpjPeloTexto(c: string): string | null {
   // NFS-e: o primeiro CNPJ depois do PRESTADOR. DANFE: o primeiro antes do DESTINATÁRIO.
-  const prestador = depois(t, /PRESTADOR/i, 500);
-  const fonte = prestador ?? t.split(/DESTINAT[ÁA]RIO/i)[0];
-  const m = fonte ? CNPJ.exec(fonte) : null;
+  const i = c.indexOf("PRESTADOR");
+  const fonte = i >= 0 ? c.slice(i, i + 500) : c.split("DESTINATARIO")[0];
+  const m = CNPJ.exec(fonte);
   const digitos = m ? m[0].replace(/\D/g, "") : "";
   return digitos.length === 14 && isValidCnpj(digitos) ? digitos : null;
 }
 
 /** Número, emissão, valor e CNPJ do emitente pelo texto do PDF. Nulo no que não achou. */
 export function lerPeloTexto(texto: string): CamposDoPdf {
-  const t = normalizar(texto);
+  const c = compactar(texto);
   return {
-    numero: numeroPeloTexto(t),
-    cnpj: cnpjPeloTexto(t),
-    emissao: emissaoPeloTexto(t),
-    valor: valorPeloTexto(t),
+    numero: numeroPeloTexto(c),
+    cnpj: cnpjPeloTexto(c),
+    emissao: emissaoPeloTexto(c),
+    valor: valorPeloTexto(c),
   };
 }
