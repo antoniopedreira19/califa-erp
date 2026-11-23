@@ -21,17 +21,6 @@ function limparCpf(cpf: string): string {
   return cpf.replace(/\D/g, "");
 }
 
-const PARENTESCOS = [
-  "conjuge",
-  "filho",
-  "filha",
-  "pai",
-  "mae",
-  "irmao",
-  "irma",
-  "outro",
-] as const;
-
 const criarDepSchema = z.object({
   colaboradorId: z.string().uuid(),
   nome: z.string().min(2, "Nome é obrigatório.").max(200),
@@ -282,5 +271,3 @@ export async function removerDepDePlano(
   revalidatePath("/rh/beneficios");
   return { ok: true, id: parsed.data.linkId };
 }
-
-export { PARENTESCOS };
