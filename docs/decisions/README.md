@@ -287,6 +287,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 273 | [Mídia Off, entrega 3: a PP do repasse e o encerramento depois da veiculação](273-midia-off-pp-do-repasse-e-encerramento.md) | 2026-11-23 |
 | 274 | [Mídia Off, entrega 4: os veículos do mês (AP, PI, NF e BV)](274-midia-off-veiculos-do-mes.md) | 2026-11-23 |
 | 275 | [Mídia Off, entrega 5: planejado e realizado (encerrar antes, estender)](275-midia-off-planejado-e-realizado.md) | 2026-11-23 |
+| 276 | [A NF presa ao job da planilha e a carga das NFs da planilha](276-nf-presa-ao-job-da-planilha.md) | 2026-11-23 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -299,4 +300,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 273**. (A 270 está em uso por outra sessão, ainda sem arquivo nesta pasta.) (A 267 existe na pasta e ainda não está nesta tabela.) (A 264 existe na pasta e ainda não está nesta tabela.) (A 240 está em uso por outra frente, ainda sem arquivo neste índice.) (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 277**. (A 270 está em uso por outra sessão, ainda sem arquivo nesta pasta.) (A 267 existe na pasta e ainda não está nesta tabela.) (A 264 existe na pasta e ainda não está nesta tabela.) (A 240 está em uso por outra frente, ainda sem arquivo neste índice.) (091 e 092 existem na pasta e ainda não estão nesta tabela.)
