@@ -9321,10 +9321,13 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 
 - **Banco:** `faturamento_itens.job_planilha_chave/job_planilha_nome`, `faturamentos_passagens_da_planilha`, `jobs_da_planilha_com_nf`, `passar_nf_da_planilha_ao_job`, `_previsao_de_nf_lancada` na `vw_fluxo_caixa` e `emitir_faturamento` gravando as colunas (`20261123950001`); regra (c) de `_historico_previsoes_pagas` — a previsão REC e as retenções que citam a NF paga contam no DRE (`950002`); `anexar_pdf_da_nota` (`950003`); número 275 → 276 no texto aplicado (`950004`).
 - **Emissão:** `emitirFaturamento` aceita `job_planilha_chave/nome` nos itens e `sem_pdf` (só a NF da planilha); a NF antiga leva o CNAE mesmo antes do cadastro, sem CBS/IBS. Gaveta da NF: "Sem PDF" com "Anexar PDF"; o item aparece como "Job da planilha".
-- **Abertura:** sugestão do nome (`lib/calculos/nfs-da-planilha.ts`), linha "NFs da planilha" na confirmação e `passarNfsDaPlanilhaAoJob` (`abertura-de-job/nfs-da-planilha.ts`) depois de abrir; no mensal, o mês anterior ao da emissão.
+- **Abertura:** sugestão do nome (`lib/calculos/nfs-da-planilha.ts`), linha "NFs da planilha" na confirmação e `passarNfsDaPlanilhaAoJob` (`abertura-de-job/nfs-da-planilha.ts`) depois de abrir; no mensal, o mês anterior ao da emissão e, se ele não é do job, o da emissão (`mesDaNotaNoJob`).
 - **Conciliação:** regra 0 de `donosDaPlanilha` (a linha que cita a NF é do título) e `nfsPagasDaPlanilha` + `eDeNfPaga` em `banco-dados.ts`; `HistoricoDoMotor.nfs`.
 - **Carga (produção, 23/11):** 208 NFs (R$ 27,62 mi), 35 baixas e 32 linhas do banco trocadas da planilha para as baixas; DRE do 4T igual. Scripts em `tmp/nfs-planilha/` (fora do git). Conferido antes no Sandbox (TESTE-275A–G, TES-1012/26 aberto com o nome da planilha).
-- **Falta:** as 26 mensais fora dos meses do job (regra do mês), a segunda parte (20 recebidas antes de 03/11 e a 2ª parcela da NF 4946), e as listas a decidir (sem cliente, Saving, Ambev com o crédito do ISS, emissão em 2027, depósitos que pagam outras coisas).
+- **Mensais (regra nova do mês):** 12 emitidas, 10 baixas e 10 linhas do banco trocadas; DRE do 4T igual.
+- **Pelo envio do GP:** 15 NFs (R$ 697.296,17) faturadas pela parcela do envio; 7 baixas e 7 linhas do banco trocadas; DRE do 4T igual.
+- **Segunda parte (recebidas antes de 03/11):** 14 NFs (R$ 5,79 mi) e a 2ª parcela da 4946; 16 baixas pela data da planilha, 15 ligadas às linhas dela (decisão 270); DRE só no 4T de 2025 (+R$ 8.000 da 4946, que faltavam desde a primeira parte); Paypal zerado pela 6393.
+- **Falta:** as 2 do NOM-1001 e as 4 do AMB-1055 (mês), as 6 da segunda parte que ficaram para decidir (13, 5549, 2478–2480 e 6405), e as listas a decidir (sem cliente, Saving, Ambev com o crédito do ISS, emissão em 2027, depósitos que pagam outras coisas).
 
 ## ⚠️ Nota de 2026-11-23 — a emissão da NF 6479 corrigida (vencimento lançado na emissão)
 
@@ -9351,4 +9354,10 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Rateio por empresa gerencial** no painel da aprovação: o valor de cada gerencial e as regionais pela regra de `lib/fiscal/rateio-gerencial.ts` (receita da competência; regional padrão do CNPJ — GoCrazy → SS; empresa de uma regional só; sem receita, regional escolhida). O lote "pelo calculado" segue com o rateio do sistema.
 - **Nota avulsa** entra no rateio pelas regionais dela (`faturamentos_regionais`), não mais "sem regional".
 - Conferido no Sandbox (Empresa Teste): saldo da contabilidade gravado e usado em novembro; título com rateio em duas gerenciais. Faltam a 2b (Guia da contabilidade) e a 3 (guia já paga pela planilha).
+
+## ⚠️ Nota de 2026-11-23 — a Guia da contabilidade (decisão 277, entrega 2b)
+
+- **"+ Guia da contabilidade"** na faixa de cada CNPJ da Apuração: a guia que o sistema não calcula (competência antes de outubro/2026, filial sem nota, imposto fora da apuração) entra aprovada com o valor da contabilidade, o motivo e o rateio por gerencial; as regionais pela receita do período (notas do sistema de outubro em diante; antes, `historico_notas` + regional do job da planilha — `lib/fiscal/receita-do-periodo.ts`).
+- **Banco** (migration 20261123400003): `impostos_a_pagar.da_contabilidade` + RPC `lancar_guia_da_contabilidade` (por cima do `criar_imposto_avulso`; origem continua `avulso`).
+- Conferido no Sandbox (Empresa Teste): PIS set/2026 e IOF nov/2026 lançados, em "Aprovadas" e em Impostos a Pagar. Falta a entrega 3 (guia já paga, ligada às linhas da planilha).
 

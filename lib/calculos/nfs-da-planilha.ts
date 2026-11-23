@@ -14,13 +14,25 @@ export function nomeComparavel(nome: string | null | undefined): string {
     .toLowerCase();
 }
 
-/** O mês que a NF do job mensal fatura: o anterior ao da emissão (Tiago,
- *  23/11/2026: a 6397, emitida em 03/11, fatura outubro). "2026-11-03" → "2026-10-01". */
+/** O mês anterior ao da emissão ("2026-11-03" → "2026-10-01"). */
 export function mesDaNotaMensal(emissao: string): string {
   const [ano, mes] = emissao.slice(0, 7).split("-").map(Number);
   const a = mes === 1 ? ano - 1 : ano;
   const m = mes === 1 ? 12 : mes - 1;
   return `${a}-${String(m).padStart(2, "0")}-01`;
+}
+
+/**
+ * O mês que a NF do job mensal fatura (Tiago, 23/11/2026): o anterior ao da
+ * emissão (a 6397, emitida em 03/11, fatura outubro); se esse mês não é do
+ * job, o mês da emissão (o job do 4T faturado no próprio mês: emitida em
+ * 09/10, fatura outubro). Nulo: nenhum dos dois é do job.
+ */
+export function mesDaNotaNoJob(emissao: string, mesesDoJob: readonly string[]): string | null {
+  const anterior = mesDaNotaMensal(emissao);
+  if (mesesDoJob.includes(anterior)) return anterior;
+  const daEmissao = `${emissao.slice(0, 7)}-01`;
+  return mesesDoJob.includes(daEmissao) ? daEmissao : null;
 }
 
 /** Os jobs da planilha que casam com o que se digita no nome (a sugestão da

@@ -40,10 +40,11 @@ import type { CadastroFiscal } from "@/lib/fiscal/cadastro";
 import { trimestreDe } from "@/lib/fiscal/apuracao";
 import { dataBr, mesDe, nomeDoMes, proximoMes, r2 } from "@/lib/fiscal/datas";
 import { aprovarGuiasPeloCalculado } from "./actions";
-import type { DadosDaApuracao, EstabelecimentoDaTela, GuiaDaTela, PJDaTela } from "./dados";
+import type { DadosDaApuracao, EstabelecimentoDaTela, GuiaDaContabilidade, GuiaDaTela, PJDaTela } from "./dados";
 import { MemoriaDialog } from "./memoria-dialog";
 import { NomeDaGuia, Nota, ResumoItem, cnpjBr, moeda, nomeGuia, situacaoDa, somaGrupo, tituloPorExtenso } from "./ui";
 import { DialogoAApurar, ItemDoResumo, LinhaProjecao, projecoesDe, type Projecao } from "./a-apurar";
+import { DialogoGuiaDaContabilidade, LinhaDaContabilidade } from "./guia-da-contabilidade";
 import {
   BarraDosFiltrosDeColuna,
   FILTRO_VAZIO,
@@ -289,12 +290,27 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
   // Decisão 277: os blocos recolhidos e o "Aprovar" de um CNPJ só (nulo = todos).
   const [recolhidos, setRecolhidos] = React.useState<Set<string>>(new Set());
   const [loteDoCnpj, setLoteDoCnpj] = React.useState<string | null>(null);
+  /** Decisão 277 (2b): o CNPJ da Guia da contabilidade em lançamento. */
+  const [guiaContabilDe, setGuiaContabilDe] = React.useState<PJDaTela | null>(null);
   const [aApurarAberto, setAApurarAberto] = React.useState<Projecao | null>(null);
   const todasProjecoes = React.useMemo(() => projecoesDe(dados, pjPorId), [dados, pjPorId]);
 
   // Os chips de competência: os meses e os trimestres que têm guia.
-  const meses = React.useMemo(() => [...new Set(guias.filter((g) => g.periodo === "mensal").map((g) => g.competencia))].sort(), [guias]);
-  const trimestres = React.useMemo(() => [...new Set(guias.map(trimestreDaGuia))].sort(), [guias]);
+  // Com as competências das guias da contabilidade (decisão 277): setembro, o 3º trimestre...
+  const meses = React.useMemo(
+    () =>
+      [
+        ...new Set([
+          ...guias.filter((g) => g.periodo === "mensal").map((g) => g.competencia),
+          ...dados.guiasDaContabilidade.filter((c) => c.periodo === "mensal").map((c) => c.competencia),
+        ]),
+      ].sort(),
+    [guias, dados.guiasDaContabilidade],
+  );
+  const trimestres = React.useMemo(
+    () => [...new Set([...guias.map(trimestreDaGuia), ...dados.guiasDaContabilidade.map((c) => c.trimestre)])].sort(),
+    [guias, dados.guiasDaContabilidade],
+  );
 
   /** O chip de competência põe o filtro na coluna Competência (mês) ou
    *  Trimestre: o trimestre traz também as guias mensais dos três meses. */
@@ -327,10 +343,21 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
     !["aberto", "a_apurar", "todas"].includes(mostrar) || (colunas.filtrando && !periodo)
       ? []
       : projecoesDoCnpj.filter((p) => !periodo || (periodo.includes("-T") ? p.trimestre === periodo : p.competencia === periodo));
-  type LinhaDaTabela = { tipo: "guia"; g: GuiaDaTela; v: string } | { tipo: "a_apurar"; p: Projecao; v: string };
+  // Decisão 277 (2b): as guias da contabilidade já nascem aprovadas — entram em
+  // "Aprovadas" e "Todas", com o CNPJ e a competência de cima.
+  const contabeisDoCnpj = dados.guiasDaContabilidade.filter((c) => cnpjs.length === 0 || cnpjs.includes(c.empresa_contabil_id));
+  const contabeis =
+    !["aprovadas", "todas"].includes(mostrar) || (colunas.filtrando && !periodo)
+      ? []
+      : contabeisDoCnpj.filter((c) => !periodo || (periodo.includes("-T") ? c.trimestre === periodo : c.competencia === periodo));
+  type LinhaDaTabela =
+    | { tipo: "guia"; g: GuiaDaTela; v: string }
+    | { tipo: "a_apurar"; p: Projecao; v: string }
+    | { tipo: "contabil"; c: GuiaDaContabilidade; v: string };
   const linhasDaTabela: LinhaDaTabela[] = [
     ...lista.map((g) => ({ tipo: "guia" as const, g, v: g.vencimento })),
     ...projecoes.map((p) => ({ tipo: "a_apurar" as const, p, v: p.vencimento })),
+    ...contabeis.map((c) => ({ tipo: "contabil" as const, c, v: c.vencimento })),
   ];
   // Com ordem pelo título, as linhas "A apurar" ficam no fim; sem ela, entram pela data.
   if (!colunas.ordenacao) linhasDaTabela.sort((a, b) => a.v.localeCompare(b.v));
@@ -345,15 +372,23 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
   const contagem = (f: (g: GuiaDaTela) => boolean) => porCnpj.filter(f).length;
   // Os botões de CNPJ contam pelo filtro "Mostrar", antes do recorte do CNPJ.
   const comProjecoes = ["aberto", "a_apurar", "todas"].includes(mostrar);
+  const comContabeis = ["aprovadas", "todas"].includes(mostrar);
   const contagemDoCnpj = (pj: string) =>
     ordenadas.filter((g) => g.empresa_contabil_id === pj && filtroDoMostrar(g)).length +
-    (comProjecoes ? todasProjecoes.filter((p) => p.pj === pj).length : 0);
-  const pjsComGuia = pjs.filter((p) => guias.some((g) => g.empresa_contabil_id === p.id) || todasProjecoes.some((x) => x.pj === p.id));
-  // Os blocos: as linhas por CNPJ, na ordem do cadastro; bloco vazio no filtro sai.
-  const pjDaLinha = (l: LinhaDaTabela) => (l.tipo === "guia" ? l.g.empresa_contabil_id : l.p.pj);
+    (comProjecoes ? todasProjecoes.filter((p) => p.pj === pj).length : 0) +
+    (comContabeis ? dados.guiasDaContabilidade.filter((c) => c.empresa_contabil_id === pj).length : 0);
+  const pjsComGuia = pjs.filter(
+    (p) =>
+      guias.some((g) => g.empresa_contabil_id === p.id) ||
+      todasProjecoes.some((x) => x.pj === p.id) ||
+      dados.guiasDaContabilidade.some((c) => c.empresa_contabil_id === p.id),
+  );
+  // Os blocos: um por CNPJ, na ordem do cadastro. O bloco vazio no filtro fica
+  // (só a faixa): é dela que sai a Guia da contabilidade.
+  const pjDaLinha = (l: LinhaDaTabela) => (l.tipo === "guia" ? l.g.empresa_contabil_id : l.tipo === "a_apurar" ? l.p.pj : l.c.empresa_contabil_id);
   const blocos = pjs
-    .map((pj) => ({ pj, linhas: linhasDaTabela.filter((l) => pjDaLinha(l) === pj.id) }))
-    .filter((b) => b.linhas.length > 0);
+    .filter((pj) => cnpjs.length === 0 || cnpjs.includes(pj.id))
+    .map((pj) => ({ pj, linhas: linhasDaTabela.filter((l) => pjDaLinha(l) === pj.id) }));
 
   function nomeDoLocal(g: GuiaDaTela) {
     return g.estabelecimento_id ? estabPorId.get(g.estabelecimento_id)?.nome ?? g.local : pjPorId.get(g.empresa_contabil_id)?.nome ?? g.local;
@@ -409,7 +444,7 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
                     ? undefined
                     : k === "a_apurar"
                       ? projecoesDoCnpj.length
-                      : contagem(f) + (k === "aberto" ? projecoesDoCnpj.length : 0)
+                      : contagem(f) + (k === "aberto" ? projecoesDoCnpj.length : 0) + (k === "aprovadas" ? contabeisDoCnpj.length : 0)
                 }
               >
                 {rotulo}
@@ -534,7 +569,7 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
             </tr>
           </thead>
           <tbody>
-            {linhasDaTabela.length === 0 && (
+            {blocos.length === 0 && (
               <tr>
                 <td colSpan={LARGURAS.length} className="px-4 py-10 text-center text-sm text-muted-foreground">
                   {colunas.ativo || mostrar !== "todas" || cnpjs.length ? "Nenhuma guia com esse filtro." : "Nenhuma guia até agora."}
@@ -549,11 +584,14 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
               const emCursoDoBloco = guiasDoBloco.filter((g) => g.estado === "em_curso");
               const totalPendente = r2(pendentesDoBloco.reduce((s, g) => s + aAprovarDa(g), 0));
               const totalEmCursoBloco = r2(emCursoDoBloco.reduce((s, g) => s + g.apurado, 0));
-              const aprovadoDoBloco = r2(guiasDoBloco.reduce((s, g) => s + valoresDaGuia(g).aprovado, 0));
+              const contabeisDoBloco = b.linhas.flatMap((l) => (l.tipo === "contabil" ? [l.c] : []));
+              const aprovadoDoBloco = r2(
+                guiasDoBloco.reduce((s, g) => s + valoresDaGuia(g).aprovado, 0) + contabeisDoBloco.reduce((s, c) => s + c.valor, 0),
+              );
               const primeira = [...pendentesDoBloco].sort((x, y) => x.vencimento.localeCompare(y.vencimento))[0];
               const dias = primeira ? diasEntre(dados.hoje, primeira.vencimento) : 0;
               const matriz = matrizDa(b.pj.id, pjPorId, estabPorId);
-              const projecoesDoBloco = b.linhas.length - guiasDoBloco.length;
+              const projecoesDoBloco = b.linhas.filter((l) => l.tipo === "a_apurar").length;
               return (
                 <React.Fragment key={b.pj.id}>
                   <tr
@@ -578,6 +616,17 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
                         <span className="text-[15px] font-bold">{b.pj.nome}</span>
                         <span className="font-mono text-xs text-muted-foreground">{cnpjBr(matriz?.cnpj)}</span>
                         <span className="text-xs text-muted-foreground">· {b.pj.rotulo_regime}</span>
+                        <button
+                          type="button"
+                          title="A guia que o sistema ainda não calcula entra aprovada, com o valor da contabilidade"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setGuiaContabilDe(b.pj);
+                          }}
+                          className="ml-2 inline-flex items-center gap-1 rounded-md border border-border bg-white px-2 py-1 text-[11px] font-semibold text-foreground transition-colors hover:border-california-red/50 hover:text-california-red"
+                        >
+                          + Guia da contabilidade
+                        </button>
                       </div>
                       {primeira && (
                         <span
@@ -597,7 +646,9 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
                         pendentesDoBloco.length ? `${pendentesDoBloco.length} a aprovar` : null,
                         emCursoDoBloco.length ? `${emCursoDoBloco.length} em curso (${moeda(totalEmCursoBloco)})` : null,
                         projecoesDoBloco ? `${projecoesDoBloco} a apurar` : null,
-                        recolhido ? `${b.linhas.length} ${b.linhas.length === 1 ? "linha recolhida" : "linhas recolhidas"}` : null,
+                        contabeisDoBloco.length ? `${contabeisDoBloco.length} da contabilidade` : null,
+                        b.linhas.length === 0 ? "nenhuma guia neste filtro" : null,
+                        recolhido && b.linhas.length ? `${b.linhas.length} ${b.linhas.length === 1 ? "linha recolhida" : "linhas recolhidas"}` : null,
                       ]
                         .filter(Boolean)
                         .join(" · ")}
@@ -628,7 +679,20 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
                   </tr>
                   {!recolhido &&
                     b.linhas.map((l) =>
-                      l.tipo === "a_apurar" ? (
+                      l.tipo === "contabil" ? (
+                        <LinhaDaContabilidade
+                          key={l.c.id}
+                          c={l.c}
+                          local={
+                            l.c.estabelecimento_id
+                              ? (() => {
+                                  const e = estabPorId.get(l.c.estabelecimento_id!);
+                                  return e ? `${e.municipio}-${e.uf}` : "—";
+                                })()
+                              : "Federal"
+                          }
+                        />
+                      ) : l.tipo === "a_apurar" ? (
                         <LinhaProjecao key={l.p.chave} p={l.p} pj={pjPorId.get(l.p.pj)} semCnpj onAbrir={() => setAApurarAberto(l.p)} />
                       ) : (
                         <LinhaGuia
@@ -698,6 +762,19 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
           avulso e as mudanças da reforma tributária.
         </span>
       </p>
+
+      {guiaContabilDe && (
+        <DialogoGuiaDaContabilidade
+          pj={guiaContabilDe}
+          dados={dados}
+          onClose={() => setGuiaContabilDe(null)}
+          onLancada={(texto) => {
+            setGuiaContabilDe(null);
+            setToast({ texto, link: true });
+            startTransition(() => router.refresh());
+          }}
+        />
+      )}
 
       {guiaAberta && (
         <MemoriaDialog
