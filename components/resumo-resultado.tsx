@@ -27,6 +27,12 @@ interface Props {
    * Obrigatória: as visões de projeto, que somam jobs, mandam `null`.
    */
   abertura: { valorJob: number; deducoes: number } | null;
+  /**
+   * O que muda o valor do job depois da abertura, para a ajuda do card
+   * dividido: a errata (nacional) ou a mudança da veiculação (Mídia Off,
+   * decisão 275 — encerrar antes e estender, sem errata).
+   */
+  mudancaDepoisDaAbertura?: "errata" | "veiculacao";
   /** Soma do planejado dos itens: o desembolso esperado da agência. */
   custoPlanejado: number;
   /** Soma do realizado lançado. */
@@ -69,6 +75,7 @@ export function ResumoResultado({
   bvPlanejado = 0,
   bvRealizado = 0,
   moeda,
+  mudancaDepoisDaAbertura = "errata",
 }: Props) {
   // O BV volta para a agência: ele REDUZ o custo na conta do resultado —
   // a mesma operação que o painel Resultado escreve como linha "+ BVs".
@@ -96,7 +103,11 @@ export function ResumoResultado({
       <div className="grid grid-cols-[auto_auto] rounded-xl border border-border bg-card shadow-soft">
         <CelulaValor
           rotulo="Valor do job · inicial"
-          dica="Valor do job na abertura, antes das erratas. É a base do resultado planejado."
+          dica={
+            mudancaDepoisDaAbertura === "veiculacao"
+              ? "Valor do job na abertura, antes das mudanças da veiculação. É a base do resultado planejado."
+              : "Valor do job na abertura, antes das erratas. É a base do resultado planejado."
+          }
           valor={formatCurrency(abertura.valorJob, moeda)}
         />
         <Linha
@@ -108,7 +119,11 @@ export function ResumoResultado({
         />
         <CelulaValor
           rotulo="Valor do job · atual"
-          dica="Valor do job com as erratas. É a base do resultado realizado."
+          dica={
+            mudancaDepoisDaAbertura === "veiculacao"
+              ? "Valor do job com a veiculação encerrada antes ou estendida. É a base do resultado realizado."
+              : "Valor do job com as erratas. É a base do resultado realizado."
+          }
           valor={formatCurrency(valorJob, moeda)}
           separador
         />

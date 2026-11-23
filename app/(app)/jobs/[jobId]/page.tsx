@@ -79,6 +79,7 @@ import type {
   ItemBv,
 } from "@/lib/types";
 import { SeloMidiaSystem } from "../_midia-system/midia-system";
+import { nomeDaLinhaDoJob } from "@/lib/calculos/midia-off";
 
 export const dynamic = "force-dynamic";
 
@@ -183,6 +184,7 @@ export default async function JobDetailPage({
     totaisJob,
     custoPlanejadoJob,
     custoRealizadoJob,
+    aberturaMidia,
     bvPlanejadoJob,
     bvRealizadoJob,
     podeEditarRealizado,
@@ -197,6 +199,7 @@ export default async function JobDetailPage({
     papelCorrigeNf,
     etapasDoJob,
     podeConfirmarBv,
+    podeAnexarDocumentosDaMidia,
     ppsQuePossoPrestarContas,
     papelNaErrata,
     errataPronta,
@@ -227,6 +230,18 @@ export default async function JobDetailPage({
     }),
   );
   const nomeDoGrupo = new Map(grupos.map((g) => [g.id, g.nome]));
+  // Mídia Off: a linha não tem item; vale "praça · veículo".
+  const nomeDaOrigem = (id: string, item: string): string => {
+    const linha = detalhe.midia?.linhas.find((l) => l.id === id);
+    return nomeDaLinhaDoJob(
+      {
+        item,
+        praca: linha?.praca ?? null,
+        veiculo: detalhe.midia?.veiculos.find((v) => v.id === linha?.fornecedor_id)?.nome ?? null,
+      },
+      "—",
+    );
+  };
   const ppsNoComite: PPNoComite[] = [...aEmitirPorItemId.values()].flat().flatMap((a) => {
     const pedido = comiteDaPP.pedidos[a.id];
     if (!pedido) return [];
@@ -235,7 +250,8 @@ export default async function JobDetailPage({
       {
         aEmitir: a,
         pedido,
-        itemNome: it?.item ?? "—",
+        // Mídia Off: a linha não tem item; vale "praça · veículo".
+        itemNome: it ? nomeDaOrigem(it.id, it.item) : "—",
         grupoNome: it?.grupo_id ? (nomeDoGrupo.get(it.grupo_id) ?? null) : null,
         acimaDoAprovado:
           pedido.status === "aprovado" &&
@@ -360,7 +376,9 @@ export default async function JobDetailPage({
                 // Só o valor do job de hoje (volta atrás da decisão 151, em
                 // 15/10/2026): o da abertura fica no card de Erratas e no
                 // histórico da planilha.
-                abertura={null}
+                abertura={aberturaMidia}
+                // Na Mídia Off quem muda o valor é a veiculação (decisão 275).
+                mudancaDepoisDaAbertura="veiculacao"
                 custoPlanejado={custoPlanejadoJob}
                 custoRealizado={custoRealizadoJob}
                 bvRealizado={bvRealizadoJob}
@@ -644,6 +662,7 @@ export default async function JobDetailPage({
             ppsQuePossoPrestarContas={ppsQuePossoPrestarContas}
             midiaSystem={detalhe.midiaSystem}
             podeConfirmarBv={podeConfirmarBv && !comPedido && !emDecisao}
+            podeAnexarDocumentosDaMidia={podeAnexarDocumentosDaMidia && !comPedido && !emDecisao}
             // Decisão 265: a nota do Novo faturamento trava como o envio.
             jaEnviadoParaFaturamento={
               envioFaturamento !== null
@@ -800,6 +819,8 @@ export default async function JobDetailPage({
         // Mídia Off (decisão 167): encerra pelo botão de sempre, depois da
         // veiculação e com as PPs do repasse pagas (entrega 3).
         midiaOff={detalhe.midia !== null}
+        // Decisão 274: AP, PI e a NF de cada veículo travam o envio do mês.
+        faltaParaEnviarDaMidia={detalhe.midia?.faltaPorMes ?? {}}
         faturamentoMensal={detalhe.faturamentoMensal}
         podeEnviarFaturamentoMensal={detalhe.podeEnviarFaturamentoMensal}
         faturamentoEnvioUnico={detalhe.faturamentoEnvioUnico}

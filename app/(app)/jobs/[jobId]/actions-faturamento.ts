@@ -16,9 +16,14 @@ import {
   conferirEnvioDoJob,
   mensagemJaEnviado,
 } from "@/lib/faturamento/conferir-envio-do-job";
-import { diaSeguinte, limitesDoMes, mesEmVeiculacao } from "@/lib/calculos/midia-off";
+import {
+  diaSeguinte,
+  limitesDoMes,
+  mesEmVeiculacao,
+  type ParametrosMidia,
+} from "@/lib/calculos/midia-off";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
-import { lerUltimaVeiculacaoDoMes } from "@/lib/data/midia-do-job";
+import { lerFaltaDosVeiculosNoMes, lerUltimaVeiculacaoDoMes } from "@/lib/data/midia-do-job";
 
 export type ActionResult =
   | { ok: true; id: string }
@@ -140,9 +145,12 @@ function dataBr(iso: string): string {
 }
 
 /**
- * A trava do envio de um mês da Mídia Off (decisão 167): o mês só vai ao
- * faturamento no dia seguinte à última veiculação dele — a maior data com
- * inserção na grade, ou o fim do período, que pode cair no mês seguinte.
+ * As travas do envio de um mês da Mídia Off:
+ * 1. (decisão 167) o mês só vai ao faturamento no dia seguinte à última
+ *    veiculação dele — a maior data com inserção na grade, ou o fim do
+ *    período, que pode cair no mês seguinte;
+ * 2. (decisão 274) cada veículo do mês com AP, PI e a NF dele — no
+ *    A · Repasse, a PP do repasse enviada ao financeiro.
  *
  * O envio do último mês encerrava o job junto (entrega 2) até a entrega 3
  * (23/11/2026): o job de mídia agora encerra pelo "Enviar para
@@ -159,6 +167,7 @@ async function conferirEnvioDoMesDaMidia(
     versaoAprovadaId: string;
     mes: string;
     nomeMes: string;
+    params: ParametrosMidia;
   },
 ): Promise<{ recusa: string; motivo: string } | null> {
   const ultima = await lerUltimaVeiculacaoDoMes(
@@ -179,6 +188,27 @@ async function conferirEnvioDoMesDaMidia(
     return {
       recusa: `A veiculação de ${p.nomeMes} vai até ${dataBr(fim)}: o envio para faturamento libera em ${dataBr(diaSeguinte(fim))}.`,
       motivo: "mes_em_veiculacao",
+    };
+  }
+
+  const falta = await lerFaltaDosVeiculosNoMes(
+    supabase,
+    p.tenantId,
+    p.jobId,
+    p.versaoAprovadaId,
+    p.mes,
+    p.params,
+  );
+  if (falta === undefined) {
+    return {
+      recusa: "Não foi possível conferir os documentos dos veículos do mês. Tente de novo.",
+      motivo: "leitura_dos_documentos",
+    };
+  }
+  if (falta.length > 0) {
+    return {
+      recusa: `Falta para enviar ${p.nomeMes}: ${falta.join("; ")}.`,
+      motivo: "documentos_da_midia",
     };
   }
   return null;
@@ -263,6 +293,7 @@ export async function enviarJobParaFaturamento(
       versaoAprovadaId: job.versao_orcamento_aprovada_id,
       mes,
       nomeMes: nomeMes ?? mes,
+      params: conf.paramsMidia,
     });
     if (recusa) {
       await logAuditEvent({

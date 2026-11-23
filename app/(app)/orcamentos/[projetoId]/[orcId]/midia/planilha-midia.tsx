@@ -17,6 +17,7 @@
  */
 
 import * as React from "react";
+import type { InfoDoRealizado } from "@/lib/calculos/midia-off";
 import { useRouter } from "next/navigation";
 import { AlertCircle, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -109,6 +110,11 @@ interface Props {
     /** A calha de cada linha (decisão 167, entrega 3): a PP do repasse,
      *  desenhada pela tabela do job, que é dona das PPs. `null`: sem calha. */
     calha?: ((l: LinhaMidia) => React.ReactNode) | null;
+    /** Os veículos do mês (decisão 274): AP, PI, NF e BV de cada veículo,
+     *  no pé do mês. Recebe o mês `YYYY-MM-01`. */
+    veiculosDoMes?: ((mes: string) => React.ReactNode) | null;
+    /** Planejado e realizado (decisão 275): o que mudou em cada linha. */
+    realizado?: ((id: string) => InfoDoRealizado | null) | null;
   } | null;
 }
 
@@ -501,6 +507,7 @@ export function PlanilhaMidiaOff({
     veiculos,
     abrirVeiculo,
     calhaDoJob: doJob?.calha ?? null,
+    realizadoDoJob: doJob?.realizado ?? null,
   };
 
   /** Os formatos que a versão já usa no meio: o do meio e o das linhas. */
@@ -633,6 +640,7 @@ export function PlanilhaMidiaOff({
           </div>
         )}
         {!vazio && <TotalDaMidia conta={d.f.geral} qtdMeios={d.grupos.length} qtdLinhas={d.linhas.length} rotulo={`Total · ${nome}`} />}
+        {!vazio && doJob?.veiculosDoMes ? doJob.veiculosDoMes(`${d.mes.slice(0, 7)}-01`) : null}
         {!vazio && !opcoes.semTotais && <TotaisMidia f={d.f} p={params} titulo={`Totais de ${nome}`} />}
       </div>
     );

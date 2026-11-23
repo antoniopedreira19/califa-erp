@@ -12,15 +12,20 @@
  * Desde a entrega 3, cada linha A · Repasse tem na calha a PP do repasse
  * (`calha`, desenhada pela tabela do job, que é dona das PPs).
  *
- * Fora daqui, por enquanto: AP, PI, NF e BV do veículo no mês (entrega 4),
- * e o realizado — encerrar antes, estender (entrega 5).
+ * Desde a entrega 4, cada mês termina com os veículos dele: AP, PI, a NF e
+ * o BV do veículo (`veiculosDoMes`, decisão 274).
+ *
+ * Desde a entrega 5 (decisão 275) é a visão única: a planilha mostra a
+ * campanha como está — a linha que mudou em laranja, com o inicial
+ * riscado; a extensão como linha vermelha —, e o card "Planejado e
+ * realizado", acima dela, guarda o inicial, as ações e o registro.
  */
 
 import type { ReactNode } from "react";
 import { ClipboardList } from "lucide-react";
 import { nomeVersao } from "@/lib/nome-versao";
 import { PlanilhaMidiaOff } from "@/app/(app)/orcamentos/[projetoId]/[orcId]/midia/planilha-midia";
-import type { LinhaMidia } from "@/lib/calculos/midia-off";
+import type { InfoDoRealizado, LinhaMidia } from "@/lib/calculos/midia-off";
 import type { VersaoOrcamentoGrupo, VersaoOrcamentoMes } from "@/lib/types";
 import type { MidiaDoDetalhe } from "../carregar-detalhe";
 
@@ -38,6 +43,9 @@ export function PlanilhaMidiaDoJob({
   detalheCampanha,
   noLugar = false,
   calha = null,
+  veiculosDoMes = null,
+  realizado = null,
+  cardDoRealizado = null,
 }: {
   job: { id: string; projeto_id: string; orcamento_id: string };
   nomeJob: string;
@@ -59,6 +67,12 @@ export function PlanilhaMidiaDoJob({
   noLugar?: boolean;
   /** A calha de cada linha: a PP do repasse (entrega 3). */
   calha?: ((l: LinhaMidia) => ReactNode) | null;
+  /** Os veículos de cada mês, no pé dele (entrega 4, decisão 274). */
+  veiculosDoMes?: ((mes: string) => ReactNode) | null;
+  /** Planejado e realizado (entrega 5, decisão 275): o que mudou em cada
+   *  linha, e o card com o inicial, o atual, as ações e o registro. */
+  realizado?: ((id: string) => InfoDoRealizado | null) | null;
+  cardDoRealizado?: ReactNode;
 }) {
   return (
     <div className="space-y-6">
@@ -69,6 +83,8 @@ export function PlanilhaMidiaDoJob({
         </div>
         <div className="flex items-center gap-3">{linkDaVersao}</div>
       </div>
+
+      {cardDoRealizado}
 
       <PlanilhaMidiaOff
         projetoId={job.projeto_id}
@@ -82,7 +98,7 @@ export function PlanilhaMidiaDoJob({
         params={midia.params}
         mesPedido={mesPedido}
         readOnly
-        doJob={{ hrefBase: hrefPlanilha, detalheDoMes, detalheCampanha, noLugar, calha }}
+        doJob={{ hrefBase: hrefPlanilha, detalheDoMes, detalheCampanha, noLugar, calha, veiculosDoMes, realizado }}
       />
     </div>
   );

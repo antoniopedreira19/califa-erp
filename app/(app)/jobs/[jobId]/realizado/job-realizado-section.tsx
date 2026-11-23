@@ -160,7 +160,17 @@ import type {
 import { LinkSaidaDeModulo } from "@/components/financeiro/link-saida-de-modulo";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PlanilhaMidiaDoJob } from "./planilha-midia-do-job";
-import { alvoDoRepasse, decomposicaoDoRepasse, nomeDoMesMidia } from "@/lib/calculos/midia-off";
+import { VeiculosDoMes, type BvDoVeiculo } from "./veiculos-do-mes";
+import {
+  alvoDoRepasse,
+  decomposicaoDoRepasse,
+  fechamentoDosItens,
+  nomeDoMesMidia,
+  notaDoVeiculo,
+  ultimaVeiculacaoDaCampanha,
+} from "@/lib/calculos/midia-off";
+import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
+import { RealizadoDaMidia, type LinhaDoRealizado } from "./realizado-da-midia";
 import type { SugestaoDaPP } from "./gerar-pp-drawer";
 import type { MidiaDoDetalhe } from "../carregar-detalhe";
 import { useProtegerSaida } from "@/components/voltar/estado";
@@ -318,6 +328,10 @@ interface Props {
   /** Confirmar o BV — `jobs.confirmar_bv`, administrador e GP (decisão
    *  080). Telas de leitura mandam `false`. */
   podeConfirmarBv: boolean;
+  /** Mídia Off (decisão 274): anexar, trocar e remover AP, PI e a NF do
+   *  veículo — administrador, GP e produtor, com o job aberto. As telas de
+   *  leitura (financeiro) não mandam: o card abre em consulta. */
+  podeAnexarDocumentosDaMidia?: boolean;
   /** Job já enviado para faturamento: o valor da nota está congelado em
    *  `jobs_envio_faturamento` e nem errata nem save podem mexer nele
    *  (decisão 028, nota de 27/08/2026). O servidor já recusava — sem
@@ -664,6 +678,7 @@ function PlanilhaDoJob({
   podeCadastrarFornecedor = false,
   podeEditarFornecedor = false,
   podeConfirmarBv,
+  podeAnexarDocumentosDaMidia = false,
   jaEnviadoParaFaturamento = false,
   ppsPorItemId,
   aEmitirPorItemId,
@@ -2041,6 +2056,115 @@ function PlanilhaDoJob({
   ) : null;
 
   if (midia) {
+    // Os veículos de um mês (decisão 274): AP, PI, NF e o BV de cada um.
+    const nomeDoVeiculoDaMidia = (id: string) =>
+      midia.veiculos.find((v) => v.id === id)?.nome ??
+      fornecedores.find((f) => f.id === id)?.nome ??
+      "Veículo";
+    const bvDoVeiculo = (v: { linhaIds: string[] }): BvDoVeiculo | null => {
+      // O BV do veículo no mês mora numa linha do job: a que já tem BV, ou
+      // a primeira do veículo no mês.
+      const comBv = v.linhaIds.find((id) => (bvsPorItem[id] ?? []).length > 0);
+      const ancora = itens.find((i) => i.id === (comBv ?? v.linhaIds[0]));
+      return ancora ? { ancora, bvs: bvsPorItem[ancora.id] ?? [] } : null;
+    };
+    const veiculosDoMesDaMidia = (mes: string) => {
+      const doMes = faturamentoMensal.find((m) => m.mes.slice(0, 10) === mes);
+      return (
+        <VeiculosDoMes
+          jobId={job.id}
+          mes={mes}
+          veiculos={midia.veiculosPorMes[mes] ?? []}
+          nomeDoVeiculo={nomeDoVeiculoDaMidia}
+          enviado={
+            doMes?.envio
+              ? { em: doMes.envio.enviado_em }
+              : doMes?.peloFinanceiro
+                ? { em: null }
+                : null
+          }
+          leituraFalhou={midia.documentosFalharam}
+          notaPlanejada={(v) =>
+            v.linhaIds.reduce((s, id) => {
+              const plan = midia.realizado.info[id]?.contaPlanejada;
+              return s + (plan ? notaDoVeiculo(plan.totalNegociado, midia.params) : 0);
+            }, 0)
+          }
+          podeAnexar={podeAnexarDocumentosDaMidia}
+          bv={{
+            doVeiculo: bvDoVeiculo,
+            fornecedores: fornecedores.map((f) => ({
+              id: f.id,
+              nome: f.razao_social ?? f.nome,
+              cpf_cnpj: f.cpf_cnpj,
+            })),
+            percentualImposto: Number(versaoDoRascunho.percentual_imposto ?? 0),
+            versaoLabel: `v${versao.numero_versao}`,
+            podeLancar: podeAcoes,
+            podeConfirmar: podeConfirmarBv,
+          }}
+        />
+      );
+    };
+    // Planejado e realizado (decisão 275): o card acima da planilha.
+    const mesDoGrupoMidia = new Map(
+      grupos.map((g) => [g.id, meses.find((m) => m.id === g.mes_id)?.mes?.slice(0, 10) ?? null]),
+    );
+    const meioDoGrupoMidia = new Map(grupos.map((g) => [g.id, g.meio ?? g.nome]));
+    const linhasDoRealizado: LinhaDoRealizado[] = midia.linhas.flatMap((l) => {
+      const mes = mesDoGrupoMidia.get(l.grupo_id);
+      if (!mes) return [];
+      return [
+        {
+          id: l.id,
+          nome: nomeDaLinhaMidia ? nomeDaLinhaMidia(l.id) : l.item,
+          meio: meioDoGrupoMidia.get(l.grupo_id) ?? "",
+          mes,
+          tipo: l.tipo_custo,
+          extensao: !!midia.realizado.extensaoEm[l.id],
+          emPPs: (() => {
+            const r = realizadosMap.get(l.id);
+            return r ? somaDasPPsNaoCanceladas(ppsPorItemId.get(r.id) ?? []) : 0;
+          })(),
+          valor_unitario_orcado: Number(l.valor_unitario_orcado ?? 0),
+          quantidade_orcada: Number(l.quantidade_orcada ?? 0),
+          dias_meses_orcado: Number(l.dias_meses_orcado ?? 0),
+          total_orcado: Number(l.total_orcado ?? 0),
+          insercoes_por_dia: (l.insercoes_por_dia as Record<string, number> | null) ?? null,
+          data_inicio: l.data_inicio ?? null,
+          data_fim: l.data_fim ?? null,
+        },
+      ];
+    });
+    const fecharMidia = (ls: Array<{ tipo: string; total_orcado: number }>) =>
+      fechamentoDosItens(
+        ls.map((l) => ({ tipo_custo: l.tipo, total_orcado: l.total_orcado })),
+        midia.params,
+      );
+    const mesesEnviadosMidia = faturamentoMensal
+      .filter((m) => m.envio !== null || m.peloFinanceiro)
+      .map((m) => m.mes.slice(0, 10));
+    const cardDoRealizado = (
+      <RealizadoDaMidia
+        jobId={job.id}
+        jobCodigo={job.codigo}
+        linhas={linhasDoRealizado}
+        registros={midia.realizado.registros}
+        inicial={fechamentoDosItens(midia.realizado.iniciais, midia.params)}
+        atual={fecharMidia(linhasDoRealizado)}
+        fechar={fecharMidia}
+        meses={meses.map((m) => m.mes.slice(0, 10))}
+        mesesEnviados={mesesEnviadosMidia}
+        fimDaVeiculacao={ultimaVeiculacaoDaCampanha(faturamentoMensal.map((m) => m.ultimaVeiculacao))}
+        hoje={hojeEmSaoPauloIso()}
+        travadoPor={
+          job.status === "aberto" || job.status === "em_producao"
+            ? null
+            : "A veiculação só muda com o job aberto."
+        }
+        podeMexer={podeAcoes}
+      />
+    );
     const enviados = faturamentoMensal.filter((m) => m.envio !== null).length;
     const comFaturamento = faturamentoMensal.filter((m) => m.faturamento > 0.004).length;
     // Decisão 256: o mês do Novo faturamento fecha sem envio da produção.
@@ -2056,6 +2180,9 @@ function PlanilhaDoJob({
       {tabela(gruposDaPlanilha, undefined, false, null, false, (calhaDaLinha) => (
       <PlanilhaMidiaDoJob
         calha={(l) => calhaDaLinha(l.id)}
+        veiculosDoMes={(mes) => veiculosDoMesDaMidia(mes)}
+        realizado={(id) => midia.realizado.info[id] ?? null}
+        cardDoRealizado={cardDoRealizado}
         job={job}
         nomeJob={nomeJob}
         versao={versao}
@@ -2090,7 +2217,10 @@ function PlanilhaDoJob({
             m.mes.slice(0, 7),
             m.situacao === "em_veiculacao" && m.ultimaVeiculacao
               ? `Em veiculação até ${dataBr(m.ultimaVeiculacao).slice(0, 5)}`
-              : ROTULO_DA_SITUACAO[m.situacao],
+              : m.situacao === "a_enviar" &&
+                  (midia.veiculosPorMes[m.mes.slice(0, 10)] ?? []).some((v) => v.falta.length > 0)
+                ? "Falta AP, PI ou NF"
+                : ROTULO_DA_SITUACAO[m.situacao],
           ]),
         )}
         detalheCampanha={

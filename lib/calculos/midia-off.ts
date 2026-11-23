@@ -454,19 +454,218 @@ export function alvoDoRepasse(
   return midia ? notaDoVeiculo(totalOrcado, midia) : Number(totalOrcado ?? 0);
 }
 
+// ---- Entrega 4 (decisão 274): os veículos de cada mês ----------------------
+
+/**
+ * Em que pé está a PP do repasse de uma linha A · Repasse. A NF do veículo
+ * no A · Repasse chega anexada à PP, e o mês só vai ao faturamento com ela
+ * enviada ao financeiro (protótipo aprovado, 23/11/2026):
+ * - `a_gerar`: nenhuma PP ativa;
+ * - `a_enviar`: alguma PP ainda gerada, ou rejeitada e por reemitir;
+ * - `por_fechar`: todas enviadas, mas a linha não disse que acabou (a nota
+ *   pode ter mais PPs);
+ * - `enviada` / `paga`: pronta.
+ */
+export type SituacaoDoRepasse = "a_gerar" | "a_enviar" | "por_fechar" | "enviada" | "paga";
+
+export function situacaoDoRepasse(
+  pps: ReadonlyArray<{ status: string }>,
+  concluida: boolean,
+): SituacaoDoRepasse {
+  const ativas = pps.filter((p) => p.status !== "cancelada");
+  if (ativas.length === 0) return "a_gerar";
+  if (ativas.some((p) => p.status === "gerada" || p.status === "rejeitada")) return "a_enviar";
+  if (!concluida) return "por_fechar";
+  return ativas.every((p) => p.status === "pago") ? "paga" : "enviada";
+}
+
+const ORDEM_DO_REPASSE: SituacaoDoRepasse[] = ["a_gerar", "a_enviar", "por_fechar", "enviada", "paga"];
+
+/** A situação que mais falta entre as linhas A · Repasse do veículo no mês;
+ *  `null` sem linha A · Repasse. */
+export function piorRepasse(lista: ReadonlyArray<SituacaoDoRepasse>): SituacaoDoRepasse | null {
+  if (lista.length === 0) return null;
+  return lista.reduce((pior, s) => (ORDEM_DO_REPASSE.indexOf(s) < ORDEM_DO_REPASSE.indexOf(pior) ? s : pior));
+}
+
+/**
+ * O que falta, documento a documento, para o veículo liberar o envio do mês
+ * ao faturamento (decisão 274): AP e PI sempre; a NF do veículo no
+ * A · Direto; no A · Repasse, a PP do repasse enviada (a NF vem nela).
+ * Veículo sem veiculação no mês (nota zero) não pede nada.
+ */
+export function faltaDoVeiculoNoMes(v: {
+  nota: number;
+  temDireto: boolean;
+  repasse: SituacaoDoRepasse | null;
+  temAP: boolean;
+  temPI: boolean;
+  temNF: boolean;
+  /** Decisão 275: o AP ou o PI que existe foi anexado ANTES da extensão do
+   *  veículo no mês, e não a cobre (Tiago, 23/11/2026). */
+  apAntesDaExtensao?: boolean;
+  piAntesDaExtensao?: boolean;
+}): string[] {
+  if (!(v.nota > 0.004)) return [];
+  const falta: string[] = [];
+  if (!v.temAP) falta.push(v.apAntesDaExtensao ? "AP da extensão" : "AP");
+  if (!v.temPI) falta.push(v.piAntesDaExtensao ? "PI da extensão" : "PI");
+  if (v.temDireto && !v.temNF) falta.push("NF");
+  if (v.repasse === "a_gerar") falta.push("PP do repasse");
+  else if (v.repasse === "a_enviar") falta.push("envio da PP do repasse");
+  else if (v.repasse === "por_fechar") falta.push("última PP do repasse");
+  return falta;
+}
+
+/** Uma linha do job, como o veículo do mês a lê. */
+export interface LinhaDoVeiculoNoMes {
+  id: string;
+  fornecedorId: string | null;
+  tipo: string;
+  negociado: number;
+  meio: string | null;
+  /** Só no A · Repasse. */
+  repasse: SituacaoDoRepasse | null;
+  /** Decisão 275: quando a linha nasceu de uma extensão; `null` fora dela. */
+  extensaoEm?: string | null;
+}
+
+/** Os documentos de UM veículo no mês. */
+export interface DocumentosDoVeiculo<D> {
+  ap: D | null;
+  pi: D | null;
+  nf: D | null;
+}
+
+export interface VeiculoNoMes<D> extends DocumentosDoVeiculo<D> {
+  veiculoId: string;
+  /** `YYYY-MM-01`. */
+  mes: string;
+  meios: string[];
+  tipos: Array<"A" | "AR">;
+  /** As linhas do veículo no mês, na ordem da planilha. A primeira é a
+   *  âncora do BV do veículo no mês (o BV mora numa linha do job). */
+  linhaIds: string[];
+  negociado: number;
+  nota: number;
+  /** A nota só das linhas A · Direto: é contra ela que a NF do veículo se
+   *  confere (a do A · Repasse vem na PP). */
+  notaDireto: number;
+  repasse: SituacaoDoRepasse | null;
+  /** Decisão 275: a extensão mais nova do veículo no mês — AP e PI de
+   *  antes dela não a cobrem. `null` sem extensão. */
+  extensaoEm: string | null;
+  /** O AP / o PI anexado existe mas é de antes da extensão. */
+  apAntesDaExtensao: boolean;
+  piAntesDaExtensao: boolean;
+  falta: string[];
+}
+
+/**
+ * Os veículos de um mês do job de Mídia Off (decisão 274): as linhas do mês
+ * agrupadas pelo veículo, com os documentos dele e o que falta para o envio.
+ * Linha sem veículo fica de fora — não há a quem pedir documento.
+ */
+export function veiculosNoMes<D extends { fornecedorId: string; mes: string; tipo: string; criadoEm?: string }>(
+  mes: string,
+  linhas: ReadonlyArray<LinhaDoVeiculoNoMes>,
+  documentos: ReadonlyArray<D>,
+  p: ParametrosMidia,
+): Array<VeiculoNoMes<D>> {
+  const m10 = mes.slice(0, 10);
+  const porVeiculo = new Map<string, LinhaDoVeiculoNoMes[]>();
+  for (const l of linhas) {
+    if (!l.fornecedorId) continue;
+    porVeiculo.set(l.fornecedorId, [...(porVeiculo.get(l.fornecedorId) ?? []), l]);
+  }
+  return [...porVeiculo.entries()].map(([veiculoId, ls]) => {
+    const doc = (tipo: string) =>
+      documentos.find((d) => d.fornecedorId === veiculoId && d.mes.slice(0, 10) === m10 && d.tipo === tipo) ?? null;
+    const tipos = [...new Set(ls.map((l) => (l.tipo === "AR" ? "AR" : "A") as "A" | "AR"))];
+    const negociado = Math.round(ls.reduce((s, l) => s + l.negociado, 0) * 100) / 100;
+    const nota = Math.round(ls.reduce((s, l) => s + notaDoVeiculo(l.negociado, p), 0) * 100) / 100;
+    const notaDireto =
+      Math.round(
+        ls.filter((l) => l.tipo !== "AR").reduce((s, l) => s + notaDoVeiculo(l.negociado, p), 0) * 100,
+      ) / 100;
+    const repasse = piorRepasse(ls.filter((l) => l.tipo === "AR").map((l) => l.repasse ?? "a_gerar"));
+    const ap = doc("ap");
+    const pi = doc("pi");
+    const nf = doc("nf");
+    const extensaoEm =
+      ls.map((l) => l.extensaoEm ?? null).filter((x): x is string => !!x).sort().pop() ?? null;
+    // O documento anexado antes da extensão não a cobre (decisão 275).
+    const vale = (d: D | null) => d !== null && (!extensaoEm || !d.criadoEm || d.criadoEm >= extensaoEm);
+    return {
+      veiculoId,
+      mes: m10,
+      meios: [...new Set(ls.map((l) => l.meio ?? "").filter(Boolean))],
+      tipos,
+      linhaIds: ls.map((l) => l.id),
+      negociado,
+      nota,
+      notaDireto,
+      repasse,
+      ap,
+      pi,
+      nf,
+      extensaoEm,
+      apAntesDaExtensao: ap !== null && !vale(ap),
+      piAntesDaExtensao: pi !== null && !vale(pi),
+      falta: faltaDoVeiculoNoMes({
+        nota,
+        temDireto: tipos.includes("A"),
+        repasse,
+        temAP: vale(ap),
+        temPI: vale(pi),
+        temNF: nf !== null,
+        apAntesDaExtensao: ap !== null && !vale(ap),
+        piAntesDaExtensao: pi !== null && !vale(pi),
+      }),
+    };
+  });
+}
+
+/** "AP, PI e NF" — a lista do que falta, em português. */
+export function listaDoQueFalta(xs: ReadonlyArray<string>): string {
+  if (xs.length <= 1) return xs.join("");
+  return `${xs.slice(0, -1).join(", ")} e ${xs[xs.length - 1]}`;
+}
+
+/**
+ * O nome de uma linha do job para a PP (o "Item" do PDF) e para as
+ * mensagens: o item; na linha de Mídia Off, que não tem item (é praça,
+ * veículo e meio), "praça · veículo".
+ */
+export function nomeDaLinhaDoJob(
+  l: { item?: string | null; praca?: string | null; veiculo?: string | null },
+  padrao = "Item",
+): string {
+  const item = l.item?.trim();
+  if (item) return item;
+  const midia = [l.praca?.trim(), l.veiculo?.trim()].filter(Boolean).join(" · ");
+  return midia || padrao;
+}
+
 /**
  * Como a PP nova do repasse já vem preenchida (decisão 167, entrega 3):
  * o valor que falta para a nota do veículo, decomposto na quantidade e nos
  * períodos da linha quando o unitário fecha no centavo; senão, numa
  * parcela só (1 × 1), para a soma nunca ficar meio centavo abaixo da nota.
+ *
+ * A PP guarda quantidade e D/M com 3 casas: a conta é feita com eles já
+ * arredondados. A extensão de 15 dias em mês de 31 (D/M 0,96774…) virava
+ * 0,968 no formulário e passava R$ 2,06 da nota (23/11/2026).
  */
 export function decomposicaoDoRepasse(
   valor: number,
   quantidade: number,
   periodos: number,
 ): { unitario: number; quantidade: number; dm: number } {
-  const q = quantidade > 0 ? quantidade : 1;
-  const d = periodos > 0 ? periodos : 1;
+  const tres = (x: number) => Math.round(x * 1000) / 1000;
+  const q = quantidade > 0 ? tres(quantidade) : 1;
+  const d = periodos > 0 ? tres(periodos) : 1;
+  if (!(q > 0) || !(d > 0)) return { unitario: Math.round(valor * 100) / 100, quantidade: 1, dm: 1 };
   const unitario = Math.round((valor / (q * d)) * 100) / 100;
   if (Math.abs(unitario * q * d - valor) < 0.005) return { unitario, quantidade: q, dm: d };
   return { unitario: Math.round(valor * 100) / 100, quantidade: 1, dm: 1 };
@@ -571,6 +770,263 @@ export function diaSeguinte(iso: string): string {
  *  linhas, vale o último dia do mês. */
 export function mesEmVeiculacao(mes: string, ultima: string | null, hoje: string): boolean {
   return hoje <= (ultima ?? limitesDoMes(mes).fim);
+}
+
+// ---- Entrega 5 (decisão 275): encerrar antes e estender -----------------
+
+/** Dias corridos entre duas datas `YYYY-MM-DD`, contando os dois extremos. */
+export function diasEntre(inicio: string, fim: string): number {
+  const a = Date.parse(`${inicio.slice(0, 10)}T12:00:00Z`);
+  const b = Date.parse(`${fim.slice(0, 10)}T12:00:00Z`);
+  return Math.round((b - a) / 86400000) + 1;
+}
+
+/** A linha da cópia do job, como o corte e a extensão a leem. */
+export interface LinhaDaVeiculacao {
+  valor_unitario_orcado: number | string | null;
+  quantidade_orcada: number | string | null;
+  dias_meses_orcado: number | string | null;
+  total_orcado: number | string | null;
+  insercoes_por_dia: Record<string, number | string> | null;
+  data_inicio: string | null;
+  data_fim: string | null;
+}
+
+/** O que a linha grava no corte: os campos que mudam. */
+export interface LinhaCortada {
+  quantidade_orcada: number;
+  dias_meses_orcado: number;
+  insercoes_por_dia: Record<string, number> | null;
+  data_fim: string | null;
+  /** O negociado que fica (unitário × quantidade × períodos). */
+  total: number;
+  /** Grade: as inserções que não vão ao ar, por dia. */
+  diasCortados: Record<string, number> | null;
+  /** Período: dias que ficam no ar e dias do período inteiro. */
+  dias: number | null;
+  diasDoPeriodo: number | null;
+}
+
+/**
+ * O negociado sugerido de uma linha por período encerrada antes: o
+ * proporcional aos dias que ficaram no ar (Tiago, resposta 1c — sugerido e
+ * editável). `dias` zero: a linha não chega a ir ao ar.
+ */
+export function proporcionalDoPeriodo(
+  l: Pick<LinhaDaVeiculacao, "data_inicio" | "data_fim" | "total_orcado">,
+  ultimoDia: string,
+): { valor: number; dias: number; total: number } {
+  const total = Number(l.total_orcado ?? 0);
+  if (!l.data_inicio || !l.data_fim) return { valor: total, dias: 0, total: 0 };
+  const diasTotal = diasEntre(l.data_inicio, l.data_fim);
+  if (ultimoDia < l.data_inicio) return { valor: 0, dias: 0, total: diasTotal };
+  if (ultimoDia >= l.data_fim) return { valor: total, dias: diasTotal, total: diasTotal };
+  const dias = diasEntre(l.data_inicio, ultimoDia);
+  return { valor: Math.round(((total * dias) / diasTotal) * 100) / 100, dias, total: diasTotal };
+}
+
+/** A linha ainda tem veiculação depois do dia (`YYYY-MM-DD`)? `mes` é o mês
+ *  da linha (`YYYY-MM-01`), que dá o dia das inserções da grade. */
+export function veiculaDepois(l: LinhaDaVeiculacao, mes: string, dia: string): boolean {
+  if (l.insercoes_por_dia) {
+    const m7 = mes.slice(0, 7);
+    return Object.entries(l.insercoes_por_dia).some(
+      ([d, n]) => Number(n) > 0 && `${m7}-${String(Number(d)).padStart(2, "0")}` > dia,
+    );
+  }
+  return !!l.data_fim && l.data_fim > dia;
+}
+
+/**
+ * Uma linha encerrada no dia (`ultimoDia`, o último no ar). Grade: as
+ * inserções depois do dia saem, e o negociado é o unitário × as que ficam.
+ * Período: o fim vira o dia, e o negociado é o `valorPeriodo` (o
+ * proporcional, se não vier). `null` quando a linha não muda.
+ */
+export function cortarLinha(
+  l: LinhaDaVeiculacao,
+  mes: string,
+  ultimoDia: string,
+  valorPeriodo?: number | null,
+): LinhaCortada | null {
+  if (!veiculaDepois(l, mes, ultimoDia)) return null;
+  const unit = Number(l.valor_unitario_orcado ?? 0);
+  if (l.insercoes_por_dia) {
+    const m7 = mes.slice(0, 7);
+    const ficam: Record<string, number> = {};
+    const cortados: Record<string, number> = {};
+    for (const [d, n] of Object.entries(l.insercoes_por_dia)) {
+      const q = Number(n);
+      if (!(q > 0)) continue;
+      if (`${m7}-${String(Number(d)).padStart(2, "0")}` <= ultimoDia) ficam[d] = q;
+      else cortados[d] = q;
+    }
+    const qt = Object.values(ficam).reduce((s, n) => s + n, 0);
+    const dm = Number(l.dias_meses_orcado ?? 1) || 1;
+    return {
+      quantidade_orcada: qt,
+      dias_meses_orcado: dm,
+      insercoes_por_dia: ficam,
+      data_fim: l.data_fim,
+      total: Math.round(unit * qt * dm * 100) / 100,
+      diasCortados: cortados,
+      dias: null,
+      diasDoPeriodo: null,
+    };
+  }
+  const p = proporcionalDoPeriodo(l, ultimoDia);
+  const valor = Math.max(0, Math.round(Number(valorPeriodo ?? p.valor) * 100) / 100);
+  const qt = Number(l.quantidade_orcada ?? 1) || 1;
+  // O negociado que fica cabe nos períodos: unitário × quantidade × (a
+  // fração dos períodos). Dez casas para o total fechar no centavo.
+  const dm = unit * qt > 0 ? Math.round((valor / (unit * qt)) * 1e10) / 1e10 : 0;
+  return {
+    quantidade_orcada: qt,
+    dias_meses_orcado: dm,
+    insercoes_por_dia: null,
+    data_fim: p.dias === 0 ? l.data_inicio : ultimoDia,
+    total: valor,
+    diasCortados: null,
+    dias: p.dias,
+    diasDoPeriodo: p.total,
+  };
+}
+
+/**
+ * A linha de uma extensão (Tiago: "extensão em linha nova", sem planejado),
+ * no mesmo unitário da linha de origem. Grade: as inserções por dia do mês
+ * da extensão. Período: início, fim e o negociado (o da linha por dia ×
+ * os dias, sugerido e editável).
+ */
+export function linhaDaExtensao(
+  base: Pick<LinhaDaVeiculacao, "valor_unitario_orcado" | "quantidade_orcada">,
+  ext:
+    | { forma: "grade"; dias: Record<string, number> }
+    | { forma: "periodo"; inicio: string; fim: string; valor: number },
+): {
+  quantidade_orcada: number;
+  dias_meses_orcado: number;
+  insercoes_por_dia: Record<string, number> | null;
+  data_inicio: string | null;
+  data_fim: string | null;
+  total: number;
+} {
+  const unit = Number(base.valor_unitario_orcado ?? 0);
+  if (ext.forma === "grade") {
+    const dias = Object.fromEntries(Object.entries(ext.dias).filter(([, n]) => Number(n) > 0));
+    const qt = Object.values(dias).reduce((s, n) => s + Number(n), 0);
+    return {
+      quantidade_orcada: qt,
+      dias_meses_orcado: 1,
+      insercoes_por_dia: dias,
+      data_inicio: null,
+      data_fim: null,
+      total: Math.round(unit * qt * 100) / 100,
+    };
+  }
+  const qt = Number(base.quantidade_orcada ?? 1) || 1;
+  const valor = Math.round(ext.valor * 100) / 100;
+  return {
+    quantidade_orcada: qt,
+    dias_meses_orcado: unit * qt > 0 ? Math.round((valor / (unit * qt)) * 1e10) / 1e10 : 0,
+    insercoes_por_dia: null,
+    data_inicio: ext.inicio,
+    data_fim: ext.fim,
+    total: valor,
+  };
+}
+
+/** O que mudou numa linha do job em relação ao planejado inicial — a
+ *  planilha lê para marcar a linha (visão única, opção A). */
+export interface InfoDoRealizado {
+  status: "igual" | "encerrada" | "cancelada" | "extensao";
+  /** A pastilha: "Encerrada em 15/12", "Cancelada", "Extensão". */
+  rotulo: string | null;
+  /** Grade: as inserções planejadas que não foram ao ar, por dia. */
+  diasCortados: Record<string, number> | null;
+  /** Período: o fim planejado, quando a linha acabou antes. */
+  fimPlanejado: string | null;
+  /** Período: "15 de 31 dias" no lugar dos períodos. */
+  textoPeriodos: string | null;
+  /** A conta planejada inicial da linha (negociado e total), para o valor
+   *  riscado. `null` na extensão. */
+  contaPlanejada: { totalNegociado: number; total: number } | null;
+}
+
+const INFO_IGUAL = {
+  status: "igual",
+  rotulo: null,
+  diasCortados: null,
+  fimPlanejado: null,
+  textoPeriodos: null,
+} as const;
+
+/**
+ * A comparação de uma linha de hoje com a dela no planejado inicial (a
+ * versão aprovada). `inicial` nulo: a linha nasceu de uma extensão.
+ * `encerradaEm`: o último dia no ar do encerramento que a alcançou, para
+ * o rótulo da linha da grade.
+ */
+export function infoDoRealizado(
+  atual: LinhaDaVeiculacao,
+  inicial: LinhaDaVeiculacao | null,
+  encerradaEm: string | null,
+  p: ParametrosMidia,
+): InfoDoRealizado {
+  if (!inicial) {
+    return {
+      ...INFO_IGUAL,
+      status: "extensao",
+      rotulo: "Extensão",
+      textoPeriodos:
+        !atual.insercoes_por_dia && atual.data_inicio && atual.data_fim
+          ? `${diasEntre(atual.data_inicio, atual.data_fim)} dias`
+          : null,
+      contaPlanejada: null,
+    };
+  }
+  const plan = contaDoNegociado(Number(inicial.total_orcado ?? 0), p);
+  const contaPlanejada = { totalNegociado: plan.totalNegociado, total: plan.total };
+  const totalAtual = Number(atual.total_orcado ?? 0);
+  const mudouValor = Math.abs(totalAtual - Number(inicial.total_orcado ?? 0)) >= 0.005;
+  const mudouFim = !!inicial.data_fim && atual.data_fim !== inicial.data_fim;
+  if (!mudouValor && !mudouFim) return { ...INFO_IGUAL, contaPlanejada };
+
+  const cancelada = !(totalAtual > 0.004);
+  const dataBr = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
+  if (inicial.insercoes_por_dia) {
+    const cortados: Record<string, number> = {};
+    for (const [d, n] of Object.entries(inicial.insercoes_por_dia)) {
+      const antes = Number(n);
+      const agora = Number(atual.insercoes_por_dia?.[d] ?? 0);
+      if (antes > agora) cortados[d] = antes - agora;
+    }
+    return {
+      status: cancelada ? "cancelada" : "encerrada",
+      rotulo: cancelada ? "Cancelada" : encerradaEm ? `Encerrada em ${dataBr(encerradaEm)}` : "Alterada",
+      diasCortados: Object.keys(cortados).length ? cortados : null,
+      fimPlanejado: null,
+      textoPeriodos: null,
+      contaPlanejada,
+    };
+  }
+  const dias =
+    atual.data_inicio && atual.data_fim && !cancelada ? diasEntre(atual.data_inicio, atual.data_fim) : 0;
+  const total = inicial.data_inicio && inicial.data_fim ? diasEntre(inicial.data_inicio, inicial.data_fim) : 0;
+  return {
+    status: cancelada ? "cancelada" : "encerrada",
+    rotulo: cancelada ? "Cancelada" : atual.data_fim ? `Encerrada em ${dataBr(atual.data_fim)}` : "Alterada",
+    diasCortados: null,
+    fimPlanejado: mudouFim ? inicial.data_fim : null,
+    textoPeriodos: total ? (cancelada ? "Não foi ao ar" : `${dias} de ${total} dias`) : null,
+    contaPlanejada,
+  };
+}
+
+/** O negociado da linha por período, por dia (base da extensão sugerida). */
+export function negociadoPorDia(l: Pick<LinhaDaVeiculacao, "data_inicio" | "data_fim" | "total_orcado">): number {
+  if (!l.data_inicio || !l.data_fim) return 0;
+  return Number(l.total_orcado ?? 0) / diasEntre(l.data_inicio, l.data_fim);
 }
 
 // ---- Leitura de números digitados ----------------------------------------

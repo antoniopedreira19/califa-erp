@@ -701,6 +701,8 @@ export default async function JobNoFinanceiroPage({
             agoraLabel={formatDataHoraBr(new Date())}
             abertoEmLabel={formatDataHoraBr(job.data_abertura_financeiro)}
             abertoPorNome={detalhe.abertoPorNome}
+            // Decisão 276: a sugestão dos jobs da planilha é só da fila de abertura.
+            jobsDaPlanilha={[]}
           />
         }
         info={

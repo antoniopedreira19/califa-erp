@@ -24,6 +24,13 @@
  * E a linha da planilha de PP já paga (revisão de 23/11/2026, `eDePpPaga`):
  * não há título em aberto para ficar no lugar dela, e ela sai da lista antes
  * do motor e da tabela (`banco-dados.ts`).
+ *
+ * 0. Pela NF (decisão 276, 23/11/2026): a NF da planilha lançada no sistema
+ *    tem o título a receber dela. A linha de recebimento da planilha que cita
+ *    o número da NF ("NF 6331", na observação) e as retenções na fonte que
+ *    citam a mesma NF são do título: o financeiro baixa o título, e o DRE
+ *    conta as linhas pela NF paga (`_historico_previsoes_pagas`, regra c).
+ *    Depois de pago, elas saem da lista (`eDeNfPaga`).
  */
 
 export interface LinhaDaPlanilha {
@@ -34,6 +41,10 @@ export interface LinhaDaPlanilha {
   descricao: string;
   /** O fornecedor como a planilha escreveu ("Flash App | Tais Andrade"). */
   quem: string | null;
+  /** Decisão 276: os números de NF que a linha cita (`numerosDeNf`). */
+  nfs: string[];
+  /** Decisão 276: a retenção na fonte do cliente (`ehRetencao`). */
+  retencao: boolean;
 }
 
 export interface TituloEmAberto {
@@ -62,6 +73,35 @@ export const normalizar = (s: string | null | undefined): string =>
 export function codigoDePp(texto: string | null | undefined): string | null {
   const m = (texto ?? "").match(/\bPP[\s-]?0*(\d{1,5})\b/i);
   return m ? `PP-${m[1].padStart(5, "0")}` : null;
+}
+
+/** Os números de NF que um texto da planilha cita ("NF 6331", "NF 145 (repasse
+ *  referente a NF 4698)", "NFs 6404/6405"), sem zeros à esquerda — a mesma
+ *  leitura de `_numeros_de_nf` no banco (decisão 276). */
+export function numerosDeNf(texto: string | null | undefined): string[] {
+  const vistos = new Set<string>();
+  const rx = /\b(?:NFS?|N\.F\.?|NOTAS?)\s*[:#nº°o.\-]*\s*((?:\d{2,5}\s*(?:[,/&]|\be\b)?\s*)+)/gi;
+  for (const m of (texto ?? "").matchAll(rx)) {
+    for (const n of m[1].match(/\d{2,5}/g) ?? []) {
+      const sem = n.replace(/^0+/, "");
+      if (sem) vistos.add(sem);
+    }
+  }
+  return [...vistos];
+}
+
+/** O número da NF do título a receber ("NF 6331" → "6331"); nulo, não é de NF. */
+function nfDoTitulo(t: Pick<TituloEmAberto, "origem" | "ref">): string | null {
+  if (t.origem !== "nf") return null;
+  const m = t.ref.match(/^NF\s+0*(\d+)/i);
+  return m ? m[1] : null;
+}
+
+/** A linha da planilha que é do recebimento de NF já paga no sistema (decisão
+ *  276): o recebimento que cita a NF ou a retenção na fonte dela. */
+export function eDeNfPaga(linha: Pick<LinhaDaPlanilha, "valor" | "nfs" | "retencao">, pagas: ReadonlySet<string>): boolean {
+  if (!(linha.valor > 0 || linha.retencao)) return false;
+  return linha.nfs.length > 0 && linha.nfs.some((n) => pagas.has(n));
 }
 
 /** Todos os códigos de PP do texto, sem repetir ("PP01028 PP01027 - Reembolso"). */
@@ -114,7 +154,21 @@ const dias = (a: string, b: string) => Math.abs((Date.parse(`${a}T00:00:00Z`) - 
 export function donosDaPlanilha(planilha: LinhaDaPlanilha[], titulos: TituloEmAberto[]): Map<string, string> {
   const dono = new Map<string, string>();
   const semCodigo: LinhaDaPlanilha[] = [];
+  // 0. A NF do título a receber: o recebimento que a cita (até o valor do
+  //    título) e as retenções na fonte dela.
+  const porNf = new Map<string, TituloEmAberto>();
+  for (const t of titulos) {
+    const n = nfDoTitulo(t);
+    if (n && !porNf.has(n)) porNf.set(n, t);
+  }
   for (const x of planilha) {
+    if (porNf.size === 0 || x.nfs.length === 0) continue;
+    const t = x.nfs.map((n) => porNf.get(n)).find(Boolean);
+    if (!t) continue;
+    if (x.retencao || (x.valor > 0 && centavos(x.valor) <= centavos(t.valor) + 1)) dono.set(x.id, t.id);
+  }
+  for (const x of planilha) {
+    if (dono.has(x.id)) continue;
     const codigo = codigoDePp(x.descricao);
     if (codigo) {
       const t = titulos.find((t) => t.ref.includes(codigo) || t.descricao.includes(codigo));

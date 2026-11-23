@@ -102,6 +102,13 @@ export type AuditAction =
   | "item_bv.editado"
   | "item_bv.confirmado"
   | "item_bv.cancelado"
+  // Mídia Off (decisão 274): AP, PI e NF do veículo no mês.
+  | "midia_documento.anexado"
+  | "midia_documento.trocado"
+  | "midia_documento.removido"
+  // Mídia Off (decisão 275): encerrar a veiculação antes e estender.
+  | "midia.veiculacao_encerrada"
+  | "midia.veiculacao_estendida"
   | "categoria.criada"
   | "categoria.editada"
   | "categoria.inativada"
@@ -149,6 +156,8 @@ export type AuditAction =
   | "projeto_financeiro.codigo_trocado"
   | "job.abertura_aprovada"
   | "job.aberto_no_financeiro"
+  // Decisão 276: as NFs presas ao job da planilha que passaram (ou não) ao job aberto.
+  | "job.nfs_da_planilha_passadas"
   // Edição do registro da abertura de um job já aberto ("Editar
   // registro"). Separada de `aberto_no_financeiro` de propósito: a
   // abertura acontece uma vez, a edição quantas forem precisas, e o
@@ -371,6 +380,8 @@ export type AuditAction =
   | "contas_pagar.baixa_lote_cartao"
   | "faturamento.emitido"
   | "faturamento.cancelado"
+  // Decisão 276: o PDF anexado depois à NF que entrou pela planilha sem ele.
+  | "faturamento.pdf_anexado"
   | "titulo.baixado"
   | "titulo.baixa_estornada"
   | "titulo.previsao_repactuada"
@@ -507,6 +518,8 @@ export type AuditAction =
   | "pp.anexo.nf_lida_por_ia"
   // Decisão 271: a leitura ampliada da NF tomada (Notas Fiscais › Tomadas).
   | "nota_fiscal.leitura_ampliada"
+  | "nota_fiscal.registro_alterado"
+  | "nota_fiscal.registro_confirmado"
   // Leitura do anexo logo que ele sobe (decisão 192): o tipo,
   // o número e os dados do documento. Mesma metadata, mais `tipo_lido`.
   | "pp.anexo.lido_por_ia"

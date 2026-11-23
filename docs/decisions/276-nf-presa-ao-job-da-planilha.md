@@ -1,0 +1,35 @@
+# 276 — A NF presa ao job da planilha e a carga das NFs da planilha
+
+**Data:** 2026-11-23
+**Status:** aceita e implementada em 23/11/2026; a carga da primeira parte rodou na produção no mesmo dia.
+**Quem decidiu:** Tiago (23/11/2026, numa sessão derivada: "voce poderia abrir esses jobs apenas no historico, e assim que o seja aberto pelo sistema (e o financeiro registre o mesmo nome do job que estamos aqui), voce faz a correspondencia e registra o caso"; "Acho que isso nao precisa de uma tela. Precisa apenas ficar na base para que a ação seja feito ao abrir o job. Poderia ficar em uma lista que seria carregada durante a digitação do nome do novo job"; "Concordo"; depois, "Pode montar" e "Pode rodar").
+**Migrations:** `20261123950001_nf_presa_ao_job_da_planilha.sql`, `20261123950002_previsao_paga_pela_nf.sql`, `20261123950003_anexar_pdf_da_nota.sql`, `20261123950004_nf_da_planilha_numero_276.sql` (troca o número 275 → 276 no texto já aplicado; o 275 é da Mídia Off).
+**Relacionadas:** [211](211-importacao-do-historico-da-planilha-financeira.md) (o histórico da planilha), [256](256-novo-faturamento-e-faturar-unificado.md) e [265](265-mais-faturamento-um-formulario-so.md) (o Novo faturamento), [262](262-conciliacao-acertar-e-conciliar.md) (D2, a linha da planilha que é de um título), [270](270-baixa-antes-do-inicio-da-conta.md) (a previsão paga e a baixa antes do início), [271](271-controle-unico-de-nfs-os-seis-pontos.md) (a seção Notas Fiscais).
+
+## O problema
+
+A planilha do financeiro tinha centenas de NFs emitidas fora do sistema — em aberto ou já recebidas — e o sistema, dez. Sem o título, o recebimento dessas NFs não tinha o que baixar: a conciliação fechava pela linha da planilha, o Contas a Receber não via o que estava para entrar e o fluxo dependia da previsão da planilha. Boa parte das NFs é de jobs que não existem no sistema: os do 1T ao 3T, que nunca serão abertos, e os do 4T que a produção ainda não abriu.
+
+## Decisões
+
+| # | Tema | Decisão |
+|---|---|---|
+| D1 | Vínculo | Sem tela nova. A NF de job que não existe no sistema fica presa ao job da planilha (`historico_jobs`, pela chave e pelo nome): é uma nota avulsa ("Sem job"), com rateio na regional do job da planilha e centro de custo 01 · Receita / Geral (provisório), e cada item guarda `job_planilha_chave` e `job_planilha_nome`. |
+| D2 | Abertura | O campo "Nome do job" da abertura sugere, enquanto se digita, os jobs da planilha com NF esperando. Abrir o job com o nome de um deles (escolhido ou digitado igual, sem acento, caixa ou espaço a mais) passa as NFs para ele: cada uma vira Novo faturamento do job, sem rateio nem centro de custo, com registro em `faturamentos_passagens_da_planilha` e auditoria. A nota de vários jobs da planilha não passa sozinha. A recusa de uma NF (outro cliente, outra empresa, job que gera save, envio do GP esperando nota, mês fora do job) não desfaz a abertura: vira o aviso do fim. |
+| D3 | Mensal | A NF de job mensal fatura o mês anterior ao da emissão (exemplo: a 6397, emitida em 03/11, fatura outubro). |
+| D4 | PDF | A NF sem PDF entra com número, emissão e valor da planilha (caminho vazio) e o PDF se anexa depois, pela gaveta da NF (`anexar_pdf_da_nota`). Só a NF da planilha entra sem PDF. |
+| D5 | CNAE | Pelo PIS/COFINS da nota na planilha: cumulativa (0,65% + 3%) → 82.30-0-01 item 12.08; não cumulativa: PUBLI → 73.11-4-00, ATV/ATVN → 82.30-0-01 item 17.10; outra alíquota ou sem tipo → 73.11-4-00. A coluna "CNAE" da aba Faturamento é o tipo (ATV/ATVN/PUBLI), e o regime de ATV e ATVN se inverte na GoCrazy. A Hitlab (só CNAEs cumulativos) fica no 90.01-9-02. NF emitida antes do cadastro de impostos (2026) leva o CNAE e fica fora da Apuração e da CBS/IBS. |
+| D6 | Fora da carga | Sem job na aba Faturamento (lista para o financeiro) e NF de 2026 sem recebimento nem previsão que cite o número (lista para conferir). |
+| D7 | Fluxo de caixa | A previsão de recebimento da planilha (REC) que cita o número da NF e é do mesmo job da planilha sai do ramo "previsao_planilha" quando a NF está no sistema: no lugar dela fica o título. A retenção prevista fica. |
+| D8 | DRE | Regra (c) de `_historico_previsoes_pagas`: a previsão REC que cita a NF (do job dela) e as retenções na fonte que citam a NF contam como pagas quando todos os títulos da NF estão pagos, se o número é de uma nota só e os recebimentos que citam a NF não passam do valor dela. Resolve a NF recebida líquida (o caso da 6116) sem ligação à mão. |
+| D9 | Conciliação | Regra 0 da D2 da 262: o recebimento da planilha que cita a NF (até o valor do título) e as retenções dela são do título a receber da NF — o financeiro baixa o título. Paga a NF, as linhas saem da lista (`eDeNfPaga`). |
+
+## A carga (23/11/2026)
+
+Planilha de 23/11, scripts em `tmp/nfs-planilha/` (fora do git): `classificar.py`, `montar_carga.py`, `montar_fila.py`, `montar_baixas.py` e o executor `entrada/runner-nfs.js`, que chama as mesmas ações da tela com a sessão do Tiago.
+
+- Emitidas: 208 NFs, R$ 27.622.104,98 — 165 presas ao job da planilha e 43 Novo faturamento de jobs do sistema; 7 com o PDF da pasta "NFs Pri".
+- Recebidas desde 03/11: 35 baixas (com as retenções da planilha) e 32 linhas do banco que saíram da planilha e foram para as baixas. O DRE do 4T não mudou (REC 16.505.869,66).
+- Fluxo: a previsão de entrada da planilha caiu R$ 16,16 mi e a dos títulos subiu R$ 16,04 mi; o total previsto ficou em R$ 95,15 mi (era R$ 95,27 mi).
+- Fora desta parte: 26 NFs de jobs mensais cujo mês anterior à emissão não é do job (a regra D3 não cobre os jobs do 4T faturados no próprio mês); 20 recebidas antes de 03/11 (segunda parte: baixa antes do início, ligada ao histórico); 10 com emissão em 2027; 7 da Ambev com o crédito do ISS retido à parte; 4 cujo depósito paga outras coisas; e as 44 a decidir do plano (sem cliente no sistema, Saving, vários jobs do sistema).
+- A NF 4946 entrou com a 2ª parcela (R$ 152.000) em aberto, mas a planilha a recebeu em fevereiro e março: vai para a segunda parte.

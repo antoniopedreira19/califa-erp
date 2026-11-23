@@ -33,9 +33,11 @@ import {
   FAIXA_ROTULO,
   LINHA_TOTAL_ROTULO,
   ORCADO,
+  REALIZADO,
   SELECAO,
   VEICULACAO,
 } from "@/app/(app)/_planilha/blocos";
+import type { InfoDoRealizado } from "@/lib/calculos/midia-off";
 import { Badge } from "@/components/ui/badge";
 import { Combobox } from "@/components/ui/combobox";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
@@ -112,6 +114,9 @@ export interface ApiDaPlanilha {
    *  repasse, desenhada por quem conhece as PPs. `null` no orçamento e
    *  onde a linha não tem o que mostrar. */
   calhaDoJob: ((l: LinhaMidia) => React.ReactNode) | null;
+  /** No job (decisão 275, visão única): o que mudou em cada linha em
+   *  relação ao planejado inicial. `null` no orçamento. */
+  realizadoDoJob: ((id: string) => InfoDoRealizado | null) | null;
 }
 
 /** A seleção de dias da grade: um retângulo dentro de UM meio de UM mês —
@@ -145,6 +150,44 @@ function useApi(): ApiDaPlanilha {
 
 export function ProvedorDaPlanilha({ valor, children }: { valor: ApiDaPlanilha; children: React.ReactNode }) {
   return <Ctx.Provider value={valor}>{children}</Ctx.Provider>;
+}
+
+// ---- Visão única no job (decisão 275, opção A) ------------------------------
+// A planilha do job mostra a campanha como está: o bloco segue azul (ORÇADO)
+// e só a linha que mudou fica laranja, com o valor inicial riscado embaixo;
+// a inserção que não foi ao ar e o fim planejado ficam riscados; a extensão
+// é a linha vermelha do nacional.
+
+function infoDe(api: ApiDaPlanilha, id: string): InfoDoRealizado | null {
+  return api.realizadoDoJob?.(id) ?? null;
+}
+function linhaMudou(api: ApiDaPlanilha, id: string): boolean {
+  const inf = infoDe(api, id);
+  return !!inf && inf.status !== "igual";
+}
+/** O valor inicial (planejado), riscado embaixo do valor de hoje. */
+function ValorInicial({ id, campo, atual }: { id: string; campo: "totalNegociado" | "total"; atual: number }) {
+  const api = useApi();
+  const plan = infoDe(api, id)?.contaPlanejada?.[campo];
+  if (plan === undefined || Math.abs(atual - plan) < 0.005) return null;
+  return (
+    <div className="mt-0.5 text-[9.5px] font-normal text-muted-foreground line-through" title="Planejado inicial">
+      {brl(plan)}
+    </div>
+  );
+}
+/** A pastilha da linha que mudou. */
+function TagDoRealizado({ id }: { id: string }) {
+  const api = useApi();
+  const inf = infoDe(api, id);
+  if (!inf?.rotulo) return null;
+  const classe =
+    inf.status === "extensao" ? ERRATA.tagVermelha : inf.status === "cancelada" ? ERRATA.tagRemovida : ERRATA.tagAlterada;
+  return (
+    <div className="mt-0.5 leading-none">
+      <span className={classe}>{inf.rotulo}</span>
+    </div>
+  );
 }
 
 // ---- Formatação -----------------------------------------------------------
@@ -430,6 +473,8 @@ function Dia({
         "relative select-none p-0 text-center font-mono text-[10px] leading-none",
         VEICULACAO.dia,
         fimDeSemana && VEICULACAO.diaFimDeSemana,
+        infoDe(api, linha.id)?.diasCortados?.[String(dia)] &&
+          "bg-[repeating-linear-gradient(135deg,rgba(185,28,28,.09)_0_3px,transparent_3px_7px)]",
         !api.readOnly && cn("cursor-cell", VEICULACAO.diaHover),
         marcado && VEICULACAO.diaMarcado,
         selecionado && !ativo && VEICULACAO.diaSelecionado,
@@ -448,7 +493,28 @@ function Dia({
       onPointerEnter={() => api.estenderSelecao(idx, dia)}
       title={`Dia ${dia}`}
     >
-      <span className={cn(valor ? "font-bold text-foreground" : "text-transparent")}>{valor || "·"}</span>
+      {(() => {
+        const inf = infoDe(api, linha.id);
+        const cortado = inf?.diasCortados?.[String(dia)];
+        if (cortado && !valor)
+          return (
+            <span
+              title={`Não foi ao ar: ${cortado} ${cortado === 1 ? "inserção" : "inserções"}`}
+              className="font-semibold text-[#b91c1c]/60 line-through"
+            >
+              {cortado}
+            </span>
+          );
+        return (
+          <span
+            className={cn(
+              valor ? cn("font-bold", inf?.status === "extensao" ? REALIZADO.texto : "text-foreground") : "text-transparent",
+            )}
+          >
+            {valor || "·"}
+          </span>
+        );
+      })()}
       {ativo && (
         <CampoAberto
           chave={chave}
@@ -718,6 +784,7 @@ export function DicasDaPlanilha() {
 
 function CelulasValor({ linha, conta }: { linha: LinhaMidia; conta: ContaDaLinha }) {
   const api = useApi();
+  const mudou = linhaMudou(api, linha.id);
   const td = "px-1.5 py-1.5 text-right align-top whitespace-nowrap font-mono text-[11px]";
   const k = (c: string) => `${linha.id}:${c}`;
   return (
@@ -761,17 +828,19 @@ function CelulasValor({ linha, conta }: { linha: LinhaMidia; conta: ContaDaLinha
           }}
         />
       </Cel>
-      <Cel linhaId={linha.id} coluna="totalNegociado" className={cn(td, ORCADO.celulaMeio, "font-semibold")}>
+      <Cel linhaId={linha.id} coluna="totalNegociado" className={cn(td, ORCADO.celulaMeio, "font-semibold", mudou && REALIZADO.texto)}>
         {brl(conta.totalNegociado)}
+        <ValorInicial id={linha.id} campo="totalNegociado" atual={conta.totalNegociado} />
       </Cel>
-      <Cel linhaId={linha.id} coluna="notaVeiculo" className={cn(td, ORCADO.celulaMeio, "text-muted-foreground")}>
+      <Cel linhaId={linha.id} coluna="notaVeiculo" className={cn(td, ORCADO.celulaMeio, "text-muted-foreground", mudou && REALIZADO.texto)}>
         {brl(conta.notaVeiculo)}
       </Cel>
-      <Cel linhaId={linha.id} coluna="notaAgencia" className={cn(td, ORCADO.celulaMeio, "text-muted-foreground")}>
+      <Cel linhaId={linha.id} coluna="notaAgencia" className={cn(td, ORCADO.celulaMeio, "text-muted-foreground", mudou && REALIZADO.texto)}>
         {brl(conta.notaAgencia)}
       </Cel>
-      <Cel linhaId={linha.id} coluna="total" className={cn(td, ORCADO.celulaTotal, "font-semibold")}>
+      <Cel linhaId={linha.id} coluna="total" className={cn(td, ORCADO.celulaTotal, "font-semibold", mudou && REALIZADO.texto)}>
         {brl(conta.total)}
+        <ValorInicial id={linha.id} campo="total" atual={conta.total} />
       </Cel>
     </>
   );
@@ -948,6 +1017,11 @@ function CelulasDatas({ linha }: { linha: LinhaMidia }) {
           }}
           className={DATA_NA_CELULA}
         />
+        {infoDe(api, linha.id)?.fimPlanejado && (
+          <div className="px-1.5 font-mono text-[10px] text-muted-foreground line-through" title="Fim planejado">
+            {String(infoDe(api, linha.id)!.fimPlanejado).split("-").reverse().join("/")}
+          </div>
+        )}
       </Cel>
     </>
   );
@@ -1504,7 +1578,13 @@ function LinhaGrade({
   const k = (c: string) => `${linha.id}:${c}`;
   const txt = "px-2 py-1.5 text-[11.5px] text-foreground";
   return (
-    <tr data-calha={`l:${linha.id}`} className="border-t border-t-border/70 hover:bg-[#fcfcfb]">
+    <tr
+      data-calha={`l:${linha.id}`}
+      className={cn(
+        "border-t border-t-border/70 hover:bg-[#fcfcfb]",
+        infoDe(api, linha.id)?.status === "extensao" && ERRATA.linhaVermelha,
+      )}
+    >
       <Cel linhaId={linha.id} coluna="praca" className={cn(txt, "px-3", larga && FIXA_PRACA)}>
         <Editavel chave={k("praca")} valor={linha.praca} tipo="texto" placeholder="Praça" onSalvar={(v) => api.atualizarLinha(linha.id, { praca: String(v) })} />
       </Cel>
@@ -1512,6 +1592,7 @@ function LinhaGrade({
       <CelulaTipo linha={linha} />
       <Cel linhaId={linha.id} coluna="descricao" className={txt}>
         <Editavel chave={k("descricao")} valor={linha.descricao} tipo="texto" placeholder="Programa ou faixa" onSalvar={(v) => api.atualizarLinha(linha.id, { descricao: String(v) })} />
+        <TagDoRealizado id={linha.id} />
       </Cel>
       <Cel linhaId={linha.id} coluna="formato" className={cn(txt, "text-muted-foreground")}>
         <Editavel
@@ -1664,7 +1745,13 @@ function LinhaPeriodo({ linha, conta }: { linha: LinhaMidia; conta: ContaDaLinha
   const k = (c: string) => `${linha.id}:${c}`;
   const txt = "px-2 py-1.5 text-[11.5px] text-foreground align-top";
   return (
-    <tr data-calha={`l:${linha.id}`} className="border-t border-t-border/70 hover:bg-[#fcfcfb]">
+    <tr
+      data-calha={`l:${linha.id}`}
+      className={cn(
+        "border-t border-t-border/70 hover:bg-[#fcfcfb]",
+        infoDe(api, linha.id)?.status === "extensao" && ERRATA.linhaVermelha,
+      )}
+    >
       <Cel linhaId={linha.id} coluna="praca" className={cn(txt, "px-3")}>
         {/* Cidade longa ("Visconde do Rio Branco/MG") quebra em vez de
             cortar: a linha por período já tem duas linhas. */}
@@ -1674,6 +1761,7 @@ function LinhaPeriodo({ linha, conta }: { linha: LinhaMidia; conta: ContaDaLinha
       <CelulaTipo linha={linha} />
       <Cel linhaId={linha.id} coluna="descricao" className={txt}>
         <Editavel quebra chave={k("descricao")} valor={linha.descricao} tipo="texto" placeholder="Ponto ou descrição" onSalvar={(v) => api.atualizarLinha(linha.id, { descricao: String(v) })} />
+        <TagDoRealizado id={linha.id} />
         {linha.detalhe && <div className="mt-0.5 line-clamp-2 text-[10.5px] leading-snug text-muted-foreground">{linha.detalhe}</div>}
       </Cel>
       <Cel linhaId={linha.id} coluna="formato" className={cn(txt, "text-muted-foreground")}>
@@ -1689,6 +1777,9 @@ function LinhaPeriodo({ linha, conta }: { linha: LinhaMidia; conta: ContaDaLinha
           valor={linha.periodos}
           tipo="inteiro"
           exibir={
+            infoDe(api, linha.id)?.textoPeriodos ? (
+              <span className="font-sans text-[10.5px]">{infoDe(api, linha.id)!.textoPeriodos}</span>
+            ) :
             <span>
               {inteiro(linha.periodos)}{" "}
               <span className="font-sans text-[10.5px] text-muted-foreground">

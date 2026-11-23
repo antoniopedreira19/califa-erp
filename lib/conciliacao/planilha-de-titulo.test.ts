@@ -8,13 +8,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
-import { codigoDePp, codigosDePp, donosDaPlanilha, eDePpPaga, nomesBatem, type LinhaDaPlanilha, type TituloEmAberto } from "./planilha-de-titulo";
+import { codigoDePp, codigosDePp, donosDaPlanilha, eDeNfPaga, eDePpPaga, nomesBatem, numerosDeNf, type LinhaDaPlanilha, type TituloEmAberto } from "./planilha-de-titulo";
 
 const linha = (x: Partial<LinhaDaPlanilha> & { id: string }): LinhaDaPlanilha => ({
   data: "2026-11-12",
   valor: -4500,
   descricao: "Controller",
   quem: "Colaboradora Exemplo Silva",
+  nfs: [],
+  retencao: false,
   ...x,
 });
 const pp = (x: Partial<TituloEmAberto> & { id: string }): TituloEmAberto => ({
@@ -107,4 +109,46 @@ test("fica a linha que cita PP paga mas é outro movimento", () => {
   assert.ok(!eDePpPaga({ valor: -4800, descricao: "PAGO EM DUPLICIDADE?? CONFERIR - PP-00446" }, pagas));
   assert.ok(!eDePpPaga({ valor: -5000, descricao: "PIX NÃO EFETUADO - PP00288" }, pagas));
   assert.ok(!eDePpPaga({ valor: -2189.09, descricao: "PP01028 PP01020 - Reembolso" }, pagas), "uma das PPs citadas ainda está aberta");
+});
+
+// ---- Decisão 276: a linha da planilha da NF lançada no sistema ----
+
+const nf = (x: Partial<TituloEmAberto> & { id: string }): TituloEmAberto => ({
+  data: "2026-12-01",
+  valor: 10000,
+  descricao: "Cliente Exemplo",
+  quem: "Cliente Exemplo",
+  origem: "nf",
+  ref: "NF 6331",
+  ...x,
+});
+
+test("lê os números de NF que a planilha cita", () => {
+  assert.deepEqual(numerosDeNf("NF 6331"), ["6331"]);
+  assert.deepEqual(numerosDeNf("NF 145 ( repasse referente a NF 4698)").sort(), ["145", "4698"]);
+  assert.deepEqual(numerosDeNf("NFs 6404/6405 e 6406").sort(), ["6404", "6405", "6406"]);
+  assert.deepEqual(numerosDeNf("Recebimento - venc. 01/09"), []);
+  assert.deepEqual(numerosDeNf(null), []);
+});
+
+test("o recebimento e as retenções que citam a NF são do título dela", () => {
+  const rec = linha({ id: "h1", valor: 10000, descricao: "Recebimento", nfs: ["6331"] });
+  const ret = linha({ id: "h2", valor: -500, descricao: "ISS retido na fonte", nfs: ["6331"], retencao: true });
+  const outra = linha({ id: "h3", valor: 10000, descricao: "Recebimento", nfs: ["6332"] });
+  const maior = linha({ id: "h4", valor: 20000, descricao: "Recebimento", nfs: ["6331"] });
+  const dono = donosDaPlanilha([rec, ret, outra, maior], [nf({ id: "t1" })]);
+  assert.equal(dono.get("h1"), "t1");
+  assert.equal(dono.get("h2"), "t1");
+  assert.equal(dono.has("h3"), false);
+  // A previsão maior que o título cita a NF por engano: fica livre.
+  assert.equal(dono.has("h4"), false);
+});
+
+test("a linha do recebimento de NF já paga sai da lista", () => {
+  const pagas = new Set(["6331"]);
+  assert.equal(eDeNfPaga({ valor: 10000, nfs: ["6331"], retencao: false }, pagas), true);
+  assert.equal(eDeNfPaga({ valor: -500, nfs: ["6331"], retencao: true }, pagas), true);
+  // Uma saída comum que cita a NF (o repasse) não sai.
+  assert.equal(eDeNfPaga({ valor: -500, nfs: ["6331"], retencao: false }, pagas), false);
+  assert.equal(eDeNfPaga({ valor: 10000, nfs: ["6332"], retencao: false }, pagas), false);
 });

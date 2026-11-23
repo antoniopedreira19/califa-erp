@@ -1,12 +1,13 @@
 // node --import tsx --test lib/ia/ler-nota-tomada.test.ts
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cnaeLido, codigoServicoLido, leituraParaGravar, type DadosBrutosNotaTomada } from "./ler-nota-tomada";
+import { chaveDoNumero, cnaeLido, codigoServicoLido, leituraParaGravar, type DadosBrutosNotaTomada } from "./ler-nota-tomada";
 
 const vazia = { aliquota: null, valor: null };
 const base: DadosBrutosNotaTomada = {
   numero_nf: "000771",
   cnpj_emissor: "11222333000181",
+  data_emissao: "2026-11-05",
   valor_total: 3000,
   descricao_servico: "  Locação de   equipamentos de filmagem ",
   cnae: "7739-0/99",
@@ -17,12 +18,12 @@ const base: DadosBrutosNotaTomada = {
   retencoes: { iss: { aliquota: 2, valor: 60 }, irrf: { aliquota: 1.5, valor: 45 }, pis: vazia, cofins: vazia, csll: vazia, inss: vazia },
   confianca_baixa: false,
 };
-const nota = { numero: "771", cnpjEmitente: "11.222.333/0001-81" };
+const nota = { numero: "771", cnpjEmitente: "11.222.333/0001-81", valor: 3000, emissao: "2026-11-05" };
 
 test("monta a leitura e as retenções com valor", () => {
   const r = leituraParaGravar(base, nota);
-  assert.ok(r.ok);
-  if (!r.ok) return;
+  assert.equal(r.arquivoDaNota, true);
+  assert.deepEqual(r.leitura.divergencias, []);
   assert.equal(r.leitura.descricao_servico, "Locação de equipamentos de filmagem");
   assert.equal(r.leitura.competencia, "2026-11");
   assert.deepEqual(r.leitura.retencoes, [
@@ -31,30 +32,62 @@ test("monta a leitura e as retenções com valor", () => {
   ]);
 });
 
-test("recusa o arquivo de outra nota", () => {
-  const r = leituraParaGravar({ ...base, numero_nf: "772" }, nota);
-  assert.equal(r.ok, false);
+test("o PDF de outra nota: guarda o que o PDF traz, sem os dados da leitura", () => {
+  const r = leituraParaGravar({ ...base, numero_nf: "59540" }, nota);
+  assert.equal(r.arquivoDaNota, false);
+  assert.equal(r.motivo, "O PDF traz a NF 59540, não a 771.");
+  assert.deepEqual(r.leitura.divergencias, ["numero"]);
+  assert.equal(r.leitura.pdf.numero, "59540");
+  assert.equal(r.leitura.descricao_servico, null);
+  assert.deepEqual(r.leitura.retencoes, []);
 });
 
-test("recusa o arquivo de outro emitente", () => {
-  const r = leituraParaGravar({ ...base, cnpj_emissor: "00000000000100" }, nota);
-  assert.equal(r.ok, false);
+test("o PDF de outro emitente (CNPJ válido) não é desta nota", () => {
+  const r = leituraParaGravar({ ...base, cnpj_emissor: "00000000000191" }, nota);
+  assert.equal(r.arquivoDaNota, false);
+  assert.deepEqual(r.leitura.divergencias, ["emitente"]);
 });
 
-test("competência fora do formato e alíquota absurda viram nulo", () => {
+test("CNPJ lido com dígito errado (inválido) não recusa o arquivo", () => {
+  // 11.222.333/0001-81 com dois dígitos trocados: o verificador não fecha.
+  const r = leituraParaGravar({ ...base, cnpj_emissor: "11223233000181" }, nota);
+  assert.equal(r.arquivoDaNota, true);
+  assert.deepEqual(r.leitura.divergencias, []);
+});
+
+test("emissão e valor diferentes são divergência, não recusa", () => {
+  const r = leituraParaGravar({ ...base, data_emissao: "2026-11-02", valor_total: 2500 }, nota);
+  assert.equal(r.arquivoDaNota, true);
+  assert.deepEqual(r.leitura.divergencias, ["emissao", "valor"]);
+  assert.equal(r.leitura.pdf.emissao, "2026-11-02");
+  assert.equal(r.leitura.pdf.valor, 2500);
+});
+
+test("número com pontos e zeros à esquerda é o mesmo número", () => {
+  assert.equal(chaveDoNumero("000.003.107"), "3107");
+  const r = leituraParaGravar({ ...base, numero_nf: "000.000.771" }, nota);
+  assert.deepEqual(r.leitura.divergencias, []);
+});
+
+test("o sufixo da série no número não é outro número", () => {
+  const r = leituraParaGravar({ ...base, numero_nf: "771/NFE" }, nota);
+  assert.deepEqual(r.leitura.divergencias, []);
+});
+
+test("competência fora do formato, alíquota absurda e emissão inválida viram nulo", () => {
   const r = leituraParaGravar(
-    { ...base, competencia: "11/2026", retencoes: { ...base.retencoes, irrf: { aliquota: 150, valor: 45 } } },
+    { ...base, competencia: "11/2026", data_emissao: "05/11/2026", retencoes: { ...base.retencoes, irrf: { aliquota: 150, valor: 45 } } },
     nota,
   );
-  assert.ok(r.ok);
-  if (!r.ok) return;
   assert.equal(r.leitura.competencia, null);
-  assert.equal(r.leitura.retencoes.find((x) => x.imposto === "IRRF")?.aliquota, null);
+  assert.equal(r.leitura.pdf.emissao, null);
+  assert.deepEqual(r.leitura.divergencias, []);
+  assert.deepEqual(r.leitura.retencoes[1], { imposto: "IRRF", aliquota: null, valor: 45 });
 });
 
 test("sem número ou CNPJ lidos, não recusa", () => {
-  const r = leituraParaGravar({ ...base, numero_nf: null, cnpj_emissor: null }, nota);
-  assert.ok(r.ok);
+  const r = leituraParaGravar({ ...base, numero_nf: null, cnpj_emissor: null, data_emissao: null }, nota);
+  assert.equal(r.arquivoDaNota, true);
 });
 
 test("CNAE só no formato de CNAE; o item da LC 116 não é CNAE", () => {
@@ -79,9 +112,6 @@ test("código do serviço: item da LC 116 com ou sem subitem", () => {
 
 test("o código do serviço posto no CNAE vai para o lugar certo", () => {
   const r = leituraParaGravar({ ...base, cnae: "17.06.01 / -", codigo_servico: null }, nota);
-  assert.ok(r.ok);
-  if (!r.ok) return;
   assert.equal(r.leitura.cnae, null);
   assert.equal(r.leitura.codigo_servico, "17.06.01");
 });
-

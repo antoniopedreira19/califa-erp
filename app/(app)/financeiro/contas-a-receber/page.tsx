@@ -107,7 +107,7 @@ export default async function ContasReceberPage({
         cnpj_tomador, estabelecimento_id, fiscal_cnae_id,
         empresa_id, origem_tipo, cliente_id, fornecedor_id, faturado_pelo_financeiro, mes_novo_faturamento,
         plano_conta_tipo_id, plano_conta_subtipo_id,
-        itens:faturamento_itens(id, origem_tipo, origem_id, envio_parcela_id, valor),
+        itens:faturamento_itens(id, origem_tipo, origem_id, envio_parcela_id, valor, job_planilha_nome),
         rateio:faturamentos_regionais(percentual, regional:regionais(nome))
       `)
       .eq("tenant_id", tenantId)
@@ -536,6 +536,8 @@ export default async function ContasReceberPage({
       origem_id: string | null;
       envio_parcela_id: string | null;
       valor: string | number;
+      /** Decisão 276: o job da planilha a que a NF está presa (nota avulsa). */
+      job_planilha_nome: string | null;
     }>;
   };
 
@@ -691,7 +693,11 @@ export default async function ContasReceberPage({
         return {
           origem_tipo: i.origem_tipo,
           origem_id: i.origem_id,
-          codigo: job?.codigo ?? (i.origem_tipo === "bv" ? "BV" : "Avulso"),
+          // Decisão 276: a NF presa ao job da planilha mostra o nome dele,
+          // até o job ser aberto no sistema com esse nome.
+          codigo:
+            job?.codigo ??
+            (i.origem_tipo === "bv" ? "BV" : i.origem_tipo === "avulso" && i.job_planilha_nome ? "Job da planilha" : "Avulso"),
           // Item de save aponta para o mesmo job do item próprio; o que
           // os separa é o tipo. Sem isto a nota mostra o job duas vezes.
           descricao:
@@ -699,7 +705,9 @@ export default async function ContasReceberPage({
               ? "Saldo em save — crédito do cliente"
               : i.origem_id && nomeDoJob.has(i.origem_id)
                 ? (nomeDoJob.get(i.origem_id) as string)
-                : f.descricao,
+                : i.origem_tipo === "avulso" && i.job_planilha_nome
+                  ? i.job_planilha_nome
+                  : f.descricao,
           valor: Number(i.valor),
         };
       }),

@@ -100,7 +100,7 @@ import {
 } from "@/lib/calculos/janelas-pagamento";
 import { carregarFeriadosNacionais } from "@/lib/data/feriados-nacionais";
 import { lerMidiaDoJob } from "@/lib/data/midia-do-job";
-import { alvoDoRepasse } from "@/lib/calculos/midia-off";
+import { alvoDoRepasse, nomeDaLinhaDoJob } from "@/lib/calculos/midia-off";
 import { envioDispensaNf, midiaSystemDoJob } from "@/lib/calculos/midia-system";
 import {
   DESGASTE_POR_KM_PADRAO,
@@ -991,7 +991,8 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
   const buscaOrcado = supabase
     .from("jobs_itens_orcado")
     .select(
-      "id, item, total_orcado, total_planejado, quantidade_orcada, linha_vermelha, tipo_custo, em_save, cancelada_em",
+      // O veículo dá nome à linha de Mídia Off, que não tem item.
+      "id, item, praca, total_orcado, total_planejado, quantidade_orcada, linha_vermelha, tipo_custo, em_save, cancelada_em, veiculo:fornecedores!fornecedor_id(nome)",
     )
     .eq("tenant_id", session.activeTenant.id);
 
@@ -1014,7 +1015,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
   if ((orcado as any).cancelada_em) {
     return {
       ok: false,
-      message: `"${(orcado as any).item ?? "A linha"}" foi cancelada por errata e não recebe Pedido de Produção.`,
+      message: `"${nomeDaLinhaDoJob({ item: (orcado as any).item, praca: (orcado as any).praca, veiculo: (orcado as any).veiculo?.nome }, "A linha")}" foi cancelada por errata e não recebe Pedido de Produção.`,
     };
   }
 
@@ -1025,7 +1026,11 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
     item_id: ancora.item_id,
     job_item_orcado_id: (orcado as any).id as string,
     linha_vermelha: (orcado as any).linha_vermelha === true,
-    item_nome: ((orcado as any).item as string) ?? "Item",
+    item_nome: nomeDaLinhaDoJob({
+      item: (orcado as any).item,
+      praca: (orcado as any).praca,
+      veiculo: (orcado as any).veiculo?.nome,
+    }),
     total_planejado: Number((orcado as any).total_planejado ?? 0),
     total_orcado: Number(orcado.total_orcado ?? 0),
     total_realizado: Number(ancora.total_realizado ?? 0),
@@ -1470,10 +1475,18 @@ function seloPeloStatus(status: PPStatus, canceladaEm: string | null): SeloDaPP 
 
 /** Decisão 191: o nome do item da planilha, pela âncora do realizado, para
  *  quem relê a PP gravada e refaz o PDF. */
-const ITEM_DA_PP = "realizado:jobs_itens_realizado(copia:jobs_itens_orcado(item))";
-type ItemDaPPEmbutido = { copia: { item: string | null } | null } | null;
+const ITEM_DA_PP =
+  "realizado:jobs_itens_realizado(copia:jobs_itens_orcado(item, praca, veiculo:fornecedores!fornecedor_id(nome)))";
+type ItemDaPPEmbutido = {
+  copia: { item: string | null; praca?: string | null; veiculo?: { nome: string } | null } | null;
+} | null;
 function nomeDoItemDaPP(realizado: ItemDaPPEmbutido): string {
-  return realizado?.copia?.item ?? "Item";
+  // A linha de Mídia Off não tem item: "praça · veículo" (decisão 273).
+  return nomeDaLinhaDoJob({
+    item: realizado?.copia?.item,
+    praca: realizado?.copia?.praca,
+    veiculo: realizado?.copia?.veiculo?.nome,
+  });
 }
 
 async function renderizarDocumentoDaPP(args: {
@@ -3184,7 +3197,7 @@ async function seguirDocumentoNaPP(
   supabase: ReturnType<typeof createClient>,
   tenantId: string,
   ppId: string,
-  origem: "envio" | "pronta_para_envio" | "correcao_da_nf",
+  origem: "envio" | "pronta_para_envio" | "correcao_da_nf" | "controle_de_notas",
 ): Promise<{ ok: true; troca: TrocaDeEmissora | null } | { ok: false; message: string }> {
   const [ppRes, anexosRes] = await Promise.all([
     supabase
@@ -3324,6 +3337,32 @@ export async function seguirDocumentosDaNotaCorrigida(
     troca: principal.troca,
     aviso: falhas.length > 0 ? `A NF foi corrigida, mas outra PP com ela não mudou de empresa emissora: ${falhas[0]}` : null,
   };
+}
+
+/**
+ * Decisão 271, ponto 6: depois do "Editar registro" da seção Notas Fiscais, a
+ * empresa emissora segue o CNPJ tomador corrigido em cada PP da nota e o PDF
+ * é refeito (revisão da 156). A nota já está corrigida quando isto roda: a
+ * PP que não puder seguir volta como aviso, sem desfazer a correção.
+ */
+export async function seguirDocumentoNasPPs(
+  ppIds: string[],
+): Promise<{ trocas: Array<{ ppId: string; de: string | null; para: string }>; avisos: string[] }> {
+  const ids = ppIds.filter((id) => z.string().uuid().safeParse(id).success);
+  if (ids.length === 0) return { trocas: [], avisos: [] };
+  const session = await requireSession();
+  if (session.activeRole !== "administrador" && session.activeRole !== "financeiro") {
+    return { trocas: [], avisos: ["Só o financeiro e o administrador seguem a nota nas PPs."] };
+  }
+  const supabase = createClient();
+  const trocas: Array<{ ppId: string; de: string | null; para: string }> = [];
+  const avisos: string[] = [];
+  for (const id of ids) {
+    const r = await seguirDocumentoNaPP(supabase, session.activeTenant.id, id, "controle_de_notas");
+    if (!r.ok) avisos.push(r.message);
+    else if (r.troca) trocas.push({ ppId: id, ...r.troca });
+  }
+  return { trocas, avisos };
 }
 
 /**

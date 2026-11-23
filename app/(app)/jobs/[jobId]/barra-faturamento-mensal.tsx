@@ -111,6 +111,11 @@ interface Props {
    *  até ali o envio do último mês encerrava junto). Obrigatória: campo
    *  opcional em prop é como regra nova some calada (CLAUDE.md). */
   midiaOff: boolean;
+  /** Mídia Off (decisão 274): o que ainda trava o envio de cada mês
+   *  (`YYYY-MM-01`) — AP, PI e a NF de cada veículo. O botão do mês aparece
+   *  apagado, com o motivo. `{}` fora da mídia. Obrigatória: campo opcional
+   *  em prop é como regra nova some calada (CLAUDE.md). */
+  faltaParaEnviar: Record<string, string[]>;
   /** Fade controlado pelo <BarraAcoesJob>: modo "Selecionar" da aba PPs
    *  esconde a barra pra quem está escolhendo focar no "Total selecionado".
    *  Vem como classe para ir no próprio sticky (um wrapper tira a altura e
@@ -131,6 +136,7 @@ export function BarraFaturamentoMensal({
   trilhaEncerramento,
   jobEncerrado = false,
   midiaOff,
+  faltaParaEnviar,
   classesDoFade,
   escondida = false,
 }: Props) {
@@ -149,11 +155,39 @@ export function BarraFaturamentoMensal({
   // O botão da barra recolhida é sempre o do mês mais antigo ainda a
   // enviar (design aprovado em 14/09/2026).
   const proximo = meses.find((m) => m.situacao === "a_enviar") ?? null;
+  // Mídia Off (decisão 274): AP, PI e a NF de cada veículo do mês.
+  const pendenciasDoMes = (m: MesDeFaturamento): string[] => faltaParaEnviar[m.mes.slice(0, 10)] ?? [];
   const podeEnviarMes = (m: MesDeFaturamento) =>
-    podeEnviar && !bloqueio && m.situacao === "a_enviar" && m.faturamento > 0;
+    podeEnviar &&
+    !bloqueio &&
+    m.situacao === "a_enviar" &&
+    m.faturamento > 0 &&
+    pendenciasDoMes(m).length === 0;
+  // O mês travado pelos documentos: o botão aparece apagado, com o motivo,
+  // em vez de sumir.
+  const travadoPelosDocumentos = (m: MesDeFaturamento) =>
+    podeEnviar && !bloqueio && m.situacao === "a_enviar" && m.faturamento > 0 && pendenciasDoMes(m).length > 0;
 
   function rotuloDoBotao(m: MesDeFaturamento, contorno: boolean): string {
     return contorno ? "Enviar faturamento" : `Enviar faturamento de ${nomeDoMes(m.mes)}`;
+  }
+
+  function botaoTravado(m: MesDeFaturamento, contorno: boolean) {
+    return (
+      <button
+        key={`travado-${m.mesId}-${contorno ? "linha" : "barra"}`}
+        type="button"
+        disabled
+        title={`Falta para enviar ${nomeDoMes(m.mes)}: ${pendenciasDoMes(m).join("; ")}.`}
+        className={
+          contorno
+            ? "inline-flex h-8 cursor-not-allowed items-center gap-1.5 whitespace-nowrap rounded-[10px] border border-border bg-white px-3 text-xs font-semibold text-muted-foreground opacity-60"
+            : "inline-flex h-9 cursor-not-allowed items-center gap-2 whitespace-nowrap rounded-[10px] bg-california-red px-4 text-[13px] font-semibold text-white opacity-50"
+        }
+      >
+        {rotuloDoBotao(m, contorno)}
+      </button>
+    );
   }
 
   function botaoEnviar(m: MesDeFaturamento, contorno: boolean) {
@@ -182,9 +216,12 @@ export function BarraFaturamentoMensal({
   // o que enviar, e a frase não pode pedir envio.
   const nadaAFaturar =
     meses.length > 0 && meses.every((m) => m.situacao === "sem_faturamento");
+  const proximoTravado = proximo && travadoPelosDocumentos(proximo) ? proximo : null;
   const resumo = nadaAFaturar
     ? "Este job não tem faturamento previsto: não há nota a emitir."
-    : enviados.length === 0
+    : proximoTravado
+      ? `Falta para enviar ${nomeDoMes(proximoTravado.mes)}: ${pendenciasDoMes(proximoTravado).join("; ")}.`
+      : enviados.length === 0
       ? midiaOff
         ? "Envie cada mês depois que a veiculação dele termina."
         : "Envie cada mês quando o cliente validar."
@@ -230,7 +267,9 @@ export function BarraFaturamentoMensal({
                 </span>
                 <ChipSituacao situacao={m.situacao} />
                 <span className="min-w-0 flex-1 text-xs text-muted-foreground">
-                  {detalheDoMes(m, moeda)}
+                  {travadoPelosDocumentos(m)
+                    ? `Falta para enviar: ${pendenciasDoMes(m).join("; ")}.`
+                    : detalheDoMes(m, moeda)}
                 </span>
                 {m.envio ? (
                   <button
@@ -243,6 +282,8 @@ export function BarraFaturamentoMensal({
                   </button>
                 ) : podeEnviarMes(m) ? (
                   botaoEnviar(m, true)
+                ) : travadoPelosDocumentos(m) ? (
+                  botaoTravado(m, true)
                 ) : null}
               </li>
             ))}
@@ -271,6 +312,7 @@ export function BarraFaturamentoMensal({
               )}
             </button>
             {proximo && podeEnviarMes(proximo) && botaoEnviar(proximo, false)}
+            {proximoTravado && botaoTravado(proximoTravado, false)}
           </>
         }
       >

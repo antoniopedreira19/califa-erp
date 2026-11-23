@@ -6876,3 +6876,36 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - **Combo da PP:** os veículos das linhas entram na lista de fornecedores do job (decisão 255), para a PP nascer com o veículo escolhido.
 - **Conferido no Sandbox:** TES-1026/26 — PP-00958 de R$ 16.000,00 gerada pela calha, linha concluída, "PPs · 1" com ✓, trilha "Campanha no ar até 31/12/2026 · 1 PP em aberto (PP-00958)"; TES-1025/26 (nacional) com a calha de sempre.
 - **Fica de fora:** envio e pagamento da PP do repasse não percorridos (pedem a NF); no PDF da PP da mídia a célula "Item" fica de fora (a linha não tem item; o serviço leva a descrição); entregas 4 e 5.
+
+
+## ⚠️ Nota de 2026-11-23 — Mídia Off, entrega 4: os veículos do mês (decisão 274)
+
+- **Card "Veículos de {mês}"** no pé de cada mês da planilha da mídia: uma linha por veículo com tipo, nota, AP, PI, NF do veículo, BV e "Para o faturamento".
+- **Envio do mês travado** sem AP e PI de cada veículo, sem a NF do A · Direto (número, data, valor) e, no A · Repasse, sem a PP do repasse enviada e fechada. Barra: "Falta para enviar novembro: Veículo (AP, PI e NF)"; régua: "Falta AP, PI ou NF". O servidor confere de novo.
+- **NF diferente da nota só avisa**; **mês enviado não muda** (documentos em consulta depois do envio, inclusive pelo Novo faturamento).
+- **Quem anexa:** administrador, GP e produtor; abrir, todo o tenant. Tabela `jobs_midia_documentos` e bucket `jobs-midia` (migrations `20261123500002` e `…500003`).
+- **BV do veículo no mês:** o formulário e o fluxo do BV de hoje (lançar e confirmar: administrador e GP; recebido na baixa do financeiro), já com o veículo escolhido (`fornecedorPadrao` no `BvDialog`). Trava o encerramento até recebido.
+- **Conferido no Sandbox:** TES-1026/26 — novembro com AP, PI e NF anexados pelo GP (NF com aviso de −R$ 320,00), envio liberado; produtor trocou o AP, removeu e reanexou o PI; dezembro (já faturado) em consulta e com BV de R$ 960,00 lançado.
+- **Fica de fora:** o texto do formulário do BV é o nacional ("a planilha desconta o bruto do realizado"); o BV de mídia aparece "BV — " sem nome na fila do financeiro (view do financeiro); entrega 5.
+
+
+## ⚠️ Nota de 2026-11-23 — Mídia Off, entrega 5: planejado e realizado (decisão 275)
+
+- **Visão única (opção A):** a planilha do job mostra a campanha como está — a linha que mudou em laranja, com o inicial riscado; inserção cortada e fim planejado riscados; a extensão em linha vermelha "Extensão". O planejado inicial é a versão aprovada.
+- **Card "Planejado e realizado"** acima da planilha: valor do job, faturamento e resultado (inicial → atual), "Encerrar veiculação antes", "Estender veiculação" e o registro de cada mudança. O cabeçalho do job se divide em inicial e atual.
+- **Encerrar antes:** grade perde as inserções depois do dia; período encurta, com o proporcional sugerido e editável. Aviso (sem trava) quando a PP do repasse já passa da nota que fica.
+- **Estender:** linha nova no unitário da de origem, no mês dela ou nos dois seguintes; o mês novo entra na versão aprovada e no job. AP e PI de antes da extensão não a cobrem ("AP da extensão").
+- **Mês enviado não muda; motivo opcional; administrador e GP.** Nada passa pela errata.
+- **Financeiro:** espelhos do job, previsão de recebimento do mês (e a do mês novo) e previsão de impostos acompanham a diferença sozinhos, sem revisão da abertura (Tiago, "Ajusta sozinha").
+- **Banco:** `jobs_midia_alteracoes`, `jobs_midia_alteracoes_linhas`, `jobs_itens_orcado.midia_extensao_id` e `registrar_alteracao_da_midia` (migration `20261123500004`).
+- **Conferido no Sandbox:** TES-1026/26 — novembro encerrado em 05/11 numa linha (R$ 7.700 → R$ 3.300, previsão de novembro R$ 1.601,60 → R$ 1.144,00) e outdoor estendido para 01–15/01/2027 (janeiro novo, previsão em 10/02/2027 de R$ 8.748,39).
+- **Fica de fora:** a data do job não acompanha a extensão; o texto de ajuda do cabeçalho dividido é o do nacional ("antes das erratas"); contrato do veículo.
+
+## ⚠️ Nota de 2026-11-23 — Mídia Off: as pendências das entregas 3 a 5 fechadas (decisões 273, 274 e 275)
+
+- **Nome da linha de mídia** (que não tem item): "praça · veículo" (`nomeDaLinhaDoJob` em `lib/calculos/midia-off.ts`) no PDF da PP, na origem da lista de PPs, no Comitê, na conclusão do item e nos avisos do encerramento.
+- **A data do job acompanha a extensão:** `jobs.data_fim_prevista` vai até o último dia no ar da extensão, só para frente (migration `20261123500006`). Encerrar antes não mexe na data.
+- **Textos:** o cabeçalho dividido da mídia diz "antes das mudanças da veiculação"; o BV do veículo diz que não desconta da planilha (o líquido entra no resultado realizado quando é recebido).
+- **PP do repasse sugerida na extensão:** a conta respeita as 3 casas do D/M da PP; quando não fecha no centavo, vem valor × 1 × 1 (antes passava R$ 2,06 da nota).
+- **Conferido no Sandbox (TES-1026/26):** PP-00958 enviada com NF, aprovada e paga; BV de dezembro confirmado e na fila do financeiro com nome; extensão para 22/01/2027 mudou o período do job; PDF da PP-00959 com "Item: Salvador/BA · Fornecedor Teste".
+- **Ainda aberto:** contrato do veículo; o card "Erratas" da mídia ainda fala do "Editar planilha".

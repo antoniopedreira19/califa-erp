@@ -142,6 +142,43 @@ export async function carregarMesesDoNovoFaturamento(
 }
 
 // ---------------------------------------------------------------------------
+// Anexar o PDF da NF que entrou sem ele (decisão 276)
+// ---------------------------------------------------------------------------
+
+const anexarPdfSchema = z.object({
+  faturamento_id: z.string().uuid(),
+  path: z.string().min(1).max(500),
+});
+
+/** A NF da planilha que entrou sem PDF ganha o anexo depois. Só a que está
+ *  sem anexo: a nota com PDF não troca de arquivo por aqui. */
+export async function anexarPdfDaNota(input: unknown): Promise<Result> {
+  const parsed = anexarPdfSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Entrada inválida." };
+  const gate = await checarGateFinanceiro(parsed.data.faturamento_id, "faturamento", "faturamento.pdf_anexado");
+  if (!gate.ok) return gate;
+  const { session, supabase } = gate;
+  if (!parsed.data.path.startsWith(`${session.activeTenant.id}/`)) {
+    return { ok: false, message: "Anexo inválido: envie o PDF de novo." };
+  }
+  // A nota só muda pelas funções do banco (sem UPDATE para `authenticated`).
+  const { data: numeroNf, error } = await supabase.rpc("anexar_pdf_da_nota", {
+    p_faturamento_id: parsed.data.faturamento_id,
+    p_path: parsed.data.path,
+  });
+  if (error) return { ok: false, message: error.message };
+  await logAuditEvent({
+    acao: "faturamento.pdf_anexado",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "faturamento",
+    entidadeId: parsed.data.faturamento_id,
+    metadata: { numero_nf: numeroNf as string, path: parsed.data.path },
+  });
+  revalidatePath("/financeiro/contas-a-receber");
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
 // Emitir Faturamento
 // ---------------------------------------------------------------------------
 
@@ -165,6 +202,10 @@ const itemSchema = z.object({
   origem_id: z.string().uuid().nullable(),
   envio_parcela_id: z.string().uuid().nullable(),
   valor: z.number().positive(),
+  // Decisão 276: o job da planilha do item — a NF presa a ele (nota avulsa)
+  // ou, na nota de job, a origem da carga das NFs da planilha.
+  job_planilha_chave: z.string().trim().min(1).max(300).nullable().default(null),
+  job_planilha_nome: z.string().trim().min(1).max(300).nullable().default(null),
 });
 
 const anexoDaPoSchema = z.object({
@@ -207,7 +248,10 @@ const emitirSchema = z.object({
     .trim()
     .min(1, "Informe o CNAE a ser utilizado na nota.")
     .max(120, "Máximo 120 caracteres."),
-  anexo_nf_path: z.string().min(1, "Anexe o PDF da nota fiscal antes de emitir."),
+  // Decisão 276: a NF da planilha sem PDF entra marcada (caminho vazio) e o
+  // PDF se anexa depois; fora da carga da planilha, o PDF é obrigatório.
+  anexo_nf_path: z.string(),
+  sem_pdf: z.boolean().default(false),
   // Só o avulso informa (é o campo "Centro de custo" do formulário). Em
   // job/BV a classificação que vale é a da baixa do título.
   plano_conta_tipo_id: z.string().uuid().nullable(),
@@ -294,6 +338,24 @@ export async function emitirFaturamento(
   const { session, supabase } = gate;
 
   const d = parsed.data;
+
+  // Decisão 276: só a NF da planilha (todos os itens com o job da planilha)
+  // entra sem PDF; as outras pedem o anexo, como sempre.
+  const daPlanilha = d.itens.every((i) => i.job_planilha_chave && i.job_planilha_nome);
+  if (d.itens.some((i) => (i.job_planilha_chave === null) !== (i.job_planilha_nome === null))) {
+    return { ok: false, message: "O job da planilha do item precisa da chave e do nome." };
+  }
+  if (d.itens.some((i) => i.job_planilha_chave && i.origem_tipo === "bv")) {
+    return { ok: false, message: "O BV não leva job da planilha." };
+  }
+  if (d.sem_pdf ? !daPlanilha || d.anexo_nf_path !== "" : d.anexo_nf_path.trim() === "") {
+    return {
+      ok: false,
+      message: d.sem_pdf
+        ? "Só a NF da planilha entra sem PDF."
+        : "Anexe o PDF da nota fiscal antes de emitir.",
+    };
+  }
 
   // Coerência contraparte × origem (defensivo — a RPC e o CHECK também
   // validam, e é aqui que a mensagem sai legível).
@@ -464,8 +526,11 @@ export async function emitirFaturamento(
   if (!cnaeDaLista || !cnaeDaLista.ativo || cnaeDaLista.estabelecimento_id !== d.estabelecimento_id) {
     return { ok: false, message: "O CNAE escolhido não é do CNPJ emissor." };
   }
+  // Decisão 276: a NF da planilha emitida antes do cadastro de impostos (que
+  // começa em 2026) leva o CNAE dela mesmo assim; ela fica fora da Apuração.
+  const antesDoCadastro = daPlanilha && cnaeDaLista.vigencia_inicio > d.data_emissao;
   if (
-    cnaeDaLista.vigencia_inicio > d.data_emissao ||
+    (cnaeDaLista.vigencia_inicio > d.data_emissao && !antesDoCadastro) ||
     (cnaeDaLista.vigencia_fim !== null && cnaeDaLista.vigencia_fim < d.data_emissao)
   ) {
     return { ok: false, message: "O CNAE escolhido não está vigente na data de emissão." };
@@ -499,7 +564,12 @@ export async function emitirFaturamento(
       ((reformaRes.data ?? []) as Array<{ chave: string; valor: number | string }>).find((p) => p.chave === chave)?.valor ??
         ALIQUOTAS_DA_REFORMA_PADRAO[chave],
     );
-  const aliquotasReforma = { cbs: aliquotaVigente("cbs"), ibs: aliquotaVigente("ibs") };
+  // A fase de teste da reforma começa em 2026: a NF da planilha emitida antes
+  // não tem CBS nem IBS (decisão 276).
+  const semReforma = daPlanilha && d.data_emissao < "2026-01-01";
+  const aliquotasReforma = semReforma
+    ? { cbs: 0, ibs: 0 }
+    : { cbs: aliquotaVigente("cbs"), ibs: aliquotaVigente("ibs") };
   const centavos = (v: number) => Math.round(v * 100) / 100;
   const baseIss = centavos(Math.max(0, d.valor_total - d.valor_deducoes));
   const reforma = reformaDaNota(
@@ -637,6 +707,10 @@ export async function emitirFaturamento(
         recebidos_associados: d.recebidos_associados,
         valor_cbs: reforma.cbs,
         valor_ibs: reforma.ibs,
+        // Decisão 276.
+        ...(daPlanilha
+          ? { jobs_da_planilha: [...new Set(d.itens.map((i) => i.job_planilha_nome))], sem_pdf: d.sem_pdf }
+          : {}),
       },
     }),
   ]);

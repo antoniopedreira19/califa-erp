@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { ROTULO_DA_ORIGEM } from "./dados";
 import type { NotaEmitida, NotaTomada } from "./dados";
+import { linhasDaDivergencia } from "./divergencia";
 
 /**
  * "Exportar Excel" das duas abas de Notas Fiscais (decisão 271): o que a tela mostra, uma
@@ -50,6 +51,7 @@ const TOMADAS: Coluna<NotaTomada>[] = [
   { cabecalho: "CNPJ do emitente", largura: 20, tipo: "texto", valor: (n) => n.fornecedor.documento },
   { cabecalho: "CNAE", largura: 14, tipo: "texto", valor: (n) => n.leitura.cnae ?? n.leitura.cnaeDoCadastro },
   { cabecalho: "Código do serviço", largura: 14, tipo: "texto", valor: (n) => n.leitura.codigoServico },
+  { cabecalho: "PDF diferente do registro", largura: 40, tipo: "texto", valor: (n) => linhasDaDivergencia(n).join(" | ") },
   { cabecalho: "CNPJ tomador", largura: 26, tipo: "texto", valor: (n) => n.tomador?.nome ?? null },
   { cabecalho: "CNPJ", largura: 20, tipo: "texto", valor: (n) => n.tomador?.cnpj ?? null },
   { cabecalho: "Origem", largura: 22, tipo: "texto", valor: (n) => [...new Set(n.documentos.map((d) => ROTULO_DA_ORIGEM[d.origem]))].join(", ") },

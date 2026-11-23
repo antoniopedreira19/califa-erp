@@ -9296,3 +9296,52 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Conferido** no Sandbox (criar, conta que varia com TD e débito automático, lançar a conta com fatura, editar com o título em aberto e mudança de dia, anexar e tirar documento, pausar, reativar, encerrar, link antigo, "Nova recorrência" da Conciliação) e nos testes de `lib/conciliacao/custo-fixo.test.ts` e do motor.
 - **Falta:** forma de pagamento das 96 ativas sem forma, marcar as que variam e os débitos automáticos, e o cadastro dos fornecedores pagos por PIX/TED.
 
+## ⚠️ Nota de 2026-11-23 — "Editar registro" das NFs tomadas (decisão 271, ponto 6)
+
+- **Tela:** botão "Editar registro" na aba Tomadas (`edicao-do-registro.tsx`): só nota em avaliação; número, emissão, valor e CNPJ tomador; rodapé + pop-up com motivo. Histórico no painel da nota, ícone na NF e "NF corrigida no controle de notas" no histórico do desembolso.
+- **Banco:** `notas_fiscais_fornecedor_alteracoes` + RPC `alterar_registro_das_notas` (migration `20261123800004`); `_desfazer_registro_das_notas` chamado nas duas reversões e o `corrigir_notas_fiscais_da_pp` levando desembolso e prestação (migration `20261123800005`).
+- **PP:** `seguirDocumentoNasPPs` (em `actions-pp.ts`) refaz o CNPJ e o PDF de cada PP da nota depois de gravar.
+- **Em aberto:** as 4 notas registradas sem documento aprovado (de antes da mudança na reversão) — corrigir pede o OK do Tiago.
+
+## ⚠️ Nota de 2026-11-23 — a leitura das NFs tomadas pelo texto do PDF (decisão 271, leitura v4)
+
+- **O quê:** além da leitura por imagem (IA), o texto do PDF (`pdf-parse`) dá número, emissão, valor e CNPJ do emitente sem IA (`lib/ia/texto-da-nf.ts`). A chave de acesso (44/50 dígitos, com DV) é a primeira fonte do CNPJ e completa o número; os rótulos cobrem DANFSe, NFS-e de São Paulo, NFS-e municipais e DANFE. Imagem e texto discordam → vale o texto e a nota guarda a discordância; sem texto → a divergência aparece como "só pela leitura da imagem".
+- **Banco:** `leitura_imagem`, `leitura_texto`, `leitura_texto_bruto`, `leitura_discordancias`, `leitura_so_imagem` (migration `20261123800010`). O texto bruto guardado serve para refazer os rótulos sem baixar o PDF de novo.
+- **Releitura:** o botão "Ler as N notas pela IA" relê tudo; a imagem vem do cache (`nf_extracao_cache`, esquema v3), sem custo.
+
+## ⚠️ Nota de 2026-11-23 — Mídia Off: encerrar a veiculação antes e estender mexem na previsão (decisão 275)
+
+- **O que muda para o financeiro:** quando o GP encerra uma veiculação antes do fim ou estende, os espelhos do job (`valor_total`, `faturamento_previsto`) passam a ser os de hoje; os da abertura não mudam.
+- **Previsão de recebimento:** o mês muda pela diferença do faturamento dele (`jobs_previsao_recebimento`, como na edição do orçado pelo financeiro, decisão 224). A extensão para mês novo cria a previsão dele, no mesmo dia e na mesma distância do último mês.
+- **Previsão de impostos:** muda pela diferença do imposto do job, espalhada pelas parcelas. A de desembolso não acompanha.
+- **Sem revisão da abertura** e sem travar o envio (Tiago, 23/11/2026, "Ajusta sozinha"). Quem fez e quando fica no registro do job (`jobs_midia_alteracoes`) e na auditoria (`midia.veiculacao_encerrada` / `midia.veiculacao_estendida`).
+- **Conferido no Sandbox:** TES-1026/26 — novembro R$ 1.601,60 → R$ 1.144,00; janeiro/2027 criado em 10/02/2027 com R$ 8.748,39.
+
+## ⚠️ Nota de 2026-11-23 — a NF presa ao job da planilha e a carga das NFs da planilha (decisão 276)
+
+- **Banco:** `faturamento_itens.job_planilha_chave/job_planilha_nome`, `faturamentos_passagens_da_planilha`, `jobs_da_planilha_com_nf`, `passar_nf_da_planilha_ao_job`, `_previsao_de_nf_lancada` na `vw_fluxo_caixa` e `emitir_faturamento` gravando as colunas (`20261123950001`); regra (c) de `_historico_previsoes_pagas` — a previsão REC e as retenções que citam a NF paga contam no DRE (`950002`); `anexar_pdf_da_nota` (`950003`); número 275 → 276 no texto aplicado (`950004`).
+- **Emissão:** `emitirFaturamento` aceita `job_planilha_chave/nome` nos itens e `sem_pdf` (só a NF da planilha); a NF antiga leva o CNAE mesmo antes do cadastro, sem CBS/IBS. Gaveta da NF: "Sem PDF" com "Anexar PDF"; o item aparece como "Job da planilha".
+- **Abertura:** sugestão do nome (`lib/calculos/nfs-da-planilha.ts`), linha "NFs da planilha" na confirmação e `passarNfsDaPlanilhaAoJob` (`abertura-de-job/nfs-da-planilha.ts`) depois de abrir; no mensal, o mês anterior ao da emissão.
+- **Conciliação:** regra 0 de `donosDaPlanilha` (a linha que cita a NF é do título) e `nfsPagasDaPlanilha` + `eDeNfPaga` em `banco-dados.ts`; `HistoricoDoMotor.nfs`.
+- **Carga (produção, 23/11):** 208 NFs (R$ 27,62 mi), 35 baixas e 32 linhas do banco trocadas da planilha para as baixas; DRE do 4T igual. Scripts em `tmp/nfs-planilha/` (fora do git). Conferido antes no Sandbox (TESTE-275A–G, TES-1012/26 aberto com o nome da planilha).
+- **Falta:** as 26 mensais fora dos meses do job (regra do mês), a segunda parte (20 recebidas antes de 03/11 e a 2ª parcela da NF 4946), e as listas a decidir (sem cliente, Saving, Ambev com o crédito do ISS, emissão em 2027, depósitos que pagam outras coisas).
+
+## ⚠️ Nota de 2026-11-23 — a emissão da NF 6479 corrigida (vencimento lançado na emissão)
+
+- **O caso:** a NF 6479 da California (AMB-1073/26, R$ 300.000,00) foi emitida pelo Faturar em 19/11 com a emissão 01/03/2027 — a data do vencimento. A planilha do financeiro tem 18/11/2026. Com a data errada, os impostos da nota iam para a apuração de março/2027 e a receita saía do 4º trimestre.
+- **Corrigido** pela migration `20261123400001_emissao_da_nf_6479.sql`, com o OK do Tiago: emissão 18/11/2026, título em 01/03/2027 sem mudança, evento `faturamento.emissao_corrigida` na auditoria (de → para e motivo). Conferido no banco.
+- **Não há tela** para corrigir a emissão de uma NF emitida (o "Editar registro" da 271 é das tomadas).
+- **Pendência (outro módulo, para depois):** no Faturar, pedir confirmação ("Tem certeza?") quando a emissão cair fora do mês corrente — futura, como aqui, ou passada. A carga da 276 também deixou de fora 10 NFs com emissão em 2027: conferir se são o mesmo engano.
+
+## ⚠️ Nota de 2026-11-23 — Mídia Off: o BV aparece com nome na fila e a data do job acompanha a extensão (decisões 274 e 275)
+
+- **`vw_faturamento_pendente`:** o BV da linha sem item (Mídia Off) passa a se chamar "BV — praça · agrupamento · MM/AAAA" (o veículo já está na contraparte). Só a expressão da descrição do BV mudou; colunas, ordem, tipos e a parte do job ficaram idênticas (migration `20261123500005`, conferida com contagem, soma e hash antes e depois). O Tiago pediu a correção ("corrija") em 23/11/2026.
+- **`jobs.data_fim_prevista`:** a extensão da veiculação empurra o fim previsto do job até o último dia no ar dela (nunca encurta) — o calendário de jobs passa a mostrar a campanha inteira (migration `20261123500006`).
+- **Conferido no Sandbox:** TES-1026/26 — BV de R$ 960 na fila como "BV — Salvador/BA · OOH · Outdoor · 9 x 3 m (lona) · 12/2026"; PP-00958 do repasse aprovada e baixada; período do job 01/11/2026 → 22/01/2027.
+
+## ⚠️ Nota de 2026-11-23 — a Apuração por CNPJ (decisão 277, entrega 1)
+
+- **Apuração:** botões de CNPJ (no lugar do seletor) e um bloco por CNPJ, com a faixa do grupo (CNPJ, regime, vence primeiro, a aprovar, em curso, "Aprovar as N pelo calculado" só do CNPJ; clicar recolhe). A coluna CNPJ virou "Local" (município ou "Federal"). O imposto por extenso ("PIS não cumulativo", "COFINS não cumulativa") e o código do DARF numa linha menor, com a dica do que ele quer dizer (`NomeDaGuia`, `NOME_DO_CODIGO` em `apuracao/ui.tsx`).
+- **Larguras** refeitas pelo maior valor real de 23/11 (base do IOF R$ 46,5 mi, débito do IRPJ R$ 2,66 mi), que passavam da coluna.
+- **A fazer (277 §2):** entrega 2 (Guia da contabilidade, saldo credor da contabilidade, rateio por gerencial e regionais pela receita) e entrega 3 (guia já paga ligada às linhas da planilha, DARF opcional). Depois, as 52 guias do 4º trimestre conferidas com a planilha.
+

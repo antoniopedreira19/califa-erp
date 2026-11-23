@@ -8,8 +8,8 @@ retido, os dados da leitura da NF e a visão Impostos. O ponto 3 está
 implementado (decisão [269](269-nf-da-prestacao-entra-no-cadastro-no-envio.md));
 a seção Notas Fiscais está implementada desde 23/11/2026 (Emitidas,
 Tomadas, navegador de período, visão Impostos e a leitura da NF pela IA;
-ver "Implementação" no fim); os pontos 1, 2 e 6 ("Editar registro")
-aguardam a implementação; o ponto 5 vai junto com a revisão das retenções;
+ver "Implementação" no fim) e o ponto 6 ("Editar registro", com os ajustes
+4 e 6c) também, no mesmo dia; os pontos 1 e 2 aguardam a implementação; o ponto 5 vai junto com a revisão das retenções;
 o ponto 4 não pede nada.
 **Quem decidiu:** Tiago, sobre o protótipo "Notas Fiscais" da Central
 Financeira (v3 a v14, 23/11/2026), com um seletor por ponto:
@@ -216,4 +216,212 @@ Achados no dado, sem correção (produção só leitura):
   01/03/2027.
 - No Sandbox, 6 notas tomadas apontam para fornecedores da produção (sobra
   da mudança da Empresa Teste): o emitente aparece "—".
+
+## Implementação do ponto 6 (23/11/2026)
+
+- **"Editar registro"** na aba Tomadas, como no protótipo v8: só as notas em
+  avaliação ficam editáveis (as registradas com cadeado); número, emissão,
+  valor e CNPJ tomador viram campos; a célula alterada fica destacada com o
+  valor antigo riscado; embaixo da linha, o erro que impede salvar ou o que
+  acontece junto (junção, a PP que muda de CNPJ) e quem acompanha; rodapé
+  "Cancelar" / "Salvar alterações"; pop-up com o de → para e o motivo
+  obrigatório (10+ caracteres).
+- **Banco:** `notas_fiscais_fornecedor_alteracoes` (o registro de cada
+  alteração: de → para, motivo, documentos que acompanharam, quem e quando)
+  e a RPC `alterar_registro_das_notas`, só administrador e financeiro, só
+  nota não registrada. As cópias nos anexos da PP, do desembolso e da
+  prestação acompanham; a parte de cada documento (na prestação, o `valor`
+  do documento) não muda, e o saldo é conferido. Número que já existe no
+  mesmo emitente junta as duas notas (6b). A edição simultânea é barrada
+  pelo que a tela viu ao abrir ("a NF foi alterada por <nome> depois que
+  você abriu a edição"). Migration `20261123800004`.
+- **CNPJ da PP:** depois de gravar, cada PP da nota segue o CNPJ tomador e
+  tem o PDF refeito (`seguirDocumentoNasPPs`, revisão da 156) — também na
+  junção, quando a nota que já existia estava em outro CNPJ.
+- **Histórico:** "Alterações do registro" no painel da nota e o ícone na NF
+  da tabela; o evento "NF corrigida" com o motivo em cada PP (e na PP da
+  prestação); o desembolso mostra "NF corrigida no controle de notas" no
+  histórico dele.
+- **Ajuste 4:** reverter a aprovação de uma PP ou de um desembolso desfaz o
+  registro da nota (`_desfazer_registro_das_notas`): ela passa a outro
+  documento aprovado que a traga ou volta a "Em avaliação". As 4 notas
+  registradas sem documento aprovado de antes não foram mexidas (pedem o OK
+  do Tiago).
+- **6c:** o "Corrigir a NF" da PP passou a levar junto as cópias do
+  desembolso e da prestação, e a nota antiga que fica sem PP leva os outros
+  documentos para a corrigida (antes, um desembolso na nota antiga fazia a
+  correção falhar). Migration `20261123800005`.
+- **Conferido no Sandbox:** a NF 9156 da PP-00146 virou 9158 com outro valor
+  e outro CNPJ tomador (a PP mudou de CNPJ, evento e histórico gravados), e a
+  NF 7001 foi juntada à 9158 (as duas PPs na mesma nota, a PP-00146 de volta
+  ao CNPJ da linha). Erros na tela: valor abaixo das partes e junção que
+  estoura o saldo. No banco, em transação desfeita: conflito de edição, nota
+  registrada, GP sem permissão, motivo curto, reversão da PP-00110 desfazendo
+  o registro da NF 602 e o "Corrigir a NF" da versão nova.
+
+Das 32 notas da produção que a leitura recusou, 15 estão em avaliação e se
+corrigem pela tabela; 17 estão registradas e precisam da reversão da
+aprovação do documento antes.
+
+## Leitura v3: o que o PDF traz fica na nota (23/11/2026)
+
+O Tiago não entendeu por que 32 notas foram recusadas: a tela não dizia. O
+cruzamento do cadastro com o que a IA leu dos PDFs mostrou quatro casos:
+
+- **8 recusas por engano:** a IA leu um ou dois dígitos do CNPJ do emitente
+  trocados (o CNPJ lido nem fecha os dígitos verificadores); o cadastro
+  estava certo.
+- **11 com o número digitado errado**, mesmo emitente e mesmo valor do PDF:
+  números inventados nas NFs da prestação ("03", "04"…) e chaves de acesso
+  no lugar do número.
+- **6 com o PDF de outro CNPJ** que não o fornecedor do documento.
+- **7 sem leitura útil:** guia municipal e apólices no lugar da NF, e PDFs
+  que a IA não leu.
+
+Mudou (`lib/ia/ler-nota-tomada.ts`, esquema v3, migration `20261123800006`):
+
+- O CNPJ lido só diverge se for válido pelos dígitos verificadores.
+- A emissão entra na leitura; emissão e valor diferentes viram divergência,
+  não recusa.
+- Toda leitura grava na nota o que o PDF traz (`leitura_pdf`: número, CNPJ,
+  emissão, valor) e o que diverge (`leitura_divergencias`). Com número ou
+  emitente diferentes, o PDF não é desta nota e os dados da leitura ficam
+  vazios.
+- A aba Tomadas ganhou o filtro "PDF diferente do registro", o alerta na NF
+  com o registro × PDF, a mesma caixa no painel, a coluna na exportação e,
+  no "Editar registro", o "Usar os dados do PDF" (número, emissão e valor;
+  o emitente continua voltando para quem enviou).
+
+## Revisão: o "Editar registro" corrige a nota registrada (23/11/2026)
+
+A releitura (v3) mostrou 12 notas registradas com número, emissão ou valor
+diferentes do PDF: o "Número da DPS" digitado no lugar do "Número da NFS-e"
+(DANFSe v2.0), a chave de acesso no lugar do número, o ano errado, o valor
+líquido no lugar do bruto. A regra da v8 mandava reverter a aprovação do
+documento, mas a maioria das PPs já está paga e não reverte. O Tiago
+liberou ("Sim, liberar"):
+
+- a nota registrada corrige **número, emissão e valor** pelo "Editar
+  registro", com o mesmo motivo, histórico e evento nos documentos; o
+  registro (quem, quando, em qual documento) continua;
+- o **CNPJ tomador** da registrada não muda (a célula não vira campo);
+- a registrada **não se junta** a outra nota: o número que já existe no
+  emitente é recusado.
+
+Migration `20261123800008`. A nota sem documento ativo continua travada.
+
+### O que foi corrigido na produção (23/11/2026)
+
+Releitura das 508 notas na v3: 504 lidas, 30 com o PDF diferente do registro.
+Cada caso foi conferido no PDF antes de corrigir; as correções foram feitas
+pela tela ("Editar registro" → "Usar os dados do PDF"), com motivo:
+
+- **10 em avaliação:** as 7 NFs da prestação da PP-00455 (números "01" a
+  "11" digitados no lugar dos números reais, e a emissão), uma NF de 5
+  dígitos que era a 22 (PP-01150) e duas NFs da PP-00949 (valor bruto da
+  nota; o cadastro tinha o líquido, sem o IRRF de 1,5%).
+- **9 registradas** (depois da liberação): o número da DPS ou da chave de
+  acesso no lugar do número da NFS-e (PP-00271, PP-00269, PP-00282),
+  emissões (PP-00346, PP-00357, PP-00090, PP-00861, PP-00123) e valores
+  (PP-00137 e PP-00123).
+
+Ficaram 12, que dependem de decisão: o ano lido errado pela IA (3 notas; o
+cadastro está certo), PDF emitido por outro CNPJ que não o fornecedor do
+documento (PP-01434, PP-01465, PP-01423, PP-01233 e PP-00952), PDF de outro
+documento (PP-01367/PP-01368) e documentos que não são NF (uma guia
+municipal e duas apólices de seguro). Em aberto também: a PP-00123 pagou
+R$ 250 de uma NF de R$ 2.500 e a PP-00137 cobre R$ 1.200 de uma NF de
+R$ 2.400.
+
+## "O registro está certo" (23/11/2026)
+
+Para quando quem errou foi a leitura, não o cadastro (o PDF diz 2026 e a IA
+leu 2016). No aviso de divergência do painel da nota, o financeiro confirma
+com motivo: a divergência sai, a confirmação fica no histórico da nota
+(o que o PDF trazia × o registro mantido), e a releitura que trouxer o mesmo
+PDF não volta a acusar. Se o número, a emissão ou o valor mudarem depois, a
+confirmação deixa de valer e a nota volta a ser comparada com o PDF. O
+"Editar registro" continua sendo o caminho quando o cadastro é que está
+errado. RPC `confirmar_registro_da_nota`, migration `20261123800009`.
+
+## Leitura v4: o texto do PDF como segunda leitura (23/11/2026)
+
+Pedido do Tiago depois que a leitura por imagem errou o ano em 3 notas e
+trocou dígitos de CNPJ em 8.
+
+- A leitura por imagem (IA) continua em todo PDF; para foto, cupom e PDF
+  sem texto, segue sendo a única fonte.
+- Quando o PDF tem texto selecionável, número, emissão, valor e CNPJ do
+  emitente saem dos rótulos do layout, sem IA (`lib/ia/texto-da-nf.ts`):
+  DANFSe v2.0 ("Número da NFS-e", nunca o "Número da DPS"; "Data e Hora da
+  Emissão da NFS-e"; "Valor da Operação / Serviço"; CNPJ do prestador),
+  NFS-e municipais e DANFE.
+- As duas concordam → normal. Discordam → vale o texto, e a nota guarda em
+  que discordaram ("as leituras discordaram; valeu o texto"). Sem texto →
+  vale a imagem, e a divergência aparece como "só pela leitura da imagem —
+  pode ser erro de leitura; confira o PDF".
+- A releitura reaproveita a leitura por imagem do cache (sem custo); se a
+  IA falhar e o texto trouxer os campos, vale o texto.
+- Migration `20261123800010` (colunas `leitura_imagem`, `leitura_texto`,
+  `leitura_texto_bruto`, `leitura_discordancias`, `leitura_so_imagem`).
+
+### A chave de acesso e os layouts que o primeiro leitor errava (23/11/2026)
+
+A primeira releitura das 512 notas com o texto (466 PDFs com texto, 45 só
+imagem) acusou 17 discordâncias, todas erro do leitor de texto, nenhuma da
+imagem:
+
+- **NFS-e de São Paulo (13 notas):** os rótulos vêm numa linha e os valores
+  na seguinte; o leitor pegou o número do RPS ("RPS Nº 14 Série 11") no
+  lugar do número da nota.
+- **DANFE (2 notas):** o "VALOR TOTAL DA NOTA" é o último rótulo da linha
+  do cálculo do imposto, e os valores vêm colados depois; o leitor pegou o
+  frete.
+- **CNPJ do tomador lido como emitente (2 notas):** em alguns layouts o
+  texto do PDF traz o bloco do tomador logo depois do rótulo "PRESTADOR".
+
+O que mudou (`lib/ia/texto-da-nf.ts`):
+
+- **A chave de acesso** é a primeira fonte do CNPJ do emitente e completa o
+  número: 44 dígitos na NF-e, 50 na NFS-e nacional (também o "Identificador
+  Nacional" das NFS-e municipais de São Paulo e outras), conferida pelo
+  dígito verificador (módulo 11). Estava em 440 dos 466 PDFs com texto; o
+  CNPJ dela bateu com o cadastro do fornecedor em 435 — as 5 diferenças são
+  os casos já conhecidos de PDF de outra empresa e os 2 MEIs cadastrados
+  pelo CPF. Município que numera com o ano na frente ("2026000000135" é a
+  nota 135): o ano sai.
+- **NFS-e de São Paulo:** o número (8 dígitos) colado na data da emissão,
+  depois dos rótulos; o "Nº … Série" só vale na DANFE.
+- **DANFE:** o canhoto ("EMISSÃO: … VALOR TOTAL: R$ …") dá emissão e total;
+  sem canhoto, o total é o último valor da linha do "VALOR TOTAL DA NOTA".
+- **DANFSe** com a data em traços ("28-09-2026") e com os rótulos juntos
+  antes dos valores.
+- **CNPJ pelos rótulos** (só sem chave): entre o "PRESTADOR" e o
+  "TOMADOR", e nunca o de uma empresa do grupo (`fiscal_estabelecimentos`).
+- O esquema da leitura passou a `nota-tomada-v5`: as notas lidas com o
+  leitor da v4 voltam a ser oferecidas para leitura. A imagem continua a da
+  v3 (cache, sem custo).
+- Ainda na releitura v5: o "Valor total: R$" de cada item da discriminação
+  de uma NFS-e foi lido como total — o canhoto ("EMISSÃO: … VALOR TOTAL:
+  R$ …") passou a valer só na DANFE; e o texto do PDF da NF 1398 trazia o
+  caractere nulo, que o jsonb recusa — o texto sai sem caracteres de
+  controle. O resumo da leitura deixou de contar as notas com "O registro
+  está certo".
+
+**Resultado na produção (23/11/2026, v5):** 512 notas lidas (as 2 apólices
+não são NF e ficam sem leitura); 463 com texto, 49 só pela imagem. Pelo
+texto saíram número em 441, CNPJ em 446, emissão em 429 e valor em 424 —
+no resto vale a imagem. **Nenhuma discordância entre imagem e texto.** 7
+notas com o PDF diferente do registro, todas casos já conhecidos: 2 com PDF
+de outro CNPJ só pela imagem (NFs 138 e 139), 3 com PDF de outro CNPJ
+confirmado pelo texto (NFs 26, 87 e 000031), o contrato no lugar da NF (NF
+03) e a guia municipal (NF 5914041000/1196-2). As 3 notas com "O registro
+está certo" continuam sem acusar.
+
+**Pendência (Tiago, 23/11/2026: "Não por agora", "Mas fica como
+pendência"):** segunda leitura por um modelo maior nas notas só com imagem
+(PDF sem texto) que divergem do registro — o ponto 5 do pedido da leitura
+pelo texto. Hoje cairiam nela só as NFs 138 e 139; a conferência a olho do
+PDF resolve. Retomar se a lista de notas só com imagem que divergem
+crescer.
 

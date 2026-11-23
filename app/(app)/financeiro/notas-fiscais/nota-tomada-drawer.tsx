@@ -26,8 +26,9 @@ import { cn, formatCnpj, formatDocumento } from "@/lib/utils";
 import { ROTULO_DA_ORIGEM, type DocumentoDaNota, type NotaTomada } from "./dados";
 import { Selo, dataBR, moeda } from "./comum";
 import { OrigemSelo } from "./aba-tomadas";
-import { urlDoAnexoDaNota } from "./actions";
+import { confirmarRegistroDaNota, urlDoAnexoDaNota } from "./actions";
 import { lerEmLotes } from "./leitura-das-notas";
+import { linhasDaDivergencia, origemDaLeitura, pdfDeOutraNota } from "./divergencia";
 
 const LARGURA_DO_PAINEL = 620;
 
@@ -43,6 +44,29 @@ export function NotaTomadaDrawer({ nota, onClose }: { nota: NotaTomada; onClose:
   const [erro, setErro] = React.useState<string | null>(null);
   const [lendo, setLendo] = React.useState(false);
   const [erroDaLeitura, setErroDaLeitura] = React.useState<string | null>(null);
+  // "O registro está certo": o motivo e o estado do envio.
+  const [confirmando, setConfirmando] = React.useState(false);
+  const [motivoDaConfirmacao, setMotivoDaConfirmacao] = React.useState("");
+  const [gravandoConfirmacao, setGravandoConfirmacao] = React.useState(false);
+  const [erroDaConfirmacao, setErroDaConfirmacao] = React.useState<string | null>(null);
+
+  async function confirmarRegistro() {
+    if (motivoDaConfirmacao.trim().length < 10) {
+      setErroDaConfirmacao("Escreva o motivo (pelo menos 10 caracteres).");
+      return;
+    }
+    setGravandoConfirmacao(true);
+    setErroDaConfirmacao(null);
+    const r = await confirmarRegistroDaNota(nota.id, motivoDaConfirmacao);
+    setGravandoConfirmacao(false);
+    if (!r.ok) {
+      setErroDaConfirmacao(r.message);
+      return;
+    }
+    setConfirmando(false);
+    setMotivoDaConfirmacao("");
+    router.refresh();
+  }
   const [isPending, startTransition] = React.useTransition();
   const [visualizando, setVisualizando] = React.useState<{ pp: PPRow; estabelecimentos: EstabelecimentoDaNota[]; id: string } | null>(null);
   const [visorAberto, setVisorAberto] = React.useState(false);
@@ -81,7 +105,7 @@ export function NotaTomadaDrawer({ nota, onClose }: { nota: NotaTomada; onClose:
     const r = await lerEmLotes([nota.id], () => {});
     setLendo(false);
     if (typeof r === "string") setErroDaLeitura(r);
-    else if (r.lidas === 0) setErroDaLeitura([...r.recusadas, ...r.falhas][0]?.motivo ?? "A leitura não foi gravada.");
+    else if (r.lidas === 0) setErroDaLeitura(r.falhas[0]?.motivo ?? "A leitura não foi gravada.");
     router.refresh();
   }
 
@@ -272,6 +296,82 @@ export function NotaTomadaDrawer({ nota, onClose }: { nota: NotaTomada; onClose:
                 )}
               </div>
             )}
+            {nota.leitura.divergencias.length > 0 && (
+              <div className="space-y-1 rounded-lg border border-amber-200 bg-[#fffbeb] px-3 py-2.5 text-[12.5px] text-[#92400e]">
+                <p className="flex items-center gap-1.5 font-semibold">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  {pdfDeOutraNota(nota) ? "O PDF anexado não é desta nota" : "O PDF não bate com o registro"}
+                </p>
+                {linhasDaDivergencia(nota).map((l) => (
+                  <p key={l} className="font-mono text-[12px]">
+                    {l}
+                  </p>
+                ))}
+                {nota.leitura.soImagem && (
+                  <p className="text-[12px] font-semibold">
+                    Só pela leitura da imagem (o PDF não tem texto): pode ser erro de leitura. Confira o PDF.
+                  </p>
+                )}
+                <p className="text-[12px]">
+                  {nota.leitura.divergencias.includes("emitente")
+                    ? "O PDF foi emitido por outro CNPJ: confira o documento com quem o enviou (o emitente não se corrige no controle de notas)."
+                    : pdfDeOutraNota(nota)
+                      ? "Se o PDF está certo, corrija o registro no “Editar registro” (botão “Usar os dados do PDF”). Se o PDF está errado, troque o anexo no documento."
+                      : "Corrija o registro no “Editar registro” (botão “Usar os dados do PDF”)."}{" "}
+                  Se você conferiu o PDF e quem errou foi a leitura, use “O registro está certo”.
+                </p>
+                {!confirmando ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmando(true);
+                      setErroDaConfirmacao(null);
+                    }}
+                    className="mt-1 inline-flex items-center gap-1.5 rounded-md border border-amber-300 bg-white px-2.5 py-1.5 text-[11.5px] font-semibold text-[#92400e] transition-colors hover:border-amber-500"
+                  >
+                    <CheckCircle2 className="h-3.5 w-3.5" />O registro está certo
+                  </button>
+                ) : (
+                  <div className="mt-1.5 space-y-1.5 rounded-md border border-amber-200 bg-white p-2.5 text-foreground">
+                    <label htmlFor="motivo-confirmacao" className="text-[12px] font-semibold">
+                      Motivo <span className="text-california-red">*</span>
+                    </label>
+                    <textarea
+                      id="motivo-confirmacao"
+                      value={motivoDaConfirmacao}
+                      onChange={(e) => setMotivoDaConfirmacao(e.target.value)}
+                      rows={2}
+                      disabled={gravandoConfirmacao}
+                      placeholder="Ex.: conferido no PDF, a emissão é 22/10/2026; a leitura errou o ano."
+                      className="w-full resize-none rounded-md border border-border px-2 py-1.5 text-[12.5px] outline-none focus:border-california-red"
+                    />
+                    {erroDaConfirmacao && <p className="text-[12px] text-california-red">{erroDaConfirmacao}</p>}
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setConfirmando(false)}
+                        disabled={gravandoConfirmacao}
+                        className="rounded-md px-2.5 py-1.5 text-[12px] font-semibold text-muted-foreground hover:bg-muted"
+                      >
+                        Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={confirmarRegistro}
+                        disabled={gravandoConfirmacao}
+                        className="inline-flex items-center gap-1.5 rounded-md bg-california-red px-3 py-1.5 text-[12px] font-bold text-white hover:bg-california-red/90 disabled:opacity-60"
+                      >
+                        {gravandoConfirmacao && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                        Confirmar o registro
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+            {nota.leitura.discordancias.length > 0 && nota.leitura.divergencias.length === 0 && (
+              <p className="text-[12px] text-muted-foreground">{origemDaLeitura(nota)}</p>
+            )}
             {erroDaLeitura && (
               <p className="flex items-start gap-1.5 text-[12px] text-california-red">
                 <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -336,6 +436,39 @@ export function NotaTomadaDrawer({ nota, onClose }: { nota: NotaTomada; onClose:
             <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-[#fffbeb] px-3 py-2.5 text-[12.5px] text-[#92400e]">
               <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <span>{primeiro ? `Informada no envio de ${primeiro.codigo}.` : "Informada no envio do documento."} O financeiro confere na aprovação.</span>
+            </div>
+          )}
+
+          {/* Ponto 6: as correções do financeiro no registro desta nota. */}
+          {nota.alteracoes.length > 0 && (
+            <div className="space-y-1.5">
+              <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Alterações do registro</span>
+              <div className="overflow-hidden rounded-xl border border-border">
+                {nota.alteracoes.map((alt, i) => (
+                  <div key={alt.em + i} className={cn("space-y-1 px-3.5 py-2.5 text-[12.5px]", i > 0 && "border-t border-border")}>
+                    {alt.tipo === "confirmacao" && (
+                      <p className="flex items-center gap-1.5 text-[12px] font-semibold text-emerald-700">
+                        <CheckCircle2 className="h-3.5 w-3.5" />O registro está certo (o PDF foi lido errado)
+                      </p>
+                    )}
+                    <p className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="font-semibold">{alt.por ?? "Financeiro"}</span>
+                      <span className="font-mono text-[11.5px] text-muted-foreground">
+                        {new Date(alt.em).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" })} às {new Date(alt.em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}
+                      </span>
+                    </p>
+                    <ul className="space-y-0.5">
+                      {alt.mudancas.map((m) => (
+                        <li key={m} className="font-mono text-[12px]">
+                          {m}
+                        </li>
+                      ))}
+                      {alt.juntada && <li className="text-[12px]">Juntada à nota que já existia com esse número.</li>}
+                    </ul>
+                    <p className="text-[12px] text-muted-foreground">Motivo: {alt.motivo}</p>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
 
