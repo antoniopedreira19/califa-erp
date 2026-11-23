@@ -198,6 +198,17 @@ Entrou a seção, sem o "Editar registro" (ponto 6), que vem em seguida.
   (`codigo_servico`, migration `20261123800003`), mostrado no painel e na
   exportação. A nota lida com o esquema antigo (`leitura_modelo` termina em
   `nota-tomada-v1`) volta a ser oferecida e a releitura grava por cima.
+- **A leitura das notas da produção (23/11/2026, OK do Tiago):** das 508
+  notas tomadas, 476 lidas e 32 não. Das lidas: 463 com código de
+  verificação, 396 com competência, 316 com código do serviço, só 6 com
+  CNAE (a NFS-e quase nunca traz) e 48 com retenção destacada (R$
+  109.158,91 no total). Custo: 506 leituras, US$ 0,88. As 32 foram
+  recusadas porque o arquivo traz outro número de nota ou outro emitente:
+  número digitado diferente do PDF (chave de acesso, apólice ou protocolo
+  no lugar do número), números inventados nas NFs da prestação da verba
+  ("03", "04"... da mesma prestação) e PDF de outro emitente. São casos do
+  ponto 6: o financeiro corrige o registro e a nota volta a ser lida. Até
+  lá, a barra continua oferecendo a leitura delas.
 
 Achados no dado, sem correção (produção só leitura):
 

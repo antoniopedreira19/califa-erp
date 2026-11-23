@@ -9285,4 +9285,5 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Conferido:** produção em leitura (as duas abas, painéis, peso da página) e Sandbox (painéis, barra de leitura com a falha mostrada); a RPC testada como admin e como GP do Sandbox em transação desfeita. Na versão publicada, a leitura da NF 603 do Sandbox gravou e entrou na auditoria (~US$ 0,0006 por nota).
 - Migrations `20261123800001_nota_tomada_dados_da_leitura.sql` e `20261123800002_gravar_leitura_da_nota.sql`.
 - **CNAE × código do serviço:** a IA punha o item da LC 116 ("17.06.01") no CNAE. Esquema v2 (`lib/ia/versao-nota-tomada.ts`): CNAE só com 7 dígitos (`cnaeLido`), código do serviço em `codigo_servico` (`codigoServicoLido`, migration `20261123800003`). Nota lida com outra versão do esquema conta como não lida (`leituraEAtual`).
+- **Produção lida em 23/11:** 476 de 508 notas (US$ 0,88); as 32 recusadas têm o número ou o emitente diferente do PDF e esperam o "Editar registro" (ponto 6).
 
