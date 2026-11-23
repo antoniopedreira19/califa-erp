@@ -42,6 +42,7 @@ export default async function ColaboradorFeriasPage({
     salarioRes,
     alocacaoRes,
     nfsRes,
+    folhasFeriasRes,
   ] = await Promise.all([
       supabase
         .from("colaboradores")
@@ -93,6 +94,17 @@ export default async function ColaboradorFeriasPage({
         .eq("colaborador_id", params.id)
         .eq("tenant_id", tenantId)
         .in("escopo_tipo", ["ferias_usufruto", "ferias_abono"]),
+      // Folhas de pagamento de férias deste colaborador. Usado pra decidir
+      // se um lançamento 'aprovado' é retroativo (sem folha = pagamento
+      // feito fora do sistema, não espera NF) — nesse caso vai pro
+      // histórico em vez de "Em andamento".
+      supabase
+        .from("folhas_pagamento")
+        .select("lancamento_ferias_id")
+        .eq("tenant_id", tenantId)
+        .eq("colaborador_id", params.id)
+        .eq("tipo", "ferias")
+        .not("lancamento_ferias_id", "is", null),
     ]);
 
   if (!colabRes.data) notFound();
@@ -178,6 +190,18 @@ export default async function ColaboradorFeriasPage({
   // depois que ele "volta" (passa o data_fim) é que vai pro histórico —
   // o RH precisa saber que a pessoa está em férias HOJE, mesmo que o
   // financeiro já tenha pago.
+  //
+  // Exceção retroativo: 'aprovado' SEM folha de pagamento vinculada =
+  // lançamento retroativo (pagamento feito fora do sistema). Nunca gerou
+  // folha, logo não espera NF nem fluxo financeiro — cai direto no
+  // histórico, sem alerta de NF.
+  const lancsComFolha = new Set<string>(
+    ((folhasFeriasRes.data ?? []) as Array<{
+      lancamento_ferias_id: string | null;
+    }>)
+      .map((r) => r.lancamento_ferias_id)
+      .filter((v): v is string => Boolean(v)),
+  );
   const hojeISO = new Date().toISOString().slice(0, 10);
   const STATUS_EM_ANDAMENTO_FLUXO = new Set<FeriasLancamentoStatus>([
     "pendente_aprovacao",
@@ -187,8 +211,10 @@ export default async function ColaboradorFeriasPage({
   ]);
   const idsEmAndamento = new Set<string>();
   for (const l of lancamentos) {
-    if (STATUS_EM_ANDAMENTO_FLUXO.has(l.status)) idsEmAndamento.add(l.id);
-    else if (l.status === "concluido" && l.data_fim >= hojeISO)
+    if (STATUS_EM_ANDAMENTO_FLUXO.has(l.status)) {
+      if (l.status === "aprovado" && !lancsComFolha.has(l.id)) continue;
+      idsEmAndamento.add(l.id);
+    } else if (l.status === "concluido" && l.data_fim >= hojeISO)
       idsEmAndamento.add(l.id);
   }
   const lancsEmAndamento = lancamentos.filter((l) => idsEmAndamento.has(l.id));
