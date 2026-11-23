@@ -171,11 +171,21 @@ export async function criarFolhasDePagamentoDeFerias(opts: {
 }): Promise<CriarFolhasResult> {
   const { lancamento, colaborador, actorUserId } = opts;
 
-  // 1) Retroativo? Pula.
+  // 1) Retroativo? Pula a criação da folha (pagamento foi feito fora do
+  //    sistema) e marca o lançamento como `concluido` — ficar `aprovado`
+  //    indefinidamente é mentira: não há NF nem fluxo financeiro pendente.
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
   const dataInicio = new Date(lancamento.data_inicio + "T00:00:00");
   if (dataInicio < hoje) {
+    const supabase = createClient();
+    const { error: updErr } = await supabase
+      .from("colaboradores_ferias_lancamentos")
+      .update({ status: "concluido" })
+      .eq("id", lancamento.id);
+    if (updErr) {
+      console.error("[ferias.retroativo.concluido]", updErr.message);
+    }
     return { criadas: [], pulada_porque_retroativa: true };
   }
 
