@@ -66,3 +66,30 @@ A 1ª parcela da PP-00301 continua em 09/11, ligada à linha do banco. Na Califo
 - **Recarga do histórico:** apagar a linha (a troca de uma carga) solta o par, como antes; a ligação precisa ser refeita na carga nova.
 - **Migration:** `20261123600003_varias_baixas_numa_linha_da_planilha.sql`.
 - **Conferido (produção, transação desfeita):** as baixas da PP-00178 e da PP-00185 em 14/10, ligadas juntas à linha de R$ 1.800,00; uma baixa só foi recusada ("As linhas da planilha somam R$ 1.800,00 e as baixas, R$ 900,00"); ligar de novo foi recusado; o ajuste de abertura foi de R$ 2.427.507,84 para R$ 2.429.307,84 (as duas verbas antes do início, fora do saldo). Em 21/07, as quatro baixas da 261 seguem sem se repetir, com os códigos nas linhas. Nada ficou gravado.
+
+## O DRE conta a previsão paga por baixa do sistema (revisão de 23/11/2026)
+
+⚠️ **Pedido do Tiago:** "Vamos garantir a consistência da DRE para conseguirmos acertar os fechamentos." E: "faça aqui, mas garanta que não haja interferências com o trabalho da outra sessão."
+
+- **Como o DRE é feito:** o DRE do sistema é o "DRE do histórico" (`historico_dre`), junto com o Resultado por regional e a Rentabilidade dos jobs do histórico. Os três somam só as linhas da planilha, pela competência dela: as cargas ativas e, depois do início das contas, a previsão ligada ao banco (decisão 232). Nenhum lançamento do sistema entra. Por isso as baixas antes do início, os avulsos e as ligações desta decisão não mudam o DRE.
+- **O furo:** desde a conciliação dia a dia (decisão 262), muita linha do banco é conciliada com a baixa do sistema, e a previsão da planilha do mesmo pagamento fica solta, fora do DRE padrão. Em 23/11, na California Santander: 332 linhas do banco assim, 263 com previsão de mesma data e valor.
+- **A regra nova:** a previsão também conta como acontecida quando (a) está ligada em `historico_movimento_baixas` a uma baixa já conciliada com o banco, ou (b) tem a mesma conta, o mesmo dia e o mesmo valor de uma linha do banco conciliada só com lançamentos do sistema, uma a uma (com duas iguais, a primeira com a primeira). Função interna `_historico_previsoes_pagas(tenant)`, sem acesso para `authenticated`.
+- **Nada é gravado:** a regra é lida na hora. Vale para as conciliações que vierem e não se perde na recarga da planilha. O saldo e o Extrato não mudam.
+- **Sem interferência:** não toca na carga da planilha (`historico_concluir_carga`) nem nas funções da conciliação, que são da outra frente. As três funções dos relatórios só trocam a condição da previsão, conferida trecho a trecho por expressão; o resto do corpo é o de produção.
+- **Números (2026, DRE sem previsões):**
+
+| Grupo | Antes | Depois |
+|---|---|---|
+| CO 4T | −4.615.469,29 | −5.720.239,25 |
+| CF 4T | −271.645,83 | −385.303,30 |
+| DA 4T | −472.429,08 | −477.655,84 |
+| DC 4T | −42.697,09 | −43.787,09 |
+| DP 4T | −2.455.519,93 | −2.455.726,29 |
+| CO 3T | −19.092.100,10 | −19.151.090,10 |
+| CF 3T | −1.629.914,50 | −1.630.514,50 |
+| REC 3T e 4T | sem mudança | sem mudança |
+
+  264 previsões passaram a contar; as "previstas em aberto" do ano foram de 3.361 para 3.100.
+- **O que ainda fica fora:** as 69 linhas do banco sem par exato (−R$ 141.377,80, provavelmente um pagamento dividido em várias linhas da planilha), até serem ligadas em `historico_movimento_baixas`.
+- **Fluxo de Caixa:** 59 dessas previsões já pagas apareciam na `vw_fluxo_caixa` como previsão da planilha, empurradas para a próxima janela (24/11 a 08/12, R$ 3.272.744,71), além da baixa realizada. Depois de a sessão dos custos fixos confirmar que não mexia na view, o ramo "previsao_planilha" ganhou só a condição de fora das pagas (migration `20261123600005_fluxo_sem_previsao_paga_pelo_sistema.sql`); a exclusão pela recorrência de mesma `previsao_chave` (decisão 235) continua. `_historico_previsoes_pagas(null)` devolve todos os tenants, para a view chamar uma vez só. Conferido: as 59 saíram, a view e o resumo por job com o mesmo tempo de antes (0,5 s e 0,1 s).
+- **Migrations:** `20261123600004_dre_conta_previsao_paga_pelo_sistema.sql` (relatórios) e `20261123600005_fluxo_sem_previsao_paga_pelo_sistema.sql` (Fluxo de Caixa). Conferidas em ensaio (transação desfeita) e depois de aplicadas, com os mesmos números.

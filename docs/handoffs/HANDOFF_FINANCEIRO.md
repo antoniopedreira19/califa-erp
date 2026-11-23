@@ -9263,3 +9263,9 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Dados:** as 14 ligações existentes foram para a tabela; a coluna antiga ficou obsoleta (remoção espera o OK do Tiago).
 - **Conferido** na produção em transação desfeita (PP-00178 + PP-00185 na linha de R$ 1.800,00 de 14/10) e nos casos da 261 de 21/07. Migration `20261123600003_varias_baixas_numa_linha_da_planilha.sql`.
 
+## ⚠️ Nota de 2026-11-23 — o DRE conta a previsão paga por baixa do sistema (revisão da decisão 270)
+
+- **Antes:** o DRE do histórico (e o Resultado por regional e a Rentabilidade dos jobs do histórico) só contava a previsão da planilha ligada ao banco. O pagamento conciliado com a baixa do sistema deixava a previsão solta, fora do DRE: no 4T, cerca de R$ 1,2 mi a menos de custo na California Santander.
+- **Agora:** conta também a previsão ligada a uma baixa conciliada (`historico_movimento_baixas`) ou de mesma conta, dia e valor de uma linha do banco conciliada só com lançamentos do sistema (`_historico_previsoes_pagas`). Nada é gravado; o saldo e o Extrato não mudam. CO 4T de −4.615.469,29 para −5.720.239,25.
+- **Fluxo de Caixa:** as mesmas previsões já pagas saíram do ramo "previsao_planilha" da `vw_fluxo_caixa` (eram 59, R$ 3,27 mi, previstas de 24/11 a 08/12); a exclusão pela recorrência (decisão 235) continua. Migrations `20261123600004_dre_conta_previsao_paga_pelo_sistema.sql` e `20261123600005_fluxo_sem_previsao_paga_pelo_sistema.sql`.
+
