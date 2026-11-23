@@ -15,6 +15,7 @@ import type { CartaoOption } from "@/components/financeiro/forma-pagamento-field
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { TruncateTooltip } from "@/components/ui/truncate-tooltip";
 import {
   BarraDosFiltrosDeColuna,
   celulaData,
@@ -109,8 +110,16 @@ const COLUNAS: ColunaFiltravel<Recorrencia>[] = [
 
 // A planilha é `table-fixed` (o conteúdo das telas tem 1.616 px na janela de
 // 1.838, decisão 085). Ordem das PPs e dos Desembolsos: Código, Valor, …,
-// Status e as ações no fim.
-const LARGURAS = [120, 140, 200, 160, 150, 175, 105, 150, 120, 115, 125];
+// Status e as ações no fim. Como nas PPs, as colunas de formato conhecido têm
+// largura medida pelo maior conteúdo real (23/11/2026, com os 32 px de
+// margem): o plano de contas mais longo ("Manutenção e Conserto de
+// Equipamentos", 238 px), o selo "Aguardando conta" (140 px), "Encerrada"
+// (88 px), três botões de ação e os títulos VENCIMENTO e DOCUMENTOS com o
+// ícone do filtro. A Descrição (null) fica com o que sobra: 154 px nos
+// 1.614 px da caixa, e quebra em duas linhas com o resto na dica.
+const LARGURAS: Array<number | null> = [100, 130, null, 140, 140, 272, 136, 166, 144, 120, 118];
+const LARGURA_MINIMA_DA_DESCRICAO = 148;
+const LARGURA_DA_TABELA = LARGURAS.reduce<number>((s, w) => s + (w ?? LARGURA_MINIMA_DA_DESCRICAO), 0);
 const ESTADOS_DO_TITULO: Estado[] = ["aguardando", "a_pagar", "atrasado", "sem_extrato", "a_conciliar", "pago", "previsto"];
 
 export function RecorrentesList(props: Props) {
@@ -461,10 +470,10 @@ export function RecorrentesList(props: Props) {
         </div>
       ) : (
         <div className="relative overflow-x-auto rounded-2xl border border-border bg-card shadow-soft">
-          <table className="w-full min-w-[1560px] table-fixed text-sm">
+          <table className="w-full table-fixed text-sm" style={{ minWidth: LARGURA_DA_TABELA }}>
             <colgroup>
               {LARGURAS.map((w, i) => (
-                <col key={i} style={{ width: w }} />
+                <col key={i} style={w ? { width: w } : undefined} />
               ))}
             </colgroup>
             <thead>
@@ -513,13 +522,13 @@ export function RecorrentesList(props: Props) {
                         <td className="px-4 py-3">
                           <Tooltip>
                             <TooltipTrigger asChild>
-                              <span className="line-clamp-2 font-medium">{r.descricao}</span>
+                              <span className="line-clamp-2 font-medium [overflow-wrap:anywhere]">{r.descricao}</span>
                             </TooltipTrigger>
                             <TooltipContent className="max-w-sm">{r.descricao}</TooltipContent>
                           </Tooltip>
                         </td>
                         <td className="px-4 py-3 text-xs">
-                          {r.fornecedor_nome ? <span className="line-clamp-2">{r.fornecedor_nome}</span> : <span className="text-amber-700">Sem fornecedor</span>}
+                          {r.fornecedor_nome ? <TruncateTooltip linhas={2} text={r.fornecedor_nome} /> : <span className="text-amber-700">Sem fornecedor</span>}
                         </td>
                         <td className="px-4 py-3 text-xs">
                           <div className="truncate">{r.empresa_nome}</div>
@@ -531,10 +540,8 @@ export function RecorrentesList(props: Props) {
                           </Tooltip>
                         </td>
                         <td className="px-4 py-3 text-xs">
-                          <div className="truncate">{r.subtipo_nome}</div>
-                          <div className="truncate text-muted-foreground">
-                            {r.tipo_codigo} · {r.tipo_nome}
-                          </div>
+                          <TruncateTooltip text={r.subtipo_nome} />
+                          <TruncateTooltip text={`${r.tipo_codigo} · ${r.tipo_nome}`} className="text-muted-foreground" />
                         </td>
                         <td className="px-4 py-3 text-xs">{vencimentoResumo(r)}</td>
                         <td className="px-4 py-3 text-xs">
