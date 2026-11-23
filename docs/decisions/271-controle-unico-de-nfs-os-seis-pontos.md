@@ -401,4 +401,20 @@ O que mudou (`lib/ia/texto-da-nf.ts`):
 - O esquema da leitura passou a `nota-tomada-v5`: as notas lidas com o
   leitor da v4 voltam a ser oferecidas para leitura. A imagem continua a da
   v3 (cache, sem custo).
+- Ainda na releitura v5: o "Valor total: R$" de cada item da discriminação
+  de uma NFS-e foi lido como total — o canhoto ("EMISSÃO: … VALOR TOTAL:
+  R$ …") passou a valer só na DANFE; e o texto do PDF da NF 1398 trazia o
+  caractere nulo, que o jsonb recusa — o texto sai sem caracteres de
+  controle. O resumo da leitura deixou de contar as notas com "O registro
+  está certo".
+
+**Resultado na produção (23/11/2026, v5):** 512 notas lidas (as 2 apólices
+não são NF e ficam sem leitura); 463 com texto, 49 só pela imagem. Pelo
+texto saíram número em 441, CNPJ em 446, emissão em 429 e valor em 424 —
+no resto vale a imagem. **Nenhuma discordância entre imagem e texto.** 7
+notas com o PDF diferente do registro, todas casos já conhecidos: 2 com PDF
+de outro CNPJ só pela imagem (NFs 138 e 139), 3 com PDF de outro CNPJ
+confirmado pelo texto (NFs 26, 87 e 000031), o contrato no lugar da NF (NF
+03) e a guia municipal (NF 5914041000/1196-2). As 3 notas com "O registro
+está certo" continuam sem acusar.
 
