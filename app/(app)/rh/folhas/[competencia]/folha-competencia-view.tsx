@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Search, AlertCircle } from "lucide-react";
+import { Search, AlertCircle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -118,6 +118,20 @@ export function FolhaCompetenciaView({
   const [linhaEditando, setLinhaEditando] = React.useState<FolhaLinha | null>(
     null,
   );
+  // Ordenação da tabela. Default: nome do colaborador em ordem alfabética (asc).
+  // Clique no cabeçalho alterna asc → desc → asc da mesma coluna, ou troca de coluna.
+  const [ordenacao, setOrdenacao] = React.useState<{
+    coluna: "nome" | "valor";
+    direcao: "asc" | "desc";
+  }>({ coluna: "nome", direcao: "asc" });
+
+  const alternarOrdenacao = (coluna: "nome" | "valor") => {
+    setOrdenacao((atual) =>
+      atual.coluna === coluna
+        ? { coluna, direcao: atual.direcao === "asc" ? "desc" : "asc" }
+        : { coluna, direcao: coluna === "nome" ? "asc" : "desc" },
+    );
+  };
 
   // Só os tipos que efetivamente aparecem nessa competência vão pro seletor,
   // com a contagem — espelha o padrão da aba Folhas em Contas a Pagar.
@@ -128,7 +142,7 @@ export function FolhaCompetenciaView({
 
   const filtradas = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
-    return linhas.filter((l) => {
+    const resultado = linhas.filter((l) => {
       if (tab !== "todos" && l.status !== tab) return false;
       if (tipo !== "todos" && l.colaborador.tipo_contratacao !== tipo)
         return false;
@@ -145,7 +159,21 @@ export function FolhaCompetenciaView({
         l.colaborador.funcao.toLowerCase().includes(q)
       );
     });
-  }, [linhas, busca, tab, tipo, origem, regionalId]);
+
+    const sinal = ordenacao.direcao === "asc" ? 1 : -1;
+    const ordenadas = [...resultado].sort((a, b) => {
+      if (ordenacao.coluna === "nome") {
+        return (
+          sinal *
+          a.colaborador.nome.localeCompare(b.colaborador.nome, "pt-BR", {
+            sensitivity: "base",
+          })
+        );
+      }
+      return sinal * (Number(a.salario_base) - Number(b.salario_base));
+    });
+    return ordenadas;
+  }, [linhas, busca, tab, tipo, origem, regionalId, ordenacao]);
 
   const contagemPorTab: Record<StatusFiltro, number> = {
     todos: linhas.length,
@@ -266,13 +294,25 @@ export function FolhaCompetenciaView({
           <thead className="border-b border-border bg-muted/40">
             <tr>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">
-                Colaborador
+                <ColunaOrdenavel
+                  rotulo="Colaborador"
+                  coluna="nome"
+                  alinhamento="left"
+                  ordenacao={ordenacao}
+                  onToggle={alternarOrdenacao}
+                />
               </th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground">
                 Alocação
               </th>
               <th className="px-4 py-3 text-right font-medium text-muted-foreground w-40">
-                Valor
+                <ColunaOrdenavel
+                  rotulo="Valor"
+                  coluna="valor"
+                  alinhamento="right"
+                  ordenacao={ordenacao}
+                  onToggle={alternarOrdenacao}
+                />
               </th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground w-32">
                 Status
@@ -386,6 +426,49 @@ export function FolhaCompetenciaView({
         />
       )}
     </div>
+  );
+}
+
+/** Cabeçalho de coluna ordenável. Mostra ArrowUpDown neutro quando a coluna
+ *  não está ativa; ArrowUp/ArrowDown em vermelho California quando está. */
+function ColunaOrdenavel({
+  rotulo,
+  coluna,
+  alinhamento,
+  ordenacao,
+  onToggle,
+}: {
+  rotulo: string;
+  coluna: "nome" | "valor";
+  alinhamento: "left" | "right";
+  ordenacao: { coluna: "nome" | "valor"; direcao: "asc" | "desc" };
+  onToggle: (coluna: "nome" | "valor") => void;
+}) {
+  const ativa = ordenacao.coluna === coluna;
+  const Icone = ativa
+    ? ordenacao.direcao === "asc"
+      ? ArrowUp
+      : ArrowDown
+    : ArrowUpDown;
+  const ariaSort = ativa
+    ? ordenacao.direcao === "asc"
+      ? "ascending"
+      : "descending"
+    : "none";
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(coluna)}
+      aria-sort={ariaSort}
+      className={cn(
+        "inline-flex items-center gap-1.5 font-medium transition-colors hover:text-foreground focus-visible:outline-none focus-visible:text-california-red",
+        alinhamento === "right" && "flex-row-reverse",
+        ativa ? "text-california-red" : "text-muted-foreground",
+      )}
+    >
+      <span>{rotulo}</span>
+      <Icone className="h-3.5 w-3.5" />
+    </button>
   );
 }
 
