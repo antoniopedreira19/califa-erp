@@ -76,6 +76,32 @@ export interface ARecuperarDaTela extends ARecuperar {
   jobs: string;
 }
 
+/**
+ * A guia da contabilidade (decisão 277): lançada aprovada, com o valor da
+ * contabilidade, para o que a Apuração não calcula. Mora em Impostos a Pagar
+ * (`impostos_a_pagar.da_contabilidade`) e aparece no bloco do CNPJ.
+ */
+export interface GuiaDaContabilidade {
+  id: string;
+  tributo: string;
+  titulo: string;
+  codigo: string | null;
+  empresa_contabil_id: string;
+  estabelecimento_id: string | null;
+  /** "2026-09" ou "2026-T3". */
+  competencia: string;
+  rotulo_competencia: string;
+  periodo: "mensal" | "trimestral";
+  /** "2026-T3": o trimestre da competência. */
+  trimestre: string;
+  motivo: string;
+  vencimento: string;
+  valor: number;
+  status: "a_pagar" | "pago";
+  pago_em: string | null;
+  rateio: Array<{ empresa: string; regional: string | null; valor: number }>;
+}
+
 export interface DadosDaApuracao {
   tenantId: string;
   /** Hoje em São Paulo ("AAAA-MM-DD"). */
@@ -108,6 +134,8 @@ export interface DadosDaApuracao {
   parametros: FiscalParametro[];
   /** Decisão 277: as empresas gerenciais e as regras do rateio por CNPJ. */
   regrasDoRateio: RegrasDoRateioDoTenant;
+  /** Decisão 277: as guias da contabilidade lançadas (fora as canceladas). */
+  guiasDaContabilidade: GuiaDaContabilidade[];
   /** Falha ao ler ou calcular (a aba mostra a mensagem em vez das guias). */
   erro: string | null;
 }
@@ -173,6 +201,7 @@ function vazio(tenantId: string, hoje: string, erro: string | null): DadosDaApur
     feriados: [],
     parametros: [],
     regrasDoRateio: { empresas: [], regionalDoCnpj: {}, gerencialDoCnpj: {} },
+    guiasDaContabilidade: [],
     erro,
   };
 }
@@ -190,10 +219,58 @@ interface AprovacaoDoBanco {
   saldo_credor_contabil: number | string | null;
 }
 
+interface ContabilDoBanco {
+  id: string;
+  tributo: string;
+  titulo: string;
+  codigo_receita: string | null;
+  empresa_contabil_id: string;
+  estabelecimento_id: string | null;
+  competencia: string;
+  rotulo_competencia: string;
+  descricao: string;
+  vencimento: string;
+  valor: number | string;
+  status: "a_pagar" | "pago";
+  pago_em: string | null;
+  rateio: Array<{
+    valor: number | string;
+    empresa: { nome_fantasia: string | null; razao_social: string } | null;
+    regional: { nome: string } | null;
+  }> | null;
+}
+
+function guiaDaContabilidade(c: ContabilDoBanco): GuiaDaContabilidade {
+  const trimestral = c.competencia.includes("-T");
+  const mes = trimestral ? null : Number(c.competencia.slice(5, 7));
+  return {
+    id: c.id,
+    tributo: c.tributo,
+    titulo: c.titulo,
+    codigo: c.codigo_receita,
+    empresa_contabil_id: c.empresa_contabil_id,
+    estabelecimento_id: c.estabelecimento_id,
+    competencia: c.competencia,
+    rotulo_competencia: c.rotulo_competencia,
+    periodo: trimestral ? "trimestral" : "mensal",
+    trimestre: trimestral ? c.competencia : `${c.competencia.slice(0, 4)}-T${Math.ceil((mes ?? 1) / 3)}`,
+    motivo: c.descricao.replace(/^Guia da contabilidade:\s*/, ""),
+    vencimento: c.vencimento,
+    valor: Number(c.valor),
+    status: c.status,
+    pago_em: c.pago_em,
+    rateio: (c.rateio ?? []).map((r) => ({
+      empresa: r.empresa?.nome_fantasia?.trim() || r.empresa?.razao_social || "—",
+      regional: r.regional?.nome ?? null,
+      valor: Number(r.valor),
+    })),
+  };
+}
+
 export async function carregarApuracao(supabase: SupabaseClient, tenantId: string): Promise<DadosDaApuracao> {
   const hoje = hojeEmSaoPaulo();
   try {
-    const [fatosDoBanco, empresasRes, aprovacoesRes, semCnpjRes, membrosRes, regrasDoRateio] = await Promise.all([
+    const [fatosDoBanco, empresasRes, aprovacoesRes, semCnpjRes, membrosRes, regrasDoRateio, contabilRes] = await Promise.all([
       carregarFatosFiscais(supabase, tenantId),
       supabase.from("empresas_contabeis").select("id, razao_social, nome_fantasia, de_teste").eq("tenant_id", tenantId),
       supabase
@@ -212,7 +289,18 @@ export async function carregarApuracao(supabase: SupabaseClient, tenantId: strin
       // O nome de quem aprovou: a lista de membros (a RLS de `profiles` só mostra o próprio).
       supabase.rpc("membros_ativos_do_tenant", { p_tenant_id: tenantId }),
       carregarRegrasDoRateio(supabase, tenantId),
+      supabase
+        .from("impostos_a_pagar")
+        .select(
+          "id, tributo, titulo, codigo_receita, empresa_contabil_id, estabelecimento_id, competencia, rotulo_competencia, descricao, vencimento, valor, status, pago_em, " +
+            "rateio:impostos_a_pagar_rateio(valor, empresa:empresas(nome_fantasia, razao_social), regional:regionais(nome))",
+        )
+        .eq("tenant_id", tenantId)
+        .eq("da_contabilidade", true)
+        .neq("status", "cancelado")
+        .order("vencimento"),
     ]);
+    if (contabilRes.error) throw new Error(`[fiscal.apuracao.guias_da_contabilidade] ${contabilRes.error.message}`);
     if (empresasRes.error) throw new Error(`[fiscal.apuracao.empresas] ${empresasRes.error.message}`);
     if (aprovacoesRes.error) throw new Error(`[fiscal.apuracao.aprovacoes] ${aprovacoesRes.error.message}`);
 
@@ -295,6 +383,7 @@ export async function carregarApuracao(supabase: SupabaseClient, tenantId: strin
       feriados: cadastro.feriados,
       parametros: cadastro.parametros,
       regrasDoRateio,
+      guiasDaContabilidade: ((contabilRes.data ?? []) as unknown as ContabilDoBanco[]).map(guiaDaContabilidade),
       erro: null,
     };
   } catch (e) {

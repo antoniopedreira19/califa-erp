@@ -117,7 +117,7 @@ export function RateioPorGerencial({
           className="inline-flex items-center gap-1 text-[12px] font-semibold text-california-red hover:underline"
         >
           <Plus className="h-3.5 w-3.5" />
-          Outra empresa gerencial
+          {partes.length === 0 ? "Escolher a empresa gerencial" : "Outra empresa gerencial"}
         </button>
       )}
     </div>

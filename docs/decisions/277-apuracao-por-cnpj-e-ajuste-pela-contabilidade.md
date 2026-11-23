@@ -1,10 +1,10 @@
 # 277 — A Apuração por CNPJ e o ajuste pela contabilidade (o 4º trimestre inteiro no sistema)
 
 **Data:** 2026-11-23
-**Status:** aceita. Implementadas em 23/11/2026: a entrega 1 (Apuração por CNPJ) e a entrega 2a (saldo credor da contabilidade, rateio por gerencial na aprovação e a regional da nota avulsa). Faltam a 2b (Guia da contabilidade) e a 3 (guia já paga pela planilha).
+**Status:** aceita. Implementadas em 23/11/2026: a entrega 1 (Apuração por CNPJ), a 2a (saldo credor da contabilidade, rateio por gerencial na aprovação e a regional da nota avulsa) e a 2b (Guia da contabilidade). Falta a 3 (guia já paga pela planilha).
 **Quem decidiu:** Tiago, em 23/11/2026, sobre o protótipo do Fiscal (versões 6 a 8): "Acho que podemos agrupar os impostos de cada um dos CNPJs, ou separá-los em filtros"; "Ambos"; sobre a função de ajuste, "precisamos incluir uma função onde podemos ajustar a apuração para o valor real dependendo do envio da contabilidade, até tudo estar sendo lançado pelo sistema"; "precisamos fechar 4T com tudo no sistema batendo com a planilha"; "o rateio dos impostos entre as regionais deverá ser feito por percentual da receita (fora o caso de Hitlab, que se trata de Hitlab, e GoCrazy, que corresponderá a São Sebastião da California)"; e "ok" às recomendações.
 **Revê:** a [181](181-empresas-de-teste-e-apuracao-por-vencimento.md) (a lista única por vencimento com o seletor de CNPJ) e a [183](183-a-apurar-na-lista-e-conta-da-empresa-teste-presumido.md) (a coluna CNPJ das linhas "A apurar").
-**Migration:** nenhuma na entrega 1; `20261123400002_saldo_credor_da_contabilidade.sql` na 2a.
+**Migration:** nenhuma na entrega 1; `20261123400002_saldo_credor_da_contabilidade.sql` na 2a; `20261123400003_guia_da_contabilidade.sql` na 2b.
 
 ## 1. A Apuração por CNPJ (entrega 1, implementada)
 
@@ -60,6 +60,25 @@ O inventário das 52 guias do 4º trimestre (de 01/10 a 31/12, com o valor por g
   - A COFINS de novembro foi aprovada com R$ 4.000,00 na Empresa Teste (pela receita, regional Teste) e R$ 1.148,24 na Agência California (sem receita no CNPJ, regional escolhida). O título nasceu com essas duas partes.
   - Testes do fiscal: 189 passando, incluindo o motor, a nota avulsa e as regras do rateio. `tsc`, lint e build limpos.
 
+## 4. Entrega 2b (implementada): a Guia da contabilidade
+
+- **"+ Guia da contabilidade"** fica na faixa de cada CNPJ. Todo CNPJ tem a faixa, mesmo sem guia no filtro, para lançar por ela.
+- **O diálogo** pede:
+  - o imposto, com o código do DARF do regime do CNPJ;
+  - o município, no ISS;
+  - a competência, de julho/2026 até hoje, ou o trimestre e a cota no IRPJ/CSLL;
+  - o vencimento, o valor e o motivo (mínimo de 10 caracteres);
+  - o rateio por empresa gerencial.
+- **A divisão entre regionais** vem da receita do período, lida no servidor (`lib/fiscal/receita-do-periodo.ts`). De outubro/2026 em diante, vem das notas do sistema. Antes, vem das notas do histórico da planilha (`historico_notas`, só a carga ativa e sem as canceladas), pela regional do job da planilha: `regional_id` ou a divisão `rateio_regional`, cujo código é o nome da regional (AGE = Agency, DOC = Doca).
+- **A guia que o sistema já calcula** (mesmo CNPJ, competência e código, ou município no ISS) não se lança por aqui: o diálogo manda aprovar pela lista.
+- **No banco:** `impostos_a_pagar.da_contabilidade` e a RPC `lancar_guia_da_contabilidade`. A RPC cria pelo `criar_imposto_avulso`, com as mesmas travas, marca a guia e registra a auditoria `fiscal.guia_da_contabilidade`. A origem continua `avulso`, então fluxo, conciliação, DRE e baixa a tratam como já tratavam.
+- **Na Apuração**, a guia aparece no bloco do CNPJ, em "Aprovadas" e "Todas", como "guia da contabilidade · sem cálculo no sistema · Aprovada". A competência dela entra nos botões de competência. Em Impostos a Pagar, ela fica para a baixa.
+- **Conferido no Sandbox** (Empresa Teste), pela tela:
+  - PIS não cumulativo de setembro/2026, de R$ 2.450,00, sem receita no histórico do Sandbox, com a regional escolhida (Teste).
+  - IOF do mútuo de novembro/2026, de R$ 1.000,00, com a regional pela receita das notas de novembro (Teste).
+  - As duas guias aparecem em "Aprovadas" e em Impostos a Pagar, com o rateio e a auditoria no banco.
+  - 191 testes do fiscal passam; `tsc`, lint e build limpos.
+
 ## Arquivos (entrega 1)
 
 - `app/(app)/financeiro/fiscal/apuracao/aba-apuracao.tsx`: botões de CNPJ, blocos, faixa, lote por CNPJ, coluna Local e larguras.
@@ -83,4 +102,11 @@ O inventário das 52 guias do 4º trimestre (de 01/10 a 31/12, com o valor por g
 - `lib/fiscal/rateio-gerencial.ts` (+ teste) e `lib/fiscal/rateio-gerencial-dados.ts`: a regra e as regras lidas do banco.
 - `app/(app)/financeiro/fiscal/apuracao/actions.ts`: `aprovarGuia` com `rateio_gerencial` e `saldo_credor_contabil`; `informarSaldoCredorDaContabilidade`.
 - `app/(app)/financeiro/fiscal/apuracao/rateio-por-gerencial.tsx`, `memoria-dialog.tsx`, `aba-apuracao.tsx`, `dados.ts`, `aprovacao.ts`; `lib/types.ts`.
+
+## Arquivos (entrega 2b)
+
+- `supabase/migrations/20261123400003_guia_da_contabilidade.sql`.
+- `lib/fiscal/receita-do-periodo.ts` (+ teste): a receita do período pelas notas do sistema ou pelo histórico.
+- `app/(app)/financeiro/fiscal/apuracao/actions.ts`: `previaDaReceitaDoPeriodo` e `lancarGuiaDaContabilidade`.
+- `app/(app)/financeiro/fiscal/apuracao/guia-da-contabilidade.tsx`: o diálogo e a linha; `aba-apuracao.tsx` (faixa, linhas, contagens, competências) e `dados.ts` (`guiasDaContabilidade`); `rateio-por-gerencial.tsx`.
 

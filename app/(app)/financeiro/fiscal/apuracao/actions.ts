@@ -21,7 +21,8 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { carregarFatosFiscais, type FatosDoBanco } from "@/lib/fiscal/apuracao-fatos";
-import { calcularApuracao, estadoDaGuia, type Guia } from "@/lib/fiscal/apuracao";
+import { PRIMEIRA_COMPETENCIA, calcularApuracao, estadoDaGuia, type Guia, type RateioDaGuia } from "@/lib/fiscal/apuracao";
+import { baseDaReceita, carregarNotasDoHistorico, periodoDe, receitaDasNotas, receitaDoHistorico } from "@/lib/fiscal/receita-do-periodo";
 import { rateioPorGerencial } from "@/lib/fiscal/rateio-gerencial";
 import { carregarRegrasDoRateio, regrasDoCnpj } from "@/lib/fiscal/rateio-gerencial-dados";
 import { montarPedidoDeAprovacao, type EntradaDaAprovacao } from "./aprovacao";
@@ -321,3 +322,141 @@ export async function urlDaGuiaAprovada(aprovacaoId: string): Promise<{ ok: true
   if (error || !assinada) return { ok: false, message: "Não foi possível abrir a guia." };
   return { ok: true, url: assinada.signedUrl };
 }
+
+// ---------------------------------------------------------------------------
+// A Guia da contabilidade (decisão 277, entrega 2b)
+// ---------------------------------------------------------------------------
+
+const COMPETENCIA = /^\d{4}-(0[1-9]|1[0-2]|T[1-4])$/;
+
+/**
+ * A receita do CNPJ no período, por empresa e regional: as notas do sistema
+ * de outubro/2026 em diante; antes, as do histórico da planilha.
+ */
+async function receitaDoPeriodo(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  pjId: string,
+  competencia: string,
+): Promise<{ base: RateioDaGuia[]; fonte: "sistema" | "historico" }> {
+  const { inicio, fim } = periodoDe(competencia);
+  if (inicio >= `${PRIMEIRA_COMPETENCIA}-01`) {
+    const fatos = await carregarFatosFiscais(supabase, tenantId);
+    const estabs = new Set(fatos.cadastro.estabelecimentos.filter((e) => e.empresa_contabil_id === pjId).map((e) => e.id));
+    return { base: baseDaReceita(receitaDasNotas(fatos.fatos.notas, estabs, inicio, fim)), fonte: "sistema" };
+  }
+  const [estabsRes, regras] = await Promise.all([
+    supabase.from("fiscal_estabelecimentos").select("nome").eq("tenant_id", tenantId).eq("empresa_contabil_id", pjId),
+    carregarRegrasDoRateio(supabase, tenantId),
+  ]);
+  if (estabsRes.error) throw new Error(`[fiscal.receita.estabelecimentos] ${estabsRes.error.message}`);
+  const nomes = ((estabsRes.data ?? []) as Array<{ nome: string }>).map((e) => e.nome);
+  const notas = await carregarNotasDoHistorico(supabase, tenantId, nomes, inicio, fim);
+  const regionaisPorEmpresa = new Map(regras.empresas.map((e) => [e.id, e.regionais]));
+  return { base: baseDaReceita(receitaDoHistorico(notas, regionaisPorEmpresa)), fonte: "historico" };
+}
+
+const previaSchema = z.object({
+  empresa_contabil_id: z.string().uuid(),
+  competencia: z.string().regex(COMPETENCIA),
+});
+
+/** A receita do período para a prévia do rateio na Guia da contabilidade. */
+export async function previaDaReceitaDoPeriodo(
+  input: unknown,
+): Promise<{ ok: true; base: RateioDaGuia[]; fonte: "sistema" | "historico" } | Err> {
+  const parsed = previaSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Escolha o CNPJ e a competência." };
+  const gate = await checarGate("fiscal.receita_do_periodo_lida", parsed.data.empresa_contabil_id);
+  if (!gate.ok) return gate;
+  try {
+    const r = await receitaDoPeriodo(gate.supabase, gate.session.activeTenant.id, parsed.data.empresa_contabil_id, parsed.data.competencia);
+    return { ok: true, ...r };
+  } catch (e) {
+    return { ok: false, message: `Não foi possível ler a receita do período: ${e instanceof Error ? e.message : String(e)}` };
+  }
+}
+
+const guiaDaContabilidadeSchema = z.object({
+  tributo: z.enum(["ISS", "ISS_RET", "PIS", "COFINS", "IRPJ", "CSLL", "CSRF", "IRRF", "IOF"], {
+    errorMap: () => ({ message: "Escolha o imposto." }),
+  }),
+  titulo: z.string().trim().min(2).max(120),
+  codigo_receita: z.string().trim().max(20).nullable(),
+  empresa_contabil_id: z.string().uuid("Escolha o CNPJ."),
+  estabelecimento_id: z.string().uuid().nullable(),
+  competencia: z.string().regex(COMPETENCIA, "Escolha a competência."),
+  rotulo_competencia: z.string().trim().min(1).max(60),
+  motivo: z.string().trim().min(10, "Explique por que o sistema não calculou esta guia (mínimo 10 caracteres).").max(500),
+  vencimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe o vencimento."),
+  valor: z.number().finite().positive("Informe o valor da guia.").max(1e11),
+  rateio_gerencial: z
+    .array(
+      z.object({
+        empresa_id: z.string().uuid(),
+        valor: z.number().finite().positive("Cada empresa gerencial do rateio precisa de valor."),
+        regional_id: z.string().uuid().nullable(),
+      }),
+    )
+    .min(1, "Informe o rateio por empresa gerencial.")
+    .max(20),
+  guia_path: z.string().min(3).max(500).nullable(),
+});
+
+/**
+ * Lança a guia que o sistema não calcula, já aprovada com o valor da
+ * contabilidade: vai para Impostos a Pagar (origem avulso, marcada como da
+ * contabilidade) com o rateio por empresa gerencial e as regionais pela
+ * receita do período.
+ */
+export async function lancarGuiaDaContabilidade(input: unknown): Promise<{ ok: true; id: string } | Err> {
+  const parsed = guiaDaContabilidadeSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Entrada inválida." };
+  const v = parsed.data;
+  const gate = await checarGate("fiscal.guia_da_contabilidade", v.empresa_contabil_id);
+  if (!gate.ok) return gate;
+  const { session, supabase } = gate;
+  const tenantId = session.activeTenant.id;
+
+  if (v.guia_path) {
+    if (!v.guia_path.startsWith(`${tenantId}/guias/`) || v.guia_path.includes("..")) {
+      return { ok: false, message: "Anexo inválido. Escolha o arquivo da guia de novo." };
+    }
+    const { error } = await supabase.storage.from(BUCKET).createSignedUrl(v.guia_path, 30);
+    if (error) return { ok: false, message: "O anexo da guia não foi encontrado. Escolha o arquivo de novo." };
+  }
+
+  let rateio: RateioDaGuia[];
+  try {
+    const [receita, regras] = await Promise.all([
+      receitaDoPeriodo(supabase, tenantId, v.empresa_contabil_id, v.competencia),
+      carregarRegrasDoRateio(supabase, tenantId),
+    ]);
+    const r = rateioPorGerencial(v.rateio_gerencial, receita.base, regrasDoCnpj(regras, v.empresa_contabil_id), v.valor);
+    if (!r.ok) return r;
+    rateio = r.rateio;
+  } catch (e) {
+    return { ok: false, message: `Não foi possível montar o rateio: ${e instanceof Error ? e.message : String(e)}` };
+  }
+
+  const { data, error } = await supabase.rpc("lancar_guia_da_contabilidade", {
+    p_tenant_id: tenantId,
+    p_tributo: v.tributo,
+    p_titulo: v.titulo,
+    p_codigo_receita: v.codigo_receita,
+    p_empresa_contabil_id: v.empresa_contabil_id,
+    p_estabelecimento_id: v.estabelecimento_id,
+    p_competencia: v.competencia,
+    p_rotulo_competencia: v.rotulo_competencia,
+    p_descricao: `Guia da contabilidade: ${v.motivo}`,
+    p_vencimento: v.vencimento,
+    p_valor: v.valor,
+    p_rateio: rateio.map((x) => ({ empresa_id: x.empresa_id, regional_id: x.regional_id, valor: x.valor })),
+    p_guia_path: v.guia_path,
+  });
+  if (error || typeof data !== "string") return { ok: false, message: error ? mensagemDoBanco(error.message) : "Não foi possível lançar a guia." };
+
+  revalidatePath(CAMINHO);
+  return { ok: true, id: data };
+}
+

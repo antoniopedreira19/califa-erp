@@ -9354,3 +9354,9 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Nota avulsa** entra no rateio pelas regionais dela (`faturamentos_regionais`), não mais "sem regional".
 - Conferido no Sandbox (Empresa Teste): saldo da contabilidade gravado e usado em novembro; título com rateio em duas gerenciais. Faltam a 2b (Guia da contabilidade) e a 3 (guia já paga pela planilha).
 
+## ⚠️ Nota de 2026-11-23 — a Guia da contabilidade (decisão 277, entrega 2b)
+
+- **"+ Guia da contabilidade"** na faixa de cada CNPJ da Apuração: a guia que o sistema não calcula (competência antes de outubro/2026, filial sem nota, imposto fora da apuração) entra aprovada com o valor da contabilidade, o motivo e o rateio por gerencial; as regionais pela receita do período (notas do sistema de outubro em diante; antes, `historico_notas` + regional do job da planilha — `lib/fiscal/receita-do-periodo.ts`).
+- **Banco** (migration 20261123400003): `impostos_a_pagar.da_contabilidade` + RPC `lancar_guia_da_contabilidade` (por cima do `criar_imposto_avulso`; origem continua `avulso`).
+- Conferido no Sandbox (Empresa Teste): PIS set/2026 e IOF nov/2026 lançados, em "Aprovadas" e em Impostos a Pagar. Falta a entrega 3 (guia já paga, ligada às linhas da planilha).
+
