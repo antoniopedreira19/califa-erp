@@ -21,6 +21,7 @@ import {
   type TituloDoMotor,
 } from "@/lib/conciliacao/motor";
 import { casarComHistorico } from "@/lib/conciliacao/historico";
+import type { CustoFixoDoTitulo } from "@/lib/conciliacao/custo-fixo";
 import { normalizar } from "@/lib/conciliacao/ofx";
 import { efeitoNaConta, r2 } from "@/lib/financeiro/planilha-de-titulos";
 import type { EntradaDaBaixaEmLote } from "@/lib/financeiro/baixa-em-lote";
@@ -102,6 +103,7 @@ export function titulosDoMotor(
   contaId: string,
   documentoDaParte: Record<string, string>,
   hoje: string,
+  custosFixos: Record<string, CustoFixoDoTitulo> = {},
 ): TituloDoMotor[] {
   const saida: TituloDoMotor[] = [];
   for (const l of linhas) {
@@ -127,6 +129,8 @@ export function titulosDoMotor(
       centro: centroDoTitulo(l),
       loteId: null,
       entra: efeito > 0,
+      // O título de recorrência (decisão 272): a chave é `pagar|recorrencia|<id>`.
+      custoFixo: l.origem === "recorrencia" ? custosFixos[l.chave.split("|").pop() ?? ""] ?? null : null,
     });
   }
   return saida;
@@ -337,8 +341,9 @@ export function conciliarConta(
   contaId: string,
   documentoDaParte: Record<string, string>,
   hoje: string,
+  custosFixos: Record<string, CustoFixoDoTitulo> = {},
 ): ConciliacaoDaConta {
-  const titulos = titulosDoMotor(linhasDaPlanilha, contaId, documentoDaParte, hoje);
+  const titulos = titulosDoMotor(linhasDaPlanilha, contaId, documentoDaParte, hoje, custosFixos);
   const lotes = lotesDoMotor(dados.remessas, linhasDaPlanilha, titulos);
   const movimentos: MovimentoDaLinha[] = dados.linhas.map((l) => ({
     id: l.id,

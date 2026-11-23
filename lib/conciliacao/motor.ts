@@ -45,6 +45,7 @@
  */
 
 import { normalizar } from "./ofx";
+import { reconhecerCustoFixo, type CustoFixoDoTitulo } from "./custo-fixo";
 
 export type LadoDoTitulo = "pagar" | "receber" | "imposto" | "transf";
 
@@ -92,6 +93,10 @@ export interface TituloDoMotor {
   loteId?: string | null;
   /** O título que entra na conta sem ser de receber (o estorno de verba). */
   entra?: boolean;
+  /** Título de recorrência: o passo 3 aceita a janela em volta do
+   *  vencimento, a conta que varia e o texto do débito automático
+   *  (decisão 272, `custo-fixo.ts`). */
+  custoFixo?: CustoFixoDoTitulo | null;
 }
 
 /** Um lançamento da conta ainda não conciliado. */
@@ -418,8 +423,15 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
   const pares: Array<{ r: ResultadoDoMotor<M>; t: TituloDoMotor; s: number }> = [];
   pendentes.forEach((r) => {
     titulos.forEach((t) => {
-      if (guardado(t) || !compativel(r.mov, t) || cents(t.liquido) !== cents(r.mov.valor) || venc(t) !== r.mov.data) return;
-      pares.push({ r, t, s: pontuar(r.mov, t) });
+      if (guardado(t) || !compativel(r.mov, t)) return;
+      if (cents(t.liquido) === cents(r.mov.valor) && venc(t) === r.mov.data) {
+        pares.push({ r, t, s: pontuar(r.mov, t) });
+        return;
+      }
+      // O custo fixo (decisão 272): a janela em volta do vencimento, a conta
+      // que varia e o débito automático.
+      const fixo = t.custoFixo ? reconhecerCustoFixo(t.custoFixo, r.mov, venc(t), Math.abs(t.liquido)) : null;
+      if (fixo) pares.push({ r, t, s: pontuar(r.mov, t) + fixo.bonus });
     });
   });
   pares.sort((a, b) => b.s - a.s);
@@ -438,6 +450,16 @@ export function casar<M extends MovimentoDoMotor>(movimentos: M[], sistema: Sist
     // Vários títulos do mesmo valor: a escolha é pela data, e pede conferência.
     const mesmos = r.candidatos.filter((c) => c.t.id !== titulo.id && c.s >= pontos - 5).length;
     r.empate = mesmos;
+    // O custo fixo fora do dia exato: a frase diz por que ele foi sugerido.
+    const fixo =
+      titulo.custoFixo && !(cents(titulo.liquido) === cents(r.mov.valor) && venc(titulo) === r.mov.data)
+        ? reconhecerCustoFixo(titulo.custoFixo, r.mov, venc(titulo), Math.abs(titulo.liquido))
+        : null;
+    if (fixo) {
+      r.confianca = fixo.valorIgual && !mesmos ? "alta" : "media";
+      r.motivo = fixo.motivo + (mesmos ? ` · há ${mesmos + 1} títulos possíveis — confira` : "");
+      return;
+    }
     r.confianca = pontos >= 90 && !mesmos ? "alta" : pontos >= 75 ? "media" : "baixa";
     const cnpj = cnpjDoHistorico(r.mov.historico);
     const d = Math.abs(diasEntre(venc(titulo), r.mov.data));

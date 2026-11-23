@@ -200,12 +200,12 @@ export function AbaTitulos({
   const conciliacao = React.useMemo(() => {
     if (!banco?.ultima) return null;
     try {
-      return conciliarConta(banco, linhas, contaId, dados.documentoDaParte, hoje);
+      return conciliarConta(banco, linhas, contaId, dados.documentoDaParte, hoje, dados.custosFixos);
     } catch (e) {
       console.error("[conciliacao.motor]", e);
       return null;
     }
-  }, [banco, linhas, contaId, dados.documentoDaParte, hoje]);
+  }, [banco, linhas, contaId, dados.documentoDaParte, hoje, dados.custosFixos]);
   const sugestoes = React.useMemo(() => {
     const m = new Map<string, ResultadoDaLinha>();
     for (const r of conciliacao?.resultados ?? []) {

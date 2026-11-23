@@ -9287,3 +9287,12 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **CNAE × código do serviço:** a IA punha o item da LC 116 ("17.06.01") no CNAE. Esquema v2 (`lib/ia/versao-nota-tomada.ts`): CNAE só com 7 dígitos (`cnaeLido`), código do serviço em `codigo_servico` (`codigoServicoLido`, migration `20261123800003`). Nota lida com outra versão do esquema conta como não lida (`leituraEAtual`).
 - **Produção lida em 23/11:** 476 de 508 notas (US$ 0,88); as 32 recusadas têm o número ou o emitente diferente do PDF e esperam o "Editar registro" (ponto 6).
 
+## ⚠️ Nota de 2026-11-23 — Recorrências: uma lista só, a conta que varia e o custo fixo no banco (decisão 272)
+
+- **Antes:** a aba era um cadastro sem os títulos, com página de detalhes à parte, drawer estreito e rateio por percentuais; não havia onde guardar o documento do pagamento; a Conciliação só sugeria o título de custo fixo no valor exato e no dia do vencimento.
+- **Agora:** uma lista só com as colunas do cadastro (Código REC, Valor, …, Status, Ações), o status do próximo título (Aguardando conta, A pagar, Atrasado, Sem extrato, A conciliar, Pago) com filtro, e a faixa de resumo. Detalhes e formulário num pop-up (o endereço `/recorrente/[id]` redireciona). Regional simples (uma ou "Todas (TD, pelo rateio)" da tabela da empresa), sem conta de pagamento. Conta que varia: título estimado até "Lançar a conta". Documento por título, com pendência. Pausar/Encerrar decidem o título em aberto. Editar leva a mudança ao título já gerado e em aberto (opção A, sem aprovação). Mudar o dia não gera dois títulos no mesmo mês.
+- **Conciliação:** o título de recorrência é sugerido de 12 dias antes a 5 depois do vencimento, com 20% de tolerância na conta que varia e peso pelo texto do débito automático (`lib/conciliacao/custo-fixo.ts`); a linha diz o motivo. Nada se concilia sozinho.
+- **Banco:** `20261123700001_recorrencia_codigo_e_conta_que_varia.sql` (código REC com gatilho, `valor_variavel`, `texto_no_extrato`, `valor_estimado`, `conta_lancada_em`, gerador).
+- **Conferido** no Sandbox (criar, conta que varia com TD e débito automático, lançar a conta com fatura, editar com o título em aberto e mudança de dia, anexar e tirar documento, pausar, reativar, encerrar, link antigo, "Nova recorrência" da Conciliação) e nos testes de `lib/conciliacao/custo-fixo.test.ts` e do motor.
+- **Falta:** forma de pagamento das 96 ativas sem forma, marcar as que variam e os débitos automáticos, e o cadastro dos fornecedores pagos por PIX/TED.
+

@@ -79,6 +79,7 @@ import type { FaturaDoCartaoNaBaixa } from "@/lib/financeiro/fatura-do-cartao";
 import { carregarExtrasDaPlanilha, type ExtrasDaPlanilha } from "@/lib/data/planilha-de-titulos";
 import { idsDaPlanilha } from "./linhas-da-aba";
 import { todasAsLinhas } from "@/lib/supabase/todas-as-linhas";
+import type { CustoFixoDoTitulo } from "@/lib/conciliacao/custo-fixo";
 
 export interface DadosDaAbaTitulos {
   /** O dia de hoje em Brasília: o vencido, o saldo previsto, os quadros. */
@@ -114,6 +115,9 @@ export interface DadosDaAbaTitulos {
   /** Fornecedor ou cliente → CPF/CNPJ só com os dígitos: o motor da aba
    *  Banco reconhece o CNPJ no histórico do banco (decisão 199). */
   documentoDaParte: Record<string, string>;
+  /** Título de recorrência em aberto → o que o motor precisa da recorrência
+   *  (código, conta que varia, débito automático; decisão 272). */
+  custosFixos: Record<string, CustoFixoDoTitulo>;
 }
 
 export async function carregarTitulosDaConciliacao(
@@ -150,6 +154,7 @@ export async function carregarTitulosDaConciliacao(
     impostosLidos,
     transferenciasRes,
     faturasNaBaixa,
+    custosFixosRes,
   ] = await Promise.all([
     // ---- A pagar ----
     // Só aprovada e paga viram título; a paga entra porque uma parcela
@@ -320,6 +325,14 @@ export async function carregarTitulosDaConciliacao(
       .order("data_prevista", { ascending: true }),
     // ---- As faturas do campo Fatura da baixa no cartão (decisão 197) ----
     carregarFaturasNaBaixa(supabase, tenantId, hoje),
+    // O título de recorrência em aberto e o que o motor precisa dela
+    // (decisão 272). Só os abertos: a lista não cresce com o tempo.
+    supabase
+      .from("contas_avulsas")
+      .select("id, recorrencia:contas_avulsas_recorrentes!recorrente_id(codigo, valor_variavel, texto_no_extrato)")
+      .eq("tenant_id", tenantId)
+      .eq("status", "aprovada")
+      .not("recorrente_id", "is", null),
   ]);
 
   // ⚠️ O erro é LIDO: uma consulta quebrada faria a aba dizer "nenhum
@@ -400,6 +413,20 @@ export async function carregarTitulosDaConciliacao(
     empresas[e.id] = e.nome_fantasia ?? e.razao_social ?? "—";
   }
 
+  if (custosFixosRes.error) console.error("[conciliacao.custos-fixos]", custosFixosRes.error.message);
+  const custosFixos: Record<string, CustoFixoDoTitulo> = {};
+  for (const a of (custosFixosRes.data ?? []) as unknown as Array<{
+    id: string;
+    recorrencia: { codigo: string; valor_variavel: boolean; texto_no_extrato: string | null } | null;
+  }>) {
+    if (!a.recorrencia) continue;
+    custosFixos[a.id] = {
+      codigo: a.recorrencia.codigo,
+      variavel: a.recorrencia.valor_variavel,
+      textoNoExtrato: a.recorrencia.texto_no_extrato,
+    };
+  }
+
   const documentoDaParte: Record<string, string> = {};
   for (const p of [
     ...((fornecedoresRes.data ?? []) as Array<{ id: string; cpf_cnpj: string | null }>).map((f) => [f.id, f.cpf_cnpj] as const),
@@ -452,5 +479,6 @@ export async function carregarTitulosDaConciliacao(
       retencoes.filter((r) => r.natureza === "entrada"),
     ),
     documentoDaParte,
+    custosFixos,
   };
 }

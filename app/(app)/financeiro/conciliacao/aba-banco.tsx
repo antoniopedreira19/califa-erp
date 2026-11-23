@@ -206,12 +206,12 @@ export function AbaBanco({
   // do banco sem cruzar, com o aviso — e não uma tela em branco.
   const { conciliacao, falhaDoMotor } = React.useMemo(() => {
     try {
-      return { conciliacao: conciliarConta(banco, linhasDaPlanilha, contaId, dados.documentoDaParte, dados.hoje), falhaDoMotor: false };
+      return { conciliacao: conciliarConta(banco, linhasDaPlanilha, contaId, dados.documentoDaParte, dados.hoje, dados.custosFixos), falhaDoMotor: false };
     } catch (e) {
       console.error("[conciliacao.motor]", e);
       return { conciliacao: conciliarConta(banco, [], contaId, {}, dados.hoje), falhaDoMotor: true };
     }
-  }, [banco, linhasDaPlanilha, contaId, dados.documentoDaParte, dados.hoje]);
+  }, [banco, linhasDaPlanilha, contaId, dados.documentoDaParte, dados.hoje, dados.custosFixos]);
   const secoes = React.useMemo(() => comMutuos(secoesDoBanco(conciliacao.resultados), banco), [conciliacao, banco]);
   const regraPorId = React.useMemo(() => new Map(banco.regras.map((g) => [g.id, g])), [banco.regras]);
   const titulosDoMotor = React.useMemo(() => [...conciliacao.titulos.values()], [conciliacao]);

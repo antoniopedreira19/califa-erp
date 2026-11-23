@@ -307,6 +307,8 @@ export default async function AvulsaDetalhesPage({
     pago_por: c.pago_por,
     conta_bancaria_baixa_id: c.conta_bancaria_baixa_id,
     recorrente_id: (c.recorrente_id as string | null) ?? null,
+    valor_estimado: Boolean((c as { valor_estimado?: boolean }).valor_estimado),
+    conta_lancada_em: ((c as { conta_lancada_em?: string | null }).conta_lancada_em as string | null) ?? null,
     forma_pagamento: c.forma_pagamento as FormaPagamento | null,
     cartao_credito_id: (c.cartao_credito_id as string | null) ?? null,
     data_compra: (c.data_compra as string | null) ?? null,

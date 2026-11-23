@@ -347,7 +347,12 @@ export type AuditAction =
   | "conta_recorrente.pausada"
   | "conta_recorrente.reativada"
   | "conta_recorrente.excluida"
+  | "conta_recorrente.encerrada"
   | "conta_recorrente.ocorrencia_gerada"
+  // Decisão 272: o documento e a conta do mês no título da recorrência.
+  | "conta_avulsa.anexo_incluido"
+  | "conta_avulsa.anexo_removido"
+  | "conta_avulsa.conta_lancada"
   | "conta_avulsa.rateio_alterado"
   | "conta_recorrente.rateio_alterado"
   // Fatura de cartão (28/08/2026): fechar transforma os itens em

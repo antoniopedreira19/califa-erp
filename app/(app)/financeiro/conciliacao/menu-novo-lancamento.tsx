@@ -30,7 +30,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { ContaAvulsaDrawer } from "../contas-a-pagar/conta-avulsa-drawer";
-import { ContaRecorrenteDrawer } from "../contas-a-pagar/conta-recorrente-drawer";
+import { NovaRecorrenciaDialog } from "../contas-a-pagar/recorrencias/nova-recorrencia-dialog";
 import { RecebimentoAvulsoDialog, type TipoDoRecebimentoAvulso } from "../contas-a-receber/recebimento-avulso-dialog";
 import { AvulsoDialog } from "../fiscal/impostos/dialogos";
 import { carregarDadosDoNovoLancamento, type DadosDoNovoLancamento } from "./actions-novo-lancamento";
@@ -210,18 +210,24 @@ export function MenuNovoLancamento({
             cartoes={dados.cartoes}
             onCriadaParaBaixa={(id) => onCriado("Lançamento criado.", { lado: "pagar", id })}
           />
-          <ContaRecorrenteDrawer
-            mode="criar"
+          {/* A recorrência nasce pelo formulário da aba Recorrências (decisão 272). */}
+          <NovaRecorrenciaDialog
             open={formulario === "recorrencia"}
             onOpenChange={(o) => !o && fechar()}
-            tenantId={dados.tenantId}
-            empresas={dados.empresas}
-            tipos={dados.tipos}
-            subtipos={dados.subtipos}
-            fornecedores={dados.fornecedores}
-            clientes={dados.clientes}
-            regionais={dados.regionais}
-            cartoes={dados.cartoes}
+            listas={{
+              empresas: dados.empresas,
+              tipos: dados.tipos,
+              subtipos: dados.subtipos,
+              fornecedores: dados.fornecedores,
+              clientes: dados.clientes,
+              regionais: dados.regionais,
+              cartoes: dados.cartoes,
+            }}
+            onCriada={(mensagem) => {
+              fechar();
+              onCriado(mensagem, null);
+              router.refresh();
+            }}
           />
           {formulario === "imposto_avulso" && (
             <AvulsoDialog

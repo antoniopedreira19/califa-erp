@@ -2751,9 +2751,14 @@ function LinhaDoBanco({
             <td colSpan={doSistema()} className="corte px-3 py-2">
               <span className="flex flex-wrap items-center gap-2">
                 <Adicionar c={c} p={p} candidatos={candidatos} tomados={tomados} onAdicionar={onAdicionar} onLancar={lancar} sugestao={sug} onUsarSugestao={onUsar} />
-                <span className="text-[11px] text-muted-foreground">
-                  Sugestão do sistema: a primeira da lista.
-                </span>
+                {/* O custo fixo diz por que foi sugerido (decisão 272). */}
+                {r.motivo?.startsWith("custo fixo") ? (
+                  <span className="text-[11px] font-medium text-emerald-800">Sugestão: {r.motivo}.</span>
+                ) : (
+                  <span className="text-[11px] text-muted-foreground">
+                    Sugestão do sistema: a primeira da lista.
+                  </span>
+                )}
               </span>
             </td>
             {celulasDoFim}

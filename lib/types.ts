@@ -4529,6 +4529,8 @@ export const frequenciaRecorrenciaLabel = (f: FrequenciaRecorrencia): string =>
 export interface ContaAvulsaRecorrente {
   id: string;
   tenant_id: string;
+  /** REC-00001, por tenant (decisão 272). O gatilho preenche na criação. */
+  codigo: string;
   empresa_id: string;
   descricao: string;
   valor: string; // numeric → string do supabase-js
@@ -4551,6 +4553,10 @@ export interface ContaAvulsaRecorrente {
   // md5 de fornecedor|descrição da planilha: tira a previsão da planilha do
   // fluxo (decisão 235). Nulo na recorrência criada pela tela.
   previsao_chave: string | null;
+  /** A conta varia todo mês: o título nasce estimado, "Aguardando conta" (decisão 272). */
+  valor_variavel: boolean;
+  /** Débito automático: o começo do histórico do banco (decisão 272). */
+  texto_no_extrato: string | null;
   ativo: boolean;
   criado_por: string;
   created_at: string;
@@ -4603,6 +4609,10 @@ export interface ContaAvulsa {
   pago_por: string | null;
   conta_bancaria_baixa_id: string | null;
   recorrente_id: string | null;
+  /** Título de recorrência que varia: o valor ainda é a estimativa (decisão 272). */
+  valor_estimado: boolean;
+  /** Quando a conta do mês foi lançada nesse título (decisão 272). */
+  conta_lancada_em: string | null;
   forma_pagamento: FormaPagamento | null;
   cartao_credito_id: string | null;
   /**

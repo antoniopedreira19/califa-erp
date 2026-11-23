@@ -283,6 +283,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 268 | ["Parcial" na situação do faturamento do job, e "Liquidado" vira "Recebido"](268-faturamento-parcial-e-recebido.md) | 2026-11-22 |
 | 269 | [A NF da prestação de contas da verba entra no cadastro de notas no envio](269-nf-da-prestacao-entra-no-cadastro-no-envio.md) | 2026-11-23 |
 | 271 | [O controle único de NFs: a seção Notas Fiscais e os seis pontos](271-controle-unico-de-nfs-os-seis-pontos.md) | 2026-11-23 |
+| 272 | [Recorrências: uma lista só, a conta que varia e o custo fixo reconhecido no banco](272-recorrencias-lista-unica-e-conta-que-varia.md) | 2026-11-23 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
 > paralelo à das versões em abas, e foi renumerada em 27/08/2026 — a
@@ -295,4 +296,4 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 > definitivamente pra 097 no pull de 21/09/2026 — a data é a da decisão
 > original, não a da posição final.
 
-**Próximo número livre: 272**. (A 270 está em uso por outra sessão, ainda sem arquivo nesta pasta.) (A 267 existe na pasta e ainda não está nesta tabela.) (A 264 existe na pasta e ainda não está nesta tabela.) (A 240 está em uso por outra frente, ainda sem arquivo neste índice.) (091 e 092 existem na pasta e ainda não estão nesta tabela.)
+**Próximo número livre: 273**. (A 270 está em uso por outra sessão, ainda sem arquivo nesta pasta.) (A 267 existe na pasta e ainda não está nesta tabela.) (A 264 existe na pasta e ainda não está nesta tabela.) (A 240 está em uso por outra frente, ainda sem arquivo neste índice.) (091 e 092 existem na pasta e ainda não estão nesta tabela.)

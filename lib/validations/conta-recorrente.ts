@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { rateioSchema, formaPagamentoEnum } from "./conta-avulsa";
+import { formaPagamentoEnum } from "./conta-avulsa";
 
 const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -81,7 +81,20 @@ const baseRecorrenteFields = {
     .uuid()
     .nullable()
     .or(z.literal("").transform(() => null)),
-  rateio: rateioSchema,
+  // Decisão 272: sem rateio livre, por enquanto. Uma regional (o id) ou
+  // "td" — Todas, pelo rateio da tabela da empresa (`empresas_rateios_regionais`),
+  // que o servidor resolve.
+  regional: z.string().min(1, "Escolha a regional (ou Todas, TD)."),
+  // A conta varia todo mês: o título nasce estimado, "Aguardando conta".
+  valor_variavel: z.boolean().default(false),
+  // Débito automático: o começo do histórico com que o banco mostra o débito.
+  texto_no_extrato: z
+    .string()
+    .trim()
+    .max(120, "Use até 120 letras.")
+    .nullable()
+    .or(z.literal("").transform(() => null))
+    .default(null),
 } as const;
 
 function aplicarRefinementFrequencia<
@@ -154,7 +167,13 @@ export const criarContaRecorrenteSchema = z
   });
 
 export const editarContaRecorrenteSchema = z
-  .object({ ...baseRecorrenteFields, empresa_id: z.string().uuid().optional() })
+  .object({
+    ...baseRecorrenteFields,
+    empresa_id: z.string().uuid().optional(),
+    // Opção A da decisão 272: levar a mudança também ao título já gerado e
+    // ainda em aberto (sem baixa, fora da fatura de cartão).
+    aplicar_no_titulo_em_aberto: z.boolean().default(false),
+  })
   .omit({ empresa_id: true })
   .superRefine((data, ctx) => {
     aplicarRefinementFrequencia(data, ctx);

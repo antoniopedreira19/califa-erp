@@ -1,7 +1,7 @@
 # 235 — Os custos fixos como recorrências no Contas a Pagar
 
 **Data:** 2026-11-03
-**Status:** aceita e implementada em 03/11/2026. As 133 recorrências estão gravadas. Revista em 15/11/2026: a recorrência assume o item de vez (D8).
+**Status:** aceita e implementada em 03/11/2026. As 133 recorrências estão gravadas. Revista em 15/11/2026: a recorrência assume o item de vez (D8). A aba e o rateio mudaram em 23/11/2026 (decisão [272](272-recorrencias-lista-unica-e-conta-que-varia.md)): regional simples com TD pela tabela, código REC e a conta que varia.
 **Quem decidiu:** Tiago, em 03/11/2026. Ele aceitou os três pontos de partida ("Estou de acordo com os 3 pontos citados"), escolheu as quatro recomendações da proposta e respondeu "Sim, implementar".
 **Complementa:** a [232](232-previsoes-da-planilha-no-sistema.md), na regra D8: quando um módulo assume a sua parte, a previsão daquele tipo sai do fluxo.
 **Migrations:** `20261103800001` (aditiva) e `20261115800001` (revisão da D8).

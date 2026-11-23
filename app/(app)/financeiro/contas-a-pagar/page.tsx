@@ -46,7 +46,8 @@ import {
   lerCompetencia,
 } from "@/lib/cartoes/competencia";
 import type { FaturaDoCartao } from "./fechar-fatura-dialog";
-import { RecorrentesList, type RecorrenteRow } from "./recorrentes-list";
+import { RecorrentesList } from "./recorrentes-list";
+import { carregarRecorrencias } from "./recorrencias/carregar";
 import { DesembolsosContasPagarList } from "./desembolsos-list";
 import { carregarPedidosDeDesembolso, carregarTomadores } from "@/app/(app)/financeiro/desembolsos/dados";
 import { PeopleList } from "./people-list";
@@ -81,6 +82,8 @@ export default async function PedidosCompraFinanceiroPage({
     competencia?: string;
     /** O pedido de desembolso que a aba Desembolsos abre (decisão 264). */
     abrir?: string;
+    /** A recorrência que a aba Recorrências abre no pop-up (decisão 272). */
+    rec?: string;
   };
 }) {
   const session = await requireSession();
@@ -286,25 +289,9 @@ export default async function PedidosCompraFinanceiroPage({
       .eq("tenant_id", session.activeTenant.id)
       .eq("status", "ativo")
       .order("nome_fantasia"),
-    // Recorrências (todos os status)
-    (async () => {
-      let q = supabase
-        .from("contas_avulsas_recorrentes")
-        .select(`
-          id, descricao, valor, frequencia,
-          dia_do_mes, dia_quinzena_1, dia_quinzena_2, dia_do_ano_dia, dia_do_ano_mes,
-          proxima_data, data_fim, ativo,
-          fornecedor:fornecedores(nome, razao_social),
-          empresa:empresas(razao_social, nome_fantasia),
-          tipo:plano_contas_tipos!inner(codigo),
-          subtipo:plano_contas_subtipos!inner(nome)
-        `)
-        .eq("tenant_id", session.activeTenant.id)
-        .order("ativo", { ascending: false })
-        .order("proxima_data", { ascending: true });
-      if (empresaFiltroIds.length > 0) q = q.in("empresa_id", empresaFiltroIds);
-      return q;
-    })(),
+    // Recorrências (todos os status), com os títulos, os documentos e o
+    // status de cada título (decisão 272).
+    carregarRecorrencias(supabase, session.activeTenant.id, empresaFiltroIds, hojeEmSaoPauloIso()),
     // Contagem de recorrências ativas
     (async () => {
       let q = supabase
@@ -479,7 +466,7 @@ export default async function PedidosCompraFinanceiroPage({
   if (remessasItensRes.error) console.error("[financeiro.remessas_itens]", remessasItensRes.error.message);
   if (ultimasRetencoesRes.error) console.error("[financeiro.ultimas_retencoes]", ultimasRetencoesRes.error.message);
   if (retencoesDaAprovacaoRes.error) console.error("[financeiro.retencoes_da_aprovacao]", retencoesDaAprovacaoRes.error.message);
-  if (recorrentesRes.error) console.error("[financeiro.recorrentes.list]", recorrentesRes.error.message);
+  if (recorrentesRes.erro) console.error("[financeiro.recorrentes.list]", recorrentesRes.erro);
   if (cartoesRes.error) console.error("[financeiro.cartoes.list]", cartoesRes.error.message);
   if (desembolsosTitulosRes.error) console.error("[financeiro.desembolsos_titulos.list]", desembolsosTitulosRes.error.message);
   if (devolucoesRes.error) console.error("[financeiro.devolucoes.list]", devolucoesRes.error.message);
@@ -668,43 +655,6 @@ export default async function PedidosCompraFinanceiroPage({
     .filter((t) => t.origem === "fatura_cartao" && (t.status === "a_pagar" || (t.data_pagamento ?? "") >= corteDasFaturas))
     .map((t) => t.id);
   const extrasDaPlanilha = carregarExtrasDaPlanilha(supabase, session.activeTenant.id, idsDaLista);
-
-  // Mapeamento das recorrências para RecorrenteRow
-  const recorrentesRows: RecorrenteRow[] = ((recorrentesRes.data ?? []) as unknown as Array<{
-    id: string;
-    descricao: string;
-    valor: string | number;
-    frequencia: "mensal" | "quinzenal" | "anual";
-    dia_do_mes: number | null;
-    dia_quinzena_1: number | null;
-    dia_quinzena_2: number | null;
-    dia_do_ano_dia: number | null;
-    dia_do_ano_mes: number | null;
-    proxima_data: string;
-    data_fim: string | null;
-    ativo: boolean;
-    fornecedor: { nome: string | null; razao_social: string | null } | null;
-    empresa: { razao_social: string | null; nome_fantasia: string | null } | null;
-    tipo: { codigo: string } | null;
-    subtipo: { nome: string } | null;
-  }>).map((r) => ({
-    id: r.id,
-    descricao: r.descricao,
-    valor: Number(r.valor),
-    frequencia: r.frequencia,
-    dia_do_mes: r.dia_do_mes,
-    dia_quinzena_1: r.dia_quinzena_1,
-    dia_quinzena_2: r.dia_quinzena_2,
-    dia_do_ano_dia: r.dia_do_ano_dia,
-    dia_do_ano_mes: r.dia_do_ano_mes,
-    proxima_data: r.proxima_data,
-    data_fim: r.data_fim,
-    ativo: r.ativo,
-    fornecedor_nome: r.fornecedor?.razao_social ?? r.fornecedor?.nome ?? null,
-    empresa_nome: r.empresa?.razao_social ?? r.empresa?.nome_fantasia ?? "",
-    tipo_codigo: r.tipo?.codigo ?? "",
-    subtipo_nome: r.subtipo?.nome ?? "",
-  }));
 
   // Listas para os dropdowns do drawer de conta avulsa
   const empresasList = (empresasRes.data ?? []).map((e: { id: string; razao_social: string | null; nome_fantasia: string | null }) => ({
@@ -1097,7 +1047,10 @@ export default async function PedidosCompraFinanceiroPage({
           titulosAPagarCount={titulosAPagarCount}
           recorrentes={
             <RecorrentesList
-              rows={recorrentesRows}
+              recs={recorrentesRes.recs}
+              hoje={hojeEmSaoPauloIso()}
+              abrir={searchParams?.rec ?? null}
+              erro={recorrentesRes.erro}
               tenantId={session.activeTenant.id}
               empresas={empresasList}
               tipos={tiposRes.data ?? []}
