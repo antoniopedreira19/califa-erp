@@ -9319,3 +9319,10 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Conciliação:** regra 0 de `donosDaPlanilha` (a linha que cita a NF é do título) e `nfsPagasDaPlanilha` + `eDeNfPaga` em `banco-dados.ts`; `HistoricoDoMotor.nfs`.
 - **Carga (produção, 23/11):** 208 NFs (R$ 27,62 mi), 35 baixas e 32 linhas do banco trocadas da planilha para as baixas; DRE do 4T igual. Scripts em `tmp/nfs-planilha/` (fora do git). Conferido antes no Sandbox (TESTE-275A–G, TES-1012/26 aberto com o nome da planilha).
 - **Falta:** as 26 mensais fora dos meses do job (regra do mês), a segunda parte (20 recebidas antes de 03/11 e a 2ª parcela da NF 4946), e as listas a decidir (sem cliente, Saving, Ambev com o crédito do ISS, emissão em 2027, depósitos que pagam outras coisas).
+
+## ⚠️ Nota de 2026-11-23 — a emissão da NF 6479 corrigida (vencimento lançado na emissão)
+
+- **O caso:** a NF 6479 da California (AMB-1073/26, R$ 300.000,00) foi emitida pelo Faturar em 19/11 com a emissão 01/03/2027 — a data do vencimento. A planilha do financeiro tem 18/11/2026. Com a data errada, os impostos da nota iam para a apuração de março/2027 e a receita saía do 4º trimestre.
+- **Corrigido** pela migration `20261123400001_emissao_da_nf_6479.sql`, com o OK do Tiago: emissão 18/11/2026, título em 01/03/2027 sem mudança, evento `faturamento.emissao_corrigida` na auditoria (de → para e motivo). Conferido no banco.
+- **Não há tela** para corrigir a emissão de uma NF emitida (o "Editar registro" da 271 é das tomadas).
+- **Pendência (outro módulo, para depois):** no Faturar, pedir confirmação ("Tem certeza?") quando a emissão cair fora do mês corrente — futura, como aqui, ou passada. A carga da 276 também deixou de fora 10 NFs com emissão em 2027: conferir se são o mesmo engano.
