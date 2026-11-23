@@ -9362,3 +9362,11 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Banco** (migration 20261123400003): `impostos_a_pagar.da_contabilidade` + RPC `lancar_guia_da_contabilidade` (por cima do `criar_imposto_avulso`; origem continua `avulso`).
 - Conferido no Sandbox (Empresa Teste): PIS set/2026 e IOF nov/2026 lançados, em "Aprovadas" e em Impostos a Pagar. Falta a entrega 3 (guia já paga, ligada às linhas da planilha).
 
+
+## ⚠️ Nota de 2026-11-23 — paga no histórico (decisão 277, entrega 3)
+
+- **A guia paga fora do sistema** sai de A pagar **sem lançamento**: o pagamento já está no histórico da planilha, por onde o DRE e o fluxo contam (dar baixa contaria duas vezes). DARF e comprovante opcionais. Opção A, escolhida pelo Tiago em 23/11, com o nome "paga no histórico".
+- **Banco** (migration 20261123400004): `impostos_a_pagar.pago_no_historico`; `chk_imposto_pago_consistente` aceita o pago sem comprovante só com a marca; RPC `marcar_imposto_pago_no_historico` (auditoria `fiscal.imposto_pago_no_historico`); `cancelar_baixa_imposto` desfaz a marca.
+- **Onde:** Impostos a Pagar (detalhes, e o link "Já foi paga e está no histórico da planilha?" na baixa); a caixa "Já foi paga" na Guia da contabilidade e no painel de aprovação (só guia de um título). A tela confere com as linhas de imposto do histórico na conta e no dia (`lib/fiscal/pago-no-historico.ts`; "PIS CRÉDITO" soma no "PIS").
+- **Status:** "Pago dd/mm · no histórico" na planilha de títulos (`LinhaDaPlanilha.pagoNoHistorico`, obrigatório; falso fora do imposto).
+- Conferido no Sandbox (marcar, desfazer, guia da contabilidade já paga, aprovação já paga; zero lançamentos). Próximo: as 52 guias do 4º trimestre, uma a uma com a planilha.

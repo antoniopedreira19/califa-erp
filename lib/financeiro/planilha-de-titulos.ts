@@ -176,6 +176,9 @@ export interface LinhaDaPlanilha {
   avisoDaContraparte: string | null;
   /** A verba paga: o status é o da prestação (decisão 081). */
   situacaoDaVerba: SituacaoVerba | null;
+  /** Decisão 277: o imposto pago fora do sistema, com o pagamento no
+   *  histórico da planilha (sem lançamento). Falso nas outras origens. */
+  pagoNoHistorico: boolean;
   busca: string;
 }
 

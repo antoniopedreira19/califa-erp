@@ -875,6 +875,15 @@ export function SeloDoStatus({ l }: { l: LinhaDaPlanilha }) {
       <span className="inline-flex flex-col items-center gap-1">
         <span className={cn(BASE_DO_SELO, COR_DO_STATUS.pago)}>{ROTULO_DO_STATUS.pago}</span>
         {pagoEm}
+        {/* Decisão 277: o imposto pago fora do sistema, sem lançamento. */}
+        {l.pagoNoHistorico && (
+          <span
+            className="whitespace-nowrap text-[10.5px] font-medium text-amber-800"
+            title="Pago fora do sistema: o pagamento está no histórico da planilha, que é por onde o DRE e o fluxo de caixa contam. Nenhum lançamento foi criado."
+          >
+            no histórico
+          </span>
+        )}
       </span>
     );
   }

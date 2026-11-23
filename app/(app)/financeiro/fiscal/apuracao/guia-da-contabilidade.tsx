@@ -22,6 +22,7 @@ import { lancarGuiaDaContabilidade, previaDaReceitaDoPeriodo } from "./actions";
 import type { DadosDaApuracao, GuiaDaContabilidade, PJDaTela } from "./dados";
 import { NomeDaGuia, moeda, tituloPorExtenso } from "./ui";
 import { RateioPorGerencial } from "./rateio-por-gerencial";
+import { CamposDoPagoNoHistorico, contaSugerida } from "../impostos/pago-no-historico";
 
 type Tributo = "ISS" | "ISS_RET" | "PIS" | "COFINS" | "IRPJ" | "CSLL" | "CSRF" | "IRRF" | "IOF";
 interface Opcao {
@@ -126,6 +127,11 @@ export function DialogoGuiaDaContabilidade({
   const [valor, setValor] = React.useState(0);
   const [motivo, setMotivo] = React.useState("");
   const competencia = op.periodo === "trimestral" ? tri : mes;
+  // Entrega 3: a guia já paga fora do sistema, com o pagamento no histórico da planilha.
+  const [jaPaga, setJaPaga] = React.useState(false);
+  const [pagoEm, setPagoEm] = React.useState("");
+  const [contaPaga, setContaPaga] = React.useState("");
+  const nomesDasPJs = React.useMemo(() => Object.fromEntries(dados.pjs.map((p) => [p.id, p.nome])), [dados.pjs]);
 
   // A receita do período (do servidor): a base que divide cada gerencial entre as regionais.
   const [base, setBase] = React.useState<RateioDaGuia[] | null>(null);
@@ -177,6 +183,9 @@ export function DialogoGuiaDaContabilidade({
     if (!(valor > 0)) return setErro("Informe o valor da guia.");
     if (motivo.trim().length < 10) return setErro("Explique por que o sistema não calculou esta guia (mínimo 10 caracteres).");
     if (!base) return setErro("Espere a receita do período carregar.");
+    if (jaPaga && !pagoEm) return setErro("Informe a data em que a guia foi paga.");
+    if (jaPaga && !contaPaga) return setErro("Selecione a conta que pagou a guia.");
+    if (jaPaga && pagoEm > dados.hoje) return setErro("A data do pagamento no histórico não pode ser depois de hoje.");
     const conferido = rateioPorGerencial(partes, base, regras, valor);
     if (!conferido.ok) return setErro(conferido.message);
     const sufixoCota = op.periodo === "trimestral" && cota !== "unica" ? ` · ${COTAS.find(([k]) => k === cota)![1]}` : "";
@@ -196,14 +205,20 @@ export function DialogoGuiaDaContabilidade({
         valor,
         rateio_gerencial: partes,
         guia_path: null,
+        pago_no_historico: jaPaga ? { pago_em: pagoEm, conta_bancaria_id: contaPaga } : null,
       });
     } catch {
       r = { ok: false, message: "Não foi possível falar com o servidor. Tente de novo." };
     }
     setEnviando(false);
     if (!r.ok) return setErro(r.message);
+    const nome = `${tituloPorExtenso({ titulo: op.titulo, codigo: op.codigo })}${sufixoCota} de ${op.periodo === "trimestral" ? rotuloTri(tri) : rotuloMes(mes)} (${pj.nome})`;
     onLancada(
-      `${tituloPorExtenso({ titulo: op.titulo, codigo: op.codigo })}${sufixoCota} de ${op.periodo === "trimestral" ? rotuloTri(tri) : rotuloMes(mes)} (${pj.nome}) entrou aprovada, com ${moeda(valor)}. Está em "Aprovadas" e em Impostos a Pagar.`,
+      r.aviso
+        ? `${nome} entrou aprovada, com ${moeda(valor)}. ${r.aviso}`
+        : jaPaga
+          ? `${nome} entrou aprovada e paga no histórico, com ${moeda(valor)}, sem lançamento. Está em "Aprovadas" e nos pagos de Impostos a Pagar.`
+          : `${nome} entrou aprovada, com ${moeda(valor)}. Está em "Aprovadas" e em Impostos a Pagar.`,
     );
   }
 
@@ -322,6 +337,41 @@ export function DialogoGuiaDaContabilidade({
           </div>
         )}
 
+        <div className="space-y-3 rounded-xl border border-border p-3">
+          <label className="flex cursor-pointer items-start gap-2 text-[13px]">
+            <input
+              type="checkbox"
+              className="mt-0.5 h-4 w-4 accent-california-red"
+              checked={jaPaga}
+              onChange={(e) => {
+                const marcado = e.target.checked;
+                setJaPaga(marcado);
+                if (marcado) {
+                  if (!pagoEm && vencimento && vencimento <= dados.hoje) setPagoEm(vencimento);
+                  if (!contaPaga) setContaPaga(contaSugerida(dados.contas, pj.id));
+                }
+              }}
+            />
+            <span>
+              <b>Já foi paga</b>: o pagamento está no histórico da planilha. A guia entra e já sai de A pagar, sem lançamento (o DRE e
+              o fluxo de caixa contam pelo histórico).
+            </span>
+          </label>
+          {jaPaga && (
+            <CamposDoPagoNoHistorico
+              contas={dados.contas}
+              pjId={pj.id}
+              pjNome={pj.nome}
+              nomesDasPJs={nomesDasPJs}
+              valor={valor}
+              data={pagoEm}
+              onData={setPagoEm}
+              conta={contaPaga}
+              onConta={setContaPaga}
+            />
+          )}
+        </div>
+
         {erro && <p className="rounded-lg border border-california-red/40 bg-california-red/5 p-2.5 text-[12.5px] text-california-red">{erro}</p>}
 
         <div className="flex justify-end gap-2 border-t border-border pt-4">
@@ -335,7 +385,7 @@ export function DialogoGuiaDaContabilidade({
             className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-3 py-2 text-sm font-semibold text-white hover:bg-california-red-hover disabled:opacity-60"
           >
             {enviando && <Loader2 className="h-4 w-4 animate-spin" />}
-            Lançar a guia aprovada
+            {jaPaga ? "Lançar aprovada e paga no histórico" : "Lançar a guia aprovada"}
           </button>
         </div>
       </DialogContent>
@@ -352,7 +402,10 @@ export function LinhaDaContabilidade({ c, local }: { c: GuiaDaContabilidade; loc
       <td className="px-3 py-3">
         <span className="whitespace-nowrap font-mono text-xs font-semibold">{c.vencimento.split("-").reverse().join("/")}</span>
         {c.status === "pago" && c.pago_em && (
-          <span className="block text-[10.5px] text-muted-foreground">paga em {c.pago_em.split("-").reverse().join("/")}</span>
+          <span className="block text-[10.5px] text-muted-foreground">
+            paga em {c.pago_em.split("-").reverse().join("/")}
+            {c.pago_no_historico ? " · no histórico" : ""}
+          </span>
         )}
       </td>
       <td className="px-3 py-3">
@@ -377,7 +430,9 @@ export function LinhaDaContabilidade({ c, local }: { c: GuiaDaContabilidade; loc
         <span className="inline-flex rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-emerald-800">
           Aprovada
         </span>
-        <span className="block text-[10px] text-muted-foreground">{c.status === "pago" ? "e paga" : "pela contabilidade"}</span>
+        <span className="block text-[10px] text-muted-foreground">
+          {c.status !== "pago" ? "pela contabilidade" : c.pago_no_historico ? "paga no histórico" : "e paga"}
+        </span>
       </td>
       <td className="px-2 py-3 text-center text-[10.5px] text-muted-foreground" />
     </tr>

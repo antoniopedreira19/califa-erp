@@ -21,7 +21,7 @@
 - **O imposto por extenso**: "PIS não cumulativo" (6912) e "COFINS não cumulativa" (5856), em vez de "PIS" e "COFINS". O código do DARF vai numa linha menor, com a explicação na dica. O código é o número impresso na guia que diz à Receita qual imposto está sendo pago. O mesmo nome vale no diálogo do "Aprovar pelo calculado" e no filtro da coluna Guia.
 - **Larguras**: o espaço da coluna CNPJ foi para Base, Débito e Apurado. As larguras foram medidas pelos maiores valores reais de 23/11/2026 (R$ 46.500.000,00 na base do IOF e R$ 2.661.685,92 no débito do IRPJ do 4º trimestre) na tela de 1.616 px. Antes, esses valores passavam da coluna.
 
-## 2. O 4º trimestre inteiro no sistema (entregas 2 e 3, a fazer)
+## 2. O 4º trimestre inteiro no sistema (entregas 2 e 3)
 
 As regras combinadas para lançar os impostos que foram pagos fora do sistema, até tudo sair pelo sistema batendo com a planilha:
 
@@ -34,7 +34,7 @@ As regras combinadas para lançar os impostos que foram pagos fora do sistema, a
    - Dentro de cada gerencial, as regionais dividem pela receita da competência da guia: o mês, ou o trimestre no IRPJ/CSLL.
    - Exceções: Hitlab → regional Hitlab; GoCrazy → SS da California. A "Distribuição de lucro" das guias da GoCrazy também vai para California · SS.
    - Antes de outubro, a receita vem das notas do histórico da planilha, que trazem a regional de cada job.
-4. **Guia já paga pela planilha.** A baixa entra na data e na conta do banco, ligada às linhas da planilha que registram o pagamento (a soma tem de fechar). Não nasce outro débito, para o pagamento não contar duas vezes no extrato, no fluxo e no DRE. Nesse caminho, o PDF do DARF é opcional e pode ser anexado depois.
+4. **Guia paga no histórico.** A guia já paga fora do sistema sai de A pagar com a data e a conta do pagamento, sem lançamento: o pagamento já está no histórico da planilha, que é por onde o DRE e o fluxo de caixa contam. Não nasce outro débito, para o pagamento não contar duas vezes. Nesse caminho, o PDF do DARF e o comprovante são opcionais. A ideia inicial (ligar a baixa às linhas da planilha) não serve: as linhas de 04/11 e 10/11 já estão conciliadas com o banco pelo histórico, e as de 20/11 esperam o extrato. O Tiago escolheu esta opção (A) em 23/11 e o nome "paga no histórico" (não "paga pela planilha").
 5. **IRPJ e CSLL da California que somam zero** na planilha (as três cotas do 3º trimestre: os créditos anulam e não houve DARF) ficam fora do Fiscal.
 
 O inventário das 52 guias do 4º trimestre (de 01/10 a 31/12, com o valor por gerencial) foi lido da planilha de 23/11. Ele fica fora do git, por ter os valores do financeiro.
@@ -79,6 +79,28 @@ O inventário das 52 guias do 4º trimestre (de 01/10 a 31/12, com o valor por g
   - As duas guias aparecem em "Aprovadas" e em Impostos a Pagar, com o rateio e a auditoria no banco.
   - 191 testes do fiscal passam; `tsc`, lint e build limpos.
 
+## 5. Entrega 3 (implementada): paga no histórico
+
+- **No banco** (`20261123400004_imposto_pago_no_historico.sql`):
+  - `impostos_a_pagar.pago_no_historico`.
+  - A regra `chk_imposto_pago_consistente` aceita o pago sem comprovante só quando é no histórico. Para as linhas que já existiam, a regra é a mesma.
+  - A RPC `marcar_imposto_pago_no_historico(imposto, data, conta, guia, comprovante)`: só admin e financeiro, só imposto A pagar, data até hoje (Brasília), as travas de conta da baixa (`_conta_da_baixa`). Não cria lançamento e registra a auditoria `fiscal.imposto_pago_no_historico`.
+  - `cancelar_baixa_imposto` desfaz também a marca. O pago no histórico não tem lançamento a apagar.
+- **Onde se marca:**
+  - em Impostos a Pagar, nos detalhes do imposto ("Marcar como paga no histórico") e pelo link "Já foi paga e está no histórico da planilha?" do diálogo de baixa;
+  - na Guia da contabilidade, com a caixa "Já foi paga": a guia entra aprovada e já paga;
+  - no painel de aprovação, com a mesma caixa, só na guia de um título. Com cotas, cada cota se marca em Impostos a Pagar.
+- **A conferência:** escolhidas a data e a conta, a tela lê as linhas de imposto do histórico da planilha naquele dia e naquela conta, agrupadas pela descrição (`lib/fiscal/pago-no-historico.ts`). O grupo que soma o valor da guia aparece como "bate com a guia". A linha de crédito ("PIS CRÉDITO") soma no grupo do imposto, porque a planilha abre o PIS e a COFINS não cumulativos em débito cheio menos crédito. Sem linha nenhuma, a tela avisa: marcar como paga um pagamento que não está no histórico tira a saída do DRE e do fluxo.
+- **Como aparece:** o status do imposto em Impostos a Pagar diz "Pago dd/mm/aaaa · no histórico". O olho abre "Paga no histórico", com "Desfazer: voltar a A pagar". Na Apuração, a guia da contabilidade diz "paga no histórico".
+- **Conferido no Sandbox** (Empresa Teste), pela tela, logado como admin:
+  - O PIS de setembro foi marcado em Impostos a Pagar (sem linha no histórico do Sandbox, com o aviso). Depois foi desfeito, e voltou a A pagar.
+  - A COFINS de setembro, de R$ 1.234,56, foi lançada como Guia da contabilidade já paga.
+  - O ISS próprio de novembro, de R$ 2.431,01, foi aprovado já pago.
+  - Nos três, nenhum lançamento, e a auditoria ficou no banco.
+  - A trava de papel também funcionou: no meio do teste, outra sessão trocou o login do 127.0.0.1 para o GP do Sandbox, e a conferência respondeu "Apenas admin ou financeiro" (`acao_negada` no audit).
+- **Conferido na produção, só leitura:** a regra da conferência acha o ISS de 04/11 (11 linhas, R$ 175.230,82, e o de R$ 9.787,91) e o PIS/COFINS de 20/11 (R$ 42.805,20 e R$ 338.470,20, débito menos crédito).
+- Os testes de fiscal, financeiro e conciliação passam (368). `tsc` e lint estão limpos.
+
 ## Arquivos (entrega 1)
 
 - `app/(app)/financeiro/fiscal/apuracao/aba-apuracao.tsx`: botões de CNPJ, blocos, faixa, lote por CNPJ, coluna Local e larguras.
@@ -110,3 +132,11 @@ O inventário das 52 guias do 4º trimestre (de 01/10 a 31/12, com o valor por g
 - `app/(app)/financeiro/fiscal/apuracao/actions.ts`: `previaDaReceitaDoPeriodo` e `lancarGuiaDaContabilidade`.
 - `app/(app)/financeiro/fiscal/apuracao/guia-da-contabilidade.tsx`: o diálogo e a linha; `aba-apuracao.tsx` (faixa, linhas, contagens, competências) e `dados.ts` (`guiasDaContabilidade`); `rateio-por-gerencial.tsx`.
 
+## Arquivos (entrega 3)
+
+- `supabase/migrations/20261123400004_imposto_pago_no_historico.sql`.
+- `lib/fiscal/pago-no-historico.ts` (+ teste): a conferência com o histórico.
+- `app/(app)/financeiro/fiscal/impostos/pago-no-historico.tsx`: o diálogo, os campos embutidos e a conferência; `actions.ts` (`marcarImpostoPagoNoHistorico`, `linhasDoHistoricoNoDia`); `dialogos.tsx` (o link na baixa, "Paga no histórico" e o desfazer); `aba-impostos.tsx`; `dados.ts`.
+- `app/(app)/financeiro/fiscal/apuracao/`: `actions.ts` (`aprovarGuia` e `lancarGuiaDaContabilidade` com `pago_no_historico`), `memoria-dialog.tsx`, `guia-da-contabilidade.tsx`, `aba-apuracao.tsx`, `dados.ts` (as contas e a marca).
+- `lib/financeiro/planilha-de-titulos.ts` (+ teste), `components/financeiro/planilha-de-titulos/planilha.tsx` e `app/(app)/financeiro/conciliacao/linhas-da-aba.ts`: o `pagoNoHistorico` da linha e o "no histórico" no status.
+- `lib/types.ts`: `ImpostoAPagar.da_contabilidade` e `pago_no_historico`.

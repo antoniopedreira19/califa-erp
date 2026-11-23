@@ -6253,6 +6253,10 @@ export interface ImpostoAPagar {
   comprovante_path: string | null;
   baixado_por: string | null;
   baixado_em: string | null;
+  /** Decisão 277: guia da contabilidade (lançada aprovada, origem avulso). */
+  da_contabilidade: boolean;
+  /** Decisão 277: pago no histórico da planilha — sem lançamento; guia e comprovante opcionais. */
+  pago_no_historico: boolean;
   /** Decisão 145: o cancelamento à mão do título em aberto. Nulos fora dele. */
   cancelado_em: string | null;
   cancelado_por: string | null;
