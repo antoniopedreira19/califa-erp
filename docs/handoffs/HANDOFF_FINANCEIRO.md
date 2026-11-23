@@ -9269,3 +9269,9 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Agora:** conta também a previsão ligada a uma baixa conciliada (`historico_movimento_baixas`) ou de mesma conta, dia e valor de uma linha do banco conciliada só com lançamentos do sistema (`_historico_previsoes_pagas`). Nada é gravado; o saldo e o Extrato não mudam. CO 4T de −4.615.469,29 para −5.720.239,25.
 - **Fluxo de Caixa:** as mesmas previsões já pagas saíram do ramo "previsao_planilha" da `vw_fluxo_caixa` (eram 59, R$ 3,27 mi, previstas de 24/11 a 08/12); a exclusão pela recorrência (decisão 235) continua. Migrations `20261123600004_dre_conta_previsao_paga_pelo_sistema.sql` e `20261123600005_fluxo_sem_previsao_paga_pelo_sistema.sql`.
 
+## ⚠️ Nota de 2026-11-23 — a previsão paga casada baixa a baixa e a NF recebida líquida (revisão da decisão 270)
+
+- **Antes:** a previsão paga só casava pela linha inteira do banco. Ficavam fora do DRE o PIX de várias PPs (69 baixas, −267.750,67), os custos fixos pagos juntos (13 baixas, −195.353,76) e a NF 6116, recebida líquida e lançada na planilha pelo bruto e pelas retenções, que saiu do DRE quando a linha do banco passou da planilha para a baixa.
+- **Agora:** casa também baixa a baixa (mesma conta, dia da linha do banco e valor da baixa). `ligarBaixaAoHistorico` liga a baixa já conciliada às previsões da mesma conta de qualquer dia, quando a soma bate; a NF 6116 já está ligada. REC 4T voltou a 16.505.869,66; CO 4T −5.987.759,92; CF 4T −556.324,06.
+- Migration `20261123600006_previsao_paga_baixa_a_baixa_e_nf_liquida.sql`.
+

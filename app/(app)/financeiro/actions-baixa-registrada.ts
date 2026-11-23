@@ -244,10 +244,12 @@ const ligarSchema = z.object({
 });
 
 /**
- * A conciliação do histórico (decisão 270, 23/11/2026): liga as baixas com
- * data antes do início da conta às linhas da planilha que registram o mesmo
- * pagamento (mesma conta, mesmo dia, mesma soma). Várias baixas numa linha
- * quando um PIX pagou mais de uma PP. Ligada a uma linha da carga do
+ * A conciliação do histórico (decisão 270, 23/11/2026): liga as baixas às
+ * linhas da planilha que registram o mesmo pagamento, com a mesma soma. Antes
+ * do início da conta: mesma conta e mesmo dia. A partir do início: a baixa já
+ * conciliada com o banco e as previsões da mesma conta, de qualquer dia (a NF
+ * recebida líquida que a planilha lança pelo bruto e pelas retenções). Várias
+ * baixas numa linha quando um PIX pagou mais de uma PP. Ligada a uma linha da carga do
  * período ou da cauda, a baixa deixa de contar duas vezes no Extrato antes do
  * início e a linha mostra o código da PP; a linha do só DRE não aparece no
  * Extrato (fica fora do saldo), e a ligação fica só registrada. As travas
