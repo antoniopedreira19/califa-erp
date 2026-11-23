@@ -148,6 +148,14 @@ test("NFS-e de São Paulo: o número da nota, não o do RPS; a emissão colada n
   assert.deepEqual(lerPeloTexto(NOTA_SAO_PAULO), { numero: "00000013", cnpj: "11222333000181", emissao: "2026-10-21", valor: 1200 });
 });
 
+test("NFS-e: o \"Valor total: R$\" de cada item da discriminação não é o total da nota", () => {
+  const comItens = NOTA_SAO_PAULO.replace(
+    "VALOR TOTAL DO SERVIÇO",
+    "- 17 quadros em acrílico\nValor unitário: R$ 50,00 Valor total: R$ 850,00\n- 01 peça, emissão: 01/01/2020\nValor total: R$ 350,00\nVALOR TOTAL DO SERVIÇO",
+  );
+  assert.deepEqual(lerPeloTexto(comItens), { numero: "00000013", cnpj: "11222333000181", emissao: "2026-10-21", valor: 1200 });
+});
+
 test("DANFE com os valores colados: o canhoto dá a emissão e o total, não o frete", () => {
   const danfe = `DANFE
 Nº.000.000.911

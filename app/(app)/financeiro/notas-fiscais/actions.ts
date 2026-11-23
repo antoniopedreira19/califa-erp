@@ -19,7 +19,7 @@ import {
   leituraParaGravar,
   type DadosBrutosNotaTomada,
 } from "@/lib/ia/ler-nota-tomada";
-import { extrairTextoDoPdf, lerPeloTexto } from "@/lib/ia/texto-da-nf";
+import { extrairTextoDoPdf, lerPeloTexto, type CamposDoPdf } from "@/lib/ia/texto-da-nf";
 import { NOTAS_POR_LEITURA, type TabelaDoAnexo } from "./dados";
 import { seguirDocumentoNasPPs } from "@/app/(app)/jobs/[jobId]/realizado/actions-pp";
 
@@ -82,10 +82,19 @@ export async function lerNotasTomadas(ids: string[]): Promise<{ ok: true; result
   const [{ data: notas }, { data: estabelecimentos }] = await Promise.all([
     supabase
       .from("notas_fiscais_fornecedor")
-      .select("id, numero, valor, data_emissao, fornecedor:fornecedores(cpf_cnpj)")
+      .select("id, numero, valor, data_emissao, divergencia_confirmada_pdf, fornecedor:fornecedores(cpf_cnpj)")
       .eq("tenant_id", tenantId)
       .in("id", lote)
-      .returns<Array<{ id: string; numero: string; valor: number | string; data_emissao: string; fornecedor: { cpf_cnpj: string | null } | null }>>(),
+      .returns<
+        Array<{
+          id: string;
+          numero: string;
+          valor: number | string;
+          data_emissao: string;
+          divergencia_confirmada_pdf: Partial<CamposDoPdf> | null;
+          fornecedor: { cpf_cnpj: string | null } | null;
+        }>
+      >(),
     supabase.from("fiscal_estabelecimentos").select("cnpj").eq("tenant_id", tenantId).returns<Array<{ cnpj: string | null }>>(),
   ]);
   // Os CNPJs das empresas do grupo: são o tomador, nunca o emitente pelo texto do PDF.
@@ -158,8 +167,11 @@ export async function lerNotasTomadas(ids: string[]): Promise<{ ok: true; result
           return;
         }
         resultado.lidas++;
-        if (conferida.leitura.divergencias.length > 0) {
-          resultado.divergentes.push({ numero: nota.numero, motivo: conferida.motivo ?? motivoDaDivergencia(conferida.leitura.pdf, conferida.leitura.divergencias) });
+        // "O registro está certo" (migration 800009): o mesmo PDF já confirmado
+        // não volta a acusar — a RPC zera a divergência, e o resumo também.
+        const divergencias = mesmoPdf(nota.divergencia_confirmada_pdf, conferida.leitura.pdf) ? [] : conferida.leitura.divergencias;
+        if (divergencias.length > 0) {
+          resultado.divergentes.push({ numero: nota.numero, motivo: conferida.motivo ?? motivoDaDivergencia(conferida.leitura.pdf, divergencias) });
         }
         await logAuditEvent({
           acao: "nota_fiscal.leitura_ampliada",
@@ -172,7 +184,7 @@ export async function lerNotasTomadas(ids: string[]): Promise<{ ok: true; result
             cache_hit: !!cache?.dados,
             modelo: VERSAO_LEITURA_NOTA_TOMADA,
             arquivo_da_nota: conferida.arquivoDaNota,
-            divergencias: conferida.leitura.divergencias,
+            divergencias,
             com_texto: Boolean(textoDoPdf),
             discordancias: conferida.leitura.discordancias,
             tokens_in: tokensIn,
@@ -209,6 +221,12 @@ function dadosVazios(): DadosBrutosNotaTomada {
     retencoes: { iss: vazia, irrf: vazia, pis: vazia, cofins: vazia, csll: vazia, inss: vazia },
     confianca_baixa: true,
   };
+}
+
+/** O PDF lido é o mesmo que o financeiro confirmou ("O registro está certo")? */
+function mesmoPdf(confirmado: Partial<CamposDoPdf> | null, lido: CamposDoPdf | null): boolean {
+  if (!confirmado || !lido) return false;
+  return (["numero", "cnpj", "emissao", "valor"] as const).every((k) => (confirmado[k] ?? null) === (lido[k] ?? null));
 }
 
 /** "No PDF: emissão 05/11/2026; valor R$ 82,00." */

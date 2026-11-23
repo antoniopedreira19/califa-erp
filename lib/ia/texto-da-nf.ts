@@ -185,10 +185,12 @@ function numeroPeloRotulo(c: string): string | null {
 }
 
 function emissaoPeloRotulo(c: string): string | null {
+  const danfe = c.includes("DANFE");
   const regras = [
     new RegExp(`DATAEHORADAEMISSAODANFS-?E:?${DATA}`),
-    // O canhoto da DANFE: "EMISSÃO: 16/11/2026 … VALOR TOTAL: R$ …".
-    new RegExp(`EMISSAO:${DATA}`),
+    // O canhoto da DANFE: "EMISSÃO: 16/11/2026 … VALOR TOTAL: R$ …". Só na
+    // DANFE: na NFS-e, "emissão:" pode estar na discriminação do serviço.
+    ...(danfe ? [new RegExp(`EMISSAO:${DATA}`)] : []),
     new RegExp(`DATAEHORADEEMISSAO:?${DATA}`),
     new RegExp(`DATAD[AE]EMISSAO(?:DANOTA)?:?${DATA}`),
     new RegExp(`EMISSAO\\(HORARIODEBRASILIA\\)${DATA}`),
@@ -200,7 +202,7 @@ function emissaoPeloRotulo(c: string): string | null {
   }
   // DANFE sem canhoto: os rótulos numa linha ("NOME/RAZÃO SOCIAL CNPJ/CPF
   // DATA DA EMISSÃO") e os valores na seguinte.
-  if (c.includes("DANFE")) {
+  if (danfe) {
     const m = new RegExp(`DATAD[AE]EMISSAO.{0,150}?${DATA}`).exec(c);
     const iso = m ? paraIso(m[1], m[2], m[3]) : null;
     if (iso) return iso;
@@ -209,10 +211,11 @@ function emissaoPeloRotulo(c: string): string | null {
 }
 
 function valorPeloRotulo(c: string): number | null {
-  // O canhoto da DANFE: "VALOR TOTAL: R$ 19.270,00".
-  const canhoto = paraNumero(new RegExp(`VALORTOTAL:R\\$${VALOR}`).exec(c)?.[1]);
-  if (canhoto) return canhoto;
   if (c.includes("DANFE")) {
+    // O canhoto da DANFE: "VALOR TOTAL: R$ 19.270,00". Só na DANFE: na NFS-e,
+    // a discriminação do serviço traz o "Valor total: R$" de cada item.
+    const canhoto = paraNumero(new RegExp(`VALORTOTAL:R\\$${VALOR}`).exec(c)?.[1]);
+    if (canhoto) return canhoto;
     // DANFE: "VALOR TOTAL DA NOTA" é o último rótulo da linha do cálculo do
     // imposto; os valores da linha (frete, seguro, desconto…) vêm colados
     // depois dele, e o total é o último.
