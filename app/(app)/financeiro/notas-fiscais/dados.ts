@@ -546,6 +546,10 @@ export interface LeituraDaNota {
   retencoes: Array<{ imposto: string; aliquota: number | null; valor: number }>;
   retido: number;
   liquido: number;
+  /** O que o PDF traz (número, CNPJ do emitente, emissão "AAAA-MM-DD", valor). */
+  pdf: { numero: string | null; cnpj: string | null; emissao: string | null; valor: number | null } | null;
+  /** O que o PDF não confirma do registro. Com "numero" ou "emitente", o PDF não é desta nota. */
+  divergencias: Array<"numero" | "emitente" | "emissao" | "valor">;
 }
 
 export interface DadosDasTomadas {
@@ -577,7 +581,7 @@ export async function carregarTomadas(supabase: Supabase, tenantId: string): Pro
         .select(
           `id, numero, data_emissao, valor, tomador_estabelecimento_id, registrada_em, registrada_na_pp_id, registrada_no_desembolso_id,
            iss_retido_aliquota, credito_pis_cofins_retirado, credito_pis_cofins_motivo,
-           leitura_em, leitura_modelo, cnae, codigo_servico, descricao_servico, municipio_prestacao, competencia, codigo_verificacao, retencoes,
+           leitura_em, leitura_modelo, leitura_pdf, leitura_divergencias, cnae, codigo_servico, descricao_servico, municipio_prestacao, competencia, codigo_verificacao, retencoes,
            fornecedor:fornecedores(id, nome, razao_social, cpf_cnpj, regime_tributario, cnae)`,
         )
         .eq("tenant_id", tenantId)
@@ -826,6 +830,8 @@ export async function carregarTomadas(supabase: Supabase, tenantId: string): Pro
         municipio: lida ? (n.municipio_prestacao ?? null) : null,
         competencia: lida && n.competencia ? String(n.competencia).slice(0, 7) : null,
         codigoVerificacao: lida ? (n.codigo_verificacao ?? null) : null,
+        pdf: lida && n.leitura_pdf ? { numero: n.leitura_pdf.numero ?? null, cnpj: n.leitura_pdf.cnpj ?? null, emissao: n.leitura_pdf.emissao ?? null, valor: n.leitura_pdf.valor == null ? null : Number(n.leitura_pdf.valor) } : null,
+        divergencias: lida ? ((n.leitura_divergencias ?? []) as LeituraDaNota["divergencias"]) : [],
         retencoes,
         retido,
         liquido: r2(Number(n.valor) - retido),

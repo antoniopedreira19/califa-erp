@@ -41,6 +41,7 @@ import { NotaTomadaDrawer } from "./nota-tomada-drawer";
 import { NavegadorDePeriodo, janelaInicial, naJanela, type Janela } from "./navegacao";
 import { AlternarVisao, FECHO, IMPOSTOS_DAS_TOMADAS, TabelaDosImpostos, impostosDaTomada } from "./impostos";
 import { BotaoLerNotas } from "./leitura-das-notas";
+import { dadosDoPdf, linhasDaDivergencia, pdfDeOutraNota } from "./divergencia";
 import { alterarRegistroDasNotas } from "./actions";
 import {
   ConfirmarEdicaoDialog,
@@ -55,7 +56,7 @@ import {
   type Edicoes,
 } from "./edicao-do-registro";
 
-type Filtro = "todas" | SituacaoDaTomada;
+type Filtro = "todas" | SituacaoDaTomada | "divergentes";
 
 export const SITUACAO_DA_TOMADA: Record<SituacaoDaTomada, { rotulo: string; cor: "verde" | "ambar" | "cinza"; dica: string }> = {
   registrada: { rotulo: "Registrada", cor: "verde", dica: "O financeiro conferiu e registrou a nota." },
@@ -196,7 +197,12 @@ export function AbaTomadas({ dados, cnpjs, hoje }: { dados: DadosDasTomadas; cnp
   );
   const daOrigem = React.useMemo(() => (origem === "todas" ? naBase : naBase.filter((n) => n.origens.includes(origem))), [naBase, origem]);
   const contar = (s: SituacaoDaTomada) => daOrigem.filter((n) => n.situacao === s).length;
-  const doTopo = React.useMemo(() => (filtro === "todas" ? daOrigem : daOrigem.filter((n) => n.situacao === filtro)), [daOrigem, filtro]);
+  const passaNoFiltro = React.useCallback(
+    (n: NotaTomada) => (filtro === "todas" ? true : filtro === "divergentes" ? n.leitura.divergencias.length > 0 : n.situacao === filtro),
+    [filtro],
+  );
+  const nDivergentes = daOrigem.filter((n) => n.leitura.divergencias.length > 0).length;
+  const doTopo = React.useMemo(() => daOrigem.filter(passaNoFiltro), [daOrigem, passaNoFiltro]);
   const colunas = useFiltrosDeColuna(doTopo, COLUNAS, { guardarEm: "notas-fiscais-tomadas", contexto: `${janela.gran}${janela.ref}` });
   const visiveis = colunas.visiveis;
   const corte = useLimiteDeLinhas(`${visao}|${visiveis.length}|${visiveis[0]?.id ?? ""}|${visiveis[visiveis.length - 1]?.id ?? ""}`);
@@ -210,7 +216,7 @@ export function AbaTomadas({ dados, cnpjs, hoje }: { dados: DadosDasTomadas; cnp
   const faltaLancar = visiveis.filter((n) => n.situacao !== "sem_pp").reduce((s, n) => s + Math.max(0, n.valor - n.nasDocumentos), 0);
   const nSemPP = contar("sem_pp");
   // A origem conta o que a situação mostra (sem o filtro de origem).
-  const baseDaOrigem = filtro === "todas" ? naBase : naBase.filter((n) => n.situacao === filtro);
+  const baseDaOrigem = naBase.filter(passaNoFiltro);
   const contarOrigem = (o: OrigemDoDocumento) => baseDaOrigem.filter((n) => n.origens.includes(o)).length;
   const origensPresentes = ORIGENS_DO_DOCUMENTO.filter((o) => contarOrigem(o) > 0 || origem === o);
   const filtrado = colunas.ativo || filtro !== "todas" || origem !== "todas" || cnpjsMarcados.length > 0 || !!q || janela.gran !== "tudo";
@@ -232,6 +238,9 @@ export function AbaTomadas({ dados, cnpjs, hoje }: { dados: DadosDasTomadas; cnp
           <StatusChip ativo={filtro === "em_avaliacao"} onClick={() => setFiltro("em_avaliacao")} label="Em avaliação" count={contar("em_avaliacao")} />
           {(nSemPP > 0 || filtro === "sem_pp") && (
             <StatusChip ativo={filtro === "sem_pp"} onClick={() => setFiltro("sem_pp")} label="Sem documento ativo" count={nSemPP} />
+          )}
+          {(nDivergentes > 0 || filtro === "divergentes") && (
+            <StatusChip ativo={filtro === "divergentes"} onClick={() => setFiltro("divergentes")} label="PDF diferente do registro" count={nDivergentes} />
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -474,6 +483,23 @@ function LinhaTomada({ n, onVer, edicao }: { n: NotaTomada; onVer: () => void; e
               className="h-8 px-2 font-mono text-[13px] font-bold"
             />
             {a?.campos.has("numero") && <Antes>{n.numero}</Antes>}
+            {dadosDoPdf(n) && (
+              <button
+                type="button"
+                onClick={() => {
+                  const d = dadosDoPdf(n)!;
+                  ed.onMudar({
+                    ...(d.numero ? { numero: d.numero } : {}),
+                    ...(d.emissao ? { emissao: d.emissao } : {}),
+                    ...(d.valor !== undefined ? { valor: d.valor } : {}),
+                  });
+                }}
+                title={linhasDaDivergencia(n).join("\n")}
+                className="mt-1 whitespace-nowrap text-[10.5px] font-semibold text-amber-700 underline-offset-2 hover:underline"
+              >
+                Usar os dados do PDF
+              </button>
+            )}
           </>
         ) : (
           <span className="inline-flex min-w-0 items-center gap-1.5">
@@ -496,6 +522,24 @@ function LinhaTomada({ n, onVer, edicao }: { n: NotaTomada; onVer: () => void; e
             >
               {n.numero}
             </button>
+            {n.leitura.divergencias.length > 0 && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-600" aria-label="PDF diferente do registro" />
+                </TooltipTrigger>
+                <TooltipContent side="top" className="max-w-sm">
+                  <p className="font-semibold">{pdfDeOutraNota(n) ? "O PDF anexado não é desta nota" : "O PDF não bate com o registro"}</p>
+                  {linhasDaDivergencia(n).map((l) => (
+                    <p key={l}>{l}</p>
+                  ))}
+                  <p className="mt-1 text-[11.5px] opacity-80">
+                    {n.leitura.divergencias.includes("emitente")
+                      ? "Emitente diferente: confira o documento com quem o enviou."
+                      : "Corrija pelo “Editar registro” (botão “Usar os dados do PDF”)."}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            )}
             {ultima && !edicao && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -631,7 +675,9 @@ function LinhaTomada({ n, onVer, edicao }: { n: NotaTomada; onVer: () => void; e
         ) : (
           <span
             className="cursor-default font-sans text-muted-foreground"
-            title={n.leitura.lida ? "A NF não destaca retenção." : "A NF ainda não foi lida pela IA."}
+            title={
+              !n.leitura.lida ? "A NF ainda não foi lida pela IA." : pdfDeOutraNota(n) ? "O PDF anexado não é desta nota." : "A NF não destaca retenção."
+            }
           >
             —
           </span>

@@ -49,9 +49,10 @@ export async function urlDoAnexoDaNota(
 // ---------------------------------------------------------------------------
 
 export interface ResultadoDaLeitura {
+  /** Notas cuja leitura foi gravada (inclusive as divergentes). */
   lidas: number;
-  /** O arquivo não parecia ser a nota (número ou emitente diferentes). */
-  recusadas: Array<{ numero: string; motivo: string }>;
+  /** O PDF não bate com o registro: outro número, outro emitente, outra emissão ou outro valor. */
+  divergentes: Array<{ numero: string; motivo: string }>;
   falhas: Array<{ numero: string; motivo: string }>;
 }
 
@@ -69,14 +70,14 @@ export async function lerNotasTomadas(ids: string[]): Promise<{ ok: true; result
   const lote = ids.filter((id) => /^[0-9a-f-]{36}$/i.test(id)).slice(0, NOTAS_POR_LEITURA);
   const tenantId = session.activeTenant.id;
   const supabase = createClient();
-  const resultado: ResultadoDaLeitura = { lidas: 0, recusadas: [], falhas: [] };
+  const resultado: ResultadoDaLeitura = { lidas: 0, divergentes: [], falhas: [] };
 
   const { data: notas } = await supabase
     .from("notas_fiscais_fornecedor")
-    .select("id, numero, fornecedor:fornecedores(cpf_cnpj)")
+    .select("id, numero, valor, data_emissao, fornecedor:fornecedores(cpf_cnpj)")
     .eq("tenant_id", tenantId)
     .in("id", lote)
-    .returns<Array<{ id: string; numero: string; fornecedor: { cpf_cnpj: string | null } | null }>>();
+    .returns<Array<{ id: string; numero: string; valor: number | string; data_emissao: string; fornecedor: { cpf_cnpj: string | null } | null }>>();
 
   // As notas do lote em paralelo: a chamada cabe no tempo da página (60 s).
   await Promise.all(
@@ -113,11 +114,12 @@ export async function lerNotasTomadas(ids: string[]): Promise<{ ok: true; result
           tokensOut = r.tokensOut;
           await supabase.from("nf_extracao_cache").insert({ tenant_id: tenantId, hash_sha256: hash, dados, modelo: VERSAO_LEITURA_NOTA_TOMADA });
         }
-        const conferida = leituraParaGravar(dados, { numero: nota.numero, cnpjEmitente: nota.fornecedor?.cpf_cnpj ?? null });
-        if (!conferida.ok) {
-          resultado.recusadas.push({ numero: nota.numero, motivo: conferida.motivo });
-          return;
-        }
+        const conferida = leituraParaGravar(dados, {
+          numero: nota.numero,
+          cnpjEmitente: nota.fornecedor?.cpf_cnpj ?? null,
+          valor: Number(nota.valor),
+          emissao: nota.data_emissao,
+        });
         const { error } = await supabase.rpc("gravar_leitura_da_nota", {
           p_nota_id: nota.id,
           p_dados: conferida.leitura,
@@ -129,6 +131,9 @@ export async function lerNotasTomadas(ids: string[]): Promise<{ ok: true; result
           return;
         }
         resultado.lidas++;
+        if (conferida.leitura.divergencias.length > 0) {
+          resultado.divergentes.push({ numero: nota.numero, motivo: conferida.motivo ?? motivoDaDivergencia(conferida.leitura.pdf, conferida.leitura.divergencias) });
+        }
         await logAuditEvent({
           acao: "nota_fiscal.leitura_ampliada",
           tenantId,
@@ -139,6 +144,8 @@ export async function lerNotasTomadas(ids: string[]): Promise<{ ok: true; result
             arquivo_hash: hash,
             cache_hit: !!cache?.dados,
             modelo: VERSAO_LEITURA_NOTA_TOMADA,
+            arquivo_da_nota: conferida.arquivoDaNota,
+            divergencias: conferida.leitura.divergencias,
             tokens_in: tokensIn,
             tokens_out: tokensOut,
             custo_usd: custoEstimadoUsd(tokensIn, tokensOut),
@@ -155,6 +162,15 @@ export async function lerNotasTomadas(ids: string[]): Promise<{ ok: true; result
 }
 
 type Supabase = ReturnType<typeof createClient>;
+
+/** "No PDF: emissão 05/11/2026; valor R$ 82,00." */
+function motivoDaDivergencia(pdf: { emissao: string | null; valor: number | null }, divergencias: string[]): string {
+  const partes: string[] = [];
+  if (divergencias.includes("emissao") && pdf.emissao) partes.push(`emissão ${pdf.emissao.split("-").reverse().join("/")}`);
+  if (divergencias.includes("valor") && pdf.valor !== null)
+    partes.push(`valor ${pdf.valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`);
+  return `No PDF: ${partes.join("; ")}.`;
+}
 
 /** O arquivo da nota: o anexo do primeiro documento que a traz (PP, desembolso, prestação). */
 async function anexoDaNota(supabase: Supabase, tenantId: string, notaId: string): Promise<{ path: string; mimetype: string } | null> {

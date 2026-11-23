@@ -23,12 +23,12 @@ type Estado =
 
 /** Lê as notas em lotes; devolve o resultado somado. */
 export async function lerEmLotes(ids: string[], aoAvancar: (feitas: number) => void): Promise<ResultadoDaLeitura | string> {
-  const soma: ResultadoDaLeitura = { lidas: 0, recusadas: [], falhas: [] };
+  const soma: ResultadoDaLeitura = { lidas: 0, divergentes: [], falhas: [] };
   for (let i = 0; i < ids.length; i += NOTAS_POR_LEITURA) {
     const r = await lerNotasTomadas(ids.slice(i, i + NOTAS_POR_LEITURA));
     if (!r.ok) return r.message;
     soma.lidas += r.resultado.lidas;
-    soma.recusadas.push(...r.resultado.recusadas);
+    soma.divergentes.push(...r.resultado.divergentes);
     soma.falhas.push(...r.resultado.falhas);
     aoAvancar(Math.min(ids.length, i + NOTAS_POR_LEITURA));
   }
@@ -101,13 +101,21 @@ export function BotaoLerNotas({ ids }: { ids: string[] }) {
 }
 
 function ResumoDaLeitura({ resultado, onFechar }: { resultado: ResultadoDaLeitura; onFechar: () => void }) {
-  const problemas = [...resultado.recusadas, ...resultado.falhas];
+  const problemas = [...resultado.divergentes, ...resultado.falhas];
   return (
     <div className="flex flex-1 flex-col gap-1">
       <span className={cn("flex items-center gap-2", resultado.lidas > 0 ? "text-emerald-700" : "text-amber-700")}>
         {resultado.lidas > 0 ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertTriangle className="h-3.5 w-3.5" />}
         {resultado.lidas === 0 ? "Nenhuma nota foi lida." : resultado.lidas === 1 ? "1 nota lida." : `${resultado.lidas} notas lidas.`}
-        {problemas.length > 0 && <span className="text-amber-700">{problemas.length === 1 ? " 1 não foi lida:" : ` ${problemas.length} não foram lidas:`}</span>}
+        {resultado.divergentes.length > 0 && (
+          <span className="text-amber-700">
+            {resultado.divergentes.length === 1 ? " 1 com o PDF diferente do registro" : ` ${resultado.divergentes.length} com o PDF diferente do registro`}
+            {resultado.falhas.length > 0 ? "," : ":"}
+          </span>
+        )}
+        {resultado.falhas.length > 0 && (
+          <span className="text-california-red">{resultado.falhas.length === 1 ? " 1 não foi lida:" : ` ${resultado.falhas.length} não foram lidas:`}</span>
+        )}
         <button type="button" onClick={onFechar} className="ml-auto text-[11.5px] font-semibold text-muted-foreground hover:text-california-red">
           Fechar
         </button>

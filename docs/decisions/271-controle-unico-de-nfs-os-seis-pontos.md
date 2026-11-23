@@ -263,3 +263,32 @@ Das 32 notas da produção que a leitura recusou, 15 estão em avaliação e se
 corrigem pela tabela; 17 estão registradas e precisam da reversão da
 aprovação do documento antes.
 
+## Leitura v3: o que o PDF traz fica na nota (23/11/2026)
+
+O Tiago não entendeu por que 32 notas foram recusadas: a tela não dizia. O
+cruzamento do cadastro com o que a IA leu dos PDFs mostrou quatro casos:
+
+- **8 recusas por engano:** a IA leu um ou dois dígitos do CNPJ do emitente
+  trocados (o CNPJ lido nem fecha os dígitos verificadores); o cadastro
+  estava certo.
+- **11 com o número digitado errado**, mesmo emitente e mesmo valor do PDF:
+  números inventados nas NFs da prestação ("03", "04"…) e chaves de acesso
+  no lugar do número.
+- **6 com o PDF de outro CNPJ** que não o fornecedor do documento.
+- **7 sem leitura útil:** guia municipal e apólices no lugar da NF, e PDFs
+  que a IA não leu.
+
+Mudou (`lib/ia/ler-nota-tomada.ts`, esquema v3, migration `20261123800006`):
+
+- O CNPJ lido só diverge se for válido pelos dígitos verificadores.
+- A emissão entra na leitura; emissão e valor diferentes viram divergência,
+  não recusa.
+- Toda leitura grava na nota o que o PDF traz (`leitura_pdf`: número, CNPJ,
+  emissão, valor) e o que diverge (`leitura_divergencias`). Com número ou
+  emitente diferentes, o PDF não é desta nota e os dados da leitura ficam
+  vazios.
+- A aba Tomadas ganhou o filtro "PDF diferente do registro", o alerta na NF
+  com o registro × PDF, a mesma caixa no painel, a coluna na exportação e,
+  no "Editar registro", o "Usar os dados do PDF" (número, emissão e valor;
+  o emitente continua voltando para quem enviou).
+

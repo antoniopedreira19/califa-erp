@@ -28,6 +28,7 @@ import { Selo, dataBR, moeda } from "./comum";
 import { OrigemSelo } from "./aba-tomadas";
 import { urlDoAnexoDaNota } from "./actions";
 import { lerEmLotes } from "./leitura-das-notas";
+import { linhasDaDivergencia, pdfDeOutraNota } from "./divergencia";
 
 const LARGURA_DO_PAINEL = 620;
 
@@ -81,7 +82,7 @@ export function NotaTomadaDrawer({ nota, onClose }: { nota: NotaTomada; onClose:
     const r = await lerEmLotes([nota.id], () => {});
     setLendo(false);
     if (typeof r === "string") setErroDaLeitura(r);
-    else if (r.lidas === 0) setErroDaLeitura([...r.recusadas, ...r.falhas][0]?.motivo ?? "A leitura não foi gravada.");
+    else if (r.lidas === 0) setErroDaLeitura(r.falhas[0]?.motivo ?? "A leitura não foi gravada.");
     router.refresh();
   }
 
@@ -270,6 +271,26 @@ export function NotaTomadaDrawer({ nota, onClose }: { nota: NotaTomada; onClose:
                     {lendo ? "Lendo…" : "Ler esta NF"}
                   </button>
                 )}
+              </div>
+            )}
+            {nota.leitura.divergencias.length > 0 && (
+              <div className="space-y-1 rounded-lg border border-amber-200 bg-[#fffbeb] px-3 py-2.5 text-[12.5px] text-[#92400e]">
+                <p className="flex items-center gap-1.5 font-semibold">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  {pdfDeOutraNota(nota) ? "O PDF anexado não é desta nota" : "O PDF não bate com o registro"}
+                </p>
+                {linhasDaDivergencia(nota).map((l) => (
+                  <p key={l} className="font-mono text-[12px]">
+                    {l}
+                  </p>
+                ))}
+                <p className="text-[12px]">
+                  {nota.leitura.divergencias.includes("emitente")
+                    ? "O PDF foi emitido por outro CNPJ: confira o documento com quem o enviou (o emitente não se corrige no controle de notas)."
+                    : pdfDeOutraNota(nota)
+                      ? "Se o PDF está certo, corrija o registro no “Editar registro” (botão “Usar os dados do PDF”). Se o PDF está errado, troque o anexo no documento."
+                      : "Corrija o registro no “Editar registro” (botão “Usar os dados do PDF”)."}
+                </p>
               </div>
             )}
             {erroDaLeitura && (
