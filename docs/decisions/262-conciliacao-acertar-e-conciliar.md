@@ -86,3 +86,42 @@ pagamento como da PP-…"). Código: `lib/conciliacao/planilha-de-titulo.ts`
 **Conferido (17/11, na produção, só leitura):** na linha de débito de 16/11 da
 California Santander, a busca por "samba" traz só a PP-00384 (em aberto); a
 linha "PP00384 - Roda de samba" da planilha, do mesmo dia, não é mais opção.
+
+## Revisão de 23/11/2026 — D11: o cartão do "Lançar avulso" também usa a linha
+
+⚠️ **D11 ampliada (Tiago, 23/11/2026: "Sim, corrija aqui").**
+
+**O caso.** Numa linha de entrada, o "Lançar avulso" abre o Recebimento
+avulso, e o primeiro cartão é o "Recebimento antes da NF" (decisão 260, D14).
+Escolhido por esse caminho, o cartão:
+- vinha com a data de hoje e a conta em branco;
+- gravava sem conciliar a linha.
+
+Só o item próprio do ⋯ usava a linha.
+
+**Agora o cartão faz o mesmo que o item do ⋯:**
+- a data, a conta e o valor vêm da linha e não se editam;
+- o valor acima do saldo a faturar fica em vermelho e o botão não registra;
+- **"Registrar e conciliar"** grava e concilia pela mesma action
+  (`registrarRecebimentoAntesNfPelaLinha`) e pela mesma função do banco;
+- o Desfazer da linha cancela o recebimento (D12).
+
+**O internacional** (o job com câmbio fechado) continua fora da linha, como
+no ⋯. Pelo "Lançar avulso", o formulário do câmbio já vem com a data e a
+conta da linha, editáveis, e registra como antes. A linha se concilia depois,
+pela sugestão do sistema (o bruto com o valor da linha).
+
+**Também confirmado pelo Tiago em 23/11/2026:** o pagamento e o recebimento
+avulso continuam **sem job** (regra de 15/09/2026). O custo de job entra pela
+planilha e pela PP (ou pelo Job de Pagamentos, decisão 266). O dinheiro do
+cliente entra pelo recebimento antes da NF ou pela baixa da NF.
+
+**No código:**
+- `aba-banco.tsx`: passa `linhaDoBanco` no `inicial` do Recebimento avulso;
+- `recebimento-avulso-dialog.tsx`: registra pela linha quando ela existe e
+  não é câmbio;
+- `recebimento-antes-nf-dialog.tsx`: os campos da linha (`CampoDaLinha`) e o
+  botão "Registrar e conciliar".
+
+Sem migration.
+

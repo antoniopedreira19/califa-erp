@@ -79,7 +79,12 @@ import {
   criarTransferenciaEntreContas,
   saldoDaContaNoDia,
 } from "./actions-recebimento-avulso";
-import { CamposDoRecebimentoAntesNf, type CambioPayload, type RecebidoAntesPayload } from "./recebimento-antes-nf-dialog";
+import {
+  CamposDoRecebimentoAntesNf,
+  type CambioPayload,
+  type LinhaDoBancoNoRecebido,
+  type RecebidoAntesPayload,
+} from "./recebimento-antes-nf-dialog";
 import {
   carregarAlvosDoRecebimentoAntesNf,
   registrarRecebimentoAntesNf,
@@ -87,6 +92,7 @@ import {
   registrarRecebimentoCambio,
   type AlvoDaConciliacao,
 } from "./actions-recebimento-antes-nf";
+import { registrarRecebimentoAntesNfPelaLinha } from "../conciliacao/actions-dia-a-dia";
 
 export type TipoDoRecebimentoAvulso = "recebimento_avulso" | "antes_da_nf" | "transferencia" | "rendimento" | "mutuo";
 
@@ -253,6 +259,12 @@ export function RecebimentoAvulsoDialog({
     valor: number;
     data: string;
     notasDeSocio?: { empresaId: string | null; recebidoDe: string | null };
+    /** Decisão 262 (revisão de 23/11/2026): a linha de crédito do extrato,
+     *  no "Lançar avulso" da conciliação. No cartão "Recebimento antes da
+     *  NF", a data, a conta e o valor são os dela e "Registrar e conciliar"
+     *  deixa a linha conciliada, como o item do ⋯ da linha. O internacional
+     *  só traz a data e a conta: o câmbio não se concilia pela linha. */
+    linhaDoBanco?: LinhaDoBancoNoRecebido;
   };
 }) {
   const [pending, startTransition] = React.useTransition();
@@ -297,26 +309,42 @@ export function RecebimentoAvulsoDialog({
   const [pendingAntes, startAntes] = React.useTransition();
   const escolha = alvos?.find((a) => a.chave === escolhido) ?? null;
 
+  const linhaDoBanco = inicial?.linhaDoBanco ?? null;
+
   function registrarAntes(dados: RecebidoAntesPayload, cambio: CambioPayload | null) {
     const a = escolha;
     if (!a) return;
     setErroAntes(null);
     startAntes(async () => {
-      const res = a.jobId
-        ? await registrarRecebimentoAntesNfDoJob({ job_id: a.jobId, ...dados })
-        : cambio
-          ? await registrarRecebimentoCambio({ envio_nota_id: a.envioNotaId, ...dados, ...cambio })
-          : await registrarRecebimentoAntesNf({ envio_nota_id: a.envioNotaId, item_bv_id: a.itemBvId, ...dados });
+      // Decisão 262: pela linha do extrato, a data, a conta e o valor são os
+      // dela (lidos no banco), e a linha sai conciliada na mesma transação —
+      // a mesma action do item do ⋯ da linha. O câmbio vai como sempre.
+      const pelaLinha = linhaDoBanco !== null && cambio === null;
+      const res = pelaLinha
+        ? await registrarRecebimentoAntesNfPelaLinha({
+            linhaId: linhaDoBanco.id,
+            envioNotaId: a.jobId ? null : a.envioNotaId,
+            itemBvId: a.jobId ? null : a.itemBvId,
+            jobId: a.jobId,
+            tipoId: dados.plano_conta_tipo_id,
+            subtipoId: dados.plano_conta_subtipo_id,
+          })
+        : a.jobId
+          ? await registrarRecebimentoAntesNfDoJob({ job_id: a.jobId, ...dados })
+          : cambio
+            ? await registrarRecebimentoCambio({ envio_nota_id: a.envioNotaId, ...dados, ...cambio })
+            : await registrarRecebimentoAntesNf({ envio_nota_id: a.envioNotaId, item_bv_id: a.itemBvId, ...dados });
       if (!res.ok) {
         setErroAntes(res.message);
         return;
       }
+      const conciliado = pelaLinha ? " A linha do banco ficou conciliada." : "";
       onCriado(
         "",
         false,
         a.jobId
-          ? `${formatCurrency(dados.valor, "BRL")} recebidos antes da NF em ${a.titulo}, presos ao job: o Novo faturamento associa à nota.`
-          : `${formatCurrency(dados.valor, "BRL")} recebidos antes da NF em ${a.titulo}. Na emissão da nota, o valor entra como a parcela 1, já recebida.`,
+          ? `${formatCurrency(dados.valor, "BRL")} recebidos antes da NF em ${a.titulo}, presos ao job: o Novo faturamento associa à nota.${conciliado}`
+          : `${formatCurrency(dados.valor, "BRL")} recebidos antes da NF em ${a.titulo}. Na emissão da nota, o valor entra como a parcela 1, já recebida.${conciliado}`,
       );
     });
   }
@@ -672,6 +700,7 @@ export function RecebimentoAvulsoDialog({
                 <CamposDoRecebimentoAntesNf
                   key={escolha.chave}
                   alvo={escolha}
+                  linha={linhaDoBanco}
                   contas={contas}
                   tipos={tipos}
                   subtipos={subtipos}

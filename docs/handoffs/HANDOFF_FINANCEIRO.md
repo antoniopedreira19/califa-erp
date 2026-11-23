@@ -9228,3 +9228,14 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - A lista de usos da nota mostra "PP-xxxxx · prestação" com `tipo` = `prestacao`; o anexo da PP não oferece corrigir a prestação.
 - As 9 NFs das prestações que estavam em avaliação na produção foram ligadas na migration `20261123300001` (a `20261123300002` só acerta o rótulo).
 - **Conferido no Sandbox:** reenvio da prestação da PP-00951 com NF pelo produtor (nota no cadastro) e o aviso "Esta NF já está em PP-00951 · prestação" no formulário do desembolso do GP; saldo e correção testados no banco em transação desfeita.
+
+## ⚠️ Nota de 2026-11-23 — o "Recebimento antes da NF" do "Lançar avulso" usa a linha do banco (revisão da decisão 262, D11)
+
+- **Antes:** pela linha de entrada, "Lançar avulso" › cartão "Recebimento antes da NF" vinha com a data de hoje e a conta em branco, e gravava sem conciliar a linha. Só o item próprio do ⋯ usava a linha.
+- **Agora:**
+  - o cartão traz a data, a conta e o valor da linha, sem edição;
+  - "Registrar e conciliar" grava e concilia, como o item do ⋯ (mesma action, mesma função do banco);
+  - o Desfazer cancela o recebimento;
+  - o internacional só traz a data e a conta (editáveis), registra como antes e se concilia depois, pela sugestão.
+- **Confirmado pelo Tiago:** pagamento e recebimento avulso continuam sem job.
+- Sem migration.

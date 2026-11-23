@@ -133,6 +133,18 @@ export interface CambioPayload {
   tarifa: number;
 }
 
+/** Decisão 262 (pendência D16 da 260): a linha de crédito do extrato de
+ *  onde o recebimento nasce, na Conciliação automática. A data, a conta e o
+ *  valor são os dela e não se editam; a linha sai conciliada. */
+export interface LinhaDoBancoNoRecebido {
+  id: string;
+  data: string;
+  valor: number;
+  contaId: string;
+  /** "Conta Teste · Santander". */
+  contaNome: string;
+}
+
 /** O IOF do câmbio no banco: 0,38% do crédito (o extrato real do BB). Só a
  *  sugestão do campo, que se edita. */
 const IOF_DO_CAMBIO = 0.0038;
@@ -222,6 +234,7 @@ export function RecebimentoAntesNfDialog({
  */
 export function CamposDoRecebimentoAntesNf({
   alvo,
+  linha = null,
   contas,
   tipos,
   subtipos,
@@ -231,6 +244,9 @@ export function CamposDoRecebimentoAntesNf({
   onConfirm,
 }: {
   alvo: AlvoDoRecebidoAntes;
+  /** Decisão 262: aberto pela linha do extrato (a data, a conta e o valor
+   *  dela, sem edição). */
+  linha?: LinhaDoBancoNoRecebido | null;
   contas: ContaBancaria[];
   tipos: PlanoContaTipo[];
   subtipos: PlanoContaSubtipo[];
@@ -243,6 +259,7 @@ export function CamposDoRecebimentoAntesNf({
     <FormularioDoCambio
       key={alvo.chave}
       alvo={alvo}
+      linha={linha}
       cambio={alvo.cambio}
       contas={contas}
       tipos={tipos}
@@ -256,6 +273,7 @@ export function CamposDoRecebimentoAntesNf({
     <FormularioDoRecebido
       key={alvo.chave}
       alvo={alvo}
+      linha={linha}
       contas={contas}
       tipos={tipos}
       subtipos={subtipos}
@@ -267,8 +285,23 @@ export function CamposDoRecebimentoAntesNf({
   );
 }
 
+/** O campo que vem da linha do banco: o valor dela, sem edição. */
+function CampoDaLinha({ children, mono = false }: { children: React.ReactNode; mono?: boolean }) {
+  return (
+    <div
+      className={cn(
+        "flex h-11 items-center rounded-lg border border-border bg-muted/50 px-3.5 text-sm",
+        mono && "font-mono font-semibold",
+      )}
+    >
+      {children}
+    </div>
+  );
+}
+
 function FormularioDoRecebido({
   alvo,
+  linha = null,
   contas,
   tipos,
   subtipos,
@@ -278,6 +311,7 @@ function FormularioDoRecebido({
   onConfirm,
 }: {
   alvo: AlvoDoRecebidoAntes;
+  linha?: LinhaDoBancoNoRecebido | null;
   contas: ContaBancaria[];
   tipos: PlanoContaTipo[];
   subtipos: PlanoContaSubtipo[];
@@ -287,15 +321,17 @@ function FormularioDoRecebido({
   onConfirm: (payload: RecebidoAntesPayload) => void;
 }) {
   const hoje = format(new Date(), "yyyy-MM-dd");
-  const [data, setData] = React.useState(hoje);
-  const [contaId, setContaId] = React.useState("");
-  const [valor, setValor] = React.useState(0);
+  const [data, setData] = React.useState(linha?.data ?? hoje);
+  const [contaId, setContaId] = React.useState(linha?.contaId ?? "");
+  const [valor, setValor] = React.useState(linha?.valor ?? 0);
   const [tipoId, setTipoId] = React.useState("");
   const [subtipoId, setSubtipoId] = React.useState("");
   const [erroLocal, setErroLocal] = React.useState<string | null>(null);
 
   const jaRecebido = somaDosRecebidos(alvo.recebidos);
   const limite = Math.max(0, Math.round((alvo.saldo - jaRecebido) * 100) / 100);
+  // Pela linha do banco o valor é o dela: acima do saldo, não registra.
+  const passaDoSaldo = linha !== null && valor > limite + 0.004;
 
   // Toda conta ativa, de qualquer empresa (decisão de 29/08/2026), como na
   // baixa do título.
@@ -368,44 +404,52 @@ function FormularioDoRecebido({
             <label className="text-xs font-semibold">
               Data do recebimento <span className="text-california-red">*</span>
             </label>
-            <DatePicker
-              name="data_recebimento_antes_nf"
-              defaultValue={hoje}
-              onDateChange={(d) => {
-                setData(d ? format(d, "yyyy-MM-dd") : "");
-                setErroLocal(null);
-              }}
-            />
+            {linha ? (
+              <CampoDaLinha mono>{formatarData(linha.data)}</CampoDaLinha>
+            ) : (
+              <DatePicker
+                name="data_recebimento_antes_nf"
+                defaultValue={hoje}
+                onDateChange={(d) => {
+                  setData(d ? format(d, "yyyy-MM-dd") : "");
+                  setErroLocal(null);
+                }}
+              />
+            )}
           </div>
           <div className="space-y-1">
             <label className="text-xs font-semibold">
               Conta que recebeu <span className="text-california-red">*</span>
             </label>
-            <Select
-              value={contaId}
-              onValueChange={(v) => {
-                setContaId(v);
-                setErroLocal(null);
-              }}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Selecione a conta..." />
-              </SelectTrigger>
-              <SelectContent>
-                {contasAtivas.length === 0 ? (
-                  <div className="px-2 py-1.5 text-xs text-muted-foreground">
-                    Nenhuma conta bancária ativa. Cadastre em
-                    /financeiro/cadastros/contas-bancarias.
-                  </div>
-                ) : (
-                  contasAtivas.map((c) => (
-                    <SelectItem key={c.id} value={c.id}>
-                      {c.nome} · {c.banco}
-                    </SelectItem>
-                  ))
-                )}
-              </SelectContent>
-            </Select>
+            {linha ? (
+              <CampoDaLinha>{linha.contaNome}</CampoDaLinha>
+            ) : (
+              <Select
+                value={contaId}
+                onValueChange={(v) => {
+                  setContaId(v);
+                  setErroLocal(null);
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a conta..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {contasAtivas.length === 0 ? (
+                    <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                      Nenhuma conta bancária ativa. Cadastre em
+                      /financeiro/cadastros/contas-bancarias.
+                    </div>
+                  ) : (
+                    contasAtivas.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.nome} · {c.banco}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+            )}
           </div>
         </div>
 
@@ -413,17 +457,27 @@ function FormularioDoRecebido({
           <label className="text-xs font-semibold">
             Valor recebido <span className="text-california-red">*</span>
           </label>
-          <MoneyInput
-            value={valor}
-            onValueChange={(v) => {
-              setValor(v);
-              setErroLocal(null);
-            }}
-          />
-          <p className="text-[11.5px] text-muted-foreground">
-            Até {formatMoney(limite)}, o que falta faturar {alvo.ehBv ? "do BV" : "da nota"}
-            {jaRecebido > 0 ? " menos o que já foi recebido antes" : ""}.
-          </p>
+          {linha ? (
+            <CampoDaLinha mono>{formatMoney(linha.valor)}</CampoDaLinha>
+          ) : (
+            <MoneyInput
+              value={valor}
+              onValueChange={(v) => {
+                setValor(v);
+                setErroLocal(null);
+              }}
+            />
+          )}
+          {passaDoSaldo ? (
+            <p className="text-[11.5px] font-semibold text-california-red">
+              O valor da linha passa do saldo a faturar {alvo.ehBv ? "do BV" : "da nota"} ({formatMoney(limite)}).
+            </p>
+          ) : (
+            <p className="text-[11.5px] text-muted-foreground">
+              Até {formatMoney(limite)}, o que falta faturar {alvo.ehBv ? "do BV" : "da nota"}
+              {jaRecebido > 0 ? " menos o que já foi recebido antes" : ""}.
+            </p>
+          )}
         </div>
 
         <div className="space-y-1">
@@ -480,14 +534,14 @@ function FormularioDoRecebido({
           {alvo.jobId ? (
             // Decisão 256: o job sem envio — o recebimento fica preso a ele.
             <span>
-              O dinheiro entra no extrato agora e fica preso ao job. No Novo faturamento, associado à
+              {linha ? "O dinheiro entra no extrato já conciliado com a linha do banco" : "O dinheiro entra no extrato agora"} e fica preso ao job. No Novo faturamento, associado à
               nota, este valor entra como a{" "}
               <strong className="font-semibold text-foreground">parcela 1, já recebida</strong>, com
               esta data. Nada entra de novo na conta.
             </span>
           ) : (
             <span>
-              O dinheiro entra no extrato agora, e {alvo.ehBv ? "o BV" : "a nota"} continua
+              {linha ? "O dinheiro entra no extrato já conciliado com a linha do banco" : "O dinheiro entra no extrato agora"}, e {alvo.ehBv ? "o BV" : "a nota"} continua
               na aba Faturamento com o valor recebido marcado na linha. Quando a NF for
               emitida, este valor entra como a{" "}
               <strong className="font-semibold text-foreground">parcela 1, já recebida</strong>,
@@ -508,11 +562,11 @@ function FormularioDoRecebido({
         <button
           type="button"
           onClick={handleSubmit}
-          disabled={pending}
+          disabled={pending || passaDoSaldo}
           className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-700 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-800 disabled:opacity-50"
         >
           <HandCoins className="h-4 w-4" />
-          {pending ? "Registrando..." : "Registrar recebimento"}
+          {pending ? "Registrando..." : linha ? "Registrar e conciliar" : "Registrar recebimento"}
         </button>
       </div>
     </>
@@ -532,6 +586,7 @@ function FormularioDoRecebido({
  */
 function FormularioDoCambio({
   alvo,
+  linha = null,
   cambio,
   contas,
   tipos,
@@ -542,6 +597,11 @@ function FormularioDoCambio({
   onConfirm,
 }: {
   alvo: AlvoDoRecebidoAntes;
+  /** Decisão 262: aberto pela linha do extrato, só a data e a conta vêm
+   *  dela, editáveis. O câmbio não se concilia pela linha (a função do banco
+   *  recusa o internacional): registra como sempre, e a linha se concilia
+   *  depois, pela sugestão. */
+  linha?: LinhaDoBancoNoRecebido | null;
   cambio: CambioDoJob;
   contas: ContaBancaria[];
   tipos: PlanoContaTipo[];
@@ -564,8 +624,8 @@ function FormularioDoCambio({
     ? subtipos.filter((x) => x.tipo_id === tipoReceita.id && x.ativo)
     : [];
 
-  const [data, setData] = React.useState(hoje);
-  const [contaId, setContaId] = React.useState("");
+  const [data, setData] = React.useState(linha?.data ?? hoje);
+  const [contaId, setContaId] = React.useState(linha?.contaId ?? "");
   const [valorMoeda, setValorMoeda] = React.useState(moedaInicial);
   const [cotacaoTxt, setCotacaoTxt] = React.useState(formatarCotacao(cambio.cotacaoDaVersao));
   // O IOF acompanha o bruto até ser editado à mão.
@@ -647,7 +707,7 @@ function FormularioDoCambio({
             </label>
             <DatePicker
               name="data_recebimento_antes_nf"
-              defaultValue={hoje}
+              defaultValue={linha?.data ?? hoje}
               onDateChange={(d) => {
                 setData(d ? format(d, "yyyy-MM-dd") : "");
                 setErroLocal(null);

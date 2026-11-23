@@ -956,6 +956,16 @@ export function AbaBanco({
                     // O PIX de empresa de fora já diz quem pagou: a chave da parte é
                     // o mesmo `f:<id>` do "Recebido de".
                     notasDeSocio: avulso.notas ? { empresaId: banco.conta.empresaId, recebidoDe: avulso.r.mutuo?.parte.chave ?? null } : undefined,
+                    // Decisão 262 (revisão de 23/11/2026): o cartão "Recebimento
+                    // antes da NF" usa a data, a conta e o valor da linha e a
+                    // deixa conciliada, como o item do ⋯ da linha.
+                    linhaDoBanco: {
+                      id: avulso.r.mov.id,
+                      data: avulso.r.mov.data,
+                      valor: r2(Math.abs(avulso.r.mov.valor)),
+                      contaId,
+                      contaNome: `${banco.conta.nome} · ${banco.conta.banco}`,
+                    },
                   }
                 : undefined
             }
