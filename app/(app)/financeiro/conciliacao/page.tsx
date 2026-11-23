@@ -234,11 +234,12 @@ export default async function ConciliacaoPage({
     // das linhas: as duas só dependem da consulta acima.
     // Decisão 261: a baixa da PP paga antes de a conta começar no sistema
     // aparece na linha do histórico que a registra (com o código da PP);
-    // aqui ela sairia uma segunda vez, na parte do sistema.
+    // aqui ela sairia uma segunda vez, na parte do sistema. Decisão 270: uma
+    // linha pode registrar mais de uma baixa (um PIX para duas PPs).
     const naLinhaDoHistorico = new Set(
       continuo
         ? continuo.ligados
-        : (historico?.linhas ?? []).map((l) => l.lancamentoId).filter((id): id is string => !!id),
+        : (historico?.linhas ?? []).flatMap((l) => l.lancamentoIds),
     );
     const brutos: unknown[] = (data ?? []).filter(
       (r) => !naLinhaDoHistorico.has((r as { id: string }).id),

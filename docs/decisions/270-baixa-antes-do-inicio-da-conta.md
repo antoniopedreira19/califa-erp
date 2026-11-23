@@ -27,9 +27,9 @@ Para escapar do erro, o financeiro deu baixa com data de novembro em pagamentos 
 ## O que a ligação muda
 
 - Linha da carga do **período** ou da **cauda**: a baixa sem ligação conta duas vezes no Extrato antes do início (a linha e a baixa), e o ajuste de abertura compensa. Ligada, a baixa deixa de se repetir.
-- Linha do **só DRE** (a maior parte de outubro): o só DRE não entra no saldo, então a baixa sozinha já deixa o Extrato certo. Ligada, a linha passa a mostrar o código da PP.
+- Linha do **só DRE** (a maior parte de outubro): o só DRE não entra no saldo nem aparece no Extrato, então a baixa sozinha já deixa o Extrato certo. Ligada, a ligação fica registrada (a planilha diz que pagou aquela PP), sem mudar a tela.
 - Regras de `ligar_baixa_ao_historico`: baixa com data antes do início, sem ligação, que não seja estorno; linhas de carga ativa `periodo`, `cauda` ou `so_dre`, sem ligação e sem linha do banco, da mesma conta e do mesmo dia; soma igual ao valor da baixa, com o sinal dela. Cancelar a baixa solta as linhas.
-- Uma linha que paga duas PPs (as verbas do ANI-1012 em outubro) ainda não se liga: a ligação é uma baixa por linha.
+- Uma linha que paga duas PPs (um PIX só para duas verbas da mesma pessoa) se liga às duas baixas: ver "Várias baixas numa linha" abaixo.
 
 ## Como funciona
 
@@ -53,3 +53,16 @@ PP-00153 (R$ 600,00) e 2ª parcela da PP-00301 (R$ 17.300,00) tinham sido baixad
 | PP-00301, 2ª parcela | baixa em 09/11, sem linha | cancelada (motivo registrado); baixa em 02/10 pela baixa comum; ligada à linha da planilha de 02/10 |
 
 A 1ª parcela da PP-00301 continua em 09/11, ligada à linha do banco. Na California Santander, as baixas de 09/11 sem linha do banco caíram de 18 (−R$ 59.187,45) para 16 (−R$ 41.287,45): o saldo do sistema a partir de 09/11 deixa de ficar R$ 17.900,00 abaixo do banco, e o ajuste de abertura absorve os dois pagamentos. A segunda ligação da mesma baixa foi recusada ("Esta baixa já está ligada a uma linha da planilha."), como devia.
+
+## Várias baixas numa linha (revisão de 23/11/2026)
+
+⚠️ **Pedido do Tiago, depois da entrega:** "Faço a ligação com a planilha aceitar várias baixas numa linha só?" — "Sim, faça".
+
+- **O caso:** o financeiro paga duas verbas da mesma pessoa num PIX só, e a planilha registra o PIX numa linha que cita as duas PPs. Em outubro, no ANI-1012: 14/10 R$ 1.800,00 (PP-00178 + PP-00185), 14/10 R$ 1.500,00 (PP-00184 + PP-00188), 20/10 R$ 1.200,00 (PP-00182 + PP-00186) e 20/10 R$ 700,00 (PP-00183 + PP-00187), todas do só DRE; e em 28/09, na Santander GoCrazy (carga do período), R$ 1.200,00 para PP-00191 + PP-00192, que somam R$ 1.187,56 (os R$ 12,44 de diferença esperam o comprovante). No sistema, cada PP tem a sua baixa.
+- **Por que não cabia:** a ligação da decisão 261 morava na linha (`historico_movimentos.lancamento_id`), e uma linha só apontava para uma baixa. Com o banco é o contrário (a baixa aponta para a linha do banco), por isso um PIX do banco já conciliava várias PPs.
+- **Agora:** a ligação mora em `historico_movimento_baixas`, um par linha × baixa. Valem uma linha com várias baixas, uma baixa com várias linhas (a parcela paga em duas transferências no mesmo dia) e várias com várias, desde que sejam da mesma conta e do mesmo dia e as somas batam. `ligar_baixa_ao_historico(baixas[], linhas[])` e `ligarBaixaAoHistorico({ lancamento_ids, movimento_ids })`. A baixa pelo histórico da 261 grava na mesma tabela.
+- **Extrato:** a baixa ligada a uma linha do período ou da cauda não se repete na parte do sistema, e a linha mostra os códigos de todas as PPs ("PP-00178, PP-00185"). A linha do só DRE não aparece no Extrato.
+- **Dados:** as 14 ligações que existiam (12 da 261 e as 2 de 23/11) foram para a tabela. A coluna `historico_movimentos.lancamento_id` ficou sem uso, marcada como obsoleta; removê-la é destrutivo e espera o OK do Tiago.
+- **Recarga do histórico:** apagar a linha (a troca de uma carga) solta o par, como antes; a ligação precisa ser refeita na carga nova.
+- **Migration:** `20261123600003_varias_baixas_numa_linha_da_planilha.sql`.
+- **Conferido (produção, transação desfeita):** as baixas da PP-00178 e da PP-00185 em 14/10, ligadas juntas à linha de R$ 1.800,00; uma baixa só foi recusada ("As linhas da planilha somam R$ 1.800,00 e as baixas, R$ 900,00"); ligar de novo foi recusado; o ajuste de abertura foi de R$ 2.427.507,84 para R$ 2.429.307,84 (as duas verbas antes do início, fora do saldo). Em 21/07, as quatro baixas da 261 seguem sem se repetir, com os códigos nas linhas. Nada ficou gravado.

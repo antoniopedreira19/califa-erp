@@ -9245,7 +9245,7 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Antes:** toda baixa recusava data anterior ao início da conta no sistema ("Data do pagamento é anterior à data do saldo inicial da conta."). Para escapar do erro, o financeiro deu baixa com data de novembro em pagamentos de outubro (PP-00298, PP-00153, PP-00301), e o saldo do sistema ficou abaixo do banco.
 - **Agora:** o mesmo "Confirmar baixa" aceita a data antiga em todas as baixas (PP, avulsa, recorrência, título a receber, desembolso, estorno de verba, fatura, imposto, recebimento antes da NF, lote e estorno de baixa). O pop-up mostra a faixa âmbar "Pagamento antes do início da conta no sistema (dd/mm/aaaa): a baixa vai para o período antes do início e não muda o saldo nem a conciliação", e o rodapé diz que a baixa "fica a conciliar com o histórico da planilha". O saldo e a conciliação contam do início da conta; no Extrato contínuo a baixa entra antes do início e o ajuste de abertura se recalcula.
 - **Fechamento:** a trava do mês fechado vale só a partir do início da conta; a baixa antiga entra mesmo com novembro fechado.
-- **Conciliação do histórico:** `ligarBaixaAoHistorico` (sem botão) liga a baixa antiga às linhas da planilha do mesmo dia, conta e valor. Ligada a linha do período ou da cauda, a baixa deixa de contar duas vezes no Extrato antes do início; ligada ao só DRE, a linha mostra a PP.
+- **Conciliação do histórico:** `ligarBaixaAoHistorico` (sem botão) liga a baixa antiga às linhas da planilha do mesmo dia, conta e valor. Ligada a linha do período ou da cauda, a baixa deixa de contar duas vezes no Extrato antes do início; a linha do só DRE não aparece no Extrato, e a ligação fica só registrada.
 - **Conferido no Sandbox:** PP-00102 baixada em 15/09 na Conta Teste 253 (início em 01/10), com a faixa e o rodapé novos. Migration `20261123600001_baixa_antes_do_inicio_da_conta.sql`.
 
 
@@ -9255,3 +9255,11 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - Agora a saída da planilha cujas PPs citadas estão todas pagas sai das previsões e da cauda no carregamento da conta (`banco-dados.ts`, `ppsPagasDaPlanilha`). Continuam a duplicidade, a devolução, o estorno, o PIX não efetuado, a linha com PP ainda aberta e a numeração antiga da planilha.
 - Código em `lib/conciliacao/planilha-de-titulo.ts` (`eDePpPaga`, 11 testes). Sem migration.
 - Em aberto: travar ou avisar a baixa à mão de PP cuja linha da planilha já está conciliada.
+
+## ⚠️ Nota de 2026-11-23 — várias baixas numa linha da planilha (revisão da decisão 270)
+
+- **Antes:** a linha da planilha guardava uma baixa só (`historico_movimentos.lancamento_id`). Um PIX que pagou duas verbas da mesma pessoa (uma linha, duas PPs) não se ligava.
+- **Agora:** a ligação mora em `historico_movimento_baixas` (par linha × baixa): várias baixas numa linha, ou várias linhas numa baixa, com a mesma conta, o mesmo dia e as somas iguais. `ligarBaixaAoHistorico` recebe `lancamento_ids`. O Extrato mostra os códigos de todas as PPs na linha ("PP-00178, PP-00185") e não repete as baixas.
+- **Dados:** as 14 ligações existentes foram para a tabela; a coluna antiga ficou obsoleta (remoção espera o OK do Tiago).
+- **Conferido** na produção em transação desfeita (PP-00178 + PP-00185 na linha de R$ 1.800,00 de 14/10) e nos casos da 261 de 21/07. Migration `20261123600003_varias_baixas_numa_linha_da_planilha.sql`.
+

@@ -236,19 +236,22 @@ export async function estornarValorDaBaixa(input: unknown): Promise<Result> {
 // ---------------------------------------------------------------------
 
 const ligarSchema = z.object({
-  lancamento_id: z.string().uuid(),
+  /** As baixas que a linha registra: mais de uma quando um PIX pagou várias PPs. */
+  lancamento_ids: z.array(z.string().uuid()).min(1, "Escolha as baixas que a linha da planilha registra."),
   movimento_ids: z
     .array(z.string().uuid())
     .min(1, "Escolha as linhas da planilha que registram este pagamento."),
 });
 
 /**
- * A conciliação do histórico (decisão 270, 23/11/2026): liga a baixa com data
- * antes do início da conta às linhas da planilha que registram o mesmo
- * pagamento (mesma conta, mesmo dia, mesma soma). Ligada a uma linha da
- * carga do período ou da cauda, a baixa deixa de contar duas vezes no
- * Extrato antes do início; ligada a uma do só DRE, a linha passa a mostrar a
- * PP. As travas moram em `ligar_baixa_ao_historico`. Sem botão na tela por
+ * A conciliação do histórico (decisão 270, 23/11/2026): liga as baixas com
+ * data antes do início da conta às linhas da planilha que registram o mesmo
+ * pagamento (mesma conta, mesmo dia, mesma soma). Várias baixas numa linha
+ * quando um PIX pagou mais de uma PP. Ligada a uma linha da carga do
+ * período ou da cauda, a baixa deixa de contar duas vezes no Extrato antes do
+ * início e a linha mostra o código da PP; a linha do só DRE não aparece no
+ * Extrato (fica fora do saldo), e a ligação fica só registrada. As travas
+ * moram em `ligar_baixa_ao_historico`. Sem botão na tela por
  * enquanto: a ligação é feita pela equipe, com a planilha do financeiro.
  */
 export async function ligarBaixaAoHistorico(input: unknown): Promise<Result> {
@@ -258,11 +261,11 @@ export async function ligarBaixaAoHistorico(input: unknown): Promise<Result> {
   }
   const d = parsed.data;
 
-  const gate = await gateFinanceiro("lancamento_financeiro", d.lancamento_id, "lancamento_financeiro.ligado_ao_historico");
+  const gate = await gateFinanceiro("lancamento_financeiro", d.lancamento_ids[0], "lancamento_financeiro.ligado_ao_historico");
   if (!gate.ok) return gate;
 
   const { error } = await gate.supabase.rpc("ligar_baixa_ao_historico", {
-    p_lancamento_id: d.lancamento_id,
+    p_lancamento_ids: d.lancamento_ids,
     p_movimento_ids: d.movimento_ids,
   });
   if (error) {
@@ -278,8 +281,8 @@ export async function ligarBaixaAoHistorico(input: unknown): Promise<Result> {
     acao: "lancamento_financeiro.ligado_ao_historico",
     tenantId: session.activeTenant.id,
     entidadeTipo: "lancamento_financeiro",
-    entidadeId: d.lancamento_id,
-    metadata: { movimento_ids: d.movimento_ids },
+    entidadeId: d.lancamento_ids[0],
+    metadata: { lancamento_ids: d.lancamento_ids, movimento_ids: d.movimento_ids },
   });
 
   revalidarBaixas();
