@@ -6876,3 +6876,14 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - **Combo da PP:** os veículos das linhas entram na lista de fornecedores do job (decisão 255), para a PP nascer com o veículo escolhido.
 - **Conferido no Sandbox:** TES-1026/26 — PP-00958 de R$ 16.000,00 gerada pela calha, linha concluída, "PPs · 1" com ✓, trilha "Campanha no ar até 31/12/2026 · 1 PP em aberto (PP-00958)"; TES-1025/26 (nacional) com a calha de sempre.
 - **Fica de fora:** envio e pagamento da PP do repasse não percorridos (pedem a NF); no PDF da PP da mídia a célula "Item" fica de fora (a linha não tem item; o serviço leva a descrição); entregas 4 e 5.
+
+
+## ⚠️ Nota de 2026-11-23 — Mídia Off, entrega 4: os veículos do mês (decisão 274)
+
+- **Card "Veículos de {mês}"** no pé de cada mês da planilha da mídia: uma linha por veículo com tipo, nota, AP, PI, NF do veículo, BV e "Para o faturamento".
+- **Envio do mês travado** sem AP e PI de cada veículo, sem a NF do A · Direto (número, data, valor) e, no A · Repasse, sem a PP do repasse enviada e fechada. Barra: "Falta para enviar novembro: Veículo (AP, PI e NF)"; régua: "Falta AP, PI ou NF". O servidor confere de novo.
+- **NF diferente da nota só avisa**; **mês enviado não muda** (documentos em consulta depois do envio, inclusive pelo Novo faturamento).
+- **Quem anexa:** administrador, GP e produtor; abrir, todo o tenant. Tabela `jobs_midia_documentos` e bucket `jobs-midia` (migrations `20261123500002` e `…500003`).
+- **BV do veículo no mês:** o formulário e o fluxo do BV de hoje (lançar e confirmar: administrador e GP; recebido na baixa do financeiro), já com o veículo escolhido (`fornecedorPadrao` no `BvDialog`). Trava o encerramento até recebido.
+- **Conferido no Sandbox:** TES-1026/26 — novembro com AP, PI e NF anexados pelo GP (NF com aviso de −R$ 320,00), envio liberado; produtor trocou o AP, removeu e reanexou o PI; dezembro (já faturado) em consulta e com BV de R$ 960,00 lançado.
+- **Fica de fora:** o texto do formulário do BV é o nacional ("a planilha desconta o bruto do realizado"); o BV de mídia aparece "BV — " sem nome na fila do financeiro (view do financeiro); entrega 5.

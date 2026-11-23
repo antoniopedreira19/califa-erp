@@ -14,6 +14,11 @@ import assert from "node:assert/strict";
 
 import {
   alvoDoRepasse,
+  faltaDoVeiculoNoMes,
+  listaDoQueFalta,
+  piorRepasse,
+  situacaoDoRepasse,
+  veiculosNoMes,
   comAContaDaMidia,
   composicao,
   decomposicaoDoRepasse,
@@ -318,4 +323,55 @@ test("PP do repasse pré-preenchida: decompõe só quando fecha no centavo", () 
 test("fim da campanha: a maior última veiculação entre os meses", () => {
   assert.equal(ultimaVeiculacaoDaCampanha(["2026-11-20", null, "2026-12-31"]), "2026-12-31");
   assert.equal(ultimaVeiculacaoDaCampanha([null, null]), null);
+});
+
+// ---- Entrega 4 (decisão 274): os veículos de cada mês --------------------
+
+test("situação da PP do repasse: gerar, enviar, fechar, enviada e paga", () => {
+  assert.equal(situacaoDoRepasse([], false), "a_gerar");
+  assert.equal(situacaoDoRepasse([{ status: "cancelada" }], false), "a_gerar");
+  assert.equal(situacaoDoRepasse([{ status: "gerada" }], true), "a_enviar");
+  assert.equal(situacaoDoRepasse([{ status: "aprovada" }, { status: "rejeitada" }], true), "a_enviar");
+  assert.equal(situacaoDoRepasse([{ status: "em_avaliacao" }], false), "por_fechar");
+  assert.equal(situacaoDoRepasse([{ status: "aprovada" }, { status: "pago" }], true), "enviada");
+  assert.equal(situacaoDoRepasse([{ status: "pago" }, { status: "cancelada" }], true), "paga");
+  assert.equal(piorRepasse(["paga", "a_enviar", "enviada"]), "a_enviar");
+  assert.equal(piorRepasse([]), null);
+});
+
+test("o que falta ao veículo no mês: AP, PI, a NF do Direto e a PP do Repasse", () => {
+  const base = { nota: 1000, temDireto: true, repasse: null, temAP: false, temPI: false, temNF: false };
+  assert.deepEqual(faltaDoVeiculoNoMes(base), ["AP", "PI", "NF"]);
+  assert.deepEqual(faltaDoVeiculoNoMes({ ...base, temAP: true, temPI: true, temNF: true }), []);
+  assert.deepEqual(
+    faltaDoVeiculoNoMes({ ...base, temDireto: false, repasse: "a_enviar", temAP: true, temPI: true }),
+    ["envio da PP do repasse"],
+  );
+  // Sem veiculação no mês, nada é pedido.
+  assert.deepEqual(faltaDoVeiculoNoMes({ ...base, nota: 0 }), []);
+  assert.equal(listaDoQueFalta(["AP", "PI", "NF"]), "AP, PI e NF");
+});
+
+test("veículos do mês: agrupa as linhas pelo veículo, com os documentos dele", () => {
+  const linhas = [
+    { id: "l1", fornecedorId: "v1", tipo: "A", negociado: 1000, meio: "TV Fechada", repasse: null },
+    { id: "l2", fornecedorId: "v1", tipo: "AR", negociado: 500, meio: "Rádio", repasse: "enviada" as const },
+    { id: "l3", fornecedorId: "v2", tipo: "AR", negociado: 2000, meio: "OOH", repasse: "a_gerar" as const },
+    { id: "l4", fornecedorId: null, tipo: "A", negociado: 300, meio: "OOH", repasse: null },
+  ];
+  const docs = [
+    { fornecedorId: "v1", mes: "2026-12-01", tipo: "ap" },
+    { fornecedorId: "v1", mes: "2026-12-01", tipo: "pi" },
+    { fornecedorId: "v1", mes: "2026-11-01", tipo: "nf" },
+  ];
+  const vs = veiculosNoMes("2026-12-01", linhas, docs, P20);
+  assert.equal(vs.length, 2);
+  const [v1, v2] = vs;
+  assert.deepEqual(v1.linhaIds, ["l1", "l2"]);
+  assert.deepEqual(v1.tipos, ["A", "AR"]);
+  assert.equal(v1.negociado, 1500);
+  assert.equal(v1.nota, 1200);
+  // A NF de novembro não vale para dezembro.
+  assert.deepEqual(v1.falta, ["NF"]);
+  assert.deepEqual(v2.falta, ["AP", "PI", "PP do repasse"]);
 });

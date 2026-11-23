@@ -12,8 +12,11 @@
  * Desde a entrega 3, cada linha A · Repasse tem na calha a PP do repasse
  * (`calha`, desenhada pela tabela do job, que é dona das PPs).
  *
- * Fora daqui, por enquanto: AP, PI, NF e BV do veículo no mês (entrega 4),
- * e o realizado — encerrar antes, estender (entrega 5).
+ * Desde a entrega 4, cada mês termina com os veículos dele: AP, PI, a NF e
+ * o BV do veículo (`veiculosDoMes`, decisão 274).
+ *
+ * Fora daqui, por enquanto: o realizado — encerrar antes, estender
+ * (entrega 5).
  */
 
 import type { ReactNode } from "react";
@@ -38,6 +41,7 @@ export function PlanilhaMidiaDoJob({
   detalheCampanha,
   noLugar = false,
   calha = null,
+  veiculosDoMes = null,
 }: {
   job: { id: string; projeto_id: string; orcamento_id: string };
   nomeJob: string;
@@ -59,6 +63,8 @@ export function PlanilhaMidiaDoJob({
   noLugar?: boolean;
   /** A calha de cada linha: a PP do repasse (entrega 3). */
   calha?: ((l: LinhaMidia) => ReactNode) | null;
+  /** Os veículos de cada mês, no pé dele (entrega 4, decisão 274). */
+  veiculosDoMes?: ((mes: string) => ReactNode) | null;
 }) {
   return (
     <div className="space-y-6">
@@ -82,7 +88,7 @@ export function PlanilhaMidiaDoJob({
         params={midia.params}
         mesPedido={mesPedido}
         readOnly
-        doJob={{ hrefBase: hrefPlanilha, detalheDoMes, detalheCampanha, noLugar, calha }}
+        doJob={{ hrefBase: hrefPlanilha, detalheDoMes, detalheCampanha, noLugar, calha, veiculosDoMes }}
       />
     </div>
   );

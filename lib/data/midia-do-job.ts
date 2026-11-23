@@ -15,11 +15,16 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   desembolsoDaMidia,
   fechamentoDosItens,
+  listaDoQueFalta,
   parametrosDaVersao,
+  situacaoDoRepasse,
   ultimaVeiculacaoDoMes,
+  veiculosNoMes,
   type FechamentoMidia,
+  type LinhaDoVeiculoNoMes,
   type ParametrosMidia,
 } from "@/lib/calculos/midia-off";
+import type { DocumentoDaMidia } from "@/lib/midia/documentos";
 import { SELECT_PARAMETROS_DO_JOB, comParametrosDoJob } from "./parametros-do-job";
 
 export type MidiaDoJob =
@@ -150,6 +155,158 @@ export async function lerUltimaVeiculacaoDoMes(
     mes,
     (linhasRes.data ?? []).filter((l) => gruposDoMes.has(l.grupo_id)),
   );
+}
+
+const SELECT_DOCUMENTO =
+  "id, fornecedor_id, mes, tipo, numero, valor, data_emissao, nome_arquivo, storage_path, created_at, autor:profiles!created_by(nome)";
+
+/** A linha de `jobs_midia_documentos` no formato das telas. */
+export function documentoDaLinha(d: any): DocumentoDaMidia {
+  const autor = Array.isArray(d.autor) ? d.autor[0] : d.autor;
+  return {
+    id: d.id,
+    fornecedorId: d.fornecedor_id,
+    mes: String(d.mes).slice(0, 10),
+    tipo: d.tipo,
+    numero: d.numero,
+    valor: d.valor === null || d.valor === undefined ? null : Number(d.valor),
+    dataEmissao: d.data_emissao ?? null,
+    nomeArquivo: d.nome_arquivo,
+    path: d.storage_path,
+    criadoEm: d.created_at,
+    criadoPorNome: autor?.nome ?? null,
+  };
+}
+
+/** AP, PI e NF do veículo de todos os meses do job (decisão 274).
+ *  `undefined` quando a leitura falhou. */
+export async function lerDocumentosDaMidia(
+  supabase: SupabaseClient,
+  tenantId: string,
+  jobId: string,
+): Promise<DocumentoDaMidia[] | undefined> {
+  const { data, error } = await supabase
+    .from("jobs_midia_documentos")
+    .select(SELECT_DOCUMENTO)
+    .eq("job_id", jobId)
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: true });
+  if (error) {
+    console.error("[midia-do-job.documentos]", error.message);
+    return undefined;
+  }
+  return (data ?? []).map(documentoDaLinha);
+}
+
+/**
+ * O que falta, veículo a veículo, para o mês ir ao faturamento (decisão
+ * 274), pela CÓPIA das linhas — a mesma conta da tela (`veiculosNoMes`).
+ * Devolve "Veículo (AP, PI e NF)" por veículo com falta; `[]` liberado;
+ * `undefined` quando a leitura falhou.
+ */
+export async function lerFaltaDosVeiculosNoMes(
+  supabase: SupabaseClient,
+  tenantId: string,
+  jobId: string,
+  versaoAprovadaId: string,
+  mes: string,
+  params: ParametrosMidia,
+): Promise<string[] | undefined> {
+  const [mesesRes, gruposRes, linhasRes, docsRes, realizadosRes, ppsRes] = await Promise.all([
+    supabase
+      .from("versoes_orcamento_meses")
+      .select("id, mes")
+      .eq("versao_orcamento_id", versaoAprovadaId)
+      .eq("tenant_id", tenantId)
+      .eq("mes", mes.slice(0, 10))
+      .returns<{ id: string; mes: string }[]>(),
+    supabase
+      .from("versoes_orcamento_grupos")
+      .select("id, mes_id, meio")
+      .eq("versao_orcamento_id", versaoAprovadaId)
+      .eq("tenant_id", tenantId)
+      .returns<{ id: string; mes_id: string | null; meio: string | null }[]>(),
+    supabase
+      .from("jobs_itens_orcado")
+      .select("id, grupo_id, fornecedor_id, tipo_custo, total_orcado, ordem")
+      .eq("job_id", jobId)
+      .eq("tenant_id", tenantId)
+      .is("cancelada_em", null)
+      .order("ordem", { ascending: true })
+      .returns<
+        {
+          id: string;
+          grupo_id: string;
+          fornecedor_id: string | null;
+          tipo_custo: string;
+          total_orcado: number | string | null;
+        }[]
+      >(),
+    supabase
+      .from("jobs_midia_documentos")
+      .select(SELECT_DOCUMENTO)
+      .eq("job_id", jobId)
+      .eq("tenant_id", tenantId)
+      .eq("mes", mes.slice(0, 10)),
+    supabase
+      .from("jobs_itens_realizado")
+      .select("id, job_item_orcado_id, pps_concluidas_em")
+      .eq("job_id", jobId)
+      .eq("tenant_id", tenantId)
+      .returns<{ id: string; job_item_orcado_id: string; pps_concluidas_em: string | null }[]>(),
+    supabase
+      .from("pedidos_compra")
+      .select("item_realizado_id, status")
+      .eq("job_id", jobId)
+      .eq("tenant_id", tenantId)
+      .returns<{ item_realizado_id: string | null; status: string }[]>(),
+  ]);
+  const erro =
+    mesesRes.error ?? gruposRes.error ?? linhasRes.error ?? docsRes.error ?? realizadosRes.error ?? ppsRes.error;
+  if (erro) {
+    console.error("[midia-do-job.falta-dos-veiculos]", erro.message);
+    return undefined;
+  }
+  const mesId = (mesesRes.data ?? [])[0]?.id;
+  if (!mesId) return [];
+  const grupoDoMes = new Map(
+    (gruposRes.data ?? []).filter((g) => g.mes_id === mesId).map((g) => [g.id, g.meio]),
+  );
+  const realizadoDaLinha = new Map((realizadosRes.data ?? []).map((r) => [r.job_item_orcado_id, r]));
+  const linhas: LinhaDoVeiculoNoMes[] = (linhasRes.data ?? [])
+    .filter((l) => grupoDoMes.has(l.grupo_id))
+    .map((l) => {
+      const r = realizadoDaLinha.get(l.id);
+      return {
+        id: l.id,
+        fornecedorId: l.fornecedor_id,
+        tipo: l.tipo_custo,
+        negociado: Number(l.total_orcado ?? 0),
+        meio: grupoDoMes.get(l.grupo_id) ?? null,
+        repasse:
+          l.tipo_custo === "AR"
+            ? situacaoDoRepasse(
+                (ppsRes.data ?? []).filter((p) => r && p.item_realizado_id === r.id),
+                r?.pps_concluidas_em != null,
+              )
+            : null,
+      };
+    });
+  const veiculos = veiculosNoMes(mes, linhas, (docsRes.data ?? []).map(documentoDaLinha), params).filter(
+    (v) => v.falta.length > 0,
+  );
+  if (veiculos.length === 0) return [];
+  const { data: nomes } = await supabase
+    .from("fornecedores")
+    .select("id, nome")
+    .eq("tenant_id", tenantId)
+    .in(
+      "id",
+      veiculos.map((v) => v.veiculoId),
+    )
+    .returns<{ id: string; nome: string }[]>();
+  const nomeDe = new Map((nomes ?? []).map((f) => [f.id, f.nome]));
+  return veiculos.map((v) => `${nomeDe.get(v.veiculoId) ?? "Veículo"} (${listaDoQueFalta(v.falta)})`);
 }
 
 /** O fechamento da mídia do job inteiro, pela cópia das linhas: o que as

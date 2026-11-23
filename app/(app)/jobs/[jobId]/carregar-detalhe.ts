@@ -94,12 +94,18 @@ import {
   fechamentoDosItens,
   realizadoDaLinhaMidia,
   parametrosDaVersao,
+  listaDoQueFalta,
+  situacaoDoRepasse,
   ultimaVeiculacaoDaCampanha,
+  veiculosNoMes,
   type ParametrosMidia,
+  type VeiculoNoMes,
 } from "@/lib/calculos/midia-off";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import type { VersaoOrcamentoItem } from "@/lib/types";
 import { SELECT_PARAMETROS_DO_JOB, comParametrosDoJob } from "@/lib/data/parametros-do-job";
+import { lerDocumentosDaMidia } from "@/lib/data/midia-do-job";
+import type { DocumentoDaMidia } from "@/lib/midia/documentos";
 
 /** Mídia Off (decisão 167): o que a planilha de mídia do job precisa — as
  *  condições da versão, as linhas da cópia no formato de linha da planilha
@@ -108,6 +114,15 @@ export interface MidiaDoDetalhe {
   params: ParametrosMidia;
   linhas: VersaoOrcamentoItem[];
   veiculos: { id: string; nome: string; meios: string[] }[];
+  /** Os veículos de cada mês (decisão 274), pela chave `YYYY-MM-01`: as
+   *  linhas, AP, PI e NF do veículo, a PP do repasse e o que falta para o
+   *  envio do mês. Vazio quando a leitura dos documentos falhou — e aí
+   *  `documentosFalharam` trava o envio na tela, como o servidor. */
+  veiculosPorMes: Record<string, Array<VeiculoNoMes<DocumentoDaMidia>>>;
+  documentosFalharam: boolean;
+  /** O que trava o envio de cada mês, por veículo: "Veículo (AP, PI e
+   *  NF)". A barra de faturamento lê daqui; o servidor refaz a conta. */
+  faltaPorMes: Record<string, string[]>;
 }
 
 /**
@@ -212,6 +227,7 @@ export async function carregarDetalheDoJob(
     errataProntaRes,
     meiosDaVersaoRes,
     veiculosRes,
+    documentosDaMidia,
     apresentacoesDoProjeto,
     custosDoSocioRes,
     socioDaEmpresaRes,
@@ -500,6 +516,8 @@ export async function carregarDetalheDoJob(
           .not("fornecedor_id", "is", null)
           .returns<{ fornecedor_id: string; veiculo: { id: string; nome: string } | null }[]>()
       : Promise.resolve({ data: [], error: null }),
+    // AP, PI e NF do veículo no mês (decisão 274).
+    ehMidiaOff ? lerDocumentosDaMidia(supabase, session.activeTenant.id, jobId) : Promise.resolve([]),
     // As apresentações do projeto, no card PROJETO da ficha (decisão 213).
     listarApresentacoesDoProjeto(supabase, session.activeTenant.id, raw.projeto_id),
     // Decisão 236: os custos pagos pelo sócio (a Robotech, nos jobs da
@@ -1661,7 +1679,12 @@ export async function carregarDetalheDoJob(
     bvs
       .filter((bv) => BV_SITUACAO_EM_ABERTO.includes(bv.situacao))
       .map((bv) => ({
-        item: nomeDoItem.get(orcadoId) ?? "Item da planilha",
+        // A linha de Mídia Off não tem "item": o BV é do veículo no mês
+        // (decisão 274), e o nome é o dele.
+        item:
+          nomeDoItem.get(orcadoId) ||
+          (bv.fornecedor_id ? (veiculosRes.data ?? []).find((v) => v.fornecedor_id === bv.fornecedor_id)?.veiculo?.nome : null) ||
+          "Item da planilha",
         situacao: bv.situacao,
       })),
   );
@@ -1755,6 +1778,10 @@ export async function carregarDetalheDoJob(
 
   const podeEditarRealizado = quemPodeMexer && jobAceitaRealizado(job.status);
   const podeAcoesPlanilha = quemPodeMexer && jobAceitaAcoesPlanilha(job.status);
+  // Mídia Off (decisão 274): AP, PI e a NF do veículo são também do
+  // produtor (Tiago, 23/11/2026) — `jobs.editar`, com o job aberto.
+  const podeAnexarDocumentosDaMidia =
+    paramsMidia !== null && pode(session.activeRole, "jobs.editar") && jobAceitaAcoesPlanilha(job.status);
   // A PP se partiu em dois desde 08/09/2026 (decisão 056): GERAR vale na
   // pré-abertura, ENVIAR ao financeiro continua esperando a abertura — e
   // a marca `abertura_em_revisao` fecha o envio da linha que a errata
@@ -1840,6 +1867,47 @@ export async function carregarDetalheDoJob(
   // as linhas da CÓPIA com as colunas da mídia (no formato de linha que a
   // planilha lê), no agrupamento do job, e o nome de cada veículo.
   if (veiculosRes.error) console.error("[job.veiculos]", veiculosRes.error.message);
+  // Os veículos de cada mês (decisão 274): as linhas vivas do mês, pelo
+  // agrupamento do job, com a PP do repasse de cada A · Repasse.
+  function veiculosDaMidiaPorMes(p: ParametrosMidia): MidiaDoDetalhe["veiculosPorMes"] {
+    const mesDoGrupo = new Map(
+      grupos.map((g) => [g.id, meses.find((m: any) => m.id === g.mes_id)?.mes as string | undefined]),
+    );
+    const meioDoGrupo = new Map(grupos.map((g) => [g.id, g.meio ?? null]));
+    const porMes: MidiaDoDetalhe["veiculosPorMes"] = {};
+    const linhasPorMes = new Map<string, any[]>();
+    for (const it of (itensRes.data ?? []) as any[]) {
+      if (it.cancelada_em) continue;
+      const grupoId = it.job_grupo_id ?? it.grupo_id;
+      const mes = mesDoGrupo.get(grupoId);
+      if (!mes) continue;
+      const chave = String(mes).slice(0, 10);
+      linhasPorMes.set(chave, [...(linhasPorMes.get(chave) ?? []), { ...it, _grupo: grupoId }]);
+    }
+    for (const [mes, linhas] of linhasPorMes) {
+      porMes[mes] = veiculosNoMes(
+        mes,
+        linhas.map((it) => {
+          const r = realizadosMap.get(it.id);
+          return {
+            id: it.id as string,
+            fornecedorId: (it.fornecedor_id as string | null) ?? null,
+            tipo: it.tipo_custo as string,
+            negociado: Number(it.total_orcado ?? 0),
+            meio: meioDoGrupo.get(it._grupo) ?? null,
+            repasse:
+              it.tipo_custo === "AR"
+                ? situacaoDoRepasse(r ? (ppsPorItemId.get(r.id) ?? []) : [], r?.pps_concluidas_em != null)
+                : null,
+          };
+        }),
+        documentosDaMidia ?? [],
+        p,
+      );
+    }
+    return porMes;
+  }
+  const veiculosPorMesDaMidia = paramsMidia ? veiculosDaMidiaPorMes(paramsMidia) : {};
   const midia: MidiaDoDetalhe | null = paramsMidia
     ? {
         params: paramsMidia,
@@ -1893,6 +1961,21 @@ export async function carregarDetalheDoJob(
               .map((v) => [v.fornecedor_id, { id: v.fornecedor_id, nome: v.veiculo!.nome, meios: [] }]),
           ).values(),
         ],
+        veiculosPorMes: veiculosPorMesDaMidia,
+        documentosFalharam: documentosDaMidia === undefined,
+        faltaPorMes: Object.fromEntries(
+          Object.entries(veiculosPorMesDaMidia).map(([mes, vs]) => [
+            mes,
+            documentosDaMidia === undefined
+              ? ["não foi possível ler os documentos dos veículos"]
+              : vs
+                  .filter((v) => v.falta.length > 0)
+                  .map(
+                    (v) =>
+                      `${(veiculosRes.data ?? []).find((x) => x.fornecedor_id === v.veiculoId)?.veiculo?.nome ?? "Veículo"} (${listaDoQueFalta(v.falta)})`,
+                  ),
+          ]),
+        ),
       }
     : null;
 
@@ -2000,6 +2083,7 @@ export async function carregarDetalheDoJob(
     // com a chave, o Produtor Responsável também (decisão 174).
     papelCorrigeNf: corrigeNfNoJob(session.activeRole, session.profile.id, job),
     podeConfirmarBv,
+    podeAnexarDocumentosDaMidia,
     ppsQuePossoPrestarContas,
     // Errata (decisão 159): o GP e o administrador registram — mandam ao
     // financeiro; o produtor prepara e deixa a errata pronta para envio. O

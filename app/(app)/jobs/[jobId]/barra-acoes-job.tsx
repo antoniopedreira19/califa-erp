@@ -101,6 +101,9 @@ interface Props {
    *  Repasse sem PP e o da barra de faturamento. Obrigatória: opcional,
    *  uma regra nova sumiria calada (CLAUDE.md). */
   midiaOff: boolean;
+  /** Mídia Off (decisão 274): o que ainda trava o envio de cada mês — AP,
+   *  PI e a NF de cada veículo. `{}` fora da mídia. */
+  faltaParaEnviarDaMidia: Record<string, string[]>;
   /** O job tem pedido de cancelamento no financeiro (decisão 169): a barra
    *  vira uma linha só, como antes da abertura — faturamento e encerramento
    *  esperam a decisão. Os gatilhos do banco recusam os dois de novo. */
@@ -264,6 +267,7 @@ export function BarraAcoesJob({
   podeEncerrar,
   savePorItem,
   midiaOff,
+  faltaParaEnviarDaMidia,
   cancelamentoPendente,
 }: Props) {
   // Enquanto a errata está aberta quem fala no rodapé é a barra dela: o
@@ -376,6 +380,7 @@ export function BarraAcoesJob({
         trilhaEncerramento={trilhaEncerramento}
         jobEncerrado={status === "encerrado" || status === "finalizado"}
         midiaOff={midiaOff}
+        faltaParaEnviar={faltaParaEnviarDaMidia}
         classesDoFade={classesDoFade}
         escondida={escondida}
       />

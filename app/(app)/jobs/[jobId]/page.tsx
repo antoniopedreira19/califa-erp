@@ -197,6 +197,7 @@ export default async function JobDetailPage({
     papelCorrigeNf,
     etapasDoJob,
     podeConfirmarBv,
+    podeAnexarDocumentosDaMidia,
     ppsQuePossoPrestarContas,
     papelNaErrata,
     errataPronta,
@@ -644,6 +645,7 @@ export default async function JobDetailPage({
             ppsQuePossoPrestarContas={ppsQuePossoPrestarContas}
             midiaSystem={detalhe.midiaSystem}
             podeConfirmarBv={podeConfirmarBv && !comPedido && !emDecisao}
+            podeAnexarDocumentosDaMidia={podeAnexarDocumentosDaMidia && !comPedido && !emDecisao}
             // Decisão 265: a nota do Novo faturamento trava como o envio.
             jaEnviadoParaFaturamento={
               envioFaturamento !== null
@@ -800,6 +802,8 @@ export default async function JobDetailPage({
         // Mídia Off (decisão 167): encerra pelo botão de sempre, depois da
         // veiculação e com as PPs do repasse pagas (entrega 3).
         midiaOff={detalhe.midia !== null}
+        // Decisão 274: AP, PI e a NF de cada veículo travam o envio do mês.
+        faltaParaEnviarDaMidia={detalhe.midia?.faltaPorMes ?? {}}
         faturamentoMensal={detalhe.faturamentoMensal}
         podeEnviarFaturamentoMensal={detalhe.podeEnviarFaturamentoMensal}
         faturamentoEnvioUnico={detalhe.faturamentoEnvioUnico}

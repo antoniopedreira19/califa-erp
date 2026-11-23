@@ -162,6 +162,9 @@ interface Props {
   podeConfirmar: boolean;
   /** Ausente ⇒ grava direto nas Server Actions. */
   adaptador?: AdaptadorBv;
+  /** O fornecedor que o BV NOVO já traz escolhido. Mídia Off (decisão 274):
+   *  o BV é do veículo no mês, e o veículo é ele. */
+  fornecedorPadrao?: string | null;
 }
 
 /** Aceita "1.234,56" e "1234.56". Vírgula presente ⇒ ponto é milhar.
@@ -283,6 +286,7 @@ export function BvDialog({
   readOnly,
   podeConfirmar,
   adaptador,
+  fornecedorPadrao = null,
 }: Props) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
@@ -412,7 +416,7 @@ export function BvDialog({
   // valores daquele BV — senão o formulário mostraria os do anterior.
   React.useEffect(() => {
     if (!open) return;
-    setFornecedorId(bvSelecionado?.fornecedor_id ?? null);
+    setFornecedorId(bvSelecionado ? bvSelecionado.fornecedor_id : fornecedorPadrao);
     setValorRaw(paraEdicao(Number(bvSelecionado?.valor ?? 0)));
     setAliquotaRaw(
       bvSelecionado
@@ -422,6 +426,8 @@ export function BvDialog({
           : String(bvSelecionado.percentual_imposto).replace(".", ",")
         : "",
     );
+    // `fornecedorPadrao` só vale ao abrir o BV novo.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, bvSelecionado]);
 
   const totalOrcado = Number(item.total_orcado);

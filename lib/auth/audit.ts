@@ -102,6 +102,10 @@ export type AuditAction =
   | "item_bv.editado"
   | "item_bv.confirmado"
   | "item_bv.cancelado"
+  // Mídia Off (decisão 274): AP, PI e NF do veículo no mês.
+  | "midia_documento.anexado"
+  | "midia_documento.trocado"
+  | "midia_documento.removido"
   | "categoria.criada"
   | "categoria.editada"
   | "categoria.inativada"

@@ -120,5 +120,6 @@ job de Mídia Off.
 - No PDF da PP da mídia a célula "Item" fica de fora: a linha de mídia não
   tem item. O serviço leva o meio, o formato e a praça.
 - O TES-1027/26 encerrou pela regra antiga (167 §6) e fica como está.
-- Entregas 4 (veículos do mês: AP, PI, NF e BV) e 5 (visão única, encerrar
-  antes, estender), e as cinco escolhas feitas no protótipo, a confirmar.
+- Entrega 5 (visão única, encerrar antes, estender). A entrega 4 (veículos
+  do mês: AP, PI, NF e BV) saiu na [274](274-midia-off-veiculos-do-mes.md),
+  com as cinco escolhas do protótipo confirmadas pelo Tiago em 23/11/2026.

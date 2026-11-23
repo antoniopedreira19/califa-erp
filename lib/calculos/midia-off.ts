@@ -454,6 +454,163 @@ export function alvoDoRepasse(
   return midia ? notaDoVeiculo(totalOrcado, midia) : Number(totalOrcado ?? 0);
 }
 
+// ---- Entrega 4 (decisão 274): os veículos de cada mês ----------------------
+
+/**
+ * Em que pé está a PP do repasse de uma linha A · Repasse. A NF do veículo
+ * no A · Repasse chega anexada à PP, e o mês só vai ao faturamento com ela
+ * enviada ao financeiro (protótipo aprovado, 23/11/2026):
+ * - `a_gerar`: nenhuma PP ativa;
+ * - `a_enviar`: alguma PP ainda gerada, ou rejeitada e por reemitir;
+ * - `por_fechar`: todas enviadas, mas a linha não disse que acabou (a nota
+ *   pode ter mais PPs);
+ * - `enviada` / `paga`: pronta.
+ */
+export type SituacaoDoRepasse = "a_gerar" | "a_enviar" | "por_fechar" | "enviada" | "paga";
+
+export function situacaoDoRepasse(
+  pps: ReadonlyArray<{ status: string }>,
+  concluida: boolean,
+): SituacaoDoRepasse {
+  const ativas = pps.filter((p) => p.status !== "cancelada");
+  if (ativas.length === 0) return "a_gerar";
+  if (ativas.some((p) => p.status === "gerada" || p.status === "rejeitada")) return "a_enviar";
+  if (!concluida) return "por_fechar";
+  return ativas.every((p) => p.status === "pago") ? "paga" : "enviada";
+}
+
+const ORDEM_DO_REPASSE: SituacaoDoRepasse[] = ["a_gerar", "a_enviar", "por_fechar", "enviada", "paga"];
+
+/** A situação que mais falta entre as linhas A · Repasse do veículo no mês;
+ *  `null` sem linha A · Repasse. */
+export function piorRepasse(lista: ReadonlyArray<SituacaoDoRepasse>): SituacaoDoRepasse | null {
+  if (lista.length === 0) return null;
+  return lista.reduce((pior, s) => (ORDEM_DO_REPASSE.indexOf(s) < ORDEM_DO_REPASSE.indexOf(pior) ? s : pior));
+}
+
+/**
+ * O que falta, documento a documento, para o veículo liberar o envio do mês
+ * ao faturamento (decisão 274): AP e PI sempre; a NF do veículo no
+ * A · Direto; no A · Repasse, a PP do repasse enviada (a NF vem nela).
+ * Veículo sem veiculação no mês (nota zero) não pede nada.
+ */
+export function faltaDoVeiculoNoMes(v: {
+  nota: number;
+  temDireto: boolean;
+  repasse: SituacaoDoRepasse | null;
+  temAP: boolean;
+  temPI: boolean;
+  temNF: boolean;
+}): string[] {
+  if (!(v.nota > 0.004)) return [];
+  const falta: string[] = [];
+  if (!v.temAP) falta.push("AP");
+  if (!v.temPI) falta.push("PI");
+  if (v.temDireto && !v.temNF) falta.push("NF");
+  if (v.repasse === "a_gerar") falta.push("PP do repasse");
+  else if (v.repasse === "a_enviar") falta.push("envio da PP do repasse");
+  else if (v.repasse === "por_fechar") falta.push("última PP do repasse");
+  return falta;
+}
+
+/** Uma linha do job, como o veículo do mês a lê. */
+export interface LinhaDoVeiculoNoMes {
+  id: string;
+  fornecedorId: string | null;
+  tipo: string;
+  negociado: number;
+  meio: string | null;
+  /** Só no A · Repasse. */
+  repasse: SituacaoDoRepasse | null;
+}
+
+/** Os documentos de UM veículo no mês. */
+export interface DocumentosDoVeiculo<D> {
+  ap: D | null;
+  pi: D | null;
+  nf: D | null;
+}
+
+export interface VeiculoNoMes<D> extends DocumentosDoVeiculo<D> {
+  veiculoId: string;
+  /** `YYYY-MM-01`. */
+  mes: string;
+  meios: string[];
+  tipos: Array<"A" | "AR">;
+  /** As linhas do veículo no mês, na ordem da planilha. A primeira é a
+   *  âncora do BV do veículo no mês (o BV mora numa linha do job). */
+  linhaIds: string[];
+  negociado: number;
+  nota: number;
+  /** A nota só das linhas A · Direto: é contra ela que a NF do veículo se
+   *  confere (a do A · Repasse vem na PP). */
+  notaDireto: number;
+  repasse: SituacaoDoRepasse | null;
+  falta: string[];
+}
+
+/**
+ * Os veículos de um mês do job de Mídia Off (decisão 274): as linhas do mês
+ * agrupadas pelo veículo, com os documentos dele e o que falta para o envio.
+ * Linha sem veículo fica de fora — não há a quem pedir documento.
+ */
+export function veiculosNoMes<D extends { fornecedorId: string; mes: string; tipo: string }>(
+  mes: string,
+  linhas: ReadonlyArray<LinhaDoVeiculoNoMes>,
+  documentos: ReadonlyArray<D>,
+  p: ParametrosMidia,
+): Array<VeiculoNoMes<D>> {
+  const m10 = mes.slice(0, 10);
+  const porVeiculo = new Map<string, LinhaDoVeiculoNoMes[]>();
+  for (const l of linhas) {
+    if (!l.fornecedorId) continue;
+    porVeiculo.set(l.fornecedorId, [...(porVeiculo.get(l.fornecedorId) ?? []), l]);
+  }
+  return [...porVeiculo.entries()].map(([veiculoId, ls]) => {
+    const doc = (tipo: string) =>
+      documentos.find((d) => d.fornecedorId === veiculoId && d.mes.slice(0, 10) === m10 && d.tipo === tipo) ?? null;
+    const tipos = [...new Set(ls.map((l) => (l.tipo === "AR" ? "AR" : "A") as "A" | "AR"))];
+    const negociado = Math.round(ls.reduce((s, l) => s + l.negociado, 0) * 100) / 100;
+    const nota = Math.round(ls.reduce((s, l) => s + notaDoVeiculo(l.negociado, p), 0) * 100) / 100;
+    const notaDireto =
+      Math.round(
+        ls.filter((l) => l.tipo !== "AR").reduce((s, l) => s + notaDoVeiculo(l.negociado, p), 0) * 100,
+      ) / 100;
+    const repasse = piorRepasse(ls.filter((l) => l.tipo === "AR").map((l) => l.repasse ?? "a_gerar"));
+    const ap = doc("ap");
+    const pi = doc("pi");
+    const nf = doc("nf");
+    return {
+      veiculoId,
+      mes: m10,
+      meios: [...new Set(ls.map((l) => l.meio ?? "").filter(Boolean))],
+      tipos,
+      linhaIds: ls.map((l) => l.id),
+      negociado,
+      nota,
+      notaDireto,
+      repasse,
+      ap,
+      pi,
+      nf,
+      falta: faltaDoVeiculoNoMes({
+        nota,
+        temDireto: tipos.includes("A"),
+        repasse,
+        temAP: ap !== null,
+        temPI: pi !== null,
+        temNF: nf !== null,
+      }),
+    };
+  });
+}
+
+/** "AP, PI e NF" — a lista do que falta, em português. */
+export function listaDoQueFalta(xs: ReadonlyArray<string>): string {
+  if (xs.length <= 1) return xs.join("");
+  return `${xs.slice(0, -1).join(", ")} e ${xs[xs.length - 1]}`;
+}
+
 /**
  * Como a PP nova do repasse já vem preenchida (decisão 167, entrega 3):
  * o valor que falta para a nota do veículo, decomposto na quantidade e nos

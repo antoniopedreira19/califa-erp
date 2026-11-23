@@ -109,6 +109,9 @@ interface Props {
     /** A calha de cada linha (decisão 167, entrega 3): a PP do repasse,
      *  desenhada pela tabela do job, que é dona das PPs. `null`: sem calha. */
     calha?: ((l: LinhaMidia) => React.ReactNode) | null;
+    /** Os veículos do mês (decisão 274): AP, PI, NF e BV de cada veículo,
+     *  no pé do mês. Recebe o mês `YYYY-MM-01`. */
+    veiculosDoMes?: ((mes: string) => React.ReactNode) | null;
   } | null;
 }
 
@@ -633,6 +636,7 @@ export function PlanilhaMidiaOff({
           </div>
         )}
         {!vazio && <TotalDaMidia conta={d.f.geral} qtdMeios={d.grupos.length} qtdLinhas={d.linhas.length} rotulo={`Total · ${nome}`} />}
+        {!vazio && doJob?.veiculosDoMes ? doJob.veiculosDoMes(`${d.mes.slice(0, 7)}-01`) : null}
         {!vazio && !opcoes.semTotais && <TotaisMidia f={d.f} p={params} titulo={`Totais de ${nome}`} />}
       </div>
     );

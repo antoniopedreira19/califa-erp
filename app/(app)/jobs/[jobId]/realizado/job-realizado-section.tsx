@@ -160,6 +160,7 @@ import type {
 import { LinkSaidaDeModulo } from "@/components/financeiro/link-saida-de-modulo";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { PlanilhaMidiaDoJob } from "./planilha-midia-do-job";
+import { VeiculosDoMes, type BvDoVeiculo } from "./veiculos-do-mes";
 import { alvoDoRepasse, decomposicaoDoRepasse, nomeDoMesMidia } from "@/lib/calculos/midia-off";
 import type { SugestaoDaPP } from "./gerar-pp-drawer";
 import type { MidiaDoDetalhe } from "../carregar-detalhe";
@@ -318,6 +319,10 @@ interface Props {
   /** Confirmar o BV — `jobs.confirmar_bv`, administrador e GP (decisão
    *  080). Telas de leitura mandam `false`. */
   podeConfirmarBv: boolean;
+  /** Mídia Off (decisão 274): anexar, trocar e remover AP, PI e a NF do
+   *  veículo — administrador, GP e produtor, com o job aberto. As telas de
+   *  leitura (financeiro) não mandam: o card abre em consulta. */
+  podeAnexarDocumentosDaMidia?: boolean;
   /** Job já enviado para faturamento: o valor da nota está congelado em
    *  `jobs_envio_faturamento` e nem errata nem save podem mexer nele
    *  (decisão 028, nota de 27/08/2026). O servidor já recusava — sem
@@ -664,6 +669,7 @@ function PlanilhaDoJob({
   podeCadastrarFornecedor = false,
   podeEditarFornecedor = false,
   podeConfirmarBv,
+  podeAnexarDocumentosDaMidia = false,
   jaEnviadoParaFaturamento = false,
   ppsPorItemId,
   aEmitirPorItemId,
@@ -2041,6 +2047,50 @@ function PlanilhaDoJob({
   ) : null;
 
   if (midia) {
+    // Os veículos de um mês (decisão 274): AP, PI, NF e o BV de cada um.
+    const nomeDoVeiculoDaMidia = (id: string) =>
+      midia.veiculos.find((v) => v.id === id)?.nome ??
+      fornecedores.find((f) => f.id === id)?.nome ??
+      "Veículo";
+    const bvDoVeiculo = (v: { linhaIds: string[] }): BvDoVeiculo | null => {
+      // O BV do veículo no mês mora numa linha do job: a que já tem BV, ou
+      // a primeira do veículo no mês.
+      const comBv = v.linhaIds.find((id) => (bvsPorItem[id] ?? []).length > 0);
+      const ancora = itens.find((i) => i.id === (comBv ?? v.linhaIds[0]));
+      return ancora ? { ancora, bvs: bvsPorItem[ancora.id] ?? [] } : null;
+    };
+    const veiculosDoMesDaMidia = (mes: string) => {
+      const doMes = faturamentoMensal.find((m) => m.mes.slice(0, 10) === mes);
+      return (
+        <VeiculosDoMes
+          jobId={job.id}
+          mes={mes}
+          veiculos={midia.veiculosPorMes[mes] ?? []}
+          nomeDoVeiculo={nomeDoVeiculoDaMidia}
+          enviado={
+            doMes?.envio
+              ? { em: doMes.envio.enviado_em }
+              : doMes?.peloFinanceiro
+                ? { em: null }
+                : null
+          }
+          leituraFalhou={midia.documentosFalharam}
+          podeAnexar={podeAnexarDocumentosDaMidia}
+          bv={{
+            doVeiculo: bvDoVeiculo,
+            fornecedores: fornecedores.map((f) => ({
+              id: f.id,
+              nome: f.razao_social ?? f.nome,
+              cpf_cnpj: f.cpf_cnpj,
+            })),
+            percentualImposto: Number(versaoDoRascunho.percentual_imposto ?? 0),
+            versaoLabel: `v${versao.numero_versao}`,
+            podeLancar: podeAcoes,
+            podeConfirmar: podeConfirmarBv,
+          }}
+        />
+      );
+    };
     const enviados = faturamentoMensal.filter((m) => m.envio !== null).length;
     const comFaturamento = faturamentoMensal.filter((m) => m.faturamento > 0.004).length;
     // Decisão 256: o mês do Novo faturamento fecha sem envio da produção.
@@ -2056,6 +2106,7 @@ function PlanilhaDoJob({
       {tabela(gruposDaPlanilha, undefined, false, null, false, (calhaDaLinha) => (
       <PlanilhaMidiaDoJob
         calha={(l) => calhaDaLinha(l.id)}
+        veiculosDoMes={(mes) => veiculosDoMesDaMidia(mes)}
         job={job}
         nomeJob={nomeJob}
         versao={versao}
@@ -2090,7 +2141,10 @@ function PlanilhaDoJob({
             m.mes.slice(0, 7),
             m.situacao === "em_veiculacao" && m.ultimaVeiculacao
               ? `Em veiculação até ${dataBr(m.ultimaVeiculacao).slice(0, 5)}`
-              : ROTULO_DA_SITUACAO[m.situacao],
+              : m.situacao === "a_enviar" &&
+                  (midia.veiculosPorMes[m.mes.slice(0, 10)] ?? []).some((v) => v.falta.length > 0)
+                ? "Falta AP, PI ou NF"
+                : ROTULO_DA_SITUACAO[m.situacao],
           ]),
         )}
         detalheCampanha={
