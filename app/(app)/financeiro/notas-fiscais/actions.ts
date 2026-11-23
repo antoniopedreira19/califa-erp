@@ -12,7 +12,14 @@ import { requireSession } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { createClient } from "@/lib/supabase/server";
 import { custoEstimadoUsd } from "@/lib/ia/openai-client";
-import { VERSAO_LEITURA_NOTA_TOMADA, lerNotaTomada, leituraParaGravar, type DadosBrutosNotaTomada } from "@/lib/ia/ler-nota-tomada";
+import {
+  VERSAO_DA_LEITURA_POR_IMAGEM,
+  VERSAO_LEITURA_NOTA_TOMADA,
+  lerNotaTomada,
+  leituraParaGravar,
+  type DadosBrutosNotaTomada,
+} from "@/lib/ia/ler-nota-tomada";
+import { extrairTextoDoPdf, lerPeloTexto } from "@/lib/ia/texto-da-nf";
 import { NOTAS_POR_LEITURA, type TabelaDoAnexo } from "./dados";
 import { seguirDocumentoNasPPs } from "@/app/(app)/jobs/[jobId]/realizado/actions-pp";
 
@@ -95,12 +102,16 @@ export async function lerNotasTomadas(ids: string[]): Promise<{ ok: true; result
         }
         const arquivo = Buffer.from(await blob.arrayBuffer());
         const hash = createHash("sha256").update(arquivo).digest("hex");
+        // A segunda leitura: o texto do PDF, quando ele tem texto (sem IA).
+        const textoDoPdf = anexo.mimetype.startsWith("image/") ? null : await extrairTextoDoPdf(arquivo);
+        const porTexto = textoDoPdf ? lerPeloTexto(textoDoPdf) : null;
+        // A leitura por imagem (IA), pelo cache quando o arquivo já foi lido.
         const { data: cache } = await supabase
           .from("nf_extracao_cache")
           .select("dados")
           .eq("tenant_id", tenantId)
           .eq("hash_sha256", hash)
-          .eq("modelo", VERSAO_LEITURA_NOTA_TOMADA)
+          .eq("modelo", VERSAO_DA_LEITURA_POR_IMAGEM)
           .maybeSingle<{ dados: DadosBrutosNotaTomada }>();
         let dados: DadosBrutosNotaTomada;
         let tokensIn = 0;
@@ -108,21 +119,32 @@ export async function lerNotasTomadas(ids: string[]): Promise<{ ok: true; result
         if (cache?.dados) {
           dados = cache.dados;
         } else {
-          const r = await lerNotaTomada(arquivo, anexo.mimetype);
-          dados = r.dados;
-          tokensIn = r.tokensIn;
-          tokensOut = r.tokensOut;
-          await supabase.from("nf_extracao_cache").insert({ tenant_id: tenantId, hash_sha256: hash, dados, modelo: VERSAO_LEITURA_NOTA_TOMADA });
+          try {
+            const r = await lerNotaTomada(arquivo, anexo.mimetype);
+            dados = r.dados;
+            tokensIn = r.tokensIn;
+            tokensOut = r.tokensOut;
+            await supabase.from("nf_extracao_cache").insert({ tenant_id: tenantId, hash_sha256: hash, dados, modelo: VERSAO_DA_LEITURA_POR_IMAGEM });
+          } catch (err) {
+            // A IA não leu, mas o texto do PDF trouxe os campos: vale o texto.
+            if (!porTexto || (!porTexto.numero && !porTexto.valor)) throw err;
+            console.error("[notas-fiscais.leitura.imagem]", err instanceof Error ? err.message : err);
+            dados = dadosVazios();
+          }
         }
-        const conferida = leituraParaGravar(dados, {
-          numero: nota.numero,
-          cnpjEmitente: nota.fornecedor?.cpf_cnpj ?? null,
-          valor: Number(nota.valor),
-          emissao: nota.data_emissao,
-        });
+        const conferida = leituraParaGravar(
+          dados,
+          {
+            numero: nota.numero,
+            cnpjEmitente: nota.fornecedor?.cpf_cnpj ?? null,
+            valor: Number(nota.valor),
+            emissao: nota.data_emissao,
+          },
+          porTexto,
+        );
         const { error } = await supabase.rpc("gravar_leitura_da_nota", {
           p_nota_id: nota.id,
-          p_dados: conferida.leitura,
+          p_dados: { ...conferida.leitura, texto_bruto: textoDoPdf ? textoDoPdf.slice(0, 20000) : null },
           p_modelo: VERSAO_LEITURA_NOTA_TOMADA,
         });
         if (error) {
@@ -146,6 +168,8 @@ export async function lerNotasTomadas(ids: string[]): Promise<{ ok: true; result
             modelo: VERSAO_LEITURA_NOTA_TOMADA,
             arquivo_da_nota: conferida.arquivoDaNota,
             divergencias: conferida.leitura.divergencias,
+            com_texto: Boolean(textoDoPdf),
+            discordancias: conferida.leitura.discordancias,
             tokens_in: tokensIn,
             tokens_out: tokensOut,
             custo_usd: custoEstimadoUsd(tokensIn, tokensOut),
@@ -162,6 +186,25 @@ export async function lerNotasTomadas(ids: string[]): Promise<{ ok: true; result
 }
 
 type Supabase = ReturnType<typeof createClient>;
+
+/** A leitura por imagem vazia: a IA não leu e vale só o texto do PDF. */
+function dadosVazios(): DadosBrutosNotaTomada {
+  const vazia = { aliquota: null, valor: null };
+  return {
+    numero_nf: null,
+    cnpj_emissor: null,
+    data_emissao: null,
+    valor_total: null,
+    descricao_servico: null,
+    cnae: null,
+    codigo_servico: null,
+    municipio_prestacao: null,
+    competencia: null,
+    codigo_verificacao: null,
+    retencoes: { iss: vazia, irrf: vazia, pis: vazia, cofins: vazia, csll: vazia, inss: vazia },
+    confianca_baixa: true,
+  };
+}
 
 /** "No PDF: emissão 05/11/2026; valor R$ 82,00." */
 function motivoDaDivergencia(pdf: { emissao: string | null; valor: number | null }, divergencias: string[]): string {

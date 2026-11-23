@@ -11,10 +11,19 @@
  *   arquivo se for válido (a v2 recusou 8 notas por um dígito lido errado);
  *   o que o PDF traz (número, CNPJ, emissão, valor) e o que diverge do
  *   registro ficam gravados na nota, lida ou não.
+ * - v4 (23/11/2026): o texto do PDF, quando existe, entra como segunda
+ *   leitura (`texto-da-nf.ts`); discordando da imagem, vale o texto.
  *
  * Sem dependências: a tela (cliente) também lê.
  */
-export const ESQUEMA_LEITURA_NOTA_TOMADA = "nota-tomada-v3";
+export const ESQUEMA_LEITURA_NOTA_TOMADA = "nota-tomada-v4";
+
+/**
+ * O esquema da leitura por IMAGEM (a chave do cache das leituras). A v4 só
+ * acrescentou o texto do PDF: a leitura por imagem é a da v3, e a releitura
+ * usa o cache, sem custo.
+ */
+export const ESQUEMA_DA_LEITURA_POR_IMAGEM = "nota-tomada-v3";
 
 /** A leitura gravada é da versão atual do esquema? */
 export function leituraEAtual(modelo: string | null | undefined): boolean {

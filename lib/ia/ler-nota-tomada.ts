@@ -15,9 +15,13 @@ import type OpenAI from "openai";
 import { getOpenAIClient, MODELO_LEITURA_NF } from "./openai-client";
 import type { RetencaoDestacadaNaNf } from "@/lib/types";
 import { isValidCnpj } from "@/lib/utils";
-import { ESQUEMA_LEITURA_NOTA_TOMADA } from "./versao-nota-tomada";
+import { ESQUEMA_DA_LEITURA_POR_IMAGEM, ESQUEMA_LEITURA_NOTA_TOMADA } from "./versao-nota-tomada";
+import type { CamposDoPdf } from "./texto-da-nf";
 
+/** A versão gravada na nota (`leitura_modelo`). */
 export const VERSAO_LEITURA_NOTA_TOMADA = `${MODELO_LEITURA_NF}|${ESQUEMA_LEITURA_NOTA_TOMADA}`;
+/** A chave do cache da leitura por imagem (`nf_extracao_cache.modelo`). */
+export const VERSAO_DA_LEITURA_POR_IMAGEM = `${MODELO_LEITURA_NF}|${ESQUEMA_DA_LEITURA_POR_IMAGEM}`;
 
 type Imposto = RetencaoDestacadaNaNf["imposto"];
 const IMPOSTOS: Imposto[] = ["ISS", "IRRF", "PIS", "COFINS", "CSLL", "INSS"];
@@ -150,21 +154,24 @@ export async function lerNotaTomada(
 /** O que a nota diverge do PDF. "emitente" só com o CNPJ lido válido. */
 export type DivergenciaDoPdf = "numero" | "emitente" | "emissao" | "valor";
 
-/** O que o PDF traz, como a IA leu. */
-export interface OQueOPdfTraz {
-  numero: string | null;
-  cnpj: string | null;
-  /** "AAAA-MM-DD". */
-  emissao: string | null;
-  valor: number | null;
-}
+/** O que o PDF traz: número, CNPJ do emitente, emissão "AAAA-MM-DD" e valor. */
+export type OQueOPdfTraz = CamposDoPdf;
 
 /** O que se grava na nota (formato da RPC `gravar_leitura_da_nota`). */
 export interface LeituraParaGravar {
   /** O PDF é desta nota (mesmo número e mesmo emitente): os dados abaixo valem. */
   arquivo_da_nota: boolean;
+  /** O que vale do PDF: o texto, quando existe; senão, a imagem. */
   pdf: OQueOPdfTraz;
   divergencias: DivergenciaDoPdf[];
+  /** A leitura por imagem (IA), como veio. */
+  imagem: OQueOPdfTraz;
+  /** A leitura pelo texto do PDF; nula quando o PDF não tem texto. */
+  texto: OQueOPdfTraz | null;
+  /** Os campos em que a imagem e o texto discordaram (valeu o texto). */
+  discordancias: DivergenciaDoPdf[];
+  /** O PDF não tem texto: a divergência é só pela leitura da imagem. */
+  so_imagem: boolean;
   descricao_servico: string | null;
   /** Só no formato de CNAE, "NNNN-N/NN". */
   cnae: string | null;
@@ -219,14 +226,31 @@ export function codigoServicoLido(v: string | null): string | null {
 export function leituraParaGravar(
   dados: DadosBrutosNotaTomada,
   nota: { numero: string; cnpjEmitente: string | null; valor: number; emissao: string },
+  porTexto: OQueOPdfTraz | null = null,
 ): { arquivoDaNota: boolean; motivo: string | null; leitura: LeituraParaGravar } {
   const cnpjLido = soDigitos(dados.cnpj_emissor);
-  const pdf: OQueOPdfTraz = {
+  const imagem: OQueOPdfTraz = {
     numero: texto(dados.numero_nf, 60),
     cnpj: cnpjLido.length === 14 ? cnpjLido : null,
     emissao: dataValida(dados.data_emissao),
     valor: numero(dados.valor_total),
   };
+  // As duas leituras: o texto vale onde existe; a imagem completa o resto.
+  const pdf: OQueOPdfTraz = {
+    numero: porTexto?.numero ?? imagem.numero,
+    cnpj: porTexto?.cnpj ?? imagem.cnpj,
+    emissao: porTexto?.emissao ?? imagem.emissao,
+    valor: porTexto?.valor ?? imagem.valor,
+  };
+  const discordancias: DivergenciaDoPdf[] = [];
+  if (porTexto) {
+    const dig = (v: string | null) => soDigitos(v).replace(/^0+/, "");
+    if (porTexto.numero && imagem.numero && chaveDoNumero(porTexto.numero) !== chaveDoNumero(imagem.numero) && dig(porTexto.numero) !== dig(imagem.numero))
+      discordancias.push("numero");
+    if (porTexto.cnpj && imagem.cnpj && porTexto.cnpj !== imagem.cnpj) discordancias.push("emitente");
+    if (porTexto.emissao && imagem.emissao && porTexto.emissao !== imagem.emissao) discordancias.push("emissao");
+    if (porTexto.valor !== null && imagem.valor !== null && Math.abs(porTexto.valor - imagem.valor) > 0.009) discordancias.push("valor");
+  }
   const divergencias: DivergenciaDoPdf[] = [];
   const chaveLida = chaveDoNumero(pdf.numero);
   const chaveDaNota = chaveDoNumero(nota.numero);
@@ -262,6 +286,10 @@ export function leituraParaGravar(
       arquivo_da_nota: arquivoDaNota,
       pdf,
       divergencias,
+      imagem,
+      texto: porTexto,
+      discordancias,
+      so_imagem: porTexto === null,
       descricao_servico: valem ? texto(dados.descricao_servico, 300) : null,
       cnae: valem ? cnaeLido(dados.cnae) : null,
       // A v1 mostrou a IA pondo o código do serviço no CNAE: aproveita de lá.
