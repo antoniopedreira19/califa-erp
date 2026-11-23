@@ -514,6 +514,13 @@ export default async function JobDetailPage({
               statusBadgeClasses={statusBadgeClasses}
             />
 
+            {/* Na Mídia Off não há errata (a planilha da mídia não tem o
+                "Editar planilha"): a campanha muda pelo card "Planejado e
+                realizado", na Planilha Interna, que guarda o registro
+                (decisão 275). O card de Erratas ficava vazio e mandava
+                usar um botão que não existe — Tiago, 23/11/2026: "Pode
+                tirar". */}
+            {detalhe.midia === null && (
             <ErratasCard
               erratas={erratas}
               valorJobAbertura={
@@ -537,6 +544,7 @@ export default async function JobDetailPage({
               // A errata pronta para envio (decisão 159) entra no topo.
               pronta={errataPronta}
             />
+            )}
 
             {/* As edições do orçado feitas pelo financeiro (decisão 115):
                 a produção vê o que mudou e quem mudou. O card só existe

@@ -145,9 +145,13 @@ num mês de 31 vinha com D/M 0,968 (a PP guarda 3 casas) e passava R$ 2,06
 da nota. `decomposicaoDoRepasse` agora faz a conta com as casas da PP e,
 quando não fecha no centavo, sugere valor × 1 × 1 (PP-00959: R$ 7.741,94).
 
+**Card "Erratas" fora da Mídia Off** (Tiago, 23/11/2026: "Pode tirar"):
+na mídia não há errata (a planilha não tem o "Editar planilha"), e o card
+ficava em "Nenhuma errata registrada" mandando usar um botão que não existe.
+Saiu da aba Informações do job, na produção e no financeiro
+(`detalhe.midia === null`); o registro das mudanças é o do card "Planejado e
+realizado". Nos outros jobs, nada muda.
+
 ## Em aberto
 
 - Contrato do veículo (Tiago: "para um momento seguinte").
-- O card "Erratas" do job de mídia diz que "alterações no orçado do job são
-  feitas pelo botão Editar planilha"; na mídia a mudança é pelo card
-  "Planejado e realizado".
