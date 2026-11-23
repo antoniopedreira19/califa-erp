@@ -11,6 +11,7 @@ import {
   Landmark,
   Mail,
   MessageSquare,
+  Palmtree,
   Receipt,
   Wallet,
 } from "lucide-react";
@@ -617,6 +618,7 @@ export async function carregarHomeGerenteProducao(
     mensagensNaoLidas,
     meusJobsAndamento,
     meusOrcamentosAbertos,
+    feriasAguardandoMim,
   ] = await Promise.all([
     // ESTRITO: versoes aguardando revisao ou enviadas ao cliente, onde eu sou o GP
     // "enviada_cliente" EXISTE no enum — incluido agora
@@ -688,6 +690,12 @@ export async function carregarHomeGerenteProducao(
           .in("status", ["rascunho", "em_revisao", "enviado_cliente"])
           // Arquivado (decisão 118) não é orçamento em aberto.
           .is("arquivado_em", null),
+    // EQUIPE: solicitações de férias dos liderados aguardando o gerente aprovar.
+    // RLS `ferias_lancamentos_lider_select` já restringe aos liderados do caller.
+    supabase
+      .from("colaboradores_ferias_lancamentos")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "aguardando_gestor"),
   ]);
 
   const prontosPraEncerrar = await contarProntosPraEncerrar(
@@ -724,6 +732,13 @@ export async function carregarHomeGerenteProducao(
       subtitulo: "Chat dos jobs em que você participa",
       href: "/jobs?filtro=chat_pendente&meus=1",
       icone: MessageSquare,
+    },
+    {
+      titulo: "Férias aguardando sua aprovação",
+      contagem: feriasAguardandoMim.count ?? 0,
+      subtitulo: "Solicitações dos seus liderados",
+      href: "/equipe",
+      icone: Palmtree,
     },
   ];
 
