@@ -418,3 +418,10 @@ confirmado pelo texto (NFs 26, 87 e 000031), o contrato no lugar da NF (NF
 03) e a guia municipal (NF 5914041000/1196-2). As 3 notas com "O registro
 está certo" continuam sem acusar.
 
+**Pendência (Tiago, 23/11/2026: "Não por agora", "Mas fica como
+pendência"):** segunda leitura por um modelo maior nas notas só com imagem
+(PDF sem texto) que divergem do registro — o ponto 5 do pedido da leitura
+pelo texto. Hoje cairiam nela só as NFs 138 e 139; a conferência a olho do
+PDF resolve. Retomar se a lista de notas só com imagem que divergem
+crescer.
+
