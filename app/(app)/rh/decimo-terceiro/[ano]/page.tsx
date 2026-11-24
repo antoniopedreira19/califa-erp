@@ -226,7 +226,7 @@ export default async function DecimoTerceiroDetalhePage({ params }: Props) {
 
       <TabelaLinhas
         linhas={linhas}
-        podeEditar={podeEditar && folha.status === "rascunho"}
+        podeEditar={podeEditar}
       />
     </div>
   );
