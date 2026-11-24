@@ -9382,3 +9382,10 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
   auditoria ganham `baixas_herdadas`.
 - Motivo: unificar as cargas do histórico numa versão só para o fechamento
   do 3T (decisão 211, seção de 23/11).
+
+## ⚠️ Nota de 2026-11-23 — ajustes depois da carga do 4T (decisão 277 §6)
+
+- **Mútuos:** a guia de IOF paga no histórico que é o mesmo pagamento do IOF do histórico (mesmo CNPJ e valor) não soma de novo (`guiasDeIofAContar`).
+- **Rateio por gerencial:** a sugestão acompanha o valor da guia até a pessoa mexer (Guia da contabilidade e aprovação).
+- **Conferência do pago no histórico:** "tributo" saiu das palavras de imposto.
+- Carga da produção (23/11): 12 Guias da contabilidade de set/3T pagas no histórico (R$ 761.400,80); o resto aguarda o Tiago (ver 277 e a memória do fiscal).

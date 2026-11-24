@@ -30,7 +30,9 @@ export interface GrupoDoHistorico {
   bate: boolean;
 }
 
-const DE_IMPOSTO = /\b(darf|iss|pis|cofins|irpj|csll|iof|imposto|tributo)\b/i;
+// Sem "tributo": na planilha ela aparece em descrição de serviço ("tributo a
+// uma banda", cachê de show), não em pagamento de imposto.
+const DE_IMPOSTO = /\b(darf|iss|pis|cofins|irpj|csll|iof|imposto)\b/i;
 
 /** Linha de imposto: o centro de custo tributário (03) ou a descrição. */
 export function ehLinhaDeImposto(l: Pick<LinhaDoHistorico, "plano_codigo" | "descricao">): boolean {

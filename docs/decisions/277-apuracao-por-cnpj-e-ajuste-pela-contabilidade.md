@@ -101,6 +101,14 @@ O inventário das 52 guias do 4º trimestre (de 01/10 a 31/12, com o valor por g
 - **Conferido na produção, só leitura:** a regra da conferência acha o ISS de 04/11 (11 linhas, R$ 175.230,82, e o de R$ 9.787,91) e o PIS/COFINS de 20/11 (R$ 42.805,20 e R$ 338.470,20, débito menos crédito).
 - Os testes de fiscal, financeiro e conciliação passam (368). `tsc` e lint estão limpos.
 
+## 6. Ajustes depois da carga de 23/11 (implementados)
+
+A carga das 12 guias pagas em outubro (feita pela tela, na produção) mostrou três defeitos:
+
+- **Mútuos contava o IOF duas vezes.** A tela de mútuos soma o IOF do histórico (`mutuos_iof_historico`, pela linha do extrato) e soma também a guia de IOF paga. Uma guia paga no histórico pode ser o mesmo pagamento. Agora ela só soma quando o histórico não tem um pagamento do mesmo CNPJ e valor (`guiasDeIofAContar`, `lib/financeiro/mutuo.ts`). A guia baixada no sistema sempre soma.
+- **A sugestão do rateio ficava em R$ 0,00** quando o valor da guia era digitado depois de a receita do período carregar. Agora, enquanto a pessoa não mexe no rateio, a sugestão refaz a conta com o valor da guia. Vale na Guia da contabilidade e no painel de aprovação.
+- **A conferência trazia linhas que não são de imposto**: a palavra "tributo" aparece em descrição de serviço na planilha ("tributo" a uma banda). Ela saiu da lista de palavras.
+
 ## Arquivos (entrega 1)
 
 - `app/(app)/financeiro/fiscal/apuracao/aba-apuracao.tsx`: botões de CNPJ, blocos, faixa, lote por CNPJ, coluna Local e larguras.

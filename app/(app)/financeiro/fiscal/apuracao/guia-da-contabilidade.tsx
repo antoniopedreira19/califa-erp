@@ -138,6 +138,8 @@ export function DialogoGuiaDaContabilidade({
   const [fonte, setFonte] = React.useState<"sistema" | "historico" | null>(null);
   const [erroBase, setErroBase] = React.useState<string | null>(null);
   const [partes, setPartes] = React.useState<ParteDaGerencial[]>([]);
+  // A sugestão por gerencial acompanha o valor da guia até a pessoa mexer no rateio.
+  const [partesEditadas, setPartesEditadas] = React.useState(false);
   React.useEffect(() => {
     let vivo = true;
     setBase(null);
@@ -160,8 +162,15 @@ export function DialogoGuiaDaContabilidade({
   }, [pj.id, competencia]);
   // Nova base: a sugestão por gerencial recomeça (com o valor de agora).
   React.useEffect(() => {
-    if (base) setPartes(gerenciaisDaBase(base, valor, gerencial));
+    if (!base) return;
+    setPartes(gerenciaisDaBase(base, valor, gerencial));
+    setPartesEditadas(false);
   }, [base]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Valor novo com o rateio ainda intocado: a sugestão refaz a conta com ele
+  // (antes ficava em R$ 0,00 quando o valor vinha depois da receita).
+  React.useEffect(() => {
+    if (base && !partesEditadas) setPartes(gerenciaisDaBase(base, valor, gerencial));
+  }, [valor]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A guia que o sistema já calcula se aprova por ela, não por aqui.
   const calculada = dados.guias.find(
@@ -325,7 +334,18 @@ export function DialogoGuiaDaContabilidade({
           </p>
         ) : (
           <div className="space-y-1">
-            {valor > 0 && <RateioPorGerencial total={valor} base={base} regras={regras} partes={partes} onChange={setPartes} />}
+            {valor > 0 && (
+              <RateioPorGerencial
+                total={valor}
+                base={base}
+                regras={regras}
+                partes={partes}
+                onChange={(p) => {
+                  setPartes(p);
+                  setPartesEditadas(true);
+                }}
+              />
+            )}
             <p className="text-[11px] text-muted-foreground">
               {erroBase ??
                 (base.length === 0

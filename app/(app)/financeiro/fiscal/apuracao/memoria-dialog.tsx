@@ -128,6 +128,11 @@ export function MemoriaDialog({
   // Decisão 277: o rateio por empresa gerencial (o da contabilidade) e, no PIS e na
   // COFINS não cumulativos, o saldo credor que a contabilidade levou para o mês seguinte.
   const [partes, setPartes] = React.useState<ParteDaGerencial[]>(() => gerenciaisDaBase(g.rateio, calculado, gerencialDoCnpj));
+  // A sugestão por gerencial acompanha o valor da guia até a pessoa mexer no rateio.
+  const [partesEditadas, setPartesEditadas] = React.useState(false);
+  React.useEffect(() => {
+    if (!partesEditadas) setPartes(gerenciaisDaBase(g.rateio, valorGuia, gerencialDoCnpj));
+  }, [valorGuia]); // eslint-disable-line react-hooks/exhaustive-deps
   const temSaldo = !diferenca && (g.codigo === "6912" || g.codigo === "5856");
   const [saldoContabil, setSaldoContabil] = React.useState<number>(g.saldo_credor_gerado);
   const saldoMudou = temSaldo && Math.abs(saldoContabil - g.saldo_credor_gerado) >= 0.01;
@@ -600,6 +605,7 @@ export function MemoriaDialog({
                     partes={partes}
                     onChange={(p) => {
                       setPartes(p);
+                      setPartesEditadas(true);
                       setErro(null);
                     }}
                   />

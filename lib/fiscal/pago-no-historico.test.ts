@@ -12,6 +12,7 @@ test("só as linhas de imposto: o centro tributário (03) ou a descrição", () 
   assert.equal(ehLinhaDeImposto({ plano_codigo: "15.999", descricao: "COFINS" }), true);
   assert.equal(ehLinhaDeImposto({ plano_codigo: "02.999", descricao: "PP-00202 Transmissão" }), false);
   assert.equal(ehLinhaDeImposto({ plano_codigo: "07.006", descricao: "NÃO ENTENDI ISSO" }), false);
+  assert.equal(ehLinhaDeImposto({ plano_codigo: "02.999", descricao: "APRESENTAÇÃO ARTÍSTICA - TRIBUTO A UMA BANDA" }), false);
 });
 
 test("a guia dividida por gerencial e trimestre, com o crédito positivo, soma o valor dela", () => {

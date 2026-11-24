@@ -1,6 +1,7 @@
 import type { createClient } from "@/lib/supabase/server";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import {
+  guiasDeIofAContar,
   parteDeFora,
   parteDoCnpj,
   saldosDosPares,
@@ -67,7 +68,7 @@ export async function carregarMutuos(supabase: Supabase, tenantId: string): Prom
       .eq("tenant_id", tenantId),
     supabase
       .from("impostos_a_pagar")
-      .select("empresa_contabil_id, rotulo_competencia, valor, status, multa_juros")
+      .select("empresa_contabil_id, rotulo_competencia, valor, status, multa_juros, pago_no_historico")
       .eq("tenant_id", tenantId)
       .eq("tributo", "IOF")
       .in("status", ["a_pagar", "pago"]),
@@ -165,21 +166,30 @@ export async function carregarMutuos(supabase: Supabase, tenantId: string): Prom
   }));
 
   // A guia que já está no histórico da planilha: a linha fica lá, e só soma aqui.
-  for (const h of iofsDoHistoricoRes.data ?? []) {
-    iofs.push({
-      pagador: parteDoCnpj(h.pagador_empresa_contabil_id),
-      com: h.com_fornecedor_id ? parteDeFora(h.com_fornecedor_id) : parteDoCnpj(h.com_empresa_contabil_id as string),
-      valor: Number(h.valor),
-    });
-  }
+  const iofsDoHistorico: IofDoMutuo[] = (iofsDoHistoricoRes.data ?? []).map((h) => ({
+    pagador: parteDoCnpj(h.pagador_empresa_contabil_id),
+    com: h.com_fornecedor_id ? parteDeFora(h.com_fornecedor_id) : parteDoCnpj(h.com_empresa_contabil_id as string),
+    valor: Number(h.valor),
+  }));
+  iofs.push(...iofsDoHistorico);
 
   // A guia paga soma no IOF do par. Só a empresa de fora tem guia por enquanto:
   // com mais de uma para o mesmo CNPJ, a guia não diz de qual delas é.
-  const guias = (guiasRes.data ?? []) as Array<{ empresa_contabil_id: string; rotulo_competencia: string; valor: string | number; status: string }>;
-  for (const g of guias.filter((x) => x.status === "pago")) {
-    const pagador = parteDoCnpj(g.empresa_contabil_id);
-    const foras = aberturas.filter((a) => a.credor === pagador && a.devedor.startsWith("f:"));
-    iofs.push({ pagador, com: foras.length === 1 ? foras[0].devedor : null, valor: Number(g.valor) });
+  // Decisão 277: a guia paga no histórico que é o mesmo pagamento do IOF do
+  // histórico (mesmo CNPJ e valor) não soma de novo.
+  const guias = (guiasRes.data ?? []) as Array<{
+    empresa_contabil_id: string;
+    rotulo_competencia: string;
+    valor: string | number;
+    status: string;
+    pago_no_historico: boolean;
+  }>;
+  const pagas = guias
+    .filter((x) => x.status === "pago")
+    .map((g) => ({ pagador: parteDoCnpj(g.empresa_contabil_id), valor: Number(g.valor), pagoNoHistorico: g.pago_no_historico }));
+  for (const g of guiasDeIofAContar(pagas, iofsDoHistorico)) {
+    const foras = aberturas.filter((a) => a.credor === g.pagador && a.devedor.startsWith("f:"));
+    iofs.push({ pagador: g.pagador, com: foras.length === 1 ? foras[0].devedor : null, valor: g.valor });
   }
   const guiasAbertas = guias
     .filter((x) => x.status === "a_pagar")

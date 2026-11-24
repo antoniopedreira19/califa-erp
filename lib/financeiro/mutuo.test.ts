@@ -184,3 +184,23 @@ test("com mútuo sem linha por perto, não oferece outro", () => {
   const semLinha = [{ data: "2026-10-19", valor: 700, origem: "mutuo_entrada" }];
   assert.equal(mutuoDaLinha(ctx, base.partes, { data: "2026-10-20", valor: 600, historico: "PIX" }, semLinha), null);
 });
+
+test("IOF: a guia paga no histórico que já está no IOF do histórico não conta de novo; a outra soma", async () => {
+  const { guiasDeIofAContar } = await import("./mutuo");
+  const GO = "ec:go";
+  const guias = [
+    { pagador: GO, valor: 4426.17, pagoNoHistorico: true }, // o mesmo pagamento do histórico
+    { pagador: CAL, valor: 2549.69, pagoNoHistorico: true }, // não está no histórico do mútuo
+    { pagador: GO, valor: 3813, pagoNoHistorico: false }, // baixada no sistema
+    { pagador: GO, valor: 4426.17, pagoNoHistorico: true }, // um segundo de mesmo valor: o histórico só desconta um
+  ];
+  const contar = guiasDeIofAContar(guias, [{ pagador: GO, valor: 4426.17 }]);
+  assert.deepEqual(
+    contar.map((g) => [g.pagador, g.valor]),
+    [
+      [CAL, 2549.69],
+      [GO, 3813],
+      [GO, 4426.17],
+    ],
+  );
+});
