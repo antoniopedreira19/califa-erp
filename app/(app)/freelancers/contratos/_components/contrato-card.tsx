@@ -44,6 +44,7 @@ import {
   type FreelancerContratoHistoricoEntry,
   type TipoFreelancerContrato,
 } from "@/lib/types";
+import { StatusRealDropdown } from "../../_components/status-real-dropdown";
 
 interface Props {
   contrato: FreelancerContrato;
@@ -653,22 +654,27 @@ export function ContratoCard({
                   Atual
                 </span>
               )}
-              {!contrato.status_real &&
-                (() => {
-                  const today = new Date().toISOString().slice(0, 10);
-                  const isAgendado =
-                    contrato.data_inicio !== null &&
-                    contrato.data_inicio > today;
-                  return isAgendado ? (
+              {(() => {
+                const today = new Date().toISOString().slice(0, 10);
+                const isAgendado =
+                  !contrato.status_real &&
+                  contrato.data_inicio !== null &&
+                  contrato.data_inicio > today;
+                if (isAgendado) {
+                  return (
                     <span className="rounded-full bg-violet-100 text-violet-700 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5">
                       Agendado
                     </span>
-                  ) : (
-                    <span className="rounded-full bg-gray-100 text-gray-600 text-[9px] font-bold uppercase tracking-wider px-2 py-0.5">
-                      Encerrado
-                    </span>
                   );
-                })()}
+                }
+                return (
+                  <StatusRealDropdown
+                    contratoId={contrato.id}
+                    valorAtual={contrato.status_real}
+                    podeEditar={!!canManage}
+                  />
+                );
+              })()}
             </div>
             {contrato.cargo && (
               <p className="text-xs text-muted-foreground mt-0.5">

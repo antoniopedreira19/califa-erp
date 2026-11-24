@@ -571,6 +571,10 @@ export type AuditAction =
   | "freelancer_contrato.distrato_minuta_gerada"
   | "freelancer_contrato.distrato_aplicado"
   | "freelancer_contrato.distrato_cancelado"
+  // Encerramento manual do vínculo (sem distrato formal): troca inline do
+  // status_real pelo RH/admin/fin ou pelo responsável. Reversível.
+  | "freelancer_contrato.status_real_encerrado"
+  | "freelancer_contrato.status_real_reaberto"
   // Freelancer efetivado como colaborador CLT/PJ/estágio (03/11/2026).
   // Encerra o contrato de freela e linka pro colaborador recém-criado.
   | "freelancer_contrato.efetivado"

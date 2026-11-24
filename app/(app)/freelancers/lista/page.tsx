@@ -325,6 +325,8 @@ export default async function FreelancersListaPage({
 
       <ListaClient
         freelancers={freelancers}
+        currentUserId={session.profile.id}
+        isAprovador={isAprovador}
         filtrosDropdowns={
           <FiltrosDropdowns
             responsaveisDisponiveis={responsaveisDisponiveis}

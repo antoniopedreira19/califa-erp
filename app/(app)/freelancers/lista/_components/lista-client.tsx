@@ -27,11 +27,16 @@ import type {
 } from "@/lib/types";
 import { formatarCargo } from "@/lib/formatar-cargo";
 import { StatusBadge } from "../../_components/status-badge";
+import { StatusRealDropdown } from "../../_components/status-real-dropdown";
 
 interface Props {
   freelancers: FreelancerComStatus[];
   /** Dropdowns de filtro (responsável/job/cargo). Renderizados no mesmo bloco da busca. */
   filtrosDropdowns?: React.ReactNode;
+  /** UUID do usuário logado — pra decidir se ele pode editar o status do contrato. */
+  currentUserId: string;
+  /** admin/rh/financeiro — pode editar status de qualquer contrato. */
+  isAprovador: boolean;
 }
 
 const CHAVES_FILTRO = [
@@ -59,6 +64,8 @@ const TIPO_LABEL: Record<TipoFreelancerContrato, string> = {
 export function ListaClient({
   freelancers,
   filtrosDropdowns,
+  currentUserId,
+  isAprovador,
 }: Props) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -151,6 +158,8 @@ export function ListaClient({
           filtrados={filtrados}
           valoresVisiveis={valoresVisiveis}
           setValoresVisiveis={setValoresVisiveis}
+          currentUserId={currentUserId}
+          isAprovador={isAprovador}
         />
       )}
     </div>
@@ -161,10 +170,14 @@ function TabelaFreelancers({
   filtrados,
   valoresVisiveis,
   setValoresVisiveis,
+  currentUserId,
+  isAprovador,
 }: {
   filtrados: FreelancerComStatus[];
   valoresVisiveis: boolean;
   setValoresVisiveis: React.Dispatch<React.SetStateAction<boolean>>;
+  currentUserId: string;
+  isAprovador: boolean;
 }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-white shadow-soft">
@@ -205,6 +218,8 @@ function TabelaFreelancers({
                 key={f.id}
                 f={f}
                 valoresVisiveis={valoresVisiveis}
+                currentUserId={currentUserId}
+                isAprovador={isAprovador}
               />
             ))}
           </tbody>
@@ -217,9 +232,13 @@ function TabelaFreelancers({
 function FreelancerRow({
   f,
   valoresVisiveis,
+  currentUserId,
+  isAprovador,
 }: {
   f: FreelancerComStatus;
   valoresVisiveis: boolean;
+  currentUserId: string;
+  isAprovador: boolean;
 }) {
   const router = useRouter();
   const href = `/freelancers/${f.id}`;
@@ -332,7 +351,15 @@ function FreelancerRow({
         )}
       </td>
       <td className="px-3 py-2.5 text-center">
-        <StatusRealBadge ativo={f.status_real} />
+        {f.contrato_id ? (
+          <StatusRealDropdown
+            contratoId={f.contrato_id}
+            valorAtual={f.status_real}
+            podeEditar={isAprovador || f.responsavel_id === currentUserId}
+          />
+        ) : (
+          <StatusRealBadge ativo={f.status_real} />
+        )}
       </td>
       <td className="px-3 py-2.5 text-center">
         <StatusBadge status={f.status_calculado as StatusCalculado} />
