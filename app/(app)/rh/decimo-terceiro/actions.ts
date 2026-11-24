@@ -475,6 +475,128 @@ export async function editarLinhaDecimoTerceiro(
     return { ok: false, message: `Falha ao salvar: ${errUpd.message}` };
   }
 
+  // Re-sincroniza folhas_pagamento das parcelas já fechadas. Sem isso, a
+  // Folha de Pagamento do perfil e o Contas a Pagar ficam com o valor
+  // antigo depois do override. Parcela com qualquer linha 'aprovada' ou
+  // 'paga' NÃO é tocada — histórico fechado é imutável.
+  const parcelasParaResync: { numero: 1 | 2; tipo: string }[] = [
+    { numero: 1, tipo: "decimo_terceiro_1a_parcela" },
+    { numero: 2, tipo: "decimo_terceiro_2a_parcela" },
+  ];
+  const parcelasPuladas: number[] = [];
+
+  for (const p of parcelasParaResync) {
+    const { data: existentes, error: errSel } = await supabase
+      .from("folhas_pagamento")
+      .select(
+        "id, status, enviada_em, enviada_por, data_pagamento_prevista, competencia_ano, competencia_mes",
+      )
+      .eq("tenant_id", tenantId)
+      .eq("decimo_terceiro_linha_id", linhaId)
+      .eq("tipo", p.tipo);
+    if (errSel) {
+      return {
+        ok: false,
+        message: `Falha ao ler folhas da ${p.numero}ª parcela: ${errSel.message}`,
+      };
+    }
+    if (!existentes || existentes.length === 0) continue;
+
+    const temImutavel = existentes.some(
+      (f) => f.status === "aprovada" || f.status === "paga",
+    );
+    if (temImutavel) {
+      parcelasPuladas.push(p.numero);
+      continue;
+    }
+
+    const ref = existentes[0];
+
+    const linhaParaMontar: LinhaParaMontar = {
+      decimo_terceiro_linha_id: linhaId,
+      colaborador_id: linha.colaborador_id,
+      tipo_contratacao:
+        linha.snapshot_tipo_contratacao as LinhaParaMontar["tipo_contratacao"],
+      primeira_parcela: calc.primeiraParcela,
+      segunda_parcela: calc.segundaParcela,
+      parte_pj_primeira_parcela: calc.partePj?.primeiraParcela ?? null,
+      parte_pj_segunda_parcela: calc.partePj?.segundaParcela ?? null,
+      parte_clt_primeira_parcela: calc.parteClt?.primeiraParcela ?? null,
+      parte_clt_segunda_parcela: calc.parteClt?.segundaParcela ?? null,
+    };
+
+    const montadas = montarFolhasParcela(linhaParaMontar, p.numero);
+
+    const novas = montadas.map((m) => {
+      // Mesmo ajuste de fecharParcela: 2ª parcela CLT vai pra contabilidade
+      // com valor líquido (sem INSS/IRRF), porque montarFolhasParcela devolve
+      // bruto e a contabilidade recebe o líquido.
+      let salarioBase = m.salario_base;
+      if (p.numero === 2 && m.origem === "contabilidade") {
+        if (linha.snapshot_tipo_contratacao === "clt") {
+          salarioBase -= calc.descontoInss + calc.descontoIrrf;
+        } else if (linha.snapshot_tipo_contratacao === "clt_recibo") {
+          salarioBase -=
+            (calc.parteClt?.descontoInss ?? 0) +
+            (calc.parteClt?.descontoIrrf ?? 0);
+        }
+      }
+      return {
+        tenant_id: tenantId,
+        colaborador_id: m.colaborador_id,
+        competencia_ano: ref.competencia_ano,
+        competencia_mes: ref.competencia_mes,
+        salario_base: salarioBase,
+        status: "enviada",
+        tipo: m.tipo,
+        origem: m.origem,
+        enviada_em: ref.enviada_em,
+        enviada_por: ref.enviada_por,
+        data_pagamento_prevista: ref.data_pagamento_prevista,
+        decimo_terceiro_linha_id: linhaId,
+        decimo_terceiro_adiantamento_id: null as string | null,
+        created_by: session.profile.id,
+      };
+    });
+
+    const idsExistentes = existentes.map((f) => f.id);
+    const { error: errDel } = await supabase
+      .from("folhas_pagamento")
+      .delete()
+      .in("id", idsExistentes);
+    if (errDel) {
+      return {
+        ok: false,
+        message: `Falha ao limpar folhas da ${p.numero}ª parcela: ${errDel.message}`,
+      };
+    }
+
+    if (novas.length > 0) {
+      const { data: inseridas, error: errIns } = await supabase
+        .from("folhas_pagamento")
+        .insert(novas)
+        .select("id");
+      if (errIns) {
+        return {
+          ok: false,
+          message: `Falha ao re-inserir folhas da ${p.numero}ª parcela: ${errIns.message}`,
+        };
+      }
+      for (const f of inseridas ?? []) {
+        const { error: errAloc } = await supabase.rpc(
+          "replicar_alocacao_para_folha",
+          { p_folha_id: f.id },
+        );
+        if (errAloc) {
+          console.error(
+            "[13.editar_linha.replicar_aloc]",
+            errAloc.message,
+          );
+        }
+      }
+    }
+  }
+
   await logAuditEvent({
     acao: "decimo_terceiro.linha.editada",
     tenantId,
@@ -483,6 +605,7 @@ export async function editarLinhaDecimoTerceiro(
     metadata: {
       salario_editado: parsed.data.salario_editado,
       avos_editado: parsed.data.avos_editado,
+      parcelas_puladas_resync: parcelasPuladas,
     },
   });
 

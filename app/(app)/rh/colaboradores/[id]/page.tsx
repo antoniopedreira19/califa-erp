@@ -148,7 +148,7 @@ export default async function ColaboradorDetalhePage({
     supabase
       .from("decimo_terceiro_linhas")
       .select(
-        `avos, total_bruto, total_adiantado, total_liquido,
+        `avos, avos_editado, total_bruto, total_adiantado, total_liquido,
          folha:decimo_terceiro_folhas!decimo_terceiro_linhas_folha_id_fkey(ano, status)`,
       )
       .eq("tenant_id", session.activeTenant.id)
@@ -245,6 +245,7 @@ export default async function ColaboradorDetalhePage({
 
   type Historico13Raw = {
     avos: number;
+    avos_editado: number | null;
     total_bruto: string;
     total_adiantado: string;
     total_liquido: string;
@@ -261,7 +262,7 @@ export default async function ColaboradorDetalhePage({
       return f
         ? {
             ano: f.ano,
-            avos: r.avos,
+            avos: r.avos_editado ?? r.avos,
             total_bruto: Number(r.total_bruto),
             total_adiantado: Number(r.total_adiantado),
             total_liquido: Number(r.total_liquido),
