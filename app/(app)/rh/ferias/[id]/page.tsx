@@ -342,6 +342,7 @@ export default async function ColaboradorFeriasPage({
         <HistoricoColapsavel
           lancamentos={lancsFinalizados.map((l) => ({
             id: l.id,
+            periodo_id: l.periodo_id,
             tipo: l.tipo,
             dias: l.dias,
             dias_abono: l.dias_abono ?? 0,
@@ -351,6 +352,13 @@ export default async function ColaboradorFeriasPage({
             observacao: l.observacao,
             lancado_direto_por_rh: l.lancado_direto_por_rh ?? false,
             valor_total: l.valor_total ? Number(l.valor_total) : null,
+          }))}
+          periodos={periodos.map((p) => ({
+            id: p.id,
+            numero: p.numero,
+            aquisitivo_inicio: p.aquisitivo_inicio,
+            aquisitivo_fim: p.aquisitivo_fim,
+            dias_direito: p.dias_direito,
           }))}
           tipoContratacao={c.tipo_contratacao}
         />

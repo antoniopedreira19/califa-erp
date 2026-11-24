@@ -10,6 +10,7 @@ import type {
 
 type Lanc = {
   id: string;
+  periodo_id: string | null;
   tipo: FeriasLancamentoTipo;
   dias: number;
   dias_abono: number;
@@ -21,36 +22,128 @@ type Lanc = {
   valor_total: number | null;
 };
 
+type PeriodoResumo = {
+  id: string;
+  numero: number;
+  aquisitivo_inicio: string;
+  aquisitivo_fim: string;
+  dias_direito: number;
+};
+
 type Props = {
   lancamentos: Lanc[];
+  periodos: PeriodoResumo[];
   tipoContratacao: TipoContratacao;
 };
+
+type Grupo = {
+  chave: string;
+  titulo: string;
+  periodoNumero: number | null;
+  lancamentos: Lanc[];
+};
+
+/** Status que efetivamente consomem dias do aquisitivo. Cancelado/reprovado
+ *  não contam. */
+const STATUS_CONSOME_SALDO: FeriasLancamentoStatus[] = [
+  "aprovado",
+  "concluido",
+  "nf_anexada",
+  "aguardando_financeiro",
+  "enviado_financeiro",
+];
+
+function agrupar(
+  lancs: Lanc[],
+  periodos: PeriodoResumo[],
+): Grupo[] {
+  const porId = new Map(periodos.map((p) => [p.id, p]));
+  const buckets = new Map<string, Grupo>();
+
+  for (const l of lancs) {
+    const chave = l.periodo_id ?? "__sem_periodo__";
+    if (!buckets.has(chave)) {
+      if (l.periodo_id) {
+        const p = porId.get(l.periodo_id);
+        buckets.set(chave, {
+          chave,
+          titulo: p
+            ? `Aquisitivo ${p.aquisitivo_inicio.slice(0, 4)}/${p.aquisitivo_fim.slice(0, 4)}`
+            : "Aquisitivo removido",
+          periodoNumero: p?.numero ?? null,
+          lancamentos: [],
+        });
+      } else {
+        buckets.set(chave, {
+          chave,
+          titulo: "Sem período (abono avulso)",
+          periodoNumero: null,
+          lancamentos: [],
+        });
+      }
+    }
+    buckets.get(chave)!.lancamentos.push(l);
+  }
+
+  // Ordena aquisitivos: numero DESC (mais recente primeiro); "sem período" no fim
+  const grupos = Array.from(buckets.values());
+  grupos.sort((a, b) => {
+    if (a.periodoNumero === null && b.periodoNumero === null) return 0;
+    if (a.periodoNumero === null) return 1;
+    if (b.periodoNumero === null) return -1;
+    return b.periodoNumero - a.periodoNumero;
+  });
+
+  // Dentro de cada grupo: lançamento mais recente primeiro
+  for (const g of grupos) {
+    g.lancamentos.sort((a, b) =>
+      b.data_inicio.localeCompare(a.data_inicio),
+    );
+  }
+
+  return grupos;
+}
+
+function diasConsumidosNoGrupo(g: Grupo): number {
+  return g.lancamentos
+    .filter((l) => STATUS_CONSOME_SALDO.includes(l.status))
+    .reduce((acc, l) => acc + l.dias, 0);
+}
 
 /**
  * Histórico de lançamentos de férias — colapsado por padrão pra não
  * poluir a página. Clica no cabeçalho pra expandir. Lista em ordem
  * cronológica decrescente.
  */
-export function HistoricoColapsavel({ lancamentos }: Props) {
+export function HistoricoColapsavel({ lancamentos, periodos }: Props) {
   const [aberto, setAberto] = React.useState(false);
   const [busca, setBusca] = React.useState("");
 
-  const filtradas = React.useMemo(() => {
+  const gruposFiltrados = React.useMemo(() => {
     const termo = busca.trim().toLowerCase();
-    if (!termo) return lancamentos;
-    return lancamentos.filter((l) => {
-      const data = `${l.data_inicio} ${l.data_fim}`;
-      const tipo = tipoLabel(l.tipo).toLowerCase();
-      // Obs técnica de import não entra na busca — senão o RH digita
-      // "import" e aparece tudo.
-      const obs = isObsImport(l.observacao)
-        ? ""
-        : (l.observacao ?? "").toLowerCase();
-      return (
-        data.includes(termo) || tipo.includes(termo) || obs.includes(termo)
-      );
-    });
-  }, [lancamentos, busca]);
+    const lancsFiltrados = !termo
+      ? lancamentos
+      : lancamentos.filter((l) => {
+          const data = `${l.data_inicio} ${l.data_fim}`;
+          const tipo = tipoLabel(l.tipo).toLowerCase();
+          // Obs técnica de import não entra na busca — senão o RH digita
+          // "import" e aparece tudo.
+          const obs = isObsImport(l.observacao)
+            ? ""
+            : (l.observacao ?? "").toLowerCase();
+          return (
+            data.includes(termo) ||
+            tipo.includes(termo) ||
+            obs.includes(termo)
+          );
+        });
+    return agrupar(lancsFiltrados, periodos);
+  }, [lancamentos, periodos, busca]);
+
+  const periodosPorId = React.useMemo(
+    () => new Map(periodos.map((p) => [p.id, p])),
+    [periodos],
+  );
 
   return (
     <section>
@@ -96,16 +189,46 @@ export function HistoricoColapsavel({ lancamentos }: Props) {
               </button>
             )}
           </div>
-          {filtradas.length === 0 ? (
+          {gruposFiltrados.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border bg-muted/20 p-6 text-center text-sm text-muted-foreground">
               Nenhum lançamento encontrado.
             </div>
           ) : (
-            <ul className="divide-y divide-border rounded-xl border border-border bg-white shadow-soft overflow-hidden">
-              {filtradas.map((l) => (
-                <LinhaLancamento key={l.id} lanc={l} />
-              ))}
-            </ul>
+            <div className="space-y-3">
+              {gruposFiltrados.map((g) => {
+                const p = g.chave === "__sem_periodo__"
+                  ? null
+                  : periodosPorId.get(g.chave) ?? null;
+                const usados = diasConsumidosNoGrupo(g);
+                return (
+                  <div
+                    key={g.chave}
+                    className="rounded-xl border border-border bg-white shadow-soft overflow-hidden"
+                  >
+                    <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/30 px-4 py-2.5">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          {g.titulo}
+                        </p>
+                        {p && (
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {usados} de {p.dias_direito} dias usados
+                          </p>
+                        )}
+                      </div>
+                      <span className="inline-flex items-center justify-center min-w-[24px] rounded-full bg-background px-2 py-0.5 text-xs font-semibold text-muted-foreground border border-border">
+                        {g.lancamentos.length}
+                      </span>
+                    </div>
+                    <ul className="divide-y divide-border">
+                      {g.lancamentos.map((l) => (
+                        <LinhaLancamento key={l.id} lanc={l} />
+                      ))}
+                    </ul>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </div>
       )}
