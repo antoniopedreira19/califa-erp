@@ -6816,8 +6816,8 @@ export interface FreelancerSolicitacao {
   cargo: string | null;
   valor: number;
   tipo: TipoFreelancerContrato;
-  data_inicio: string | null;
-  data_termino: string | null;
+  data_inicio: string;
+  data_termino: string;
   cidade: string | null;
   observacoes: string | null;
 

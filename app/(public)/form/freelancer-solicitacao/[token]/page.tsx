@@ -16,8 +16,8 @@ interface SolicitacaoPublica {
   cargo: string | null;
   tipo: string;
   valor: number;
-  data_inicio: string | null;
-  data_termino: string | null;
+  data_inicio: string;
+  data_termino: string;
   cidade: string | null;
   status: string;
   expira_em: string | null;
@@ -158,16 +158,10 @@ export default async function FormPublicoPage({
                 rotulo="Valor"
                 valor={`${formatCurrency(sol.valor)} / ${sol.tipo}`}
               />
-              {sol.data_inicio && (
-                <ItemContrato
-                  rotulo="Período"
-                  valor={
-                    sol.data_termino
-                      ? `${formatarDataBR(sol.data_inicio)} → ${formatarDataBR(sol.data_termino)}`
-                      : formatarDataBR(sol.data_inicio)
-                  }
-                />
-              )}
+              <ItemContrato
+                rotulo="Período"
+                valor={`${formatarDataBR(sol.data_inicio)} → ${formatarDataBR(sol.data_termino)}`}
+              />
               {sol.cidade && (
                 <ItemContrato rotulo="Cidade" valor={sol.cidade} />
               )}

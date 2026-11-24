@@ -201,11 +201,7 @@ export function PopoverSolicitacao({
     }
   }
 
-  const prazoTexto = s.data_termino
-    ? `${formatDate(s.data_inicio)} → ${formatDate(s.data_termino)}`
-    : s.data_inicio
-      ? `A partir de ${formatDate(s.data_inicio)}`
-      : "—";
+  const prazoTexto = `${formatDate(s.data_inicio)} → ${formatDate(s.data_termino)}`;
 
   const valorTexto = `${formatCurrency(Number(s.valor))} / ${
     s.tipo === "mensal" ? "mês" : s.tipo === "diarias" ? "diária" : "período"

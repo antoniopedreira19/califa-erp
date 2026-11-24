@@ -67,8 +67,8 @@ export async function criarSolicitacao(
       {
         p_tenant_id: session.activeTenant.id,
         p_freelancer_id: freelancerIdResolvido,
-        p_data_inicio: parsed.data.data_inicio ?? null,
-        p_data_termino: parsed.data.data_termino ?? null,
+        p_data_inicio: parsed.data.data_inicio,
+        p_data_termino: parsed.data.data_termino,
       },
     );
     if (dispErr) {
@@ -97,8 +97,8 @@ export async function criarSolicitacao(
       cargo: parsed.data.cargo ?? null,
       tipo: parsed.data.tipo,
       valor: parsed.data.valor,
-      data_inicio: parsed.data.data_inicio ?? null,
-      data_termino: parsed.data.data_termino ?? null,
+      data_inicio: parsed.data.data_inicio,
+      data_termino: parsed.data.data_termino,
       cidade: parsed.data.cidade ?? null,
       observacoes: parsed.data.observacoes ?? null,
       status: "pendente",

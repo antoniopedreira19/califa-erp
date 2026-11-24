@@ -981,21 +981,13 @@ function SolicitacaoRow({
 }) {
   const statusAtivo = statusOtimista ?? (s.status as FreelancerSolicitacaoStatus);
   // Prazo em 3 linhas (igual AgCaliforniaRH): data inicio, seta, data termino.
-  // Com data_termino nulo, mostra "A partir de" + inicio em bloco unico.
-  const prazoNode =
-    s.data_inicio && s.data_termino ? (
-      <div className="flex flex-col items-start leading-tight text-foreground tabular-nums">
-        <span>{formatarDataLonga(s.data_inicio)}</span>
-        <span className="text-muted-foreground">→</span>
-        <span>{formatarDataLonga(s.data_termino)}</span>
-      </div>
-    ) : s.data_inicio ? (
-      <span className="text-foreground tabular-nums">
-        {formatarDataLonga(s.data_inicio)}
-      </span>
-    ) : (
-      <span className="text-muted-foreground">—</span>
-    );
+  const prazoNode = (
+    <div className="flex flex-col items-start leading-tight text-foreground tabular-nums">
+      <span>{formatarDataLonga(s.data_inicio)}</span>
+      <span className="text-muted-foreground">→</span>
+      <span>{formatarDataLonga(s.data_termino)}</span>
+    </div>
+  );
 
   return (
     <tr

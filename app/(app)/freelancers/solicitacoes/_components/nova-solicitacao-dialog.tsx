@@ -275,6 +275,16 @@ export function NovaSolicitacaoDialog({
       setErroGeral("Informe a data de início.");
       return;
     }
+    if (!dataTerminoCalculada) {
+      setErroGeral(
+        tipo === "mensal"
+          ? "Informe a duração em meses."
+          : tipo === "diarias"
+            ? "Informe a duração em dias."
+            : "Informe a duração.",
+      );
+      return;
+    }
 
     const nomeFinal = travado
       ? freelaSelecionado!.nome
@@ -527,10 +537,10 @@ export function NovaSolicitacaoDialog({
                 <Campo
                   rotulo={
                     tipo === "mensal"
-                      ? "Duração (meses)"
+                      ? "Duração (meses) *"
                       : tipo === "diarias"
-                        ? "Duração (dias)"
-                        : "Duração"
+                        ? "Duração (dias) *"
+                        : "Duração *"
                   }
                   erro={fieldErrors.data_termino}
                 >

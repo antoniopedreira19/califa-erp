@@ -10,6 +10,13 @@ const dataOpcional = z
   .nullable()
   .optional();
 
+const dataObrigatoria = z
+  .string()
+  .min(1, { message: "Data é obrigatória" })
+  .refine((v) => /^\d{4}-\d{2}-\d{2}$/.test(v), {
+    message: "Data inválida",
+  });
+
 const textoOpcional = (max: number) =>
   z
     .string()
@@ -61,13 +68,13 @@ export const criarSolicitacaoSchema = z
     valor: z.coerce
       .number({ invalid_type_error: "Valor inválido" })
       .min(0, { message: "Valor deve ser positivo ou zero" }),
-    data_inicio: dataOpcional,
-    data_termino: dataOpcional,
+    data_inicio: dataObrigatoria,
+    data_termino: dataObrigatoria,
     cidade: textoOpcional(100),
     observacoes: textoOpcional(1000),
   })
   .superRefine((v, ctx) => {
-    if (v.data_inicio && v.data_termino && v.data_termino < v.data_inicio) {
+    if (v.data_termino < v.data_inicio) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["data_termino"],
