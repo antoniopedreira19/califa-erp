@@ -215,7 +215,7 @@ function LinhaDependente({
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="font-medium text-foreground">
-            {dependente.nome}
+            <span className="uppercase">{dependente.nome}</span>
             {dependente.parentesco && (
               <span className="text-xs font-normal text-muted-foreground">
                 {" "}· {dependente.parentesco}

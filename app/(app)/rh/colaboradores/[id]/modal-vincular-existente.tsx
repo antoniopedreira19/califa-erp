@@ -153,7 +153,7 @@ export function ModalVincularExistente({
                               : "hover:bg-muted/40"
                           }`}
                         >
-                          <p className="text-sm font-medium">{p.nome}</p>
+                          <p className="text-sm font-medium uppercase">{p.nome}</p>
                           <p className="text-xs text-muted-foreground">
                             {p.email}
                           </p>

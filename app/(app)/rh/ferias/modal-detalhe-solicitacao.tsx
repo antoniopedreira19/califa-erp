@@ -193,7 +193,7 @@ export function ModalDetalheSolicitacao({ row, onFechar, onSucesso }: Props) {
     <Dialog open onOpenChange={(v) => !v && onFechar()}>
       <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{row.nome}</DialogTitle>
+          <DialogTitle className="uppercase">{row.nome}</DialogTitle>
           <DialogDescription>
             {regimeLabel}
             {row.funcao && <> · {row.funcao}</>}

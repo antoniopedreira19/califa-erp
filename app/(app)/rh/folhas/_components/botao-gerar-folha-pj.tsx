@@ -132,7 +132,7 @@ export function BotaoGerarFolhaPj(props: { ano: number; mes: number }) {
                         className="flex items-center justify-between gap-2"
                       >
                         <span className="truncate">
-                          <strong>{d.nome}</strong> · {d.dias_ferias} dia
+                          <strong className="uppercase">{d.nome}</strong> · {d.dias_ferias} dia
                           {d.dias_ferias === 1 ? "" : "s"} de férias
                         </span>
                         <span className="shrink-0 font-mono">

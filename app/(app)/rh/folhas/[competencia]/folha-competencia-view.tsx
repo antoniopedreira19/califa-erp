@@ -336,7 +336,7 @@ export function FolhaCompetenciaView({
               >
                 <td className="px-4 py-3">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{l.colaborador.nome}</span>
+                    <span className="font-medium uppercase">{l.colaborador.nome}</span>
                     <SeloFluxo
                       tipo={l.colaborador.tipo_contratacao}
                       origem={l.origem}

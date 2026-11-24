@@ -278,7 +278,7 @@ function LinhaSolicitacao({
       className="border-b border-border last:border-b-0 hover:bg-muted/20 transition-colors cursor-pointer"
     >
       <Td>
-        <p className="font-semibold text-foreground text-sm">{r.nome}</p>
+        <p className="font-semibold text-foreground text-sm uppercase">{r.nome}</p>
         <p className="text-[11px] text-muted-foreground mt-0.5 uppercase tracking-wider">
           {regimeLabel}
           {r.funcao && <> · {r.funcao}</>}

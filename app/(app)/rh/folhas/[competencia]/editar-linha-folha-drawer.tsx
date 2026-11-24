@@ -147,7 +147,7 @@ export function EditarLinhaFolhaDrawer({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DrawerContent>
         <DialogHeader className="border-b border-border p-6">
-          <DialogTitle>{linha.colaborador.nome}</DialogTitle>
+          <DialogTitle className="uppercase">{linha.colaborador.nome}</DialogTitle>
           <DialogDescription>
             {linha.colaborador.funcao}
             {linha.colaborador.nivel_codigo

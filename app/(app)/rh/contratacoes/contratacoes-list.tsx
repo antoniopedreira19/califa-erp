@@ -200,7 +200,7 @@ export function ContratacoesList({
                         href={`/rh/contratacoes/${c.id}`}
                         prefetch={false}
                         onClick={(e) => e.stopPropagation()}
-                        className="hover:text-california-red transition-colors"
+                        className="uppercase hover:text-california-red transition-colors"
                       >
                         {c.nome}
                       </Link>

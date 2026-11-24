@@ -192,7 +192,7 @@ export function ContratacaoDetalheView({
         <p className="text-xs font-semibold uppercase tracking-wider text-california-red">
           Contratação
         </p>
-        <h1 className="mt-1 text-3xl font-bold tracking-tight">{c.nome}</h1>
+        <h1 className="mt-1 text-3xl font-bold tracking-tight uppercase">{c.nome}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {c.cargo} · {tipoContratacaoLabel(c.tipo_contratacao)}
           {ehPJ && c.pj_natureza ? ` (${NATUREZA_PJ_LABEL[c.pj_natureza]})` : ""}

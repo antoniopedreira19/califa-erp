@@ -60,7 +60,7 @@ export function HeaderColaborador({
             <UserRound className="h-5 w-5 text-california-red" />
           </div>
           <div className="min-w-0">
-            <h1 className="text-3xl font-bold tracking-tight text-foreground">
+            <h1 className="text-3xl font-bold tracking-tight text-foreground uppercase">
               {colaborador.nome}
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">{meta}</p>

@@ -376,7 +376,7 @@ export function ListaAdiantamentos({
                       {formatarData(a.data)}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="font-medium">{a.colaborador_nome}</div>
+                      <div className="font-medium uppercase">{a.colaborador_nome}</div>
                       <div className="text-xs text-muted-foreground">
                         {a.colaborador_funcao}
                       </div>
@@ -646,7 +646,7 @@ function NovoAdiantamentoDialogContent({
             <SelectContent>
               {colaboradores.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
-                  {c.nome}
+                  <span className="uppercase">{c.nome}</span>
                 </SelectItem>
               ))}
             </SelectContent>

@@ -280,7 +280,7 @@ function PreviewTabela(props: { preview: ResumoImportacao }) {
                 key={`${l.cpf}-${i}`}
                 className="border-t border-border"
               >
-                <td className="px-3 py-2 truncate max-w-[260px]">{l.nome}</td>
+                <td className="px-3 py-2 truncate max-w-[260px] uppercase">{l.nome}</td>
                 <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
                   {formatarCpf(l.cpf)}
                 </td>

@@ -74,7 +74,7 @@ export function DialogEditarLinha({ linha, onClose }: Props) {
     <Dialog open onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{linha.nome}</DialogTitle>
+          <DialogTitle className="uppercase">{linha.nome}</DialogTitle>
           <DialogDescription>
             Ajuste manual do cálculo. Deixe em branco para manter o valor atual.
           </DialogDescription>

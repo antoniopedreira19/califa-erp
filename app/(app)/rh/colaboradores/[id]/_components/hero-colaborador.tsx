@@ -47,7 +47,7 @@ export function HeroColaborador({
             {avatar}
           </div>
           <div className="min-w-0">
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-balance text-white">
+            <h1 className="text-2xl md:text-3xl font-bold tracking-tight text-balance text-white uppercase">
               {c.nome}
             </h1>
 
@@ -103,7 +103,7 @@ export function HeroColaborador({
               {c.lider && (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 border border-white/15 px-2 py-0.5 text-[11px] font-semibold text-white">
                   <User className="h-3 w-3" />
-                  Líder {c.lider.nome}
+                  Líder <span className="uppercase">{c.lider.nome}</span>
                 </span>
               )}
             </div>

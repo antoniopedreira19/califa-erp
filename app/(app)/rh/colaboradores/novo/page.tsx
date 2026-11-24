@@ -183,7 +183,7 @@ export default async function NovoColaboradorPage({
               Convertendo freelancer em colaborador
             </p>
             <p className="mt-0.5 text-xs text-emerald-800">
-              <strong>{bannerEfetivacao.nome}</strong> será cadastrado(a) em
+              <strong className="uppercase">{bannerEfetivacao.nome}</strong> será cadastrado(a) em
               /rh/colaboradores. Ao salvar, o contrato de freela vigente é
               encerrado automaticamente na data de admissão informada e qualquer
               minuta de distrato pendente é cancelada.
@@ -202,7 +202,7 @@ export default async function NovoColaboradorPage({
               Já existe colaborador com esse CPF
             </p>
             <p className="mt-0.5 text-xs text-amber-800">
-              <strong>{cpfJaExiste.nome}</strong> já está cadastrado(a). Antes
+              <strong className="uppercase">{cpfJaExiste.nome}</strong> já está cadastrado(a). Antes
               de criar um novo, abra o registro existente —{" "}
               <Link
                 href={`/rh/colaboradores/${cpfJaExiste.id}`}

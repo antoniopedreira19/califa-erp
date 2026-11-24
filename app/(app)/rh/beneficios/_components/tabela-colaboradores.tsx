@@ -73,7 +73,7 @@ export function TabelaColaboradores({
                   <Link
                     href={`/rh/beneficios/colaborador/${l.colaborador_id}?${params.toString()}`}
                     prefetch={false}
-                    className="block px-4 py-3 font-medium text-foreground hover:text-california-red"
+                    className="block px-4 py-3 font-medium text-foreground hover:text-california-red uppercase"
                   >
                     {l.nome}
                   </Link>

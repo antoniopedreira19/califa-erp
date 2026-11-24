@@ -355,7 +355,7 @@ function ItemSolicitacao({
             href="/rh/ferias?tab=solicitacoes"
             prefetch={false}
             onClick={onIr}
-            className="block text-sm font-medium text-foreground hover:text-california-red truncate"
+            className="block text-sm font-medium text-foreground hover:text-california-red truncate uppercase"
           >
             {item.colaborador_nome}
           </Link>
@@ -396,7 +396,7 @@ function ItemNf({
             href={`/rh/ferias/${item.colaborador_id}`}
             prefetch={false}
             onClick={onIr}
-            className="block text-sm font-medium text-foreground hover:text-california-red truncate"
+            className="block text-sm font-medium text-foreground hover:text-california-red truncate uppercase"
           >
             {item.colaborador_nome}
           </Link>
@@ -440,7 +440,7 @@ function ItemPaga({
             href={`/rh/ferias/${item.colaborador_id}`}
             prefetch={false}
             onClick={onIr}
-            className="block text-sm font-medium text-foreground hover:text-california-red truncate"
+            className="block text-sm font-medium text-foreground hover:text-california-red truncate uppercase"
           >
             {item.colaborador_nome}
           </Link>

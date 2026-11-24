@@ -32,7 +32,7 @@ export function LinhaQuadro({ row }: Props) {
     >
       {/* Colaborador: nome + função + tipo */}
       <div className="min-w-0">
-        <p className="text-sm font-medium truncate">{row.nome}</p>
+        <p className="text-sm font-medium truncate uppercase">{row.nome}</p>
         <p className="text-xs text-muted-foreground truncate">
           {row.funcao} ·{" "}
           <span className="uppercase tracking-wider">

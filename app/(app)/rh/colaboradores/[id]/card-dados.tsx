@@ -133,7 +133,7 @@ export function CardDados({ colaborador, niveis, lideres, lideresAtuais, pendenc
       </div>
 
       <div className="mt-5 grid gap-x-8 gap-y-4 md:grid-cols-2">
-        <Info label="Nome" value={colaborador.nome} />
+        <Info label="Nome" value={<span className="uppercase">{colaborador.nome}</span>} />
         <Info
           label="Função"
           value={colaborador.funcao}
@@ -152,7 +152,7 @@ export function CardDados({ colaborador, niveis, lideres, lideresAtuais, pendenc
         <Info label="Telefone" value={formatarTelefone(colaborador.telefone)} />
         <Info
           label="Líder direto"
-          value={colaborador.lider?.nome ?? "—"}
+          value={<span className="uppercase">{colaborador.lider?.nome ?? "—"}</span>}
         />
         <Info label="Admissão" value={formatarData(colaborador.data_admissao)} />
         <Info
