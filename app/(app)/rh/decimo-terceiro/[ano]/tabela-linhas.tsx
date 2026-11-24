@@ -378,7 +378,15 @@ export function TabelaLinhas({ linhas, podeEditar }: Props) {
                       {brl.format(l.salario_editado ?? l.salario)}
                     </td>
                     <td className="px-4 py-3 text-center tabular-nums">
-                      {l.avos}
+                      {l.avos_editado ?? l.avos}
+                      {l.avos_editado != null && l.avos_editado !== l.avos && (
+                        <span
+                          title={`Original calculado: ${l.avos}. Override manual.`}
+                          className="ml-1 text-amber-600"
+                        >
+                          *
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums">
                       {brl.format(l.primeira_parcela)}
@@ -421,7 +429,7 @@ export function TabelaLinhas({ linhas, podeEditar }: Props) {
                         <td className="px-4 py-2 text-muted-foreground tabular-nums">
                           {brl.format((l.salario_editado ?? l.salario) - (l.valor_recibo ?? 0))}
                         </td>
-                        <td className="px-4 py-2 text-center text-muted-foreground">{l.avos}</td>
+                        <td className="px-4 py-2 text-center text-muted-foreground">{l.avos_editado ?? l.avos}</td>
                         <td className="px-4 py-2 text-right tabular-nums">
                           {brl.format(l.parte_clt!.primeira_parcela)}
                         </td>
@@ -454,7 +462,7 @@ export function TabelaLinhas({ linhas, podeEditar }: Props) {
                         <td className="px-4 py-2 text-muted-foreground tabular-nums">
                           {brl.format(l.valor_recibo ?? 0)}
                         </td>
-                        <td className="px-4 py-2 text-center text-muted-foreground">{l.avos}</td>
+                        <td className="px-4 py-2 text-center text-muted-foreground">{l.avos_editado ?? l.avos}</td>
                         <td className="px-4 py-2 text-right tabular-nums">
                           {brl.format(l.parte_pj!.primeira_parcela)}
                         </td>

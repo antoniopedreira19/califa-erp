@@ -48,6 +48,8 @@ Controlar o ciclo completo do 13º no ERP, do cálculo inicial em janeiro (com o
 Entra na folha quem atende aos **três** critérios:
 
 1. `tipo_contratacao` ∈ {`clt`, `clt_recibo`, `pj`, `mei`}. Estágio e sócio ficam de fora (não têm 13º por lei / recebem pró-labore).
+
+> **Atenção regra da California (≠ lei trabalhista):** PJ e MEI **recebem** 13º cheio aqui. A diferença pra CLT não é se recebe ou não — é que **PJ/MEI não sofrem desconto de INSS/IRRF** (ver §5.3). Nunca zerar linha de PJ no 13º achando "PJ não tem 13º por lei" — está incorreto nesse contexto.
 2. `data_admissao <= {ano}-12-31` (contratado até o fim do ano).
 3. **Não desligado dentro do ano**: `data_encerramento IS NULL` OR `data_encerramento > {ano}-12-31`. Desligados no ano têm 13º proporcional calculado pelo módulo de [Rescisões](/rh/rescisoes); duplicar aqui gera distorção no DRE.
 
