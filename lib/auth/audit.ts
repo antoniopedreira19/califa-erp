@@ -438,6 +438,12 @@ export type AuditAction =
   | "colaborador.vinculado_a_usuario"
   | "colaborador.desvinculado"
   | "colaborador.role_alterada"
+  // Rescisão (/rh/rescisoes). Nasce em rascunho junto com o
+  // `colaborador.inativado`; o RH ajusta descontos e envia ao financeiro
+  // como avulsa (`contas_avulsas` plano 05.013 Rescisão).
+  | "rescisao.ajuste_editado"
+  | "rescisao.recalculada"
+  | "rescisao.enviada_financeiro"
   // Folha mensal (subsistema RH, 2026-09-18)
   | "folha.gerada"
   | "folha.linha.editada_rh"

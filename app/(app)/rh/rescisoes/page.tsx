@@ -1,25 +1,27 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
-import { Calculator, UserX, FileSignature } from "lucide-react";
+import {
+  FileSignature,
+  Clock,
+  Wallet,
+  Send,
+  CheckCircle2,
+} from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
-import type { Colaborador } from "@/lib/types";
-import { tipoContratacaoLabel } from "@/lib/types";
+import { EmptyState } from "@/components/empty-state";
+import type { TipoContratacao } from "@/lib/types";
+import { RescisoesView, type RescisaoLinha } from "./_components/rescisoes-view";
 
 export const dynamic = "force-dynamic";
 
-type ColabRow = Pick<
-  Colaborador,
-  "id" | "nome" | "tipo_contratacao" | "data_admissao" | "data_encerramento"
->;
+const brl = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
 
-export default async function RescisoesPage({
-  searchParams,
-}: {
-  searchParams: { colab?: string };
-}) {
+export default async function RescisoesPage() {
   const session = await requireSession();
   if (session.activeRole !== "administrador" && session.activeRole !== "rh") {
     redirect("/home?reason=sem_permissao_rh");
@@ -27,374 +29,223 @@ export default async function RescisoesPage({
 
   const supabase = createClient();
   const tenantId = session.activeTenant.id;
-  const colaboradorSelecionadoId = searchParams.colab;
 
-  // Lista colaboradores encerrados nos últimos 90 dias
-  const noventaDiasAtras = new Date();
-  noventaDiasAtras.setDate(noventaDiasAtras.getDate() - 90);
-  const corteISO = noventaDiasAtras.toISOString().slice(0, 10);
-
-  const { data: desligadosData } = await supabase
-    .from("colaboradores")
-    .select("id, nome, tipo_contratacao, data_admissao, data_encerramento")
+  // Carrega todas as rescisões (todos status) + dados do colaborador.
+  // Rescisões canceladas não aparecem no default (tab "Pendentes"), mas
+  // continuam acessíveis na tab "Todas" pra auditoria.
+  const { data: rescisoesRaw, error } = await supabase
+    .from("rescisoes")
+    .select(
+      `
+      id,
+      status,
+      data_rescisao,
+      salario_vigente,
+      saldo_salario_dias,
+      saldo_salario_valor,
+      avos_ferias,
+      valor_ferias,
+      valor_um_terco_ferias,
+      avos_decimo,
+      valor_decimo_terceiro,
+      ajuste_valor,
+      ajuste_motivo,
+      total_bruto,
+      total_liquido,
+      conta_avulsa_id,
+      enviada_em,
+      paga_em,
+      colaborador:colaboradores!colaborador_id(
+        id, nome, cpf, tipo_contratacao, data_admissao
+      )
+      `,
+    )
     .eq("tenant_id", tenantId)
-    .eq("status", "inativo")
-    .not("data_encerramento", "is", null)
-    .gte("data_encerramento", corteISO)
-    .order("data_encerramento", { ascending: false })
-    .limit(50);
+    .order("data_rescisao", { ascending: false })
+    .limit(500);
 
-  const desligados = (desligadosData ?? []) as ColabRow[];
-
-  // Se tem colaborador selecionado, calcula a rescisão
-  let calculo: CalculoRescisao | null = null;
-  let selecionado: ColabRow | null = null;
-  if (colaboradorSelecionadoId) {
-    selecionado =
-      desligados.find((c) => c.id === colaboradorSelecionadoId) ?? null;
-    if (!selecionado) {
-      // Pode ser um colaborador ativo (RH testando pré-rescisão)
-      const { data } = await supabase
-        .from("colaboradores")
-        .select("id, nome, tipo_contratacao, data_admissao, data_encerramento")
-        .eq("id", colaboradorSelecionadoId)
-        .eq("tenant_id", tenantId)
-        .maybeSingle();
-      if (data) selecionado = data as ColabRow;
-    }
-
-    if (selecionado) {
-      calculo = await calcularRescisao(
-        supabase,
-        selecionado.id,
-        selecionado.data_encerramento ??
-          new Date().toISOString().slice(0, 10),
-        selecionado.data_admissao,
-      );
-    }
+  if (error) {
+    console.error("[rh.rescisoes.page]", error.message);
   }
+
+  type Row = {
+    id: string;
+    status: RescisaoLinha["status"];
+    data_rescisao: string;
+    salario_vigente: string | number | null;
+    saldo_salario_dias: number | null;
+    saldo_salario_valor: string | number | null;
+    avos_ferias: number | null;
+    valor_ferias: string | number | null;
+    valor_um_terco_ferias: string | number | null;
+    avos_decimo: number | null;
+    valor_decimo_terceiro: string | number | null;
+    ajuste_valor: string | number;
+    ajuste_motivo: string | null;
+    total_bruto: string | number | null;
+    total_liquido: string | number | null;
+    conta_avulsa_id: string | null;
+    enviada_em: string | null;
+    paga_em: string | null;
+    colaborador: {
+      id: string;
+      nome: string;
+      cpf: string | null;
+      tipo_contratacao: TipoContratacao;
+      data_admissao: string;
+    } | null;
+  };
+
+  const linhas: RescisaoLinha[] = ((rescisoesRaw ?? []) as unknown as Row[])
+    .filter((r) => r.colaborador !== null)
+    .map((r) => ({
+      id: r.id,
+      status: r.status,
+      data_rescisao: r.data_rescisao,
+      salario_vigente: r.salario_vigente == null ? null : Number(r.salario_vigente),
+      saldo_salario_dias: r.saldo_salario_dias,
+      saldo_salario_valor:
+        r.saldo_salario_valor == null ? null : Number(r.saldo_salario_valor),
+      avos_ferias: r.avos_ferias,
+      valor_ferias: r.valor_ferias == null ? null : Number(r.valor_ferias),
+      valor_um_terco_ferias:
+        r.valor_um_terco_ferias == null ? null : Number(r.valor_um_terco_ferias),
+      avos_decimo: r.avos_decimo,
+      valor_decimo_terceiro:
+        r.valor_decimo_terceiro == null ? null : Number(r.valor_decimo_terceiro),
+      ajuste_valor: Number(r.ajuste_valor ?? 0),
+      ajuste_motivo: r.ajuste_motivo,
+      total_bruto: r.total_bruto == null ? null : Number(r.total_bruto),
+      total_liquido: r.total_liquido == null ? null : Number(r.total_liquido),
+      conta_avulsa_id: r.conta_avulsa_id,
+      enviada_em: r.enviada_em,
+      paga_em: r.paga_em,
+      colaborador: r.colaborador!,
+    }));
+
+  // KPIs: cards de topo. Calculamos do dataset inteiro (sem filtrar por
+  // status aqui) e deixamos cada card interpretar o que ele quer.
+  const pendentes = linhas.filter((l) => l.status === "rascunho");
+  const enviadas = linhas.filter((l) => l.status === "enviada_financeiro");
+  const pagas = linhas.filter((l) => l.status === "paga");
+
+  const hoje = new Date();
+  const inicioMes = new Date(hoje.getFullYear(), hoje.getMonth(), 1);
+  const noMes = (iso: string | null) => {
+    if (!iso) return false;
+    return new Date(iso) >= inicioMes;
+  };
+  const enviadasNoMes = linhas.filter((l) => noMes(l.enviada_em)).length;
+  const pagasNoMes = linhas.filter((l) => noMes(l.paga_em)).length;
+
+  const totalAPagar = pendentes.reduce(
+    (acc, l) => acc + (l.total_liquido ?? 0),
+    0,
+  );
 
   return (
     <div className="space-y-6 max-w-[1480px] mx-auto">
       <BotaoVoltar reserva="/rh" />
       <PageHeader
         title="Rescisões"
-        description="Cálculo de verbas rescisórias (saldo de salário, férias proporcionais pela regra dos avós, 1/3 constitucional, 13º proporcional). Base para gerar o título em Contas a Pagar."
+        description="Verbas rescisórias calculadas a partir do desligamento. Nasce como rascunho ao inativar o colaborador — depois de revisar os descontos, você envia pro financeiro como título em Contas a Pagar."
         icon={FileSignature}
       />
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_1.5fr]">
-        {/* Lista de desligados recentes */}
-        <section className="rounded-2xl border border-border bg-card shadow-soft overflow-hidden self-start">
-          <header className="flex items-center gap-3 px-5 py-4 border-b border-border">
-            <div className="rounded-lg bg-california-red/10 p-2">
-              <UserX className="h-4 w-4 text-california-red" />
-            </div>
-            <h3 className="text-base font-semibold">Desligados recentes</h3>
-          </header>
-          {desligados.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-10">
-              Nenhum desligamento nos últimos 90 dias.
-            </p>
-          ) : (
-            <ul className="divide-y divide-border max-h-[500px] overflow-y-auto">
-              {desligados.map((c) => {
-                const ativo = c.id === colaboradorSelecionadoId;
-                return (
-                  <li key={c.id}>
-                    <Link
-                      href={`/rh/rescisoes?colab=${c.id}`}
-                      prefetch={false}
-                      className={`block px-5 py-3 transition-colors ${
-                        ativo
-                          ? "bg-california-red/5 border-l-2 border-california-red"
-                          : "hover:bg-muted/40"
-                      }`}
-                    >
-                      <p className="text-sm font-medium truncate">{c.nome}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Desligado em{" "}
-                        {c.data_encerramento
-                          ? new Date(
-                              c.data_encerramento + "T00:00:00",
-                            ).toLocaleDateString("pt-BR")
-                          : "—"}{" "}
-                        · {tipoContratacaoLabel(c.tipo_contratacao)}
-                      </p>
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </section>
-
-        {/* Cálculo */}
-        <section className="rounded-2xl border border-border bg-card shadow-soft p-6">
-          {!selecionado || !calculo ? (
-            <div className="text-center py-16">
-              <Calculator className="h-10 w-10 text-muted-foreground mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">
-                Escolha um desligado na lista pra ver o cálculo da rescisão.
-              </p>
-            </div>
-          ) : (
-            <RescisaoCalculo colab={selecionado} calculo={calculo} />
-          )}
-        </section>
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <KpiCard
+          icone={<Clock className="h-4 w-4" />}
+          rotulo="Pendentes"
+          valorPrincipal={pendentes.length.toString()}
+          rodape={
+            pendentes.length > 0 ? (
+              <span className="text-xs text-muted-foreground">
+                aguardando revisão + envio
+              </span>
+            ) : (
+              <span className="text-xs text-emerald-700">tudo em dia</span>
+            )
+          }
+          tom={pendentes.length > 0 ? "vermelho" : undefined}
+        />
+        <KpiCard
+          icone={<Wallet className="h-4 w-4" />}
+          rotulo="Total a pagar"
+          valorPrincipal={brl.format(totalAPagar)}
+          rodape={
+            <span className="text-xs text-muted-foreground">
+              líquido somado das rescisões em rascunho
+            </span>
+          }
+        />
+        <KpiCard
+          icone={<Send className="h-4 w-4" />}
+          rotulo="Enviadas (mês)"
+          valorPrincipal={enviadasNoMes.toString()}
+          rodape={
+            <span className="text-xs text-muted-foreground">
+              total enviadas: {enviadas.length}
+            </span>
+          }
+        />
+        <KpiCard
+          icone={<CheckCircle2 className="h-4 w-4" />}
+          rotulo="Pagas (mês)"
+          valorPrincipal={pagasNoMes.toString()}
+          rodape={
+            <span className="text-xs text-muted-foreground">
+              total pagas: {pagas.length}
+            </span>
+          }
+        />
       </div>
+
+      {linhas.length === 0 ? (
+        <EmptyState
+          icon={FileSignature}
+          title="Nenhuma rescisão registrada"
+          description="Rescisões nascem automaticamente quando o RH inativa um colaborador."
+        />
+      ) : (
+        <RescisoesView linhas={linhas} />
+      )}
     </div>
   );
 }
 
-type CalculoRescisao = {
-  salarioVigente: number;
-  dataDemissao: string;
-  saldoSalarioDias: number;
-  saldoSalarioValor: number;
-  avosFerias: number;
-  valorFerias: number;
-  valorUmTercoFerias: number;
-  avosDecimo: number;
-  valorDecimoTerceiro: number;
-  totalDevido: number;
-};
-
-async function calcularRescisao(
-  supabase: ReturnType<typeof createClient>,
-  colaboradorId: string,
-  dataDemissao: string,
-  dataAdmissao: string,
-): Promise<CalculoRescisao | null> {
-  // Salário vigente
-  const { data: salarios } = await supabase
-    .from("colaboradores_salarios")
-    .select("valor")
-    .eq("colaborador_id", colaboradorId)
-    .lte("data_inicio", dataDemissao)
-    .or(`data_fim.is.null,data_fim.gte.${dataDemissao}`)
-    .order("data_inicio", { ascending: false })
-    .limit(1);
-
-  if (!salarios || salarios.length === 0) return null;
-  const salario = Number(salarios[0].valor);
-
-  // Avos de férias via RPC
-  const { data: avosFeriasData } = await supabase.rpc(
-    "fn_calcular_meses_rescisao",
-    {
-      p_colaborador_id: colaboradorId,
-      p_data_demissao: dataDemissao,
-    },
-  );
-  const avosFerias = Number(avosFeriasData ?? 0);
-
-  // Saldo de salário: dias trabalhados do mês da demissão
-  const dem = new Date(dataDemissao + "T00:00:00");
-  const saldoDias = dem.getDate();
-
-  // 13º proporcional de rescisão: meses trabalhados no ano da demissão,
-  // aplicando a regra do dia 15 nos dois extremos (admissão e demissão).
-  // Ver docs/modulos/rh/60-decimo-terceiro.md §5.1.
-  const avosDecimo = calcularAvos13Rescisao(dataAdmissao, dataDemissao);
-
-  const saldoValor = round2((salario / 30) * saldoDias);
-  const valorFerias = round2((salario / 12) * avosFerias);
-  const valorUmTerco = round2(valorFerias / 3);
-  const valorDecimo = round2((salario / 12) * avosDecimo);
-  const total = round2(saldoValor + valorFerias + valorUmTerco + valorDecimo);
-
-  return {
-    salarioVigente: salario,
-    dataDemissao,
-    saldoSalarioDias: saldoDias,
-    saldoSalarioValor: saldoValor,
-    avosFerias,
-    valorFerias,
-    valorUmTercoFerias: valorUmTerco,
-    avosDecimo,
-    valorDecimoTerceiro: valorDecimo,
-    totalDevido: total,
-  };
-}
-
-function round2(n: number): number {
-  return Math.round(n * 100) / 100;
-}
-
-/**
- * Avos de 13º proporcional em rescisão. Conta meses trabalhados no ano
- * da demissão com regra do dia 15:
- * - Mês de admissão: conta se admitiu até dia 15; se admitiu depois,
- *   começa no mês seguinte.
- * - Mês de demissão: conta se demitiu no dia 15 ou depois; se antes,
- *   para no mês anterior.
- * - Admissão em ano anterior: começa em janeiro do ano da demissão.
- *
- * Doc: `docs/modulos/rh/60-decimo-terceiro.md` §5.1.
- */
-function calcularAvos13Rescisao(
-  dataAdmissao: string,
-  dataDemissao: string,
-): number {
-  const adm = new Date(dataAdmissao + "T00:00:00");
-  const dem = new Date(dataDemissao + "T00:00:00");
-  const anoDemissao = dem.getFullYear();
-
-  // Mês inicial contado (1..12) no ano da demissão.
-  let mesInicio: number;
-  if (adm.getFullYear() < anoDemissao) {
-    mesInicio = 1;
-  } else if (adm.getFullYear() === anoDemissao) {
-    const mesAdm = adm.getMonth() + 1;
-    mesInicio = adm.getDate() <= 15 ? mesAdm : mesAdm + 1;
-  } else {
-    return 0; // admissão posterior à demissão — defensivo
-  }
-
-  // Mês final contado (1..12).
-  const mesDem = dem.getMonth() + 1;
-  const mesFim = dem.getDate() >= 15 ? mesDem : mesDem - 1;
-
-  return Math.max(0, mesFim - mesInicio + 1);
-}
-
-function RescisaoCalculo({
-  colab,
-  calculo,
-}: {
-  colab: ColabRow;
-  calculo: CalculoRescisao;
-}) {
-  return (
-    <div className="space-y-5">
-      <header>
-        <h3 className="text-lg font-semibold">{colab.nome}</h3>
-        <p className="text-xs text-muted-foreground">
-          {tipoContratacaoLabel(colab.tipo_contratacao)} · Admissão{" "}
-          {new Date(colab.data_admissao + "T00:00:00").toLocaleDateString(
-            "pt-BR",
-          )}{" "}
-          · Desligamento{" "}
-          {new Date(calculo.dataDemissao + "T00:00:00").toLocaleDateString(
-            "pt-BR",
-          )}
-        </p>
-      </header>
-
-      <div className="rounded-xl bg-muted/40 p-4">
-        <p className="text-xs uppercase tracking-wider text-muted-foreground">
-          Salário vigente
-        </p>
-        <p className="mt-1 text-xl font-semibold">
-          {fmtBRL(calculo.salarioVigente)}
-        </p>
-      </div>
-
-      <div className="rounded-xl border border-border overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-muted/40 text-xs uppercase tracking-wider text-muted-foreground">
-            <tr>
-              <th className="text-left px-4 py-2">Verba</th>
-              <th className="text-center px-4 py-2">Quantidade</th>
-              <th className="text-right px-4 py-2">Valor</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            <LinhaVerba
-              rotulo="Saldo de salário"
-              qtd={`${calculo.saldoSalarioDias} dias`}
-              valor={calculo.saldoSalarioValor}
-            />
-            <LinhaVerba
-              rotulo="Férias"
-              qtd={`${calculo.avosFerias} avós`}
-              valor={calculo.valorFerias}
-              dica="Regra dos avós (F12): 12 por período + proporcional do atual (≥ 15 dias)."
-            />
-            <LinhaVerba
-              rotulo="1/3 férias"
-              qtd=""
-              valor={calculo.valorUmTercoFerias}
-            />
-            <LinhaVerba
-              rotulo="13º proporcional"
-              qtd={`${calculo.avosDecimo} meses`}
-              valor={calculo.valorDecimoTerceiro}
-            />
-          </tbody>
-          <tfoot>
-            <tr className="bg-california-red/5 font-semibold">
-              <td className="px-4 py-3" colSpan={2}>
-                TOTAL DEVIDO
-              </td>
-              <td className="px-4 py-3 text-right text-lg">
-                {fmtBRL(calculo.totalDevido)}
-              </td>
-            </tr>
-          </tfoot>
-        </table>
-      </div>
-
-      <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
-        <p className="text-xs font-medium text-amber-900 mb-2">
-          Descontos (planos, TotalPass etc.)
-        </p>
-        <p className="text-sm text-amber-800">
-          Benefícios recorrentes ficam zerados por padrão no MVP (F9) — viram
-          tema do subsistema de Benefícios. Até lá, o RH deduz manualmente ao
-          lançar em Contas a Pagar.
-        </p>
-      </div>
-
-      <div className="rounded-lg border border-sky-200 bg-sky-50 p-4">
-        <p className="text-xs font-medium text-sky-900 mb-2">
-          Como gerar o pagamento
-        </p>
-        <p className="text-sm text-sky-800">
-          Com o valor acima, o RH cria uma avulsa em{" "}
-          <Link
-            href="/financeiro/contas-a-pagar"
-            prefetch={false}
-            className="font-medium underline underline-offset-2"
-          >
-            Contas a Pagar
-          </Link>{" "}
-          com descrição &ldquo;Rescisão – {colab.nome}&rdquo;, selecionando a
-          empresa de alocação. O lançamento automático direto daqui vai entrar
-          no próximo ciclo.
-        </p>
-      </div>
-    </div>
-  );
-}
-
-function LinhaVerba({
+function KpiCard({
+  icone,
   rotulo,
-  qtd,
-  valor,
-  dica,
+  valorPrincipal,
+  rodape,
+  tom,
 }: {
+  icone: React.ReactNode;
   rotulo: string;
-  qtd: string;
-  valor: number;
-  dica?: string;
+  valorPrincipal: string;
+  rodape: React.ReactNode;
+  tom?: "vermelho";
 }) {
+  const corValor =
+    tom === "vermelho" && valorPrincipal !== "0"
+      ? "text-california-red"
+      : "text-foreground";
   return (
-    <tr>
-      <td className="px-4 py-3">
-        <p>{rotulo}</p>
-        {dica && <p className="text-xs text-muted-foreground mt-0.5">{dica}</p>}
-      </td>
-      <td className="px-4 py-3 text-center text-muted-foreground">{qtd}</td>
-      <td className="px-4 py-3 text-right font-medium">{fmtBRL(valor)}</td>
-    </tr>
+    <div className="rounded-2xl border border-border bg-card p-5 shadow-soft flex flex-col justify-between min-h-[128px]">
+      <div className="flex items-center gap-2 text-muted-foreground">
+        <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-california-red/10 text-california-red">
+          {icone}
+        </span>
+        <span className="text-xs font-semibold uppercase tracking-wide">
+          {rotulo}
+        </span>
+      </div>
+      <div className="mt-3">
+        <p className={`text-2xl font-bold tabular-nums leading-none ${corValor}`}>
+          {valorPrincipal}
+        </p>
+        <div className="mt-2">{rodape}</div>
+      </div>
+    </div>
   );
-}
-
-function fmtBRL(n: number): string {
-  return n.toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
 }

@@ -13,6 +13,10 @@ import {
   dadosBancariosColaboradorSchema,
 } from "@/lib/validations/rh-colaboradores";
 import { alterarAlocacao } from "@/app/(app)/rh/colaboradores/[id]/actions-alocacao";
+import {
+  calcularSnapshotRescisao,
+  calcularTotalLiquido,
+} from "@/lib/rh/calculo-rescisao";
 
 type ActionResult<T = { id: string }> =
   | ({ ok: true } & T)
@@ -420,6 +424,7 @@ export type InativarColaboradorResult =
       resumo: EncerrarPendenciasPayload & {
         auth_banido: boolean;
         liderados_que_perderam_lider: number;
+        rescisao_criada: boolean;
       };
     }
   | { ok: false; message: string; fieldErrors?: Record<string, string[]> };
@@ -444,10 +449,11 @@ export async function inativarColaborador(
   const tenantId = session.activeTenant.id;
   const supabase = createClient();
 
-  // Carrega user_id antes do UPDATE pra saber se precisa banir no Auth.
+  // Carrega user_id e data_admissao antes do UPDATE: user_id pra banir
+  // no Auth, data_admissao pra snapshot do cálculo de rescisão.
   const { data: colab, error: selErr } = await supabase
     .from("colaboradores")
-    .select("id, user_id")
+    .select("id, user_id, data_admissao")
     .eq("id", id)
     .eq("tenant_id", tenantId)
     .maybeSingle();
@@ -549,6 +555,40 @@ export async function inativarColaborador(
     }
   }
 
+  // Cria a rescisão em rascunho. Snapshot do cálculo entra junto, mas a
+  // ausência dele (sem salário vigente, por ex) não bloqueia — RH pode
+  // recalcular na tela. A rescisão só vira "enviada" depois que o RH
+  // revisar os descontos/ajustes manualmente.
+  let rescisaoCriada = false;
+  const snapshot = await calcularSnapshotRescisao(
+    supabase,
+    id,
+    colab.data_admissao as string,
+    dataEncerramento,
+  );
+  const totalLiquido = snapshot
+    ? calcularTotalLiquido(snapshot.total_bruto, 0)
+    : null;
+  const { error: rescErr } = await supabase.from("rescisoes").insert({
+    tenant_id: tenantId,
+    colaborador_id: id,
+    data_rescisao: dataEncerramento,
+    status: "rascunho",
+    created_by: session.profile.id,
+    ...(snapshot ?? {}),
+    total_liquido: totalLiquido,
+  });
+  if (rescErr) {
+    // Pode já existir uma rescisão não-cancelada (reativou + inativou de
+    // novo sem fechar a anterior). Loga mas não derruba o fluxo — RH vê
+    // a rescisão existente na tela.
+    if (!rescErr.message.includes("uniq_rescisao_ativa_por_colaborador")) {
+      console.error("[rh.colaborador.inativar.rescisao]", rescErr.message);
+    }
+  } else {
+    rescisaoCriada = true;
+  }
+
   await logAuditEvent({
     acao: "colaborador.inativado",
     tenantId,
@@ -560,12 +600,14 @@ export async function inativarColaborador(
       auth_banido: authBanido,
       user_id: colab.user_id,
       liderados_que_perderam_lider,
+      rescisao_criada: rescisaoCriada,
     },
   });
 
   revalidatePath("/rh");
   revalidatePath("/rh/colaboradores");
   revalidatePath(`/rh/colaboradores/${id}`);
+  revalidatePath("/rh/rescisoes");
   // `/equipe` dos ex-liderados: se tinham só esse líder, o item some da
   // sidebar do liderado — não dá pra revalidar pra cada um, mas o layout
   // já roda `temLiderados` no próximo request.
@@ -577,6 +619,7 @@ export async function inativarColaborador(
       ...resumo,
       auth_banido: authBanido,
       liderados_que_perderam_lider,
+      rescisao_criada: rescisaoCriada,
     },
   };
 }
@@ -710,6 +753,23 @@ export async function reativarColaborador(
     }
   }
 
+  // Cancela a rescisão em rascunho pra liberar o slot. Rescisões já
+  // enviadas ou pagas ficam intactas — o evento fiscal aconteceu.
+  const { count: rescCanceladas } = await supabase
+    .from("rescisoes")
+    .update(
+      {
+        status: "cancelada",
+        cancelada_em: new Date().toISOString(),
+        cancelada_por: session.profile.id,
+        updated_by: session.profile.id,
+      },
+      { count: "exact" },
+    )
+    .eq("tenant_id", tenantId)
+    .eq("colaborador_id", id)
+    .eq("status", "rascunho");
+
   await logAuditEvent({
     acao: "colaborador.reativado",
     tenantId,
@@ -718,11 +778,13 @@ export async function reativarColaborador(
     metadata: {
       auth_desbanido: authDesbanido,
       user_id: colab.user_id,
+      rescisoes_canceladas: rescCanceladas ?? 0,
     },
   });
 
   revalidatePath("/rh");
   revalidatePath("/rh/colaboradores");
   revalidatePath(`/rh/colaboradores/${id}`);
+  revalidatePath("/rh/rescisoes");
   return { ok: true, id };
 }

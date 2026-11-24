@@ -5545,6 +5545,30 @@ export function folhaLinhaStatusLabel(s: FolhaLinhaStatus): string {
  *  - "contabilidade": importada do PDF "Relação Geral dos Líquidos" (fluxo CLT: clt + parte CLT do híbrido + estagio + socio). */
 export type FolhaOrigem = "california" | "contabilidade";
 
+/** Status do fluxo de rescisão. `rascunho` nasce ao inativar, migra pra
+ *  `enviada_financeiro` quando o RH gera a avulsa e vira `paga` por
+ *  trigger quando a avulsa é baixada. `cancelada` libera o slot
+ *  (reativar colaborador antes de enviar).
+ *  Ver supabase/migrations/20261124100001_rescisoes_tabela.sql. */
+export type RescisaoStatus =
+  | "rascunho"
+  | "enviada_financeiro"
+  | "paga"
+  | "cancelada";
+
+export function rescisaoStatusLabel(s: RescisaoStatus): string {
+  switch (s) {
+    case "rascunho":
+      return "Rascunho";
+    case "enviada_financeiro":
+      return "Enviada ao financeiro";
+    case "paga":
+      return "Paga";
+    case "cancelada":
+      return "Cancelada";
+  }
+}
+
 /** Warnings emitidos pelo parser/importador do PDF da contabilidade. */
 export interface FolhaImportacaoWarning {
   tipo:
