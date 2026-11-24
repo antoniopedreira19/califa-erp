@@ -118,9 +118,41 @@ Lançado pela tela, como o Tiago, com a planilha de 23/11 (o histórico foi reca
 - **IOF do mútuo sem regional:** como o cálculo do sistema e a planilha, o IOF vai para a regional padrão do CNPJ que emprestou ou fica sem regional (`regrasDoCnpj(..., tributo)`).
 - **Fica para depois:** as guias de outubro ainda não pagas esperam os DARFs da contabilidade (25/11); as cotas 2 e 3 do 3º trimestre da GoCrazy entram com a correção do fluxo de caixa (§8).
 
-## 8. O fluxo de caixa conta imposto duas vezes (a decidir)
+## 8. O fluxo de caixa conta imposto duas vezes (decidido em 23/11)
 
-O fluxo soma as previsões de imposto da planilha e o que o Fiscal projeta (guias da Apuração e impostos a pagar). Em ISS, PIS e COFINS de novembro e dezembro, as duas fontes têm valores parecidos e se somam (cerca de R$ 370 mil por mês a mais). No IRPJ/CSLL do 4º trimestre, o Fiscal projeta cerca de R$ 1,56 milhão por mês de janeiro a março, contra cerca de R$ 288 mil na planilha: a estimativa do lucro real usa o lucro bruto dos jobs, sem as despesas da empresa. A regra de qual fonte vale fica com o Tiago.
+O fluxo soma as previsões de imposto da planilha e o que o Fiscal projeta (guias da Apuração e impostos a pagar). Em ISS, PIS e COFINS de novembro e dezembro, as duas fontes têm valores parecidos e se somam (cerca de R$ 370 mil por mês a mais). No IRPJ/CSLL do 4º trimestre, o Fiscal projeta cerca de R$ 1,56 milhão por mês de janeiro a março, contra cerca de R$ 288 mil na planilha: a estimativa do lucro real usa o lucro bruto dos jobs, sem as despesas da empresa.
+
+**Decisão do Tiago (23/11), a opção A com o ajuste da base:**
+
+- **ISS, PIS e COFINS:** a partir de novembro, o Fiscal é a única fonte. A previsão da planilha sai quando o Fiscal tem a guia daquele CNPJ (o da conta que paga), imposto e mês.
+- **IRPJ e CSLL:** a planilha continua no fluxo até a guia ser aprovada. Aprovada, a guia deixa de ser previsão e vira título, e o título substitui a previsão da planilha daquele CNPJ e trimestre. Antes da aprovação, a estimativa do sistema não entra no fluxo.
+- As cotas 2 e 3 do 3º trimestre da GoCrazy entram como Guia da contabilidade a pagar.
+- A implementação do fluxo é a próxima entrega.
+
+## 9. O ajuste da base do lucro real (implementado)
+
+O Tiago quer acertar o IRPJ/CSLL no sistema, sem passar pela planilha, enquanto o cálculo não estiver calibrado. Hoje a estimativa do lucro real não vê as despesas: no 4º trimestre da California, a base do sistema é de R$ 13,6 milhões, contra cerca de R$ 2,25 milhões na planilha. O motivo: R$ 16,96 milhões de faturamento contra só R$ 2,19 milhões de custo das NFs de fornecedor lançadas. Ele decidiu (23/11):
+
+- **O ajuste entra na base, uma linha só:** "(−) Despesas e ajustes do Lucro Real" (ou "(+) Ajustes do Lucro Real"), por CNPJ e trimestre. Ela vale para o IRPJ e para a CSLL. O sistema refaz IRPJ 15% + adicional de 10% (acima de R$ 60 mil no trimestre) e CSLL 9%, menos as retenções.
+- **Só fica registrado quando a guia é aprovada com ele.** Não é um lançamento parcial de imposto durante a apuração: o ajuste é um campo do formulário de aprovação, no pop-up da guia, com motivo obrigatório (10 caracteres) e a prévia das duas guias.
+- **A outra guia do par herda.** Aprovado o IRPJ com o ajuste, a CSLL do trimestre já abre com ele no calculado, e a aprovação dela grava o mesmo ajuste. O banco também faz isso: `aprovar_guia_fiscal` herda o ajuste do par e recusa um ajuste diferente. Com o par aprovado sem ajuste, a outra guia só se ajusta pelo valor da guia.
+- **A estimativa continua subindo com notas novas:** o ajuste é uma diferença em R$, não um valor fixo. O que entrar depois da aprovação volta como Diferença a aprovar, como sempre.
+- **ISS, PIS e COFINS** se ajustam pelo valor da guia, como já era. O IRPJ/CSLL do presumido também: a base é presumida, sem despesas.
+
+**Arquivos:**
+
+- `supabase/migrations/20261123400005_ajuste_da_base_do_lucro_real.sql`: `fiscal_aprovacoes.ajuste_base` e `ajuste_base_motivo`, com a trava, e `aprovar_guia_fiscal` com `p_ajuste_base` e `p_ajuste_base_motivo` (default nulo).
+- `lib/fiscal/apuracao.ts` (+ teste): `AjusteDaBase`, `LucroRealDaGuia` (`Guia.lucro_real`), `impostosDoLucroReal` (a conta da prévia), `chaveDoPar`, e o ajuste aprovado na base das duas guias. `calcularApuracao` ganhou a prévia do servidor (`previaDoAjuste`).
+- `app/(app)/financeiro/fiscal/apuracao/aprovacao.ts` (+ teste): `validarAjusteDaBase`; o pedido leva o ajuste que a guia recalculada usou.
+- `actions.ts`: `aprovarGuia` com `ajuste_base` (recalcula com a prévia antes de gravar). `memoria-dialog.tsx`: a seção do ajuste, o ajuste herdado e o ajuste na guia aprovada. `aba-apuracao.tsx`: "base ajustada" na coluna Base.
+- `lib/fiscal/apuracao-fatos.ts`, `dados.ts` e `lib/types.ts`: os dois campos lidos do banco.
+
+**Conferido no Sandbox (Empresa Teste, 4º tri/2026, aprovação antecipada da PJ de teste):**
+
+- Ajuste de −R$ 50.000,00 sobre o lucro bruto de R$ 83.890,44. A prévia deu IRPJ de R$ 3.883,57 e CSLL de R$ 2.250,14, que batem com a conta à mão.
+- O IRPJ foi aprovado com 3 cotas.
+- A CSLL abriu com o ajuste herdado e foi aprovada com o mesmo ajuste (`ajuste_base_herdado` na auditoria).
+- `tsc`, lint e os 220 testes do fiscal.
 
 ## Arquivos (entrega 1)
 

@@ -164,6 +164,8 @@ interface AprovacaoDoBanco {
   compensacoes_usadas: unknown;
   cotas: unknown;
   saldo_credor_contabil: number | string | null;
+  ajuste_base: number | string | null;
+  ajuste_base_motivo: string | null;
 }
 
 const SELECT_JOB =
@@ -227,7 +229,7 @@ export async function carregarFatosFiscais(supabase: SupabaseClient, tenantId: s
       .not("registrada_em", "is", null),
     supabase
       .from("fiscal_aprovacoes")
-      .select("chave, data, valor_calculado, valor_guia, diferenca, compensacoes_usadas, cotas, saldo_credor_contabil")
+      .select("chave, data, valor_calculado, valor_guia, diferenca, compensacoes_usadas, cotas, saldo_credor_contabil, ajuste_base, ajuste_base_motivo")
       .eq("tenant_id", tenantId)
       .order("aprovada_em"),
   ]);
@@ -474,6 +476,8 @@ export function montarFatos(e: {
     compensacoes_usadas: Array.isArray(a.compensacoes_usadas) ? (a.compensacoes_usadas as string[]) : [],
     cotas: Array.isArray(a.cotas) ? (a.cotas as Cota[]) : null,
     saldo_credor_contabil: a.saldo_credor_contabil === null || a.saldo_credor_contabil === undefined ? null : Number(a.saldo_credor_contabil),
+    ajuste_base: a.ajuste_base === null || a.ajuste_base === undefined ? null : Number(a.ajuste_base),
+    ajuste_base_motivo: a.ajuste_base_motivo ?? null,
   }));
 
   return { cadastro: e.cadastro, fatos: { notas, recebimentos, notasFornecedor, mutuos: e.mutuos }, aprovacoes };

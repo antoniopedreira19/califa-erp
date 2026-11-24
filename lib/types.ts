@@ -6216,6 +6216,13 @@ export interface FiscalAprovacao {
    * contabilidade levou para o mês seguinte. Nulo = vale o calculado.
    */
   saldo_credor_contabil: number | null;
+  /**
+   * Decisão 277 §9: IRPJ/CSLL do lucro real — o ajuste da base aprovado com a
+   * guia (com sinal: negativo reduz), que vale para o par do mesmo CNPJ e
+   * trimestre. Nulo = sem ajuste.
+   */
+  ajuste_base: number | null;
+  ajuste_base_motivo: string | null;
 }
 
 export type OrigemImpostoAPagar = "apuracao" | "diferenca" | "avulso";

@@ -985,7 +985,9 @@ function LinhaGuia({
       <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-xs text-muted-foreground">
         {base ? moeda(base) : "—"}
         {g.periodo === "trimestral" && (
-          <span className="block font-sans text-[10px]">{pj?.regime === "lucro_presumido" ? "base presumida" : "lucro bruto"}</span>
+          <span className="block font-sans text-[10px]">
+            {pj?.regime === "lucro_presumido" ? "base presumida" : g.lucro_real?.ajuste ? "base ajustada" : "lucro bruto"}
+          </span>
         )}
       </td>
       <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-xs">{debito ? moeda(debito) : "—"}</td>

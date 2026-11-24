@@ -39,6 +39,9 @@ export interface AprovacaoDaTela {
   autor: string;
   /** Decisão 277: o saldo credor que a contabilidade levou para o mês seguinte (nulo = o calculado). */
   saldo_credor_contabil: number | null;
+  /** Decisão 277 §9: o ajuste da base do lucro real aprovado com esta guia (nulo = sem ajuste). */
+  ajuste_base: number | null;
+  ajuste_base_motivo: string | null;
 }
 
 export interface GuiaDaTela extends Guia {
@@ -223,6 +226,8 @@ interface AprovacaoDoBanco {
   guia_path: string | null;
   aprovada_por: string;
   saldo_credor_contabil: number | string | null;
+  ajuste_base: number | string | null;
+  ajuste_base_motivo: string | null;
 }
 
 interface ContabilDoBanco {
@@ -283,7 +288,9 @@ export async function carregarApuracao(supabase: SupabaseClient, tenantId: strin
       supabase.from("empresas_contabeis").select("id, razao_social, nome_fantasia, de_teste").eq("tenant_id", tenantId),
       supabase
         .from("fiscal_aprovacoes")
-        .select("id, chave, data, valor_calculado, valor_guia, justificativa, diferenca, guia_path, aprovada_por, saldo_credor_contabil")
+        .select(
+          "id, chave, data, valor_calculado, valor_guia, justificativa, diferenca, guia_path, aprovada_por, saldo_credor_contabil, ajuste_base, ajuste_base_motivo",
+        )
         .eq("tenant_id", tenantId)
         .order("aprovada_em"),
       // Só a contagem: as notas de antes do módulo fiscal não dizem por qual CNPJ saíram.
@@ -340,6 +347,8 @@ export async function carregarApuracao(supabase: SupabaseClient, tenantId: strin
         guia_nome: nomeDoArquivo(a.guia_path),
         autor: nomes.get(a.aprovada_por) ?? "—",
         saldo_credor_contabil: a.saldo_credor_contabil === null ? null : Number(a.saldo_credor_contabil),
+        ajuste_base: a.ajuste_base === null ? null : Number(a.ajuste_base),
+        ajuste_base_motivo: a.ajuste_base_motivo,
       });
       aprovacoesPorChave.set(a.chave, lista);
     }

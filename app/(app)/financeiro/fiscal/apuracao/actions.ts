@@ -25,7 +25,7 @@ import { PRIMEIRA_COMPETENCIA, calcularApuracao, estadoDaGuia, type Guia, type R
 import { baseDaReceita, carregarNotasDoHistorico, periodoDe, receitaDasNotas, receitaDoHistorico } from "@/lib/fiscal/receita-do-periodo";
 import { rateioPorGerencial } from "@/lib/fiscal/rateio-gerencial";
 import { carregarRegrasDoRateio, regrasDoCnpj } from "@/lib/fiscal/rateio-gerencial-dados";
-import { montarPedidoDeAprovacao, type EntradaDaAprovacao } from "./aprovacao";
+import { montarPedidoDeAprovacao, validarAjusteDaBase, type EntradaDaAprovacao } from "./aprovacao";
 import { hojeEmSaoPaulo } from "./dados";
 
 type Err = { ok: false; message: string };
@@ -128,6 +128,18 @@ const aprovarSchema = z.object({
   /** Decisão 277: o saldo credor que a contabilidade levou para o mês seguinte (PIS/COFINS não cumulativos). */
   saldo_credor_contabil: z.number().finite().min(0, "O saldo credor não pode ser negativo.").max(1e11).nullable().default(null),
   /**
+   * Decisão 277 §9: IRPJ/CSLL do lucro real — o ajuste da base (com sinal:
+   * negativo reduz), que vale para as duas guias do CNPJ e trimestre e só se
+   * registra com esta aprovação.
+   */
+  ajuste_base: z
+    .object({
+      valor: z.number().finite(),
+      motivo: z.string().max(500),
+    })
+    .nullable()
+    .default(null),
+  /**
    * Decisão 277, entrega 3: a guia já foi paga fora do sistema e o pagamento
    * está no histórico da planilha — o título nasce e já sai de A pagar, sem
    * lançamento. Só na guia de um título (com cotas, cada uma em Impostos a Pagar).
@@ -170,10 +182,26 @@ export async function aprovarGuia(
   } catch (e) {
     return { ok: false, message: `Não foi possível recalcular a apuração: ${e instanceof Error ? e.message : String(e)}` };
   }
-  const calculada = r.guias.find((x) => x.chave === v.chave);
+  let calculada = r.guias.find((x) => x.chave === v.chave);
   if (!calculada) return { ok: false, message: "Esta guia não está mais na apuração. Atualize a página." };
   if (v.saldo_credor_contabil !== null && !temSaldoCredor(v.chave)) {
     return { ok: false, message: "Só a guia de PIS ou COFINS não cumulativos tem saldo credor." };
+  }
+
+  // Decisão 277 §9: o ajuste da base do lucro real. O servidor recalcula a
+  // guia com ele (a prévia): o calculado, a memória, o rateio e as cotas já
+  // saem ajustados, e a aprovação grava o ajuste junto.
+  if (v.ajuste_base) {
+    const estadoAntes = estadoDaGuia(calculada, r.hoje, r.fatos.aprovacoes).estado;
+    const valido = validarAjusteDaBase(calculada, estadoAntes, v.ajuste_base);
+    if (!valido.ok) return valido;
+    const comAjuste = calcularApuracao(r.fatos.cadastro, r.fatos.fatos, r.hoje, r.fatos.aprovacoes, {
+      chave: v.chave,
+      valor: v.ajuste_base.valor,
+      motivo: v.ajuste_base.motivo,
+    }).find((x) => x.chave === v.chave);
+    if (!comAjuste?.lucro_real?.ajuste) return { ok: false, message: "Não foi possível recalcular a guia com o ajuste da base." };
+    calculada = comAjuste;
   }
 
   // Decisão 277: o rateio por empresa gerencial (o da contabilidade), com as regionais pela receita.

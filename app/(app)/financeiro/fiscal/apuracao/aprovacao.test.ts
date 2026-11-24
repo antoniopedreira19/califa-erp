@@ -10,12 +10,13 @@ import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import type { FiscalEstabelecimento } from "@/lib/types";
 import type { CadastroFiscal } from "@/lib/fiscal/cadastro";
-import { cotasDe, type Guia, type RateioDaGuia } from "@/lib/fiscal/apuracao";
+import { cotasDe, impostosDoLucroReal, type Guia, type RateioDaGuia } from "@/lib/fiscal/apuracao";
 import { r2 } from "@/lib/fiscal/datas";
 import {
   apuradoSemCompensacao,
   calculadoParaAGuia,
   montarPedidoDeAprovacao,
+  validarAjusteDaBase,
   type EntradaDaAprovacao,
   type PedidoDeAprovacao,
 } from "./aprovacao";
@@ -69,6 +70,7 @@ const guiaIrpj = (apurado: number): Guia => ({
   ],
   apurado,
   saldo_credor_gerado: 0,
+  lucro_real: null,
   base: 100000,
   rateio: RATEIO,
   avisos: [],
@@ -95,6 +97,7 @@ const guiaIss = (): Guia => ({
   ],
   apurado: 850,
   saldo_credor_gerado: 0,
+  lucro_real: null,
   base: 20000,
   rateio: RATEIO.map((r) => ({ ...r, valor: r2((850 * r.pct) / 100) })),
   avisos: [],
@@ -340,5 +343,53 @@ describe("Diferença: o complementar", () => {
     assert.equal(p.p_titulos.length, 1);
     assert.equal(p.p_titulos[0].cota_numero, null);
     conferirTravas(p);
+  });
+});
+
+describe("Decisão 277 §9: o ajuste da base do lucro real", () => {
+  const LR: NonNullable<Guia["lucro_real"]> = {
+    lucro_bruto: 500000,
+    ajuste: null,
+    par_aprovado: false,
+    aliquota_irpj: 15,
+    aliquota_adicional: 10,
+    limite_adicional: 60000,
+    aliquota_csll: 9,
+    irrf: 0,
+    csll_retida: 0,
+  };
+  const MOTIVO = "Folha e aluguel do trimestre, pelo balancete";
+
+  test("só no IRPJ/CSLL do lucro real, na aprovação, com o par sem aprovação e com motivo", () => {
+    const g = { lucro_real: LR };
+    assert.deepEqual(validarAjusteDaBase(g, "a_aprovar", { valor: -100000, motivo: MOTIVO }), { ok: true });
+    assert.equal(validarAjusteDaBase({ lucro_real: null }, "a_aprovar", { valor: -1, motivo: MOTIVO }).ok, false);
+    assert.equal(validarAjusteDaBase(g, "diferenca", { valor: -1, motivo: MOTIVO }).ok, false);
+    assert.equal(validarAjusteDaBase(g, "a_aprovar", { valor: 0, motivo: MOTIVO }).ok, false);
+    assert.equal(validarAjusteDaBase(g, "a_aprovar", { valor: -1, motivo: "curto" }).ok, false);
+    const par = validarAjusteDaBase({ lucro_real: { ...LR, par_aprovado: true } }, "a_aprovar", { valor: -1, motivo: MOTIVO });
+    assert.equal(par.ok === false && par.message, "A outra guia deste trimestre foi aprovada sem ajuste da base: aqui vale só o valor da guia.");
+    const herdado = { ...LR, ajuste: { valor: -5, motivo: MOTIVO, tributo: "CSLL" as const, data: "2027-01-05", aprovado: true } };
+    assert.equal(validarAjusteDaBase({ lucro_real: herdado }, "a_aprovar", { valor: -1, motivo: MOTIVO }).ok, false);
+  });
+
+  test("a conta da prévia: 15% + 10% acima de R$ 60 mil no IRPJ e 9% na CSLL, sobre a base ajustada", () => {
+    assert.deepEqual(impostosDoLucroReal(LR, -400000), { base: 100000, ir15: 15000, adicional: 4000, irpj: 19000, csll: 9000 });
+    // A base não fica negativa: imposto zerado.
+    assert.deepEqual(impostosDoLucroReal(LR, -600000), { base: 0, ir15: 0, adicional: 0, irpj: 0, csll: 0 });
+    // O IRRF abate só os 15%.
+    assert.equal(impostosDoLucroReal({ ...LR, irrf: 20000 }, -400000).irpj, 4000);
+  });
+
+  test("o pedido leva o ajuste que a guia recalculada usou (o da prévia ou o herdado); a diferença, não", () => {
+    const ajuste = { valor: -400000, motivo: MOTIVO, tributo: "IRPJ" as const, data: "2027-01-05", aprovado: false };
+    const g = { ...guiaIrpj(19000), lucro_real: { ...LR, ajuste } };
+    const p = montar(g, { valor_guia: 19000 });
+    assert.equal(p.p_ajuste_base, -400000);
+    assert.equal(p.p_ajuste_base_motivo, MOTIVO);
+    assert.equal(p.p_valor_calculado, 19000);
+    conferirTravas(p);
+    assert.equal(montar(guiaIrpj(19000), { valor_guia: 19000 }).p_ajuste_base, null);
+    assert.equal(montar(g, { valor_guia: 500 }, "diferenca", 500).p_ajuste_base, null);
   });
 });

@@ -135,6 +135,7 @@ export function guiasDoIofDoMutuo(mutuos: readonly MutuoDoIof[], comp: string, f
       memoria,
       apurado,
       saldo_credor_gerado: 0,
+      lucro_real: null,
       base: soma,
       rateio: [{ empresa_id: m.empresa_id, empresa_nome: m.empresa_nome, regional_id: m.regional_id, regional_nome: m.regional_nome, valor: apurado, pct: 100 }],
       avisos: [],
