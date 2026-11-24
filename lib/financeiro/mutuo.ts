@@ -78,19 +78,20 @@ export interface GuiaPagaDoIof {
 
 /**
  * As guias de IOF pagas que ainda não estão no IOF do par. A guia paga no
- * histórico (decisão 277) pode ser o mesmo pagamento que o IOF do histórico
- * já soma (`mutuos_iof_historico`, pela linha do extrato): mesmo CNPJ pagador
+ * histórico (decisão 277) pode ser o mesmo pagamento que o par já soma por
+ * outro caminho — o IOF do histórico (`mutuos_iof_historico`, pela linha do
+ * extrato) ou o lançamento ligado ao mútuo (`mutuos_iof`): mesmo CNPJ pagador
  * e mesmo valor, no centavo. Essa fica de fora, para não contar duas vezes;
- * cada pagamento do histórico desconta uma guia só. A guia baixada no sistema
+ * cada pagamento já contado desconta uma guia só. A guia baixada no sistema
  * sempre soma.
  */
 export function guiasDeIofAContar(
   guias: GuiaPagaDoIof[],
-  doHistorico: Array<Pick<IofDoMutuo, "pagador" | "valor">>,
+  jaContados: Array<Pick<IofDoMutuo, "pagador" | "valor">>,
 ): GuiaPagaDoIof[] {
   const chave = (pagador: string, valor: number) => `${pagador}|${Math.round(valor * 100)}`;
   const restantes = new Map<string, number>();
-  for (const h of doHistorico) {
+  for (const h of jaContados) {
     const k = chave(h.pagador, h.valor);
     restantes.set(k, (restantes.get(k) ?? 0) + 1);
   }

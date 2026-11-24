@@ -175,8 +175,8 @@ export async function carregarMutuos(supabase: Supabase, tenantId: string): Prom
 
   // A guia paga soma no IOF do par. Só a empresa de fora tem guia por enquanto:
   // com mais de uma para o mesmo CNPJ, a guia não diz de qual delas é.
-  // Decisão 277: a guia paga no histórico que é o mesmo pagamento do IOF do
-  // histórico (mesmo CNPJ e valor) não soma de novo.
+  // Decisão 277: a guia paga no histórico que é o mesmo pagamento de um IOF
+  // já contado (mesmo CNPJ e valor) não soma de novo.
   const guias = (guiasRes.data ?? []) as Array<{
     empresa_contabil_id: string;
     rotulo_competencia: string;
@@ -187,7 +187,8 @@ export async function carregarMutuos(supabase: Supabase, tenantId: string): Prom
   const pagas = guias
     .filter((x) => x.status === "pago")
     .map((g) => ({ pagador: parteDoCnpj(g.empresa_contabil_id), valor: Number(g.valor), pagoNoHistorico: g.pago_no_historico }));
-  for (const g of guiasDeIofAContar(pagas, iofsDoHistorico)) {
+  // O "já contado" é o IOF do histórico e o lançado à mão ligado ao mútuo (`mutuos_iof`).
+  for (const g of guiasDeIofAContar(pagas, iofs)) {
     const foras = aberturas.filter((a) => a.credor === g.pagador && a.devedor.startsWith("f:"));
     iofs.push({ pagador: g.pagador, com: foras.length === 1 ? foras[0].devedor : null, valor: g.valor });
   }
