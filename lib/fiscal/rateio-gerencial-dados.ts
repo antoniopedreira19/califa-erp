@@ -56,6 +56,7 @@ export async function carregarRegrasDoRateio(supabase: SupabaseClient, tenantId:
 }
 
 /** As regras para a guia de um CNPJ. */
-export function regrasDoCnpj(t: RegrasDoRateioDoTenant, pjId: string): RegrasDoRateio {
-  return { empresas: t.empresas, regionalDoCnpj: t.regionalDoCnpj[pjId] ?? null };
+/** As regras do rateio de uma guia: as do CNPJ e, no IOF do mútuo, sem dividir pela receita. */
+export function regrasDoCnpj(t: RegrasDoRateioDoTenant, pjId: string, tributo: string): RegrasDoRateio {
+  return { empresas: t.empresas, regionalDoCnpj: t.regionalDoCnpj[pjId] ?? null, pelaReceita: tributo !== "IOF" };
 }

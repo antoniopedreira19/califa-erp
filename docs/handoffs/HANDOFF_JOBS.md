@@ -6908,4 +6908,5 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - **Textos:** o cabeçalho dividido da mídia diz "antes das mudanças da veiculação"; o BV do veículo diz que não desconta da planilha (o líquido entra no resultado realizado quando é recebido).
 - **PP do repasse sugerida na extensão:** a conta respeita as 3 casas do D/M da PP; quando não fecha no centavo, vem valor × 1 × 1 (antes passava R$ 2,06 da nota).
 - **Conferido no Sandbox (TES-1026/26):** PP-00958 enviada com NF, aprovada e paga; BV de dezembro confirmado e na fila do financeiro com nome; extensão para 22/01/2027 mudou o período do job; PDF da PP-00959 com "Item: Salvador/BA · Fornecedor Teste".
-- **Ainda aberto:** contrato do veículo; o card "Erratas" da mídia ainda fala do "Editar planilha".
+- **Card "Erratas":** saiu dos jobs de Mídia Off (produção e financeiro), a pedido do Tiago — a mídia não tem errata; o registro é o do "Planejado e realizado".
+- **Ainda aberto:** contrato do veículo.

@@ -109,7 +109,7 @@ export const nomeDoImposto = (t: Pick<ImpostoDaLista, "titulo" | "cota_numero" |
 /** O imposto do fornecedor que a agência só repassa (retido na fonte). */
 const ehRetencao = (tributo: string) => tributo === "CSRF" || tributo === "IRRF" || tributo === "ISS_RET";
 
-function Erro({ children }: { children: React.ReactNode }) {
+export function Erro({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-start gap-2 rounded-lg border border-california-red/40 bg-california-red/5 p-3 text-sm text-california-red">
       <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
@@ -118,7 +118,7 @@ function Erro({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Resumo({ t }: { t: ImpostoDaLista }) {
+export function Resumo({ t }: { t: ImpostoDaLista }) {
   return (
     <div className="grid grid-cols-[max-content_1fr_max-content_1fr] gap-x-4 gap-y-1.5 rounded-xl border border-border bg-muted/40 p-4 text-[13px]">
       <span className="text-muted-foreground">Imposto</span>
@@ -196,6 +196,7 @@ export function BaixaImpostoDialog({
   multaInicial,
   onClose,
   onBaixado,
+  onPagoNoHistorico,
 }: {
   imposto: ImpostoDaLista;
   /** As contas ativas, sem as contas-espelho de cartão. */
@@ -211,6 +212,8 @@ export function BaixaImpostoDialog({
   multaInicial?: number;
   onClose: () => void;
   onBaixado: (feita: BaixaDeImpostoFeita) => void;
+  /** Decisão 277: troca para "Marcar como paga no histórico" (só na aba Impostos a Pagar). */
+  onPagoNoHistorico?: () => void;
 }) {
   const [pending, startTransition] = React.useTransition();
   const [data, setData] = React.useState<string>(() => dataInicial ?? hojeIso());
@@ -413,7 +416,22 @@ export function BaixaImpostoDialog({
           </div>
           <RateioPrevia t={t} total={total} multaJuros={multa} />
         </div>
-        <div className="flex justify-end gap-2 border-t border-border pt-4">
+        <div className="flex items-center justify-end gap-2 border-t border-border pt-4">
+          {onPagoNoHistorico && (
+            <button
+              type="button"
+              onClick={() => {
+                if (pending) return;
+                guia.descartarEnviados();
+                comprovante.descartarEnviados();
+                onPagoNoHistorico();
+              }}
+              disabled={pending}
+              className="mr-auto text-left text-[12.5px] font-medium text-muted-foreground underline-offset-2 hover:text-california-red hover:underline disabled:opacity-50"
+            >
+              Já foi paga e está no histórico da planilha?
+            </button>
+          )}
           <button
             type="button"
             onClick={fechar}
@@ -455,6 +473,8 @@ export function BaixaRegistradaDialog({
   const [motivo, setMotivo] = React.useState("");
   const [erro, setErro] = React.useState<string | null>(null);
   const pago = t.status === "pago";
+  // Decisão 277: pago fora do sistema, sem lançamento — desfazer só volta a A pagar.
+  const noHistorico = pago && t.pago_no_historico;
 
   function cancelar() {
     setErro(null);
@@ -467,7 +487,11 @@ export function BaixaRegistradaDialog({
         setErro(res.message);
         return;
       }
-      onCancelada("Baixa cancelada: o lançamento saiu da conciliação e o imposto voltou a A pagar.");
+      onCancelada(
+        noHistorico
+          ? "Desfeito: o imposto voltou a A pagar. Não havia lançamento a apagar."
+          : "Baixa cancelada: o lançamento saiu da conciliação e o imposto voltou a A pagar.",
+      );
     });
   }
 
@@ -477,7 +501,7 @@ export function BaixaRegistradaDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Eye className="h-5 w-5 text-california-red" />
-            Baixa registrada
+            {noHistorico ? "Paga no histórico" : "Baixa registrada"}
           </DialogTitle>
           <DialogDescription className="sr-only">O pagamento registrado deste imposto.</DialogDescription>
         </DialogHeader>
@@ -511,6 +535,12 @@ export function BaixaRegistradaDialog({
               <span className="text-muted-foreground">Registrada por</span>
               <span className="text-xs">{t.baixado_por_nome ?? "—"}</span>
             </div>
+            {noHistorico && (
+              <p className="border-t border-border pt-2 text-[12px] leading-relaxed text-muted-foreground">
+                Paga fora do sistema: o pagamento está no histórico da planilha, que é por onde o DRE e o fluxo de caixa
+                contam. Nenhum lançamento foi criado.
+              </p>
+            )}
           </div>
         ) : (
           <p className="text-sm text-muted-foreground">Sem baixa.</p>
@@ -528,17 +558,18 @@ export function BaixaRegistradaDialog({
         {cancelando ? (
           <div className="space-y-2 rounded-xl border border-california-red/30 bg-california-red/[0.04] p-3">
             <label className="text-xs font-semibold">
-              Motivo do cancelamento <span className="text-california-red">*</span>
+              {noHistorico ? "Motivo" : "Motivo do cancelamento"} <span className="text-california-red">*</span>
             </label>
             <Textarea
               rows={2}
               value={motivo}
               onChange={(e) => setMotivo(e.target.value)}
-              placeholder="Ex.: baixa lançada na conta errada."
+              placeholder={noHistorico ? "Ex.: marcada na guia errada." : "Ex.: baixa lançada na conta errada."}
             />
             <p className="text-[11.5px] text-muted-foreground">
-              Cancelar tira o lançamento do extrato e o imposto volta a A pagar (decisão 120). O motivo precisa de pelo
-              menos 10 caracteres.
+              {noHistorico
+                ? "Desfazer só volta o imposto a A pagar: não há lançamento a apagar. O motivo precisa de pelo menos 10 caracteres."
+                : "Cancelar tira o lançamento do extrato e o imposto volta a A pagar (decisão 120). O motivo precisa de pelo menos 10 caracteres."}
             </p>
             <div className="flex justify-end gap-2">
               <button
@@ -555,7 +586,7 @@ export function BaixaRegistradaDialog({
                 onClick={cancelar}
                 className="rounded-lg bg-california-red px-3 py-2 text-sm font-semibold text-white hover:bg-california-red-hover disabled:opacity-50"
               >
-                {pending ? "Cancelando..." : "Cancelar esta baixa"}
+                {pending ? "Cancelando..." : noHistorico ? "Voltar a A pagar" : "Cancelar esta baixa"}
               </button>
             </div>
           </div>
@@ -567,7 +598,7 @@ export function BaixaRegistradaDialog({
                 onClick={() => setCancelando(true)}
                 className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-muted-foreground hover:border-california-red hover:text-california-red"
               >
-                Cancelar esta baixa
+                {noHistorico ? "Desfazer: voltar a A pagar" : "Cancelar esta baixa"}
               </button>
               <button
                 type="button"

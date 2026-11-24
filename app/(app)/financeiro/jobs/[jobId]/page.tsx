@@ -779,6 +779,10 @@ export default async function JobNoFinanceiroPage({
               statusBadgeClasses={jobStatusBadgeClasses}
             />
 
+            {/* Sem o card na Mídia Off, como na página da produção: não há
+                errata na mídia; a campanha muda pelo "Planejado e
+                realizado" (decisão 275; Tiago, 23/11/2026). */}
+            {detalhe.midia === null && (
             <ErratasCard
               erratas={detalhe.erratas}
               valorJobAbertura={job.valor_job_abertura}
@@ -792,6 +796,7 @@ export default async function JobNoFinanceiroPage({
               // A errata pronta não foi ao financeiro (decisão 159).
               pronta={null}
             />
+            )}
 
             {/* O histórico do "Editar orçado" (decisão 115). Só existe
                 depois da primeira alteração. */}

@@ -184,6 +184,89 @@ export interface AprovacaoFiscal {
    * saldo calculado (`saldo_credor_gerado`).
    */
   saldo_credor_contabil: number | null;
+  /**
+   * IRPJ/CSLL do lucro real (decisão 277 §9): o ajuste da base aprovado com a
+   * guia — com sinal, negativo reduz —, as despesas e ajustes que o lucro
+   * bruto não vê. Vale para o par (IRPJ e CSLL do mesmo CNPJ e trimestre).
+   * Nulo = sem ajuste.
+   */
+  ajuste_base: number | null;
+  ajuste_base_motivo: string | null;
+}
+
+/** O ajuste da base de um CNPJ e trimestre do lucro real, como entra no cálculo. */
+export interface AjusteDaBase {
+  /** Com sinal: negativo reduz a base. */
+  valor: number;
+  motivo: string;
+  /** A guia aprovada com ele (a outra do par herda). */
+  tributo: "IRPJ" | "CSLL";
+  data: string;
+  /** Falso na prévia do servidor, antes de a aprovação gravar. */
+  aprovado: boolean;
+}
+
+/**
+ * O que a prévia do ajuste da base precisa para refazer o IRPJ e a CSLL do
+ * lucro real na tela (decisão 277 §9), pela mesma conta do cálculo
+ * (`impostosDoLucroReal`).
+ */
+export interface LucroRealDaGuia {
+  /** O lucro bruto do trimestre, antes do ajuste (pode ser negativo). */
+  lucro_bruto: number;
+  /** O ajuste já aprovado no par, ou o da prévia do servidor; nulo sem ajuste. */
+  ajuste: AjusteDaBase | null;
+  /** A outra guia do par (IRPJ ↔ CSLL) já foi aprovada. */
+  par_aprovado: boolean;
+  aliquota_irpj: number;
+  aliquota_adicional: number;
+  /** O limite do adicional no trimestre (3 × o do mês). */
+  limite_adicional: number;
+  aliquota_csll: number;
+  /** IRRF retido pelos clientes no trimestre: abate só os 15%, nunca o adicional. */
+  irrf: number;
+  csll_retida: number;
+}
+
+/** O IRPJ e a CSLL do lucro real com um ajuste da base — a conta do cálculo, para a prévia. */
+export function impostosDoLucroReal(l: LucroRealDaGuia, ajuste: number) {
+  const base = Math.max(0, r2(l.lucro_bruto + ajuste));
+  const ir15 = r2((base * l.aliquota_irpj) / 100);
+  const adicional = r2((Math.max(0, base - l.limite_adicional) * l.aliquota_adicional) / 100);
+  const irpj = r2(Math.max(0, ir15 - l.irrf) + adicional);
+  const csll = r2(Math.max(0, (base * l.aliquota_csll) / 100 - l.csll_retida));
+  return { base, ir15, adicional, irpj, csll };
+}
+
+/** A outra guia do par de IRPJ/CSLL (mesmo CNPJ e trimestre); nulo nos outros tributos. */
+export function chaveDoPar(chave: string): string | null {
+  if (chave.startsWith("irpj|")) return `csll|${chave.slice(5)}`;
+  if (chave.startsWith("csll|")) return `irpj|${chave.slice(5)}`;
+  return null;
+}
+
+/** O rótulo da linha do ajuste na memória de cálculo. */
+export const rotuloDoAjusteDaBase = (valor: number) =>
+  valor < 0 ? "(−) Despesas e ajustes do Lucro Real" : "(+) Ajustes do Lucro Real";
+
+/** Decisão 277 §9: o ajuste da base aprovado em cada "pj|trimestre", do IRPJ ou da CSLL (o primeiro). */
+function ajustesDaBase(aprovacoes: AprovacaoFiscal[]): Map<string, AjusteDaBase> {
+  const m = new Map<string, AjusteDaBase>();
+  for (const a of aprovacoes) {
+    if (a.diferenca || a.ajuste_base === null || a.ajuste_base === 0) continue;
+    const [prefixo, pj, t] = a.chave.split("|");
+    if ((prefixo !== "irpj" && prefixo !== "csll") || !pj || !t) continue;
+    const k = `${pj}|${t}`;
+    if (!m.has(k))
+      m.set(k, {
+        valor: r2(a.ajuste_base),
+        motivo: a.ajuste_base_motivo ?? "",
+        tributo: prefixo === "irpj" ? "IRPJ" : "CSLL",
+        data: a.data,
+        aprovado: true,
+      });
+  }
+  return m;
 }
 
 export interface ItemMemoria {
@@ -251,6 +334,8 @@ export interface Guia {
   cotas?: Cota[];
   /** ISS de Salvador: o ISS a recuperar compensado nesta guia (sugerido ou aprovado). */
   compensacoes?: ARecuperar[];
+  /** IRPJ/CSLL do lucro real (decisão 277 §9): o que a prévia do ajuste da base usa. Nulo nas outras guias. */
+  lucro_real: LucroRealDaGuia | null;
 }
 
 export type EstadoGuia = "em_curso" | "a_aprovar" | "aprovada" | "diferenca";
@@ -835,6 +920,7 @@ function guiaIss(
     memoria,
     apurado: Math.max(0, soma),
     saldo_credor_gerado: 0,
+    lucro_real: null,
     base: r2(base),
     rateio: rateioPor(pesos, Math.max(0, soma)),
     // A observação do vencimento no cadastro ("dia 20 ... a confirmar"), como o "aConfirmar" do protótipo.
@@ -1052,6 +1138,7 @@ function guiaPisCofins(
     memoria,
     apurado: Math.max(0, soma),
     saldo_credor_gerado: soma < 0 ? -soma : 0,
+    lucro_real: null,
     base: r2(base),
     rateio: rateioPor(pesos.length ? pesos : pesosDosCreditos, Math.max(0, soma)),
     avisos,
@@ -1082,7 +1169,7 @@ export function cotasDe(total: number, trimestre: string, cidade: string, cad: C
   });
 }
 
-function guiasIrpjCsll(ctx: Contexto, pj: string, t: string): Guia[] {
+function guiasIrpjCsll(ctx: Contexto, pj: string, t: string, ajuste: AjusteDaBase | null): Guia[] {
   const meses = mesesDoTrimestre(t);
   const dentro = (d: string) => meses.includes(mesDe(d));
   const fim = fimDoTrimestre(t);
@@ -1095,6 +1182,8 @@ function guiasIrpjCsll(ctx: Contexto, pj: string, t: string): Guia[] {
   let baseIr = 0;
   let baseCs = 0;
   let receitaRef = 0;
+  // Lucro real: o lucro bruto antes do ajuste da base (decisão 277 §9).
+  let lucroBruto: number | null = null;
 
   if (reg.ramo === "real") {
     const notas = ctx.conhecidas.filter((n) => ctx.pjDoEstab(n.estabelecimento_id) === pj && dentro(n.emissao));
@@ -1162,14 +1251,31 @@ function guiasIrpjCsll(ctx: Contexto, pj: string, t: string): Guia[] {
       {
         grupo: "base",
         rotulo: "(=) Lucro bruto do trimestre",
-        detalhe: "estimativa · o Lucro Real também desconta folha, aluguel e outras despesas; a guia da contabilidade fecha a diferença",
+        detalhe: ajuste
+          ? "estimativa do sistema, sem folha, aluguel e outras despesas"
+          : "estimativa · o Lucro Real também desconta folha, aluguel e outras despesas; o ajuste da base, na aprovação, desconta o que falta",
         valor: lucro,
       },
     ];
+    lucroBruto = lucro;
+    // Decisão 277 §9: o ajuste da base aprovado no par (ou o da prévia), uma linha só para as duas guias.
+    let base = Math.max(0, lucro);
+    if (ajuste) {
+      base = Math.max(0, r2(lucro + ajuste.valor));
+      linhas.push(
+        {
+          grupo: "base",
+          rotulo: rotuloDoAjusteDaBase(ajuste.valor),
+          detalhe: `${ajuste.motivo}${ajuste.aprovado ? ` · aprovado com a guia do ${ajuste.tributo} em ${dataBr(ajuste.data)}` : " · prévia desta aprovação"}`,
+          valor: ajuste.valor,
+        },
+        { grupo: "base", rotulo: "(=) Base do Lucro Real", detalhe: "o que vai ao IRPJ e à CSLL", valor: base },
+      );
+    }
     memIr.push(...linhas.map((l) => ({ ...l })));
     memCs.push(...linhas.map((l) => ({ ...l })));
-    baseIr = baseCs = Math.max(0, lucro);
-    if (lucro <= 0)
+    baseIr = baseCs = base;
+    if (lucro <= 0 && !ajuste)
       avisos.push(
         "Lucro bruto do trimestre negativo: IRPJ e CSLL ficam zerados. A compensação de prejuízo entra como ajuste justificado na aprovação.",
       );
@@ -1318,8 +1424,23 @@ function guiasIrpjCsll(ctx: Contexto, pj: string, t: string): Guia[] {
   const cidade = ctx.matriz(pj).municipio;
   const guia = (tributo: "IRPJ" | "CSLL", memoria: ItemMemoria[], apurado: number, avisosDaGuia: string[]): Guia => {
     const cotas = cotasDe(apurado, t, cidade, ctx.cad);
+    const chave = `${tributo.toLowerCase()}|${pj}|${t}`;
+    const lucroReal: LucroRealDaGuia | null =
+      lucroBruto === null
+        ? null
+        : {
+            lucro_bruto: lucroBruto,
+            ajuste,
+            par_aprovado: ctx.aprovada(chaveDoPar(chave)!),
+            aliquota_irpj: aliquotaIrpj,
+            aliquota_adicional: aliquotaAdicional,
+            limite_adicional: limite,
+            aliquota_csll: aliquotaCsll,
+            irrf: r2(irrf),
+            csll_retida: r2(csllRetida),
+          };
     return {
-      chave: `${tributo.toLowerCase()}|${pj}|${t}`,
+      chave,
       tributo,
       titulo: tributo === "IRPJ" ? "IRPJ (com adicional)" : "CSLL",
       codigo: codigoDarf(tributo, reg.regime),
@@ -1339,6 +1460,7 @@ function guiasIrpjCsll(ctx: Contexto, pj: string, t: string): Guia[] {
       rateio: rateioPor(pesos, apurado),
       avisos: avisosDaGuia,
       cotas,
+      lucro_real: lucroReal,
     };
   };
   return [guia("IRPJ", memIr, irDevido, avisosIrpj), guia("CSLL", memCs, csDevido, [...avisos, ...avisosCs])];
@@ -1572,6 +1694,7 @@ function guiasRetencoes(ctx: Contexto, pj: string, comp: string): Guia[] {
       memoria,
       apurado: soma,
       saldo_credor_gerado: 0,
+      lucro_real: null,
       base: r2(memoria.reduce((s, i) => s + (i.base ?? 0), 0)),
       rateio: rateioPor(pesos, soma),
       avisos: [],
@@ -1620,6 +1743,7 @@ function guiasRetencoes(ctx: Contexto, pj: string, comp: string): Guia[] {
       memoria,
       apurado: soma,
       saldo_credor_gerado: 0,
+      lucro_real: null,
       base: r2(memoria.reduce((s, i) => s + (i.base ?? 0), 0)),
       rateio: rateioPor(pesos, soma),
       avisos: [],
@@ -1682,9 +1806,33 @@ export function issARecuperar(cad: CadastroFiscal, fatos: FatosFiscais, aprovaco
  * trimestres delas), com o que o sistema sabia em `asOf`. A competência em
  * curso sai como estimativa; o estado de cada guia vem de `estadoDaGuia`.
  */
-export function calcularApuracao(cad: CadastroFiscal, fatos: FatosFiscais, asOf: string, aprovacoes: AprovacaoFiscal[]): Guia[] {
+export function calcularApuracao(
+  cad: CadastroFiscal,
+  fatos: FatosFiscais,
+  asOf: string,
+  aprovacoes: AprovacaoFiscal[],
+  /**
+   * Decisão 277 §9: o ajuste da base pedido na aprovação de uma guia de
+   * IRPJ/CSLL, para o servidor recalcular antes de gravar. Só vale onde o par
+   * ainda não tem ajuste aprovado.
+   */
+  previaDoAjuste: { chave: string; valor: number; motivo: string } | null = null,
+): Guia[] {
   const ctx = criarContexto(cad, fatos, asOf, new Set(aprovacoes.filter((a) => !a.diferenca).map((a) => a.chave)));
   const aprovadas = aprovacaoPorChave(aprovacoes);
+  const ajustes = ajustesDaBase(aprovacoes);
+  if (previaDoAjuste && previaDoAjuste.valor !== 0) {
+    const [prefixo, pjDaPrevia, tDaPrevia] = previaDoAjuste.chave.split("|");
+    const k = `${pjDaPrevia}|${tDaPrevia}`;
+    if ((prefixo === "irpj" || prefixo === "csll") && !ajustes.has(k))
+      ajustes.set(k, {
+        valor: r2(previaDoAjuste.valor),
+        motivo: previaDoAjuste.motivo.trim(),
+        tributo: prefixo === "irpj" ? "IRPJ" : "CSLL",
+        data: dia(asOf),
+        aprovado: false,
+      });
+  }
   const aRecuperar = todosARecuperar(ctx, aprovadas);
   const competencias = competenciasAte(ctx.asOf);
   const out: Guia[] = [];
@@ -1726,7 +1874,7 @@ export function calcularApuracao(cad: CadastroFiscal, fatos: FatosFiscais, asOf:
   for (const t of trimestres)
     for (const pj of ctx.pjs)
       out.push(
-        ...guiasIrpjCsll(ctx, pj, t).filter(
+        ...guiasIrpjCsll(ctx, pj, t, ajustes.get(`${pj}|${t}`) ?? null).filter(
           (g) => g.memoria.some((m) => m.grupo === "base" && m.valor !== 0) || ctx.aprovada(g.chave),
         ),
       );
@@ -1915,7 +2063,8 @@ export function titulosDaAprovacao(g: Guia, a: AprovacaoFiscal): TituloDaAprovac
  * trimestre vai ter).
  */
 export function guiasIrpjCsllDoTrimestre(cad: CadastroFiscal, fatos: FatosFiscais, pj: string, trimestre: string, asOf: string): Guia[] {
-  return guiasIrpjCsll(criarContexto(cad, fatos, asOf), pj, trimestre);
+  // Só o presumido pelo caixa usa a projeção: sem ajuste da base (decisão 277 §9 é do lucro real).
+  return guiasIrpjCsll(criarContexto(cad, fatos, asOf), pj, trimestre, null);
 }
 
 /** O rateio de um total pelos jobs das notas, cada nota pesando pelo valor dado (como nas guias do caixa). */

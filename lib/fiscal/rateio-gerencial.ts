@@ -8,7 +8,10 @@
  *  1. o CNPJ com regional padrão (hoje, a GoCrazy → SS) leva a parte da
  *     gerencial dele inteira para essa regional;
  *  2. a gerencial com uma regional só (a Hitlab) vai inteira para ela;
- *  3. sem receita da gerencial na competência, a regional é escolhida.
+ *  3. sem receita da gerencial na competência, a regional é escolhida;
+ *  4. o IOF do mútuo não divide pela receita: vai para a regional padrão do
+ *     CNPJ que emprestou ou fica sem regional — como o cálculo do sistema
+ *     (`iof-mutuo.ts`) e a planilha fazem.
  */
 import type { RateioDaGuia } from "./apuracao";
 import { r2 } from "./datas";
@@ -28,6 +31,8 @@ export interface RegrasDoRateio {
   empresas: EmpresaDoRateio[];
   /** A regional padrão do CNPJ da guia, quando ele tem (a GoCrazy → SS). */
   regionalDoCnpj: { empresa_id: string; regional_id: string } | null;
+  /** As regionais dividem pela receita. Falso no IOF do mútuo: sem regional (fora a do CNPJ). */
+  pelaReceita: boolean;
 }
 
 /** O valor de uma empresa gerencial; `regional_id` só quando ela não tem receita na competência. */
@@ -37,7 +42,7 @@ export interface ParteDaGerencial {
   regional_id: string | null;
 }
 
-export type ComoDividiu = "regional_do_cnpj" | "regional_unica" | "receita" | "escolhida" | "sem_regional";
+export type ComoDividiu = "regional_do_cnpj" | "regional_unica" | "receita" | "escolhida" | "sem_regional" | "sem_regional_iof";
 
 export interface DivisaoDaGerencial {
   como: ComoDividiu;
@@ -50,6 +55,7 @@ const TEXTO: Record<ComoDividiu, string> = {
   receita: "pela receita da competência",
   escolhida: "sem receita no período: regional escolhida",
   sem_regional: "sem receita no período: escolha a regional",
+  sem_regional_iof: "sem regional, como no cálculo do IOF do mútuo",
 };
 export const textoDaDivisao = (c: ComoDividiu) => TEXTO[c];
 
@@ -79,6 +85,12 @@ export function dividirGerencial(parte: ParteDaGerencial, base: RateioDaGuia[], 
 
   if (regras.regionalDoCnpj && regras.regionalDoCnpj.empresa_id === parte.empresa_id) {
     return uma("regional_do_cnpj", empresa?.regionais.find((r) => r.id === regras.regionalDoCnpj!.regional_id));
+  }
+  if (!regras.pelaReceita) {
+    return {
+      como: "sem_regional_iof",
+      partes: [{ empresa_id: parte.empresa_id, empresa_nome: nomeEmpresa, regional_id: null, regional_nome: null, valor: r2(parte.valor), pct: 100 }],
+    };
   }
   if (empresa && empresa.regionais.length === 1) return uma("regional_unica", empresa.regionais[0]);
 

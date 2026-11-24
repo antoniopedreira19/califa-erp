@@ -25,7 +25,7 @@ import { PRIMEIRA_COMPETENCIA, calcularApuracao, estadoDaGuia, type Guia, type R
 import { baseDaReceita, carregarNotasDoHistorico, periodoDe, receitaDasNotas, receitaDoHistorico } from "@/lib/fiscal/receita-do-periodo";
 import { rateioPorGerencial } from "@/lib/fiscal/rateio-gerencial";
 import { carregarRegrasDoRateio, regrasDoCnpj } from "@/lib/fiscal/rateio-gerencial-dados";
-import { montarPedidoDeAprovacao, type EntradaDaAprovacao } from "./aprovacao";
+import { montarPedidoDeAprovacao, validarAjusteDaBase, type EntradaDaAprovacao } from "./aprovacao";
 import { hojeEmSaoPaulo } from "./dados";
 
 type Err = { ok: false; message: string };
@@ -127,6 +127,30 @@ const aprovarSchema = z.object({
     .default(null),
   /** Decisão 277: o saldo credor que a contabilidade levou para o mês seguinte (PIS/COFINS não cumulativos). */
   saldo_credor_contabil: z.number().finite().min(0, "O saldo credor não pode ser negativo.").max(1e11).nullable().default(null),
+  /**
+   * Decisão 277 §9: IRPJ/CSLL do lucro real — o ajuste da base (com sinal:
+   * negativo reduz), que vale para as duas guias do CNPJ e trimestre e só se
+   * registra com esta aprovação.
+   */
+  ajuste_base: z
+    .object({
+      valor: z.number().finite(),
+      motivo: z.string().max(500),
+    })
+    .nullable()
+    .default(null),
+  /**
+   * Decisão 277, entrega 3: a guia já foi paga fora do sistema e o pagamento
+   * está no histórico da planilha — o título nasce e já sai de A pagar, sem
+   * lançamento. Só na guia de um título (com cotas, cada uma em Impostos a Pagar).
+   */
+  pago_no_historico: z
+    .object({
+      pago_em: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe a data do pagamento."),
+      conta_bancaria_id: z.string().uuid("Selecione a conta que pagou a guia."),
+    })
+    .nullable()
+    .default(null),
 });
 
 /** A guia de PIS ou COFINS não cumulativos: a única com saldo credor. */
@@ -134,7 +158,7 @@ const temSaldoCredor = (chave: string) => /^(pis|cofins)\|/.test(chave);
 
 export async function aprovarGuia(
   input: unknown,
-): Promise<{ ok: true; aprovacaoId: string; titulos: number; aviso: string | null } | Err> {
+): Promise<{ ok: true; aprovacaoId: string; titulos: number; pagoNoHistorico: boolean; aviso: string | null } | Err> {
   const parsed = aprovarSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Entrada inválida." };
   const v = parsed.data;
@@ -158,10 +182,26 @@ export async function aprovarGuia(
   } catch (e) {
     return { ok: false, message: `Não foi possível recalcular a apuração: ${e instanceof Error ? e.message : String(e)}` };
   }
-  const calculada = r.guias.find((x) => x.chave === v.chave);
+  let calculada = r.guias.find((x) => x.chave === v.chave);
   if (!calculada) return { ok: false, message: "Esta guia não está mais na apuração. Atualize a página." };
   if (v.saldo_credor_contabil !== null && !temSaldoCredor(v.chave)) {
     return { ok: false, message: "Só a guia de PIS ou COFINS não cumulativos tem saldo credor." };
+  }
+
+  // Decisão 277 §9: o ajuste da base do lucro real. O servidor recalcula a
+  // guia com ele (a prévia): o calculado, a memória, o rateio e as cotas já
+  // saem ajustados, e a aprovação grava o ajuste junto.
+  if (v.ajuste_base) {
+    const estadoAntes = estadoDaGuia(calculada, r.hoje, r.fatos.aprovacoes).estado;
+    const valido = validarAjusteDaBase(calculada, estadoAntes, v.ajuste_base);
+    if (!valido.ok) return valido;
+    const comAjuste = calcularApuracao(r.fatos.cadastro, r.fatos.fatos, r.hoje, r.fatos.aprovacoes, {
+      chave: v.chave,
+      valor: v.ajuste_base.valor,
+      motivo: v.ajuste_base.motivo,
+    }).find((x) => x.chave === v.chave);
+    if (!comAjuste?.lucro_real?.ajuste) return { ok: false, message: "Não foi possível recalcular a guia com o ajuste da base." };
+    calculada = comAjuste;
   }
 
   // Decisão 277: o rateio por empresa gerencial (o da contabilidade), com as regionais pela receita.
@@ -173,7 +213,12 @@ export async function aprovarGuia(
     } catch (e) {
       return { ok: false, message: `Não foi possível ler as empresas do rateio: ${e instanceof Error ? e.message : String(e)}` };
     }
-    const rateio = rateioPorGerencial(v.rateio_gerencial, calculada.rateio, regrasDoCnpj(regras, calculada.empresa_contabil_id), v.valor_guia);
+    const rateio = rateioPorGerencial(
+      v.rateio_gerencial,
+      calculada.rateio,
+      regrasDoCnpj(regras, calculada.empresa_contabil_id, calculada.tributo),
+      v.valor_guia,
+    );
     if (!rateio.ok) return rateio;
     g = { ...calculada, rateio: rateio.rateio };
   }
@@ -186,6 +231,15 @@ export async function aprovarGuia(
     juros_pct: v.juros_pct,
   });
   if (!montagem.ok) return montagem;
+  if (v.pago_no_historico && montagem.pedido.p_titulos.length !== 1) {
+    return {
+      ok: false,
+      message:
+        montagem.pedido.p_titulos.length === 0
+          ? "Sem valor a pagar, não há o que marcar como paga."
+          : "Com mais de uma cota, aprove e marque cada cota paga em Impostos a Pagar.",
+    };
+  }
 
   const { data, error } = await supabase.rpc("aprovar_guia_fiscal", {
     ...montagem.pedido,
@@ -205,8 +259,36 @@ export async function aprovarGuia(
     if (s.error) aviso = `A guia foi aprovada, mas o saldo credor da contabilidade não foi gravado (${s.error.message}). Informe de novo na guia.`;
   }
 
+  // Já paga no histórico: o título recém-criado sai de A pagar, sem lançamento.
+  let pagoNoHistorico = false;
+  if (v.pago_no_historico) {
+    const { data: titulos, error: erroTitulos } = await supabase
+      .from("impostos_a_pagar")
+      .select("id")
+      .eq("tenant_id", tenantId)
+      .eq("aprovacao_id", String(data));
+    const id = !erroTitulos && titulos?.length === 1 ? (titulos[0] as { id: string }).id : null;
+    const marca = id
+      ? await supabase.rpc("marcar_imposto_pago_no_historico", {
+          p_imposto_id: id,
+          p_pago_em: v.pago_no_historico.pago_em,
+          p_conta_bancaria_id: v.pago_no_historico.conta_bancaria_id,
+          p_guia_path: null,
+          p_comprovante_path: null,
+        })
+      : null;
+    if (id && !marca?.error) pagoNoHistorico = true;
+    else {
+      const motivo = marca?.error?.message ?? erroTitulos?.message ?? "título não encontrado";
+      console.error("[fiscal.aprovar.pago_no_historico]", motivo);
+      aviso = `${aviso ? `${aviso} ` : ""}A guia foi aprovada, mas não foi marcada como paga no histórico (${motivo}). Marque em Impostos a Pagar.`;
+    }
+    revalidatePath("/financeiro/conciliacao");
+    revalidatePath("/financeiro/fluxo-caixa");
+  }
+
   revalidatePath(CAMINHO);
-  return { ok: true, aprovacaoId: String(data), titulos: montagem.pedido.p_titulos.length, aviso };
+  return { ok: true, aprovacaoId: String(data), titulos: montagem.pedido.p_titulos.length, pagoNoHistorico, aviso };
 }
 
 // ---------------------------------------------------------------------------
@@ -401,6 +483,17 @@ const guiaDaContabilidadeSchema = z.object({
     .min(1, "Informe o rateio por empresa gerencial.")
     .max(20),
   guia_path: z.string().min(3).max(500).nullable(),
+  /**
+   * Entrega 3: a guia já foi paga fora do sistema e o pagamento está no
+   * histórico da planilha — entra e já sai de A pagar, sem lançamento.
+   */
+  pago_no_historico: z
+    .object({
+      pago_em: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe a data do pagamento."),
+      conta_bancaria_id: z.string().uuid("Selecione a conta que pagou a guia."),
+    })
+    .nullable()
+    .optional(),
 });
 
 /**
@@ -409,7 +502,9 @@ const guiaDaContabilidadeSchema = z.object({
  * contabilidade) com o rateio por empresa gerencial e as regionais pela
  * receita do período.
  */
-export async function lancarGuiaDaContabilidade(input: unknown): Promise<{ ok: true; id: string } | Err> {
+export async function lancarGuiaDaContabilidade(
+  input: unknown,
+): Promise<{ ok: true; id: string; aviso: string | null } | Err> {
   const parsed = guiaDaContabilidadeSchema.safeParse(input);
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message ?? "Entrada inválida." };
   const v = parsed.data;
@@ -432,7 +527,7 @@ export async function lancarGuiaDaContabilidade(input: unknown): Promise<{ ok: t
       receitaDoPeriodo(supabase, tenantId, v.empresa_contabil_id, v.competencia),
       carregarRegrasDoRateio(supabase, tenantId),
     ]);
-    const r = rateioPorGerencial(v.rateio_gerencial, receita.base, regrasDoCnpj(regras, v.empresa_contabil_id), v.valor);
+    const r = rateioPorGerencial(v.rateio_gerencial, receita.base, regrasDoCnpj(regras, v.empresa_contabil_id, v.tributo), v.valor);
     if (!r.ok) return r;
     rateio = r.rateio;
   } catch (e) {
@@ -456,7 +551,26 @@ export async function lancarGuiaDaContabilidade(input: unknown): Promise<{ ok: t
   });
   if (error || typeof data !== "string") return { ok: false, message: error ? mensagemDoBanco(error.message) : "Não foi possível lançar a guia." };
 
+  // Já paga no histórico: marca na sequência. Se a marca falhar, a guia fica
+  // lançada (a pagar) e a tela avisa para marcar em Impostos a Pagar.
+  let aviso: string | null = null;
+  if (v.pago_no_historico) {
+    const { error: erroPago } = await supabase.rpc("marcar_imposto_pago_no_historico", {
+      p_imposto_id: data,
+      p_pago_em: v.pago_no_historico.pago_em,
+      p_conta_bancaria_id: v.pago_no_historico.conta_bancaria_id,
+      p_guia_path: null,
+      p_comprovante_path: null,
+    });
+    if (erroPago) {
+      console.error("[fiscal.guia_da_contabilidade.pago_no_historico]", erroPago.message);
+      aviso = `A guia entrou, mas não foi marcada como paga no histórico (${mensagemDoBanco(erroPago.message)}). Marque em Impostos a Pagar.`;
+    }
+    revalidatePath("/financeiro/conciliacao");
+    revalidatePath("/financeiro/fluxo-caixa");
+  }
+
   revalidatePath(CAMINHO);
-  return { ok: true, id: data };
+  return { ok: true, id: data, aviso };
 }
 

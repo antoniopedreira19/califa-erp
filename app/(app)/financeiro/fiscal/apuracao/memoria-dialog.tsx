@@ -6,7 +6,9 @@
  * as regionais; à direita o painel do estado — em curso, aprovada, ou o
  * formulário de aprovação (valor da guia da contabilidade, justificativa
  * quando difere, compensação do ISS a recuperar, cotas do IRPJ/CSLL e o
- * anexo da guia).
+ * anexo da guia). No IRPJ/CSLL do lucro real, o ajuste da base (decisão 277
+ * §9): uma linha que vale para as duas guias do trimestre e só se registra
+ * com a aprovação.
  *
  * O formulário só manda as decisões da pessoa: o servidor recalcula a guia
  * (`aprovarGuia`). As cotas mostradas aqui saem da mesma função que o
@@ -23,14 +25,22 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import { createClient } from "@/lib/supabase/client";
 import type { CadastroFiscal } from "@/lib/fiscal/cadastro";
-import { vencimentoDaComplementar, type Cota, type ItemMemoria } from "@/lib/fiscal/apuracao";
+import {
+  impostosDoLucroReal,
+  rotuloDoAjusteDaBase,
+  vencimentoDaComplementar,
+  type Cota,
+  type ItemMemoria,
+} from "@/lib/fiscal/apuracao";
 import { dataBr, r2 } from "@/lib/fiscal/datas";
 import { aprovarGuia, informarSaldoCredorDaContabilidade, urlDaGuiaAprovada } from "./actions";
 import { gerenciaisDaBase, rateioPorGerencial, type ParteDaGerencial, type RegrasDoRateio } from "@/lib/fiscal/rateio-gerencial";
 import { RateioPorGerencial } from "./rateio-por-gerencial";
-import { JUSTIFICATIVA_MINIMA, calculadoParaAGuia, cotasDaAprovacao } from "./aprovacao";
+import { JUSTIFICATIVA_MINIMA, MOTIVO_DO_AJUSTE_MINIMO, calculadoParaAGuia, cotasDaAprovacao } from "./aprovacao";
 import type { EstabelecimentoDaTela, GuiaDaTela, PJDaTela } from "./dados";
 import { Nota, fimDoPeriodo, moeda, pct, situacaoDa } from "./ui";
+import type { ContaDaBaixaDeImposto } from "../impostos/dados";
+import { CamposDoPagoNoHistorico, contaSugerida } from "../impostos/pago-no-historico";
 
 const GRUPOS: Array<{ grupos: ItemMemoria["grupo"][]; titulo: string }> = [
   { grupos: ["base"], titulo: "Base de cálculo do trimestre" },
@@ -70,7 +80,13 @@ export function MemoriaDialog({
   aprovarEmCurso,
   regrasDoRateio,
   gerencialDoCnpj,
+  contas,
+  nomesDasPJs,
 }: {
+  /** Decisão 277, entrega 3: as contas que pagam guia ("já foi paga", no histórico da planilha). */
+  contas: ContaDaBaixaDeImposto[];
+  /** PJ → nome, para o aviso "a guia é da X e a conta é da Y". */
+  nomesDasPJs: Record<string, string>;
   /** Decisão 277: as empresas gerenciais e a regra das regionais para esta guia. */
   regrasDoRateio: RegrasDoRateio;
   /** A empresa gerencial do CNPJ: a sugestão do rateio quando a guia não tem receita. */
@@ -102,7 +118,20 @@ export function MemoriaDialog({
   const valorComp = r2((g.compensacoes ?? []).reduce((s, c) => s + c.valor, 0));
 
   const [usarComp, setUsarComp] = React.useState(true);
-  const calculado = calculadoParaAGuia(g, g.estado, g.delta, usarComp);
+  const calculadoDoSistema = calculadoParaAGuia(g, g.estado, g.delta, usarComp);
+
+  // Decisão 277 §9: o ajuste da base do lucro real. Uma linha para o IRPJ e a
+  // CSLL do trimestre; só se registra com a aprovação. Se o par já foi
+  // aprovado com ajuste, ele já está no calculado (herdado).
+  const lucroReal = !diferenca && podeAprovar ? g.lucro_real : null;
+  const ajusteHerdado = lucroReal?.ajuste ?? null;
+  const ajustavel = !!lucroReal && !ajusteHerdado && !lucroReal.par_aprovado;
+  const [ajusteSentido, setAjusteSentido] = React.useState<"reduz" | "aumenta">("reduz");
+  const [ajusteValor, setAjusteValor] = React.useState(0);
+  const [ajusteMotivo, setAjusteMotivo] = React.useState("");
+  const ajusteComSinal = ajustavel && ajusteValor >= 0.01 ? r2(ajusteSentido === "reduz" ? -ajusteValor : ajusteValor) : 0;
+  const previa = lucroReal && ajusteComSinal !== 0 ? impostosDoLucroReal(lucroReal, ajusteComSinal) : null;
+  const calculado = previa ? (g.tributo === "IRPJ" ? previa.irpj : previa.csll) : calculadoDoSistema;
   const [valorGuia, setValorGuia] = React.useState<number>(calculado);
   const [justificativa, setJustificativa] = React.useState("");
   const [arquivo, setArquivo] = React.useState<File | null>(null);
@@ -120,6 +149,11 @@ export function MemoriaDialog({
   // Decisão 277: o rateio por empresa gerencial (o da contabilidade) e, no PIS e na
   // COFINS não cumulativos, o saldo credor que a contabilidade levou para o mês seguinte.
   const [partes, setPartes] = React.useState<ParteDaGerencial[]>(() => gerenciaisDaBase(g.rateio, calculado, gerencialDoCnpj));
+  // A sugestão por gerencial acompanha o valor da guia até a pessoa mexer no rateio.
+  const [partesEditadas, setPartesEditadas] = React.useState(false);
+  React.useEffect(() => {
+    if (!partesEditadas) setPartes(gerenciaisDaBase(g.rateio, valorGuia, gerencialDoCnpj));
+  }, [valorGuia]); // eslint-disable-line react-hooks/exhaustive-deps
   const temSaldo = !diferenca && (g.codigo === "6912" || g.codigo === "5856");
   const [saldoContabil, setSaldoContabil] = React.useState<number>(g.saldo_credor_gerado);
   const saldoMudou = temSaldo && Math.abs(saldoContabil - g.saldo_credor_gerado) >= 0.01;
@@ -133,6 +167,14 @@ export function MemoriaDialog({
         : [],
     [g.periodo, g.competencia, diferenca, valorGuia, cidadeDaMatriz, cadastroDasCotas, cotaUnica, jurosPct],
   );
+
+  // Decisão 277, entrega 3: a guia já paga fora do sistema, com o pagamento no
+  // histórico da planilha. Só na guia de um título (com cotas, cada uma em Impostos a Pagar).
+  const umTitulo = !diferenca && valorGuia > 0 && (g.periodo !== "trimestral" || cotas.length === 1);
+  const [jaPaga, setJaPaga] = React.useState(false);
+  const [pagoEm, setPagoEm] = React.useState("");
+  const [contaPaga, setContaPaga] = React.useState("");
+  const marcarPaga = jaPaga && umTitulo;
 
   const fim = fimDoPeriodo(g.periodo, g.competencia);
   const local = estab
@@ -161,6 +203,10 @@ export function MemoriaDialog({
       setPerguntarAntecipada(true);
       return;
     }
+    if (ajusteComSinal !== 0 && ajusteMotivo.trim().length < MOTIVO_DO_AJUSTE_MINIMO) {
+      setErro(`Explique o ajuste da base (mínimo ${MOTIVO_DO_AJUSTE_MINIMO} caracteres).`);
+      return;
+    }
     if (pedeMotivo && justificativa.trim().length < JUSTIFICATIVA_MINIMA) {
       setErro(`Explique a diferença entre a contabilidade e o calculado (mínimo ${JUSTIFICATIVA_MINIMA} caracteres).`);
       return;
@@ -172,6 +218,9 @@ export function MemoriaDialog({
         return;
       }
     }
+    if (marcarPaga && !pagoEm) return setErro("Informe a data em que a guia foi paga.");
+    if (marcarPaga && !contaPaga) return setErro("Selecione a conta que pagou a guia.");
+    if (marcarPaga && pagoEm > hoje) return setErro("A data do pagamento no histórico não pode ser depois de hoje.");
     setEnviando(true);
     setErro(null);
     const supabase = createClient();
@@ -199,6 +248,8 @@ export function MemoriaDialog({
         guia_path: guiaPath,
         rateio_gerencial: comRateio ? partes : null,
         saldo_credor_contabil: saldoMudou ? saldoContabil : null,
+        pago_no_historico: marcarPaga ? { pago_em: pagoEm, conta_bancaria_id: contaPaga } : null,
+        ajuste_base: ajusteComSinal !== 0 ? { valor: ajusteComSinal, motivo: ajusteMotivo } : null,
       });
     } catch {
       r = { ok: false, message: "Não foi possível falar com o servidor. Tente de novo." };
@@ -214,9 +265,11 @@ export function MemoriaDialog({
     const aviso = r.aviso ? ` ${r.aviso}` : "";
     onAprovada(
       (r.titulos > 0
-        ? `${g.titulo} de ${g.rotulo_competencia} ${diferenca ? "· diferença aprovada" : "aprovado"}. ${
-            r.titulos === 1 ? "Título criado" : `${r.titulos} títulos criados`
-          } em Impostos a Pagar.`
+        ? r.pagoNoHistorico
+          ? `${g.titulo} de ${g.rotulo_competencia} aprovado e pago no histórico, sem lançamento. Está nos pagos de Impostos a Pagar.`
+          : `${g.titulo} de ${g.rotulo_competencia} ${diferenca ? "· diferença aprovada" : "aprovado"}. ${
+              r.titulos === 1 ? "Título criado" : `${r.titulos} títulos criados`
+            } em Impostos a Pagar.`
         : diferenca
           ? `${g.titulo} de ${g.rotulo_competencia}: saldo registrado, sem valor a pagar.`
           : `${g.titulo} de ${g.rotulo_competencia} confirmado sem valor a pagar.`) + aviso,
@@ -404,6 +457,12 @@ export function MemoriaDialog({
                       </p>
                     )}
                     {a.diferenca && a.justificativa && <p className="text-muted-foreground">{a.justificativa}</p>}
+                    {a.ajuste_base !== null && (
+                      <p className="text-sky-800">
+                        {rotuloDoAjusteDaBase(a.ajuste_base)}: {a.ajuste_base < 0 ? "−" : "+"} {moeda(Math.abs(a.ajuste_base))} ·{" "}
+                        {a.ajuste_base_motivo}
+                      </p>
+                    )}
                     <p className="text-muted-foreground">
                       Guia:{" "}
                       {a.guia_nome ? (
@@ -476,6 +535,32 @@ export function MemoriaDialog({
                   )}
                 </div>
 
+                {lucroReal && (
+                  <AjusteDaBaseDoLucroReal
+                    tributo={g.tributo === "IRPJ" ? "IRPJ" : "CSLL"}
+                    lucroBruto={lucroReal.lucro_bruto}
+                    herdado={ajusteHerdado}
+                    parAprovado={lucroReal.par_aprovado}
+                    sentido={ajusteSentido}
+                    valor={ajusteValor}
+                    motivo={ajusteMotivo}
+                    previa={previa}
+                    temRetencao={lucroReal.irrf > 0 || lucroReal.csll_retida > 0}
+                    onSentido={(s) => {
+                      setAjusteSentido(s);
+                      setErro(null);
+                    }}
+                    onValor={(v) => {
+                      setAjusteValor(v);
+                      setErro(null);
+                    }}
+                    onMotivo={(t) => {
+                      setAjusteMotivo(t);
+                      setErro(null);
+                    }}
+                  />
+                )}
+
                 {temComp && (
                   <label className="flex items-start gap-2.5 rounded-lg border border-sky-200 bg-sky-50/60 p-3 text-[12.5px] text-sky-900">
                     <Checkbox checked={usarComp} onCheckedChange={(v) => setUsarComp(v === true)} className="mt-0.5" />
@@ -503,8 +588,8 @@ export function MemoriaDialog({
                   />
                   <p className={cn("text-[11.5px]", Math.abs(dif) >= 0.01 ? "font-semibold text-amber-700" : "text-muted-foreground")}>
                     {Math.abs(dif) < 0.01
-                      ? `Igual ao calculado (${moeda(calculado)}).`
-                      : `${moeda(Math.abs(dif))} ${dif > 0 ? "acima" : "abaixo"} do calculado (${moeda(calculado)}).`}
+                      ? `Igual ao calculado${previa ? " com o ajuste da base" : ""} (${moeda(calculado)}).`
+                      : `${moeda(Math.abs(dif))} ${dif > 0 ? "acima" : "abaixo"} do calculado${previa ? " com o ajuste da base" : ""} (${moeda(calculado)}).`}
                   </p>
                 </div>
 
@@ -578,9 +663,53 @@ export function MemoriaDialog({
                     partes={partes}
                     onChange={(p) => {
                       setPartes(p);
+                      setPartesEditadas(true);
                       setErro(null);
                     }}
                   />
+                )}
+
+                {umTitulo && (
+                  <div className="space-y-3 rounded-xl border border-border p-3">
+                    <label className="flex cursor-pointer items-start gap-2 text-[13px]">
+                      <Checkbox
+                        className="mt-0.5"
+                        checked={jaPaga}
+                        onCheckedChange={(v) => {
+                          const marcado = v === true;
+                          setJaPaga(marcado);
+                          setErro(null);
+                          if (marcado) {
+                            if (!pagoEm && g.vencimento <= hoje) setPagoEm(g.vencimento);
+                            if (!contaPaga) setContaPaga(contaSugerida(contas, g.empresa_contabil_id));
+                          }
+                        }}
+                      />
+                      <span>
+                        <b>Já foi paga</b>: o pagamento está no histórico da planilha. O título nasce e já sai de A pagar, sem
+                        lançamento (o DRE e o fluxo de caixa contam pelo histórico).
+                      </span>
+                    </label>
+                    {jaPaga && (
+                      <CamposDoPagoNoHistorico
+                        contas={contas}
+                        pjId={g.empresa_contabil_id}
+                        pjNome={pj?.nome ?? null}
+                        nomesDasPJs={nomesDasPJs}
+                        valor={valorGuia}
+                        data={pagoEm}
+                        onData={(d) => {
+                          setPagoEm(d);
+                          setErro(null);
+                        }}
+                        conta={contaPaga}
+                        onConta={(c) => {
+                          setContaPaga(c);
+                          setErro(null);
+                        }}
+                      />
+                    )}
+                  </div>
                 )}
 
                 <div className="space-y-1.5">
@@ -842,6 +971,152 @@ function SaldoDaContabilidade({
         )}
       </div>
       {erro && <p className="text-[12px] text-california-red">{erro}</p>}
+    </div>
+  );
+}
+
+/**
+ * O ajuste da base do lucro real na aprovação (decisão 277 §9): uma linha
+ * "(−) Despesas e ajustes do Lucro Real" que vale para o IRPJ e a CSLL do
+ * CNPJ e trimestre, com a prévia das duas guias. Só se registra com a
+ * aprovação; a outra guia do par herda.
+ */
+function AjusteDaBaseDoLucroReal({
+  tributo,
+  lucroBruto,
+  herdado,
+  parAprovado,
+  sentido,
+  valor,
+  motivo,
+  previa,
+  temRetencao,
+  onSentido,
+  onValor,
+  onMotivo,
+}: {
+  tributo: "IRPJ" | "CSLL";
+  lucroBruto: number;
+  herdado: { valor: number; motivo: string; tributo: "IRPJ" | "CSLL"; data: string } | null;
+  parAprovado: boolean;
+  sentido: "reduz" | "aumenta";
+  valor: number;
+  motivo: string;
+  previa: { base: number; irpj: number; csll: number } | null;
+  temRetencao: boolean;
+  onSentido: (s: "reduz" | "aumenta") => void;
+  onValor: (v: number) => void;
+  onMotivo: (t: string) => void;
+}) {
+  const outra = tributo === "IRPJ" ? "CSLL" : "IRPJ";
+  if (herdado) {
+    return (
+      <div className="space-y-1 rounded-lg border border-sky-200 bg-sky-50/60 p-3 text-[12.5px] text-sky-900">
+        <p className="font-semibold">Ajuste da base aprovado com a guia do {herdado.tributo}</p>
+        <p>
+          {rotuloDoAjusteDaBase(herdado.valor)}: <b className="font-mono">{herdado.valor < 0 ? "−" : "+"} {moeda(Math.abs(herdado.valor))}</b> ·{" "}
+          {herdado.motivo}
+        </p>
+        <p className="text-[11.5px] text-sky-800/80">
+          Aprovado em {dataBr(herdado.data)}. Ele já está no calculado desta guia: a base vale para o IRPJ e a CSLL do trimestre.
+        </p>
+      </div>
+    );
+  }
+  if (parAprovado) {
+    return (
+      <Nota tom="cinza" icone={<Info className="h-3.5 w-3.5" />}>
+        A guia do {outra} deste trimestre foi aprovada sem ajuste da base: aqui vale só o valor da guia.
+      </Nota>
+    );
+  }
+  return (
+    <div className="space-y-2.5 rounded-xl border border-border p-3">
+      <div>
+        <p className="text-xs font-semibold">Ajuste da base (lucro real)</p>
+        <p className="mt-0.5 text-[11.5px] text-muted-foreground">
+          O sistema estima a base pelo lucro bruto dos jobs, sem folha, aluguel e as outras despesas. Informe o que falta descontar
+          (ou somar): o IRPJ e a CSLL deste trimestre são refeitos, e o ajuste fica registrado com a aprovação.
+        </p>
+      </div>
+      <div className="inline-flex rounded-lg border border-border p-0.5 text-[12px]">
+        {(
+          [
+            ["reduz", "(−) Reduz a base"],
+            ["aumenta", "(+) Aumenta a base"],
+          ] as const
+        ).map(([s, rotulo]) => (
+          <button
+            key={s}
+            type="button"
+            onClick={() => onSentido(s)}
+            className={cn(
+              "rounded-md px-2.5 py-1 font-medium",
+              sentido === s ? "bg-california-red text-white" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {rotulo}
+          </button>
+        ))}
+      </div>
+      <MoneyInput value={valor} onValueChange={onValor} />
+      {previa && (
+        <>
+          <table className="w-full table-fixed text-[12px]">
+            <colgroup>
+              <col />
+              <col className="w-[132px]" />
+            </colgroup>
+            <tbody>
+              <tr className="border-b border-border/70">
+                <td className="py-1 text-muted-foreground">Lucro bruto do sistema</td>
+                <td className="py-1 text-right font-mono">{moeda(lucroBruto)}</td>
+              </tr>
+              <tr className="border-b border-border/70">
+                <td className="py-1 text-muted-foreground">{rotuloDoAjusteDaBase(sentido === "reduz" ? -1 : 1)}</td>
+                <td className="py-1 text-right font-mono">
+                  {sentido === "reduz" ? "−" : "+"} {moeda(valor)}
+                </td>
+              </tr>
+              <tr className="border-b border-border/70 font-semibold">
+                <td className="py-1">(=) Base do Lucro Real</td>
+                <td className="py-1 text-right font-mono">{moeda(previa.base)}</td>
+              </tr>
+              {(
+                [
+                  ["IRPJ", "IRPJ (15% + adicional de 10%)", previa.irpj],
+                  ["CSLL", "CSLL (9%)", previa.csll],
+                ] as const
+              ).map(([t, rotulo, v]) => (
+                <tr key={t} className={cn(t === tributo ? "font-semibold" : "text-muted-foreground")}>
+                  <td className="py-1">
+                    {rotulo}
+                    <span className="ml-1 text-[11px] font-normal text-muted-foreground">
+                      · {t === tributo ? "esta guia" : "a outra guia do trimestre"}
+                    </span>
+                  </td>
+                  <td className="py-1 text-right font-mono">{moeda(v)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {temRetencao && <p className="text-[11px] text-muted-foreground">Já descontadas as retenções sofridas no trimestre.</p>}
+          <p className="text-[11.5px] text-muted-foreground">
+            O ajuste vale também para a guia da {outra} deste trimestre: ela abre com o mesmo ajuste, já no calculado.
+          </p>
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold">
+              Motivo do ajuste <span className="text-california-red">*</span>
+            </label>
+            <Textarea
+              rows={2}
+              value={motivo}
+              onChange={(e) => onMotivo(e.target.value)}
+              placeholder="Ex.: folha, aluguel e despesas administrativas do trimestre, pelo balancete da contabilidade."
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

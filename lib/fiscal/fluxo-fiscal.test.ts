@@ -37,6 +37,7 @@ function guia(p: Partial<GuiaComEstado> & Pick<GuiaComEstado, "chave" | "estado"
     memoria: [],
     apurado: 1000,
     saldo_credor_gerado: 0,
+    lucro_real: null,
     base: 0,
     rateio: [
       { empresa_id: "e1", empresa_nome: "California", regional_id: "r-sp", regional_nome: "SP", valor: 600, pct: 60 },

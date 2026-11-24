@@ -305,6 +305,7 @@ export function linhaAPagar(t: TituloAPagar, ctx: ContextoDasLinhas): Linha {
       ? "Os dados de pagamento do fornecedor mudaram depois desta PP. Ela continua valendo pelos dados que estão no documento dela; o cadastro novo vale para as próximas."
       : null,
     situacaoDaVerba: t.verba_situacao,
+    pagoNoHistorico: false,
     busca: minusculas([descricao, t.origem_label, t.fornecedor_nome, empresa, t.job_codigo, t.job_nome, t.nf_numero]),
     motivoForaDoLote: motivoForaDoLoteAPagar(t),
     lote: paraOLoteAPagar(t),
@@ -424,6 +425,7 @@ export function linhaAReceber(t: TituloAReceber, ctx: ContextoDasLinhas): Linha 
     urgente: null,
     avisoDaContraparte: null,
     situacaoDaVerba: null,
+    pagoNoHistorico: false,
     busca: minusculas([descricao, t.fat_descricao, t.contraparte_nome, empresa, ...t.jobs_cobertos, t.codigo_avulsa]),
     motivoForaDoLote: transferencia ? "Transferência tem baixa própria: dê baixa nela sozinha." : motivoForaDoLoteAReceber(t),
     lote: transferencia ? null : paraOLoteAReceber(t),
@@ -487,6 +489,7 @@ export function linhaDeImposto(t: ImpostoDaLista, ctx: ContextoDasLinhas): Linha
     urgente: null,
     avisoDaContraparte: null,
     situacaoDaVerba: null,
+    pagoNoHistorico: pago && t.pago_no_historico,
     busca: minusculas([descricao, referencia, contraparte, t.pj, t.local, t.cnpj, t.rotulo_competencia, t.descricao]),
     motivoForaDoLote: null,
     lote: pago ? null : paraOLoteImposto(t),

@@ -43,7 +43,7 @@ Rentabilidade: 2.738 jobs de 2023 a 2026. As abas de 2021 e 2022 ficam de fora, 
 | DIV-004 | IOF de R$ 2.549,69 · fornecedor | Falta carregar | Sem valor; só o campo | Aberta: falta a Receita Federal no cadastro |
 | DIV-005 | Todos os relatórios · previsões | Regra do sistema | Varia | A DRE com previsões mostra igual à planilha (decisão 232) |
 | DIV-006 | DRE 2026 · Custo tributário, 1T | Regra do sistema | R$ 10.250,20 | O sistema conta o crédito |
-| DIV-007 | DRE 2026 · Empréstimo à Hitlab | Regra do sistema | R$ 1.064.357,82 no 2T e R$ 528.850,34 no 3T | O sistema soma todas as contas |
+| DIV-007 | DRE 2026 · Empréstimo à Hitlab | Regra do sistema | R$ 885.056,82 no 2T e R$ 832.077,29 no 3T (planilha de 23/11) | O sistema soma todas as contas |
 | DIV-008 | DRE 2026 · Mútuo interno | Regra do sistema | ±R$ 350.000; efeito líquido zero | O sistema soma as duas pontas |
 | DIV-009 | DRE 2026 · CCH, total do ano | Omissão da planilha com prova | R$ 96.801,75 de receita e R$ 85.324,72 de custo | O sistema soma os trimestres |
 | DIV-010 | DRE 2024 · Perda, 3T | Regra do sistema | R$ 40.000 | Digitado na fórmula, sem lançamento |
@@ -51,7 +51,7 @@ Rentabilidade: 2.738 jobs de 2023 a 2026. As abas de 2021 e 2022 ficam de fora, 
 | DIV-012 | DRE 2023 · CCH, custo tributário, 4T | Omissão da planilha com prova | R$ 58.426,45 | O sistema conta o débito |
 | DIV-013 | DRE 2024 · Hitlab, receita financeira, 3T | Regra do sistema | R$ 389,63 | O sistema desconta o débito |
 | DIV-014 | DRE · Posição da bonificação | Regra do sistema | Só no subtotal | O lucro líquido não muda |
-| DIV-015 | DRE 2026 · Texto com espaço sobrando | Omissão da planilha com prova | Seis casos, abaixo | O sistema apara o texto |
+| DIV-015 | DRE 2026 · Texto com espaço sobrando | Omissão da planilha com prova | Oito casos, abaixo; no 3T, R$ 4.800,00 no lucro líquido | O sistema apara o texto |
 | DIV-016 | DRE · Hitlab, reinvestimento do ano | Omissão da planilha com prova | Coluna do ano em zero | O sistema soma os trimestres |
 | DIV-017 | Regional · Rateio fora do percentual | Regra do sistema | 22 células | O sistema usa o percentual do ano |
 | DIV-018 | Regional · Benefício e projetos no Fechamento | Regra do sistema | 51 células | O sistema rateia pelo faturamento |
@@ -82,7 +82,7 @@ Rentabilidade: 2.738 jobs de 2023 a 2026. As abas de 2021 e 2022 ficam de fora, 
 | DIV-043 | Extrato · Seis linhas sem Tipo na planilha | Pendência de conciliação | R$ 160.546,59 e R$ 464,72 no saldo | Aberta: falta saber o que são |
 | DIV-044 | Extrato · Entradas e saídas de 26 a 30/10 sem linha na planilha | Pendência de conciliação | +R$ 76.533,34 e −R$ 36.386,97 | Aberta: falta saber o que são |
 | DIV-045 | Extrato · Linhas da planilha de 27/10 a 01/11 sem linha no banco | Pendência de conciliação | −R$ 66.923,42 no saldo | Aberta: o extrato até 03/11 não as tem |
-| DIV-046 | Regional · CCH, custo operacional da Agency no 3T | Omissão da planilha com prova | R$ 7.000,01 | O sistema segue a DRE |
+| DIV-046 | Regional · CCH, custo operacional da Agency no 3T | Omissão da planilha com prova | R$ 7.000,01 | Resolvida na planilha de 23/11: bate |
 | DIV-047 | Contas a pagar · PP-00040, 2ª parcela | Pendência de conciliação | R$ 7.250,00 | Aberta: paga no banco, aberta no sistema |
 | DIV-048 | Jobs do 4T · DEE-1001/26 em duas linhas da Res. Jobs CMH 2026 | Omissão da planilha com prova | R$ 5.136.840,56 e R$ 3.191.394,56 de receita | Aberta: qual linha é cada job; pode contar duas vezes no fluxo |
 | DIV-049 | Jobs do 4T · Código de job cancelado na planilha | Omissão da planilha com prova | R$ 230.000,00 e R$ 309.011,95 | A carga já liga ao job ativo; corrigir a planilha |
@@ -90,6 +90,7 @@ Rentabilidade: 2.738 jobs de 2023 a 2026. As abas de 2021 e 2022 ficam de fora, 
 | DIV-051 | Jobs do 4T · Código vazio na planilha | Omissão da planilha com prova | Dois jobs | A carga já liga pelo nome; corrigir a planilha |
 | DIV-052 | Jobs do 4T · Jobs do sistema fora da planilha de 01/11 | Omissão da planilha com prova | R$ 225.508,36 | Só no sistema até a próxima versão da planilha |
 | DIV-053 | Jobs do 4T · Universal: um job da planilha virou três | Pendência de conciliação | R$ 129.800,00 a mais previstos no sistema | Aberta: versão de 04/11, ainda não carregada |
+| DIV-054 | Fechamento 3T · A consolidada não fecha com as DREs | Omissão da planilha com prova | R$ 238.887,78 no lucro após investimentos | Decidido: a consolidada é a soma das DREs |
 
 ---
 
@@ -185,7 +186,7 @@ Desde a decisão 231 (02/11/2026), a entrada pode ser lançada no sistema, no Ti
 
 ### DIV-007 · Empréstimo à Hitlab
 
-- **Diferença:** R$ 1.064.357,82 no 2T e R$ 528.850,34 no 3T. A planilha deixa a Santander GoCrazy como "n/a" nessa linha.
+- **Diferença:** R$ 885.056,82 no 2T e R$ 832.077,29 no 3T, na planilha de 23/11 (19:40). Em 02/11 eram R$ 1.064.357,82 e R$ 528.850,34: a planilha mudou os lançamentos da Hitlab pagos pela Santander GoCrazy. A planilha deixa a Santander GoCrazy como "n/a" nessa linha. No 2T, mais R$ 2.500,00 de uma linha "HIT 2T 2026 " (DIV-015).
 - **Qual vale:** o sistema, que soma todas as contas (decisão 211, "Uma regra só por linha").
 - **Para a gestão:** a linha da planilha não olha uma das contas. No sistema o empréstimo aparece inteiro.
 
@@ -237,10 +238,14 @@ Desde a decisão 231 (02/11/2026), a entrada pode ser lançada no sistema, no Ti
 |---|---|---:|---:|---|
 | Job | `CMH 1T 2026 ` | 1 | R$ 5.000,00 | Empréstimo à CCH, 1T |
 | Job | `CMH 2T 2026 ` | 2 | R$ 748,41 | Empréstimo à CCH, 2T |
-| Job | `CMH 3T 2026 ` | 4 | R$ 9.759,00 | Empréstimo à CCH, 3T |
+| Job | `HIT 2T 2026 ` | 1 | R$ 2.500,00 | Empréstimo à Hitlab, 2T |
+| Job | `CMH 3T 2026 ` | 5 | R$ 9.660,03 | Empréstimo à CCH, 3T |
+| Tipo | `CO  3T 2026` | 1 | R$ 4.800,00 | Custo operacional da California, 3T: **muda o lucro líquido do 3T** |
 | Job | `CMH 4T 2026 ` e `CMH  4T 2026` | 5 | R$ 14.851,64 | Empréstimo à CCH, 4T |
+| Tipo | `CO  4T 2026` | 6 | R$ 29.798,15 | Custo operacional da California, 4T |
 | Tipo | `DP 4T 2026 ` | 2 | R$ 6.669,70 | Pessoal da California, 4T, e pessoal da regional NE |
-| Tipo | `CMH CO 4T 2026 ` | 8 | R$ 5.000,00 | Custo operacional da CCH, 4T |
+
+- **Conferido na planilha de 23/11 (19:40):** a linha `CMH 3T 2026 ` ganhou uma quinta, um crédito de R$ 98,97 de 09/11 (eram 4 linhas, R$ 9.759,00); `HIT 2T 2026 `, `CO  3T 2026` (de 18/11) e `CO  4T 2026` são novas; `CMH CO 4T 2026 ` (8 linhas) foi corrigida na planilha. No fechamento do 3T, só `CO  3T 2026` muda o lucro líquido: a DRE da California no sistema fica R$ 4.800,00 abaixo da do Fechamento até o Tipo ser corrigido na planilha, como o Tiago combinou em 23/11.
 
 - **Qual vale:** o sistema.
 - **Para a gestão:** o lançamento existe e foi pago. Um espaço a mais no texto faz a planilha não o enxergar. Corrigindo o texto, a diferença some.
@@ -449,6 +454,7 @@ Apuradas na conciliação de outubro, em 02/11/2026.
 - **Qual vale:** o sistema, que tira o regional dos mesmos lançamentos da DRE.
 - **Para a gestão:** a DRE da CCH é a mesma nos dois lados. Só a divisão por regional do 3T muda em R$ 7.000.
 - **Situação:** o job que a aba Res. Jobs conta a mais não foi identificado.
+- **Resolvida (23/11/2026):** na planilha de 23/11 (19:40) e no Fechamento do mesmo dia, o custo da Agency no 3T bate com o sistema (−R$ 1.045.154,70 nos dois). A planilha mudou a linha, e a diferença deixou de existir.
 
 ### DIV-047 · PP-00040: a 2ª parcela paga no banco e aberta no sistema
 
@@ -521,6 +527,26 @@ Achado pela sessão que mapeou os jobs do 4T, na planilha de 04/11 (ainda não c
   - O UER-1004/26 foi criado em 03/11 às 09:17 e está cancelado, com R$ 20.380,17 de valor e nenhuma previsão.
 - **Diferença:** o sistema prevê R$ 329.800,00 de recebimento nos dois jobs abertos, e a planilha, R$ 200.000,00 nos três. São R$ 129.800,00 a mais no fluxo de caixa do sistema.
 - **Situação:** aberta. Falta saber qual divisão vale e se o UER-1004/26 volta a valer.
+
+### DIV-054 · Fechamento do 3T: a consolidada não fecha com as DREs da planilha
+
+- **Relatório:** Fechamento de 23/11, aba "DRE Califa + CCH + Hit + Vet", bloco de 2026 (linha 127), colunas do 3T (Z a AK), linha 187, "LUCRO LÍQUIDO APÓS INVESTIMENTOS".
+- **Diferença:** a consolidada dá R$ 5.892.357,23; as quatro abas DRE (California, CMH, HIT e Ventura) somam R$ 5.653.469,45. São R$ 238.887,78 a mais na consolidada.
+
+| Empresa | Consolidada (linha 187) | Aba DRE (lucro líquido) | Consolidada − DRE |
+|---|---:|---:|---:|
+| California (colunas AB a AF) | 3.115.151,26 | 3.118.078,41 | −2.927,15 |
+| CCH (coluna AG) | 999.432,97 | 723.918,04 | +275.514,93 |
+| Hitlab (coluna AJ) | 1.972.490,15 | 1.972.490,15 | 0,00 |
+| Ventura (coluna AK) | −194.717,15 | −161.017,15 | −33.700,00 |
+
+- **Prova, empresa por empresa:**
+  - **Ventura:** a célula AK134 é `=-'DRE VENTURA'!AD8`. Ela inverte o sinal da receita (R$ 16.850,00 vira −R$ 16.850,00), como a AK144 faz com o custo (`=-'DRE VENTURA'!AD9`), que é mostrado negativo. A receita sai do lucro em vez de entrar: 2 × R$ 16.850,00.
+  - **CCH:** as colunas AH e AI (CCH SE e CCH DOCA) vêm da aba "DRE CMH Regional" (R209, R219, R227, R234, R244), que soma pela Res. Jobs CMH 2026 e pela Gerencial 26, e não pelos Tipos, como a aba DRE CMH. Ficam de fora R$ 242.299,11 de custo da XP California (a DRE CMH os soma na coluna XP CALIFÓRNIA) e R$ 23.630,08 de custo fixo (o custo fixo geral da CCH na Gerencial 26). A receita da Res. Jobs fica R$ 10.388,96 acima da aba DRE CMH, e a receita financeira de R$ 803,21 não entra (a linha 244 da regional não a traz). Soma: 242.299,11 + 23.630,08 + 10.388,96 − 803,21 = 275.514,94 (um centavo de frações).
+  - **California:** o custo operacional da linha 143 (colunas AB a AF, pela Res. Jobs 2026) é R$ 14.845.241,22; a aba DRE, pelos Tipos, dá R$ 14.842.314,07. São R$ 2.927,15 a mais de custo na consolidada.
+- **Qual vale:** as DREs de cada empresa. Decidido pelo Tiago em 23/11/2026: "a consolidade deve ser visivel, e sera fechada no msmo momento, por se tratar de nada mais do que a soma das partes". No sistema, a consolidada será a soma das quatro DREs (o relatório ainda não existe; entra nos ajustes do módulo de Relatórios).
+- **Para a gestão:** a consolidada da planilha é montada por outro caminho (as abas regionais e de jobs) e deixa de fora custos que a DRE de cada empresa conta, além de inverter a receita da Ventura. No sistema, a consolidada é a soma das empresas e não tem diferença com elas.
+- **Para zerar na planilha:** tirar o sinal de menos da AK134; na CCH, fazer a consolidada ler a aba DRE CMH, ou levar à Res. Jobs CMH 2026 e à Gerencial 26 o custo da XP e o custo fixo que faltam (o custo da XP como custo de job ainda espera a decisão do Tiago no regional); na California, achar o custo de R$ 2.927,15 que a Res. Jobs 2026 tem a mais que os Tipos.
 
 ---
 

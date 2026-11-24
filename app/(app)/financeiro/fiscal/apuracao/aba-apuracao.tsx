@@ -231,6 +231,7 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
 
   const estabPorId = React.useMemo(() => new Map(estabelecimentos.map((e) => [e.id, e])), [estabelecimentos]);
   const pjPorId = React.useMemo(() => new Map(pjs.map((p) => [p.id, p])), [pjs]);
+  const nomesDasPJs = React.useMemo(() => Object.fromEntries(pjs.map((p) => [p.id, p.nome])), [pjs]);
   const ordemPj = React.useCallback(
     (id: string) => {
       const i = pjs.findIndex((p) => p.id === id);
@@ -788,8 +789,10 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
           cadastroDasCotas={cadastroDasCotas}
           hoje={dados.hoje}
           aprovarEmCurso={aprovaEmCurso(guiaAberta)}
-          regrasDoRateio={regrasDoCnpj(dados.regrasDoRateio, guiaAberta.empresa_contabil_id)}
+          regrasDoRateio={regrasDoCnpj(dados.regrasDoRateio, guiaAberta.empresa_contabil_id, guiaAberta.tributo)}
           gerencialDoCnpj={dados.regrasDoRateio.gerencialDoCnpj[guiaAberta.empresa_contabil_id] ?? null}
+          contas={dados.contas}
+          nomesDasPJs={nomesDasPJs}
           onClose={() => setAberta(null)}
           onAprovada={(texto) => {
             setAberta(null);
@@ -982,7 +985,9 @@ function LinhaGuia({
       <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-xs text-muted-foreground">
         {base ? moeda(base) : "—"}
         {g.periodo === "trimestral" && (
-          <span className="block font-sans text-[10px]">{pj?.regime === "lucro_presumido" ? "base presumida" : "lucro bruto"}</span>
+          <span className="block font-sans text-[10px]">
+            {pj?.regime === "lucro_presumido" ? "base presumida" : g.lucro_real?.ajuste ? "base ajustada" : "lucro bruto"}
+          </span>
         )}
       </td>
       <td className="whitespace-nowrap px-3 py-3 text-right font-mono text-xs">{debito ? moeda(debito) : "—"}</td>

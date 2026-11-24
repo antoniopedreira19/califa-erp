@@ -61,6 +61,7 @@ function linha(p: Partial<LinhaDaPlanilha> & { chave: string }): LinhaDaPlanilha
     urgente: null,
     avisoDaContraparte: null,
     situacaoDaVerba: null,
+    pagoNoHistorico: false,
     busca: "",
     ...p,
   };

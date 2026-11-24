@@ -24,6 +24,7 @@ import { revalidatePath } from "next/cache";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
+import { gruposDoHistorico, type GrupoDoHistorico, type LinhaDoHistorico } from "@/lib/fiscal/pago-no-historico";
 
 type Err = { ok: false; message: string };
 
@@ -196,6 +197,123 @@ export async function cancelarBaixaImposto(
 
   revalidarImpostos();
   return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Paga no histórico (decisão 277, entrega 3)
+// ---------------------------------------------------------------------------
+
+const pagoNoHistoricoSchema = z.object({
+  imposto_id: z.string().uuid(),
+  pago_em: dataIso,
+  conta_bancaria_id: z.string().uuid("Selecione a conta que pagou a guia."),
+  /** A guia nova; nula = a que o imposto já tem (ou nenhuma). */
+  guia_path: caminho.nullable(),
+  comprovante_path: caminho.nullable(),
+  /** O valor que a tela mostrou (a mesma trava da baixa). */
+  valor_confirmado: z.number().positive(),
+});
+
+export type EntradaDoPagoNoHistorico = z.input<typeof pagoNoHistoricoSchema>;
+
+/**
+ * Marca o imposto como pago no histórico: o pagamento foi feito fora do
+ * sistema e já está no histórico da planilha, que é por onde o DRE e o fluxo
+ * de caixa contam. Sai de A pagar sem lançamento nenhum (dar baixa contaria a
+ * saída duas vezes). O DARF e o comprovante são opcionais.
+ */
+export async function marcarImpostoPagoNoHistorico(
+  input: EntradaDoPagoNoHistorico,
+): Promise<{ ok: true } | Err> {
+  const parsed = pagoNoHistoricoSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Entrada inválida." };
+  }
+  const d = parsed.data;
+  const gate = await checarGateFinanceiro(d.imposto_id, "imposto_a_pagar.pago_no_historico");
+  if (!gate.ok) return gate;
+  const { session, supabase } = gate;
+  const tenantId = session.activeTenant.id;
+
+  if (!anexoDoTenant(d.guia_path, tenantId) || !anexoDoTenant(d.comprovante_path, tenantId)) {
+    return { ok: false, message: "Anexo inválido. Anexe o arquivo de novo." };
+  }
+
+  const { data: atual, error: erroAtual } = await supabase
+    .from("impostos_a_pagar")
+    .select("valor, status")
+    .eq("id", d.imposto_id)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (erroAtual) {
+    console.error("[impostos.pago_no_historico.leitura]", erroAtual.message);
+    return { ok: false, message: "Não foi possível marcar como paga. Tente novamente." };
+  }
+  if (!atual) return { ok: false, message: "Imposto não encontrado." };
+  if (atual.status !== "a_pagar") {
+    return { ok: false, message: atual.status === "cancelado" ? "Este imposto foi cancelado." : "Este imposto já está pago." };
+  }
+  if (Math.abs(Number(atual.valor) - d.valor_confirmado) >= 0.005) {
+    return {
+      ok: false,
+      message: `O valor deste imposto mudou desde que a tela abriu (agora ${Number(atual.valor).toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}). Feche, confira e marque de novo.`,
+    };
+  }
+
+  const { error } = await supabase.rpc("marcar_imposto_pago_no_historico", {
+    p_imposto_id: d.imposto_id,
+    p_pago_em: d.pago_em,
+    p_conta_bancaria_id: d.conta_bancaria_id,
+    p_guia_path: d.guia_path,
+    p_comprovante_path: d.comprovante_path,
+  });
+  if (error) {
+    console.error("[impostos.pago_no_historico]", error.message);
+    return { ok: false, message: mensagemDoBanco(error.message, "Não foi possível marcar como paga. Tente novamente.") };
+  }
+
+  revalidarImpostos();
+  return { ok: true };
+}
+
+const conferenciaSchema = z.object({
+  conta_bancaria_id: z.string().uuid(),
+  data: dataIso,
+  valor: z.number().positive(),
+});
+
+/**
+ * As linhas de imposto do histórico da planilha na conta e no dia — a
+ * conferência antes de marcar a guia como paga no histórico.
+ */
+export async function linhasDoHistoricoNoDia(
+  input: z.input<typeof conferenciaSchema>,
+): Promise<{ ok: true; grupos: GrupoDoHistorico[] } | Err> {
+  const parsed = conferenciaSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Entrada inválida." };
+  const gate = await checarGateFinanceiro(null, "imposto_a_pagar.conferir_historico");
+  if (!gate.ok) return gate;
+  const { session, supabase } = gate;
+
+  const { data, error } = await supabase
+    .from("historico_movimentos")
+    .select("descricao, plano_codigo, tipo_planilha, valor, carga:historico_cargas!inner(situacao)")
+    .eq("tenant_id", session.activeTenant.id)
+    .eq("carga.situacao", "ativa")
+    .eq("conta_bancaria_id", parsed.data.conta_bancaria_id)
+    .eq("data", parsed.data.data)
+    .limit(2000);
+  if (error) {
+    console.error("[impostos.conferir_historico]", error.message);
+    return { ok: false, message: "Não foi possível ler o histórico da planilha." };
+  }
+  const linhas = ((data ?? []) as Array<Omit<LinhaDoHistorico, "valor"> & { valor: number | string }>).map((l) => ({
+    descricao: l.descricao,
+    plano_codigo: l.plano_codigo,
+    tipo_planilha: l.tipo_planilha,
+    valor: Number(l.valor),
+  }));
+  return { ok: true, grupos: gruposDoHistorico(linhas, parsed.data.valor) };
 }
 
 // ---------------------------------------------------------------------------

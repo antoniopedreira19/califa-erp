@@ -18,6 +18,7 @@ const REGRAS: RegrasDoRateio = {
     { id: HIT, nome: "Hitlab", regionais: [{ id: "hitlab", nome: "Hitlab" }] },
   ],
   regionalDoCnpj: null,
+  pelaReceita: true,
 };
 const b = (empresa_id: string, regional_id: string | null, valor: number): RateioDaGuia => ({
   empresa_id,
@@ -108,4 +109,20 @@ test("a sugestão por gerencial vem do rateio do sistema (com a parte sem region
     ],
   );
   assert.deepEqual(gerenciaisDaBase([], 2000, CAL), [{ empresa_id: CAL, valor: 2000, regional_id: null }]);
+});
+
+test("IOF do mútuo: sem regional (como o cálculo do sistema), fora a regional do CNPJ que emprestou", () => {
+  const base = [b(CAL, "sp", 600), b(CAL, "ne", 400)];
+  const iof = { ...REGRAS, pelaReceita: false };
+  const cal = rateioPorGerencial([{ empresa_id: CAL, valor: 2549.69, regional_id: null }], base, iof, 2549.69);
+  assert.ok(cal.ok);
+  if (cal.ok) assert.deepEqual(cal.rateio.map((r) => [r.empresa_id, r.regional_id, r.valor]), [[CAL, null, 2549.69]]);
+  const go = rateioPorGerencial(
+    [{ empresa_id: CAL, valor: 4426.17, regional_id: null }],
+    base,
+    { ...iof, regionalDoCnpj: { empresa_id: CAL, regional_id: "ss" } },
+    4426.17,
+  );
+  assert.ok(go.ok);
+  if (go.ok) assert.deepEqual(go.rateio.map((r) => [r.empresa_id, r.regional_id, r.valor]), [[CAL, "ss", 4426.17]]);
 });

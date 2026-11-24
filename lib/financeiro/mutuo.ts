@@ -68,6 +68,43 @@ export interface IofDoMutuo {
   valor: number;
 }
 
+/** Uma guia de IOF paga (Impostos a Pagar). */
+export interface GuiaPagaDoIof {
+  pagador: string;
+  valor: number;
+  /** Decisão 277: paga fora do sistema, com o pagamento no histórico da planilha. */
+  pagoNoHistorico: boolean;
+}
+
+/**
+ * As guias de IOF pagas que ainda não estão no IOF do par. A guia paga no
+ * histórico (decisão 277) pode ser o mesmo pagamento que o par já soma por
+ * outro caminho — o IOF do histórico (`mutuos_iof_historico`, pela linha do
+ * extrato) ou o lançamento ligado ao mútuo (`mutuos_iof`): mesmo CNPJ pagador
+ * e mesmo valor, no centavo. Essa fica de fora, para não contar duas vezes;
+ * cada pagamento já contado desconta uma guia só. A guia baixada no sistema
+ * sempre soma.
+ */
+export function guiasDeIofAContar(
+  guias: GuiaPagaDoIof[],
+  jaContados: Array<Pick<IofDoMutuo, "pagador" | "valor">>,
+): GuiaPagaDoIof[] {
+  const chave = (pagador: string, valor: number) => `${pagador}|${Math.round(valor * 100)}`;
+  const restantes = new Map<string, number>();
+  for (const h of jaContados) {
+    const k = chave(h.pagador, h.valor);
+    restantes.set(k, (restantes.get(k) ?? 0) + 1);
+  }
+  return guias.filter((g) => {
+    if (!g.pagoNoHistorico) return true;
+    const k = chave(g.pagador, g.valor);
+    const n = restantes.get(k) ?? 0;
+    if (n === 0) return true;
+    restantes.set(k, n - 1);
+    return false;
+  });
+}
+
 export interface GuiaAbertaDoIof {
   parte: string;
   competencia: string;

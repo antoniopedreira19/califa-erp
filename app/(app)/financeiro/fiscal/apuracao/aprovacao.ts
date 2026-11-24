@@ -18,7 +18,11 @@
  *   única é o valor inteiro no 1º vencimento, sem juros;
  * - a diferença (guia aprovada cujo cálculo mudou) vira UM título
  *   complementar; o calculado guardado é o apurado inteiro de hoje, que é o
- *   que a próxima comparação usa (`estadoDaGuia`).
+ *   que a próxima comparação usa (`estadoDaGuia`);
+ * - IRPJ/CSLL do lucro real (decisão 277 §9): o ajuste da base entra na
+ *   aprovação — o servidor recalcula a guia com ele (`calcularApuracao`, a
+ *   prévia) e o calculado guardado já é o ajustado; a outra guia do par herda
+ *   o ajuste, que só se registra com a aprovação.
  */
 import { formatBRL } from "@/lib/format";
 import type { CadastroFiscal } from "@/lib/fiscal/cadastro";
@@ -47,6 +51,48 @@ export interface EntradaDaAprovacao {
   cota_unica: boolean;
   /** IRPJ/CSLL: os juros (%) de cada cota, pelo índice; a 1ª é sempre sem juros. */
   juros_pct: Array<number | null> | null;
+}
+
+/** O ajuste da base pedido na aprovação do IRPJ ou da CSLL do lucro real (decisão 277 §9). */
+export interface AjusteDaBasePedido {
+  /** Com sinal: negativo reduz a base. */
+  valor: number;
+  motivo: string;
+}
+
+/** O mínimo do motivo do ajuste da base: a trava de `fiscal_aprovacoes` e de `aprovar_guia_fiscal`. */
+export const MOTIVO_DO_AJUSTE_MINIMO = 10;
+
+/**
+ * Se a guia aceita um ajuste da base agora (decisão 277 §9): só o IRPJ e a
+ * CSLL do lucro real, na aprovação da guia (não na diferença), com o par
+ * ainda sem aprovação. `g` é a guia recalculada SEM a prévia.
+ */
+export function validarAjusteDaBase(
+  g: Pick<Guia, "lucro_real">,
+  estado: EstadoGuia,
+  ajuste: AjusteDaBasePedido,
+): { ok: true } | { ok: false; message: string } {
+  if (!g.lucro_real) return { ok: false, message: "O ajuste da base vale só no IRPJ e na CSLL do lucro real." };
+  if (estado === "diferenca" || estado === "aprovada") {
+    return { ok: false, message: "O ajuste da base entra na aprovação da guia, não depois dela." };
+  }
+  if (g.lucro_real.ajuste) {
+    return {
+      ok: false,
+      message: `Este trimestre já tem ajuste da base, aprovado com a guia do ${g.lucro_real.ajuste.tributo}. Atualize a página.`,
+    };
+  }
+  if (g.lucro_real.par_aprovado) {
+    return { ok: false, message: "A outra guia deste trimestre foi aprovada sem ajuste da base: aqui vale só o valor da guia." };
+  }
+  if (!Number.isFinite(ajuste.valor) || Math.abs(ajuste.valor) < 0.01 || Math.abs(ajuste.valor) > 1e11) {
+    return { ok: false, message: "Informe o valor do ajuste da base." };
+  }
+  if (ajuste.motivo.trim().length < MOTIVO_DO_AJUSTE_MINIMO) {
+    return { ok: false, message: `Explique o ajuste da base (mínimo ${MOTIVO_DO_AJUSTE_MINIMO} caracteres).` };
+  }
+  return { ok: true };
 }
 
 /** Um título como `aprovar_guia_fiscal` recebe em `p_titulos`. */
@@ -82,6 +128,9 @@ export interface PedidoDeAprovacao {
   p_memoria: ItemMemoria[];
   p_rateio: RateioDaGuia[];
   p_titulos: TituloDoPedido[];
+  /** Decisão 277 §9: o ajuste da base do lucro real que a guia leva (o pedido ou o herdado do par). */
+  p_ajuste_base: number | null;
+  p_ajuste_base_motivo: string | null;
 }
 
 export type ResultadoDaMontagem = { ok: true; pedido: PedidoDeAprovacao } | { ok: false; message: string };
@@ -190,6 +239,9 @@ export function montarPedidoDeAprovacao(e: {
   }
 
   const compensacoes = usar ? (g.compensacoes ?? []).map((c) => c.id) : [];
+  // Decisão 277 §9: o ajuste da base que o cálculo da guia usou — o desta
+  // aprovação (prévia do servidor) ou o herdado do par. Na diferença, não.
+  const ajuste = diferenca ? null : (g.lucro_real?.ajuste ?? null);
   const memoria = temCompensacao && !usar ? g.memoria.filter((m) => m.grupo !== "compensacao") : g.memoria;
 
   let cotas: Cota[] | null = null;
@@ -212,6 +264,8 @@ export function montarPedidoDeAprovacao(e: {
     cotas,
     // O saldo da contabilidade se grava depois, à parte (definir_saldo_credor_contabil).
     saldo_credor_contabil: null,
+    ajuste_base: ajuste?.valor ?? null,
+    ajuste_base_motivo: ajuste?.motivo ?? null,
   };
   const titulos = titulosDaAprovacao(g, aprovacao);
 
@@ -267,6 +321,8 @@ export function montarPedidoDeAprovacao(e: {
       p_memoria: memoria,
       p_rateio: g.rateio,
       p_titulos: pTitulos,
+      p_ajuste_base: ajuste?.valor ?? null,
+      p_ajuste_base_motivo: ajuste?.motivo ?? null,
     },
   };
 }

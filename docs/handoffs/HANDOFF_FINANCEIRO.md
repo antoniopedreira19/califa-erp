@@ -9328,7 +9328,8 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Pelo envio do GP:** 15 NFs (R$ 697.296,17) faturadas pela parcela do envio; 7 baixas e 7 linhas do banco trocadas; DRE do 4T igual.
 - **Segunda parte (recebidas antes de 03/11):** 14 NFs (R$ 5,79 mi) e a 2ª parcela da 4946; 16 baixas pela data da planilha, 15 ligadas às linhas dela (decisão 270); DRE só no 4T de 2025 (+R$ 8.000 da 4946, que faltavam desde a primeira parte); Paypal zerado pela 6393.
 - **Recomendações sem o financeiro:** 6485 do NOM-1001 pelo envio de novembro; cliente em 18 jobs da planilha (`20261123950005`) e 10 NFs emitidas (R$ 1,77 mi; a 29 da GoCrazy com a baixa de 01/09 ligada à planilha); DRE igual.
-- **Falta:** a 6384 do NOM-1001 (o envio de outubro é R$ 0,02 menor que a NF; o GP corrige o envio) e as 4 do AMB-1055 (mês); as 6 da segunda parte (13, 5549, 2478–2480 e 6405) e a 2327; Mercado Livre (EBAZAR × Mercado Pago), a 6235 (dois clientes) e os clientes sem cadastro; os 4 depósitos (6276/6280 com a 6046 do Saving, 6357 com a retenção que cita a 6156, 6151 antes do início); Saving, Ambev com o crédito do ISS, emissão em 2027 e as de vários jobs.
+- **Regras aprovadas (Saving, emissão 2027, retenção na linha; "só o presente"):** 21 NFs (R$ 1,67 mi). Das 21, 11 foram recebidas desde 03/11: 11 baixas e 9 linhas do banco trocadas. As outras 10 estão em aberto. O "crédito do ISS da Ambev" era a devolução do ISS de 01/10, que não precisou de avulso. DRE idêntico. A 6151 foi ligada depois de `20261123950006`, que aceita, antes do início, a linha da planilha já conciliada com uma linha do banco também anterior ao início. Desfazer por lote testado no Sandbox. Placar semanal em `tmp/nfs-planilha/placar/placar.sql`. As devoluções de ISS à Ambev lançadas no CT (26 linhas, R$ 131.291,61 em 31/01/2027) voltaram ao fluxo (`20261123950007`); quem reescrever a `vw_fluxo_caixa` inteira mantém a condição.
+- **Falta:** a 6384 do NOM-1001 (o GP corrige o envio) e as 4 do AMB-1055 (mês); as 6 da segunda parte (13, 5549, 2478–2480 e 6405) e a 2327. Com os XMLs (24/11): Mercado Livre (EBAZAR × Mercado Pago), a 6235 (dois clientes), os clientes sem cadastro (com as 6498, 6500 e 6501), a 6357 (tipo do imposto retido), a 6496 e a 6497 (mês do fee da Warner) e as de vários jobs.
 
 ## ⚠️ Nota de 2026-11-23 — a emissão da NF 6479 corrigida (vencimento lançado na emissão)
 
@@ -9362,3 +9363,30 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Banco** (migration 20261123400003): `impostos_a_pagar.da_contabilidade` + RPC `lancar_guia_da_contabilidade` (por cima do `criar_imposto_avulso`; origem continua `avulso`).
 - Conferido no Sandbox (Empresa Teste): PIS set/2026 e IOF nov/2026 lançados, em "Aprovadas" e em Impostos a Pagar. Falta a entrega 3 (guia já paga, ligada às linhas da planilha).
 
+
+## ⚠️ Nota de 2026-11-23 — paga no histórico (decisão 277, entrega 3)
+
+- **A guia paga fora do sistema** sai de A pagar **sem lançamento**: o pagamento já está no histórico da planilha, por onde o DRE e o fluxo contam (dar baixa contaria duas vezes). DARF e comprovante opcionais. Opção A, escolhida pelo Tiago em 23/11, com o nome "paga no histórico".
+- **Banco** (migration 20261123400004): `impostos_a_pagar.pago_no_historico`; `chk_imposto_pago_consistente` aceita o pago sem comprovante só com a marca; RPC `marcar_imposto_pago_no_historico` (auditoria `fiscal.imposto_pago_no_historico`); `cancelar_baixa_imposto` desfaz a marca.
+- **Onde:** Impostos a Pagar (detalhes, e o link "Já foi paga e está no histórico da planilha?" na baixa); a caixa "Já foi paga" na Guia da contabilidade e no painel de aprovação (só guia de um título). A tela confere com as linhas de imposto do histórico na conta e no dia (`lib/fiscal/pago-no-historico.ts`; "PIS CRÉDITO" soma no "PIS").
+- **Status:** "Pago dd/mm · no histórico" na planilha de títulos (`LinhaDaPlanilha.pagoNoHistorico`, obrigatório; falso fora do imposto).
+- Conferido no Sandbox (marcar, desfazer, guia da contabilidade já paga, aprovação já paga; zero lançamentos). Próximo: as 52 guias do 4º trimestre, uma a uma com a planilha.
+
+## ⚠️ Nota de 2026-11-23 — a troca de carga do histórico preserva as ligações (fechamento do 3T)
+
+- Migration `20261123980001_troca_de_carga_preserva_ligacoes.sql`, aplicada:
+  `historico_concluir_carga` passa a ligação com a baixa
+  (`historico_movimento_baixas`) para a linha nova da versão seguinte, pela
+  digital, conta e valor ou pela herdeira pelo conteúdo, e recusa a troca se
+  alguma ligação ficaria sem linha (antes, sumia em cascata). A cauda herda a
+  ligação com o banco também pelo conteúdo, como as previsões. O retorno e a
+  auditoria ganham `baixas_herdadas`.
+- Motivo: unificar as cargas do histórico numa versão só para o fechamento
+  do 3T (decisão 211, seção de 23/11).
+
+## ⚠️ Nota de 2026-11-23 — ajustes depois da carga do 4T (decisão 277 §6)
+
+- **Mútuos:** a guia de IOF paga no histórico que é o mesmo pagamento do IOF do histórico (mesmo CNPJ e valor) não soma de novo (`guiasDeIofAContar`).
+- **Rateio por gerencial:** a sugestão acompanha o valor da guia até a pessoa mexer (Guia da contabilidade e aprovação).
+- **Conferência do pago no histórico:** "tributo" saiu das palavras de imposto.
+- Carga da produção (23/11): 12 Guias da contabilidade de set/3T pagas no histórico (R$ 761.400,80); o resto aguarda o Tiago (ver 277 e a memória do fiscal).
