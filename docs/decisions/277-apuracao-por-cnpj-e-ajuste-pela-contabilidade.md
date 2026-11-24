@@ -105,9 +105,22 @@ O inventário das 52 guias do 4º trimestre (de 01/10 a 31/12, com o valor por g
 
 A carga das 12 guias pagas em outubro (feita pela tela, na produção) mostrou três defeitos:
 
-- **Mútuos contava o IOF duas vezes.** A tela de mútuos soma o IOF do histórico (`mutuos_iof_historico`, pela linha do extrato) e soma também a guia de IOF paga. Uma guia paga no histórico pode ser o mesmo pagamento. Agora ela só soma quando o histórico não tem um pagamento do mesmo CNPJ e valor (`guiasDeIofAContar`, `lib/financeiro/mutuo.ts`). A guia baixada no sistema sempre soma.
+- **Mútuos contava o IOF duas vezes.** A tela de mútuos soma o IOF do histórico (`mutuos_iof_historico`, pela linha do extrato) e soma também a guia de IOF paga. Uma guia paga no histórico pode ser o mesmo pagamento. Agora ela só soma quando o mesmo pagamento (mesmo CNPJ e valor) não foi contado por outro caminho: o IOF do histórico ou o lançamento ligado ao mútuo (`mutuos_iof`, caso do IOF de 15/10 da California) — `guiasDeIofAContar`, `lib/financeiro/mutuo.ts`. A guia baixada no sistema sempre soma.
 - **A sugestão do rateio ficava em R$ 0,00** quando o valor da guia era digitado depois de a receita do período carregar. Agora, enquanto a pessoa não mexe no rateio, a sugestão refaz a conta com o valor da guia. Vale na Guia da contabilidade e no painel de aprovação.
 - **A conferência trazia linhas que não são de imposto**: a palavra "tributo" aparece em descrição de serviço na planilha ("tributo" a uma banda). Ela saiu da lista de palavras.
+
+## 7. A carga do 4º trimestre na produção (23/11, à noite)
+
+Lançado pela tela, como o Tiago, com a planilha de 23/11 (o histórico foi recarregado no mesmo dia pela frente do fechamento do 3T):
+
+- **Guias da contabilidade pagas no histórico** (competência de setembro e do 3º trimestre, pagas em outubro): ISS, ISS retido, PIS, COFINS, IRPJ/CSLL do 3º trimestre e IOF do mútuo da California, da GoCrazy e da Hitlab. Os PIS/COFINS de setembro da California foram pagos em quatro DARFs; todos entraram como não cumulativos (6912/5856), com a competência dos dois menores a confirmar no comprovante do Santander. O ISS pago ao Rio de Janeiro entrou no CNPJ da matriz.
+- **Outubro, pela aprovação na Apuração, pago no histórico:** ISS de Salvador (R$ 175.230,82; o sistema calculou R$ 128.066,93) e de São Paulo (R$ 3.357,25; o sistema calculou R$ 9.651,33), com a diferença em análise. ISS retido de Salvador e de Fortaleza de outubro como Guia da contabilidade.
+- **IOF do mútuo sem regional:** como o cálculo do sistema e a planilha, o IOF vai para a regional padrão do CNPJ que emprestou ou fica sem regional (`regrasDoCnpj(..., tributo)`).
+- **Fica para depois:** as guias de outubro ainda não pagas esperam os DARFs da contabilidade (25/11); as cotas 2 e 3 do 3º trimestre da GoCrazy entram com a correção do fluxo de caixa (§8).
+
+## 8. O fluxo de caixa conta imposto duas vezes (a decidir)
+
+O fluxo soma as previsões de imposto da planilha e o que o Fiscal projeta (guias da Apuração e impostos a pagar). Em ISS, PIS e COFINS de novembro e dezembro, as duas fontes têm valores parecidos e se somam (cerca de R$ 370 mil por mês a mais). No IRPJ/CSLL do 4º trimestre, o Fiscal projeta cerca de R$ 1,56 milhão por mês de janeiro a março, contra cerca de R$ 288 mil na planilha: a estimativa do lucro real usa o lucro bruto dos jobs, sem as despesas da empresa. A regra de qual fonte vale fica com o Tiago.
 
 ## Arquivos (entrega 1)
 
