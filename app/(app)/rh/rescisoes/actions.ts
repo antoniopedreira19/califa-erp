@@ -174,12 +174,16 @@ export async function recalcularRescisao(
 }
 
 /**
- * Cria conta avulsa em Contas a Pagar (plano 05 Despesa com Pessoal /
- * subtipo 013 Rescisão), com data prevista de pagamento = hoje + 10
- * dias (padrão TRCT). Muda rescisão pra `enviada_financeiro` e grava
- * `conta_avulsa_id` no lookup inverso. Quando a avulsa for baixada, o
- * trigger `trg_conta_avulsa_propaga_rescisao` marca a rescisão como
- * `paga` sozinho.
+ * Cria linha em `folhas_pagamento` com `tipo='rescisao'` e
+ * `status='enviada'`, apontando `rescisao_id` pra rescisão. A linha
+ * aparece na aba People de `/financeiro/contas-a-pagar` pela view
+ * `vw_people_aprovar_financeiro` — mesmo caminho de salário, férias e
+ * 13º. A alocação do colaborador vira linha em
+ * `folhas_pagamento_alocacoes` (empresa + regional, ou rateio da
+ * empresa quando `usa_rateio_empresa=true`), igual gerar_folha_mensal.
+ *
+ * Quando o financeiro mudar a linha pra `status='paga'`, o trigger
+ * `trg_folha_rescisao_propaga_pagamento` marca a rescisão como `paga`.
  */
 export async function enviarRescisaoAoFinanceiro(
   rescisaoId: string,
@@ -193,9 +197,7 @@ export async function enviarRescisaoAoFinanceiro(
 
   const { data: resc, error: selErr } = await supabase
     .from("rescisoes")
-    .select(
-      "id, status, colaborador_id, data_rescisao, total_liquido, colaborador:colaboradores!colaborador_id(nome)",
-    )
+    .select("id, status, colaborador_id, data_rescisao, total_liquido")
     .eq("id", rescisaoId)
     .eq("tenant_id", tenantId)
     .maybeSingle();
@@ -215,11 +217,13 @@ export async function enviarRescisaoAoFinanceiro(
     };
   }
 
-  // Alocação atual: usa como empresa/regional da avulsa. Rateios ficam
-  // pra v2; no MVP o RH alinha com Contas a Pagar se precisar dividir.
+  // Alocação atual do colaborador. Rescisão é um evento de folha como
+  // qualquer outro: entra com a alocação do dia do desligamento. Quando
+  // `usa_rateio_empresa=true`, puxamos o rateio padrão da empresa pra o
+  // ano, do mesmo jeito que `gerar_folha_da_competencia`.
   const { data: aloc } = await supabase
     .from("colaboradores_alocacoes")
-    .select("empresa_id, regional_id")
+    .select("empresa_id, regional_id, usa_rateio_empresa")
     .eq("colaborador_id", resc.colaborador_id as string)
     .is("data_fim", null)
     .order("data_inicio", { ascending: false })
@@ -234,59 +238,77 @@ export async function enviarRescisaoAoFinanceiro(
     };
   }
 
-  // Plano 05.013 (Rescisão) do tenant.
-  const { data: subtipo } = await supabase
-    .from("plano_contas_subtipos")
-    .select("id, tipo_id, tipo:plano_contas_tipos!tipo_id(id, codigo)")
-    .eq("tenant_id", tenantId)
-    .eq("codigo", "013")
-    .maybeSingle();
-
-  const tipo = (subtipo as unknown as { tipo: { id: string; codigo: string } } | null)?.tipo;
-  if (!subtipo || !tipo || tipo.codigo !== "05") {
-    return {
-      ok: false,
-      message:
-        "Plano de contas 'Rescisão' (05.013) não configurado neste tenant.",
-    };
-  }
-
-  const colabNome =
-    (resc.colaborador as unknown as { nome: string } | null)?.nome ?? "—";
-
-  const dataPrevista = new Date();
+  const dataRescisao = new Date(
+    (resc.data_rescisao as string) + "T00:00:00",
+  );
+  const competenciaAno = dataRescisao.getFullYear();
+  const competenciaMes = dataRescisao.getMonth() + 1;
+  const dataPrevista = new Date(dataRescisao);
   dataPrevista.setDate(dataPrevista.getDate() + 10);
-  const dataPrevistaISO = dataPrevista.toISOString().slice(0, 10);
 
-  const { data: avulsa, error: avulsaErr } = await supabase
-    .from("contas_avulsas")
+  const { data: linhaFolha, error: folhaErr } = await supabase
+    .from("folhas_pagamento")
     .insert({
       tenant_id: tenantId,
-      empresa_id: aloc.empresa_id as string,
-      regional_id: (aloc.regional_id as string | null) ?? null,
       colaborador_id: resc.colaborador_id as string,
-      descricao: `Rescisão – ${colabNome}`,
-      valor: totalLiquido,
-      natureza: "saida",
-      status: "aprovada",
-      plano_conta_tipo_id: tipo.id,
-      plano_conta_subtipo_id: subtipo.id,
-      data_prevista_pagamento: dataPrevistaISO,
-      criado_por: session.profile.id,
+      competencia_ano: competenciaAno,
+      competencia_mes: competenciaMes,
+      salario_base: totalLiquido,
+      status: "enviada",
+      origem: "california",
+      tipo: "rescisao",
+      rescisao_id: rescisaoId,
+      data_pagamento_prevista: dataPrevista.toISOString().slice(0, 10),
+      enviada_em: new Date().toISOString(),
+      enviada_por: session.profile.id,
+      created_by: session.profile.id,
     })
     .select("id")
     .single();
 
-  if (avulsaErr || !avulsa) {
-    console.error("[rh.rescisao.enviar.avulsa]", avulsaErr?.message);
-    return { ok: false, message: "Falha ao criar lançamento em Contas a Pagar." };
+  if (folhaErr || !linhaFolha) {
+    console.error("[rh.rescisao.enviar.folha]", folhaErr?.message);
+    return {
+      ok: false,
+      message: "Falha ao criar linha em folhas de pagamento.",
+    };
+  }
+
+  // Alocação da linha: rateio padrão da empresa quando
+  // `usa_rateio_empresa`, senão 100% na empresa+regional específica.
+  if (aloc.usa_rateio_empresa) {
+    const { data: rateios } = await supabase
+      .from("empresas_rateios_regionais")
+      .select("regional_id, percentual")
+      .eq("tenant_id", tenantId)
+      .eq("empresa_id", aloc.empresa_id as string)
+      .eq("ano_vigencia", competenciaAno)
+      .gt("percentual", 0);
+    if (rateios && rateios.length > 0) {
+      await supabase.from("folhas_pagamento_alocacoes").insert(
+        rateios.map((r) => ({
+          tenant_id: tenantId,
+          folha_id: linhaFolha.id,
+          empresa_id: aloc.empresa_id as string,
+          regional_id: r.regional_id as string,
+          percentual: r.percentual as number,
+        })),
+      );
+    }
+  } else if (aloc.regional_id) {
+    await supabase.from("folhas_pagamento_alocacoes").insert({
+      tenant_id: tenantId,
+      folha_id: linhaFolha.id,
+      empresa_id: aloc.empresa_id as string,
+      regional_id: aloc.regional_id as string,
+      percentual: 100,
+    });
   }
 
   const { error: updErr } = await supabase
     .from("rescisoes")
     .update({
       status: "enviada_financeiro",
-      conta_avulsa_id: avulsa.id,
       enviada_em: new Date().toISOString(),
       enviada_por: session.profile.id,
       updated_by: session.profile.id,
@@ -295,8 +317,6 @@ export async function enviarRescisaoAoFinanceiro(
 
   if (updErr) {
     console.error("[rh.rescisao.enviar.update]", updErr.message);
-    // Avulsa já foi criada — melhor deixar passar e deixar o RH reconciliar
-    // manualmente do que travar o fluxo.
   }
 
   await logAuditEvent({
@@ -305,7 +325,7 @@ export async function enviarRescisaoAoFinanceiro(
     entidadeTipo: "rescisao",
     entidadeId: rescisaoId,
     metadata: {
-      conta_avulsa_id: avulsa.id,
+      folha_pagamento_id: linhaFolha.id,
       total_liquido: totalLiquido,
       empresa_id: aloc.empresa_id,
     },
@@ -313,5 +333,5 @@ export async function enviarRescisaoAoFinanceiro(
 
   revalidatePath("/rh/rescisoes");
   revalidatePath("/financeiro/contas-a-pagar");
-  return { ok: true, id: avulsa.id };
+  return { ok: true, id: linhaFolha.id };
 }

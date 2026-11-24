@@ -263,7 +263,7 @@ export function DrawerRescisao({
           </div>
         )}
 
-        {linha.status === "enviada_financeiro" && linha.conta_avulsa_id && (
+        {linha.status === "enviada_financeiro" && (
           <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
             Enviada ao financeiro{" "}
             {linha.enviada_em && (
@@ -276,11 +276,11 @@ export function DrawerRescisao({
             )}
             .{" "}
             <Link
-              href="/financeiro/contas-a-pagar"
+              href="/financeiro/contas-a-pagar?tab=people"
               prefetch={false}
               className="font-medium underline underline-offset-2"
             >
-              Ver em Contas a Pagar
+              Ver na aba People de Contas a Pagar
             </Link>
           </div>
         )}
