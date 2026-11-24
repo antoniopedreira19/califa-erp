@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   ChevronRight,
   CornerUpLeft,
+  Download,
   Pencil,
   Search,
   Send,
@@ -240,6 +241,7 @@ export function JobsList({
   const [selecionados, setSelecionados] = React.useState<string[]>([]);
   const [loteAberto, setLoteAberto] = React.useState(false);
   const [aviso, setAviso] = React.useState<string | null>(null);
+  const [exportando, setExportando] = React.useState(false);
   React.useEffect(() => {
     if (!aviso) return;
     const t = setTimeout(() => setAviso(null), 6000);
@@ -401,6 +403,17 @@ export function JobsList({
     fechadosIds,
   ]);
 
+  async function exportar() {
+    if (colunas.visiveis.length === 0 || exportando) return;
+    setExportando(true);
+    try {
+      const { exportarJobsXlsx } = await import("./exportar-jobs");
+      await exportarJobsXlsx(colunas.visiveis);
+    } finally {
+      setExportando(false);
+    }
+  }
+
   function toggleGrupo(id: string) {
     setFechadosIds((prev) => {
       const next = new Set(prev);
@@ -494,6 +507,16 @@ export function JobsList({
           )}
         </div>
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={exportar}
+            disabled={colunas.visiveis.length === 0 || exportando}
+            className="inline-flex h-9 items-center gap-2 whitespace-nowrap rounded-lg border border-border bg-white px-3 text-xs font-semibold text-foreground transition-colors hover:border-california-red/40 hover:text-california-red disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-border disabled:hover:text-foreground"
+            aria-label="Exportar jobs para planilha"
+          >
+            <Download className="h-3.5 w-3.5" />
+            {exportando ? "Exportando..." : "Exportar"}
+          </button>
           {podeEnviarFaturamento && (
             <button
               type="button"
