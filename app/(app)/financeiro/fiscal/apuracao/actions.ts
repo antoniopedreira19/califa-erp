@@ -185,7 +185,12 @@ export async function aprovarGuia(
     } catch (e) {
       return { ok: false, message: `Não foi possível ler as empresas do rateio: ${e instanceof Error ? e.message : String(e)}` };
     }
-    const rateio = rateioPorGerencial(v.rateio_gerencial, calculada.rateio, regrasDoCnpj(regras, calculada.empresa_contabil_id), v.valor_guia);
+    const rateio = rateioPorGerencial(
+      v.rateio_gerencial,
+      calculada.rateio,
+      regrasDoCnpj(regras, calculada.empresa_contabil_id, calculada.tributo),
+      v.valor_guia,
+    );
     if (!rateio.ok) return rateio;
     g = { ...calculada, rateio: rateio.rateio };
   }
@@ -494,7 +499,7 @@ export async function lancarGuiaDaContabilidade(
       receitaDoPeriodo(supabase, tenantId, v.empresa_contabil_id, v.competencia),
       carregarRegrasDoRateio(supabase, tenantId),
     ]);
-    const r = rateioPorGerencial(v.rateio_gerencial, receita.base, regrasDoCnpj(regras, v.empresa_contabil_id), v.valor);
+    const r = rateioPorGerencial(v.rateio_gerencial, receita.base, regrasDoCnpj(regras, v.empresa_contabil_id, v.tributo), v.valor);
     if (!r.ok) return r;
     rateio = r.rateio;
   } catch (e) {

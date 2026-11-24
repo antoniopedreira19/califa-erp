@@ -114,11 +114,11 @@ export function DialogoGuiaDaContabilidade({
   const opcoes = React.useMemo(() => opcoesDo(presumido), [presumido]);
   const estabs = dados.estabelecimentos.filter((e) => e.empresa_contabil_id === pj.id);
   const { meses, tris } = React.useMemo(() => competencias(dados.hoje), [dados.hoje]);
-  const regras = regrasDoCnpj(dados.regrasDoRateio, pj.id);
   const gerencial = dados.regrasDoRateio.gerencialDoCnpj[pj.id] ?? null;
 
   const [chave, setChave] = React.useState("pis");
   const op = opcoes.find((o) => o.chave === chave) ?? opcoes[0];
+  const regras = regrasDoCnpj(dados.regrasDoRateio, pj.id, op.tributo);
   const [estab, setEstab] = React.useState(estabs[0]?.id ?? "");
   const [mes, setMes] = React.useState(meses.includes("2026-09") ? "2026-09" : meses[0]);
   const [tri, setTri] = React.useState(tris.includes("2026-T3") ? "2026-T3" : tris[0]);

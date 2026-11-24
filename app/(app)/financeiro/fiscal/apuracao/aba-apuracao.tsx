@@ -789,7 +789,7 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
           cadastroDasCotas={cadastroDasCotas}
           hoje={dados.hoje}
           aprovarEmCurso={aprovaEmCurso(guiaAberta)}
-          regrasDoRateio={regrasDoCnpj(dados.regrasDoRateio, guiaAberta.empresa_contabil_id)}
+          regrasDoRateio={regrasDoCnpj(dados.regrasDoRateio, guiaAberta.empresa_contabil_id, guiaAberta.tributo)}
           gerencialDoCnpj={dados.regrasDoRateio.gerencialDoCnpj[guiaAberta.empresa_contabil_id] ?? null}
           contas={dados.contas}
           nomesDasPJs={nomesDasPJs}
