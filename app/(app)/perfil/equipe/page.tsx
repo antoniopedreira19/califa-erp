@@ -3,6 +3,7 @@ import { Users2 } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/ui/page-header";
+import { BotaoVoltar } from "@/components/voltar/botao-voltar";
 import { KpiCardsEquipe } from "./kpi-cards-equipe";
 import { EquipeTabs } from "./equipe-tabs";
 import { AbaEquipe } from "./aba-equipe";
@@ -65,7 +66,8 @@ export default async function EquipePage() {
   const nVencendo = vencendo60d.count ?? 0;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
+      <BotaoVoltar reserva="/perfil" />
       <PageHeader
         title="Equipe"
         description="Visão dos colaboradores que reportam a você: quadro atual e aprovações pendentes de férias."
