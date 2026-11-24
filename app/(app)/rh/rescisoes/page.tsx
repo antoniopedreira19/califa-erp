@@ -69,6 +69,7 @@ export default async function RescisoesPage({
         selecionado.id,
         selecionado.data_encerramento ??
           new Date().toISOString().slice(0, 10),
+        selecionado.data_admissao,
       );
     }
   }
@@ -163,6 +164,7 @@ async function calcularRescisao(
   supabase: ReturnType<typeof createClient>,
   colaboradorId: string,
   dataDemissao: string,
+  dataAdmissao: string,
 ): Promise<CalculoRescisao | null> {
   // Salário vigente
   const { data: salarios } = await supabase
@@ -191,8 +193,10 @@ async function calcularRescisao(
   const dem = new Date(dataDemissao + "T00:00:00");
   const saldoDias = dem.getDate();
 
-  // 13º: meses trabalhados no ano
-  const avosDecimo = dem.getMonth() + 1;
+  // 13º proporcional de rescisão: meses trabalhados no ano da demissão,
+  // aplicando a regra do dia 15 nos dois extremos (admissão e demissão).
+  // Ver docs/modulos/rh/60-decimo-terceiro.md §5.1.
+  const avosDecimo = calcularAvos13Rescisao(dataAdmissao, dataDemissao);
 
   const saldoValor = round2((salario / 30) * saldoDias);
   const valorFerias = round2((salario / 12) * avosFerias);
@@ -216,6 +220,43 @@ async function calcularRescisao(
 
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
+}
+
+/**
+ * Avos de 13º proporcional em rescisão. Conta meses trabalhados no ano
+ * da demissão com regra do dia 15:
+ * - Mês de admissão: conta se admitiu até dia 15; se admitiu depois,
+ *   começa no mês seguinte.
+ * - Mês de demissão: conta se demitiu no dia 15 ou depois; se antes,
+ *   para no mês anterior.
+ * - Admissão em ano anterior: começa em janeiro do ano da demissão.
+ *
+ * Doc: `docs/modulos/rh/60-decimo-terceiro.md` §5.1.
+ */
+function calcularAvos13Rescisao(
+  dataAdmissao: string,
+  dataDemissao: string,
+): number {
+  const adm = new Date(dataAdmissao + "T00:00:00");
+  const dem = new Date(dataDemissao + "T00:00:00");
+  const anoDemissao = dem.getFullYear();
+
+  // Mês inicial contado (1..12) no ano da demissão.
+  let mesInicio: number;
+  if (adm.getFullYear() < anoDemissao) {
+    mesInicio = 1;
+  } else if (adm.getFullYear() === anoDemissao) {
+    const mesAdm = adm.getMonth() + 1;
+    mesInicio = adm.getDate() <= 15 ? mesAdm : mesAdm + 1;
+  } else {
+    return 0; // admissão posterior à demissão — defensivo
+  }
+
+  // Mês final contado (1..12).
+  const mesDem = dem.getMonth() + 1;
+  const mesFim = dem.getDate() >= 15 ? mesDem : mesDem - 1;
+
+  return Math.max(0, mesFim - mesInicio + 1);
 }
 
 function RescisaoCalculo({
