@@ -608,10 +608,11 @@ export async function inativarColaborador(
   revalidatePath("/rh/colaboradores");
   revalidatePath(`/rh/colaboradores/${id}`);
   revalidatePath("/rh/rescisoes");
-  // `/equipe` dos ex-liderados: se tinham só esse líder, o item some da
-  // sidebar do liderado — não dá pra revalidar pra cada um, mas o layout
-  // já roda `temLiderados` no próximo request.
-  revalidatePath("/equipe");
+  // `/perfil/equipe` dos ex-liderados: se tinham só esse líder, o card
+  // "Minha equipe" some do /perfil do liderado — não dá pra revalidar
+  // pra cada um, mas o /perfil já roda `temLiderados` no próximo request.
+  revalidatePath("/perfil/equipe");
+  revalidatePath("/perfil");
   return {
     ok: true,
     id,

@@ -20,7 +20,6 @@ import {
   BarChart3,
   Settings,
   Users,
-  Users2,
   UserCheck,
   Gavel,
   FolderKanban,
@@ -43,9 +42,6 @@ type NavLink = {
   /** Comitê de Aprovações (decisão 223): não é de papel, é de quem é
    *  membro (ou administrador) — o layout diz. */
   soDoComite?: boolean;
-  /** Equipe (PR líder→RH): só aparece pra quem tem pelo menos 1 liderado
-   *  em `colaboradores.lider_id`. Gated server-side no layout. */
-  soLider?: boolean;
 };
 
 const links: NavLink[] = [
@@ -94,12 +90,6 @@ const links: NavLink[] = [
     permissao: "sidebar.rh",
   },
   {
-    href: "/equipe",
-    label: "Equipe",
-    icon: Users2,
-    soLider: true,
-  },
-  {
     href: "/freelancers",
     label: "Freelancers",
     icon: UserCheck,
@@ -130,15 +120,11 @@ export function Sidebar({
   role,
   nome,
   doComite,
-  temEquipe,
 }: {
   role: AppRole;
   nome: string;
   /** Membro do Comitê de Aprovações ou administrador (decisão 223). */
   doComite: boolean;
-  /** Tem pelo menos 1 liderado em `colaboradores.lider_id` — libera o
-   *  item "Equipe" na sidebar. Gated server-side no layout. */
-  temEquipe: boolean;
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -147,7 +133,6 @@ export function Sidebar({
   const expanded = hovered || mobileOpen;
 
   const visibleLinks = links.filter((l) => {
-    if (l.soLider) return temEquipe;
     if (l.soDoComite) return doComite;
     return !l.permissao || pode(role, l.permissao);
   });

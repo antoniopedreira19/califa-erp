@@ -349,7 +349,7 @@ export async function aprovarLancamentoOverrideRh(
 
   revalidatePath("/rh/ferias");
   revalidatePath("/perfil");
-  revalidatePath("/equipe");
+  revalidatePath("/perfil/equipe");
   revalidatePath("/financeiro/contas-a-pagar");
   return { ok: true, id: lanc.id, aviso };
 }

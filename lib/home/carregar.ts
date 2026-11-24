@@ -737,7 +737,7 @@ export async function carregarHomeGerenteProducao(
       titulo: "Férias aguardando sua aprovação",
       contagem: feriasAguardandoMim.count ?? 0,
       subtitulo: "Solicitações dos seus liderados",
-      href: "/equipe",
+      href: "/perfil/equipe",
       icone: Palmtree,
     },
   ];

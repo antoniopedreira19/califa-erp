@@ -18,7 +18,9 @@ import { CardBeneficios } from "./card-beneficios";
 import { QuadroNf } from "./_components/quadro-nf";
 import { CardDocumentos } from "./card-documentos";
 import { CardMinhasFerias } from "./card-minhas-ferias";
+import { CardMinhaEquipe } from "./card-minha-equipe";
 import { BotaoEditarPerfilCompleto } from "./botao-editar-perfil-completo";
+import { temLiderados } from "@/lib/equipe/tem-liderados";
 import type { NfPendenteQuadro } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -49,8 +51,35 @@ export default async function PerfilPage() {
   // Dados de acesso (auth.users) só precisam de service client.
   const acesso = await carregarAcessoColaborador(session.profile.id);
 
+  // "Minha equipe" (ex-página /equipe): só aparece pra quem é líder de ao
+  // menos 1 colaborador. Checagem roda pros dois branches (colab + enxuto)
+  // porque admin/rh sem colab próprio ainda pode ser líder de alguém.
+  const souLider = await temLiderados(
+    supabase,
+    session.profile.id,
+    session.activeTenant.id,
+  );
+
   // Branch: usuário SEM colaborador vinculado — perfil enxuto.
   if (!colab) {
+    // Se é líder, mesmo sem colab próprio, mostramos o card no lado direito.
+    // Contagem de pedidos aguardando: só consultamos se é líder.
+    const aguardandoVoce = souLider
+      ? (
+          await supabase
+            .from("colaboradores_ferias_lancamentos")
+            .select("id", { count: "exact", head: true })
+            .eq("status", "aguardando_gestor")
+        ).count ?? 0
+      : 0;
+    const liderados = souLider
+      ? (
+          await supabase
+            .from("vw_equipe_do_lider")
+            .select("colaborador_id", { count: "exact", head: true })
+        ).count ?? 0
+      : 0;
+
     return (
       <div className="space-y-6 max-w-6xl mx-auto">
         <HeroPerfil
@@ -78,6 +107,12 @@ export default async function PerfilPage() {
               statusMembership="ativo"
               lastSignIn={acesso?.last_sign_in_at ?? null}
             />
+            {souLider && (
+              <CardMinhaEquipe
+                liderados={liderados}
+                aguardandoVoce={aguardandoVoce}
+              />
+            )}
           </div>
         </div>
       </div>
@@ -99,6 +134,8 @@ export default async function PerfilPage() {
     resumoBeneficios,
     { data: linhasNfData },
     { data: documentosData },
+    equipeCountRes,
+    aguardandoCountRes,
   ] = await Promise.all([
     ehSocio
       ? Promise.resolve({ data: [] })
@@ -143,6 +180,19 @@ export default async function PerfilPage() {
       .eq("tenant_id", session.activeTenant.id)
       .eq("colaborador_id", colab.id)
       .order("uploaded_at", { ascending: false }),
+    // Cards "Minha equipe" (só renderiza quando `souLider`). RLS em
+    // `vw_equipe_do_lider` e `*_lider_select` já filtra por `auth.uid()`.
+    souLider
+      ? supabase
+          .from("vw_equipe_do_lider")
+          .select("colaborador_id", { count: "exact", head: true })
+      : Promise.resolve({ count: 0 }),
+    souLider
+      ? supabase
+          .from("colaboradores_ferias_lancamentos")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "aguardando_gestor")
+      : Promise.resolve({ count: 0 }),
   ]);
 
   const linhasQuadro = (linhasNfData ?? []) as NfPendenteQuadro[];
@@ -155,6 +205,9 @@ export default async function PerfilPage() {
     | null;
   const roleReal = membership?.role ?? (session.activeRole as AppRole);
   const statusMembership = membership?.status ?? "ativo";
+
+  const nLiderados = equipeCountRes.count ?? 0;
+  const nAguardando = aguardandoCountRes.count ?? 0;
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto">
@@ -214,6 +267,12 @@ export default async function PerfilPage() {
             statusMembership={statusMembership}
             lastSignIn={acesso?.last_sign_in_at ?? null}
           />
+          {souLider && (
+            <CardMinhaEquipe
+              liderados={nLiderados}
+              aguardandoVoce={nAguardando}
+            />
+          )}
           <CardBeneficios resumo={resumoBeneficios} />
           {colab.tipo_contratacao !== "socio" && (
             <CardDocumentos

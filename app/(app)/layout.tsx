@@ -4,7 +4,6 @@ import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { souMembroDoComite } from "@/lib/data/comite";
-import { temLiderados } from "@/lib/equipe/tem-liderados";
 import { Sidebar } from "@/components/sidebar";
 import { RastroDeNavegacao } from "@/components/voltar/rastro-de-navegacao";
 import { AvisoDeVersaoNova } from "@/components/aviso-de-versao-nova";
@@ -51,18 +50,16 @@ export default async function AppLayout({
   // sempre; os outros, se forem membros. Uma leitura curta e indexada, só
   // para quem não é administrador nem freelancer.
   const supabaseLayout = createClient();
-  const [doComite, temEquipe] = await Promise.all([
+  const doComite =
     session.activeRole === "administrador"
-      ? Promise.resolve(true)
+      ? true
       : session.activeRole !== "freelancer"
-        ? souMembroDoComite(
+        ? await souMembroDoComite(
             supabaseLayout,
             session.activeTenant.id,
             session.profile.id,
           )
-        : Promise.resolve(false),
-    temLiderados(supabaseLayout, session.profile.id, session.activeTenant.id),
-  ]);
+        : false;
 
   return (
     <div className="min-h-screen bg-background">
@@ -70,7 +67,6 @@ export default async function AppLayout({
         role={session.activeRole}
         nome={session.profile.nome}
         doComite={doComite}
-        temEquipe={temEquipe}
       />
       {/* Rastro das páginas desta aba, para o botão Voltar (decisão 108).
           Não desenha nada; o Suspense é exigência do useSearchParams. */}

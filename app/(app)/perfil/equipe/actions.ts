@@ -102,7 +102,7 @@ export async function aprovarLancamentoComoLider(
     metadata: { colaborador_id: lanc.colaborador_id },
   });
 
-  revalidatePath("/equipe");
+  revalidatePath("/perfil/equipe");
   revalidatePath("/rh/ferias");
   return { ok: true, id: lancamentoId };
 }
@@ -192,7 +192,7 @@ export async function reprovarLancamentoComoLider(
     metadata: { colaborador_id: lanc.colaborador_id, motivo },
   });
 
-  revalidatePath("/equipe");
+  revalidatePath("/perfil/equipe");
   revalidatePath("/rh/ferias");
   return { ok: true, id: lancamentoId };
 }
