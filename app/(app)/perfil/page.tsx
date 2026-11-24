@@ -20,7 +20,6 @@ import { CardDocumentos } from "./card-documentos";
 import { CardMinhasFerias } from "./card-minhas-ferias";
 import { CardMinhaEquipe } from "./card-minha-equipe";
 import { BotaoEditarPerfilCompleto } from "./botao-editar-perfil-completo";
-import { temLiderados } from "@/lib/equipe/tem-liderados";
 import type { NfPendenteQuadro } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -54,31 +53,30 @@ export default async function PerfilPage() {
   // "Minha equipe" (ex-página /equipe): só aparece pra quem é líder de ao
   // menos 1 colaborador. Checagem roda pros dois branches (colab + enxuto)
   // porque admin/rh sem colab próprio ainda pode ser líder de alguém.
-  const souLider = await temLiderados(
-    supabase,
-    session.profile.id,
-    session.activeTenant.id,
+  // Busca os IDs direto da `vw_equipe_do_lider` (filtrada por auth.uid())
+  // pra conseguir filtrar `colaboradores_ferias_lancamentos` explicitamente
+  // — a RLS daquela tabela libera tudo do tenant pra admin/rh e vazaria.
+  const { data: lideradosData } = await supabase
+    .from("vw_equipe_do_lider")
+    .select("colaborador_id");
+  const lideradoIds = (lideradosData ?? []).map(
+    (l: { colaborador_id: string }) => l.colaborador_id,
   );
+  const souLider = lideradoIds.length > 0;
 
   // Branch: usuário SEM colaborador vinculado — perfil enxuto.
   if (!colab) {
     // Se é líder, mesmo sem colab próprio, mostramos o card no lado direito.
-    // Contagem de pedidos aguardando: só consultamos se é líder.
     const aguardandoVoce = souLider
       ? (
           await supabase
             .from("colaboradores_ferias_lancamentos")
             .select("id", { count: "exact", head: true })
+            .in("colaborador_id", lideradoIds)
             .eq("status", "aguardando_gestor")
         ).count ?? 0
       : 0;
-    const liderados = souLider
-      ? (
-          await supabase
-            .from("vw_equipe_do_lider")
-            .select("colaborador_id", { count: "exact", head: true })
-        ).count ?? 0
-      : 0;
+    const liderados = lideradoIds.length;
 
     return (
       <div className="space-y-6 max-w-6xl mx-auto">
@@ -134,7 +132,6 @@ export default async function PerfilPage() {
     resumoBeneficios,
     { data: linhasNfData },
     { data: documentosData },
-    equipeCountRes,
     aguardandoCountRes,
   ] = await Promise.all([
     ehSocio
@@ -180,17 +177,14 @@ export default async function PerfilPage() {
       .eq("tenant_id", session.activeTenant.id)
       .eq("colaborador_id", colab.id)
       .order("uploaded_at", { ascending: false }),
-    // Cards "Minha equipe" (só renderiza quando `souLider`). RLS em
-    // `vw_equipe_do_lider` e `*_lider_select` já filtra por `auth.uid()`.
-    souLider
-      ? supabase
-          .from("vw_equipe_do_lider")
-          .select("colaborador_id", { count: "exact", head: true })
-      : Promise.resolve({ count: 0 }),
+    // Card "Minha equipe" (só renderiza quando `souLider`). Filtro
+    // explícito por `colaborador_id IN (lideradoIds)` — a RLS da tabela
+    // libera tudo pra admin/rh e vazaria a contagem do tenant todo.
     souLider
       ? supabase
           .from("colaboradores_ferias_lancamentos")
           .select("id", { count: "exact", head: true })
+          .in("colaborador_id", lideradoIds)
           .eq("status", "aguardando_gestor")
       : Promise.resolve({ count: 0 }),
   ]);
@@ -206,7 +200,7 @@ export default async function PerfilPage() {
   const roleReal = membership?.role ?? (session.activeRole as AppRole);
   const statusMembership = membership?.status ?? "ativo";
 
-  const nLiderados = equipeCountRes.count ?? 0;
+  const nLiderados = lideradoIds.length;
   const nAguardando = aguardandoCountRes.count ?? 0;
 
   return (

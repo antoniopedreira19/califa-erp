@@ -36,7 +36,11 @@ function fmtData(iso: string): string {
   });
 }
 
-export async function AbaFerias() {
+export async function AbaFerias({
+  lideradoIds,
+}: {
+  lideradoIds: string[];
+}) {
   const supabase = createClient();
 
   const hoje = new Date();
@@ -45,9 +49,12 @@ export async function AbaFerias() {
   daqui30.setDate(hoje.getDate() + 30);
   const daqui30ISO = daqui30.toISOString().slice(0, 10);
 
-  // A RLS `ferias_lancamentos_lider_select` libera os lançamentos dos liderados
-  // do caller; o nome vem da `vw_equipe_do_lider` (SECURITY DEFINER-like) porque
-  // a RLS da `colaboradores` é admin+rh — embed direto zeraria o resultado pro
+  // Filtro explícito por `colaborador_id IN (liderados do caller)` em vez
+  // de confiar só na RLS: a tabela tem policy que libera tudo do tenant
+  // pra `administrador` e `rh`, então admin-que-também-é-líder veria
+  // pendências de outros times sem o filtro. O nome vem da
+  // `vw_equipe_do_lider` (filtrada por auth.uid()) porque a RLS da
+  // `colaboradores` é admin+rh — embed direto zeraria o resultado pro
   // gerente_producao.
   const [pendentesRes, emFeriasRes, equipeRes] = await Promise.all([
     supabase
@@ -55,11 +62,13 @@ export async function AbaFerias() {
       .select(
         "id, data_inicio, data_fim, dias, dias_abono, tipo, observacao, colaborador_id",
       )
+      .in("colaborador_id", lideradoIds)
       .eq("status", "aguardando_gestor")
       .order("created_at", { ascending: true }),
     supabase
       .from("colaboradores_ferias_lancamentos")
       .select("id, data_inicio, data_fim, tipo, colaborador_id")
+      .in("colaborador_id", lideradoIds)
       .in("status", ["aprovado", "nf_anexada", "enviado_financeiro", "concluido"])
       // Abono puro (avulso/excepcional) é venda — não tira o colaborador de serviço.
       .in("tipo", ["usufruto", "abono_combinado"])
