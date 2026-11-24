@@ -220,27 +220,10 @@ export default async function ColaboradorFeriasPage({
   const lancsEmAndamento = lancamentos.filter((l) => idsEmAndamento.has(l.id));
   const lancsFinalizados = lancamentos.filter((l) => !idsEmAndamento.has(l.id));
 
-  // Saldo total = soma do saldo dos aquisitivos "não fechados" (apto,
-  // em curso, em alerta, vencido). O que já foi regularizado não entra.
-  // Aquisitivos futuros (data de início > hoje) ficam de fora — o
-  // colaborador ainda não tem direito ao que não começou. Isso aparece
-  // quando o gerador cria períodos 2 anos à frente.
-  const periodosQueContam = periodos.filter(
-    (p) =>
-      (p.status === "apto" ||
-        p.status === "em_alerta" ||
-        p.status === "vencido" ||
-        p.status === "incompleto") &&
-      p.aquisitivo_inicio <= hojeISO,
-  );
-  const saldoTotal = periodosQueContam.reduce((acc, p) => {
-    const ocupados = diasOcupados.get(p.id) ?? 0;
-    return acc + Math.max(p.dias_direito - ocupados, 0);
-  }, 0);
-
   // Lista de aquisitivos pra mostrar no colapsável "Períodos disponíveis".
   // Os regularizados e não habilitados ficam de fora — não têm saldo útil.
-  // Também corta aquisitivos futuros pelo mesmo motivo do saldo.
+  // Aquisitivos futuros (data de início > hoje) também não aparecem — o
+  // colaborador ainda não tem direito ao que não começou.
   const periodosDisponiveis = periodos
     .filter(
       (p) =>
@@ -275,6 +258,13 @@ export default async function ColaboradorFeriasPage({
           (ordemCtaStatus[a.status] ?? 9) - (ordemCtaStatus[b.status] ?? 9),
       )[0] ?? null;
 
+  // Saldo mostrado no hero = saldo do mesmo aquisitivo destacado no card
+  // "próximo período disponível" (prioriza vencido > alerta > apto). Somar
+  // todos os aquisitivos abertos gera número inflado (ex.: 13+30+30=73) que
+  // não reflete o que o colaborador vai efetivamente gozar agora. Os demais
+  // períodos aparecem detalhados no colapsável logo abaixo.
+  const saldoHero = proximoPeriodo?.saldo ?? 0;
+
   const salarioNum = salario?.valor != null ? Number(salario.valor) : null;
   const regionalLabel = alocacao?.usa_rateio_empresa
     ? "Rateio da empresa"
@@ -307,7 +297,7 @@ export default async function ColaboradorFeriasPage({
         data_admissao={c.data_admissao}
         email={c.email}
         status={c.status}
-        saldoDias={saldoTotal}
+        saldoDias={saldoHero}
         salario={salarioNum}
         empresa={alocacao?.empresa?.nome_fantasia ?? null}
         regional={regionalLabel}
