@@ -38,6 +38,7 @@ const ESCOPO_OPCOES: {
   { valor: "decimo_terceiro_p1", label: "13º 1ª parcela" },
   { valor: "decimo_terceiro_p2", label: "13º 2ª parcela" },
   { valor: "decimo_terceiro_adiantamento", label: "13º adiantamento" },
+  { valor: "rescisao", label: "Rescisão" },
 ];
 
 // Filtro de contratação agrupado por categoria exibida ao usuário.
@@ -68,7 +69,7 @@ const NOMES_MES = [
 // Helpers de badge
 // ---------------------------------------------------------------------------
 
-type BadgeVariant = "azul" | "verde" | "amarelo" | "roxo";
+type BadgeVariant = "azul" | "verde" | "amarelo" | "roxo" | "vermelho";
 
 function badgeVariantParaEscopo(
   escopo: PeopleAprovarItem["escopo_tipo"],
@@ -80,6 +81,7 @@ function badgeVariantParaEscopo(
     case "decimo_terceiro_p1": return "roxo";
     case "decimo_terceiro_p2": return "roxo";
     case "decimo_terceiro_adiantamento": return "roxo";
+    case "rescisao":           return "vermelho";
   }
 }
 
@@ -91,6 +93,7 @@ function labelEscopoTipo(escopo: PeopleAprovarItem["escopo_tipo"]): string {
     case "decimo_terceiro_p1": return "13º P1";
     case "decimo_terceiro_p2": return "13º P2";
     case "decimo_terceiro_adiantamento": return "13º Adiantamento";
+    case "rescisao":           return "Rescisão";
   }
 }
 
@@ -106,6 +109,7 @@ function BadgeTipo({
     verde:   "bg-emerald-100 text-emerald-800",
     amarelo: "bg-amber-100 text-amber-800",
     roxo:    "bg-violet-100 text-violet-800",
+    vermelho: "bg-red-100 text-red-800",
   };
   return (
     <span
