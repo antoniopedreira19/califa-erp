@@ -123,6 +123,7 @@ Ordem: mais recente primeiro. Cada linha aponta para um arquivo em `docs/handoff
 
 | Data | Entrega | Handoff |
 |---|---|---|
+| 2026-11-25 | Nota parcial do Novo faturamento destrava errata e "Editar planilha" (trava vira por valor). Suporta o padrão YouTube/Google (depósito progressivo + fechamento trimestral). ADR 279 + doc operacional `FATURAMENTO-PROGRESSIVO.md`. Nenhuma migration. | [2026-11-25-faturamento-progressivo-trava-por-valor.md](handoffs/2026-11-25-faturamento-progressivo-trava-por-valor.md) |
 | 2026-11-21 | Colaborador pode ter N líderes; qualquer um aprova. Tabela N:N + trigger de sync + policies/view reescritas + drawer com chips | [2026-11-21-ferias-n-lideres-por-colaborador.md](handoffs/2026-11-21-ferias-n-lideres-por-colaborador.md) |
 | 2026-11-21 | Férias com aprovação em duas etapas (líder → RH): página `/equipe` nova na sidebar, override do RH, backfill de 34% → 93% de `lider_id`, ADR 267 | [2026-11-21-ferias-fluxo-lider-rh.md](handoffs/2026-11-21-ferias-fluxo-lider-rh.md) |
 | 2026-10-28 | 13° no quadro de NF + adiantamento: parcelas PJ/CLT/híbrido no quadro de NF, adiantamentos com fluxo completo (anexar → aprovar → título), excluir adiantamento com 3 estados, People atualizado | [2026-10-28-13o-nf-fluxo.md](handoffs/2026-10-28-13o-nf-fluxo.md) |
