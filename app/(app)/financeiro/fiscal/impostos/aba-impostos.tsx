@@ -18,7 +18,6 @@ import {
   CalendarClock,
   CheckCheck,
   FileText,
-  History,
   Pencil,
   Info,
   Plus,
@@ -55,7 +54,6 @@ import {
   somaDias,
 } from "./dialogos";
 import { paraOLoteImposto } from "./lote";
-import { PagoNoHistoricoDialog } from "./pago-no-historico";
 
 type Filtro = "a_pagar" | "vencidos" | "pagos" | "todos";
 
@@ -86,8 +84,6 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
   const [cancelandoId, setCancelandoId] = React.useState<string | null>(null);
   const [corrigindoId, setCorrigindoId] = React.useState<string | null>(null);
   const [vendoId, setVendoId] = React.useState<string | null>(null);
-  // Decisão 277: a guia paga fora do sistema, com o pagamento no histórico da planilha.
-  const [historicoId, setHistoricoId] = React.useState<string | null>(null);
   const [criando, setCriando] = React.useState(false);
   /** "Criar e dar baixa": a baixa abre quando o imposto novo chega da página. */
   const [baixarDepois, setBaixarDepois] = React.useState<string | null>(null);
@@ -203,7 +199,6 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
   const cancelando = porId(cancelandoId);
   const corrigindo = porId(corrigindoId);
   const vendo = porId(vendoId);
-  const noHistorico = porId(historicoId);
 
   return (
     <div className="space-y-4">
@@ -327,7 +322,6 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
             { rotulo: "Abrir na Apuração", icone: FileText, onClick: () => router.push("/financeiro/fiscal?aba=apuracao") },
           ];
           if (estaEmAberto(t)) {
-            acoes.push({ rotulo: "Marcar como paga no histórico", icone: History, onClick: () => setHistoricoId(t.id) });
             acoes.push({ rotulo: "Corrigir o valor", icone: Pencil, onClick: () => setCorrigindoId(t.id) });
             acoes.push({ rotulo: "Cancelar o imposto", icone: XCircle, perigo: true, onClick: () => setCancelandoId(t.id) });
           }
@@ -359,8 +353,7 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
         <Info className="h-3.5 w-3.5 shrink-0" />
         A baixa é feita aqui e vai para a conciliação, rateada entre as empresas e regionais. Para pagar várias guias de uma
         vez, selecione-as. O valor da guia só muda na Apuração, onde ela é aprovada; aqui, na baixa, entram só multa e
-        juros. O olho do imposto pago abre a baixa para conferir e, se preciso, cancelar. A guia paga fora do sistema, que já
-        está no histórico da planilha, se marca como paga no histórico (nos detalhes): sai de A pagar sem lançamento.
+        juros. O olho do imposto pago abre a baixa para conferir e, se preciso, cancelar.
       </p>
 
       {baixando && (
@@ -370,10 +363,6 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
           nomesDasPJs={nomesDasPJs}
           tenantId={dados.tenantId}
           onClose={() => setBaixandoId(null)}
-          onPagoNoHistorico={() => {
-            setHistoricoId(baixando.id);
-            setBaixandoId(null);
-          }}
           onBaixado={({ mensagem }) => {
             setBaixandoId(null);
             setToast(mensagem);
@@ -416,21 +405,6 @@ export function AbaImpostos({ dados }: { dados: DadosDosImpostos }) {
           onClose={() => setCancelandoId(null)}
           onCancelado={(mensagem) => {
             setCancelandoId(null);
-            selecao.limpar();
-            setToast(mensagem);
-            router.refresh();
-          }}
-        />
-      )}
-      {noHistorico && (
-        <PagoNoHistoricoDialog
-          imposto={noHistorico}
-          contas={dados.contas}
-          nomesDasPJs={nomesDasPJs}
-          tenantId={dados.tenantId}
-          onClose={() => setHistoricoId(null)}
-          onFeito={(mensagem) => {
-            setHistoricoId(null);
             selecao.limpar();
             setToast(mensagem);
             router.refresh();

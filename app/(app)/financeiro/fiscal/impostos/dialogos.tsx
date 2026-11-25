@@ -196,7 +196,6 @@ export function BaixaImpostoDialog({
   multaInicial,
   onClose,
   onBaixado,
-  onPagoNoHistorico,
 }: {
   imposto: ImpostoDaLista;
   /** As contas ativas, sem as contas-espelho de cartão. */
@@ -212,8 +211,6 @@ export function BaixaImpostoDialog({
   multaInicial?: number;
   onClose: () => void;
   onBaixado: (feita: BaixaDeImpostoFeita) => void;
-  /** Decisão 277: troca para "Marcar como paga no histórico" (só na aba Impostos a Pagar). */
-  onPagoNoHistorico?: () => void;
 }) {
   const [pending, startTransition] = React.useTransition();
   const [data, setData] = React.useState<string>(() => dataInicial ?? hojeIso());
@@ -417,21 +414,6 @@ export function BaixaImpostoDialog({
           <RateioPrevia t={t} total={total} multaJuros={multa} />
         </div>
         <div className="flex items-center justify-end gap-2 border-t border-border pt-4">
-          {onPagoNoHistorico && (
-            <button
-              type="button"
-              onClick={() => {
-                if (pending) return;
-                guia.descartarEnviados();
-                comprovante.descartarEnviados();
-                onPagoNoHistorico();
-              }}
-              disabled={pending}
-              className="mr-auto text-left text-[12.5px] font-medium text-muted-foreground underline-offset-2 hover:text-california-red hover:underline disabled:opacity-50"
-            >
-              Já foi paga e está no histórico da planilha?
-            </button>
-          )}
           <button
             type="button"
             onClick={fechar}

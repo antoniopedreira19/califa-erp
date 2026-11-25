@@ -100,6 +100,9 @@ O inventário das 52 guias do 4º trimestre (de 01/10 a 31/12, com o valor por g
   - A trava de papel também funcionou: no meio do teste, outra sessão trocou o login do 127.0.0.1 para o GP do Sandbox, e a conferência respondeu "Apenas admin ou financeiro" (`acao_negada` no audit).
 - **Conferido na produção, só leitura:** a regra da conferência acha o ISS de 04/11 (11 linhas, R$ 175.230,82, e o de R$ 9.787,91) e o PIS/COFINS de 20/11 (R$ 42.805,20 e R$ 338.470,20, débito menos crédito).
 - Os testes de fiscal, financeiro e conciliação passam (368). `tsc` e lint estão limpos.
+- **Retirada da tela em 25/11 (Tiago).** A marca serviu para registrar, pelo Claude, os pagamentos de antes do sistema: 24 guias na produção, pagas de 05/10 a 10/11. Nenhum usuário vai marcar guia como paga no histórico, e daqui em diante o imposto se paga pelo sistema (aprovar, dar baixa, conciliar). Saíram as três entradas da tela (painel de aprovação, Guia da contabilidade, Impostos a Pagar), as ações `marcarImpostoPagoNoHistorico` e `linhasDoHistoricoNoDia`, o `pago_no_historico` de `aprovarGuia` e `lancarGuiaDaContabilidade`, e `lib/fiscal/pago-no-historico.ts`.
+  - **Ficou o que as 24 guias precisam:** a coluna, a trava, a RPC, o "no histórico" do status, o "Paga no histórico" no olho (com o desfazer), o DRE e o fluxo pelo histórico e o desconto do IOF nos mútuos.
+  - **Um caso retroativo novo** se registra pelo banco, numa migration revisada, com a mesma RPC.
 
 ## 6. Ajustes depois da carga de 23/11 (implementados)
 

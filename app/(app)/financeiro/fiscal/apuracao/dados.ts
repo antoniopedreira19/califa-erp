@@ -13,7 +13,6 @@ import {
   type Guia,
 } from "@/lib/fiscal/apuracao";
 import { formatarCnpj, regimeDaPJ, type CadastroFiscal } from "@/lib/fiscal/cadastro";
-import type { ContaDaBaixaDeImposto } from "../impostos/dados";
 import type { FiscalFeriado, FiscalParametro, RegimeTributarioPJ } from "@/lib/types";
 
 /**
@@ -142,8 +141,6 @@ export interface DadosDaApuracao {
   regrasDoRateio: RegrasDoRateioDoTenant;
   /** Decisão 277: as guias da contabilidade lançadas (fora as canceladas). */
   guiasDaContabilidade: GuiaDaContabilidade[];
-  /** Decisão 277, entrega 3: as contas que pagam guia (a "já paga no histórico" da Guia da contabilidade). */
-  contas: ContaDaBaixaDeImposto[];
   /** Falha ao ler ou calcular (a aba mostra a mensagem em vez das guias). */
   erro: string | null;
 }
@@ -210,7 +207,6 @@ function vazio(tenantId: string, hoje: string, erro: string | null): DadosDaApur
     parametros: [],
     regrasDoRateio: { empresas: [], regionalDoCnpj: {}, gerencialDoCnpj: {} },
     guiasDaContabilidade: [],
-    contas: [],
     erro,
   };
 }
@@ -283,7 +279,7 @@ function guiaDaContabilidade(c: ContabilDoBanco): GuiaDaContabilidade {
 export async function carregarApuracao(supabase: SupabaseClient, tenantId: string): Promise<DadosDaApuracao> {
   const hoje = hojeEmSaoPaulo();
   try {
-    const [fatosDoBanco, empresasRes, aprovacoesRes, semCnpjRes, membrosRes, regrasDoRateio, contabilRes, contasRes] = await Promise.all([
+    const [fatosDoBanco, empresasRes, aprovacoesRes, semCnpjRes, membrosRes, regrasDoRateio, contabilRes] = await Promise.all([
       carregarFatosFiscais(supabase, tenantId),
       supabase.from("empresas_contabeis").select("id, razao_social, nome_fantasia, de_teste").eq("tenant_id", tenantId),
       supabase
@@ -314,17 +310,7 @@ export async function carregarApuracao(supabase: SupabaseClient, tenantId: strin
         .eq("da_contabilidade", true)
         .neq("status", "cancelado")
         .order("vencimento"),
-      // As contas que pagam guia: as mesmas de Impostos a Pagar (ativas, sem a conta-espelho do cartão).
-      supabase
-        .from("contas_bancarias")
-        .select("id, nome, banco, empresa_contabil_id, saldo_inicial_data")
-        .eq("tenant_id", tenantId)
-        .eq("ativo", true)
-        .neq("tipo", "cartao_credito")
-        .order("ordem")
-        .order("nome"),
     ]);
-    if (contasRes.error) console.error("[fiscal.apuracao.contas]", contasRes.error.message);
     if (contabilRes.error) throw new Error(`[fiscal.apuracao.guias_da_contabilidade] ${contabilRes.error.message}`);
     if (empresasRes.error) throw new Error(`[fiscal.apuracao.empresas] ${empresasRes.error.message}`);
     if (aprovacoesRes.error) throw new Error(`[fiscal.apuracao.aprovacoes] ${aprovacoesRes.error.message}`);
@@ -411,7 +397,6 @@ export async function carregarApuracao(supabase: SupabaseClient, tenantId: strin
       parametros: cadastro.parametros,
       regrasDoRateio,
       guiasDaContabilidade: ((contabilRes.data ?? []) as unknown as ContabilDoBanco[]).map(guiaDaContabilidade),
-      contas: (contasRes.data ?? []) as ContaDaBaixaDeImposto[],
       erro: null,
     };
   } catch (e) {
