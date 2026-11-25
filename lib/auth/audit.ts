@@ -506,6 +506,7 @@ export type AuditAction =
   | "beneficio.vinculo.criado"
   | "beneficio.vinculo.modo_alterado"
   | "beneficio.vinculo.encerrado"
+  | "beneficio.vinculo.excluido"
   | "beneficio.dependente.criado"
   | "beneficio.dependente.editado"
   | "beneficio.dependente.desativado"
