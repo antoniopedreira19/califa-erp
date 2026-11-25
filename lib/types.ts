@@ -5608,6 +5608,24 @@ export function rescisaoStatusLabel(s: RescisaoStatus): string {
   }
 }
 
+/** Representação mínima de uma linha de `rescisoes`. Usada nos cards do
+ *  perfil do colaborador — não inclui o snapshot completo de cálculo que
+ *  a tela de /rh/rescisoes precisa. */
+export interface RescisaoResumo {
+  id: string;
+  tenant_id: string;
+  colaborador_id: string;
+  data_rescisao: string;
+  status: RescisaoStatus;
+  total_bruto: string | number | null;
+  total_liquido: string | number | null;
+  termo_quitacao_path: string | null;
+  termo_quitacao_nome: string | null;
+  termo_quitacao_tamanho_bytes: number | null;
+  termo_quitacao_uploaded_at: string | null;
+  termo_quitacao_uploaded_by: string | null;
+}
+
 /** Warnings emitidos pelo parser/importador do PDF da contabilidade. */
 export interface FolhaImportacaoWarning {
   tipo:

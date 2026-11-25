@@ -444,6 +444,9 @@ export type AuditAction =
   | "rescisao.ajuste_editado"
   | "rescisao.recalculada"
   | "rescisao.enviada_financeiro"
+  | "rescisao.termo_quitacao_anexado"
+  | "rescisao.termo_quitacao_removido"
+  | "rescisao.termo_quitacao_baixado"
   // Folha mensal (subsistema RH, 2026-09-18)
   | "folha.gerada"
   | "folha.linha.editada_rh"

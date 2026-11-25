@@ -75,6 +75,7 @@ export default async function ColaboradorDetalhePage({
     periodosFeriasRes,
     folhasRecentesRes,
     documentosRes,
+    rescisaoAtivaRes,
   ] = await Promise.all([
     supabase
       .from("colaboradores")
@@ -181,6 +182,19 @@ export default async function ColaboradorDetalhePage({
       .eq("tenant_id", session.activeTenant.id)
       .eq("colaborador_id", params.id)
       .order("uploaded_at", { ascending: false }),
+    // Rescisão ativa (não cancelada) — alimenta o CardRescisao.
+    supabase
+      .from("rescisoes")
+      .select(
+        `id, colaborador_id, data_rescisao, status, total_liquido,
+         termo_quitacao_nome, termo_quitacao_uploaded_at`,
+      )
+      .eq("tenant_id", session.activeTenant.id)
+      .eq("colaborador_id", params.id)
+      .in("status", ["rascunho", "enviada_financeiro", "paga"])
+      .order("data_rescisao", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
   ]);
 
   if (!colabRes.data) {
@@ -469,6 +483,50 @@ export default async function ColaboradorDetalhePage({
     profileNome = (profileRes.data?.nome as string | null | undefined) ?? null;
   }
 
+  // Rescisão ativa + NF anexada (escopo='rescisao'). A NF só é buscada
+  // quando a rescisão existe — seria fetch morto no Promise.all.
+  type RescisaoAtivaRaw = {
+    id: string;
+    colaborador_id: string;
+    data_rescisao: string;
+    status: "rascunho" | "enviada_financeiro" | "paga" | "cancelada";
+    total_liquido: string | number | null;
+    termo_quitacao_nome: string | null;
+    termo_quitacao_uploaded_at: string | null;
+  };
+  const rescisaoRow =
+    (rescisaoAtivaRes.data as RescisaoAtivaRaw | null) ?? null;
+  const rescisaoAtiva = rescisaoRow
+    ? {
+        id: rescisaoRow.id,
+        colaborador_id: rescisaoRow.colaborador_id,
+        data_rescisao: rescisaoRow.data_rescisao,
+        status: rescisaoRow.status,
+        total_liquido:
+          rescisaoRow.total_liquido === null
+            ? null
+            : Number(rescisaoRow.total_liquido),
+        termo_quitacao_nome: rescisaoRow.termo_quitacao_nome,
+        termo_quitacao_uploaded_at: rescisaoRow.termo_quitacao_uploaded_at,
+      }
+    : null;
+  const nfRescisaoRes = rescisaoAtiva
+    ? await supabase
+        .from("colaboradores_nf_anexos")
+        .select("id, arquivo_nome, uploaded_at")
+        .eq("tenant_id", session.activeTenant.id)
+        .eq("colaborador_id", colab.id)
+        .eq("escopo_tipo", "rescisao")
+        .eq("escopo_id", rescisaoAtiva.id)
+        .maybeSingle()
+    : { data: null };
+  const nfRescisao =
+    (nfRescisaoRes.data as {
+      id: string;
+      arquivo_nome: string;
+      uploaded_at: string;
+    } | null) ?? null;
+
   // Empresa/regional vigentes pro Hero (primeira alocação sem data_fim).
   const alocacaoVigente = alocacoes.find((a) => a.data_fim === null) ?? null;
   const empresaPrincipal = alocacaoVigente?.empresa?.nome_fantasia ?? null;
@@ -559,7 +617,11 @@ export default async function ColaboradorDetalhePage({
               anoVigente={anoNfVigente}
               mesVigente={mesNfVigente}
             />
-            <CardRescisao dataEncerramento={colab.data_encerramento} />
+            <CardRescisao
+              rescisao={rescisaoAtiva}
+              nfAnexada={nfRescisao}
+              dataEncerramento={colab.data_encerramento}
+            />
           </div>
         }
       />

@@ -76,6 +76,7 @@ function resolverEscopoFake(
     folha?: { colaborador_id: string; competencia_ano: number; competencia_mes: number };
     ferias?: { colaborador_id: string; data_inicio: string };
     decimoLinha?: { colaborador_id: string; ano: number };
+    rescisao?: { colaborador_id: string; data_rescisao: string };
   },
 ): EscopoResolvido | null {
   switch (tipo) {
@@ -119,6 +120,15 @@ function resolverEscopoFake(
         colaboradorId: dados.decimoLinha.colaborador_id,
         competenciaAno: dados.decimoLinha.ano,
         competenciaMes: 12,
+      };
+    }
+    case "rescisao": {
+      if (!dados.rescisao) return null;
+      const d = new Date(dados.rescisao.data_rescisao + "T00:00:00");
+      return {
+        colaboradorId: dados.rescisao.colaborador_id,
+        competenciaAno: d.getFullYear(),
+        competenciaMes: d.getMonth() + 1,
       };
     }
   }

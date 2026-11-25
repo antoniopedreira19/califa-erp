@@ -117,7 +117,29 @@ export async function resolverEscopo(
       return resolverDecimoTerceiroLinha(supabase, tenantId, escopoId, escopoTipo);
     case "decimo_terceiro_adiantamento":
       return resolverDecimoTerceiroAdiantamento(supabase, tenantId, escopoId);
+    case "rescisao":
+      return resolverRescisao(supabase, tenantId, escopoId);
   }
+}
+
+export async function resolverRescisao(
+  supabase: SupabaseQueryClient,
+  tenantId: string,
+  escopoId: string,
+): Promise<EscopoResolvido | null> {
+  const { data } = await supabase
+    .from("rescisoes")
+    .select("colaborador_id, data_rescisao")
+    .eq("id", escopoId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+  if (!data) return null;
+  const d = new Date((data.data_rescisao as string) + "T00:00:00");
+  return {
+    colaboradorId: data.colaborador_id as string,
+    competenciaAno: d.getFullYear(),
+    competenciaMes: d.getMonth() + 1,
+  };
 }
 
 export async function resolverDecimoTerceiroAdiantamento(
