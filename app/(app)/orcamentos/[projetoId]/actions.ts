@@ -11,6 +11,10 @@ import { orcamentoSchema } from "@/lib/validations/orcamentos";
 import { gerarCodigoOrcamento } from "@/lib/codigos/orcamentos";
 import { honorariosDoOrcamento } from "@/lib/data/clientes";
 import { modeloPlanilhaDoOrcamento } from "@/lib/data/modelo-planilha";
+import {
+  taxasAoEntrarNoInternacional,
+  type TaxasDoFechamento,
+} from "@/lib/calculos/excecao-fechamento";
 import { criarMesesDoPeriodo } from "@/lib/data/meses-versao";
 import {
   ALIQUOTA_IMPOSTO_PADRAO,
@@ -1072,6 +1076,42 @@ export async function atualizarOrcamento(
     });
   }
 
+  // Entrar no internacional (revisão da decisão 206, 25/11/2026): as
+  // versões abertas passam ao fechamento padrão e à moeda USD, como uma
+  // versão que já nasce internacional. Antes elas ficavam com as int. taxes
+  // 0% de quando eram nacionais, a aprovação barrava "fora do padrão sem
+  // exceção" e a tela não tinha como voltar ao padrão (P-0077/26-01). A
+  // versão aprovada ou cancelada não muda; o gatilho
+  // `versao_fechamento_internacional_no_padrao` aceita o padrão sem exceção.
+  if (modeloNovo === "internacional" && modeloAtual !== "internacional") {
+    const ajustadas = await levarVersoesAoPadraoInternacional(
+      supabase,
+      session.activeTenant.id,
+      orcId,
+    );
+    if (!ajustadas.ok) {
+      revalidatePath(`/orcamentos/${projetoId}/${orcId}`);
+      return {
+        ok: false,
+        message:
+          "A categoria foi trocada, mas as versões não passaram ao fechamento do internacional. Salve de novo.",
+      };
+    }
+    await logAuditEvent({
+      acao: "orcamento.modelo_planilha_trocado",
+      tenantId: session.activeTenant.id,
+      entidadeTipo: "orcamento",
+      entidadeId: orcId,
+      metadata: {
+        de: modeloAtual,
+        para: modeloNovo,
+        categoria_de: atual.categoria_id,
+        categoria_para: parsed.data.categoria_id,
+        versoes_no_padrao: ajustadas.versoes,
+      },
+    });
+  }
+
   if (conversao) {
     await logAuditEvent({
       acao: "orcamento.virou_interno",
@@ -1545,4 +1585,72 @@ export async function excluirOrcamentoVazio(
   revalidatePath(`/orcamentos/${projetoId}`);
   revalidatePath(`/orcamentos/${projetoId}/agregado`);
   return { ok: true, id: orcId };
+}
+
+/**
+ * Leva as versões abertas (nem aprovadas, nem canceladas) do orçamento ao
+ * fechamento padrão do internacional e à moeda USD quando ela está vazia.
+ * Câmbio fica em branco: a cotação é do dia (decisão 072). Devolve as
+ * versões mudadas, com o de/para, para a auditoria.
+ */
+async function levarVersoesAoPadraoInternacional(
+  supabase: ReturnType<typeof createClient>,
+  tenantId: string,
+  orcamentoId: string,
+): Promise<
+  | { ok: true; versoes: Array<{ id: string; numero: number; de: TaxasDoFechamento; para: TaxasDoFechamento }> }
+  | { ok: false }
+> {
+  const { data, error } = await supabase
+    .from("versoes_orcamento")
+    .select(
+      "id, numero_versao, status, percentual_int_taxes, percentual_imposto, int_transaction_costs, moeda_estrangeira",
+    )
+    .eq("orcamento_id", orcamentoId)
+    .eq("tenant_id", tenantId)
+    .not("status", "in", "(aprovada,cancelada)");
+  if (error) {
+    console.error("[orcamentos.atualizar.internacional]", error.message);
+    return { ok: false };
+  }
+  const versoes = (data ?? []) as Array<{
+    id: string;
+    numero_versao: number;
+    status: string;
+    percentual_int_taxes: number | string | null;
+    percentual_imposto: number | string | null;
+    int_transaction_costs: number | string | null;
+    moeda_estrangeira: string | null;
+  }>;
+
+  const mudadas: Array<{ id: string; numero: number; de: TaxasDoFechamento; para: TaxasDoFechamento }> = [];
+  for (const v of versoes) {
+    const de: TaxasDoFechamento = {
+      intTaxes: Number(v.percentual_int_taxes ?? 0),
+      imposto: Number(v.percentual_imposto ?? 0),
+      itc: Number(v.int_transaction_costs ?? 0),
+    };
+    const para = taxasAoEntrarNoInternacional(de.imposto);
+    const semMoeda = (v.moeda_estrangeira ?? "").trim() === "";
+    const taxasIguais =
+      de.intTaxes === para.intTaxes && de.imposto === para.imposto && de.itc === para.itc;
+    if (taxasIguais && !semMoeda) continue;
+
+    const { error: upErr } = await supabase
+      .from("versoes_orcamento")
+      .update({
+        percentual_int_taxes: para.intTaxes,
+        percentual_imposto: para.imposto,
+        int_transaction_costs: para.itc,
+        ...(semMoeda ? { moeda_estrangeira: "USD" } : {}),
+      })
+      .eq("id", v.id)
+      .eq("tenant_id", tenantId);
+    if (upErr) {
+      console.error("[orcamentos.atualizar.internacional]", upErr.message);
+      return { ok: false };
+    }
+    mudadas.push({ id: v.id, numero: v.numero_versao, de, para });
+  }
+  return { ok: true, versoes: mudadas };
 }
