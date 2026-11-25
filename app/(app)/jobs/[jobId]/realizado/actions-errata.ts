@@ -14,7 +14,9 @@ import {
   jobJaEnviadoParaFaturamento,
   mensagemDaPorta,
   mensagemMesJaEnviado,
+  mensagemValorAbaixoDasNotas,
   mesesEnviadosDoJob,
+  somaDasNotasEmitidasDoJob,
 } from "@/lib/data/envio-faturamento";
 import { mesesDoTrimestre, nomeDoMes, trimestreDe } from "@/lib/calculos/meses-trimestre";
 import { jobFechadoLiberado } from "@/lib/data/pagamentos-atrasados";
@@ -1386,11 +1388,20 @@ async function montarErrata(
   // faria a nota sair por um número que não é mais o do job (27/08/2026).
   // No modelo mensal (decisão 078) a porta fecha por MÊS — a conferência
   // fica mais abaixo, quando os grupos das linhas já estão lidos.
+  //
+  // Decisão 279: a nota do Novo faturamento (decisão 256) deixou de ser
+  // trava dura — ela vira trava POR VALOR, mais abaixo, depois da conta do
+  // depois. Assim o padrão do cliente que deposita conforme precisa
+  // (financeiro emite NF parcial a cada depósito, trimestre fecha depois)
+  // segue ajustável enquanto o valor do job não cair abaixo do já emitido.
+  // O envio da produção (`porta === "envio"`) continua trava dura: pela
+  // regra do Tiago (31/08/2026) o envio é definitivo.
   const mensal = planilha.modeloPlanilha === "mensal";
+  let portaDoFinanceiro = false;
   if (!mensal) {
-    // Decisão 265: a nota do Novo faturamento fecha a porta como o envio.
     const porta = await jobJaEnviadoParaFaturamento(supabase, jobId, session.activeTenant.id);
-    if (porta) return { ok: false, message: mensagemDaPorta(porta) };
+    if (porta === "envio") return { ok: false, message: mensagemDaPorta(porta) };
+    portaDoFinanceiro = porta === "financeiro";
   }
 
   // ---- Estado atual do orçado do job ----
@@ -1996,6 +2007,24 @@ async function montarErrata(
     : base;
   const depois = totaisDoFinanceiro(depoisItens, baseDepois);
   const espelhos = espelhosDe(depois);
+
+  // Decisão 279: trava por valor da NF do Novo faturamento. Com a porta do
+  // financeiro aberta (nota parcial), a errata segue desde que o valor do
+  // job não caia abaixo da soma já emitida em NF. Soma lida pela esteira
+  // (`somaDasNotasEmitidasDoJob`), que já exclui NF cancelada.
+  if (portaDoFinanceiro) {
+    const somaDasNotas = await somaDasNotasEmitidasDoJob(session.activeTenant.id, jobId);
+    if (somaDasNotas > 0.005 && depois.valorJob < somaDasNotas - 0.005) {
+      return {
+        ok: false,
+        message: mensagemValorAbaixoDasNotas(
+          "errata",
+          formatCurrency(depois.valorJob),
+          formatCurrency(somaDasNotas),
+        ),
+      };
+    }
+  }
 
   // Decisão 219: o mês novo entra com ao menos uma linha. A tela já não
   // manda o mês deixado vazio; o banco confere de novo.

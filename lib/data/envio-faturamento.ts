@@ -33,6 +33,7 @@
  *     valor do job.
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { notasEmitidasDosJobs } from "@/lib/data/faturamento-por-job";
 
 /** O que fechou a porta do faturamento: o envio do GP, ou a nota do Novo
  *  faturamento (decisão 265). `false` com a porta aberta. */
@@ -151,12 +152,49 @@ export const MENSAGEM_CONSUMO_JA_ENVIADO =
   "muda o consumo ou deixa de consumir. Gerar save continua possível até o " +
   "envio para encerramento.";
 
+/** Decisão 279: a frase da trava por valor — quando a edição faria o job
+ *  cair abaixo da soma já emitida em NF do Novo faturamento. */
+export function mensagemValorAbaixoDasNotas(
+  contexto: "errata" | "edicao",
+  valorNovo: string,
+  somaDasNotas: string,
+): string {
+  const quem = contexto === "errata" ? "Esta errata" : "Esta edição";
+  return (
+    `O financeiro já emitiu notas que somam ${somaDasNotas} sobre este job. ` +
+    `${quem} faria o valor do job cair para ${valorNovo}, abaixo do já emitido. ` +
+    `Ajuste para não deixar o job valer menos do que já foi cobrado, ou peça ` +
+    `o cancelamento da nota antes.`
+  );
+}
+
 /** A porta do consumo fechada pela nota do Novo faturamento (decisão 265). */
 export const MENSAGEM_CONSUMO_JA_FATURADO_PELO_FINANCEIRO =
   "O financeiro já faturou este job e o valor da nota está congelado: " +
   "daqui em diante nenhuma linha passa a consumir saldo de save, muda o " +
   "consumo ou deixa de consumir. Gerar save continua possível até o envio " +
   "para encerramento.";
+
+/** Decisão 279: a soma da parte do job em todas as notas emitidas sobre
+ *  ele, pela mesma leitura da esteira (`notasEmitidasDosJobs`). É o "piso"
+ *  que o valor do job não pode furar depois da primeira NF do Novo
+ *  faturamento (decisão 256) parcial: a errata da produção e o "Editar
+ *  planilha" do financeiro deixam de ser travados por "existe nota" — passam
+ *  a ser travados por "valor do job ficaria abaixo do já emitido". Assim o
+ *  padrão do YouTube (cliente deposita conforme precisa, financeiro emite NF
+ *  parcial a cada depósito, trimestre fecha depois) continua ajustável
+ *  enquanto o trimestre não fecha.
+ *
+ *  Nota cancelada não entra (a esteira já a exclui); `parte_do_job` é sempre
+ *  a parte do job na NF, nunca o total agrupado. */
+export async function somaDasNotasEmitidasDoJob(
+  tenantId: string,
+  jobId: string,
+): Promise<number> {
+  const notasPorJob = await notasEmitidasDosJobs(tenantId, [jobId]);
+  const notas = notasPorJob.get(jobId) ?? [];
+  return notas.reduce((s, n) => s + n.parte_do_job, 0);
+}
 
 /** A porta do CONSUMO de save no modelo mensal: fecha só no mês já
  *  enviado (decisão 099, 22/09/2026). */

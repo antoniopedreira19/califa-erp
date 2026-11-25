@@ -357,14 +357,28 @@ export default async function JobNoFinanceiroPage({
     situacao === "inadimplente" ||
     situacao === "recebido" ||
     (envioUnico?.faturado ?? 0) > 0.004;
+  // Decisão 279: trava DURA do orçado agora só pra envio da produção que
+  // virou NF. A nota do Novo faturamento (`envioUnico.peloFinanceiro !== null`)
+  // deixou de ser trava dura — vira trava POR VALOR no servidor
+  // (actions-alteracao-financeiro.ts): a edição grava desde que o valor do
+  // job não caia abaixo do já emitido em NF. Assim o padrão do cliente que
+  // deposita conforme precisa (NF parcial a cada depósito, trimestre fecha
+  // depois) segue ajustável enquanto o trimestre está aberto. `temNotaEmitida`
+  // continua valendo pros PARÂMETROS do job (hon./impostos/taxas), que mexem
+  // em todas as linhas e têm impacto fiscal — essa trava continua dura.
+  const envioComNf =
+    envioUnico?.envio !== undefined &&
+    envioUnico.envio !== null &&
+    envioUnico.peloFinanceiro === null &&
+    (envioUnico?.faturado ?? 0) > 0.004;
   const edicaoDoFinanceiro: EdicaoDoFinanceiro | null =
     pode(session.activeRole, "jobs.editar_orcado_financeiro") &&
     ["aberto", "em_producao", "encerrado", "finalizado"].includes(job.status)
       ? {
           travadoPor: jobEncerrado
             ? "O job já foi encerrado: o orçado não muda mais pelo financeiro."
-            : detalhe.modeloPlanilha !== "mensal" && temNotaEmitida
-              ? "O job já tem nota emitida (faturamento parcial ou total): o orçado não muda mais pelo financeiro."
+            : detalhe.modeloPlanilha !== "mensal" && envioComNf
+              ? "O job já foi enviado para faturamento e virou nota emitida: o valor da nota está congelado e o orçado não muda mais pelo financeiro."
               : null,
           mesesComNota: detalhe.faturamentoMensal
             .filter((m) => m.faturado > 0.004)

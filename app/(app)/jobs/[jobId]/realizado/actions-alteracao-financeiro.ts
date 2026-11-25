@@ -51,6 +51,8 @@ import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
+import { formatCurrency } from "@/lib/utils";
+import { mensagemValorAbaixoDasNotas } from "@/lib/data/envio-faturamento";
 import {
   CAMPOS_DO_CAMBIO,
   parametrosAtuaisDe,
@@ -465,11 +467,18 @@ async function montarAlteracao(
     ((notasDasParcelasRes.data ?? []) as any[]).map((n) => n.envio_parcela_id as string),
   );
   const envioComNota = (e: EnvioLido) => e.parcelas.some((p) => parcelasComNota.has(p.id));
-  const temNota = (notasPorJob.get(jobId)?.length ?? 0) > 0 || envios.some(envioComNota);
+  const envioComNf = envios.some(envioComNota);
+  const notasDoJob = notasPorJob.get(jobId) ?? [];
+  const temNota = notasDoJob.length > 0 || envioComNf;
 
-  if (!mensal && temNota && linhas.length > 0) return { ok: false, message: MENSAGEM_JOB_COM_NOTA };
-  // Os parâmetros mexem em todos os meses: no mensal, qualquer mês com nota
-  // também trava. O câmbio não muda conta em reais e segue editável.
+  // Decisão 279: a NF do Novo faturamento (decisão 256) deixou de ser trava
+  // dura das linhas do orçado — ela passa a travar POR VALOR, mais abaixo,
+  // depois da conta do depois. Envio da produção que já virou nota (`envioComNf`)
+  // continua trava dura, pela regra do Tiago (31/08/2026): o envio é definitivo.
+  if (!mensal && envioComNf && linhas.length > 0) return { ok: false, message: MENSAGEM_JOB_COM_NOTA };
+  // Parâmetros (hon./impostos/taxas) mexem em TODAS as linhas de todos os
+  // meses: qualquer nota ainda trava, porque o impacto fiscal é maior. O
+  // câmbio não muda conta em reais e segue editável.
   if (!naAbertura && !soCambio && temNota) return { ok: false, message: MENSAGEM_PARAMETROS_COM_NOTA };
 
   // ---- As linhas ----
@@ -684,6 +693,26 @@ async function montarAlteracao(
       : i;
   });
   const depois = totaisDoFinanceiro(itensDepois, baseDepois);
+
+  // Decisão 279: com a nota do Novo faturamento (nota do financeiro sem
+  // envio do GP) aberta parcial, a edição segue desde que o valor do job
+  // não caia abaixo da soma já emitida em NF. A trava do envio-que-virou-NF
+  // (`envioComNf`) ficou acima; aqui só mordem as notas do Novo. `notasDoJob`
+  // inclui as duas, mas quando a trava dura do envio não disparou, ela só
+  // pode ser do Novo (a esteira já exclui NF cancelada).
+  if (!mensal && !envioComNf && notasDoJob.length > 0) {
+    const somaDasNotas = notasDoJob.reduce((s, n) => s + n.parte_do_job, 0);
+    if (somaDasNotas > 0.005 && dinheiro(depois.valorJob) < somaDasNotas - 0.005) {
+      return {
+        ok: false,
+        message: mensagemValorAbaixoDasNotas(
+          "edicao",
+          formatCurrency(dinheiro(depois.valorJob)),
+          formatCurrency(somaDasNotas),
+        ),
+      };
+    }
+  }
 
   const fatAntes = dinheiro(antes.faturamentoPrevisto);
   const fatDepois = dinheiro(depois.faturamentoPrevisto);

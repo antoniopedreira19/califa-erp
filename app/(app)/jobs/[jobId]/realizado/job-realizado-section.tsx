@@ -1417,7 +1417,11 @@ function PlanilhaDoJob({
   // envio. Continua exigindo o job aberto.
   const errataLiberada =
     papelNaErrata !== null && jobAceitaAcoesPlanilha(job.status as JobStatus);
-  const podeErrata = errataLiberada && !jaEnviadoParaFaturamento && !todosOsMesesEnviados;
+  // Decisão 279: a nota do Novo faturamento (porta "financeiro") deixou de
+  // ser trava dura da errata — ela vira trava por valor no servidor. Aqui
+  // a UI só tranca em "envio" (definitivo) e nos meses mensais enviados.
+  const envioFechouOJob = jaEnviadoParaFaturamento === "envio";
+  const podeErrata = errataLiberada && !envioFechouOJob && !todosOsMesesEnviados;
 
   // "Editar orçado" do financeiro (decisão 115): até a primeira nota ou o
   // encerramento — o encerrado chega com `travadoPor`, montado pela página.
@@ -1458,9 +1462,10 @@ function PlanilhaDoJob({
       : job.status === "rejeitado_financeiro"
         ? "direto"
         : null;
-  const motivoErrataTravada = jaEnviadoParaFaturamento === "financeiro"
-    ? "Job já faturado pelo financeiro: o valor da nota está congelado e não há mais errata. Se algo estiver errado, fale com o financeiro."
-    : jaEnviadoParaFaturamento
+  // Decisão 279: a mensagem só fala em trava DURA. Com nota do Novo
+  // faturamento parcial, a errata segue — o servidor confere se o valor do
+  // job novo ficaria abaixo do já emitido e recusa só nesse caso.
+  const motivoErrataTravada = envioFechouOJob
     ? "Job já enviado para faturamento: o valor da nota está congelado e não há mais errata. Fale com o financeiro antes da emissão da nota."
     : todosOsMesesEnviados
       ? "Todos os meses do job já foram enviados para faturamento: o valor das notas está congelado e não há mais errata."
