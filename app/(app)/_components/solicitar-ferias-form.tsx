@@ -39,6 +39,10 @@ type Props = {
   periodos: PeriodoComSaldo[];
   tipoContratacao: TipoContratacao;
   modo: "colaborador" | "rh";
+  /** Modo retroativo do RH está ativo. Muda a mensagem de empty-state:
+   *  se OFF → sugere marcar retroativo; se ON → diz que o colaborador não
+   *  tem período algum cadastrado. */
+  modoRetroativoRhAtivo?: boolean;
   onSubmit: (payload: SolicitarFeriasPayload) => Promise<SolicitarFeriasResult>;
   onSucesso: () => void;
   onCancelar: () => void;
@@ -92,6 +96,7 @@ export function SolicitarFeriasForm({
   periodos,
   tipoContratacao,
   modo,
+  modoRetroativoRhAtivo = false,
   onSubmit,
   onSucesso,
   onCancelar,
@@ -286,11 +291,13 @@ export function SolicitarFeriasForm({
         <div className="space-y-1.5">
           <Label htmlFor="sff-periodo">Período aquisitivo</Label>
           {periodosDisponiveis.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
               {modo === "rh"
-                ? "Este colaborador ainda não tem período aquisitivo cadastrado. Marque \"lançamento retroativo\" ou cadastre o período antes."
+                ? modoRetroativoRhAtivo
+                  ? "Este colaborador não tem nenhum período aquisitivo cadastrado. Cadastre o período antes de lançar."
+                  : "Nenhum período aquisitivo em aberto. Marque \"Lançamento retroativo\" acima pra incluir períodos regularizados ou não habilitados."
                 : "Nenhum período com saldo disponível no momento."}
-            </p>
+            </div>
           ) : (
             <Select value={periodoId} onValueChange={setPeriodoId}>
               <SelectTrigger id="sff-periodo">

@@ -84,6 +84,7 @@ export function LancarDiretoForm({
         periodos={periodosExibidos}
         tipoContratacao={tipoContratacao}
         modo="rh"
+        modoRetroativoRhAtivo={modoRetroativo}
         onSubmit={handleSubmit}
         onSucesso={onSucesso}
         onCancelar={onFechar}

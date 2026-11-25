@@ -20,6 +20,7 @@ import type {
 import { HistoricoColapsavel } from "./historico-colapsavel";
 import { BotaoLancarDiretoCliente } from "./botao-lancar-direto";
 import { HeroColaboradorFerias } from "./hero-colaborador-ferias";
+import { formatDataAsHoraBr, formatDiaBr } from "@/lib/formatar-data-hora";
 
 export const dynamic = "force-dynamic";
 
@@ -440,7 +441,7 @@ function CardSolicitacaoAtiva({
   // data_inicio/data_fim do lançamento são sintéticas e induzem a erro.
   // Mostra "Solicitado em" com created_at no lugar do período.
   const abonoPuro = l.tipo === "abono_avulso" || l.tipo === "abono_excepcional";
-  const solicitadoEm = new Date(l.created_at).toLocaleDateString("pt-BR");
+  const solicitadoEm = formatDiaBr(l.created_at);
 
   const statusInfo: Record<
     FeriasLancamentoStatus,
@@ -566,7 +567,7 @@ function CardSolicitacaoAtiva({
             </p>
             <p className="text-[11px] text-sky-800/70">
               Anexada em{" "}
-              {new Date(nf.uploaded_at).toLocaleDateString("pt-BR")}
+              {formatDiaBr(nf.uploaded_at)}
             </p>
           </div>
         </div>
@@ -600,13 +601,9 @@ function TimelineAprovacoes({
   lancamento: ColaboradorFeriasLancamento;
   nomesAprovadores: Map<string, string>;
 }) {
-  const fmt = (iso: string) =>
-    new Date(iso).toLocaleDateString("pt-BR") +
-    " às " +
-    new Date(iso).toLocaleTimeString("pt-BR", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+  // timeZone = America/Sao_Paulo. Server roda em UTC (Vercel); sem isso, um
+  // override feito 19:45 em Brasília aparecia como 22:45.
+  const fmt = (iso: string) => formatDataAsHoraBr(iso);
 
   const temLider = Boolean(l.aprovado_pelo_lider_por && l.aprovado_pelo_lider_em);
   const temOverride = l.aprovacao_lider_override;
