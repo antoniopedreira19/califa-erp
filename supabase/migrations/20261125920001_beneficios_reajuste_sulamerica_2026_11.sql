@@ -1,27 +1,20 @@
 -- Reajuste anual SulAmerica aplicado na fatura de 11/2026.
--- Fator médio 1,0692441 (~6,924%) confirmado faixa a faixa cruzando a idade
--- real do titular PJ com o prêmio sem IOF da fatura.
+-- Fator médio 1,0692441 (~6,924%) validado faixa a faixa cruzando a idade
+-- do titular PJ com o prêmio sem IOF da fatura.
 --
--- Faixas CONFIRMADAS pela fatura 11/2026:
---   SulAmerica Direto:
---     24-28 → R$ 605,70   (5 titulares)
---     29-33 → R$ 672,34   (6 titulares)
---     34-38 → R$ 719,41   (2 titulares)
---     49-53 → R$ 1.169,15 (1 titular)
---   SulAmerica Especial:
---     24-28 → R$ 729,92
---     29-33 → R$ 810,22
---     34-38 → R$ 866,93
---     39-43 → R$ 1.005,64
---     44-48 → R$ 1.202,14
+-- Faixas CONFIRMADAS pela fatura 11/2026 (prêmio sem IOF do titular rateado,
+-- sem dependentes) — cada faixa teve múltiplos pontos batendo com o mesmo
+-- valor, exceto 49-53 Direto que teve apenas 1 ponto:
+--   SulAmerica Direto: 24-28, 29-33, 34-38, 49-53
+--   SulAmerica Especial: 24-28, 29-33, 34-38, 39-43, 44-48
 --
--- Faixas PROJETADAS (sem titular PJ para confirmar), ratio 1,0692441:
+-- Faixas PROJETADAS (sem titular PJ nessas idades na fatura), ratio 1,0692441:
 --   Direto 0-18, 19-23, 39-43, 44-48, 54-58, 59+
 --   Especial 0-18, 19-23, 49-53, 54-58, 59+
--- Reconferir no RH quando aparecer titular dessas idades.
+-- Reconferir quando aparecer titular dessas idades na próxima fatura.
 --
--- Meses 09/2026 e 10/2026 já estão fechados; as linhas congelaram os valores
--- em beneficio_fechamento_linha. Este UPDATE só afeta cálculo de 11/2026 em
+-- Meses 09/2026 e 10/2026 já estão fechados; as linhas congelaram valores em
+-- beneficio_fechamento_linha. Este UPDATE só afeta cálculo de 11/2026 em
 -- diante.
 
 do $$
