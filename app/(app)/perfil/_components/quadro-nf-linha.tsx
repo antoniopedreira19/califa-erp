@@ -11,8 +11,7 @@ import {
   Upload,
 } from "lucide-react";
 import { anexarNfPorEscopoForm } from "@/lib/nf/anexos-actions";
-import type { NfPendenteQuadro } from "@/lib/types";
-import type { NfAnexoEscopo } from "@/lib/nf/anexos-escopo";
+import type { NfPendenteQuadro, NfAnexoEscopo } from "@/lib/types";
 
 // ---------------------------------------------------------------------------
 // Helpers de exibição
@@ -36,6 +35,8 @@ function badgeVariantParaEscopo(escopo: NfAnexoEscopo): BadgeVariant {
     case "decimo_terceiro_p2":
     case "decimo_terceiro_adiantamento":
       return "roxo";
+    case "rescisao":
+      return "amarelo";
   }
 }
 
@@ -53,6 +54,8 @@ function labelEscopoTipo(escopo: NfAnexoEscopo): string {
       return "13º · 2ª parcela";
     case "decimo_terceiro_adiantamento":
       return "13º · Adiantamento";
+    case "rescisao":
+      return "Rescisão";
   }
 }
 
@@ -80,6 +83,8 @@ function tituloDoCard(linha: NfPendenteQuadro): string {
       return competencia ? `13º Salário · 2ª Parcela · ${competencia}` : "13º Salário · 2ª Parcela";
     case "decimo_terceiro_adiantamento":
       return competencia ? `13º Salário · Adiantamento · ${competencia}` : "13º Salário · Adiantamento";
+    case "rescisao":
+      return competencia ? `Rescisão · ${competencia}` : "Rescisão";
   }
 }
 
