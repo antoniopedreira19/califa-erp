@@ -212,10 +212,20 @@ export default async function ColaboradorFeriasPage({
   ]);
   const idsEmAndamento = new Set<string>();
   for (const l of lancamentos) {
+    // Abono puro é venda de dias trabalhados, não ausência — assim que
+    // concluído vai direto pro histórico, independente de data_fim
+    // (que é sintética pra determinar competência da folha). Ver
+    // commit b33c77ac — a mesma lógica já foi aplicada nos KPIs e flags.
+    const abonoPuro =
+      l.tipo === "abono_avulso" || l.tipo === "abono_excepcional";
     if (STATUS_EM_ANDAMENTO_FLUXO.has(l.status)) {
       if (l.status === "aprovado" && !lancsComFolha.has(l.id)) continue;
       idsEmAndamento.add(l.id);
-    } else if (l.status === "concluido" && l.data_fim >= hojeISO)
+    } else if (
+      l.status === "concluido" &&
+      !abonoPuro &&
+      l.data_fim >= hojeISO
+    )
       idsEmAndamento.add(l.id);
   }
   const lancsEmAndamento = lancamentos.filter((l) => idsEmAndamento.has(l.id));
