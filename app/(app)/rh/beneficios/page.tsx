@@ -126,6 +126,8 @@ export default async function BeneficiosPage({
     id: l.colaborador_id,
     nome: l.nome,
     tipo_contratacao: l.tipo_contratacao,
+    qtde_saude: l.planos_ativos.filter((p) => p.tipo === "saude").length,
+    qtde_dental: l.planos_ativos.filter((p) => p.tipo === "dental").length,
   }));
 
   return (
