@@ -22,6 +22,7 @@ import type { BeneficioCompleto } from "@/lib/queries/beneficios";
 import { coresBeneficio } from "@/lib/beneficios/cores";
 import {
   editarBeneficio,
+  removerBeneficio,
   criarFaixa,
   editarFaixa,
   removerFaixa,
@@ -255,23 +256,53 @@ export function DrawerCatalogoBeneficio({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="justify-between sm:justify-between">
           <button
             type="button"
-            onClick={onClose}
+            onClick={() => {
+              if (
+                !confirm(
+                  `Excluir o benefício "${beneficio.nome}" do catálogo? Esta ação remove as faixas de preço junto e só funciona se não houver vínculos nem fechamentos usando este benefício.`,
+                )
+              ) {
+                return;
+              }
+              setErro(null);
+              start(async () => {
+                const res = await removerBeneficio({
+                  beneficioId: beneficio.id,
+                });
+                if (!res.ok) {
+                  setErro(res.message);
+                  return;
+                }
+                onClose();
+                router.refresh();
+              });
+            }}
             disabled={pending}
-            className="rounded-md border border-border px-4 py-2 text-sm hover:bg-muted"
+            className="rounded-md border border-red-300 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
           >
-            Cancelar
+            Excluir benefício
           </button>
-          <button
-            type="button"
-            onClick={salvar}
-            disabled={pending}
-            className="rounded-md bg-california-red px-4 py-2 text-sm font-medium text-white hover:bg-california-red/90 disabled:opacity-50"
-          >
-            {pending ? "Salvando…" : "Salvar"}
-          </button>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={pending}
+              className="rounded-md border border-border px-4 py-2 text-sm hover:bg-muted"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={salvar}
+              disabled={pending}
+              className="rounded-md bg-california-red px-4 py-2 text-sm font-medium text-white hover:bg-california-red/90 disabled:opacity-50"
+            >
+              {pending ? "Salvando…" : "Salvar"}
+            </button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

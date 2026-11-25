@@ -14,6 +14,7 @@ import type { VinculoDoColaborador } from "@/lib/queries/beneficios";
 import type { BeneficioModoCusteio } from "@/lib/types";
 import { coresBeneficio } from "@/lib/beneficios/cores";
 import {
+  editarVinculo,
   encerrarVinculo,
   excluirVinculo,
   mudarModoCusteio,
@@ -106,9 +107,13 @@ function LinhaVinculo({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [mostrarMudar, setMostrarMudar] = useState(false);
+  const [mostrarEditar, setMostrarEditar] = useState(false);
   const [novoModo, setNovoModo] = useState<BeneficioModoCusteio>(
     vinculo.modo_custeio,
   );
+  const [dataInicio, setDataInicio] = useState(vinculo.data_inicio);
+  const [dataFim, setDataFim] = useState<string>(vinculo.data_fim ?? "");
+  const [observacao, setObservacao] = useState(vinculo.observacao ?? "");
   const Icon = vinculo.beneficio_tipo === "saude" ? HeartPulse : Smile;
   const cores = coresBeneficio(vinculo.beneficio_tipo);
 
@@ -144,6 +149,23 @@ function LinhaVinculo({
         alert(res.message);
         return;
       }
+      router.refresh();
+    });
+  }
+
+  function editar() {
+    start(async () => {
+      const res = await editarVinculo({
+        vinculoId: vinculo.id,
+        dataInicio,
+        dataFim: dataFim || null,
+        observacao: observacao || null,
+      });
+      if (!res.ok) {
+        alert(res.message);
+        return;
+      }
+      setMostrarEditar(false);
       router.refresh();
     });
   }
@@ -199,6 +221,14 @@ function LinhaVinculo({
           </div>
         </div>
         <div className="flex shrink-0 gap-3 text-xs">
+          <button
+            type="button"
+            onClick={() => setMostrarEditar((v) => !v)}
+            disabled={pending}
+            className="font-medium text-california-red hover:underline"
+          >
+            Editar
+          </button>
           {ativo && (
             <>
               <button
@@ -229,6 +259,69 @@ function LinhaVinculo({
           </button>
         </div>
       </div>
+      {mostrarEditar && (
+        <div className="mt-4 space-y-3 border-t border-border pt-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-foreground">
+                Data de início
+              </label>
+              <input
+                type="date"
+                value={dataInicio}
+                onChange={(e) => setDataInicio(e.target.value)}
+                className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-california-red/20"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-foreground">
+                Data de fim (opcional)
+              </label>
+              <input
+                type="date"
+                value={dataFim}
+                onChange={(e) => setDataFim(e.target.value)}
+                className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm focus:outline-none focus:ring-2 focus:ring-california-red/20"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-foreground">
+              Observação
+            </label>
+            <textarea
+              value={observacao}
+              onChange={(e) => setObservacao(e.target.value)}
+              rows={2}
+              maxLength={500}
+              className="w-full resize-none rounded-md border border-border bg-background p-2 text-sm focus:outline-none focus:ring-2 focus:ring-california-red/20"
+            />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setDataInicio(vinculo.data_inicio);
+                setDataFim(vinculo.data_fim ?? "");
+                setObservacao(vinculo.observacao ?? "");
+                setMostrarEditar(false);
+              }}
+              disabled={pending}
+              className="h-9 rounded-md border border-border px-3 text-sm"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={editar}
+              disabled={pending}
+              className="h-9 rounded-md bg-california-red px-3 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {pending ? "..." : "Salvar"}
+            </button>
+          </div>
+        </div>
+      )}
       {mostrarMudar && ativo && (
         <div className="mt-4 flex flex-wrap items-end gap-2 border-t border-border pt-4">
           <div className="flex-1 min-w-[200px]">

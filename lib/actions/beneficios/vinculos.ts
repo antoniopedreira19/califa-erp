@@ -234,6 +234,75 @@ export async function excluirVinculo(
   return { ok: true, id: parsed.data.vinculoId };
 }
 
+const editarVinculoSchema = z.object({
+  vinculoId: z.string().uuid(),
+  dataInicio: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data de início inválida."),
+  dataFim: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Data de fim inválida.")
+    .nullable(),
+  observacao: z.string().max(500).nullable(),
+});
+
+export async function editarVinculo(
+  input: z.input<typeof editarVinculoSchema>,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const bloqueio = assertRh(session.activeRole);
+  if (bloqueio) return bloqueio;
+
+  const parsed = editarVinculoSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const d = parsed.data;
+
+  if (d.dataFim && d.dataFim < d.dataInicio) {
+    return {
+      ok: false,
+      message: "Data de fim não pode ser anterior à data de início.",
+    };
+  }
+
+  const supabase = createClient();
+  const { data: vinc } = await supabase
+    .from("colaborador_beneficio")
+    .select("id, colaborador_id, beneficio_id, data_inicio, data_fim, observacao")
+    .eq("id", d.vinculoId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+  if (!vinc) return { ok: false, message: "Vínculo não encontrado." };
+
+  const { error } = await supabase
+    .from("colaborador_beneficio")
+    .update({
+      data_inicio: d.dataInicio,
+      data_fim: d.dataFim,
+      observacao: d.observacao,
+    })
+    .eq("id", d.vinculoId);
+  if (error) return { ok: false, message: `Erro ao editar: ${error.message}` };
+
+  await logAuditEvent({
+    acao: "beneficio.vinculo.editado",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "colaborador_beneficio",
+    entidadeId: d.vinculoId,
+    metadata: {
+      colaborador_id: vinc.colaborador_id,
+      beneficio_id: vinc.beneficio_id,
+      data_inicio_anterior: vinc.data_inicio,
+      data_inicio_nova: d.dataInicio,
+      data_fim_anterior: vinc.data_fim,
+      data_fim_nova: d.dataFim,
+      observacao_alterada: vinc.observacao !== d.observacao,
+    },
+  });
+
+  revalidatePath("/rh/beneficios");
+  return { ok: true, id: d.vinculoId };
+}
+
 const mudarModoSchema = z.object({
   vinculoId: z.string().uuid(),
   novoModo: z.enum([

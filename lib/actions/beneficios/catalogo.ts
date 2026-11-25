@@ -252,6 +252,56 @@ export async function editarFaixa(
   return { ok: true, id: parsed.data.faixaId };
 }
 
+const removerBeneficioSchema = z.object({ beneficioId: z.string().uuid() });
+
+export async function removerBeneficio(
+  input: z.input<typeof removerBeneficioSchema>,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const bloqueio = assertRh(session.activeRole);
+  if (bloqueio) return bloqueio;
+
+  const parsed = removerBeneficioSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const supabase = createClient();
+  const { data: benef } = await supabase
+    .from("beneficios")
+    .select("id, nome")
+    .eq("id", parsed.data.beneficioId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+  if (!benef) return { ok: false, message: "Benefício não encontrado." };
+
+  const { error } = await supabase
+    .from("beneficios")
+    .delete()
+    .eq("id", parsed.data.beneficioId);
+  if (error) {
+    if (error.code === "23503") {
+      return {
+        ok: false,
+        message:
+          "Benefício em uso: há vínculos ou fechamentos apontando pra ele. Encerre os vínculos antes de remover.",
+      };
+    }
+    return { ok: false, message: `Erro ao remover benefício: ${error.message}` };
+  }
+
+  await logAuditEvent({
+    acao: "beneficio.catalogo.removido",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "beneficios",
+    entidadeId: parsed.data.beneficioId,
+    metadata: { nome: benef.nome },
+  });
+
+  revalidatePath("/rh/beneficios");
+  return { ok: true, id: parsed.data.beneficioId };
+}
+
 const removerFaixaSchema = z.object({ faixaId: z.string().uuid() });
 
 export async function removerFaixa(
