@@ -41,8 +41,11 @@ acrescentou:
    "Responsáveis pelos jobs", ao passar o mouse na linha).
 2. **Quem troca:** o GP ou o administrador — qualquer GP, não só o do job
    (`jobs.trocar_responsaveis`). O produtor e o freelancer veem o cadeado.
-3. **Quando:** job aberto ou em produção. Antes da abertura, o GP e o
-   produtor se escolhem no envio para abertura (decisão 135); encerrado,
+3. **Quando:** enquanto o job não está congelado. Ampliado em 25/11/2026
+   para `aguardando_abertura` e `rejeitado_financeiro`: o financeiro ainda
+   não encostou no job, não faz sentido obrigar o GP a cancelar o envio e
+   refazer pelo orçamento só para trocar o Produtor Responsável. Antes dessa
+   ampliação, só `aberto` e `em_producao` aceitavam troca. Encerrado,
    finalizado e cancelado não mudam mais.
 4. **Quem pode ser o novo GP:** qualquer membro ativo com o papel GP ou
    Administrador (decisão 170). A lista mostra os GPs do projeto primeiro e
@@ -130,7 +133,26 @@ quase nunca teria para quem.
 
 ## Fica de fora
 
-- A troca do GP e do produtor em job ainda aguardando abertura: segue pelo
-  envio para abertura.
 - Tirar alguém dos GPs do projeto continua pelo "Editar projeto", em
   Orçamentos.
+
+## Ampliação de 25/11/2026 — aguardando abertura e rejeitado pelo financeiro
+
+Durante uma sessão de Tiago em um NOM-1003/26 recém-enviado, a troca do
+Produtor pela Equipe aparecia como cadeado porque o job estava em
+`aguardando_abertura`. Pela regra original, o GP teria que ir ao orçamento
+e cancelar o envio para abertura só para trocar o produtor — sem
+justificativa de negócio, porque o financeiro ainda nem tinha encostado no
+job. A regra 3 foi ampliada: a troca pela Equipe passa a aceitar também
+`aguardando_abertura` e `rejeitado_financeiro`. Mudanças:
+
+- `trocar_responsavel_do_job` (banco): removido o check explícito que exigia
+  `aberto`/`em_producao`. O portão restante barra só os três congelados
+  (`cancelado`, `encerrado`, `finalizado`). O gatilho
+  `jobs_guarda_troca_de_responsavel` já liberava escrita direta nesses dois
+  status (do próprio envio para abertura), então o portão continua coerente.
+- `JobNaEquipe.aceitaTroca` (`lib/data/equipe-do-projeto.ts`): passa a usar
+  `!jobEstaCongelado(status)` no lugar da lista de status.
+- `salvarEquipeDoProjeto` (`app/(app)/jobs/_equipe/actions.ts`): a trava do
+  servidor usa o mesmo `jobEstaCongelado`.
+- Migration: `20261125930001_trocar_responsaveis_antes_da_abertura.sql`.

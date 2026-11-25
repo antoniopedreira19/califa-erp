@@ -11,10 +11,11 @@
  * responsáveis de cada job, com a chave de cada um, e a equipe inteira.
  * GPs e produtores põem e tiram gente; quem entrou sozinho tem cadeado.
  *
- * O GP ou o administrador troca o GP e o Produtor Responsáveis de job
- * aberto ("Trocar", decisão 176), sem errata e sem o financeiro. Grava no
- * mesmo "Salvar"; a troca do produtor desliga a chave; quem sai continua
- * na equipe pelo que já o punha nela (o orçamento, o projeto).
+ * O GP ou o administrador troca o GP e o Produtor Responsáveis do job
+ * ("Trocar", decisão 176, ampliada em 25/11/2026 para aguardando_abertura e
+ * rejeitado_financeiro), sem errata e sem o financeiro. Grava no mesmo
+ * "Salvar"; a troca do produtor desliga a chave; quem sai continua na equipe
+ * pelo que já o punha nela (o orçamento, o projeto).
  */
 
 import * as React from "react";
@@ -337,7 +338,8 @@ function Responsavel({
   /** Quem estava antes da troca ainda não salva. */
   antes: PessoaDaEquipe | null;
   onDesfazer: () => void;
-  /** O "Trocar" (GP ou administrador, job aberto); sem ele, o cadeado. */
+  /** O "Trocar" (GP ou administrador, job que ainda não foi congelado);
+   *  sem ele, o cadeado. */
   trocar: React.ReactNode | null;
   children?: React.ReactNode;
 }) {

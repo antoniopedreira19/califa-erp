@@ -14,9 +14,10 @@ import { jobEstaCongelado, type JobStatus } from "@/lib/types";
  * Grava três coisas, cada uma com o seu papel:
  *  - quem está na Equipe do projeto (os acréscimos manuais, papel
  *    `equipe`): GPs e produtores (`projetos.editar_equipe`);
- *  - a troca do GP e do Produtor Responsáveis de job aberto (decisão 176):
- *    só GP e administrador (`jobs.trocar_responsaveis`), e o banco confere
- *    de novo (`trocar_responsavel_do_job`) — o GP de fora entra nos GPs do
+ *  - a troca do GP e do Produtor Responsáveis do job (decisão 176, ampliada
+ *    em 25/11/2026 para `aguardando_abertura` e `rejeitado_financeiro`): só
+ *    GP e administrador (`jobs.trocar_responsaveis`), e o banco confere de
+ *    novo (`trocar_responsavel_do_job`) — o GP de fora entra nos GPs do
  *    projeto, e a troca do produtor desliga a chave;
  *  - a chave do envio de PP pelo Produtor Responsável de cada job: só GP e
  *    administrador (`jobs.liberar_envio_pp_produtor`), e o banco confere de
@@ -120,8 +121,8 @@ export async function salvarEquipeDoProjeto(
   }>;
   const jobPorId = new Map(jobs.map((j) => [j.id, j]));
 
-  // As trocas que mudam alguém (decisão 176). Só job aberto ou em produção:
-  // antes da abertura, o GP e o produtor mudam no envio para abertura.
+  // As trocas que mudam alguém (decisão 176, ampliada em 25/11/2026):
+  // encerrado, finalizado e cancelado não aceitam troca.
   const trocas = parsed.data.trocas.filter((t) => {
     const j = jobPorId.get(t.jobId);
     return j && (t.papel === "gp" ? j.responsavel_id : j.produtor_id) !== t.para;
@@ -132,14 +133,13 @@ export async function salvarEquipeDoProjeto(
       message: "Um dos jobs não é deste projeto. Recarregue a página.",
     };
   }
-  const semTroca = trocas.find((t) => {
-    const status = jobPorId.get(t.jobId)!.status;
-    return status !== "aberto" && status !== "em_producao";
-  });
+  const semTroca = trocas.find((t) =>
+    jobEstaCongelado(jobPorId.get(t.jobId)!.status),
+  );
   if (semTroca) {
     return {
       ok: false,
-      message: `Os responsáveis do ${jobPorId.get(semTroca.jobId)!.codigo} não mudam mais: o job não está aberto.`,
+      message: `Os responsáveis do ${jobPorId.get(semTroca.jobId)!.codigo} não mudam mais: o job já foi encerrado.`,
     };
   }
   // A troca do produtor desliga a chave no banco: o que o "Salvar" pede

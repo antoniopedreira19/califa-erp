@@ -54,8 +54,11 @@ export interface JobNaEquipe {
   ppsProntas: string[];
   /** Encerrado ou finalizado: não sai mais PP, e a chave fica parada. */
   congelado: boolean;
-  /** Aberto ou em produção: o GP e o produtor se trocam pela Equipe
-   *  (decisão 176). Antes da abertura, eles mudam no envio para abertura. */
+  /** O GP e o produtor se trocam pela Equipe enquanto o job não está
+   *  congelado (decisão 176, ampliada em 25/11/2026 para aguardando_abertura
+   *  e rejeitado_financeiro: o financeiro ainda não abriu, não faz sentido
+   *  obrigar o GP a cancelar o envio e refazer pelo orçamento só para trocar
+   *  o produtor). */
   aceitaTroca: boolean;
 }
 
@@ -251,8 +254,9 @@ export async function carregarEquipeDoProjeto(
       ppsProntas: prontasPorJob.get(j.id) ?? [],
       congelado: jobEstaCongelado(j.status),
       // Decisão 266: o job de pagamentos não tem GP nem produtor (o banco
-      // recusa pôr um).
-      aceitaTroca: (j.status === "aberto" || j.status === "em_producao") && j.de_pagamentos !== true,
+      // recusa pôr um). Congelado (encerrado, finalizado, cancelado) também
+      // não aceita troca — jobEstaCongelado cobre os três.
+      aceitaTroca: !jobEstaCongelado(j.status) && j.de_pagamentos !== true,
     })),
     acrescimos,
     candidatos: ativos.filter((p) => !motivos.has(p.id)),
