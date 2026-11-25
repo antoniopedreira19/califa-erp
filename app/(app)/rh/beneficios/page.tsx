@@ -18,6 +18,7 @@ import { FiltrosQuadro } from "./_components/filtros-quadro";
 import { TabelaColaboradores } from "./_components/tabela-colaboradores";
 import { TabCatalogo } from "./_components/tab-catalogo";
 import { TabFechamentos } from "./_components/tab-fechamentos";
+import { BotaoAdicionarBeneficiario } from "./_components/botao-adicionar-beneficiario";
 
 export const dynamic = "force-dynamic";
 
@@ -120,6 +121,13 @@ export default async function BeneficiosPage({
         : Promise.resolve([] as number[]),
     ]);
 
+  const linhasComBeneficios = linhas.filter((l) => l.planos_ativos.length > 0);
+  const colaboradoresParaPicker = linhas.map((l) => ({
+    id: l.colaborador_id,
+    nome: l.nome,
+    tipo_contratacao: l.tipo_contratacao,
+  }));
+
   return (
     <div className="space-y-6 max-w-[1480px] mx-auto">
       <BotaoVoltar reserva="/rh" />
@@ -127,6 +135,15 @@ export default async function BeneficiosPage({
         title="Gestão de Benefícios"
         description="Planos de saúde, dental e dependentes dos colaboradores. Custo mensal calculado por faixa etária e modo de custeio."
         icon={ShieldPlus}
+        topActions={
+          tab === "quadro" ? (
+            <BotaoAdicionarBeneficiario
+              colaboradores={colaboradoresParaPicker}
+              ano={ano}
+              mes={mes}
+            />
+          ) : undefined
+        }
       />
 
       {/* Tabs */}
@@ -170,7 +187,7 @@ export default async function BeneficiosPage({
               .map((b) => ({ id: b.id, nome: b.nome }))}
           />
           <KpisBeneficios kpis={kpis} />
-          <TabelaColaboradores linhas={linhas} ano={ano} mes={mes} />
+          <TabelaColaboradores linhas={linhasComBeneficios} ano={ano} mes={mes} />
         </div>
       )}
 
