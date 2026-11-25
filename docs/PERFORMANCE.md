@@ -278,6 +278,24 @@ Case studies documentam decisões erradas. Sempre atualizar aqui quando algo tra
 
 **Aprendizado:** embed de nome (`responsavel:profiles!…(nome)`) parece barato, mas passa pela policy de `profiles` em cada linha; numa lista com 8 nomes por item, é a policy dela que pesa. Quando um caminho da regra não aparece nos dados reais, prove por tabela-verdade.
 
+### 8. Memory commitment SEVERE e `work_mem` baixo demais para as views pesadas (nov/2026)
+
+**Sintoma:** uma produtora (produtora) relatando travamento recorrente ao usar Pedidos de Compra; o dashboard do Supabase marcando **Memory commitment SEVERE** com picos acima do limite e **Disk IO Balance 99%**. Nos logs, nada do lado dela: 3.633 requisições/dia, todas `2xx`, p95 ~200 ms — mas `storage.search` subindo para **20 s** em momentos de pico. Compute Small (2 GB RAM, 2 GB disk gp3), em sa-east-1.
+
+**Diagnóstico:** `pg_stat_database` mostrava **1.287 GB em temp files acumulados** e **295.919 arquivos temporários** criados desde julho/2026. Cache hit ratio 100% (índices OK), pool folgado (6/90). O gargalo não era índice nem conexão: era `work_mem = 5 MB`, pequeno demais para as views e funções pesadas (`vw_saves_por_job`, `saldos_dos_dias_em_aberto` lendo 53 M blocos em 1.549 chamadas, `orcamento_esta_vazio` com máx 5,17 s). Cada vez que uma dessas query precisava de mais de 5 MB para sort/hash, o Postgres despejava o resultado parcial em disco — operação ~1000× mais lenta que RAM. Isso saturava os 3.000 IOPS do gp3, puxando o Disk IO Balance para 99%, e qualquer ação da uma produtora que passasse por `storage.search` + RLS + RPCs (abrir pedido de compra, visualizar anexos) congelava o browser. O pico de SSR dela (1.587 hits/h) não era anômalo (outros usuários faziam 3.247/h e não reclamavam), mas o fluxo dela concentrava as queries que mais dependem de `work_mem`.
+
+**Fix:** ADR [278](decisions/278-work-mem-e-plano-de-mitigacao-memory-pressure.md). Etapa 1 aplicada em 2026-11-25:
+
+```sql
+alter database postgres set work_mem = '8MB';
+```
+
+Via MCP com o role `postgres`. `ALTER SYSTEM` é bloqueado pelo Supabase gerenciado (`42501: permission denied`); `ALTER DATABASE postgres` passa e persiste em `pg_db_role_setting`, aplicando-se a toda conexão nova. Zero downtime. Pior caso teórico de RAM: 90 × 8 × 2 = 1,44 GB em 2 GB, com margem. Baseline gravado (295.919 temp files, 1.287 GB, 15,28 M transações) para reavaliar em 24-48 h. Etapas 2-5 do plano (otimizar `saldos_dos_dias_em_aberto`, `orcamento_esta_vazio`, `trava_do_cancelamento_do_job`; materializar `vw_saves_por_job`; agregar RPCs do dashboard de job) ficam em aberto. Upgrade de compute para Medium (+~$60/mês, 4 GB RAM) fica reservado para quando couber ou se a Opção A não for suficiente.
+
+**Aprendizado:** antes de concluir que "é o navegador da usuária" ou "é a máquina do Supabase", olhe `pg_stat_database.temp_bytes` e `temp_files` e compare com `work_mem`. Se o acumulado estiver na casa dos gigabytes em semanas, o `work_mem` está subdimensionado para o workload — mesmo que o "Memory usage" no dashboard pareça OK na média, os picos são em ops de sort/hash, não no uso constante. `ALTER SYSTEM` não funciona no Supabase gerenciado: use `ALTER DATABASE` ou o painel. E `Disk IO Balance` acima de 90% no dashboard é o alerta precoce de temp files saturando o gp3 — não espere o cliente reclamar.
+
+Regra operacional nova: **scripts `do $f$` de auditoria que impersonam usuários e fazem `hashtext` em todas as tabelas** (como o visto em `pg_stat_statements` que levou 87 s) **não rodam em horário comercial**. Trava o DB enquanto executa.
+
 ---
 
 ## Anti-padrões proibidos

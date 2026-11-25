@@ -289,6 +289,7 @@ pela 024, 025, 026 e 027), e mover a raiz arrasta todas.
 | 275 | [Mídia Off, entrega 5: planejado e realizado (encerrar antes, estender)](275-midia-off-planejado-e-realizado.md) | 2026-11-23 |
 | 276 | [A NF presa ao job da planilha e a carga das NFs da planilha](276-nf-presa-ao-job-da-planilha.md) | 2026-11-23 |
 | 277 | [A Apuração por CNPJ e o ajuste pela contabilidade (o 4º trimestre inteiro no sistema) (revê a 181 e a 183)](277-apuracao-por-cnpj-e-ajuste-pela-contabilidade.md) | 2026-11-23 |
+| 278 | [`work_mem` 5 → 8 MB e plano de mitigação do Memory commitment SEVERE sem subir compute](278-work-mem-e-plano-de-mitigacao-memory-pressure.md) | 2026-11-25 |
 | 279 | [Nota parcial do Novo faturamento destrava edição do orçado (trava passa a ser por valor)](279-nota-parcial-do-novo-faturamento-destrava-edicao-por-valor.md) | 2026-11-25 |
 
 > A 028 é de 24/08 e vem depois da 027, de 26/08: ela nasceu como 023, em
