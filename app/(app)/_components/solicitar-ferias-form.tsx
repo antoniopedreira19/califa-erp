@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select";
 import type {
   ColaboradorFeriasPeriodo,
+  FeriasPeriodoStatus,
   TipoContratacao,
 } from "@/lib/types";
 import { reconciliarPeriodoSelecionado } from "@/lib/ferias/reconciliar-periodo-selecionado";
@@ -73,6 +74,20 @@ function hojeIso(): string {
   return d.toISOString().slice(0, 10);
 }
 
+const ROTULO_STATUS: Record<FeriasPeriodoStatus, string> = {
+  incompleto: "em curso",
+  apto: "apto",
+  em_alerta: "em alerta",
+  vencido: "vencido",
+  regularizado: "regularizado",
+  nao_habilitado: "não habilitado",
+  pago_rescisao: "pago em rescisão",
+};
+
+function rotuloStatus(status: FeriasPeriodoStatus): string {
+  return ROTULO_STATUS[status] ?? status;
+}
+
 export function SolicitarFeriasForm({
   periodos,
   tipoContratacao,
@@ -85,9 +100,13 @@ export function SolicitarFeriasForm({
   const [erro, setErro] = React.useState<string | null>(null);
   const [erros, setErros] = React.useState<Record<string, string[]>>({});
 
-  const periodosDisponiveis = periodos.filter((p) => p.saldo > 0);
+  // Modo RH enxerga até períodos sem saldo (lançamento histórico/antecipado,
+  // RH confere e assume). Colaborador só pode escolher período com saldo > 0
+  // porque o servidor também bloqueia (ver solicitarFerias em perfil/actions).
+  const periodosDisponiveis =
+    modo === "rh" ? periodos : periodos.filter((p) => p.saldo > 0);
   const permiteAbonoAvulso = tipoContratacao === "pj";
-  const permiteCombinado = periodosDisponiveis.length > 0;
+  const permiteCombinado = periodosDisponiveis.some((p) => p.saldo > 0);
 
   const cardsVisiveis = CARDS.filter((c) => {
     if (c.tipo === "abono_avulso") return permiteAbonoAvulso;
@@ -134,10 +153,19 @@ export function SolicitarFeriasForm({
 
   const diasConsumidosDoSaldo =
     tipo === "abono_combinado" ? qtdDias + diasAbono : qtdDias;
+  // No modo RH, saldo insuficiente vira aviso informativo — não trava submit.
+  // O RH pode lançar retroativo em período já regularizado/sem saldo escritural.
+  // No modo colaborador, trava por segurança (server também rejeita).
   const excedeSaldo =
     tipo !== "abono_avulso" &&
     diasConsumidosDoSaldo > saldoDisponivel &&
-    saldoDisponivel > 0;
+    saldoDisponivel > 0 &&
+    modo === "colaborador";
+  const avisoSaldoRh =
+    modo === "rh" &&
+    tipo !== "abono_avulso" &&
+    !!periodoAtivo &&
+    diasConsumidosDoSaldo > saldoDisponivel;
 
   const dataFimCalculada = React.useMemo(
     () => calcularDataFim(dataInicio, qtdDias),
@@ -259,7 +287,9 @@ export function SolicitarFeriasForm({
           <Label htmlFor="sff-periodo">Período aquisitivo</Label>
           {periodosDisponiveis.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Nenhum período com saldo disponível no momento.
+              {modo === "rh"
+                ? "Este colaborador ainda não tem período aquisitivo cadastrado. Marque \"lançamento retroativo\" ou cadastre o período antes."
+                : "Nenhum período com saldo disponível no momento."}
             </p>
           ) : (
             <Select value={periodoId} onValueChange={setPeriodoId}>
@@ -269,7 +299,7 @@ export function SolicitarFeriasForm({
               <SelectContent>
                 {periodosDisponiveis.map((p) => (
                   <SelectItem key={p.id} value={p.id}>
-                    {`#${p.numero} · ${p.aquisitivo_inicio.slice(0, 4)}/${p.aquisitivo_fim.slice(0, 4)}`}
+                    {`#${p.numero} · ${p.aquisitivo_inicio.slice(0, 4)}/${p.aquisitivo_fim.slice(0, 4)} · ${p.saldo} ${p.saldo === 1 ? "dia" : "dias"}${modo === "rh" ? ` · ${rotuloStatus(p.status)}` : ""}`}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -282,6 +312,11 @@ export function SolicitarFeriasForm({
                 <span className="text-california-red">
                   {saldoDisponivel} {saldoDisponivel === 1 ? "dia" : "dias"}
                 </span>
+                {modo === "rh" && (
+                  <span className="ml-2 text-muted-foreground">
+                    ({rotuloStatus(periodoAtivo.status)})
+                  </span>
+                )}
               </span>
               {periodoAtivo.data_limite_gozo && (
                 <span className="text-muted-foreground">
@@ -292,6 +327,14 @@ export function SolicitarFeriasForm({
                 </span>
               )}
             </div>
+          )}
+          {avisoSaldoRh && (
+            <p className="text-xs text-amber-700">
+              Atenção: o total consumido ({diasConsumidosDoSaldo} dias)
+              ultrapassa o saldo deste período ({saldoDisponivel} dias). Lance
+              assim mesmo se for um registro retroativo ou antecipação combinada
+              com o colaborador.
+            </p>
           )}
           {erros.periodo_id && (
             <p className="text-xs text-red-600">{erros.periodo_id[0]}</p>

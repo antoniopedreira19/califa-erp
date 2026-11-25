@@ -60,10 +60,17 @@ export function CardMinhasFerias({
       p.status === "vencido",
   );
 
-  // Saldo exibido no hero = dias que o colaborador ainda pode solicitar
-  // em períodos aptos ou em alerta.
+  // Saldo exibido no hero = dias que o colaborador ainda pode solicitar.
+  // Inclui vencido porque o colaborador ainda pode gozar/vender dias de um
+  // período vencido (CLT art. 137: mesmo após o concessivo, direito persiste;
+  // perder direito nunca é automático). Server também aceita vencido.
   const periodosComSaldo = periodos
-    .filter((p) => p.status === "apto" || p.status === "em_alerta")
+    .filter(
+      (p) =>
+        p.status === "apto" ||
+        p.status === "em_alerta" ||
+        p.status === "vencido",
+    )
     .map((p) => ({
       ...p,
       saldo: Math.max(

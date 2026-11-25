@@ -32,21 +32,25 @@ export function LancarDiretoForm({
 }: Props) {
   const [modoRetroativo, setModoRetroativo] = React.useState(false);
 
-  // Default: só períodos acionáveis hoje (apto/em_alerta/vencido) com saldo > 0.
-  // Modo retroativo: inclui regularizados (lançamento histórico).
+  // Default: períodos acionáveis hoje (apto/em_alerta/vencido/incompleto),
+  // independente de saldo — o RH enxerga tudo e decide. Útil pra lançar
+  // férias antecipadas em quem ainda está no primeiro aquisitivo.
+  // Modo retroativo: inclui regularizados e não habilitados (lançamento
+  // histórico de períodos passados que o sistema ainda não enxerga como
+  // ativos).
   const periodosExibidos = React.useMemo(() => {
     const ativos = periodosComSaldo.filter(
       (p) =>
-        (p.status === "apto" ||
-          p.status === "em_alerta" ||
-          p.status === "vencido") &&
-        p.saldo > 0,
+        p.status === "apto" ||
+        p.status === "em_alerta" ||
+        p.status === "vencido" ||
+        p.status === "incompleto",
     );
     if (!modoRetroativo) return ativos;
-    const regularizados = periodosComSaldo.filter(
-      (p) => p.status === "regularizado",
+    const historicos = periodosComSaldo.filter(
+      (p) => p.status === "regularizado" || p.status === "nao_habilitado",
     );
-    return [...ativos, ...regularizados];
+    return [...ativos, ...historicos];
   }, [periodosComSaldo, modoRetroativo]);
 
   async function handleSubmit(payload: SolicitarFeriasPayload) {
@@ -73,7 +77,7 @@ export function LancarDiretoForm({
           onCheckedChange={(v) => setModoRetroativo(v === true)}
         />
         <History className="h-3.5 w-3.5" />
-        Lançamento retroativo (inclui períodos já regularizados)
+        Lançamento retroativo (inclui períodos regularizados e não habilitados)
       </label>
 
       <SolicitarFeriasForm
