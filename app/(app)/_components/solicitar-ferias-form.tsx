@@ -22,7 +22,9 @@ import { reconciliarPeriodoSelecionado } from "@/lib/ferias/reconciliar-periodo-
 
 export type SolicitarFeriasPayload = {
   tipo: "usufruto" | "abono_avulso" | "abono_combinado";
-  periodo_id: string | null;
+  /** Obrigatório em qualquer tipo — a venda/usufruto sempre sai de um
+   *  aquisitivo. Ver migration 20261125800001. */
+  periodo_id: string;
   data_inicio: string;
   data_fim: string;
   dias_abono: number;
@@ -126,7 +128,6 @@ export function SolicitarFeriasForm({
 
   // Reconcilia periodoId se a lista mudar (ex: RH alterna "modo retroativo").
   React.useEffect(() => {
-    if (tipo === "abono_avulso") return;
     const reconciliado = reconciliarPeriodoSelecionado(
       periodosDisponiveis,
       periodoId,
@@ -134,7 +135,7 @@ export function SolicitarFeriasForm({
     if (reconciliado !== periodoId) {
       setPeriodoId(reconciliado);
     }
-  }, [periodosDisponiveis, periodoId, tipo]);
+  }, [periodosDisponiveis, periodoId]);
 
   const [qtdDias, setQtdDias] = React.useState<number>(0);
   const [dataInicio, setDataInicio] = React.useState<string>("");
@@ -143,9 +144,7 @@ export function SolicitarFeriasForm({
 
   function trocarTipo(novo: CardTipo) {
     setTipo(novo);
-    setPeriodoId(
-      novo === "abono_avulso" ? "" : periodosDisponiveis[0]?.id ?? "",
-    );
+    setPeriodoId(periodosDisponiveis[0]?.id ?? "");
     setQtdDias(0);
     setDataInicio("");
     setDiasAbono(novo === "abono_combinado" ? 1 : 0);
@@ -162,13 +161,11 @@ export function SolicitarFeriasForm({
   // O RH pode lançar retroativo em período já regularizado/sem saldo escritural.
   // No modo colaborador, trava por segurança (server também rejeita).
   const excedeSaldo =
-    tipo !== "abono_avulso" &&
     diasConsumidosDoSaldo > saldoDisponivel &&
     saldoDisponivel > 0 &&
     modo === "colaborador";
   const avisoSaldoRh =
     modo === "rh" &&
-    tipo !== "abono_avulso" &&
     !!periodoAtivo &&
     diasConsumidosDoSaldo > saldoDisponivel;
 
@@ -196,7 +193,7 @@ export function SolicitarFeriasForm({
 
       const payload: SolicitarFeriasPayload = {
         tipo,
-        periodo_id: tipo === "abono_avulso" ? null : periodoId || null,
+        periodo_id: periodoId,
         data_inicio: inicioEnvio,
         data_fim: fimEnvio,
         dias_abono: tipo === "abono_combinado" ? diasAbono : 0,
@@ -229,7 +226,7 @@ export function SolicitarFeriasForm({
     qtdDias <= 0 ||
     (tipo !== "abono_avulso" && !dataInicio) ||
     (tipo === "abono_combinado" && diasAbono < 1) ||
-    (tipo !== "abono_avulso" && !periodoId) ||
+    !periodoId ||
     excedeSaldo;
 
   const labelSubmit =
@@ -286,68 +283,72 @@ export function SolicitarFeriasForm({
         </div>
       </div>
 
-      {/* Período aquisitivo — vem antes do input de dias pra mostrar o saldo */}
-      {tipo !== "abono_avulso" && (
-        <div className="space-y-1.5">
-          <Label htmlFor="sff-periodo">Período aquisitivo</Label>
-          {periodosDisponiveis.length === 0 ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
-              {modo === "rh"
-                ? modoRetroativoRhAtivo
-                  ? "Este colaborador não tem nenhum período aquisitivo cadastrado. Cadastre o período antes de lançar."
-                  : "Nenhum período aquisitivo em aberto. Marque \"Lançamento retroativo\" acima pra incluir períodos regularizados ou não habilitados."
-                : "Nenhum período com saldo disponível no momento."}
-            </div>
-          ) : (
-            <Select value={periodoId} onValueChange={setPeriodoId}>
-              <SelectTrigger id="sff-periodo">
-                <SelectValue placeholder="Escolha o período" />
-              </SelectTrigger>
-              <SelectContent>
-                {periodosDisponiveis.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {`#${p.numero} · ${p.aquisitivo_inicio.slice(0, 4)}/${p.aquisitivo_fim.slice(0, 4)} · ${p.saldo} ${p.saldo === 1 ? "dia" : "dias"}${modo === "rh" ? ` · ${rotuloStatus(p.status)}` : ""}`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-          {periodoAtivo && (
-            <div className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-2 text-xs">
-              <span className="font-medium">
-                Saldo disponível:{" "}
-                <span className="text-california-red">
-                  {saldoDisponivel} {saldoDisponivel === 1 ? "dia" : "dias"}
-                </span>
-                {modo === "rh" && (
-                  <span className="ml-2 text-muted-foreground">
-                    ({rotuloStatus(periodoAtivo.status)})
-                  </span>
-                )}
+      {/* Período aquisitivo — SEMPRE presente (inclusive abono_avulso).
+          Toda venda ou gozo sai de um aquisitivo, por decisão de produto
+          de 2026-11-25 (ver migration 20261125800001). */}
+      <div className="space-y-1.5">
+        <Label htmlFor="sff-periodo">
+          {tipo === "abono_avulso"
+            ? "De qual período aquisitivo vêm os dias vendidos?"
+            : "Período aquisitivo"}
+        </Label>
+        {periodosDisponiveis.length === 0 ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            {modo === "rh"
+              ? modoRetroativoRhAtivo
+                ? "Este colaborador não tem nenhum período aquisitivo cadastrado. Cadastre o período antes de lançar."
+                : "Nenhum período aquisitivo em aberto. Marque \"Lançamento retroativo\" acima pra incluir períodos regularizados ou não habilitados."
+              : "Nenhum período com saldo disponível no momento."}
+          </div>
+        ) : (
+          <Select value={periodoId} onValueChange={setPeriodoId}>
+            <SelectTrigger id="sff-periodo">
+              <SelectValue placeholder="Escolha o período" />
+            </SelectTrigger>
+            <SelectContent>
+              {periodosDisponiveis.map((p) => (
+                <SelectItem key={p.id} value={p.id}>
+                  {`#${p.numero} · ${p.aquisitivo_inicio.slice(0, 4)}/${p.aquisitivo_fim.slice(0, 4)} · ${p.saldo} ${p.saldo === 1 ? "dia" : "dias"}${modo === "rh" ? ` · ${rotuloStatus(p.status)}` : ""}`}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {periodoAtivo && (
+          <div className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-2 text-xs">
+            <span className="font-medium">
+              Saldo disponível:{" "}
+              <span className="text-california-red">
+                {saldoDisponivel} {saldoDisponivel === 1 ? "dia" : "dias"}
               </span>
-              {periodoAtivo.data_limite_gozo && (
-                <span className="text-muted-foreground">
-                  Precisa começar até{" "}
-                  {new Date(
-                    periodoAtivo.data_limite_gozo + "T00:00:00",
-                  ).toLocaleDateString("pt-BR")}
+              {modo === "rh" && (
+                <span className="ml-2 text-muted-foreground">
+                  ({rotuloStatus(periodoAtivo.status)})
                 </span>
               )}
-            </div>
-          )}
-          {avisoSaldoRh && (
-            <p className="text-xs text-amber-700">
-              Atenção: o total consumido ({diasConsumidosDoSaldo} dias)
-              ultrapassa o saldo deste período ({saldoDisponivel} dias). Lance
-              assim mesmo se for um registro retroativo ou antecipação combinada
-              com o colaborador.
-            </p>
-          )}
-          {erros.periodo_id && (
-            <p className="text-xs text-red-600">{erros.periodo_id[0]}</p>
-          )}
-        </div>
-      )}
+            </span>
+            {periodoAtivo.data_limite_gozo && (
+              <span className="text-muted-foreground">
+                Precisa começar até{" "}
+                {new Date(
+                  periodoAtivo.data_limite_gozo + "T00:00:00",
+                ).toLocaleDateString("pt-BR")}
+              </span>
+            )}
+          </div>
+        )}
+        {avisoSaldoRh && (
+          <p className="text-xs text-amber-700">
+            Atenção: o total consumido ({diasConsumidosDoSaldo} dias)
+            ultrapassa o saldo deste período ({saldoDisponivel} dias). Lance
+            assim mesmo se for um registro retroativo ou antecipação combinada
+            com o colaborador.
+          </p>
+        )}
+        {erros.periodo_id && (
+          <p className="text-xs text-red-600">{erros.periodo_id[0]}</p>
+        )}
+      </div>
 
       {/* Qtd dias (+ datas, quando aplicável) */}
       {tipo === "abono_avulso" ? (

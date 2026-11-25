@@ -97,7 +97,7 @@ export default async function ColaboradoresPage() {
     supabase
       .from("colaboradores")
       .select(
-        "id, nome, tipo_contratacao, funcao, status, data_admissao, data_encerramento, cpf, cnpj, email, telefone, nivel_id, data_nascimento, area, banco_codigo, agencia, conta, conta_dv, tipo_conta, pix_chave, user_id, perfil_completado_em, nivel:niveis(id, codigo)",
+        "id, nome, tipo_contratacao, funcao, status, data_admissao, data_encerramento, cpf, cnpj, email, telefone, nivel_id, data_nascimento, area, banco_codigo, agencia, conta, conta_dv, tipo_conta, pix_chave, user_id, perfil_completado_em, localizacao, genero_identidade, possui_filhos, nivel:niveis(id, codigo)",
       )
       .eq("tenant_id", session.activeTenant.id)
       .order("nome", { ascending: true }),
@@ -338,6 +338,9 @@ export default async function ColaboradoresPage() {
         regional_id: aloc?.regional_id ?? null,
         regional_nome: aloc?.regional_nome ?? null,
         usa_rateio_empresa: aloc?.usa_rateio_empresa ?? false,
+        localizacao: c.localizacao ?? null,
+        genero_identidade: c.genero_identidade ?? null,
+        possui_filhos: c.possui_filhos ?? null,
         pendencia_nivel: pendencia.nivel,
         pendencia_total: pendencia.total,
         pendencia_criticas: pendencia.criticas,

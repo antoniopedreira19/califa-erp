@@ -184,8 +184,12 @@ Consequências para o sistema:
 ### 4.4 Abono pecuniário — modelo California
 
 - **CLT clássico**: pode vender até 1/3 (10 dias) do período aquisitivo. Modelo tradicional da CLT.
-- **PJ na California**: pode vender até **10 dias avulsos, separados do bloco de férias**. É um lançamento próprio, não precisa combinar com dias de folga.
+- **PJ na California**: pode vender até **10 dias avulsos, sem precisar tirar folga no mesmo bloco**. É um lançamento próprio (`abono_avulso`), mas **sempre atrelado a um aquisitivo** — os dias vendidos saem do saldo daquele período.
 - **Exceção (ambos)**: em casos extremos, a empresa libera a venda de **mais de 10 dias** por acordo. Isso vira um lançamento marcado como "abono excepcional" e precisa de aprovação administrativa.
+
+**O que diferencia abono_avulso de usufruto** (confirmado com o RH em 2026-11-25): só o comportamento na folha de pagamento. Em usufruto, o colaborador fica de férias e recebe o salário antecipado (a folha de ferias substitui a folha do mês). Em abono_avulso, o colaborador continua trabalhando e recebe o valor do abono **somado** ao salário normal. A quantidade de dias disponíveis pra vender é a mesma dos dias disponíveis pra gozar — **saldo é saldo**.
+
+**Histórico**: até 2026-11-25, o schema forçava `abono_avulso.periodo_id = null`, tratando a venda como "externa ao aquisitivo". Isso criou 4 lançamentos vivos que não abateram saldo — corrigidos pela migration `20261125800001_ferias_abono_avulso_exige_periodo`.
 
 ### 4.5 Cálculo do saldo
 
@@ -460,7 +464,7 @@ colaboradores_ferias_lancamentos
   id uuid pk
   tenant_id uuid fk
   colaborador_id uuid fk
-  periodo_id uuid fk nullable             -- null para abono avulso PJ
+  periodo_id uuid fk not null             -- aquisitivo de origem (inclusive abono_avulso)
   tipo enum ('usufruto'|'abono_combinado'|'abono_avulso'|'abono_excepcional')
   data_inicio date
   data_fim date

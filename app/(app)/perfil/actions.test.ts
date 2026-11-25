@@ -29,17 +29,23 @@ test("usufruto: dias_abono=0 obrigatório, periodo_id obrigatório", () => {
   );
 });
 
-test("abono_avulso: periodo_id null, dias_abono=0", () => {
+// Pré-2026-11-25 abono_avulso ignorava periodo_id (saldo nunca abatia).
+// Agora todo abono — inclusive avulso — exige o aquisitivo de origem.
+test("abono_avulso: periodo_id obrigatório, dias_abono=0", () => {
   const base = {
     tipo: "abono_avulso",
-    periodo_id: null,
+    periodo_id: UUID_FAKE,
     data_inicio: dataFutura(10),
     data_fim: dataFutura(15),
     dias_abono: 0,
   };
   assert.equal(solicitarSchema.safeParse(base).success, true);
   assert.equal(
-    solicitarSchema.safeParse({ ...base, periodo_id: UUID_FAKE }).success,
+    solicitarSchema.safeParse({ ...base, periodo_id: null }).success,
+    false,
+  );
+  assert.equal(
+    solicitarSchema.safeParse({ ...base, dias_abono: 3 }).success,
     false,
   );
 });
@@ -66,7 +72,7 @@ test("abono_combinado: periodo_id obrigatório, dias_abono > 0", () => {
 test("misto rejeitado (removido do enum)", () => {
   const r = solicitarSchema.safeParse({
     tipo: "misto",
-    periodo_id: null,
+    periodo_id: UUID_FAKE,
     data_inicio: dataFutura(10),
     data_fim: dataFutura(15),
     dias_abono: 0,

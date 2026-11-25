@@ -32,10 +32,10 @@ export function SolicitarFeriasModal({ periodos, tipoContratacao }: Props) {
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
 
+  // Sem período com saldo = nada pra solicitar. Abono avulso também exige
+  // saldo (agora abate do aquisitivo — ver migration 20261125800001).
   const periodosDisponiveis = periodos.filter((p) => p.saldo > 0);
-  const permiteAbonoAvulso = tipoContratacao === "pj";
-  const semSaldoNemAbono =
-    periodosDisponiveis.length === 0 && !permiteAbonoAvulso;
+  const semSaldoNemAbono = periodosDisponiveis.length === 0;
 
   async function handleSubmit(payload: SolicitarFeriasPayload) {
     return solicitarFerias(payload);

@@ -9,16 +9,20 @@ import { z } from "zod";
  *   - `app/(app)/perfil/actions.test.ts` → testes do schema
  *
  * Tipos:
- *   - `usufruto` → tira dias de folga; precisa de periodo_id; dias_abono = 0
- *   - `abono_avulso` → PJ: vende dias sem tirar folga; periodo_id = null; dias_abono = 0
- *   - `abono_combinado` → tira X dias + vende Y; precisa de periodo_id + dias_abono > 0
+ *   - `usufruto` → tira dias de folga; dias_abono = 0
+ *   - `abono_avulso` → PJ: vende dias sem tirar folga; dias_abono = 0
+ *   - `abono_combinado` → tira X dias + vende Y; dias_abono > 0
+ *
+ * Todos exigem `periodo_id`: os dias vendidos/gozados sempre saem de um
+ * aquisitivo. Antes de 2026-11-25 o abono_avulso ignorava essa regra e
+ * não abatia saldo — ver migration 20261125800001.
  */
 export const ANTECEDENCIA_MINIMA_DIAS = 5;
 
 export const solicitarFeriasSchema = z
   .object({
     tipo: z.enum(["usufruto", "abono_avulso", "abono_combinado"]),
-    periodo_id: z.string().uuid().nullable(),
+    periodo_id: z.string().uuid({ message: "Escolha o período aquisitivo." }),
     data_inicio: z
       .string()
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Data de início inválida."),
@@ -48,24 +52,6 @@ export const solicitarFeriasSchema = z
         code: z.ZodIssueCode.custom,
         path: ["data_inicio"],
         message: `A solicitação precisa ser feita com pelo menos ${ANTECEDENCIA_MINIMA_DIAS} dias de antecedência.`,
-      });
-    }
-    if (data.tipo === "abono_avulso" && data.periodo_id !== null) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["periodo_id"],
-        message:
-          "Abono avulso não é vinculado a um período aquisitivo específico.",
-      });
-    }
-    if (
-      (data.tipo === "usufruto" || data.tipo === "abono_combinado") &&
-      !data.periodo_id
-    ) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["periodo_id"],
-        message: "Escolha o período aquisitivo das férias.",
       });
     }
     if (data.tipo === "abono_combinado" && data.dias_abono <= 0) {

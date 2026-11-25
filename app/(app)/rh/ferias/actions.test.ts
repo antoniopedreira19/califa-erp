@@ -53,10 +53,12 @@ test("usufruto proíbe dias_abono > 0", () => {
   assert.equal(r.success, false);
 });
 
-test("abono_avulso: periodo_id null + dias_abono=0", () => {
+// Pré-2026-11-25 abono_avulso rodava com periodo_id=null e nunca abatia saldo.
+// Agora exige o aquisitivo de origem, igual qualquer outro tipo.
+test("abono_avulso: periodo_id obrigatório + dias_abono=0", () => {
   const base = {
     colaborador_id: COLAB_UUID,
-    periodo_id: null,
+    periodo_id: UUID_FAKE,
     tipo: "abono_avulso",
     data_inicio: "2027-01-01",
     data_fim: "2027-01-10",
@@ -64,7 +66,11 @@ test("abono_avulso: periodo_id null + dias_abono=0", () => {
   };
   assert.equal(lancarDiretoSchema.safeParse(base).success, true);
   assert.equal(
-    lancarDiretoSchema.safeParse({ ...base, periodo_id: UUID_FAKE }).success,
+    lancarDiretoSchema.safeParse({ ...base, periodo_id: null }).success,
+    false,
+  );
+  assert.equal(
+    lancarDiretoSchema.safeParse({ ...base, dias_abono: 5 }).success,
     false,
   );
 });

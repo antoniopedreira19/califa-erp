@@ -5053,6 +5053,10 @@ export interface Colaborador {
   /** Path do arquivo de foto no bucket `colaboradores-documentos`.
    *  Atalho — a linha também existe em `colaboradores_documentos`. */
   foto_path: string | null;
+  /** Onde a pessoa mora fisicamente. Independente da regional de alocação
+   *  — alguém em Hub pode morar em SP ou NE. Alimenta o filtro da lista
+   *  e análise do RH (25/11/2026). */
+  localizacao: ColaboradorLocalizacao | null;
   /** Timestamp de quando o colaborador completou o perfil pela primeira
    *  vez via wizard. Enquanto NULL, o modal aparece em toda sessão
    *  nova. */
@@ -5079,6 +5083,37 @@ export function estadoCivilLabel(e: EstadoCivil): string {
     case "divorciado":    return "Divorciado(a)";
     case "viuvo":         return "Viúvo(a)";
     case "separado":      return "Separado(a)";
+  }
+}
+
+export type ColaboradorLocalizacao =
+  | "SP"
+  | "NE"
+  | "NO"
+  | "RJ"
+  | "SC"
+  | "BH"
+  | "SSB";
+
+export const COLABORADOR_LOCALIZACOES: ColaboradorLocalizacao[] = [
+  "SP",
+  "NE",
+  "NO",
+  "RJ",
+  "SC",
+  "BH",
+  "SSB",
+];
+
+export function localizacaoLabel(l: ColaboradorLocalizacao): string {
+  switch (l) {
+    case "SP":  return "SP";
+    case "NE":  return "Nordeste";
+    case "NO":  return "Norte";
+    case "RJ":  return "RJ";
+    case "SC":  return "SC";
+    case "BH":  return "BH";
+    case "SSB": return "Salvador";
   }
 }
 
@@ -5802,8 +5837,9 @@ export interface ColaboradorFeriasLancamento {
   id: string;
   tenant_id: string;
   colaborador_id: string;
-  /** FK pro período aquisitivo. Null apenas quando tipo = abono_avulso. */
-  periodo_id: string | null;
+  /** FK obrigatória pro período aquisitivo de origem. Antes de 2026-11-25,
+   *  abono_avulso aceitava null — corrigido pela migration 20261125800001. */
+  periodo_id: string;
   tipo: FeriasLancamentoTipo;
   data_inicio: string;
   data_fim: string;
