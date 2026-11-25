@@ -157,6 +157,46 @@ O Tiago quer acertar o IRPJ/CSLL no sistema, sem passar pela planilha, enquanto 
 - A CSLL abriu com o ajuste herdado e foi aprovada com o mesmo ajuste (`ajuste_base_herdado` na auditoria).
 - `tsc`, lint e os 220 testes do fiscal.
 
+## 10. O rateio pela receita de cada regional, "TDs (REC)" (25/11, implementado)
+
+O Tiago (25/11): "O rateio regional deve ser feito de acordo com a participação na receita de cada regional. Não deve ser um rateio arbitrário como está feito atualmente, e deve ficar registrado como TDs (REC)". Ele escolheu:
+
+- **Onde vale:** só nos impostos do Fiscal.
+- **Período da receita:** o da guia, ou seja, o mês; no IRPJ/CSLL, o trimestre. Substitui o rateio por gerencial do §3 (valor digitado por empresa gerencial, regional escolhida quando a gerencial não tinha receita) e a regra "GoCrazy → SS".
+
+**Como ficou:**
+
+- **ISS, PIS, COFINS, IRPJ e CSLL próprios:** o sistema divide a guia inteira pela receita de cada regional no período, sem valor digitado.
+  - **Na aprovação,** vale o rateio do cálculo, pelas notas da guia (no ISS, as do município).
+  - **Na Guia da contabilidade,** vale a receita do período nas notas do sistema ou, antes de outubro/2026, no histórico (no ISS, a do CNPJ do município).
+  - **O que fica fora da participação:** a receita sem regional (nota sem job, ou histórico sem regional) e a parte que arredondaria a R$ 0,00.
+  - **Sem receita de regional nenhuma no período,** a guia não se aprova nem se lança (a tela avisa).
+- **Retenções e IOF:** a retenção (ISS retido, CSRF, IRRF) segue as PPs de origem, como já era; na Guia da contabilidade, sem PP, divide pela receita. O IOF do mútuo vai para a empresa que emprestou, como já era.
+- **Registro:**
+  - O título ganha `impostos_a_pagar.rateio_pela_receita`, marcado por gatilho no ISS, PIS, COFINS, IRPJ ou CSLL que vem da Apuração ou da Guia da contabilidade.
+  - A coluna REG mostra "TDs" com "(REC)" embaixo, e a dica mostra a divisão. A exportação escreve "TDs (REC)".
+  - Com uma regional só, a REG mostra a sigla, e a dica diz "pela receita do período".
+- **Saiu da tela:** o editor "Rateio por empresa gerencial" (`rateio-por-gerencial.tsx`). No lugar, a caixa só de leitura "Rateio · TDs (REC)" (`rateio-da-guia.tsx`), na aprovação e na Guia da contabilidade.
+
+**As 18 guias de imposto sobre a receita da carga do 4T** (pagas no histórico, divididas por gerencial como na planilha) ficam para refazer com o OK do Tiago: o antes e depois está em `.claude/prototipos/fiscal/rateio-pela-receita-24.mts` (fora do git). Refazer muda só o registro do título. O DRE e o fluxo dessas guias contam pela linha da planilha no histórico, com a regional da planilha, e não pelo rateio do título.
+
+**Conferido no Sandbox** (Empresa Teste, logado como admin):
+
+- O PIS de novembro foi aprovado com a caixa "TDs (REC)": 100% na regional Teste, porque a parte da receita sem regional ficou fora. O título nasceu com `rateio_pela_receita`.
+- A Guia da contabilidade de setembro avisou "Sem receita do CNPJ no período". A de novembro, ISS de Salvador, dividiu pela receita do município.
+- `tsc`, lint e os 300 testes do financeiro e do fiscal passam.
+
+**Arquivos:**
+
+- `supabase/migrations/20261125800001_imposto_rateado_pela_receita.sql`: a coluna e o gatilho.
+- `lib/fiscal/rateio-gerencial.ts` (+ teste): `pelaReceita`, `pelaBase` e `rateioAutomatico`. Saiu `gerenciaisDaBase`.
+- `app/(app)/financeiro/fiscal/apuracao/`:
+  - `actions.ts`: `pedidoDa` com `pelaBase`; `aprovarGuia` sem `rateio_gerencial`; `lancarGuiaDaContabilidade` com `rateioAutomatico`; a receita do município no ISS.
+  - `memoria-dialog.tsx`, `guia-da-contabilidade.tsx` e `rateio-da-guia.tsx` (novo); `aba-apuracao.tsx`.
+- `lib/financeiro/planilha-de-titulos.ts` (+ teste): `rateioPelaReceita` na linha e `textoDaRegional(rateio, pelaReceita)`.
+- `components/financeiro/planilha-de-titulos/planilha.tsx` e `colunas.ts`: a REG e a exportação.
+- `app/(app)/financeiro/conciliacao/linhas-da-aba.ts` e `app/(app)/financeiro/fiscal/impostos/dados.ts`: a marca lida do banco.
+
 ## Arquivos (entrega 1)
 
 - `app/(app)/financeiro/fiscal/apuracao/aba-apuracao.tsx`: botões de CNPJ, blocos, faixa, lote por CNPJ, coluna Local e larguras.

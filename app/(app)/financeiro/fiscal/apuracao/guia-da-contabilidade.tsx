@@ -14,14 +14,14 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { MoneyInput } from "@/components/ui/money-input";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import type { RateioDaGuia } from "@/lib/fiscal/apuracao";
+import type { RateioDaGuia as RateioDaGuiaDoSistema } from "@/lib/fiscal/apuracao";
 import { mesDe } from "@/lib/fiscal/datas";
-import { gerenciaisDaBase, rateioPorGerencial, type ParteDaGerencial } from "@/lib/fiscal/rateio-gerencial";
+import { rateioAutomatico } from "@/lib/fiscal/rateio-gerencial";
 import { regrasDoCnpj } from "@/lib/fiscal/rateio-gerencial-dados";
 import { lancarGuiaDaContabilidade, previaDaReceitaDoPeriodo } from "./actions";
 import type { DadosDaApuracao, GuiaDaContabilidade, PJDaTela } from "./dados";
 import { NomeDaGuia, moeda, tituloPorExtenso } from "./ui";
-import { RateioPorGerencial } from "./rateio-por-gerencial";
+import { RateioDaGuia } from "./rateio-da-guia";
 
 type Tributo = "ISS" | "ISS_RET" | "PIS" | "COFINS" | "IRPJ" | "CSLL" | "CSRF" | "IRRF" | "IOF";
 interface Opcao {
@@ -127,18 +127,18 @@ export function DialogoGuiaDaContabilidade({
   const [motivo, setMotivo] = React.useState("");
   const competencia = op.periodo === "trimestral" ? tri : mes;
 
-  // A receita do período (do servidor): a base que divide cada gerencial entre as regionais.
-  const [base, setBase] = React.useState<RateioDaGuia[] | null>(null);
+  // A receita do período (do servidor): a base que divide a guia entre as
+  // regionais (decisão 277 §10, "TDs (REC)": sem valor digitado). No ISS, a
+  // receita é a do CNPJ do município da guia.
+  const issDoMunicipio = op.tributo === "ISS" && estab ? estab : null;
+  const [base, setBase] = React.useState<RateioDaGuiaDoSistema[] | null>(null);
   const [fonte, setFonte] = React.useState<"sistema" | "historico" | null>(null);
   const [erroBase, setErroBase] = React.useState<string | null>(null);
-  const [partes, setPartes] = React.useState<ParteDaGerencial[]>([]);
-  // A sugestão por gerencial acompanha o valor da guia até a pessoa mexer no rateio.
-  const [partesEditadas, setPartesEditadas] = React.useState(false);
   React.useEffect(() => {
     let vivo = true;
     setBase(null);
     setErroBase(null);
-    previaDaReceitaDoPeriodo({ empresa_contabil_id: pj.id, competencia })
+    previaDaReceitaDoPeriodo({ empresa_contabil_id: pj.id, competencia, estabelecimento_id: issDoMunicipio })
       .then((r) => {
         if (!vivo) return;
         if (!r.ok) {
@@ -153,18 +153,9 @@ export function DialogoGuiaDaContabilidade({
     return () => {
       vivo = false;
     };
-  }, [pj.id, competencia]);
-  // Nova base: a sugestão por gerencial recomeça (com o valor de agora).
-  React.useEffect(() => {
-    if (!base) return;
-    setPartes(gerenciaisDaBase(base, valor, gerencial));
-    setPartesEditadas(false);
-  }, [base]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Valor novo com o rateio ainda intocado: a sugestão refaz a conta com ele
-  // (antes ficava em R$ 0,00 quando o valor vinha depois da receita).
-  React.useEffect(() => {
-    if (base && !partesEditadas) setPartes(gerenciaisDaBase(base, valor, gerencial));
-  }, [valor]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [pj.id, competencia, issDoMunicipio]);
+  // O rateio do sistema, com o valor de agora.
+  const automatico = base ? rateioAutomatico({ tributo: op.tributo, base, regras, gerencialDoCnpj: gerencial, total: valor }) : null;
 
   // A guia que o sistema já calcula se aprova por ela, não por aqui.
   const calculada = dados.guias.find(
@@ -186,8 +177,7 @@ export function DialogoGuiaDaContabilidade({
     if (!(valor > 0)) return setErro("Informe o valor da guia.");
     if (motivo.trim().length < 10) return setErro("Explique por que o sistema não calculou esta guia (mínimo 10 caracteres).");
     if (!base) return setErro("Espere a receita do período carregar.");
-    const conferido = rateioPorGerencial(partes, base, regras, valor);
-    if (!conferido.ok) return setErro(conferido.message);
+    if (automatico && !automatico.ok) return setErro(automatico.message);
     const sufixoCota = op.periodo === "trimestral" && cota !== "unica" ? ` · ${COTAS.find(([k]) => k === cota)![1]}` : "";
     setEnviando(true);
     let r: Awaited<ReturnType<typeof lancarGuiaDaContabilidade>>;
@@ -203,7 +193,6 @@ export function DialogoGuiaDaContabilidade({
         motivo: motivo.trim(),
         vencimento,
         valor,
-        rateio_gerencial: partes,
         guia_path: null,
       });
     } catch {
@@ -322,25 +311,23 @@ export function DialogoGuiaDaContabilidade({
           </p>
         ) : (
           <div className="space-y-1">
-            {valor > 0 && (
-              <RateioPorGerencial
-                total={valor}
-                base={base}
-                regras={regras}
-                partes={partes}
-                onChange={(p) => {
-                  setPartes(p);
-                  setPartesEditadas(true);
-                }}
+            {valor > 0 && automatico && (
+              <RateioDaGuia
+                tributo={op.tributo}
+                partes={automatico.ok ? automatico.rateio : []}
+                vazio={automatico.ok ? "" : automatico.message}
+                contabilidade
               />
             )}
             <p className="text-[11px] text-muted-foreground">
               {erroBase ??
-                (base.length === 0
-                  ? "Sem receita do CNPJ no período: escolha a regional de cada empresa."
-                  : fonte === "historico"
-                    ? "As regionais dividem pela receita do período no histórico da planilha."
-                    : "As regionais dividem pela receita do período nas notas do sistema.")}
+                (op.tributo === "IOF"
+                  ? "O IOF do mútuo vai para a empresa gerencial do CNPJ, como no cálculo do sistema."
+                  : base.length === 0
+                    ? "Sem receita do CNPJ no período: não há como dividir pela receita de cada regional."
+                    : fonte === "historico"
+                      ? "Dividida pela receita de cada regional no período, no histórico da planilha."
+                      : "Dividida pela receita de cada regional no período, nas notas do sistema.")}
             </p>
           </div>
         )}

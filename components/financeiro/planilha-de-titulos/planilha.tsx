@@ -413,7 +413,7 @@ function LinhaDaTabela<L extends LinhaDaPlanilha>({
     situacao.tipo === "vencido" || situacao.tipo === "depois_do_vencimento" || situacao.tipo === "antes_do_vencimento";
   const atrasado = situacao.tipo === "vencido" || situacao.tipo === "depois_do_vencimento";
   const recebe = l.entra || (l.transferencia !== null && l.transferencia.destinoContaId === p.contaId);
-  const { texto: textoReg, dica: dicaReg, rateado } = textoDaRegional(l.rateio);
+  const { texto: textoReg, dica: dicaReg, rateado, criterio: criterioReg } = textoDaRegional(l.rateio, l.rateioPelaReceita);
   const sinal = !l.pagoEm && !cancelado ? (p.sinalDoBanco?.(l) ?? null) : null;
 
   const celulaDoValor = (lado: "credito" | "debito") => {
@@ -704,6 +704,7 @@ function LinhaDaTabela<L extends LinhaDaPlanilha>({
             {textoReg}
           </Dica>
         )}
+        {criterioReg && <span className="block text-[10px] leading-tight text-muted-foreground">{criterioReg}</span>}
       </td>
       {p.colunaStatus && (
         <td className="px-2 py-2 text-center">

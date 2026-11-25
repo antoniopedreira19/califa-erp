@@ -6,7 +6,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { RateioDaGuia } from "./apuracao";
-import { dividirGerencial, gerenciaisDaBase, rateioPorGerencial, type RegrasDoRateio } from "./rateio-gerencial";
+import { dividirGerencial, pelaBase, pelaReceita, rateioAutomatico, rateioPorGerencial, type RegrasDoRateio } from "./rateio-gerencial";
 
 const CAL = "cal";
 const CCH = "cch";
@@ -99,16 +99,44 @@ test("o rateio final fecha com a guia e confere as gerenciais", () => {
   assert.equal(repetida.ok, false);
 });
 
-test("a sugestão por gerencial vem do rateio do sistema (com a parte sem regional), levada ao valor da guia", () => {
-  // California 850 (600 + 150 + 100 sem regional) e CCH 250, de 1.100.
+test("decisão 277 §10: TDs (REC) — a guia inteira divide pela receita de cada regional, sem valor por gerencial", () => {
+  assert.equal(pelaReceita("ISS"), true);
+  assert.equal(pelaReceita("IRPJ"), true);
+  assert.equal(pelaReceita("ISS_RET"), false);
+  assert.equal(pelaReceita("IOF"), false);
+  // Receita com regional: NE 600, SP 150, Doca 250 (os 100 sem regional ficam fora) — levados a 2.200.
   assert.deepEqual(
-    gerenciaisDaBase(BASE, 2000, null).map((p) => [p.empresa_id, p.valor]),
+    pelaBase(BASE, 2200).map((p) => [p.empresa_id, p.regional_id, p.valor]),
     [
-      [CAL, 1545.45],
-      [CCH, 454.55],
+      [CAL, "ne", 1320],
+      [CAL, "sp", 330],
+      [CCH, "doca", 550],
     ],
   );
-  assert.deepEqual(gerenciaisDaBase([], 2000, CAL), [{ empresa_id: CAL, valor: 2000, regional_id: null }]);
+  // A parte que arredondaria a zero sai, e o resto fecha no centavo.
+  assert.deepEqual(
+    pelaBase([b(CAL, "ne", 999_999), b(CAL, "sp", 1)], 0.5).map((p) => [p.regional_id, p.valor]),
+    [["ne", 0.5]],
+  );
+  const iss = rateioAutomatico({ tributo: "ISS", base: BASE, regras: REGRAS, gerencialDoCnpj: CAL, total: 1000 });
+  assert.ok(iss.ok);
+  if (iss.ok) assert.equal(Math.round(iss.rateio.reduce((s, p) => s + p.valor, 0) * 100) / 100, 1000);
+  // A regional padrão do CNPJ não vale mais no imposto sobre a receita: só a receita.
+  const go = rateioAutomatico({
+    tributo: "PIS",
+    base: BASE,
+    regras: { ...REGRAS, regionalDoCnpj: { empresa_id: CAL, regional_id: "ss" } },
+    gerencialDoCnpj: CAL,
+    total: 1100,
+  });
+  assert.ok(go.ok);
+  if (go.ok) assert.deepEqual(go.rateio.map((p) => [p.regional_id, p.valor]), [["ne", 660], ["sp", 165], ["doca", 275]]);
+  const sem = rateioAutomatico({ tributo: "COFINS", base: [], regras: REGRAS, gerencialDoCnpj: CAL, total: 10 });
+  assert.equal(sem.ok, false);
+  // IOF do mútuo: a empresa gerencial do CNPJ, sem regional.
+  const iof = rateioAutomatico({ tributo: "IOF", base: BASE, regras: { ...REGRAS, pelaReceita: false }, gerencialDoCnpj: CAL, total: 50 });
+  assert.ok(iof.ok);
+  if (iof.ok) assert.deepEqual(iof.rateio.map((p) => [p.empresa_id, p.regional_id, p.valor]), [[CAL, null, 50]]);
 });
 
 test("IOF do mútuo: sem regional (como o cálculo do sistema), fora a regional do CNPJ que emprestou", () => {

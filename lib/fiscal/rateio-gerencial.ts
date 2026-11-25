@@ -1,6 +1,11 @@
 /**
  * O rateio da guia por empresa gerencial (decisão 277, 23/11/2026).
  *
+ * DESDE 25/11 (decisão 277 §10, "TDs (REC)"): o imposto sobre a receita (ISS,
+ * PIS, COFINS, IRPJ e CSLL) divide pela receita de cada regional no período,
+ * sem valor digitado por gerencial (`pelaBase`, `rateioAutomatico`). A divisão
+ * por gerencial abaixo ficou só para o IOF do mútuo na Guia da contabilidade.
+ *
  * Regra do Tiago: o valor de cada empresa gerencial é o da contabilidade
  * (na planilha, a soma das linhas daquela gerencial); dentro dela, as
  * regionais dividem pela receita da competência — o rateio do sistema, que
@@ -121,15 +126,6 @@ export function dividirGerencial(parte: ParteDaGerencial, base: RateioDaGuia[], 
   return { como: "sem_regional", partes: [] };
 }
 
-/** O valor de cada gerencial sugerido pelo rateio do sistema, levado a `total`. */
-export function gerenciaisDaBase(base: RateioDaGuia[], total: number, padrao: string | null): ParteDaGerencial[] {
-  const porEmpresa = new Map<string, number>();
-  for (const b of base) porEmpresa.set(b.empresa_id, (porEmpresa.get(b.empresa_id) ?? 0) + (b.valor > 0 ? b.valor : b.pct));
-  const lista = [...porEmpresa.entries()].filter(([, v]) => v > 0);
-  if (!lista.length) return padrao ? [{ empresa_id: padrao, valor: r2(total), regional_id: null }] : [];
-  return repartir(lista, ([, v]) => v, total).map(({ item, valor }) => ({ empresa_id: item[0], valor, regional_id: null }));
-}
-
 export type ResultadoDoRateio = { ok: true; rateio: RateioDaGuia[] } | { ok: false; message: string };
 
 /** O rateio final da guia (empresa × regional), conferido: fecha com o total e cada gerencial tem regional. */
@@ -157,4 +153,61 @@ export function rateioPorGerencial(partes: ParteDaGerencial[], base: RateioDaGui
   }
   // O % de cada parte sobre a guia inteira (o rateio da guia guarda assim).
   return { ok: true, rateio: rateio.map((x) => ({ ...x, pct: total > 0 ? r2((x.valor / total) * 100) : 0 })) };
+}
+
+// ---------------------------------------------------------------------------
+// Decisão 277 §10 (25/11/2026): "TDs (REC)"
+// ---------------------------------------------------------------------------
+
+/**
+ * Os impostos sobre a receita: dividem entre as regionais pela receita de
+ * cada uma no período da guia, sem valor digitado — "TDs (REC)". O Tiago:
+ * "O rateio regional deve ser feito de acordo com a participação na receita
+ * de cada regional. Não deve ser um rateio arbitrário".
+ */
+export const TRIBUTOS_PELA_RECEITA: ReadonlySet<string> = new Set(["ISS", "PIS", "COFINS", "IRPJ", "CSLL"]);
+export const pelaReceita = (tributo: string) => TRIBUTOS_PELA_RECEITA.has(tributo);
+
+/**
+ * A base levada a `total`, pelo peso de cada parte (valor ou %), com o último
+ * fechando no centavo. Só a receita de cada regional participa: a parte sem
+ * regional (nota sem job, ou sem regional no histórico) fica fora, e a parte
+ * que arredondaria a R$ 0,00 também (o rateio do imposto não aceita parte zerada).
+ */
+export function pelaBase(base: RateioDaGuia[], total: number): RateioDaGuia[] {
+  const peso = (b: RateioDaGuia) => (b.valor > 0 ? b.valor : b.pct > 0 ? b.pct : 0);
+  let itens = base.filter((b) => b.regional_id && peso(b) > 0);
+  for (;;) {
+    const partes = repartir(itens, peso, total);
+    const zeradas = partes.filter((p) => p.valor <= 0);
+    if (!zeradas.length || zeradas.length === partes.length) {
+      return partes.filter((p) => p.valor > 0).map(({ item, valor, pct }) => ({ ...item, valor, pct }));
+    }
+    itens = partes.filter((p) => p.valor > 0).map((p) => p.item);
+  }
+}
+
+/**
+ * O rateio da Guia da contabilidade, sem valor digitado: o IOF do mútuo vai
+ * para a empresa gerencial do CNPJ (na regional padrão dele, ou sem
+ * regional); os outros impostos dividem pela receita do período de cada
+ * regional (a base).
+ */
+export function rateioAutomatico(e: {
+  tributo: string;
+  base: RateioDaGuia[];
+  regras: RegrasDoRateio;
+  gerencialDoCnpj: string | null;
+  total: number;
+}): ResultadoDoRateio {
+  if (!(e.total > 0)) return { ok: false, message: "Informe o valor da guia." };
+  if (e.tributo === "IOF") {
+    if (!e.gerencialDoCnpj) return { ok: false, message: "O CNPJ não tem empresa gerencial para receber o IOF." };
+    return rateioPorGerencial([{ empresa_id: e.gerencialDoCnpj, valor: r2(e.total), regional_id: null }], e.base, e.regras, e.total);
+  }
+  const rateio = pelaBase(e.base, e.total);
+  if (!rateio.length) {
+    return { ok: false, message: "Sem receita do CNPJ no período: não há como dividir pela receita de cada regional." };
+  }
+  return { ok: true, rateio };
 }

@@ -62,6 +62,7 @@ function linha(p: Partial<LinhaDaPlanilha> & { chave: string }): LinhaDaPlanilha
     avisoDaContraparte: null,
     situacaoDaVerba: null,
     pagoNoHistorico: false,
+    rateioPelaReceita: false,
     busca: "",
     ...p,
   };
@@ -140,15 +141,30 @@ test("uma regional mostra a sigla; o rateio mostra TD e a regra na dica", () => 
     texto: "HIT",
     dica: "Hitlab · 100%",
     rateado: false,
+    criterio: null,
   });
   assert.deepEqual(
     textoDaRegional([
       { regional: "SP", percentual: 40 },
       { regional: "NE", percentual: 60 },
     ]),
-    { texto: "TD", dica: "Rateio: NE 60% · SP 40%", rateado: true },
+    { texto: "TD", dica: "Rateio: NE 60% · SP 40%", rateado: true, criterio: null },
   );
-  assert.deepEqual(textoDaRegional([]), { texto: "—", dica: null, rateado: false });
+  assert.deepEqual(textoDaRegional([]), { texto: "—", dica: null, rateado: false, criterio: null });
+});
+
+test("decisão 277 §10: o imposto dividido pela receita é TDs (REC)", () => {
+  assert.deepEqual(
+    textoDaRegional(
+      [
+        { regional: "SP", percentual: 40 },
+        { regional: "NE", percentual: 60 },
+      ],
+      true,
+    ),
+    { texto: "TDs", dica: "Rateio pela receita de cada regional no período (REC): NE 60% · SP 40%", rateado: true, criterio: "(REC)" },
+  );
+  assert.equal(textoDaRegional([{ regional: "SS", percentual: 100 }], true).texto, "SS");
 });
 
 test("a mesma regional em duas empresas (guia de imposto) soma numa parte só", () => {

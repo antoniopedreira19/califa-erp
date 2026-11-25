@@ -35,7 +35,6 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { FAIXA_GRUPO_LISTA } from "@/app/(app)/_planilha/blocos";
-import { regrasDoCnpj } from "@/lib/fiscal/rateio-gerencial-dados";
 import type { CadastroFiscal } from "@/lib/fiscal/cadastro";
 import { trimestreDe } from "@/lib/fiscal/apuracao";
 import { dataBr, mesDe, nomeDoMes, proximoMes, r2 } from "@/lib/fiscal/datas";
@@ -788,8 +787,6 @@ export function AbaApuracao({ dados }: { dados: DadosDaApuracao }) {
           cadastroDasCotas={cadastroDasCotas}
           hoje={dados.hoje}
           aprovarEmCurso={aprovaEmCurso(guiaAberta)}
-          regrasDoRateio={regrasDoCnpj(dados.regrasDoRateio, guiaAberta.empresa_contabil_id, guiaAberta.tributo)}
-          gerencialDoCnpj={dados.regrasDoRateio.gerencialDoCnpj[guiaAberta.empresa_contabil_id] ?? null}
           onClose={() => setAberta(null)}
           onAprovada={(texto) => {
             setAberta(null);
