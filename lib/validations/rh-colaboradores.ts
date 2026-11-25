@@ -83,6 +83,38 @@ export const colaboradorSchema = z
       .string()
       .trim()
       .regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida."),
+    // Campos vindos da planilha "NOVAS INFORMAÇÕES" do RH (25/11/2026).
+    // Todos opcionais — o RH preenche no cadastro ou depois na edição.
+    email_pessoal: z
+      .string()
+      .trim()
+      .max(200, "Máximo 200 caracteres.")
+      .optional()
+      .transform((v) => (v && v.length > 0 ? v : null))
+      .refine(
+        (v) => v === null || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v),
+        "E-mail pessoal inválido.",
+      ),
+    localizacao: z
+      .enum(["SP", "NE", "NO", "RJ", "SC", "BH", "SSB"])
+      .nullable()
+      .optional()
+      .transform((v) => v ?? null),
+    possui_filhos: z
+      .enum(["sim", "nao", ""])
+      .optional()
+      .transform((v) =>
+        v === "sim" ? true : v === "nao" ? false : null,
+      ),
+    quantidade_filhos: z
+      .string()
+      .trim()
+      .optional()
+      .transform((v) => (v && v.length > 0 ? Number(v) : null))
+      .refine(
+        (v) => v === null || (Number.isInteger(v) && v >= 1 && v <= 20),
+        "Quantidade de filhos precisa ser entre 1 e 20.",
+      ),
   })
   .superRefine((val, ctx) => {
     // CPF sempre obrigatório, 11 dígitos

@@ -5035,6 +5035,9 @@ export interface Colaborador {
   estado_civil: EstadoCivil | null;
   /** Flag; dados dos filhos continuam em `dependentes`. */
   possui_filhos: boolean | null;
+  /** Quantos filhos a pessoa tem. Só preenchido quando possui_filhos=true.
+   *  Opcional mesmo com flag true (RH pode não ter perguntado). 25/11/2026. */
+  quantidade_filhos: number | null;
   vegetariano: boolean | null;
   restricao_alimentar: string | null;
   emergencia_nome: string | null;

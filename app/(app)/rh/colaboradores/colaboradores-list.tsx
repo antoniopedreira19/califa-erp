@@ -9,28 +9,37 @@ import {
   EyeOff,
   AlertCircle,
   BadgeCheck,
-  Circle,
+  Check,
+  ChevronDown,
 } from "lucide-react";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import type { CadastroStatus, TipoContratacao } from "@/lib/types";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import type {
+  CadastroStatus,
+  ColaboradorLocalizacao,
+  GeneroIdentidade,
+  TipoContratacao,
+} from "@/lib/types";
 import type {
   NivelPendencia,
   CampoCritico,
   CampoParcial,
 } from "@/lib/rh/pendencias";
-import { ROTULO_CRITICO, ROTULO_PARCIAL } from "@/lib/rh/pendencias";
-import { tipoContratacaoLabel } from "@/lib/types";
+import {
+  tipoContratacaoLabel,
+  localizacaoLabel,
+  generoIdentidadeLabel,
+  COLABORADOR_LOCALIZACOES,
+} from "@/lib/types";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 export type ColaboradorRow = {
   id: string;
@@ -47,6 +56,9 @@ export type ColaboradorRow = {
   regional_id: string | null;
   regional_nome: string | null;
   usa_rateio_empresa: boolean;
+  localizacao: ColaboradorLocalizacao | null;
+  genero_identidade: GeneroIdentidade | null;
+  possui_filhos: boolean | null;
   pendencia_nivel: NivelPendencia;
   pendencia_total: number;
   pendencia_criticas: CampoCritico[];
@@ -60,19 +72,46 @@ export type ColaboradorRow = {
 export type EmpresaOpcao = { id: string; nome: string };
 export type RegionalOpcao = { id: string; nome: string; empresa_id: string };
 
-type StatusFiltro = "ativos" | "inativos" | "todos";
-type TipoFiltro = "todos" | TipoContratacao;
-
-// Sentinel para "todas" (Radix Select não aceita value="").
-const TODAS = "__todas__";
-// Sentinel para "somente Hub" no filtro de regional (colaboradores com toggle
-// usa_rateio_empresa=true).
+// Sentinel para o bucket "sem valor" em filtros multi-select.
+const SEM = "__sem__";
+// Sentinel do Hub no filtro de regionais (colaboradores com usa_rateio_empresa=true).
 const HUB = "__hub__";
 
 const brl = new Intl.NumberFormat("pt-BR", {
   style: "currency",
   currency: "BRL",
 });
+
+const OPCOES_TIPO: { value: TipoContratacao; label: string }[] = [
+  { value: "pj", label: "PJ" },
+  { value: "clt_recibo", label: "CLT + Recibo" },
+  { value: "clt", label: "CLT" },
+  { value: "estagio", label: "Estágio" },
+  { value: "socio", label: "Sócio" },
+];
+
+const OPCOES_STATUS: { value: CadastroStatus; label: string }[] = [
+  { value: "ativo", label: "Ativos" },
+  { value: "inativo", label: "Inativos" },
+];
+
+const OPCOES_GENERO: { value: GeneroIdentidade; label: string }[] = [
+  "mulher_cis",
+  "mulher_trans",
+  "homem_cis",
+  "homem_trans",
+  "nao_binario",
+  "outro",
+  "prefiro_nao_informar",
+].map((g) => ({
+  value: g as GeneroIdentidade,
+  label: generoIdentidadeLabel(g as GeneroIdentidade),
+}));
+
+const OPCOES_FILHO: { value: "sim" | "nao"; label: string }[] = [
+  { value: "sim", label: "Com filho" },
+  { value: "nao", label: "Sem filho" },
+];
 
 export function ColaboradoresList({
   colaboradores,
@@ -85,14 +124,9 @@ export function ColaboradoresList({
 }) {
   const router = useRouter();
   const [busca, setBusca] = React.useState("");
-  const [status, setStatus] = React.useState<StatusFiltro>("ativos");
-  const [tipo, setTipo] = React.useState<TipoFiltro>("todos");
-  const [cargoFiltro, setCargoFiltro] = React.useState<string>(TODAS);
-  const [empresaFiltro, setEmpresaFiltro] = React.useState<string>(TODAS);
-  const [regionalFiltro, setRegionalFiltro] = React.useState<string>(TODAS);
 
-  // Cargos distintos presentes no banco. Ordenação alfabética para
-  // facilitar a varredura visual; valores vazios/null são ignorados.
+  // Catálogos derivados dos dados. Cargos ordenados alfabeticamente para
+  // varredura visual; valores vazios/null ignorados.
   const cargosOpcoes = React.useMemo(() => {
     const set = new Set<string>();
     for (const c of colaboradores) {
@@ -100,38 +134,116 @@ export function ColaboradoresList({
     }
     return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR"));
   }, [colaboradores]);
+
+  // Ids/catálogos "universo" de cada filtro — base para o default "tudo
+  // marcado = sem filtro".
+  const todosCargos = cargosOpcoes;
+  const todosTipos = React.useMemo(() => OPCOES_TIPO.map((o) => o.value), []);
+  const todosStatus = React.useMemo(() => OPCOES_STATUS.map((o) => o.value), []);
+  const todasEmpresas = React.useMemo(
+    () => empresasOpcoes.map((e) => e.id),
+    [empresasOpcoes],
+  );
+  const todasRegionais = React.useMemo(
+    () => [HUB, ...regionaisOpcoes.map((r) => r.id)],
+    [regionaisOpcoes],
+  );
+  const todasLocalizacoes = React.useMemo(
+    () => [...COLABORADOR_LOCALIZACOES, SEM],
+    [],
+  );
+  const todosGeneros = React.useMemo(
+    () => [...OPCOES_GENERO.map((o) => o.value), SEM],
+    [],
+  );
+  const todosFilhos = React.useMemo(
+    () => [...OPCOES_FILHO.map((o) => o.value), SEM],
+    [],
+  );
+
+  // Default "todos marcados" em cada filtro. Trocar o universo (ex.: lista
+  // de empresas/cargos mudar de uma sessão para outra) não zera o estado:
+  // os selecionados se mantêm, e novas opções entram marcadas automático.
+  const [status, setStatus] = React.useState<string[]>(todosStatus);
+  const [tipos, setTipos] = React.useState<string[]>(todosTipos);
+  const [cargos, setCargos] = React.useState<string[]>(todosCargos);
+  const [empresas, setEmpresas] = React.useState<string[]>(todasEmpresas);
+  const [regionais, setRegionais] = React.useState<string[]>(todasRegionais);
+  const [localizacoes, setLocalizacoes] =
+    React.useState<string[]>(todasLocalizacoes);
+  const [generos, setGeneros] = React.useState<string[]>(todosGeneros);
+  const [filhos, setFilhos] = React.useState<string[]>(todosFilhos);
+
+  // Novas opções do universo entram como marcadas (mantém semântica "tudo
+  // marcado = sem filtro"); opções removidas somem.
+  useReconciliarUniverso(cargos, setCargos, todosCargos);
+  useReconciliarUniverso(empresas, setEmpresas, todasEmpresas);
+  useReconciliarUniverso(regionais, setRegionais, todasRegionais);
+
   // Ocultos por padrão — decisão de UI pra evitar exposição acidental de
   // salários em telas compartilhadas. O RH clica no ícone da coluna Valor
   // pra revelar.
   const [salariosOcultos, setSalariosOcultos] = React.useState(true);
 
-  // Regionais disponíveis no dropdown: quando uma empresa está selecionada,
-  // só as regionais dela; senão, todas do tenant. Hub aparece sempre.
-  const regionaisFiltradas = React.useMemo(() => {
-    if (empresaFiltro === TODAS) return regionaisOpcoes;
-    return regionaisOpcoes.filter((r) => r.empresa_id === empresaFiltro);
-  }, [regionaisOpcoes, empresaFiltro]);
-
-  // Se a regional selecionada não pertence à empresa nova, zera pra "Todas".
-  React.useEffect(() => {
-    if (regionalFiltro === TODAS || regionalFiltro === HUB) return;
-    const ainda = regionaisFiltradas.some((r) => r.id === regionalFiltro);
-    if (!ainda) setRegionalFiltro(TODAS);
-  }, [regionaisFiltradas, regionalFiltro]);
+  // Regionais disponíveis no dropdown: quando pelo menos uma empresa está
+  // filtrada (recorte efetivo), só mostra as regionais dela; Hub sempre.
+  const empresaFiltroAtivo = empresas.length !== todasEmpresas.length;
+  const regionaisOpcoesDisponiveis = React.useMemo(() => {
+    const base = empresaFiltroAtivo
+      ? regionaisOpcoes.filter((r) => empresas.includes(r.empresa_id))
+      : regionaisOpcoes;
+    return [{ id: HUB, nome: "Hub", empresa_id: "" }, ...base];
+  }, [regionaisOpcoes, empresas, empresaFiltroAtivo]);
 
   const filtered = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
+    const statusSet = new Set(status);
+    const tiposSet = new Set(tipos);
+    const cargosSet = new Set(cargos);
+    const empresasSet = new Set(empresas);
+    const regionaisSet = new Set(regionais);
+    const locSet = new Set(localizacoes);
+    const genSet = new Set(generos);
+    const filhosSet = new Set(filhos);
+
     return colaboradores.filter((c) => {
-      if (status === "ativos" && c.status !== "ativo") return false;
-      if (status === "inativos" && c.status !== "inativo") return false;
-      if (tipo !== "todos" && c.tipo_contratacao !== tipo) return false;
-      if (cargoFiltro !== TODAS && c.funcao !== cargoFiltro) return false;
-      if (empresaFiltro !== TODAS && c.empresa_id !== empresaFiltro) return false;
-      if (regionalFiltro === HUB) {
-        if (!c.usa_rateio_empresa) return false;
-      } else if (regionalFiltro !== TODAS) {
-        if (c.regional_id !== regionalFiltro) return false;
+      if (!statusSet.has(c.status)) return false;
+      if (!tiposSet.has(c.tipo_contratacao)) return false;
+      if (!cargosSet.has(c.funcao)) return false;
+
+      if (!empresasSet.has(c.empresa_id ?? "__null__")) {
+        // Colaborador sem empresa só passa se "sem empresa" estiver marcado —
+        // hoje tratamos empresa==null como "não casa com nenhuma opção
+        // selecionada", então filtra fora quando o filtro está ativo.
+        if (empresaFiltroAtivo) return false;
       }
+
+      // Regional/Hub: casa se a regional id está marcada OU se é Hub e
+      // HUB está marcado.
+      if (c.usa_rateio_empresa) {
+        if (!regionaisSet.has(HUB)) return false;
+      } else if (c.regional_id) {
+        if (!regionaisSet.has(c.regional_id)) return false;
+      } else {
+        // Sem regional e sem Hub: só passa se Hub está marcado (bucket
+        // "não enquadrado"). Mantém compat com o filtro antigo que só
+        // tinha Hub ou regional específica.
+        if (!regionaisSet.has(HUB)) return false;
+      }
+
+      // Localização
+      const locKey = c.localizacao ?? SEM;
+      if (!locSet.has(locKey)) return false;
+
+      // Gênero
+      const genKey = c.genero_identidade ?? SEM;
+      if (!genSet.has(genKey)) return false;
+
+      // Filhos
+      const filhoKey =
+        c.possui_filhos === true ? "sim" : c.possui_filhos === false ? "nao" : SEM;
+      if (!filhosSet.has(filhoKey)) return false;
+
       if (!q) return true;
       return (
         c.nome.toLowerCase().includes(q) ||
@@ -144,14 +256,16 @@ export function ColaboradoresList({
     colaboradores,
     busca,
     status,
-    tipo,
-    cargoFiltro,
-    empresaFiltro,
-    regionalFiltro,
+    tipos,
+    cargos,
+    empresas,
+    empresaFiltroAtivo,
+    regionais,
+    localizacoes,
+    generos,
+    filhos,
   ]);
 
-  // Rodapé do card: total do que está filtrado. Ajuda a perceber quanto
-  // "vale" o recorte da tela quando o usuário filtra por empresa/regional.
   const totalFiltrado = React.useMemo(
     () => filtered.reduce((acc, c) => acc + (c.salario_vigente ?? 0), 0),
     [filtered],
@@ -159,10 +273,8 @@ export function ColaboradoresList({
 
   return (
     <div className="space-y-4">
-      {/* Filtros em linha única: busca + 5 selects.
-          Ordem: Busca | Status | Cargo | Tipo | Empresa | Regionais.
-          Ações (Níveis + Novo colaborador) ficam no PageHeader, alinhadas
-          com o título. */}
+      {/* Linha de filtros: busca + N multi-select. A barra quebra conforme a
+          largura — o PageHeader mantém as ações do topo. */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex items-center">
           <Search className="absolute left-2.5 h-3.5 w-3.5 text-muted-foreground" />
@@ -174,101 +286,74 @@ export function ColaboradoresList({
             className="h-9 w-56 rounded-lg border border-border bg-white pl-[30px] pr-3 text-xs text-foreground outline-none focus:border-california-red/40"
           />
         </div>
-        <Select
-          value={status}
-          onValueChange={(v) => setStatus(v as StatusFiltro)}
-        >
-          <SelectTrigger className="h-9 w-[110px] px-2.5 text-[13px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent
-            side="bottom"
-            avoidCollisions={false}
-            className="w-[--radix-select-trigger-width]"
-          >
-            <SelectItem value="ativos">Ativos</SelectItem>
-            <SelectItem value="inativos">Inativos</SelectItem>
-            <SelectItem value="todos">Todos</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select
-          value={cargoFiltro}
-          onValueChange={(v) => setCargoFiltro(v)}
-        >
-          <SelectTrigger className="h-9 w-[180px] px-2.5 text-[13px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent
-            side="bottom"
-            avoidCollisions={false}
-            className="w-[--radix-select-trigger-width]"
-          >
-            <SelectItem value={TODAS}>Todos os cargos</SelectItem>
-            {cargosOpcoes.map((cargo) => (
-              <SelectItem key={cargo} value={cargo}>
-                {cargo}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={tipo} onValueChange={(v) => setTipo(v as TipoFiltro)}>
-          <SelectTrigger className="h-9 w-[150px] px-2.5 text-[13px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent
-            side="bottom"
-            avoidCollisions={false}
-            className="w-[--radix-select-trigger-width]"
-          >
-            <SelectItem value="todos">Todos os tipos</SelectItem>
-            <SelectItem value="pj">PJ</SelectItem>
-            <SelectItem value="clt_recibo">CLT + Recibo</SelectItem>
-            <SelectItem value="clt">CLT</SelectItem>
-            <SelectItem value="estagio">Estágio</SelectItem>
-            <SelectItem value="socio">Sócio</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select
-          value={empresaFiltro}
-          onValueChange={(v) => setEmpresaFiltro(v)}
-        >
-          <SelectTrigger className="h-9 w-[170px] px-2.5 text-[13px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent
-            side="bottom"
-            avoidCollisions={false}
-            className="w-[--radix-select-trigger-width]"
-          >
-            <SelectItem value={TODAS}>Todas as empresas</SelectItem>
-            {empresasOpcoes.map((e) => (
-              <SelectItem key={e.id} value={e.id}>
-                {e.nome}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select
-          value={regionalFiltro}
-          onValueChange={(v) => setRegionalFiltro(v)}
-        >
-          <SelectTrigger className="h-9 w-[160px] px-2.5 text-[13px]">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent
-            side="bottom"
-            avoidCollisions={false}
-            className="w-[--radix-select-trigger-width]"
-          >
-            <SelectItem value={TODAS}>Todas as regionais</SelectItem>
-            <SelectItem value={HUB}>Hub</SelectItem>
-            {regionaisFiltradas.map((r) => (
-              <SelectItem key={r.id} value={r.id}>
-                {r.nome}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <FiltroMulti
+          label="Status"
+          opcoes={OPCOES_STATUS.map((o) => ({ value: o.value, label: o.label }))}
+          selecionados={status}
+          onChange={setStatus}
+          largura="w-[130px]"
+        />
+        <FiltroMulti
+          label="Cargo"
+          opcoes={cargosOpcoes.map((c) => ({ value: c, label: c }))}
+          selecionados={cargos}
+          onChange={setCargos}
+          largura="w-[170px]"
+        />
+        <FiltroMulti
+          label="Tipo"
+          opcoes={OPCOES_TIPO.map((o) => ({ value: o.value, label: o.label }))}
+          selecionados={tipos}
+          onChange={setTipos}
+          largura="w-[150px]"
+        />
+        <FiltroMulti
+          label="Empresa"
+          opcoes={empresasOpcoes.map((e) => ({ value: e.id, label: e.nome }))}
+          selecionados={empresas}
+          onChange={setEmpresas}
+          largura="w-[170px]"
+        />
+        <FiltroMulti
+          label="Regional"
+          opcoes={regionaisOpcoesDisponiveis.map((r) => ({
+            value: r.id,
+            label: r.nome,
+          }))}
+          selecionados={regionais}
+          onChange={setRegionais}
+          largura="w-[170px]"
+        />
+        <FiltroMulti
+          label="Localização"
+          opcoes={[
+            ...COLABORADOR_LOCALIZACOES.map((l) => ({
+              value: l,
+              label: localizacaoLabel(l),
+            })),
+            { value: SEM, label: "Não informado" },
+          ]}
+          selecionados={localizacoes}
+          onChange={setLocalizacoes}
+          largura="w-[170px]"
+        />
+        <FiltroMulti
+          label="Gênero"
+          opcoes={[
+            ...OPCOES_GENERO,
+            { value: SEM, label: "Não informado" },
+          ]}
+          selecionados={generos}
+          onChange={setGeneros}
+          largura="w-[170px]"
+        />
+        <FiltroMulti
+          label="Filhos"
+          opcoes={[...OPCOES_FILHO, { value: SEM, label: "Não informado" }]}
+          selecionados={filhos}
+          onChange={setFilhos}
+          largura="w-[140px]"
+        />
       </div>
 
       {filtered.length === 0 ? (
@@ -434,64 +519,154 @@ function formatarAlocacao(c: ColaboradorRow): string {
 }
 
 /**
- * Conteúdo do tooltip da pendência: separa críticas (impedem
- * pagamento) das parciais (cadastro incompleto). Cada campo aparece
- * com bullet colorido pra digitalização rápida.
+ * Multi-select de filtro no padrão "tudo marcado = sem filtro". Mostra:
+ *   - "{label}: Todos" quando tudo está marcado,
+ *   - "{label}: {0 selecionados}" quando nada está marcado,
+ *   - "{label}: {primeiro}" quando 1 está marcado,
+ *   - "{label}: {N} selecionados" quando 2+ estão marcados.
+ *
+ * Inclui ações "Marcar todos" e "Limpar" no cabeçalho do popover. O
+ * universo da lista é o conjunto de opções recebidas — não guarda estado
+ * de "o que é universo" por fora, então novas opções do pai precisam ser
+ * reconciliadas antes de chegar aqui (ver useReconciliarUniverso).
  */
-function PendenciaTooltipConteudo({
-  criticas,
-  parciais,
+function FiltroMulti({
+  label,
+  opcoes,
+  selecionados,
+  onChange,
+  largura,
 }: {
-  criticas: CampoCritico[];
-  parciais: CampoParcial[];
+  label: string;
+  opcoes: { value: string; label: string }[];
+  selecionados: string[];
+  onChange: (v: string[]) => void;
+  largura: string;
 }) {
+  const [open, setOpen] = React.useState(false);
+  const selSet = React.useMemo(() => new Set(selecionados), [selecionados]);
+  const todasMarcadas =
+    opcoes.length > 0 && opcoes.every((o) => selSet.has(o.value));
+  const nenhumaMarcada = opcoes.every((o) => !selSet.has(o.value));
+
+  const resumo = React.useMemo(() => {
+    if (todasMarcadas) return "Todos";
+    const marcados = opcoes.filter((o) => selSet.has(o.value));
+    if (marcados.length === 0) return "Nenhum";
+    if (marcados.length === 1) return marcados[0].label;
+    return `${marcados.length} selecionados`;
+  }, [opcoes, selSet, todasMarcadas]);
+
+  function alternar(v: string) {
+    if (selSet.has(v)) {
+      onChange(selecionados.filter((x) => x !== v));
+    } else {
+      onChange([...selecionados, v]);
+    }
+  }
+
   return (
-    <div className="min-w-[220px] p-3 space-y-2.5">
-      {criticas.length > 0 && (
-        <div>
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <AlertCircle className="h-3.5 w-3.5 text-california-red" />
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-california-red">
-              Impedem pagamento
-            </span>
-          </div>
-          <ul className="space-y-1">
-            {criticas.map((campo) => (
-              <li
-                key={campo}
-                className="flex items-center gap-2 text-xs text-foreground"
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-california-red shrink-0" />
-                {ROTULO_CRITICO[campo]}
-              </li>
-            ))}
-          </ul>
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "inline-flex h-9 items-center justify-between gap-1.5 rounded-lg border border-input bg-white px-2.5 text-[13px] text-foreground outline-none hover:border-california-red/40",
+            !todasMarcadas && "border-california-red/40 bg-california-red/5",
+            largura,
+          )}
+        >
+          <span className="truncate text-left">
+            <span className="font-medium text-muted-foreground">{label}:</span>{" "}
+            <span>{resumo}</span>
+          </span>
+          <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="start"
+        side="bottom"
+        avoidCollisions={false}
+        className="w-[260px] p-0"
+      >
+        <div className="flex items-center justify-between gap-2 border-b border-border p-2 text-xs">
+          <button
+            type="button"
+            onClick={() => onChange(opcoes.map((o) => o.value))}
+            disabled={todasMarcadas}
+            className="rounded-md px-2 py-1 font-medium text-california-red hover:bg-california-red/5 disabled:opacity-40 disabled:hover:bg-transparent"
+          >
+            Marcar todos
+          </button>
+          <button
+            type="button"
+            onClick={() => onChange([])}
+            disabled={nenhumaMarcada}
+            className="rounded-md px-2 py-1 font-medium text-muted-foreground hover:bg-muted disabled:opacity-40 disabled:hover:bg-transparent"
+          >
+            Limpar
+          </button>
         </div>
-      )}
-      {criticas.length > 0 && parciais.length > 0 && (
-        <div className="border-t border-border" />
-      )}
-      {parciais.length > 0 && (
-        <div>
-          <div className="flex items-center gap-1.5 mb-1.5">
-            <Circle className="h-3.5 w-3.5 text-amber-600" />
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
-              Cadastro incompleto
-            </span>
-          </div>
-          <ul className="space-y-1">
-            {parciais.map((campo) => (
-              <li
-                key={campo}
-                className="flex items-center gap-2 text-xs text-foreground"
+        <div className="max-h-64 overflow-y-auto py-1">
+          {opcoes.length === 0 && (
+            <p className="px-3 py-2 text-sm text-muted-foreground">
+              Nenhuma opção.
+            </p>
+          )}
+          {opcoes.map((o) => {
+            const marcado = selSet.has(o.value);
+            return (
+              <button
+                type="button"
+                key={o.value}
+                onClick={() => alternar(o.value)}
+                className={cn(
+                  "flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm hover:bg-accent",
+                  marcado && "bg-accent/40",
+                )}
               >
-                <span className="h-1.5 w-1.5 rounded-full bg-amber-500 shrink-0" />
-                {ROTULO_PARCIAL[campo]}
-              </li>
-            ))}
-          </ul>
+                <span
+                  className={cn(
+                    "flex h-4 w-4 shrink-0 items-center justify-center rounded border",
+                    marcado
+                      ? "border-california-red bg-california-red text-white"
+                      : "border-border bg-white",
+                  )}
+                >
+                  {marcado && <Check className="h-3 w-3" />}
+                </span>
+                <span className="truncate">{o.label}</span>
+              </button>
+            );
+          })}
         </div>
-      )}
-    </div>
+      </PopoverContent>
+    </Popover>
   );
 }
+
+/**
+ * Garante que o estado de um filtro reflita o universo atual: opções novas
+ * entram marcadas (preserva "tudo marcado = sem filtro"); opções que saíram
+ * do universo somem do estado.
+ */
+function useReconciliarUniverso(
+  selecionados: string[],
+  setSelecionados: (v: string[]) => void,
+  universo: string[],
+) {
+  React.useEffect(() => {
+    const selSet = new Set(selecionados);
+    const univSet = new Set(universo);
+    // Novas opções: entram marcadas.
+    const novas = universo.filter((v) => !selSet.has(v));
+    // Opções que sumiram: removidas do estado.
+    const sobreviventes = selecionados.filter((v) => univSet.has(v));
+    if (novas.length === 0 && sobreviventes.length === selecionados.length) {
+      return;
+    }
+    setSelecionados([...sobreviventes, ...novas]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [universo]);
+}
+

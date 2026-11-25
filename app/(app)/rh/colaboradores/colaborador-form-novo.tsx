@@ -16,8 +16,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Empresa, Nivel } from "@/lib/types";
-import { tipoContratacaoLabel } from "@/lib/types";
+import type { ColaboradorLocalizacao, Empresa, Nivel } from "@/lib/types";
+import {
+  COLABORADOR_LOCALIZACOES,
+  localizacaoLabel,
+  tipoContratacaoLabel,
+} from "@/lib/types";
 import { criarColaborador } from "./actions";
 
 type RegionalOption = { id: string; nome: string; empresa_id: string };
@@ -77,6 +81,11 @@ export function ColaboradorFormNovo({
   const [dataAdmissao, setDataAdmissao] = React.useState<string>(
     defaults?.data_admissao ?? hoje(),
   );
+  const [localizacao, setLocalizacao] = React.useState<
+    ColaboradorLocalizacao | ""
+  >("");
+  const [possuiFilhos, setPossuiFilhos] = React.useState<"sim" | "nao" | "">("");
+  const [quantidadeFilhos, setQuantidadeFilhos] = React.useState<string>("");
 
   const isPJ =
     tipoContratacao === "pj" || tipoContratacao === "clt_recibo";
@@ -97,6 +106,12 @@ export function ColaboradorFormNovo({
     setRegionalId("");
     setUsaRateioEmpresa(false);
   }, [empresaId]);
+
+  // Ao trocar de "sim" pra "não"/"", zera a quantidade — quantidade só faz
+  // sentido quando a flag é "sim".
+  React.useEffect(() => {
+    if (possuiFilhos !== "sim") setQuantidadeFilhos("");
+  }, [possuiFilhos]);
 
   // Ao ligar Hub, limpa a regional selecionada (regra do validador).
   React.useEffect(() => {
@@ -121,6 +136,9 @@ export function ColaboradorFormNovo({
     formData.set("cnpj", cnpj);
     formData.set("telefone", telefone);
     formData.set("data_admissao", dataAdmissao);
+    formData.set("localizacao", localizacao);
+    formData.set("possui_filhos", possuiFilhos);
+    formData.set("quantidade_filhos", quantidadeFilhos);
     if (defaults?.from_freelancer_contrato_id) {
       formData.set(
         "from_freelancer_contrato_id",
@@ -340,7 +358,104 @@ export function ColaboradorFormNovo({
         </div>
       </section>
 
-      {/* Bloco 2 — Alocação inicial */}
+      {/* Bloco 2 — Informações pessoais */}
+      <section className="space-y-5">
+        <div>
+          <h2 className="text-sm font-semibold uppercase tracking-wider text-california-red">
+            Informações pessoais
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Dados que o RH preenche no cadastro. O colaborador pode
+            complementar/alterar depois no wizard do próprio perfil.
+          </p>
+          <div className="mt-2 h-px bg-border" />
+        </div>
+
+        <div className="grid gap-5 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="email_pessoal">E-mail pessoal</Label>
+            <Input
+              id="email_pessoal"
+              name="email_pessoal"
+              type="email"
+              maxLength={200}
+              placeholder="colaborador@exemplo.com"
+            />
+            {fieldErrors.email_pessoal?.map((msg, i) => (
+              <p key={i} className="text-xs text-california-red">
+                {msg}
+              </p>
+            ))}
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="localizacao">Localização</Label>
+            <Select
+              value={localizacao || NONE_SENTINEL}
+              onValueChange={(v) =>
+                setLocalizacao(v === NONE_SENTINEL ? "" : (v as ColaboradorLocalizacao))
+              }
+            >
+              <SelectTrigger id="localizacao">
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE_SENTINEL}>Não informado</SelectItem>
+                {COLABORADOR_LOCALIZACOES.map((l) => (
+                  <SelectItem key={l} value={l}>
+                    {localizacaoLabel(l)}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Onde a pessoa mora. Independe da regional de alocação.
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="possui_filhos">Tem filhos?</Label>
+            <Select
+              value={possuiFilhos || NONE_SENTINEL}
+              onValueChange={(v) =>
+                setPossuiFilhos(v === NONE_SENTINEL ? "" : (v as "sim" | "nao"))
+              }
+            >
+              <SelectTrigger id="possui_filhos">
+                <SelectValue placeholder="Selecione" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={NONE_SENTINEL}>Não informado</SelectItem>
+                <SelectItem value="sim">Sim</SelectItem>
+                <SelectItem value="nao">Não</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {possuiFilhos === "sim" && (
+            <div className="space-y-2">
+              <Label htmlFor="quantidade_filhos">Quantos filhos?</Label>
+              <Input
+                id="quantidade_filhos"
+                type="number"
+                min={1}
+                max={20}
+                step={1}
+                value={quantidadeFilhos}
+                onChange={(e) => setQuantidadeFilhos(e.target.value)}
+                placeholder="Ex.: 2"
+              />
+              {fieldErrors.quantidade_filhos?.map((msg, i) => (
+                <p key={i} className="text-xs text-california-red">
+                  {msg}
+                </p>
+              ))}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Bloco 3 — Alocação inicial */}
       <section className="space-y-5">
         <div>
           <h2 className="text-sm font-semibold uppercase tracking-wider text-california-red">

@@ -23,8 +23,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { Colaborador, Nivel } from "@/lib/types";
-import { tipoContratacaoLabel } from "@/lib/types";
+import type { Colaborador, ColaboradorLocalizacao, Nivel } from "@/lib/types";
+import {
+  COLABORADOR_LOCALIZACOES,
+  localizacaoLabel,
+  tipoContratacaoLabel,
+} from "@/lib/types";
 import { editarColaborador } from "../actions";
 
 const NONE_SENTINEL = "__none__";
@@ -70,6 +74,26 @@ export function EditarDadosDrawer({
   const [dataAdmissao, setDataAdmissao] = React.useState<string>(
     colaborador.data_admissao,
   );
+  const [localizacao, setLocalizacao] = React.useState<
+    ColaboradorLocalizacao | ""
+  >(colaborador.localizacao ?? "");
+  const [possuiFilhos, setPossuiFilhos] = React.useState<"sim" | "nao" | "">(
+    colaborador.possui_filhos === true
+      ? "sim"
+      : colaborador.possui_filhos === false
+        ? "nao"
+        : "",
+  );
+  const [quantidadeFilhos, setQuantidadeFilhos] = React.useState<string>(
+    colaborador.quantidade_filhos != null
+      ? String(colaborador.quantidade_filhos)
+      : "",
+  );
+
+  // Quantidade só faz sentido com "sim".
+  React.useEffect(() => {
+    if (possuiFilhos !== "sim") setQuantidadeFilhos("");
+  }, [possuiFilhos]);
 
   const isPJ =
     tipoContratacao === "pj" || tipoContratacao === "clt_recibo";
@@ -87,6 +111,19 @@ export function EditarDadosDrawer({
       setCnpj(colaborador.cnpj ?? "");
       setTelefone(colaborador.telefone ?? "");
       setDataAdmissao(colaborador.data_admissao);
+      setLocalizacao(colaborador.localizacao ?? "");
+      setPossuiFilhos(
+        colaborador.possui_filhos === true
+          ? "sim"
+          : colaborador.possui_filhos === false
+            ? "nao"
+            : "",
+      );
+      setQuantidadeFilhos(
+        colaborador.quantidade_filhos != null
+          ? String(colaborador.quantidade_filhos)
+          : "",
+      );
     }
     setOpen(next);
   }
@@ -101,6 +138,9 @@ export function EditarDadosDrawer({
     formData.set("cnpj", cnpj);
     formData.set("telefone", telefone);
     formData.set("data_admissao", dataAdmissao);
+    formData.set("localizacao", localizacao);
+    formData.set("possui_filhos", possuiFilhos);
+    formData.set("quantidade_filhos", quantidadeFilhos);
     if (nivelSel === NONE_SENTINEL) formData.delete("nivel_id");
     else formData.set("nivel_id", nivelSel);
     // Envia lista N:N. `lider_id` legado fica fora pra actions usarem
@@ -362,6 +402,94 @@ export function EditarDadosDrawer({
                   }
                 />
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email_pessoal">E-mail pessoal</Label>
+                <Input
+                  id="email_pessoal"
+                  name="email_pessoal"
+                  type="email"
+                  maxLength={200}
+                  defaultValue={colaborador.email_pessoal ?? ""}
+                  placeholder="colaborador@exemplo.com"
+                />
+                {fieldErrors.email_pessoal?.map((msg, i) => (
+                  <p key={i} className="text-xs text-california-red">
+                    {msg}
+                  </p>
+                ))}
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="localizacao">Localização</Label>
+                <Select
+                  value={localizacao || NONE_SENTINEL}
+                  onValueChange={(v) =>
+                    setLocalizacao(
+                      v === NONE_SENTINEL
+                        ? ""
+                        : (v as ColaboradorLocalizacao),
+                    )
+                  }
+                >
+                  <SelectTrigger id="localizacao">
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE_SENTINEL}>Não informado</SelectItem>
+                    {COLABORADOR_LOCALIZACOES.map((l) => (
+                      <SelectItem key={l} value={l}>
+                        {localizacaoLabel(l)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Onde a pessoa mora. Independe da regional de alocação.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="possui_filhos">Tem filhos?</Label>
+                <Select
+                  value={possuiFilhos || NONE_SENTINEL}
+                  onValueChange={(v) =>
+                    setPossuiFilhos(
+                      v === NONE_SENTINEL ? "" : (v as "sim" | "nao"),
+                    )
+                  }
+                >
+                  <SelectTrigger id="possui_filhos">
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NONE_SENTINEL}>Não informado</SelectItem>
+                    <SelectItem value="sim">Sim</SelectItem>
+                    <SelectItem value="nao">Não</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {possuiFilhos === "sim" && (
+                <div className="space-y-2">
+                  <Label htmlFor="quantidade_filhos">Quantos filhos?</Label>
+                  <Input
+                    id="quantidade_filhos"
+                    type="number"
+                    min={1}
+                    max={20}
+                    step={1}
+                    value={quantidadeFilhos}
+                    onChange={(e) => setQuantidadeFilhos(e.target.value)}
+                    placeholder="Ex.: 2"
+                  />
+                  {fieldErrors.quantidade_filhos?.map((msg, i) => (
+                    <p key={i} className="text-xs text-california-red">
+                      {msg}
+                    </p>
+                  ))}
+                </div>
+              )}
             </div>
 
             {error && (

@@ -83,6 +83,22 @@ export async function criarColaborador(
     lider_id: formData.get("lider_id")?.toString() ?? "",
     lider_ids: liderIdsRaw,
     data_admissao: formData.get("data_admissao")?.toString() ?? "",
+    email_pessoal: formData.get("email_pessoal")?.toString() ?? "",
+    localizacao:
+      (formData.get("localizacao")?.toString() as
+        | "SP"
+        | "NE"
+        | "NO"
+        | "RJ"
+        | "SC"
+        | "BH"
+        | "SSB"
+        | "") || null,
+    possui_filhos: (formData.get("possui_filhos")?.toString() ?? "") as
+      | "sim"
+      | "nao"
+      | "",
+    quantidade_filhos: formData.get("quantidade_filhos")?.toString() ?? "",
   });
   if (!colaboradorParsed.success) {
     return {
@@ -148,6 +164,15 @@ export async function criarColaborador(
       data_admissao: colaboradorParsed.data.data_admissao,
       status: "ativo",
       created_by: session.profile.id,
+      email_pessoal: colaboradorParsed.data.email_pessoal,
+      localizacao: colaboradorParsed.data.localizacao,
+      possui_filhos: colaboradorParsed.data.possui_filhos,
+      // Quantidade só faz sentido quando a flag é "sim" — a CHECK no banco
+      // rejeita caso contrário.
+      quantidade_filhos:
+        colaboradorParsed.data.possui_filhos === true
+          ? colaboradorParsed.data.quantidade_filhos
+          : null,
     })
     .select("id")
     .single();
@@ -318,6 +343,22 @@ export async function editarColaborador(
     lider_id: formData.get("lider_id")?.toString() ?? "",
     lider_ids: liderIdsRaw,
     data_admissao: formData.get("data_admissao")?.toString() ?? "",
+    email_pessoal: formData.get("email_pessoal")?.toString() ?? "",
+    localizacao:
+      (formData.get("localizacao")?.toString() as
+        | "SP"
+        | "NE"
+        | "NO"
+        | "RJ"
+        | "SC"
+        | "BH"
+        | "SSB"
+        | "") || null,
+    possui_filhos: (formData.get("possui_filhos")?.toString() ?? "") as
+      | "sim"
+      | "nao"
+      | "",
+    quantidade_filhos: formData.get("quantidade_filhos")?.toString() ?? "",
   });
   if (!parsed.success) {
     return {
@@ -350,6 +391,13 @@ export async function editarColaborador(
       funcao: parsed.data.funcao,
       nivel_id: parsed.data.nivel_id,
       data_admissao: parsed.data.data_admissao,
+      email_pessoal: parsed.data.email_pessoal,
+      localizacao: parsed.data.localizacao,
+      possui_filhos: parsed.data.possui_filhos,
+      quantidade_filhos:
+        parsed.data.possui_filhos === true
+          ? parsed.data.quantidade_filhos
+          : null,
     })
     .eq("id", id)
     .eq("tenant_id", session.activeTenant.id);
