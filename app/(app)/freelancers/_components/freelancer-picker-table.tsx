@@ -40,9 +40,16 @@ function sufixoValor(tipo: TipoContrato | null): string {
 function formatarPeriodo(
   inicio: string | null,
   termino: string | null,
-): string {
+): React.ReactNode {
   if (!inicio && !termino) return "—";
-  if (inicio && termino) return `${formatarData(inicio)} – ${formatarData(termino)}`;
+  if (inicio && termino) {
+    return (
+      <>
+        <div>{formatarData(inicio)}</div>
+        <div>{formatarData(termino)}</div>
+      </>
+    );
+  }
   if (inicio) return `Desde ${formatarData(inicio)}`;
   return `Até ${formatarData(termino as string)}`;
 }
