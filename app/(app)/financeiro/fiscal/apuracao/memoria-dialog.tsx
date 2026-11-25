@@ -39,8 +39,6 @@ import { RateioPorGerencial } from "./rateio-por-gerencial";
 import { JUSTIFICATIVA_MINIMA, MOTIVO_DO_AJUSTE_MINIMO, calculadoParaAGuia, cotasDaAprovacao } from "./aprovacao";
 import type { EstabelecimentoDaTela, GuiaDaTela, PJDaTela } from "./dados";
 import { Nota, fimDoPeriodo, moeda, pct, situacaoDa } from "./ui";
-import type { ContaDaBaixaDeImposto } from "../impostos/dados";
-import { CamposDoPagoNoHistorico, contaSugerida } from "../impostos/pago-no-historico";
 
 const GRUPOS: Array<{ grupos: ItemMemoria["grupo"][]; titulo: string }> = [
   { grupos: ["base"], titulo: "Base de cálculo do trimestre" },
@@ -80,13 +78,7 @@ export function MemoriaDialog({
   aprovarEmCurso,
   regrasDoRateio,
   gerencialDoCnpj,
-  contas,
-  nomesDasPJs,
 }: {
-  /** Decisão 277, entrega 3: as contas que pagam guia ("já foi paga", no histórico da planilha). */
-  contas: ContaDaBaixaDeImposto[];
-  /** PJ → nome, para o aviso "a guia é da X e a conta é da Y". */
-  nomesDasPJs: Record<string, string>;
   /** Decisão 277: as empresas gerenciais e a regra das regionais para esta guia. */
   regrasDoRateio: RegrasDoRateio;
   /** A empresa gerencial do CNPJ: a sugestão do rateio quando a guia não tem receita. */
@@ -168,14 +160,6 @@ export function MemoriaDialog({
     [g.periodo, g.competencia, diferenca, valorGuia, cidadeDaMatriz, cadastroDasCotas, cotaUnica, jurosPct],
   );
 
-  // Decisão 277, entrega 3: a guia já paga fora do sistema, com o pagamento no
-  // histórico da planilha. Só na guia de um título (com cotas, cada uma em Impostos a Pagar).
-  const umTitulo = !diferenca && valorGuia > 0 && (g.periodo !== "trimestral" || cotas.length === 1);
-  const [jaPaga, setJaPaga] = React.useState(false);
-  const [pagoEm, setPagoEm] = React.useState("");
-  const [contaPaga, setContaPaga] = React.useState("");
-  const marcarPaga = jaPaga && umTitulo;
-
   const fim = fimDoPeriodo(g.periodo, g.competencia);
   const local = estab
     ? `${estab.nome} · CNPJ ${estab.cnpj}`
@@ -218,9 +202,6 @@ export function MemoriaDialog({
         return;
       }
     }
-    if (marcarPaga && !pagoEm) return setErro("Informe a data em que a guia foi paga.");
-    if (marcarPaga && !contaPaga) return setErro("Selecione a conta que pagou a guia.");
-    if (marcarPaga && pagoEm > hoje) return setErro("A data do pagamento no histórico não pode ser depois de hoje.");
     setEnviando(true);
     setErro(null);
     const supabase = createClient();
@@ -248,7 +229,6 @@ export function MemoriaDialog({
         guia_path: guiaPath,
         rateio_gerencial: comRateio ? partes : null,
         saldo_credor_contabil: saldoMudou ? saldoContabil : null,
-        pago_no_historico: marcarPaga ? { pago_em: pagoEm, conta_bancaria_id: contaPaga } : null,
         ajuste_base: ajusteComSinal !== 0 ? { valor: ajusteComSinal, motivo: ajusteMotivo } : null,
       });
     } catch {
@@ -265,11 +245,9 @@ export function MemoriaDialog({
     const aviso = r.aviso ? ` ${r.aviso}` : "";
     onAprovada(
       (r.titulos > 0
-        ? r.pagoNoHistorico
-          ? `${g.titulo} de ${g.rotulo_competencia} aprovado e pago no histórico, sem lançamento. Está nos pagos de Impostos a Pagar.`
-          : `${g.titulo} de ${g.rotulo_competencia} ${diferenca ? "· diferença aprovada" : "aprovado"}. ${
-              r.titulos === 1 ? "Título criado" : `${r.titulos} títulos criados`
-            } em Impostos a Pagar.`
+        ? `${g.titulo} de ${g.rotulo_competencia} ${diferenca ? "· diferença aprovada" : "aprovado"}. ${
+            r.titulos === 1 ? "Título criado" : `${r.titulos} títulos criados`
+          } em Impostos a Pagar.`
         : diferenca
           ? `${g.titulo} de ${g.rotulo_competencia}: saldo registrado, sem valor a pagar.`
           : `${g.titulo} de ${g.rotulo_competencia} confirmado sem valor a pagar.`) + aviso,
@@ -667,49 +645,6 @@ export function MemoriaDialog({
                       setErro(null);
                     }}
                   />
-                )}
-
-                {umTitulo && (
-                  <div className="space-y-3 rounded-xl border border-border p-3">
-                    <label className="flex cursor-pointer items-start gap-2 text-[13px]">
-                      <Checkbox
-                        className="mt-0.5"
-                        checked={jaPaga}
-                        onCheckedChange={(v) => {
-                          const marcado = v === true;
-                          setJaPaga(marcado);
-                          setErro(null);
-                          if (marcado) {
-                            if (!pagoEm && g.vencimento <= hoje) setPagoEm(g.vencimento);
-                            if (!contaPaga) setContaPaga(contaSugerida(contas, g.empresa_contabil_id));
-                          }
-                        }}
-                      />
-                      <span>
-                        <b>Já foi paga</b>: o pagamento está no histórico da planilha. O título nasce e já sai de A pagar, sem
-                        lançamento (o DRE e o fluxo de caixa contam pelo histórico).
-                      </span>
-                    </label>
-                    {jaPaga && (
-                      <CamposDoPagoNoHistorico
-                        contas={contas}
-                        pjId={g.empresa_contabil_id}
-                        pjNome={pj?.nome ?? null}
-                        nomesDasPJs={nomesDasPJs}
-                        valor={valorGuia}
-                        data={pagoEm}
-                        onData={(d) => {
-                          setPagoEm(d);
-                          setErro(null);
-                        }}
-                        conta={contaPaga}
-                        onConta={(c) => {
-                          setContaPaga(c);
-                          setErro(null);
-                        }}
-                      />
-                    )}
-                  </div>
                 )}
 
                 <div className="space-y-1.5">
