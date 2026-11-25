@@ -1,7 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { Search, AlertCircle, ArrowUpDown, ArrowUp, ArrowDown } from "lucide-react";
+import {
+  Search,
+  AlertCircle,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  Palmtree,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -74,6 +81,9 @@ export type FolhaLinha = {
   /** NF anexada pra (colab, competência)? Só relevante quando a linha
    *  exige NF (origem=california + tipo in pj/mei/clt_recibo). */
   tem_nf: boolean;
+  /** Dias de férias que caíram no mês e foram descontados do salário.
+   *  0 quando o colaborador não teve férias nesse mês. */
+  dias_ferias_mes: number;
 };
 
 export type ContagemStatus = Record<
@@ -115,6 +125,7 @@ export function FolhaCompetenciaView({
   );
   const [tipo, setTipo] = React.useState<TipoFiltro>("todos");
   const [origem, setOrigem] = React.useState<OrigemFiltro>("todas");
+  const [somenteFerias, setSomenteFerias] = React.useState(false);
   const [linhaEditando, setLinhaEditando] = React.useState<FolhaLinha | null>(
     null,
   );
@@ -140,6 +151,11 @@ export function FolhaCompetenciaView({
     return ORDEM_TIPO.filter((t) => presentes.has(t));
   }, [linhas]);
 
+  const totalEmFerias = React.useMemo(
+    () => linhas.filter((l) => l.dias_ferias_mes > 0).length,
+    [linhas],
+  );
+
   const filtradas = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
     const resultado = linhas.filter((l) => {
@@ -147,6 +163,7 @@ export function FolhaCompetenciaView({
       if (tipo !== "todos" && l.colaborador.tipo_contratacao !== tipo)
         return false;
       if (origem !== "todas" && l.origem !== origem) return false;
+      if (somenteFerias && l.dias_ferias_mes <= 0) return false;
       if (
         regionalId !== SENTINEL_TODAS_REGIONAIS &&
         !l.alocacoes.some((a) => a.regional_id === regionalId)
@@ -173,7 +190,7 @@ export function FolhaCompetenciaView({
       return sinal * (Number(a.salario_base) - Number(b.salario_base));
     });
     return ordenadas;
-  }, [linhas, busca, tab, tipo, origem, regionalId, ordenacao]);
+  }, [linhas, busca, tab, tipo, origem, regionalId, somenteFerias, ordenacao]);
 
   const contagemPorTab: Record<StatusFiltro, number> = {
     todos: linhas.length,
@@ -284,6 +301,39 @@ export function FolhaCompetenciaView({
             ))}
           </SelectContent>
         </Select>
+        <button
+          type="button"
+          onClick={() => setSomenteFerias((v) => !v)}
+          disabled={totalEmFerias === 0}
+          aria-pressed={somenteFerias}
+          title={
+            totalEmFerias === 0
+              ? "Nenhum colaborador em férias nesta competência"
+              : somenteFerias
+                ? "Mostrar todos os colaboradores"
+                : "Mostrar apenas quem teve desconto por férias"
+          }
+          className={cn(
+            "inline-flex items-center gap-1.5 rounded-md border px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-california-red/40",
+            somenteFerias
+              ? "border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100"
+              : "border-border bg-background text-muted-foreground hover:text-foreground",
+            totalEmFerias === 0 && "cursor-not-allowed opacity-50 hover:bg-background",
+          )}
+        >
+          <Palmtree className="h-4 w-4" />
+          Em férias
+          <span
+            className={cn(
+              "inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1.5 text-[10px] font-bold",
+              somenteFerias
+                ? "bg-amber-600 text-white"
+                : "bg-muted text-muted-foreground",
+            )}
+          >
+            {totalEmFerias}
+          </span>
+        </button>
         <span className="ml-auto text-xs text-muted-foreground">
           Mostrando {filtradas.length} de {linhas.length}
         </span>
@@ -353,6 +403,9 @@ export function FolhaCompetenciaView({
                       }
                       temNf={l.tem_nf}
                     />
+                    {l.dias_ferias_mes > 0 && (
+                      <SeloFerias dias={l.dias_ferias_mes} />
+                    )}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {l.colaborador.funcao}
@@ -578,6 +631,21 @@ function SeloHibrido() {
       title="Colaborador CLT + Recibo (híbrido): parte do salário vai como Recibo (RPA) e parte como CLT."
     >
       Híbrido
+    </span>
+  );
+}
+
+/** Indicador de dias de férias descontados no mês. O salário_base já veio
+ *  reduzido pelo ratio (30 - dias) / 30 na função `gerar_folha_da_competencia`
+ *  — este selo apenas sinaliza que isso aconteceu. */
+function SeloFerias({ dias }: { dias: number }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-1.5 py-0 text-[10px] font-semibold text-amber-800"
+      title={`Colaborador teve ${dias} dia${dias === 1 ? "" : "s"} de férias no mês. Salário foi descontado proporcionalmente.`}
+    >
+      <Palmtree className="h-3 w-3" />
+      Férias · {dias}d
     </span>
   );
 }

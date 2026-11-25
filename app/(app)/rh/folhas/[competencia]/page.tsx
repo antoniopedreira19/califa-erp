@@ -141,8 +141,19 @@ export default async function FolhaCompetenciaPage({
     new Set(folhasRaw.map((f) => f.colaborador_id)),
   );
 
-  // Passo 2: colaboradores + alocacoes em paralelo.
-  const [colaboradoresRes, alocacoesRes, nfsAnexadasRes] = await Promise.all([
+  // Passo 2: colaboradores + alocacoes + NFs + férias que caem no mês em paralelo.
+  //
+  // Férias: busca lançamentos aprovados/pós-aprovação (aprovado, nf_anexada,
+  // enviado_financeiro, concluido) tipo usufruto/abono_combinado que interceptam
+  // o mês. O salário já veio descontado da função
+  // `gerar_folha_da_competencia`; aqui só computamos os dias no mês pra badge e
+  // filtro "Em férias". Replica a regra do `fn_dias_ferias_na_competencia`.
+  const primeiroDiaMes = new Date(Date.UTC(ano, mes - 1, 1));
+  const ultimoDiaMes = new Date(Date.UTC(ano, mes, 0));
+  const primeiroDiaIso = primeiroDiaMes.toISOString().slice(0, 10);
+  const ultimoDiaIso = ultimoDiaMes.toISOString().slice(0, 10);
+
+  const [colaboradoresRes, alocacoesRes, nfsAnexadasRes, feriasRes] = await Promise.all([
     colaboradorIds.length > 0
       ? supabase
           .from("colaboradores")
@@ -167,11 +178,61 @@ export default async function FolhaCompetenciaPage({
           .eq("competencia_mes", mes)
           .in("colaborador_id", colaboradorIds)
       : Promise.resolve({ data: [] as { colaborador_id: string }[], error: null }),
+    colaboradorIds.length > 0
+      ? supabase
+          .from("colaboradores_ferias_lancamentos")
+          .select("colaborador_id, tipo, data_inicio, data_fim, dias, dias_abono")
+          .eq("tenant_id", session.activeTenant.id)
+          .in("colaborador_id", colaboradorIds)
+          .in("status", ["aprovado", "nf_anexada", "enviado_financeiro", "concluido"])
+          .in("tipo", ["usufruto", "abono_combinado"])
+          .lte("data_inicio", ultimoDiaIso)
+          .gte("data_fim", primeiroDiaIso)
+      : Promise.resolve({ data: [] as any[], error: null }),
   ]);
 
   const colabsComNf = new Set(
     (nfsAnexadasRes.data ?? []).map((n) => n.colaborador_id),
   );
+
+  // Dias de férias por colaborador na competência. Mesma fórmula do
+  // `fn_dias_ferias_na_competencia`: pra usufruto puro, dias no mês; pra
+  // abono_combinado, proporcional ao bloco de folga (dias - dias_abono)
+  // vs. duração total do lançamento.
+  const UM_DIA_MS = 86400000;
+  const diasFeriasPorColab = new Map<string, number>();
+  for (const l of ((feriasRes.data ?? []) as {
+    colaborador_id: string;
+    tipo: string;
+    data_inicio: string;
+    data_fim: string;
+    dias: number | string;
+    dias_abono: number | string;
+  }[])) {
+    const ini = new Date(`${l.data_inicio}T00:00:00Z`);
+    const fim = new Date(`${l.data_fim}T00:00:00Z`);
+    const inicioEfetivo = ini > primeiroDiaMes ? ini : primeiroDiaMes;
+    const fimEfetivo = fim < ultimoDiaMes ? fim : ultimoDiaMes;
+    if (fimEfetivo < inicioEfetivo) continue;
+    const diasNoMesIntegral =
+      Math.floor((+fimEfetivo - +inicioEfetivo) / UM_DIA_MS) + 1;
+    const diasTotalLanc = Math.floor((+fim - +ini) / UM_DIA_MS) + 1;
+    if (diasTotalLanc <= 0) continue;
+    const diasTotalNum = Number(l.dias);
+    const diasAbonoNum = Number(l.dias_abono);
+    const diasFolgaTotal =
+      l.tipo === "abono_combinado"
+        ? diasTotalNum - diasAbonoNum
+        : diasTotalNum;
+    const diasFolgaNoMes = Math.round(
+      (diasNoMesIntegral * diasFolgaTotal) / diasTotalLanc,
+    );
+    if (diasFolgaNoMes <= 0) continue;
+    diasFeriasPorColab.set(
+      l.colaborador_id,
+      (diasFeriasPorColab.get(l.colaborador_id) ?? 0) + diasFolgaNoMes,
+    );
+  }
 
   const colaboradorPorId = new Map<
     string,
@@ -309,6 +370,7 @@ export default async function FolhaCompetenciaPage({
       alocacoes: alocs,
       alocacoes_display: computaAlocacoesDisplay(alocs),
       tem_nf: colabsComNf.has(l.colaborador_id),
+      dias_ferias_mes: diasFeriasPorColab.get(l.colaborador_id) ?? 0,
     };
   });
 
