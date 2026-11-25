@@ -381,6 +381,12 @@ interface Props {
    *  mesmo formulário, com o pagamento opcional, gravado pelas actions do
    *  veículo. Na página, Cancelar e Criar voltam para Cadastros › Veículos. */
   variante?: "fornecedor" | "veiculo";
+  /** Quem abriu o cadastro não vai pagar pela conta do cadastro — PP por
+   *  boleto, chave aleatória ou guia (ADR 255). Com o fornecedor importado
+   *  da planilha sem conta e sem PIX, pré-marca "Sem conta nem PIX" para
+   *  o botão "Salvar alterações" acender depois de completar e-mail,
+   *  telefone, regime e CNAE. A pessoa desmarca se quiser lançar a conta. */
+  preMarcarSemConta?: boolean;
 }
 
 export function FornecedorForm({
@@ -394,6 +400,7 @@ export function FornecedorForm({
   onSelecionarExistente,
   onSalvo,
   variante = "fornecedor",
+  preMarcarSemConta = false,
 }: Props) {
   const router = useRouter();
   const isEdit = Boolean(fornecedor);
@@ -482,10 +489,26 @@ export function FornecedorForm({
   );
 
   /** Decisão 161: o fornecedor não tem conta nem PIX fixos — a cada PP ele
-   *  manda boleto ou chave aleatória. */
-  const [semDadosPagamento, setSemDadosPagamento] = React.useState<boolean>(
-    fornecedor?.sem_dados_pagamento ?? false,
-  );
+   *  manda boleto ou chave aleatória.
+   *
+   *  Pré-marcado quando a PP que abriu o cadastro paga por boleto, chave
+   *  aleatória ou guia (ADR 255) E o cadastro vem sem conta e sem PIX (o
+   *  caso típico da planilha). Sem isso, a pessoa preenchia e-mail, telefone,
+   *  regime e CNAE — tudo que a PP pedia — e o botão continuava cinza porque
+   *  o formulário ainda cobrava conta ou PIX. */
+  const [semDadosPagamento, setSemDadosPagamento] = React.useState<boolean>(() => {
+    if (fornecedor?.sem_dados_pagamento) return true;
+    if (
+      preMarcarSemConta &&
+      fornecedor &&
+      !fornecedor.banco_codigo &&
+      !fornecedor.pix_tipo &&
+      !fornecedor.pix_chave
+    ) {
+      return true;
+    }
+    return false;
+  });
 
   /** O endereço nasce recolhido, e já aberto em quem tem endereço. */
   const temEndereco = Boolean(

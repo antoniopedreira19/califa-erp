@@ -76,6 +76,7 @@ export function NovoFornecedorDialog({
   onSalvo,
   nomeInicial,
   contexto = "pp",
+  preMarcarSemConta = false,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -91,6 +92,11 @@ export function NovoFornecedorDialog({
   nomeInicial?: string;
   /** Qual formulário ficou atrás — só o texto do cabeçalho muda. */
   contexto?: ContextoCadastro;
+  /** Quem abriu o cadastro não vai pagar pela conta do cadastro — PP por
+   *  boleto, chave aleatória ou guia (ADR 255). Pré-marca "Sem conta nem
+   *  PIX" no cadastro que vem vazio para o botão "Salvar alterações"
+   *  acender ao completar os campos que a PP pediu. */
+  preMarcarSemConta?: boolean;
 }) {
   const editando = Boolean(fornecedor);
   const onde = CONTEXTO[contexto];
@@ -159,6 +165,7 @@ export function NovoFornecedorDialog({
             modo="dialog"
             tipoPessoa={tipoPessoa}
             onTipoPessoaChange={setTipoPessoa}
+            preMarcarSemConta={preMarcarSemConta}
             onCancelar={() => onOpenChange(false)}
             onCriado={(f) => {
               onCriado(f);

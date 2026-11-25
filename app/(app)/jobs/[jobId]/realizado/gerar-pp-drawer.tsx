@@ -2732,6 +2732,12 @@ export function GerarPPDrawer({
           }}
           fornecedor={fornecedorParaEditar ?? undefined}
           nomeInicial={nomeSugerido || undefined}
+          // Boleto, chave aleatória ou guia (ADR 255) não pedem conta nem
+          // PIX. Pré-marca "Sem conta nem PIX" no cadastro que vem da
+          // planilha vazio: preencher e-mail, telefone, regime e CNAE já
+          // acende o "Salvar alterações" sem a pessoa ter que achar o
+          // checkbox lá embaixo.
+          preMarcarSemConta={pagamento.escolha !== "cadastro"}
           onCriado={adotarFornecedor}
           onSelecionarExistente={adotarFornecedor}
           // A edição não mexe na escolha: o fornecedor continua o mesmo,
