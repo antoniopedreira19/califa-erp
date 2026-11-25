@@ -9390,3 +9390,11 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Rateio por gerencial:** a sugestão acompanha o valor da guia até a pessoa mexer (Guia da contabilidade e aprovação).
 - **Conferência do pago no histórico:** "tributo" saiu das palavras de imposto.
 - Carga da produção (23/11): 12 Guias da contabilidade de set/3T pagas no histórico (R$ 761.400,80); o resto aguarda o Tiago (ver 277 e a memória do fiscal).
+
+## ⚠️ Nota de 2026-11-25 — a regional trocada na linha da conciliação (decisão 280)
+
+- **Conciliação automática:** a coluna Reg virou campo de busca, como o Subtipo (lançamento na linha, sugestão e Só no sistema). Opções: as regionais ativas da empresa do lançamento e o **TD** (a tabela de rateio da empresa, do ano do lançamento), quando a empresa tem a tabela completa. Largura: Reg 44→56 px, a descrição do sistema cede 12.
+- **O que é de job não troca** (PP, estorno de verba, nota de job, recebimento antes da NF): a célula mostra a regional com a dica da 069. Também não trocam folha, notas de sócio, save avulso, imposto, fatura, transferência e mútuo.
+- **Grava no documento ao conciliar** (escolha do Tiago): rateio do avulso (recorrência: só a ocorrência), da nota avulsa, do desembolso; regional da baixa manual (TD = sem regional); regional da linha da planilha (TD = `regional_todas`). Rascunho em `conciliacao_regionais` até o Conciliar, como o centro de custo.
+- **Banco** (migration `20261125600001`): `conciliacao_regionais`, `salvar_regional_da_conciliacao`, `trocar_regional_pela_conciliacao` (travas no banco, período fechado, auditoria `*.regional_alterada`). Leitura: `banco-dados.ts` traz o rascunho, a tabela TD e a empresa de cada baixa e linha da planilha.
+

@@ -1,7 +1,7 @@
 # 206 — A exceção no fechamento do internacional, só do administrador
 
 **Data:** 2026-10-22
-**Status:** aceita e implementada em 22/10/2026.
+**Status:** aceita e implementada em 22/10/2026; revista em 25/11/2026 (orçamento que passa a Internacional).
 **Quem decidiu:** Tiago, no protótipo "Exceção no fechamento do internacional"
 (forma A, botão "Exceção"; aviso A, selo e faixa), com os ajustes pedidos
 nos comentários do protótipo.
@@ -168,3 +168,47 @@ motivo, sem a Exceção do administrador (resposta do Tiago de 27/10/2026). A
 alteração grava no **job** (`jobs_parametros`): a versão aprovada, a trava
 desta decisão no orçamento e a Exceção do administrador continuam como
 estão. Ver a [224](224-parametros-do-job-na-abertura.md).
+
+## ⚠️ Revisão de 2026-11-25 — orçamento que passa a Internacional
+
+**O caso (24/11/2026, P-0077/26-01).** O orçamento nasceu em 16/10 com a
+categoria Evento (nacional), e a v1 ganhou int. taxes 0% e nenhuma moeda.
+Em 23/11 a categoria foi trocada para Internacional e a planilha interna foi
+importada por cima. O orçado bateu com a planilha no centavo, mas a versão
+continuou com 0%: a troca de categoria só mexia nas versões quando entrava
+ou saía o modelo mensal, e a importação não lê int. taxes (o padrão é fixo
+por esta decisão). A aprovação barrou "fora do padrão sem exceção
+registrada", e a mensagem mandava "voltar ao padrão pelo botão Exceção" —
+só que o pop-up só mostrava "Voltar ao padrão" com exceção registrada, e
+digitar o padrão desligava o "Aplicar". Ninguém saía pela tela.
+
+**A regra agora:**
+
+1. **Trocar a categoria para Internacional** leva as versões abertas (nem
+   aprovadas, nem canceladas) ao fechamento padrão — int. taxes 18,02%,
+   custo de transação R$ 0,00, impostos BR 19,53% (ou 0, se já estavam em
+   0) — e põe a moeda USD quando está vazia, como uma versão que já nasce
+   internacional. O câmbio continua em branco (a cotação é do dia). A troca
+   grava `orcamento.modelo_planilha_trocado` com as versões e o de/para.
+   Regra em `taxasAoEntrarNoInternacional`
+   (`lib/calculos/excecao-fechamento.ts`), a mesma do gatilho para versão
+   nova; aplicada em `atualizarOrcamento`.
+2. **"Voltar ao padrão" também sem exceção:** no pop-up "Exceção", a versão
+   fora do padrão sem exceção registrada mostra o botão e um aviso com os
+   valores que serão gravados. O servidor (`removerExcecaoDoFechamento`) e
+   o gatilho já aceitavam; faltava a tela. Serve às versões que ficaram
+   assim antes desta revisão.
+
+Sair do internacional para nacional não muda as taxas: o nacional não usa
+int. taxes nem custo de transação.
+
+**Conferência:** no Sandbox (P-0006/26), o defeito reproduzido pela versão
+publicada (orçamento Evento → Internacional, 0% e sem moeda, sem "Voltar ao
+padrão") e corrigido pelo servidor local com o "Voltar ao padrão"; outro
+orçamento Evento → Internacional já nasceu em 18,02% e USD.
+
+**Acerto do P-0077/26-01 (25/11/2026):** o administrador duplicou a v1 (a v2
+nasceu no padrão, câmbio em branco, intocada). A v1, que ficou como rascunho,
+foi levada ao padrão (int. taxes 18,02%, USD) pela migration
+`20261125740001_p0077_v1_no_fechamento_padrao.sql`, a pedido do Tiago, com
+evento de auditoria.

@@ -34,8 +34,8 @@ import {
 } from "@/lib/fiscal/apuracao";
 import { dataBr, r2 } from "@/lib/fiscal/datas";
 import { aprovarGuia, informarSaldoCredorDaContabilidade, urlDaGuiaAprovada } from "./actions";
-import { gerenciaisDaBase, rateioPorGerencial, type ParteDaGerencial, type RegrasDoRateio } from "@/lib/fiscal/rateio-gerencial";
-import { RateioPorGerencial } from "./rateio-por-gerencial";
+import { pelaBase } from "@/lib/fiscal/rateio-gerencial";
+import { RateioDaGuia } from "./rateio-da-guia";
 import { JUSTIFICATIVA_MINIMA, MOTIVO_DO_AJUSTE_MINIMO, calculadoParaAGuia, cotasDaAprovacao } from "./aprovacao";
 import type { EstabelecimentoDaTela, GuiaDaTela, PJDaTela } from "./dados";
 import { Nota, fimDoPeriodo, moeda, pct, situacaoDa } from "./ui";
@@ -76,13 +76,7 @@ export function MemoriaDialog({
   onClose,
   onAprovada,
   aprovarEmCurso,
-  regrasDoRateio,
-  gerencialDoCnpj,
 }: {
-  /** Decisão 277: as empresas gerenciais e a regra das regionais para esta guia. */
-  regrasDoRateio: RegrasDoRateio;
-  /** A empresa gerencial do CNPJ: a sugestão do rateio quando a guia não tem receita. */
-  gerencialDoCnpj: string | null;
   /**
    * A guia em curso desta PJ se aprova antes do fechamento, com confirmação:
    * só nas PJs de teste (decisão 181). O servidor confere de novo.
@@ -138,19 +132,16 @@ export function MemoriaDialog({
     if (!diferenca) setValorGuia(calculado);
   }, [calculado, diferenca]);
   const dif = r2(valorGuia - calculado);
-  // Decisão 277: o rateio por empresa gerencial (o da contabilidade) e, no PIS e na
-  // COFINS não cumulativos, o saldo credor que a contabilidade levou para o mês seguinte.
-  const [partes, setPartes] = React.useState<ParteDaGerencial[]>(() => gerenciaisDaBase(g.rateio, calculado, gerencialDoCnpj));
-  // A sugestão por gerencial acompanha o valor da guia até a pessoa mexer no rateio.
-  const [partesEditadas, setPartesEditadas] = React.useState(false);
-  React.useEffect(() => {
-    if (!partesEditadas) setPartes(gerenciaisDaBase(g.rateio, valorGuia, gerencialDoCnpj));
-  }, [valorGuia]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Decisão 277: no PIS e na COFINS não cumulativos, o saldo credor que a
+  // contabilidade levou para o mês seguinte.
   const temSaldo = !diferenca && (g.codigo === "6912" || g.codigo === "5856");
   const [saldoContabil, setSaldoContabil] = React.useState<number>(g.saldo_credor_gerado);
   const saldoMudou = temSaldo && Math.abs(saldoContabil - g.saldo_credor_gerado) >= 0.01;
   const pedeMotivo = Math.abs(dif) >= 0.01 || saldoMudou;
   const comRateio = !diferenca && valorGuia > 0;
+  // Decisão 277 §10: o rateio é o do sistema — nos impostos sobre a receita,
+  // pela receita de cada regional no período ("TDs (REC)") —, levado ao valor da guia.
+  const partesDoRateio = comRateio ? pelaBase(g.rateio, valorGuia) : [];
 
   const cotas: Cota[] = React.useMemo(
     () =>
@@ -195,12 +186,9 @@ export function MemoriaDialog({
       setErro(`Explique a diferença entre a contabilidade e o calculado (mínimo ${JUSTIFICATIVA_MINIMA} caracteres).`);
       return;
     }
-    if (comRateio) {
-      const conferido = rateioPorGerencial(partes, g.rateio, regrasDoRateio, valorGuia);
-      if (!conferido.ok) {
-        setErro(conferido.message);
-        return;
-      }
+    if (comRateio && partesDoRateio.length === 0) {
+      setErro("Esta guia não tem receita no período para dividir entre as regionais.");
+      return;
     }
     setEnviando(true);
     setErro(null);
@@ -227,7 +215,6 @@ export function MemoriaDialog({
         cota_unica: cotaUnica,
         juros_pct: g.periodo === "trimestral" ? jurosPct : null,
         guia_path: guiaPath,
-        rateio_gerencial: comRateio ? partes : null,
         saldo_credor_contabil: saldoMudou ? saldoContabil : null,
         ajuste_base: ajusteComSinal !== 0 ? { valor: ajusteComSinal, motivo: ajusteMotivo } : null,
       });
@@ -634,16 +621,10 @@ export function MemoriaDialog({
                 )}
 
                 {comRateio && (
-                  <RateioPorGerencial
-                    total={valorGuia}
-                    base={g.rateio}
-                    regras={regrasDoRateio}
-                    partes={partes}
-                    onChange={(p) => {
-                      setPartes(p);
-                      setPartesEditadas(true);
-                      setErro(null);
-                    }}
+                  <RateioDaGuia
+                    tributo={g.tributo}
+                    partes={partesDoRateio}
+                    vazio="Sem receita no período: não há como dividir esta guia entre as regionais."
                   />
                 )}
 

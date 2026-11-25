@@ -128,6 +128,11 @@ export function ExcecaoDialog({
   const erroDosValores = erroDasTaxas(valores);
   const foraDoPadrao = erroDosValores === null && desviosDoPadrao(valores).length > 0;
   const semMotivo = motivo.trim() === "";
+  // A versão já está fora do padrão SEM exceção registrada — o caso do
+  // orçamento que nasceu nacional e passou a Internacional antes da
+  // correção de 25/11/2026. Sem o "Voltar ao padrão" aqui não havia saída:
+  // digitar o padrão desliga o "Aplicar" (revisão da decisão 206).
+  const versaoForaSemExcecao = !excecao && desviosDoPadrao(atual).length > 0;
 
   const hoje = faturamento(atual);
   const comExcecao = erroDosValores === null ? faturamento(valores) : null;
@@ -139,7 +144,10 @@ export function ExcecaoDialog({
 
   let motivoDoBotao: string | null = null;
   if (erroDosValores) motivoDoBotao = erroDosValores;
-  else if (!foraDoPadrao) motivoDoBotao = "Os três valores estão no padrão: não há exceção a aplicar.";
+  else if (!foraDoPadrao)
+    motivoDoBotao = versaoForaSemExcecao
+      ? "Os três valores estão no padrão: para levar a versão a eles, use “Voltar ao padrão”."
+      : "Os três valores estão no padrão: não há exceção a aplicar.";
   else if (semMotivo) motivoDoBotao = "Escreva o motivo para aplicar.";
 
   return (
@@ -265,6 +273,18 @@ export function ExcecaoDialog({
           )}
         </div>
 
+        {versaoForaSemExcecao && (
+          <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-800">
+            <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <span>
+              Esta versão está fora do padrão sem exceção registrada. “Voltar ao padrão” grava int.
+              taxes {formatarPercentualDoFechamento(FECHAMENTO_PADRAO.intTaxes)}, impostos BR{" "}
+              {formatarPercentualDoFechamento(FECHAMENTO_PADRAO.imposto)} e custo de transação{" "}
+              {formatCurrency(FECHAMENTO_PADRAO.itc)}.
+            </span>
+          </div>
+        )}
+
         {erro && (
           <div className="flex items-start gap-2 text-xs text-california-red">
             <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
@@ -273,7 +293,7 @@ export function ExcecaoDialog({
         )}
 
         <div className="flex items-center justify-between gap-2.5">
-          {excecao ? (
+          {excecao || versaoForaSemExcecao ? (
             <button
               type="button"
               onClick={onRemover}

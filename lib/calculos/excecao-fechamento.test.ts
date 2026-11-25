@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   FECHAMENTO_PADRAO,
+  taxasAoEntrarNoInternacional,
   compraDaCotacao,
   cotacaoValida,
   desviosDoPadrao,
@@ -90,4 +91,15 @@ test("aprovação: fora do padrão sem exceção é barrada, com exceção passa
     bloqueioAprovacaoVersao({ ...base, cambioInternacional: null, percentualImposto: 19.53, fechamentoInternacional: null }),
     null,
   );
+});
+
+test("orçamento que passa a Internacional: versão vai ao padrão (revisão da 206)", () => {
+  // O P-0077/26-01: nasceu nacional com 19,53% e int. taxes 0.
+  assert.deepEqual(taxasAoEntrarNoInternacional(19.53), FECHAMENTO_PADRAO);
+  assert.equal(foraDoPadrao(taxasAoEntrarNoInternacional(19.53)), false);
+  // Imposto 0 é aceito no internacional e fica.
+  assert.deepEqual(taxasAoEntrarNoInternacional(0), { ...FECHAMENTO_PADRAO, imposto: 0 });
+  // Outra alíquota nacional vai ao padrão, como no gatilho do banco.
+  assert.deepEqual(taxasAoEntrarNoInternacional(14.25), FECHAMENTO_PADRAO);
+  assert.equal(foraDoPadrao(taxasAoEntrarNoInternacional(14.25)), false);
 });

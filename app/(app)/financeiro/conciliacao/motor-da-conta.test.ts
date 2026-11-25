@@ -45,6 +45,7 @@ const lanc = (id: string, extra: Partial<LancamentoCru> = {}): LancamentoCru => 
   fatura_cartao_id: null,
   transferencia_id: null,
   extrato_linha_id: null,
+  empresa_id: null,
   fornecedores: { nome: "FORNECEDOR 001 EXEMPLO", razao_social: null },
   ...extra,
 });

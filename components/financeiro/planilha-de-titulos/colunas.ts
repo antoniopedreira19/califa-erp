@@ -174,7 +174,8 @@ export function colunasFiltraveis(e: {
       celula: (l) => {
         const partes = juntarRateio(l.rateio);
         if (partes.length === 0) return celulaTexto("—");
-        return partes.length === 1 ? celulaTexto(siglaDaRegional(partes[0].regional)) : celulaTexto("TD");
+        if (partes.length === 1) return celulaTexto(siglaDaRegional(partes[0].regional));
+        return celulaTexto(l.rateioPelaReceita ? "TDs (REC)" : "TD");
       },
     },
     ...(e.status

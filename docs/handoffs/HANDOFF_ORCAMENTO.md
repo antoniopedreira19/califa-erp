@@ -5874,6 +5874,14 @@ sistema em R$ 314.064,17. Protótipo aprovado pelo Tiago (forma A, aviso A).
   Gatilho testado numa transação desfeita como GP e administrador. Testes,
   tsc, lint e build limpos.
 
+⚠️ **Orçamento que passa a Internacional (2026-11-25).** Trocar a categoria
+para Internacional não mexia nas versões: a que nasceu nacional ficava com
+int. taxes 0% e sem moeda, a aprovação barrava e o "Voltar ao padrão" só
+aparecia com exceção registrada (P-0077/26-01, 24/11). Agora a troca leva as
+versões abertas ao padrão (18,02% · 19,53% ou 0 · R$ 0,00) e à moeda USD, e
+o pop-up "Exceção" mostra "Voltar ao padrão" também na versão fora do padrão
+sem exceção. Ver a revisão de 25/11 na decisão 206.
+
 ## Código do projeto sem a sigla do cliente — 23/10/2026 (decisão 210)
 
 Aplicada em 26/10/2026, ~17h10, na hora combinada com a frente do

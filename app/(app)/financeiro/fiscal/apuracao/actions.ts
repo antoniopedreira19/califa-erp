@@ -23,7 +23,7 @@ import { logAuditEvent } from "@/lib/auth/audit";
 import { carregarFatosFiscais, type FatosDoBanco } from "@/lib/fiscal/apuracao-fatos";
 import { PRIMEIRA_COMPETENCIA, calcularApuracao, estadoDaGuia, type Guia, type RateioDaGuia } from "@/lib/fiscal/apuracao";
 import { baseDaReceita, carregarNotasDoHistorico, periodoDe, receitaDasNotas, receitaDoHistorico } from "@/lib/fiscal/receita-do-periodo";
-import { rateioPorGerencial } from "@/lib/fiscal/rateio-gerencial";
+import { pelaBase, pelaReceita, rateioAutomatico } from "@/lib/fiscal/rateio-gerencial";
 import { carregarRegrasDoRateio, regrasDoCnpj } from "@/lib/fiscal/rateio-gerencial-dados";
 import { montarPedidoDeAprovacao, validarAjusteDaBase, type EntradaDaAprovacao } from "./aprovacao";
 import { hojeEmSaoPaulo } from "./dados";
@@ -84,8 +84,13 @@ function pedidoDa(r: Recalculo, g: Guia, entrada: EntradaDaAprovacao) {
   const matriz =
     r.fatos.cadastro.estabelecimentos.find((e) => e.empresa_contabil_id === g.empresa_contabil_id && e.papel === "matriz") ??
     r.fatos.cadastro.estabelecimentos.find((e) => e.empresa_contabil_id === g.empresa_contabil_id);
+  // Decisão 277 §10: o imposto sobre a receita divide pela receita de cada
+  // regional ("TDs (REC)") — a receita sem regional fica fora da participação.
+  const guia = pelaReceita(g.tributo)
+    ? { ...g, rateio: pelaBase(g.rateio, entrada.valor_guia > 0 ? entrada.valor_guia : g.apurado) }
+    : g;
   return montarPedidoDeAprovacao({
-    guia: g,
+    guia,
     estado: estado.estado,
     delta: estado.delta,
     aprovacao: estado.aprovacao ?? null,
@@ -110,21 +115,6 @@ const aprovarSchema = z.object({
   juros_pct: z.array(z.number().finite().nullable()).max(3).nullable().default(null),
   /** O anexo já enviado ao bucket `impostos` pelo navegador. */
   guia_path: z.string().min(3).max(500).nullable().default(null),
-  /**
-   * Decisão 277: o valor de cada empresa gerencial (o da contabilidade); as
-   * regionais dividem pela receita, no servidor. Nulo = o rateio do sistema.
-   */
-  rateio_gerencial: z
-    .array(
-      z.object({
-        empresa_id: z.string().uuid(),
-        valor: z.number().finite().positive("Cada empresa gerencial do rateio precisa de valor."),
-        regional_id: z.string().uuid().nullable(),
-      }),
-    )
-    .max(20)
-    .nullable()
-    .default(null),
   /** Decisão 277: o saldo credor que a contabilidade levou para o mês seguinte (PIS/COFINS não cumulativos). */
   saldo_credor_contabil: z.number().finite().min(0, "O saldo credor não pode ser negativo.").max(1e11).nullable().default(null),
   /**
@@ -192,24 +182,9 @@ export async function aprovarGuia(
     calculada = comAjuste;
   }
 
-  // Decisão 277: o rateio por empresa gerencial (o da contabilidade), com as regionais pela receita.
-  let g = calculada;
-  if (v.rateio_gerencial && v.valor_guia > 0) {
-    let regras;
-    try {
-      regras = await carregarRegrasDoRateio(supabase, tenantId);
-    } catch (e) {
-      return { ok: false, message: `Não foi possível ler as empresas do rateio: ${e instanceof Error ? e.message : String(e)}` };
-    }
-    const rateio = rateioPorGerencial(
-      v.rateio_gerencial,
-      calculada.rateio,
-      regrasDoCnpj(regras, calculada.empresa_contabil_id, calculada.tributo),
-      v.valor_guia,
-    );
-    if (!rateio.ok) return rateio;
-    g = { ...calculada, rateio: rateio.rateio };
-  }
+  // Decisão 277 §10: o rateio é o do sistema, sem valor digitado — nos impostos
+  // sobre a receita, pela receita de cada regional no período ("TDs (REC)").
+  const g = calculada;
 
   const montagem = pedidoDa(r, g, {
     valor_guia: v.valor_guia,
@@ -371,17 +346,22 @@ async function receitaDoPeriodo(
   tenantId: string,
   pjId: string,
   competencia: string,
+  /** O ISS é do município: a receita é a do CNPJ daquele município (decisão 277 §10). */
+  estabelecimentoId: string | null = null,
 ): Promise<{ base: RateioDaGuia[]; fonte: "sistema" | "historico" }> {
   const { inicio, fim } = periodoDe(competencia);
   if (inicio >= `${PRIMEIRA_COMPETENCIA}-01`) {
     const fatos = await carregarFatosFiscais(supabase, tenantId);
-    const estabs = new Set(fatos.cadastro.estabelecimentos.filter((e) => e.empresa_contabil_id === pjId).map((e) => e.id));
+    const estabs = new Set(
+      fatos.cadastro.estabelecimentos
+        .filter((e) => e.empresa_contabil_id === pjId && (!estabelecimentoId || e.id === estabelecimentoId))
+        .map((e) => e.id),
+    );
     return { base: baseDaReceita(receitaDasNotas(fatos.fatos.notas, estabs, inicio, fim)), fonte: "sistema" };
   }
-  const [estabsRes, regras] = await Promise.all([
-    supabase.from("fiscal_estabelecimentos").select("nome").eq("tenant_id", tenantId).eq("empresa_contabil_id", pjId),
-    carregarRegrasDoRateio(supabase, tenantId),
-  ]);
+  let consultaEstabs = supabase.from("fiscal_estabelecimentos").select("nome").eq("tenant_id", tenantId).eq("empresa_contabil_id", pjId);
+  if (estabelecimentoId) consultaEstabs = consultaEstabs.eq("id", estabelecimentoId);
+  const [estabsRes, regras] = await Promise.all([consultaEstabs, carregarRegrasDoRateio(supabase, tenantId)]);
   if (estabsRes.error) throw new Error(`[fiscal.receita.estabelecimentos] ${estabsRes.error.message}`);
   const nomes = ((estabsRes.data ?? []) as Array<{ nome: string }>).map((e) => e.nome);
   const notas = await carregarNotasDoHistorico(supabase, tenantId, nomes, inicio, fim);
@@ -392,6 +372,8 @@ async function receitaDoPeriodo(
 const previaSchema = z.object({
   empresa_contabil_id: z.string().uuid(),
   competencia: z.string().regex(COMPETENCIA),
+  /** O município, no ISS: a receita é a do CNPJ daquele município. */
+  estabelecimento_id: z.string().uuid().nullable().default(null),
 });
 
 /** A receita do período para a prévia do rateio na Guia da contabilidade. */
@@ -403,7 +385,13 @@ export async function previaDaReceitaDoPeriodo(
   const gate = await checarGate("fiscal.receita_do_periodo_lida", parsed.data.empresa_contabil_id);
   if (!gate.ok) return gate;
   try {
-    const r = await receitaDoPeriodo(gate.supabase, gate.session.activeTenant.id, parsed.data.empresa_contabil_id, parsed.data.competencia);
+    const r = await receitaDoPeriodo(
+      gate.supabase,
+      gate.session.activeTenant.id,
+      parsed.data.empresa_contabil_id,
+      parsed.data.competencia,
+      parsed.data.estabelecimento_id,
+    );
     return { ok: true, ...r };
   } catch (e) {
     return { ok: false, message: `Não foi possível ler a receita do período: ${e instanceof Error ? e.message : String(e)}` };
@@ -423,24 +411,15 @@ const guiaDaContabilidadeSchema = z.object({
   motivo: z.string().trim().min(10, "Explique por que o sistema não calculou esta guia (mínimo 10 caracteres).").max(500),
   vencimento: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Informe o vencimento."),
   valor: z.number().finite().positive("Informe o valor da guia.").max(1e11),
-  rateio_gerencial: z
-    .array(
-      z.object({
-        empresa_id: z.string().uuid(),
-        valor: z.number().finite().positive("Cada empresa gerencial do rateio precisa de valor."),
-        regional_id: z.string().uuid().nullable(),
-      }),
-    )
-    .min(1, "Informe o rateio por empresa gerencial.")
-    .max(20),
   guia_path: z.string().min(3).max(500).nullable(),
 });
 
 /**
  * Lança a guia que o sistema não calcula, já aprovada com o valor da
  * contabilidade: vai para Impostos a Pagar (origem avulso, marcada como da
- * contabilidade) com o rateio por empresa gerencial e as regionais pela
- * receita do período.
+ * contabilidade). O rateio é do sistema, sem valor digitado (decisão 277
+ * §10): pela receita de cada regional no período ("TDs (REC)"); no IOF do
+ * mútuo, a empresa gerencial do CNPJ.
  */
 export async function lancarGuiaDaContabilidade(
   input: unknown,
@@ -464,10 +443,16 @@ export async function lancarGuiaDaContabilidade(
   let rateio: RateioDaGuia[];
   try {
     const [receita, regras] = await Promise.all([
-      receitaDoPeriodo(supabase, tenantId, v.empresa_contabil_id, v.competencia),
+      receitaDoPeriodo(supabase, tenantId, v.empresa_contabil_id, v.competencia, v.tributo === "ISS" ? v.estabelecimento_id : null),
       carregarRegrasDoRateio(supabase, tenantId),
     ]);
-    const r = rateioPorGerencial(v.rateio_gerencial, receita.base, regrasDoCnpj(regras, v.empresa_contabil_id, v.tributo), v.valor);
+    const r = rateioAutomatico({
+      tributo: v.tributo,
+      base: receita.base,
+      regras: regrasDoCnpj(regras, v.empresa_contabil_id, v.tributo),
+      gerencialDoCnpj: regras.gerencialDoCnpj[v.empresa_contabil_id] ?? null,
+      total: v.valor,
+    });
     if (!r.ok) return r;
     rateio = r.rateio;
   } catch (e) {

@@ -73,6 +73,8 @@ export interface ImpostoDaLista {
   comprovante_path: string | null;
   /** Decisão 277: pago no histórico da planilha, sem lançamento (o DRE e o fluxo contam por lá). */
   pago_no_historico: boolean;
+  /** Decisão 277 §10: dividido pela receita de cada regional no período ("TDs (REC)"). */
+  rateio_pela_receita: boolean;
   baixado_por_nome: string | null;
   /** Timestamp ISO da baixa; nulo sem baixa. */
   baixado_em: string | null;
@@ -144,7 +146,7 @@ const SELECT_IMPOSTO = `
   id, origem, tributo, titulo, codigo_receita, empresa_contabil_id, estabelecimento_id,
   competencia, rotulo_competencia, cota_numero, cota_total, descricao, vencimento,
   principal, juros, valor, status, guia_path, pago_em, conta_bancaria_id, multa_juros,
-  comprovante_path, pago_no_historico, baixado_em, cancelado_em, motivo_cancelamento,
+  comprovante_path, pago_no_historico, rateio_pela_receita, baixado_em, cancelado_em, motivo_cancelamento,
   conta:contas_bancarias!conta_bancaria_id(nome, banco),
   baixado_por_profile:profiles!baixado_por(nome),
   cancelado_por_profile:profiles!cancelado_por(nome),
@@ -180,6 +182,7 @@ interface LinhaDoBanco {
   multa_juros: Num;
   comprovante_path: string | null;
   pago_no_historico: boolean;
+  rateio_pela_receita: boolean;
   baixado_em: string | null;
   cancelado_em: string | null;
   motivo_cancelamento: string | null;
@@ -302,6 +305,7 @@ export async function lerImpostos(
       multa_juros: Number(t.multa_juros),
       comprovante_path: t.comprovante_path,
       pago_no_historico: t.pago_no_historico,
+      rateio_pela_receita: t.rateio_pela_receita,
       baixado_por_nome: t.baixado_por_profile?.nome ?? null,
       baixado_em: t.baixado_em,
       cancelado_em: t.cancelado_em,

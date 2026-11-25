@@ -179,6 +179,9 @@ export interface LinhaDaPlanilha {
   /** Decisão 277: o imposto pago fora do sistema, com o pagamento no
    *  histórico da planilha (sem lançamento). Falso nas outras origens. */
   pagoNoHistorico: boolean;
+  /** Decisão 277 §10: o imposto dividido pela receita de cada regional no
+   *  período — a REG diz "TDs (REC)". Falso nas outras origens. */
+  rateioPelaReceita: boolean;
   busca: string;
 }
 
@@ -405,22 +408,32 @@ export function juntarRateio(partes: ParteDoRateio[]): ParteDoRateio[] {
 /**
  * O texto da célula REG: a sigla da regional; com rateio entre regionais,
  * "TD" (todas), e a regra do rateio na dica ("Rateio: NE 60% · SP 40%").
+ * O imposto dividido pela receita de cada regional (decisão 277 §10) é
+ * "TDs (REC)": `criterio` traz o "(REC)", que a célula mostra embaixo.
  */
-export function textoDaRegional(rateio: ParteDoRateio[]): {
+export function textoDaRegional(
+  rateio: ParteDoRateio[],
+  pelaReceita = false,
+): {
   texto: string;
   dica: string | null;
   rateado: boolean;
+  criterio: string | null;
 } {
   const partes = juntarRateio(rateio);
-  if (partes.length === 0) return { texto: "—", dica: null, rateado: false };
+  if (partes.length === 0) return { texto: "—", dica: null, rateado: false, criterio: null };
   if (partes.length === 1) {
-    return { texto: siglaDaRegional(partes[0].regional), dica: `${partes[0].regional} · 100%`, rateado: false };
+    return {
+      texto: siglaDaRegional(partes[0].regional),
+      dica: `${partes[0].regional} · 100%${pelaReceita ? " · pela receita do período" : ""}`,
+      rateado: false,
+      criterio: null,
+    };
   }
-  return {
-    texto: "TD",
-    dica: `Rateio: ${partes.map((p) => `${p.regional} ${formatarPercentual(p.percentual)}`).join(" · ")}`,
-    rateado: true,
-  };
+  const lista = partes.map((p) => `${p.regional} ${formatarPercentual(p.percentual)}`).join(" · ");
+  return pelaReceita
+    ? { texto: "TDs", dica: `Rateio pela receita de cada regional no período (REC): ${lista}`, rateado: true, criterio: "(REC)" }
+    : { texto: "TD", dica: `Rateio: ${lista}`, rateado: true, criterio: null };
 }
 
 /**

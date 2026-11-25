@@ -92,6 +92,23 @@ export function desviosDoPadrao(t: TaxasDoFechamento): Desvio[] {
   return lista;
 }
 
+/**
+ * As taxas de uma versão aberta quando o orçamento passa a Internacional
+ * (revisão da decisão 206, 25/11/2026). A mesma regra do gatilho
+ * `versao_fechamento_internacional_no_padrao` para versão nova: int. taxes
+ * e custo de transação no padrão; impostos BR ficam se já forem 0 ou o
+ * padrão, senão vão ao padrão. Sem isto a versão ficava com as int. taxes
+ * 0% de quando era nacional, e só a exceção a tirava dali.
+ */
+export function taxasAoEntrarNoInternacional(impostoAtual: number): TaxasDoFechamento {
+  const imposto = Number(impostoAtual);
+  return {
+    intTaxes: FECHAMENTO_PADRAO.intTaxes,
+    imposto: iguais(imposto, 0) || iguais(imposto, FECHAMENTO_PADRAO.imposto) ? imposto : FECHAMENTO_PADRAO.imposto,
+    itc: FECHAMENTO_PADRAO.itc,
+  };
+}
+
 export function foraDoPadrao(t: TaxasDoFechamento): boolean {
   return desviosDoPadrao(t).length > 0;
 }
