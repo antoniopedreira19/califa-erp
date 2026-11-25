@@ -313,7 +313,7 @@ export async function carregarFreelancersLookup(
   const { data } = await supabase
     .from("freelancers_lookup")
     .select(
-      "id, nome_social, nome_completo, cargo_contrato, nome_job, responsavel_id, responsavel_nome, status_vinculo",
+      "id, nome_social, nome_completo, cargo_contrato, nome_job, responsavel_id, responsavel_nome, valor_contrato, tipo_contrato, data_inicio_contrato, data_termino_contrato, status_vinculo",
     )
     .eq("tenant_id", tenantId)
     .order("nome_social", { ascending: true });

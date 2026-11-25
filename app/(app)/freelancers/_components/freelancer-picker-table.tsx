@@ -4,6 +4,7 @@ import * as React from "react";
 import { Search, X, Lock } from "lucide-react";
 import { cn, initials, nomeCurto } from "@/lib/utils";
 import { formatarCargo } from "@/lib/formatar-cargo";
+import { formatBRL, formatarData } from "@/lib/format";
 import {
   Select,
   SelectContent,
@@ -13,6 +14,7 @@ import {
 } from "@/components/ui/select";
 
 export type StatusVinculo = "ativo" | "inativo" | "sem_contrato";
+export type TipoContrato = "mensal" | "diarias" | "periodo";
 
 export interface FreelancerLookup {
   id: string;
@@ -22,7 +24,27 @@ export interface FreelancerLookup {
   nome_job: string | null;
   responsavel_id: string | null;
   responsavel_nome: string | null;
+  valor_contrato: number | string | null;
+  tipo_contrato: TipoContrato | null;
+  data_inicio_contrato: string | null;
+  data_termino_contrato: string | null;
   status_vinculo: StatusVinculo;
+}
+
+function sufixoValor(tipo: TipoContrato | null): string {
+  if (tipo === "mensal") return "/mês";
+  if (tipo === "diarias") return "/diária";
+  return "";
+}
+
+function formatarPeriodo(
+  inicio: string | null,
+  termino: string | null,
+): string {
+  if (!inicio && !termino) return "—";
+  if (inicio && termino) return `${formatarData(inicio)} – ${formatarData(termino)}`;
+  if (inicio) return `Desde ${formatarData(inicio)}`;
+  return `Até ${formatarData(termino as string)}`;
 }
 
 const ALL = "__all__";
@@ -208,6 +230,8 @@ export function FreelancerPickerTable({
                 <th className="px-5 py-2.5">Nome</th>
                 <th className="px-3 py-2.5">Cargo</th>
                 <th className="px-3 py-2.5">Job</th>
+                <th className="px-3 py-2.5 text-right">Valor</th>
+                <th className="px-3 py-2.5">Período</th>
                 <th className="px-3 py-2.5">Responsável</th>
                 <th className="px-5 py-2.5">Vínculo</th>
               </tr>
@@ -256,6 +280,24 @@ export function FreelancerPickerTable({
                     </td>
                     <td className="px-3 py-3 text-foreground/80">
                       {f.nome_job ?? "—"}
+                    </td>
+                    <td className="px-3 py-3 text-right tabular-nums text-foreground/80 whitespace-nowrap">
+                      {f.valor_contrato != null ? (
+                        <>
+                          {formatBRL(Number(f.valor_contrato))}
+                          <span className="text-[11px] text-muted-foreground">
+                            {sufixoValor(f.tipo_contrato)}
+                          </span>
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-foreground/80 whitespace-nowrap">
+                      {formatarPeriodo(
+                        f.data_inicio_contrato,
+                        f.data_termino_contrato,
+                      )}
                     </td>
                     <td className="px-3 py-3 text-foreground/80">
                       {nomeCurto(f.responsavel_nome)}
