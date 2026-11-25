@@ -370,6 +370,78 @@ export async function salvarCentroDaConciliacao(entrada: {
   return { ok: true };
 }
 
+/** Guarda a regional escolhida para um lançamento (decisão 280): uma regional, o TD ou nada (tira). Rascunho: não revalida a página. */
+export async function salvarRegionalDaConciliacao(entrada: {
+  contaId: string;
+  item: string;
+  regionalId: string | null;
+  td: boolean;
+}): Promise<Resultado> {
+  if (
+    !UUID.safeParse(entrada.contaId).success ||
+    !ITEM.safeParse(entrada.item).success ||
+    (entrada.regionalId !== null && !UUID.safeParse(entrada.regionalId).success) ||
+    typeof entrada.td !== "boolean"
+  ) {
+    return { ok: false, message: "Entrada inválida." };
+  }
+  const g = await gate();
+  if (!g.ok) return g;
+  const { error } = await g.supabase.rpc("salvar_regional_da_conciliacao", {
+    p_conta_id: entrada.contaId,
+    p_item: entrada.item,
+    p_regional_id: entrada.td ? null : entrada.regionalId,
+    p_td: entrada.td,
+  });
+  if (error) {
+    console.error("[conciliacao.salvar_regional]", error.message);
+    return { ok: false, message: mensagemDoBanco(error.message, "Não foi possível guardar a regional.") };
+  }
+  return { ok: true };
+}
+
+const DOCUMENTO_DA_REGIONAL = z.enum(["avulsa", "desembolso", "titulo_receber", "baixa", "planilha"]);
+
+/**
+ * A regional escolhida na linha, gravada no documento antes de conciliar
+ * (decisão 280): o rateio do avulso, da nota avulsa ou do desembolso, a
+ * regional da baixa manual ou a da linha da planilha. O que é de job fica na
+ * regional do job (decisão 069): o banco recusa. TD = a tabela de rateio da
+ * empresa, do ano da data do lançamento.
+ */
+export async function trocarRegionalPelaConciliacao(entrada: {
+  documento: string;
+  ids: string[];
+  regionalId: string | null;
+  td: boolean;
+  data: string;
+}): Promise<Resultado> {
+  if (
+    !DOCUMENTO_DA_REGIONAL.safeParse(entrada.documento).success ||
+    !z.array(UUID).min(1).max(100).safeParse(entrada.ids).success ||
+    (entrada.regionalId !== null && !UUID.safeParse(entrada.regionalId).success) ||
+    typeof entrada.td !== "boolean" ||
+    (!entrada.td && entrada.regionalId === null) ||
+    !DATA.safeParse(entrada.data).success
+  ) {
+    return { ok: false, message: "Entrada inválida." };
+  }
+  const g = await gate();
+  if (!g.ok) return g;
+  const { error } = await g.supabase.rpc("trocar_regional_pela_conciliacao", {
+    p_tipo: entrada.documento,
+    p_ids: entrada.ids,
+    p_regional_id: entrada.td ? null : entrada.regionalId,
+    p_td: entrada.td,
+    p_data: entrada.data,
+  });
+  if (error) {
+    console.error("[conciliacao.trocar_regional]", error.message);
+    return { ok: false, message: mensagemDoBanco(error.message, "Não foi possível trocar a regional.") };
+  }
+  return { ok: true };
+}
+
 /** O centro de custo escolhido na linha para uma baixa já feita: gravado antes de conciliar a linha. */
 export async function trocarCentroDosLancamentos(lancamentoIds: string[], tipoId: string, subtipoId: string): Promise<Resultado> {
   if (!z.array(UUID).min(1).max(100).safeParse(lancamentoIds).success || !UUID.safeParse(tipoId).success || !UUID.safeParse(subtipoId).success) {

@@ -207,6 +207,14 @@ export interface DadosDaAbaBanco {
   acertos: Record<string, { itens: string[]; ajuste: "juros" | "retencao" | "parcial" | "correcao" | "valor" | null; especial: { k: "regra" | "par" | "mutuo"; texto: string } | null }>;
   /** Decisão 262: o centro de custo escolhido na tela para um lançamento (chave da tela: "t:", "l:", "h:"). */
   centros: Record<string, { tipoId: string; subtipoId: string | null }>;
+  /** Decisão 280: a regional escolhida na tela para um lançamento (mesma chave); `td` = o rateio da tabela da empresa. */
+  regionaisEscolhidas: Record<string, { regionalId: string | null; td: boolean }>;
+  /** Decisão 280: a tabela de rateio (TD) de cada empresa, por ano (`empresas_rateios_regionais`). */
+  rateiosTd: Array<{ empresaId: string; ano: number; regionalId: string; percentual: number }>;
+  /** Decisão 280: a empresa de cada baixa sem linha (por id do lançamento), para as regionais da troca. */
+  empresaDoLancamento: Record<string, string | null>;
+  /** Decisão 280: a empresa de cada linha da planilha (por id), para as regionais da troca. */
+  empresaDaPlanilha: Record<string, string | null>;
 }
 
 /** `.in()` com muitos ids estoura o tamanho do endereço da consulta: com
@@ -409,13 +417,15 @@ export type LancamentoCru = {
   fatura_cartao_id: string | null;
   transferencia_id: string | null;
   extrato_linha_id: string | null;
+  /** Decisão 280: a empresa do lançamento (as regionais da troca na linha). */
+  empresa_id: string | null;
   fornecedores: { nome: string | null; razao_social: string | null } | null;
 };
 
 const SELECT_LANCAMENTO =
   "id, data_movimento, descricao, natureza, valor, origem, forma_pagamento, juros_de_lancamento_id, imposto_a_pagar_id, " +
   "conta_avulsa_id, pedido_compra_parcela_id, titulo_receber_id, desembolso_parcela_id, pp_verba_devolucao_id, " +
-  "fatura_cartao_id, transferencia_id, extrato_linha_id, fornecedores(nome, razao_social)";
+  "fatura_cartao_id, transferencia_id, extrato_linha_id, empresa_id, fornecedores(nome, razao_social)";
 
 /** A mesma tradução da RPC `_cancelamento_da_baixa`. */
 function cancelamentoDe(l: LancamentoCru): CancelamentoDaBaixa | null {
@@ -456,6 +466,8 @@ type CaudaCrua = {
   fornecedor: string | null;
   regional_nome: string | null;
   regional_todas: boolean | null;
+  /** Decisão 280: a empresa da linha (as regionais da troca na linha). */
+  empresa_id: string | null;
   grupo: string | null;
   extrato_linha_id: string | null;
   /** A data da planilha, quando a previsão tem outra data (ligada ao banco, ou ajustada pela tela). */
@@ -753,7 +765,7 @@ export async function carregarBancoDaConciliacao(
           (de, ate) =>
             supabase
               .from("historico_movimentos")
-              .select("id, data, data_prevista, valor, job_nome, descricao, documento, observacao, parcela, fornecedor, regional_nome, regional_todas, grupo, extrato_linha_id, subtipo:plano_contas_subtipos(nome), carga:historico_cargas!inner(tipo, situacao, planilha_versao)")
+              .select("id, data, data_prevista, valor, job_nome, descricao, documento, observacao, parcela, fornecedor, regional_nome, regional_todas, empresa_id, grupo, extrato_linha_id, subtipo:plano_contas_subtipos(nome), carga:historico_cargas!inner(tipo, situacao, planilha_versao)")
               .eq("tenant_id", tenantId)
               .eq("conta_bancaria_id", contaId)
               .in("carga.tipo", ["cauda", "previsao"])
@@ -846,7 +858,7 @@ export async function carregarBancoDaConciliacao(
 
   // O mútuo e as baixas como o Extrato as mostra (decisão 243): juntos.
   const pendentesDaConta = linhas.filter((l) => !l.conciliada && !l.ignorada).map((l) => l.id);
-  const [mutuo, extratoPorLancamento, acertosRes, centrosRes, ppsPagas, nfsPagas] = await Promise.all([
+  const [mutuo, extratoPorLancamento, acertosRes, centrosRes, ppsPagas, nfsPagas, regionaisEscolhidasRes, rateiosTdRes] = await Promise.all([
     contextoDoMutuoNaConta(
       supabase,
       tenantId,
@@ -866,6 +878,13 @@ export async function carregarBancoDaConciliacao(
       .eq("conta_bancaria_id", contaId),
     ppsPagasDaPlanilha(supabase, tenantId, [...previsoes, ...historico]),
     nfsPagasDaPlanilha(supabase, tenantId, [...previsoes, ...historico]),
+    // Decisão 280: a regional escolhida na linha e a tabela de rateio (TD) das empresas.
+    supabase
+      .from("conciliacao_regionais")
+      .select("item, regional_id, td")
+      .eq("tenant_id", tenantId)
+      .eq("conta_bancaria_id", contaId),
+    supabase.from("empresas_rateios_regionais").select("empresa_id, ano_vigencia, regional_id, percentual").eq("tenant_id", tenantId),
   ]);
   // Só o acerto das linhas ainda em aberto (a conciliada não guarda acerto).
   const abertas = new Set(pendentesDaConta);
@@ -876,6 +895,12 @@ export async function carregarBancoDaConciliacao(
   const centros: DadosDaAbaBanco["centros"] = {};
   for (const c of (centrosRes.data ?? []) as Array<{ item: string; plano_conta_tipo_id: string; plano_conta_subtipo_id: string | null }>) {
     centros[c.item] = { tipoId: c.plano_conta_tipo_id, subtipoId: c.plano_conta_subtipo_id };
+  }
+  if (regionaisEscolhidasRes.error) console.error("[conciliacao.banco.regionais_escolhidas]", regionaisEscolhidasRes.error.message);
+  if (rateiosTdRes.error) console.error("[conciliacao.banco.rateios_td]", rateiosTdRes.error.message);
+  const regionaisEscolhidas: DadosDaAbaBanco["regionaisEscolhidas"] = {};
+  for (const r of (regionaisEscolhidasRes.data ?? []) as Array<{ item: string; regional_id: string | null; td: boolean }>) {
+    regionaisEscolhidas[r.item] = { regionalId: r.regional_id, td: r.td };
   }
 
   return {
@@ -891,6 +916,15 @@ export async function carregarBancoDaConciliacao(
     extratoPorLancamento,
     acertos,
     centros,
+    regionaisEscolhidas,
+    rateiosTd: ((rateiosTdRes.data ?? []) as Array<{ empresa_id: string; ano_vigencia: number; regional_id: string; percentual: number | string }>).map((r) => ({
+      empresaId: r.empresa_id,
+      ano: Number(r.ano_vigencia),
+      regionalId: r.regional_id,
+      percentual: Number(r.percentual),
+    })),
+    empresaDoLancamento: Object.fromEntries(semLinhaCrus.map((l) => [l.id, l.empresa_id ?? null])),
+    empresaDaPlanilha: Object.fromEntries(caudaCrua.map((h) => [h.id, h.empresa_id ?? null])),
     saldoSistemaNoFim: saldoNoFim === null ? null : r2(saldoNoFim),
     // Revisão de 23/11/2026 (D2): a linha da planilha de PP já paga sai antes do motor e da tabela;
     // e a do recebimento de NF já paga (decisão 276).

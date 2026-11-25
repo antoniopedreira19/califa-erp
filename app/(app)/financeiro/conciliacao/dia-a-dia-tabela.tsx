@@ -29,6 +29,11 @@
  *   "Conciliar tudo o que foi acertado" grava de uma vez, depois de um resumo;
  * - o centro de custo (Tipo e Subtipo) troca em qualquer lançamento, por dois
  *   campos de busca, e é gravado na conciliação (`conciliacao_centros`);
+ * - decisão 280 (Tiago, 25/11/2026): a regional (Reg) também troca na linha,
+ *   com as regionais da empresa do lançamento e o TD (o rateio da tabela da
+ *   empresa); guardada em `conciliacao_regionais` e gravada NO DOCUMENTO
+ *   (avulso, nota avulsa, desembolso, baixa manual, linha da planilha) ao
+ *   conciliar. O que é de job fica na regional do job (decisão 069);
  * - a linha da planilha que é de uma PP (pelo código na descrição) ou de um
  *   custo fixo (pela chave da recorrência, decisão 235) não é oferecida: no
  *   lugar dela vem o título;
@@ -48,6 +53,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Dica } from "@/components/ui/dica";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { siglaDaRegional, textoDaRegional, trimestreDe } from "@/lib/financeiro/planilha-de-titulos";
+import { REGIONAL_DAS_NOTAS } from "@/lib/financeiro/notas-de-socio";
 import { BotaoDaSecao, comCentro, CONTORNO, VERDE } from "./banco-tabela";
 import { InfoDica, linhasComMutuo, resumoDoSistema, type AcaoDescrita, type Item, type PropsDaFila } from "./fila-da-conta";
 import { celulasDoItem } from "./fila-linhas";
@@ -79,8 +85,10 @@ import {
   registrarRecebimentoAntesNfPelaLinha,
   salvarAcertoDaLinha,
   salvarCentroDaConciliacao,
+  salvarRegionalDaConciliacao,
   trocarCentroDasPrevisoes,
   trocarCentroDosLancamentos,
+  trocarRegionalPelaConciliacao,
 } from "./actions-dia-a-dia";
 
 const moeda = formatBRL;
@@ -593,6 +601,139 @@ function CelulasDoCentro({ c, p, e, onAbrir, className }: { c: Candidato; p: Pro
   );
 }
 
+// ---- A regional na linha (decisão 280, Tiago, 25/11/2026) ----
+/** A regional escolhida na tela para um lançamento: uma regional da empresa ou o TD (o rateio da tabela). */
+type RegionalEscolhida = { regionalId: string | null; td: boolean };
+/** O documento que guarda a regional do lançamento (o que `trocar_regional_pela_conciliacao` recebe). */
+type DocumentoDaRegional = { documento: "avulsa" | "desembolso" | "titulo_receber" | "baixa" | "planilha"; ids: string[] };
+/** A regional trocada, por lançamento: vale onde ele aparecer e é gravada no documento quando ele é conciliado. */
+const RegionaisCtx = React.createContext<{ escolhidas: Record<string, RegionalEscolhida>; trocar: (id: string, r: RegionalEscolhida | null) => void } | null>(null);
+
+const NA_REGIONAL_DO_JOB = (codigo?: string | null) =>
+  `Lançamento de job: a regional é a do job${codigo ? ` ${codigo}` : ""} (decisão 069). Para trocar, troque a regional do job.`;
+const SEM_REGIONAL_NA_TRANSFERENCIA = "Transferência entre contas não tem regional.";
+const REGIONAL_DO_IMPOSTO = "Imposto: o rateio da regional vem da apuração e não muda por aqui.";
+const REGIONAL_DA_FATURA = "Fatura do cartão: cada compra tem a regional dela; troque na compra.";
+
+/** Onde a regional do lançamento se troca (o documento e a empresa) ou por que não se troca. */
+function regraDaRegional(c: Candidato, p: PropsDaFila): { documento: DocumentoDaRegional; empresaId: string | null; onde: string } | { motivo: string } {
+  if (c.k === "planilha") return { documento: { documento: "planilha", ids: [c.h.id] }, empresaId: p.banco.empresaDaPlanilha[c.h.id] ?? null, onde: "na linha da planilha" };
+  if (c.k === "baixa") {
+    const o = String(c.l.origem);
+    const e = p.banco.extratoPorLancamento[c.l.id];
+    if (/^pp_/.test(o) || o === "recebimento_antes_nf" || e?.job || (e?.jobs ?? 0) > 0) return { motivo: NA_REGIONAL_DO_JOB(e?.job?.codigo) };
+    if (/^(transferencia|mutuo)/.test(o)) return { motivo: SEM_REGIONAL_NA_TRANSFERENCIA };
+    if (o === "imposto_baixa") return { motivo: REGIONAL_DO_IMPOSTO };
+    if (/^fatura_cartao/.test(o)) return { motivo: REGIONAL_DA_FATURA };
+    const onde: Record<string, string> = { avulsa_baixa: "no avulso (o título inteiro)", titulo_baixa: "na nota (a NF inteira)", desembolso_baixa: "no desembolso", manual: "na baixa" };
+    if (!onde[o]) return { motivo: "A regional deste lançamento não muda por aqui." };
+    const empresaId = p.banco.empresaDoLancamento[c.l.id] ?? c.l.ids.map((id) => p.banco.empresaDoLancamento[id]).find(Boolean) ?? null;
+    return { documento: { documento: "baixa", ids: c.l.ids }, empresaId, onde: onde[o] };
+  }
+  const l = p.contexto.linhaPorChave.get(c.t.id);
+  if (!l) return { motivo: "A regional deste lançamento não muda por aqui." };
+  if (l.lado === "imposto") return { motivo: REGIONAL_DO_IMPOSTO };
+  if (l.lado === "transferencia") return { motivo: SEM_REGIONAL_NA_TRANSFERENCIA };
+  if (l.job) return { motivo: NA_REGIONAL_DO_JOB(l.job.codigo) };
+  // As notas de sócio têm a regional delas (TD fixo).
+  if (l.rateio.length === 1 && l.rateio[0].regional === REGIONAL_DAS_NOTAS) return { motivo: "Notas de sócio: a regional é a das notas e não muda." };
+  if (l.lado === "pagar") {
+    const o = l.t.origem;
+    if (o === "pp" || o === "pp_devolucao_verba") return { motivo: NA_REGIONAL_DO_JOB(l.t.job_codigo) };
+    if (o === "folha") return { motivo: "Folha: a regional vem da alocação do colaborador no RH." };
+    if (o === "fatura_cartao") return { motivo: REGIONAL_DA_FATURA };
+    if (o === "avulso" || o === "recorrencia")
+      return { documento: { documento: "avulsa", ids: [l.t.id] }, empresaId: l.t.empresa_id, onde: o === "recorrencia" ? "nesta ocorrência (a recorrência fica como está)" : "no avulso (o título inteiro)" };
+    if (o === "desembolso") return { documento: { documento: "desembolso", ids: [l.t.id] }, empresaId: l.t.empresa_id, onde: "no desembolso" };
+    return { motivo: "A regional deste lançamento não muda por aqui." };
+  }
+  const o = l.t.origem;
+  if (o === "nf") return { documento: { documento: "titulo_receber", ids: [l.t.id] }, empresaId: l.t.empresa_id ?? null, onde: "na nota (a NF inteira)" };
+  if (o === "recebimento_avulso" || o === "rendimento")
+    return { documento: { documento: "avulsa", ids: [l.t.conta_avulsa_id ?? l.t.id] }, empresaId: l.t.empresa_id ?? null, onde: "no recebimento avulso" };
+  return { motivo: o === "transferencia" ? SEM_REGIONAL_NA_TRANSFERENCIA : "A regional deste lançamento não muda por aqui." };
+}
+
+/** O TD da empresa: a tabela do ano (ou do último antes dele), se ela soma 100%. */
+function tdDaEmpresa(p: PropsDaFila, empresaId: string, ano: number): Array<{ regionalId: string; percentual: number }> | null {
+  const daEmpresa = p.banco.rateiosTd.filter((r) => r.empresaId === empresaId && r.ano <= ano);
+  const vigente = Math.max(...daEmpresa.map((r) => r.ano));
+  const doAno = daEmpresa.filter((r) => r.ano === vigente).sort((a, b) => b.percentual - a.percentual);
+  return doAno.length && Math.abs(doAno.reduce((t, r) => t + r.percentual, 0) - 100) < 0.01 ? doAno : null;
+}
+
+/** A regional que o documento tem hoje, como valor do campo: o id da regional, "td" (rateado) ou nulo. */
+function regionalDoDocumento(reg: string | null, empresaId: string | null, p: PropsDaFila): string | null {
+  if (!reg) return null;
+  if (reg === "TD") return "td";
+  return p.banco.regionais.find((r) => r.empresaId === empresaId && (siglaDaRegional(r.nome) === reg || r.nome === reg))?.id ?? null;
+}
+
+/** A célula Reg: o campo de busca da regional (como o Subtipo), ou o texto com o porquê de não trocar. */
+function CelulaDaRegional({ c, p, e, onAbrir, className }: { c: Candidato; p: PropsDaFila; e: { reg: string | null }; onAbrir?: () => void; className?: string }) {
+  const ctx = React.useContext(RegionaisCtx);
+  const regra = ctx ? regraDaRegional(c, p) : null;
+  const idDoPopup = "reg" + React.useId();
+  const popupDaVez = usePopupAtivo();
+  const [chave, setChave] = React.useState(0);
+  const aberto = React.useRef(false);
+  React.useEffect(() => {
+    // Um pop-up por vez: o Tipo, o Subtipo ou a lista de outra linha abriu, esta lista fecha.
+    if (aberto.current && popupDaVez !== idDoPopup) {
+      aberto.current = false;
+      setChave((k) => k + 1);
+    }
+  }, [popupDaVez]); // eslint-disable-line react-hooks/exhaustive-deps
+  const motivo = !regra ? undefined : "motivo" in regra ? regra.motivo : !regra.empresaId ? "O lançamento não tem empresa: a regional não muda por aqui." : null;
+  if (!ctx || !regra || "motivo" in regra || !regra.empresaId)
+    return (
+      <td onClick={onAbrir} title={motivo ?? undefined} className={cn("font-mono text-[11px]", className, CEL)}>
+        {e.reg ?? <Traco />}
+      </td>
+    );
+  const empresaId = regra.empresaId;
+  const ano = Number(c.data.slice(0, 4));
+  const td = tdDaEmpresa(p, empresaId, ano);
+  const nomeDa = (id: string) => p.banco.regionais.find((r) => r.id === id)?.nome ?? "?";
+  const itens = [
+    ...p.banco.regionais.filter((r) => r.empresaId === empresaId).map((r) => ({ value: r.id, label: r.nome, curto: siglaDaRegional(r.nome) })),
+    ...(td ? [{ value: "td", label: "TD", curto: "TD", busca: "todas rateio", descricao: `Rateio: ${td.map((r) => `${nomeDa(r.regionalId)} ${String(r.percentual).replace(".", ",")}%`).join(" · ")}` }] : []),
+  ];
+  const doDocumento = regionalDoDocumento(e.reg, empresaId, p);
+  const escolhida = ctx.escolhidas[c.id];
+  const valor = escolhida ? (escolhida.td ? "td" : escolhida.regionalId) : doDocumento;
+  const CAMPO = "h-7 rounded-md border-transparent bg-transparent px-1.5 py-0 font-mono text-[11px] font-normal hover:border-border [&_svg]:h-3 [&_svg]:w-3";
+  return (
+    <td onClick={(ev) => ev.stopPropagation()} className={cn("font-mono text-[11px]", className, CEL, "!px-1 !py-1")}>
+      <span
+        onPointerDownCapture={() => {
+          aberto.current = true;
+          abrirPopup(idDoPopup);
+        }}
+      >
+        <Combobox
+          key={chave}
+          items={itens}
+          value={valor}
+          onChange={(v) => {
+            if (!v) return;
+            // Voltar à regional do documento tira a troca.
+            if (v === doDocumento) ctx.trocar(c.id, null);
+            else ctx.trocar(c.id, v === "td" ? { regionalId: null, td: true } : { regionalId: v, td: false });
+          }}
+          placeholder="—"
+          ariaLabel="Regional"
+          buscaPlaceholder="Buscar a regional…"
+          larguraLista="w-[360px]"
+          alinharLista="end"
+          cabecalhoLista={<span className="font-sans">Ao conciliar, a regional muda {regra.onde}.</span>}
+          className={cn(CAMPO, escolhida && "font-semibold text-sky-800")}
+        />
+      </span>
+    </td>
+  );
+}
+
 /** Job, Tipo, TRI e Reg de um lançamento do sistema. */
 function extras(c: Candidato, p: PropsDaFila): { job: string | null; tipo: string | null; sub: string | null; tri: string; reg: string | null } {
   if (c.k === "baixa") {
@@ -691,7 +832,8 @@ const LARGURAS = [70, 170, 122, 108, 104, 114, 180, 116, 90, 46, 110, 40, 44, 10
 const LARGURAS_DC = [70, 140, 94, 94, 100, 96, 94, 94, 156, 104, 84, 46, 100, 40, 44, 104, 152];
 /** Sem a coluna Status (opção do seletor "Status", 16/11/2026): os 104 px dela vão para as descrições (banco +50, sistema +54). */
 // 16/11/2026: o Tipo virou campo (58 px; a descrição do sistema cede 12).
-const LARGURAS_SEM_STATUS = [70, 220, 122, 108, 104, 114, 222, 116, 90, 58, 110, 40, 44, 152];
+// Decisão 280: a Reg virou campo (56 px; a descrição do sistema cede 12).
+const LARGURAS_SEM_STATUS = [70, 220, 122, 108, 104, 114, 210, 116, 90, 58, 110, 40, 56, 152];
 const LARGURAS_DC_SEM_STATUS = [70, 190, 94, 94, 100, 96, 94, 94, 198, 104, 84, 58, 100, 40, 44, 152];
 // Decisão 262: os débitos e créditos ficam no quadro do dia (a opção em colunas ficou no protótipo).
 const emColunas = () => false;
@@ -835,6 +977,38 @@ export function TabelaDeComposicoes({
     }, 400);
     return () => clearTimeout(t);
   }, [centros]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Decisão 280: a regional trocada, por lançamento, guardada como o centro de custo.
+  const [regionais, setRegionais] = React.useState<Record<string, RegionalEscolhida>>(() => ({ ...p.banco.regionaisEscolhidas }));
+  const regionaisCtx = React.useMemo(
+    () => ({
+      escolhidas: regionais,
+      trocar: (id: string, r: RegionalEscolhida | null) =>
+        setRegionais((m) => {
+          const { [id]: _fora, ...resto } = m;
+          return r ? { ...resto, [id]: r } : resto;
+        }),
+    }),
+    [regionais],
+  );
+  const regionaisNoBanco = React.useRef<Record<string, RegionalEscolhida>>({ ...p.banco.regionaisEscolhidas });
+  React.useEffect(() => {
+    const t = setTimeout(async () => {
+      const antes = regionaisNoBanco.current;
+      const mudou = [...new Set([...Object.keys(antes), ...Object.keys(regionais)])].filter((id) => JSON.stringify(antes[id] ?? null) !== JSON.stringify(regionais[id] ?? null));
+      if (!mudou.length) return;
+      for (const item of mudou) {
+        const r = regionais[item];
+        const res = await salvarRegionalDaConciliacao({ contaId: p.banco.conta.id, item, regionalId: r?.td ? null : r?.regionalId ?? null, td: !!r?.td });
+        if (!res.ok) return avisar(res.message);
+        const proximo = { ...regionaisNoBanco.current };
+        if (r) proximo[item] = { ...r };
+        else delete proximo[item];
+        regionaisNoBanco.current = proximo;
+      }
+      setSalvoEm(horaAgora());
+    }, 400);
+    return () => clearTimeout(t);
+  }, [regionais]); // eslint-disable-line react-hooks/exhaustive-deps
   const [abertas, setAbertas] = React.useState<Record<string, boolean>>({});
   const [filtro, setFiltro] = React.useState<Filtro>("todas");
   const [recolhidas, setRecolhidas] = React.useState<Set<string>>(new Set());
@@ -1049,8 +1223,20 @@ export function TabelaDeComposicoes({
     else avisarOk(`${feitas} de uma vez.`);
   };
 
-  /** O centro de custo trocado na linha numa baixa já feita: gravado antes da conciliação da linha. */
+  /** O centro de custo trocado na linha numa baixa já feita: gravado antes da conciliação da linha.
+   *  Decisão 280: e a regional trocada em qualquer lançamento, gravada no documento dele. */
   const aplicarCentrosDasBaixas = async (c: Comp): Promise<string | null> => {
+    for (const it of c.itens) {
+      const esc = regionais[it.id];
+      if (!esc) continue;
+      const regra = regraDaRegional(it, p);
+      // O lançamento que deixou de trocar a regional (ganhou job, por exemplo): a escolha antiga não vale.
+      if ("motivo" in regra) continue;
+      // Já está no documento (a troca voltou ao que era, ou foi gravada numa tentativa anterior).
+      if ((esc.td ? "td" : esc.regionalId) === regionalDoDocumento(extras(it, p).reg, regra.empresaId, p)) continue;
+      const r = await trocarRegionalPelaConciliacao({ documento: regra.documento.documento, ids: regra.documento.ids, regionalId: esc.regionalId, td: esc.td, data: it.data });
+      if (!r?.ok) return r?.message ?? "Não foi possível trocar a regional.";
+    }
     for (const it of c.itens) {
       const ce = c.centros[it.id];
       if ((it.k !== "baixa" && it.k !== "planilha") || !ce) continue;
@@ -1318,6 +1504,7 @@ export function TabelaDeComposicoes({
       <style dangerouslySetInnerHTML={{ __html: CSS_DA_TABELA }} />
       <PlanoCtx.Provider value={plano}>
       <CentrosCtx.Provider value={centrosCtx}>
+      <RegionaisCtx.Provider value={regionaisCtx}>
       <Saldos.Provider value={saldos}>
       <div className="overflow-x-auto rounded-xl border border-border bg-card">
         <table style={{ minWidth: largura() }} className="comp-corte w-full table-fixed text-sm">
@@ -1426,6 +1613,7 @@ export function TabelaDeComposicoes({
         </table>
       </div>
       </Saldos.Provider>
+      </RegionaisCtx.Provider>
       </CentrosCtx.Provider>
       </PlanoCtx.Provider>
 
@@ -2295,9 +2483,7 @@ function CelulasDoItem({
       <td onClick={onAbrir} className={cn("font-mono text-[11px]", SIS, CEL)}>
         {e.tri}
       </td>
-      <td onClick={onAbrir} className={cn("font-mono text-[11px]", SIS, CEL)}>
-        {e.reg ?? <Traco />}
-      </td>
+      <CelulaDaRegional c={c} p={p} e={e} onAbrir={onAbrir} className={SIS} />
     </>
   );
 }
@@ -2355,9 +2541,7 @@ function CelulasDaSugestao({ c, p, dataDoBanco, onAbrir, dispensar, campo }: { c
       <td onClick={onAbrir} className={cn("font-mono text-[11px]", SUG, CEL)}>
         {e.tri}
       </td>
-      <td onClick={onAbrir} className={cn("font-mono text-[11px]", SUG, CEL)}>
-        {e.reg ?? <Traco />}
-      </td>
+      <CelulaDaRegional c={c} p={p} e={e} onAbrir={onAbrir} className={SUG} />
     </>
   );
 }
@@ -3366,7 +3550,7 @@ function LinhaSoNoSistema({ c, p, linhas, onEditarData, onAssociar }: { c: Candi
         <td className={cn("truncate font-mono text-[11px]", CEL)}>{e.job ?? <Traco />}</td>
         <CelulasDoCentro c={c} p={p} e={e} />
         <td className={cn("font-mono text-[11px]", CEL)}>{e.tri}</td>
-        <td className={cn("font-mono text-[11px]", CEL)}>{e.reg ?? <Traco />}</td>
+        <CelulaDaRegional c={c} p={p} e={e} />
         {!semStatus() && (
         <td className={CEL}>
           {revisados() ? (
