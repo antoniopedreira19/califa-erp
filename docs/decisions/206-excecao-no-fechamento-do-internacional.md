@@ -207,3 +207,8 @@ publicada (orçamento Evento → Internacional, 0% e sem moeda, sem "Voltar ao
 padrão") e corrigido pelo servidor local com o "Voltar ao padrão"; outro
 orçamento Evento → Internacional já nasceu em 18,02% e USD.
 
+**Acerto do P-0077/26-01 (25/11/2026):** o administrador duplicou a v1 (a v2
+nasceu no padrão, câmbio em branco, intocada). A v1, que ficou como rascunho,
+foi levada ao padrão (int. taxes 18,02%, USD) pela migration
+`20261125740001_p0077_v1_no_fechamento_padrao.sql`, a pedido do Tiago, com
+evento de auditoria.
