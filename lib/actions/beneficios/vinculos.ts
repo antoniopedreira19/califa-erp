@@ -174,6 +174,66 @@ export async function encerrarVinculo(
   return { ok: true, id: parsed.data.vinculoId };
 }
 
+const excluirVinculoSchema = z.object({
+  vinculoId: z.string().uuid(),
+});
+
+export async function excluirVinculo(
+  input: z.input<typeof excluirVinculoSchema>,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const bloqueio = assertRh(session.activeRole);
+  if (bloqueio) return bloqueio;
+
+  const parsed = excluirVinculoSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const supabase = createClient();
+  const { data: vinc } = await supabase
+    .from("colaborador_beneficio")
+    .select("id, colaborador_id, beneficio_id, modo_custeio, data_inicio, data_fim")
+    .eq("id", parsed.data.vinculoId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+  if (!vinc) {
+    return { ok: false, message: "Vínculo não encontrado." };
+  }
+
+  const { error } = await supabase
+    .from("colaborador_beneficio")
+    .delete()
+    .eq("id", parsed.data.vinculoId);
+  if (error) {
+    if (error.code === "23503") {
+      return {
+        ok: false,
+        message:
+          "Vínculo já incluído em um fechamento mensal — não pode ser excluído. Use Encerrar para marcar o fim.",
+      };
+    }
+    return { ok: false, message: `Erro ao excluir: ${error.message}` };
+  }
+
+  await logAuditEvent({
+    acao: "beneficio.vinculo.excluido",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "colaborador_beneficio",
+    entidadeId: parsed.data.vinculoId,
+    metadata: {
+      colaborador_id: vinc.colaborador_id,
+      beneficio_id: vinc.beneficio_id,
+      modo_custeio: vinc.modo_custeio,
+      data_inicio: vinc.data_inicio,
+      data_fim: vinc.data_fim,
+    },
+  });
+
+  revalidatePath("/rh/beneficios");
+  return { ok: true, id: parsed.data.vinculoId };
+}
+
 const mudarModoSchema = z.object({
   vinculoId: z.string().uuid(),
   novoModo: z.enum([

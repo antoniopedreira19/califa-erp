@@ -15,6 +15,7 @@ import type { BeneficioModoCusteio } from "@/lib/types";
 import { coresBeneficio } from "@/lib/beneficios/cores";
 import {
   encerrarVinculo,
+  excluirVinculo,
   mudarModoCusteio,
 } from "@/lib/actions/beneficios/vinculos";
 
@@ -129,6 +130,24 @@ function LinhaVinculo({
     });
   }
 
+  function excluir() {
+    if (
+      !confirm(
+        `Excluir o vínculo com ${vinculo.beneficio_nome}? Esta ação remove o registro e não pode ser desfeita.\n\nSó use quando o vínculo foi cadastrado por engano. Para encerrar um benefício que existiu de verdade, prefira o botão "Encerrar".`,
+      )
+    ) {
+      return;
+    }
+    start(async () => {
+      const res = await excluirVinculo({ vinculoId: vinculo.id });
+      if (!res.ok) {
+        alert(res.message);
+        return;
+      }
+      router.refresh();
+    });
+  }
+
   function mudar() {
     if (novoModo === vinculo.modo_custeio) {
       setMostrarMudar(false);
@@ -179,26 +198,36 @@ function LinhaVinculo({
             )}
           </div>
         </div>
-        {ativo && (
-          <div className="flex shrink-0 gap-3 text-xs">
-            <button
-              type="button"
-              onClick={() => setMostrarMudar((v) => !v)}
-              disabled={pending}
-              className="font-medium text-california-red hover:underline"
-            >
-              Mudar modo
-            </button>
-            <button
-              type="button"
-              onClick={encerrar}
-              disabled={pending}
-              className="font-medium text-red-600 hover:underline"
-            >
-              Encerrar
-            </button>
-          </div>
-        )}
+        <div className="flex shrink-0 gap-3 text-xs">
+          {ativo && (
+            <>
+              <button
+                type="button"
+                onClick={() => setMostrarMudar((v) => !v)}
+                disabled={pending}
+                className="font-medium text-california-red hover:underline"
+              >
+                Mudar modo
+              </button>
+              <button
+                type="button"
+                onClick={encerrar}
+                disabled={pending}
+                className="font-medium text-red-600 hover:underline"
+              >
+                Encerrar
+              </button>
+            </>
+          )}
+          <button
+            type="button"
+            onClick={excluir}
+            disabled={pending}
+            className="font-medium text-red-700 hover:underline"
+          >
+            Excluir
+          </button>
+        </div>
       </div>
       {mostrarMudar && ativo && (
         <div className="mt-4 flex flex-wrap items-end gap-2 border-t border-border pt-4">
