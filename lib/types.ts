@@ -5539,6 +5539,10 @@ export type PeopleAprovarItem = NfPendenteQuadro & {
   funcao: string | null;
   origem: FolhaOrigem | null;
   alocacao_resumo: string | null;
+  /** Recibo em folhas_pagamento.anexo_url (bucket `recibos-ferias`). Hoje só
+   *  CLT férias (origem=contabilidade) usa esse caminho — o recibo não entra
+   *  em colaboradores_nf_anexos. Null quando não há anexo via folha. */
+  folha_anexo_url: string | null;
 };
 
 /** Janela de pagamento: salários (dia 03 do mês seguinte) ou

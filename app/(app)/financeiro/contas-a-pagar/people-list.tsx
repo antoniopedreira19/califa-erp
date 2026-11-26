@@ -323,6 +323,7 @@ function toFolhaLinha(
     status: "enviada",
     motivo_pendencia: null,
     origem: item.origem ?? "california",
+    escopo_tipo: item.escopo_tipo,
     nf: item.nf_anexada && item.nf_anexo_id && item.nf_arquivo_nome && item.nf_uploaded_at
       ? {
           id: item.nf_anexo_id,
@@ -330,6 +331,7 @@ function toFolhaLinha(
           uploaded_at: item.nf_uploaded_at,
         }
       : null,
+    folha_anexo_url: item.folha_anexo_url ?? null,
     colaborador: fallbackColab,
     alocacoes,
   };

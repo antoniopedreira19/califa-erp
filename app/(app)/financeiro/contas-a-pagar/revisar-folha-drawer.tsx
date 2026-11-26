@@ -53,6 +53,7 @@ import type { Empresa } from "@/lib/types";
 import { folhaLinhaStatusLabel, tipoContratacaoLabel } from "@/lib/types";
 import {
   aprovarLinhaFolha,
+  baixarReciboFeriasFinanceiro,
   reprovarLinhaFolha,
   salvarPagamentoDaFolha,
   type PagamentoDaFolhaInput,
@@ -80,14 +81,34 @@ function formatBRL(v: string | number): string {
   }).format(Number(v));
 }
 
-/** Etiqueta do painel da esquerda — recibo nas linhas CLT+Recibo, NF nas demais. */
+/** Etiqueta do painel da esquerda — recibo nas linhas em que o documento é
+ *  recibo (CLT+Recibo mensal, férias CLT da contabilidade, abono CLT), NF
+ *  nas demais (fluxo California). */
 function tituloDoDocumento(
   linha: FolhaLinhaFinanceiro,
 ): { titulo: string; legendaPadrao: string } {
+  const et = linha.escopo_tipo;
+  if (et === "ferias_usufruto" || et === "ferias_abono") {
+    const label = et === "ferias_abono" ? "Abono" : "Férias";
+    if (linha.origem === "contabilidade") {
+      return {
+        titulo: `Recibo de ${label}`,
+        legendaPadrao: "Nenhum recibo anexado",
+      };
+    }
+    return { titulo: `NF de ${label}`, legendaPadrao: "Nenhuma NF anexada" };
+  }
   if (linha.colaborador.tipo_contratacao === "clt_recibo") {
     return { titulo: "Recibo do mês", legendaPadrao: "Nenhum recibo anexado" };
   }
   return { titulo: "Nota fiscal do mês", legendaPadrao: "Nenhuma NF anexada" };
+}
+
+/** Pega só o nome do arquivo de um path salvo em storage (`tenant/colab/.../x.pdf`). */
+function nomeArquivoDaUrl(u: string | null): string | null {
+  if (!u) return null;
+  const partes = u.split("/");
+  return partes[partes.length - 1] ?? null;
 }
 
 export function RevisarFolhaDrawer({
@@ -149,37 +170,61 @@ export function RevisarFolhaDrawer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, linha.id]);
 
-  // Puxa a URL assinada do anexo quando a tela abre e há NF. Depende do
-  // id do anexo (e não do objeto `linha`) pra `router.refresh()` não
-  // refazer a URL à toa.
+  // Puxa a URL assinada do anexo quando a tela abre. Dois caminhos: NF
+  // em colaboradores_nf_anexos (fluxo PJ/MEI/recibo mensal) ou recibo em
+  // folhas_pagamento.anexo_url (fluxo CLT férias contabilidade, cada um
+  // num bucket próprio). Depende do id do anexo (e não do objeto `linha`)
+  // pra `router.refresh()` não refazer a URL à toa.
   const nfId = linha.nf?.id ?? null;
+  const reciboFolhaUrl = linha.folha_anexo_url ?? null;
+  const folhaId = linha.id;
   React.useEffect(() => {
-    if (!open || !nfId) {
+    if (!open) {
       setUrlNf(null);
       return;
     }
     let cancelado = false;
-    setCarregandoNf(true);
-    setUrlNf(null);
-    (async () => {
-      const r = await baixarNfColaborador(nfId);
-      if (cancelado) return;
-      if (r.ok) setUrlNf(r.url);
-      else setError(r.message);
-      setCarregandoNf(false);
-    })();
+    if (reciboFolhaUrl) {
+      setCarregandoNf(true);
+      setUrlNf(null);
+      (async () => {
+        const r = await baixarReciboFeriasFinanceiro(folhaId);
+        if (cancelado) return;
+        if (r.ok) setUrlNf(r.url);
+        else setError(r.message);
+        setCarregandoNf(false);
+      })();
+    } else if (nfId) {
+      setCarregandoNf(true);
+      setUrlNf(null);
+      (async () => {
+        const r = await baixarNfColaborador(nfId);
+        if (cancelado) return;
+        if (r.ok) setUrlNf(r.url);
+        else setError(r.message);
+        setCarregandoNf(false);
+      })();
+    } else {
+      setUrlNf(null);
+    }
     return () => {
       cancelado = true;
     };
-  }, [open, nfId]);
+  }, [open, nfId, reciboFolhaUrl, folhaId]);
 
   const podeAgir = linha.status === "enviada";
-  const exigeNf =
+  const ehFerias =
+    linha.escopo_tipo === "ferias_usufruto" ||
+    linha.escopo_tipo === "ferias_abono";
+  const exigeNfPj =
     linha.origem === "california" &&
     ["pj", "mei", "clt_recibo"].includes(
       linha.colaborador.tipo_contratacao,
     );
-  const exigeNfSemAnexo = exigeNf && !linha.nf;
+  const exigeReciboFeriasContabil = ehFerias && linha.origem === "contabilidade";
+  const exigeDocumento = exigeNfPj || exigeReciboFeriasContabil;
+  const temAnexo = linha.nf != null || linha.folha_anexo_url != null;
+  const exigeDocumentoSemAnexo = exigeDocumento && !temAnexo;
 
   const soma = alocacoes.reduce(
     (acc, a) => acc + (Number(String(a.percentual).replace(",", ".")) || 0),
@@ -299,9 +344,16 @@ export function RevisarFolhaDrawer({
   }
 
   const { titulo: tituloDoc, legendaPadrao } = tituloDoDocumento(linha);
-  const nfEhImagem =
-    linha.nf != null && /\.(png|jpe?g|webp|gif)$/i.test(linha.nf.arquivo_nome);
-  const legendaDoc = linha.nf?.arquivo_nome ?? legendaPadrao;
+  const nomeDoAnexo =
+    linha.nf?.arquivo_nome ?? nomeArquivoDaUrl(linha.folha_anexo_url);
+  const legendaDoc = nomeDoAnexo ?? legendaPadrao;
+  const anexoEhImagem =
+    (linha.nf != null &&
+      /\.(png|jpe?g|webp|gif)$/i.test(linha.nf.arquivo_nome)) ||
+    (linha.folha_anexo_url != null &&
+      /\.(png|jpe?g|webp|gif)$/i.test(linha.folha_anexo_url));
+  // Janela de pagamento só aparece pro fluxo NF (depende do uploaded_at):
+  // no recibo CLT contabilidade não há essa data.
   const janelaDoDoc = linha.nf
     ? janelaDaNf({
         uploadedAt: linha.nf.uploaded_at,
@@ -389,31 +441,33 @@ export function RevisarFolhaDrawer({
               ) : null
             }
           >
-            {!linha.nf ? (
+            {!temAnexo ? (
               <VazioDoPainel
                 texto={
-                  exigeNf
+                  exigeNfPj
                     ? "NF não anexada. O colaborador anexa em /perfil ou o RH em /rh/colaboradores. A aprovação fica bloqueada até isso ser feito."
-                    : "Esta linha não exige NF nem recibo (CLT importada da contabilidade)."
+                    : exigeReciboFeriasContabil
+                      ? "Recibo da contabilidade ainda não foi anexado. O RH anexa em /rh/ferias. A aprovação fica bloqueada até isso ser feito."
+                      : "Esta linha não exige NF nem recibo (CLT importada da contabilidade)."
                 }
               />
             ) : urlNf ? (
-              nfEhImagem ? (
+              anexoEhImagem ? (
                 <div className="flex h-full w-full items-center justify-center overflow-auto bg-muted/40 p-3">
                   {/* URL assinada: `next/image` exigiria domínio configurado
                       e não agregaria nada. */}
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={urlNf}
-                    alt={linha.nf.arquivo_nome}
+                    alt={nomeDoAnexo ?? tituloDoc}
                     className="max-h-full max-w-full object-contain"
                   />
                 </div>
               ) : (
                 <iframe
-                  key={linha.nf.id}
+                  key={linha.nf?.id ?? linha.folha_anexo_url ?? linha.id}
                   src={enderecoParaVisualizar(urlNf)}
-                  title={linha.nf.arquivo_nome}
+                  title={nomeDoAnexo ?? tituloDoc}
                   className="h-full w-full border-0"
                 />
               )
@@ -448,17 +502,30 @@ export function RevisarFolhaDrawer({
                 </div>
               )}
 
-              {exigeNfSemAnexo && (
+              {exigeDocumentoSemAnexo && (
                 <div className="flex items-start gap-2 rounded-lg border border-california-red/20 bg-california-red/5 px-3 py-2 text-xs text-california-red">
                   <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
                   <div>
-                    <p className="font-medium">
-                      NF não anexada — aprovação bloqueada
-                    </p>
-                    <p className="opacity-80">
-                      Peça pro colaborador anexar em /perfil, ou use o cadastro em
-                      /rh/colaboradores.
-                    </p>
+                    {exigeReciboFeriasContabil ? (
+                      <>
+                        <p className="font-medium">
+                          Recibo da contabilidade não anexado — aprovação bloqueada
+                        </p>
+                        <p className="opacity-80">
+                          Peça pro RH anexar em /rh/ferias antes de aprovar.
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="font-medium">
+                          NF não anexada — aprovação bloqueada
+                        </p>
+                        <p className="opacity-80">
+                          Peça pro colaborador anexar em /perfil, ou use o cadastro em
+                          /rh/colaboradores.
+                        </p>
+                      </>
+                    )}
                   </div>
                 </div>
               )}
@@ -676,10 +743,12 @@ export function RevisarFolhaDrawer({
                       <button
                         type="button"
                         onClick={handleAprovar}
-                        disabled={pending || salvandoPagamento || !somaOk || exigeNfSemAnexo}
+                        disabled={pending || salvandoPagamento || !somaOk || exigeDocumentoSemAnexo}
                         title={
-                          exigeNfSemAnexo
-                            ? "NF não anexada — colaborador precisa anexar em /perfil"
+                          exigeDocumentoSemAnexo
+                            ? exigeReciboFeriasContabil
+                              ? "Recibo da contabilidade não anexado — RH anexa em /rh/ferias"
+                              : "NF não anexada — colaborador precisa anexar em /perfil"
                             : undefined
                         }
                         className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"

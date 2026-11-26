@@ -1098,3 +1098,53 @@ export async function devolverFolhaParaAprovacao(input: {
   revalidarFolha(folha.competencia_ano, folha.competencia_mes);
   return { ok: true, id: folhaId };
 }
+
+/**
+ * Baixa o recibo da contabilidade de férias CLT para o drawer de revisão
+ * do financeiro. O recibo vive em `folhas_pagamento.anexo_url` (bucket
+ * `recibos-ferias`), não em `colaboradores_nf_anexos` — a action em
+ * /rh/ferias (`baixarReciboContabilFolhaFerias`) é restrita a RH, então
+ * o financeiro precisa do seu próprio caminho com o mesmo gate de
+ * permissão que o resto da aba People usa.
+ */
+export async function baixarReciboFeriasFinanceiro(
+  folhaId: string,
+): Promise<{ ok: true; url: string } | { ok: false; message: string }> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "rh.folhas.aprovar_financeiro");
+  if (!gate.ok) return { ok: false, message: gate.message };
+
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const { data: folha } = await supabase
+    .from("folhas_pagamento")
+    .select("id, tipo, origem, anexo_url")
+    .eq("id", folhaId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+
+  if (!folha) return { ok: false, message: "Linha da folha não encontrada." };
+  if (folha.tipo !== "ferias" || folha.origem !== "contabilidade") {
+    return {
+      ok: false,
+      message: "Essa linha não tem recibo da contabilidade.",
+    };
+  }
+  if (!folha.anexo_url) {
+    return { ok: false, message: "Nenhum recibo anexado." };
+  }
+
+  const { data, error } = await supabase.storage
+    .from("recibos-ferias")
+    .createSignedUrl(folha.anexo_url as string, 600);
+
+  if (error || !data?.signedUrl) {
+    console.error(
+      "[financeiro.folhas.baixarReciboFerias]",
+      error?.message ?? "sem url",
+    );
+    return { ok: false, message: "Falha ao gerar URL de download." };
+  }
+  return { ok: true, url: data.signedUrl };
+}
