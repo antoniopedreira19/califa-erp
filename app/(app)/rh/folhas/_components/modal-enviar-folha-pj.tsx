@@ -56,7 +56,8 @@ export function ModalEnviarFolhaPJ(
 ): JSX.Element {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
-  const [erro, setErro] = React.useState<string | null>(null);
+  const [erroPreview, setErroPreview] = React.useState<string | null>(null);
+  const [erroEnvio, setErroEnvio] = React.useState<string | null>(null);
   const [erroBloqueia, setErroBloqueia] = React.useState(false);
   const [carregandoPreview, setCarregandoPreview] = React.useState(false);
   const [preview, setPreview] = React.useState<PreviewAplicacao | null>(null);
@@ -67,40 +68,48 @@ export function ModalEnviarFolhaPJ(
   // Quando o modal abre: limpar estado e, se necessário, buscar preview.
   React.useEffect(() => {
     if (!props.open) {
-      setErro(null);
+      setErroPreview(null);
+      setErroEnvio(null);
       setErroBloqueia(false);
       setPreview(null);
+      setCarregandoPreview(false);
       return;
     }
 
-    setErro(null);
+    setErroPreview(null);
+    setErroEnvio(null);
     setErroBloqueia(false);
     setPreview(null);
 
     if (props.beneficiosAplicado) return;
 
+    let ativo = true;
     setCarregandoPreview(true);
+
     (async () => {
       const r = await previsualizarAplicacao({ ano: props.ano, mes: props.mes });
+      if (!ativo) return;
       setCarregandoPreview(false);
       if (!r.ok) {
         const isCatalogoIncompleto = r.message
           .toLowerCase()
           .includes("catalogo_incompleto");
-        setErro(r.message);
+        setErroPreview(r.message);
         setErroBloqueia(isCatalogoIncompleto);
         return;
       }
       setPreview(r.preview);
     })();
+
+    return () => { ativo = false; };
   }, [props.open, props.ano, props.mes, props.beneficiosAplicado]);
 
   function handleEnviar() {
-    setErro(null);
+    setErroEnvio(null);
     startTransition(async () => {
       const r = await enviarFolhaPJ({ ano: props.ano, mes: props.mes });
       if (!r.ok) {
-        setErro(r.message);
+        setErroEnvio(r.message);
         return;
       }
       props.onEnviado?.(r.linhas_enviadas);
@@ -165,11 +174,11 @@ export function ModalEnviarFolhaPJ(
             </div>
           )}
 
-          {/* ---- Preview: erro (bloqueante ou não) ---- */}
-          {!props.beneficiosAplicado && erro && !pending && (
+          {/* ---- Preview: erro de preview (bloqueante ou não) ---- */}
+          {!props.beneficiosAplicado && erroPreview && !carregandoPreview && (
             <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-              <span>{erro}</span>
+              <span>{erroPreview}</span>
             </div>
           )}
 
@@ -238,11 +247,11 @@ export function ModalEnviarFolhaPJ(
               </div>
             )}
 
-          {/* ---- Erro de envio (após clicar Enviar) ---- */}
-          {pending === false && erro && props.beneficiosAplicado && (
+          {/* ---- Erro de envio (após clicar Enviar) — sempre acima do rodapé ---- */}
+          {!pending && erroEnvio && (
             <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-              <span>{erro}</span>
+              <span>{erroEnvio}</span>
             </div>
           )}
         </div>

@@ -47,9 +47,8 @@ export function ModalEnviarFolhaCLT(
   const totalLinhas = props.linhasRascunho + props.linhasPendenteCorrecao;
   const competenciaLabel = `${NOMES_MES[props.mes - 1]}/${props.ano}`;
 
-  // Limpar erro quando o modal abre/fecha.
+  // Limpar erro quando o modal abre ou fecha.
   React.useEffect(() => {
-    if (!props.open) return;
     setErro(null);
   }, [props.open]);
 
