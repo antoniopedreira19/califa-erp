@@ -261,6 +261,12 @@ export function resolucaoDaLinha(
         ? `Lançado pela linha do banco: ${primeira}`
         : `Avulso criado e baixado: ${primeira}`;
       break;
+    case "misto": {
+      // Decisão 281: o PIX que pagou títulos do sistema e itens só da planilha.
+      const n = l.historicos.length;
+      texto = `Sistema e planilha: ${aspas(primeira)}${varios} e ${n === 1 ? "1 linha" : `${n} linhas`} da planilha`;
+      break;
+    }
     case "historico": {
       const jobs = [...new Set(l.historicos.map((h) => h.job ?? h.descricao ?? "sem job"))];
       texto = `Do histórico da planilha: ${aspas(jobs[0] ?? "competência até o 3T")}${jobs.length > 1 ? ` e mais ${jobs.length - 1}` : ""}`;
@@ -274,7 +280,7 @@ export function resolucaoDaLinha(
             ? `Baixado e conciliado sozinho: ${primeira}${varios}`
             : `Baixa de ${primeira}${varios}`;
   }
-  return { estado: "conciliado", sozinho: l.resolvidaSozinha, texto, ligados: l.conciliadaComo === "ligacao" };
+  return { estado: "conciliado", sozinho: l.resolvidaSozinha, texto, ligados: l.conciliadaComo === "ligacao" || l.conciliadaComo === "misto" };
 }
 
 export interface ConciliacaoDaConta {
