@@ -496,6 +496,7 @@ export type AuditAction =
   | "ferias.lancamento.enviado_financeiro"
   | "ferias.lancamento.reprovado"
   | "ferias.lancamento.cancelado_pelo_rh"
+  | "ferias.lancamento.periodo_editado"
   | "ferias.lancamento.lancado_direto_pelo_rh"
   // Correção manual via aba "Pendências de férias" (/rh/ferias?tab=pendencias):
   // o RH atua sobre lançamentos já concluídos quando a planilha de origem

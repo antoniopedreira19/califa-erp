@@ -453,6 +453,143 @@ export async function cancelarLancamento(
   return { ok: true, id: lanc.id };
 }
 
+// ---------- Editar período (RH) ----------
+
+import { editarPeriodoSchema } from "@/lib/ferias/editar-periodo-schema";
+import {
+  validarPeriodoEditado,
+  type AquisitivoParaValidar,
+} from "@/lib/ferias/validar-periodo-editado";
+
+/**
+ * Permite ao RH ajustar data_inicio/data_fim/periodo_id de um lançamento
+ * ainda não aprovado pelo RH. Útil quando o colaborador digitou errado.
+ *
+ * Fora de `aguardando_gestor`/`pendente_aprovacao`: erro — o caminho é
+ * cancelar e refazer (recalcular valores + deletar folhas é escopo maior).
+ */
+export async function editarPeriodoLancamento(
+  input: unknown,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const bloqueio = assertRh(session.activeRole);
+  if (bloqueio) return bloqueio;
+
+  const parsed = editarPeriodoSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: "Dados inválidos." };
+  }
+  const dados = parsed.data;
+
+  const tenantId = session.activeTenant.id;
+  const lanc = await carregarLancamento(dados.lancamento_id, tenantId);
+  if (!lanc) return { ok: false, message: "Lançamento não encontrado." };
+
+  if (
+    lanc.status !== "aguardando_gestor" &&
+    lanc.status !== "pendente_aprovacao"
+  ) {
+    return {
+      ok: false,
+      message: "Só é possível editar o período antes da aprovação do RH.",
+    };
+  }
+
+  const supabase = createClient();
+
+  let aquisitivo: AquisitivoParaValidar | null = null;
+  if (dados.periodo_id) {
+    const { data: periodoRow, error: pErr } = await supabase
+      .from("colaboradores_ferias_periodos")
+      .select("id, aquisitivo_inicio, data_limite_gozo, dias_direito")
+      .eq("id", dados.periodo_id)
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+    if (pErr || !periodoRow) {
+      return { ok: false, message: "Aquisitivo não encontrado." };
+    }
+    const { data: outrosLancs } = await supabase
+      .from("colaboradores_ferias_lancamentos")
+      .select("id, dias, status")
+      .eq("tenant_id", tenantId)
+      .eq("periodo_id", dados.periodo_id)
+      .neq("id", dados.lancamento_id);
+    const diasOcupadosOutros = (outrosLancs ?? [])
+      .filter((l) =>
+        [
+          "aguardando_gestor",
+          "pendente_aprovacao",
+          "aprovado",
+          "nf_anexada",
+          "enviado_financeiro",
+          "concluido",
+        ].includes(l.status as string),
+      )
+      .reduce((acc, l) => acc + (l.dias ?? 0), 0);
+
+    aquisitivo = {
+      id: periodoRow.id,
+      aquisitivo_inicio: periodoRow.aquisitivo_inicio,
+      data_limite_gozo: periodoRow.data_limite_gozo,
+      dias_direito: periodoRow.dias_direito,
+      dias_ocupados_outros: diasOcupadosOutros,
+    };
+  }
+
+  const resultado = validarPeriodoEditado({
+    data_inicio: dados.data_inicio,
+    data_fim: dados.data_fim,
+    aquisitivo,
+  });
+  if (!resultado.ok) {
+    return { ok: false, message: resultado.message };
+  }
+
+  const dadosAntigos = {
+    data_inicio: lanc.data_inicio,
+    data_fim: lanc.data_fim,
+    dias: lanc.dias,
+    periodo_id: lanc.periodo_id,
+  };
+
+  const { error: updErr } = await supabase
+    .from("colaboradores_ferias_lancamentos")
+    .update({
+      data_inicio: dados.data_inicio,
+      data_fim: dados.data_fim,
+      dias: resultado.dias,
+      periodo_id: dados.periodo_id,
+    })
+    .eq("id", dados.lancamento_id)
+    .eq("tenant_id", tenantId);
+
+  if (updErr) {
+    console.error("[rh.ferias.editarPeriodo]", updErr.message);
+    return { ok: false, message: "Falha ao editar período: " + updErr.message };
+  }
+
+  await logAuditEvent({
+    acao: "ferias.lancamento.periodo_editado",
+    tenantId,
+    entidadeTipo: "ferias_lancamento",
+    entidadeId: lanc.id,
+    metadata: {
+      colaborador_id: lanc.colaborador_id,
+      de: dadosAntigos,
+      para: {
+        data_inicio: dados.data_inicio,
+        data_fim: dados.data_fim,
+        dias: resultado.dias,
+        periodo_id: dados.periodo_id,
+      },
+    },
+  });
+
+  revalidatePath("/rh/ferias");
+  revalidatePath("/perfil");
+  return { ok: true, id: lanc.id };
+}
+
 // ---------- Lançamento direto pelo RH ----------
 
 // Schema movido pra lib/ferias/lancar-direto-schema.ts (pure module,
