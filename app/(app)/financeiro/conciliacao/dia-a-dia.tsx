@@ -112,7 +112,7 @@ export function ConciliacaoDiaADia(p: PropsDaFila) {
   // ---- O que a tabela pede ao servidor ----
   const servidor: AcoesDoDia = React.useMemo(
     () => ({
-      conciliarMisto: (linhaId, lancamentoIds, itens) => rodar(() => conciliarMisto({ linhaId, lancamentoIds, itens })),
+      conciliarMisto: (linhaId, lancamentoIds, itens, movimentoIds) => rodar(() => conciliarMisto({ linhaId, lancamentoIds, itens, movimentoIds })),
       mudarDataDaBaixa: (lancamentoIds, data) => rodar(() => mudarDataDaBaixa(lancamentoIds, data)),
       mudarDataDaPrevisao: (movimentoId, data) => rodar(() => mudarDataDaPrevisao(movimentoId, data)),
       mudarDataDoTitulo: (l, data) =>

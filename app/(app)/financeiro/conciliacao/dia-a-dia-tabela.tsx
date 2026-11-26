@@ -150,8 +150,9 @@ export function itensDoSistema(p: PropsDaFila): Candidato[] {
 
 /** O que a tabela pede ao servidor além das ações de sempre da aba. */
 export interface AcoesDoDia {
-  /** Baixas já feitas e títulos em aberto pagos pela mesma linha do banco. */
-  conciliarMisto: (linhaId: string, lancamentoIds: string[], itens: EntradaDaBaixaEmLote["itens"]) => void;
+  /** Baixas já feitas e títulos em aberto pagos pela mesma linha do banco; com
+   *  `movimentoIds`, também linhas da planilha (a ligação mista, decisão 281). */
+  conciliarMisto: (linhaId: string, lancamentoIds: string[], itens: EntradaDaBaixaEmLote["itens"], movimentoIds?: string[]) => void;
   mudarDataDoTitulo: (l: Linha, data: string) => void;
   /** A baixa lançada no dia errado, ainda sem linha do banco. */
   mudarDataDaBaixa: (lancamentoIds: string[], data: string) => void;
@@ -187,7 +188,7 @@ interface Edicao {
 // 16/11/2026: o Tiago escolheu a B; o código da A fica dormente até o porte.
 const opcao = (): "a" | "b" => "b";
 /** Como uma linha acertada vai para o banco no "Conciliar tudo". */
-type TipoDoAcerto = "regra" | "par" | "planilha" | "correcao" | "ligada" | "valor" | "juros" | "parcial" | "misto" | "baixa";
+type TipoDoAcerto = "regra" | "par" | "planilha" | "correcao" | "ligada" | "valor" | "juros" | "parcial" | "misto" | "planilha_e_sistema" | "baixa";
 interface Chamada {
   nome: string;
   args: unknown[];
@@ -221,6 +222,7 @@ const ROTULO_DO_ACERTO: Record<TipoDoAcerto, string> = {
   juros: "Baixa com juros e multa",
   valor: "Título passa ao valor do banco, com a baixa",
   planilha: "Pela linha da planilha (sem título no sistema)",
+  planilha_e_sistema: "Sistema e planilha no mesmo PIX (ligação mista)",
   regra: "Lançada pela regra do histórico",
   par: "PIX que saiu e voltou",
 };
@@ -1148,7 +1150,18 @@ export function TabelaDeComposicoes({
     const baixas = c.itens.filter((i): i is Extract<Candidato, { k: "baixa" }> => i.k === "baixa");
     const titulos = c.itens.filter((i): i is Extract<Candidato, { k: "titulo" }> => i.k === "titulo");
     const planilha = c.itens.filter((i): i is Extract<Candidato, { k: "planilha" }> => i.k === "planilha");
-    if (planilha.length) return baixas.length || titulos.length ? null : { nome: "conciliarPeloHistorico", args: [r.mov.id, planilha.map((i) => i.h.id), null], tipo: "planilha" };
+    if (planilha.length && !baixas.length && !titulos.length) return { nome: "conciliarPeloHistorico", args: [r.mov.id, planilha.map((i) => i.h.id), null], tipo: "planilha" };
+    // A ligação mista (decisão 281): a planilha junto com baixas e títulos, sem ajuste.
+    if (planilha.length) {
+      if (c.estado !== "bate" || c.ajuste) return null;
+      const itensMisto = titulos.map((t) => itemComCentro(p.contexto.linhaPorChave.get(t.t.id), c.centros[t.id]));
+      if (itensMisto.some((i) => !i)) return null;
+      return {
+        nome: "conciliarMisto",
+        args: [{ linhaId: r.mov.id, lancamentoIds: baixas.flatMap((b) => b.l.ids), itens: itensMisto, movimentoIds: planilha.map((i) => i.h.id) }],
+        tipo: "planilha_e_sistema",
+      };
+    }
     if (c.ajuste === "correcao" && baixas.length === 1)
       return { nome: "corrigirBaixa", args: [baixas[0].l.id, r.mov.id, `Acerto da conciliação de ${ddmm(r.mov.data)}: o banco debitou ${moeda(Math.abs(r.mov.valor))}.`], tipo: "correcao" };
     if (c.estado !== "bate" && c.estado !== "ajuste") return null;
@@ -1175,7 +1188,8 @@ export function TabelaDeComposicoes({
     if (c.especial?.k === "mutuo") return "Mútuo entre empresas: falta o lançamento entre as empresas.";
     if (c.especial) return "Falta a regra do histórico.";
     const titulos = c.itens.filter((i): i is Extract<Candidato, { k: "titulo" }> => i.k === "titulo");
-    if (c.itens.some((i) => i.k === "planilha") && titulos.length) return "Linha da planilha junto com título: conclua pela baixa.";
+    if (c.itens.some((i) => i.k === "planilha") && (titulos.length || c.itens.some((i) => i.k === "baixa")) && c.ajuste)
+      return "Planilha junto com título ou baixa não leva ajuste: faça a baixa completa do título antes e junte a linha da planilha depois.";
     if (c.ajuste === "retencao") return "Retenção na fonte: confira os impostos retidos antes de gravar.";
     if (c.ajuste === "juros") return "Juros e multa pagos por PIX ou TED: lance os juros na baixa.";
     for (const t of titulos) {
@@ -1302,6 +1316,13 @@ export function TabelaDeComposicoes({
     const baixas = c.itens.filter((i): i is Extract<Candidato, { k: "baixa" }> => i.k === "baixa");
     const titulos = c.itens.filter((i): i is Extract<Candidato, { k: "titulo" }> => i.k === "titulo");
     const planilha = c.itens.filter((i): i is Extract<Candidato, { k: "planilha" }> => i.k === "planilha");
+    if (planilha.length && (baixas.length || titulos.length)) {
+      // A ligação mista (decisão 281): a soma tem de bater, sem ajuste.
+      if (c.estado !== "bate" || c.ajuste) return avisar("A planilha junto com baixas e títulos só concilia quando a soma bate, sem ajuste.");
+      const itensMisto = titulos.map((t) => itemComCentro(p.contexto.linhaPorChave.get(t.t.id), c.centros[t.id]));
+      if (itensMisto.some((i) => !i)) return avisar("Um dos títulos pede a baixa completa (centro de custo, fatura ou guia): concilie este título sozinho primeiro.");
+      return servidor.conciliarMisto(r.mov.id, baixas.flatMap((b) => b.l.ids), itensMisto.filter((i): i is NonNullable<typeof i> => !!i), planilha.map((i) => i.h.id));
+    }
     if (planilha.length) return acoes.conciliarHistorico([{ ...r, estado: "historico", historicos: planilha.map((i) => i.h) }]);
     if (c.ajuste === "correcao" && baixas.length === 1) return acoes.corrigirBaixa({ ...r, estado: "divergencia", lancamento: baixas[0].l, diferencaBaixa: r2(Math.abs(baixas[0].valor) - Math.abs(r.mov.valor)) });
     if (baixas.length && titulos.length) return conciliarMisto(r, baixas, titulos, c.ajuste === "parcial" ? parteDoUltimo(c) : null);
@@ -3255,14 +3276,12 @@ function Adicionar({
   // A sugestão ainda não está na linha: a conta não muda sem ela.
   const falta = trocando && !daSugestao ? r2(c.falta + trocando.valor) : c.falta;
   const daLista = new Set([...(sugestao?.itens.map((i) => i.id) ?? []), ...(trocando ? [trocando.id] : [])]);
-  const temPlanilha = outros.some((i) => i.k === "planilha");
-  const temOutros = outros.some((i) => i.k !== "planilha");
   const lista = React.useMemo(() => {
     const q = norm(texto.trim());
     const fornecedores = new Set((trocando ? [trocando, ...outros] : outros).map((i) => i.quem).filter(Boolean));
     return candidatos
       .filter((x) => !naLinha.has(x.id) && !daLista.has(x.id) && Math.sign(x.valor) === Math.sign(mov.valor) && Math.abs(diasEntre(mov.data, x.data)) <= janela)
-      .filter((x) => (temPlanilha ? x.k === "planilha" : temOutros ? x.k !== "planilha" : true))
+      // Planilha e sistema juntos na mesma linha: a ligação mista (decisão 281).
       .filter((x) => !q || norm(`${x.descricao} ${x.quem ?? ""} ${moeda(Math.abs(x.valor))}`).includes(q))
       .map((x) => ({ x, fecha: cents(x.valor) === cents(falta) && Math.sign(x.valor) === Math.sign(falta), mesmo: !!x.quem && fornecedores.has(x.quem), dias: Math.abs(diasEntre(mov.data, x.data)) }))
       .sort((a, b) => Number(b.fecha) - Number(a.fecha) || a.dias - b.dias || Number(b.mesmo) - Number(a.mesmo) || Math.abs(b.x.valor) - Math.abs(a.x.valor))

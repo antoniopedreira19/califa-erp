@@ -3976,7 +3976,7 @@ export interface ExtratoLinha {
 }
 
 /** Ligacao: a baixa já existia. Baixa e avulso: nasceu na conciliação. */
-export type ConciliadaComo = "ligacao" | "baixa" | "avulso" | "regra" | "par" | "correcao" | "historico" | "conjunto";
+export type ConciliadaComo = "ligacao" | "baixa" | "avulso" | "regra" | "par" | "correcao" | "historico" | "conjunto" | "misto";
 
 /** A baixa feita à mão corrigida pela conciliação (`baixa_correcoes`). */
 export interface BaixaCorrecao {

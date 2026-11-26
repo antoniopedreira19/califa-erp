@@ -22,6 +22,9 @@
  *
  * Decisão 262: o acerto e o centro de custo da linha, o "Corrigir o valor do
  * título" e o recebimento antes da NF pela linha do banco.
+ *
+ * Decisão 281: `conciliarMisto` com `movimentoIds` é a ligação mista — o PIX
+ * que paga títulos do sistema e itens que só existem na planilha.
  */
 
 import { revalidatePath } from "next/cache";
@@ -68,11 +71,24 @@ function baixaDoItem(alvo: ItensDaBaixa[number]["alvo"]): { origem: string; colu
   return alvo.origem === "pp" ? { origem: "pp_baixa", coluna: "pedido_compra_parcela_id" } : { origem: "avulsa_baixa", coluna: "conta_avulsa_id" };
 }
 
-export async function conciliarMisto(entrada: { linhaId: string; lancamentoIds: string[]; itens: ItensDaBaixa }): Promise<Resultado> {
-  if (!UUID.safeParse(entrada.linhaId).success || !z.array(UUID).max(500).safeParse(entrada.lancamentoIds).success) {
+export async function conciliarMisto(entrada: {
+  linhaId: string;
+  lancamentoIds: string[];
+  itens: ItensDaBaixa;
+  /** Decisão 281: as linhas da planilha que o mesmo PIX pagou (a ligação mista). */
+  movimentoIds?: string[];
+}): Promise<Resultado> {
+  const movimentoIds = entrada.movimentoIds ?? [];
+  if (
+    !UUID.safeParse(entrada.linhaId).success ||
+    !z.array(UUID).max(500).safeParse(entrada.lancamentoIds).success ||
+    !z.array(UUID).max(500).safeParse(movimentoIds).success
+  ) {
     return { ok: false, message: "Entrada inválida." };
   }
-  if (!Array.isArray(entrada.itens) || entrada.itens.length === 0 || entrada.itens.length > 100) return { ok: false, message: "Entrada inválida." };
+  if (!Array.isArray(entrada.itens) || entrada.itens.length > 100) return { ok: false, message: "Entrada inválida." };
+  if (movimentoIds.length) return conciliarComAPlanilha({ ...entrada, movimentoIds });
+  if (entrada.itens.length === 0) return { ok: false, message: "Entrada inválida." };
   // Só títulos: é o "baixar e conciliar" de sempre, que o Desfazer sabe cancelar.
   if (entrada.lancamentoIds.length === 0) return baixarEConciliar({ linhaId: entrada.linhaId, itens: entrada.itens });
 
@@ -135,6 +151,87 @@ export async function conciliarMisto(entrada: { linhaId: string; lancamentoIds: 
   return {
     ok: true,
     mensagem: `${novas.length === 1 ? "1 título baixado" : `${novas.length} títulos baixados`} com os dados do banco e ${n} lançamentos conciliados com a linha.`,
+  };
+}
+
+/**
+ * A ligação mista (decisão 281): o PIX que paga títulos do sistema junto com
+ * itens que só existem na planilha do financeiro. Os títulos em aberto ganham a
+ * baixa com os dados do banco (como no misto de sempre); depois a linha se liga
+ * às baixas e às linhas da planilha numa chamada só (`conciliar_linha_mista`),
+ * que confere a soma e liga a baixa de cada PP à linha da planilha que cita a PP.
+ * O Desfazer solta tudo e não cancela baixa nenhuma (a baixa feita aqui volta a
+ * "Só no sistema", como no misto de sempre).
+ */
+async function conciliarComAPlanilha(entrada: {
+  linhaId: string;
+  lancamentoIds: string[];
+  itens: ItensDaBaixa;
+  movimentoIds: string[];
+}): Promise<Resultado> {
+  if (entrada.lancamentoIds.length === 0 && entrada.itens.length === 0) {
+    return { ok: false, message: "Só linhas da planilha: concilie pela planilha." };
+  }
+  const g = await gate();
+  if (!g.ok) return g;
+  const tenantId = g.session.activeTenant.id;
+  const { data: linha, error } = await g.supabase
+    .from("vw_extrato_linhas")
+    .select("id, conta_bancaria_id, data")
+    .eq("tenant_id", tenantId)
+    .eq("id", entrada.linhaId)
+    .maybeSingle<{ id: string; conta_bancaria_id: string; data: string }>();
+  if (error || !linha) return { ok: false, message: "Linha do extrato não encontrada." };
+
+  let novas: string[] = [];
+  if (entrada.itens.length) {
+    const baixa = await baixarPelaLinha({ linhaId: entrada.linhaId, itens: entrada.itens });
+    if (!baixa.ok) return baixa;
+    const achadas = await Promise.all(
+      entrada.itens.map((i) => {
+        const { origem, coluna } = baixaDoItem(i.alvo);
+        return g.supabase
+          .from("lancamentos_financeiros")
+          .select("id")
+          .eq("tenant_id", tenantId)
+          .eq("conta_bancaria_id", linha.conta_bancaria_id)
+          .is("extrato_linha_id", null)
+          .eq("origem", origem)
+          .eq(coluna, i.alvo.id)
+          .eq("data_movimento", linha.data)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle<{ id: string }>();
+      }),
+    );
+    novas = achadas.map((r) => r.data?.id).filter((id): id is string => !!id);
+    if (novas.length !== entrada.itens.length) {
+      revalidar();
+      return {
+        ok: false,
+        message: "Os títulos foram baixados com os dados do banco, mas a linha ficou sem conciliar: as baixas aparecem em “Só no sistema” deste dia. Monte a linha de novo com elas e as linhas da planilha.",
+      };
+    }
+  }
+
+  const { data, error: erroDaLiga } = await g.supabase.rpc("conciliar_linha_mista", {
+    p_linha_id: entrada.linhaId,
+    p_lancamento_ids: [...entrada.lancamentoIds, ...novas],
+    p_movimento_ids: entrada.movimentoIds,
+  });
+  revalidar();
+  if (erroDaLiga) {
+    console.error("[conciliacao.conciliar_linha_mista]", erroDaLiga.message);
+    const base = mensagemDoBanco(erroDaLiga.message, "Não foi possível ligar a linha do banco.");
+    return { ok: false, message: novas.length ? `${base} Os títulos já foram baixados e aparecem em “Só no sistema” deste dia.` : base };
+  }
+  const semPar = ((data as { sem_par?: Array<{ pp: string }> } | null)?.sem_par ?? []).map((s) => s.pp);
+  const n = entrada.lancamentoIds.length + novas.length;
+  return {
+    ok: true,
+    mensagem:
+      `Linha conciliada com ${n === 1 ? "1 lançamento do sistema" : `${n} lançamentos do sistema`} e ${entrada.movimentoIds.length === 1 ? "1 linha da planilha" : `${entrada.movimentoIds.length} linhas da planilha`}.` +
+      (semPar.length ? ` Sem a linha da planilha de ${semPar.join(", ")}: confira se ela não conta duas vezes nas previsões.` : ""),
   };
 }
 

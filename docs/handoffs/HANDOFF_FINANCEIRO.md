@@ -9398,3 +9398,11 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - **Grava no documento ao conciliar** (escolha do Tiago): rateio do avulso (recorrência: só a ocorrência), da nota avulsa, do desembolso; regional da baixa manual (TD = sem regional); regional da linha da planilha (TD = `regional_todas`). Rascunho em `conciliacao_regionais` até o Conciliar, como o centro de custo.
 - **Banco** (migration `20261125600001`): `conciliacao_regionais`, `salvar_regional_da_conciliacao`, `trocar_regional_pela_conciliacao` (travas no banco, período fechado, auditoria `*.regional_alterada`). Leitura: `banco-dados.ts` traz o rascunho, a tabela TD e a empresa de cada baixa e linha da planilha.
 
+
+## ⚠️ Nota de 2026-11-26 — a ligação mista na conciliação (decisão 281)
+
+- A linha do banco que paga, num PIX só, títulos do sistema e itens que só existem na planilha agora concilia: `conciliada_como = 'misto'`, RPC `conciliar_linha_mista(linha, lançamentos, linhas da planilha)` e a ação `conciliarMisto` com `movimentoIds`.
+- A baixa de cada PP da linha mista se liga sozinha à linha da planilha que cita a PP (`historico_movimento_baixas`); sem par único, a linha concilia e a tela avisa.
+- Desfazer, a baixa cancelada (`lancamento_desliga_a_linha`) e a carga desfeita (`_historico_apagar_linhas`) soltam os dois lados.
+- Na tela, o "Adicionar lançamento" oferece planilha e sistema juntos; com ajuste (juros, retenção, parcial) a linha ainda pede a baixa completa antes.
+- Migration `20261126300001`. Testada no Sandbox (Conta Teste, 20/10): título + planilha, baixa + planilha pela tela, retenção, desfazer e baixa cancelada.
