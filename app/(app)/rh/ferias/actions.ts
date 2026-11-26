@@ -40,7 +40,6 @@ function assertRh(role: string): ActionResult | null {
   return null;
 }
 
-export { dataPagamentoSchema } from "@/lib/ferias/enviar-pro-financeiro-schema";
 import { dataPagamentoSchema } from "@/lib/ferias/enviar-pro-financeiro-schema";
 
 async function carregarLancamento(id: string, tenantId: string) {
