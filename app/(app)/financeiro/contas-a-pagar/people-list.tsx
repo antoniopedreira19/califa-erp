@@ -515,7 +515,9 @@ export function PeopleList({
 
     const bloqueado = exigeNfParaUI && !item.nf_anexada;
     const tooltipBloqueado = bloqueado
-      ? "Aguardando o colaborador anexar a NF."
+      ? item.origem === "contabilidade"
+        ? "Aguardando o RH anexar o recibo da contabilidade."
+        : "Aguardando o colaborador anexar a NF."
       : null;
 
     const ehFilha = modo === "filha";
