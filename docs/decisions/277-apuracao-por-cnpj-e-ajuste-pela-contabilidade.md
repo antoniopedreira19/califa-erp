@@ -129,8 +129,28 @@ O fluxo soma as previsões de imposto da planilha e o que o Fiscal projeta (guia
 
 - **ISS, PIS e COFINS:** a partir de novembro, o Fiscal é a única fonte. A previsão da planilha sai quando o Fiscal tem a guia daquele CNPJ (o da conta que paga), imposto e mês.
 - **IRPJ e CSLL:** a planilha continua no fluxo até a guia ser aprovada. Aprovada, a guia deixa de ser previsão e vira título, e o título substitui a previsão da planilha daquele CNPJ e trimestre. Antes da aprovação, a estimativa do sistema não entra no fluxo.
-- As cotas 2 e 3 do 3º trimestre da GoCrazy entram como Guia da contabilidade a pagar.
-- A implementação do fluxo é a próxima entrega.
+- As cotas 2 e 3 do 3º trimestre da GoCrazy entram como Guia da contabilidade a pagar. Ainda não foi feito: as linhas da planilha ficam no fluxo com os mesmos valores.
+
+**Implementado em 26/11** (`lib/fiscal/fluxo-fiscal.ts`, `fluxo-fiscal-dados.ts` e `app/(app)/financeiro/fluxo-caixa/page.tsx`):
+
+- **Linhas de imposto da planilha:** são as previsões da carga ativa sem extrato, no centro tributário (03 ou 15), com o imposto lido da descrição (`tributoDaLinhaDaPlanilha`).
+  - A "COFINS crédito" conta como COFINS.
+  - A retenção sofrida ("Imposto retido na Fonte") e a restituição ficam de fora.
+  - O CNPJ é o da conta que paga.
+- **ISS, PIS e COFINS** (linhas de 01/11/2026 em diante): a linha sai quando o Fiscal põe no fluxo a guia do mesmo CNPJ, imposto e mês de vencimento, seja a estimativa da Apuração ou o título a pagar (`chavesDoFiscalNoFluxo`, `previsoesDaPlanilhaQueSaem`). O cumulativo do 12.08 conta junto do não cumulativo.
+- **IRPJ e CSLL:**
+  - Saem do fluxo a estimativa da Apuração (em curso, a aprovar e diferença) e a do "a apurar no recebimento".
+  - O título a pagar tira a linha da planilha do mesmo CNPJ e trimestre. O trimestre é o anterior ao mês do pagamento (`trimestreDaCota`).
+- **O que fica como estava:** o que foi pago (com extrato, ou pago no histórico, que o Fiscal não põe no fluxo) e o cronograma de impostos da abertura do job.
+- **Efeito na produção** (26/11, `.claude/prototipos/fiscal/fluxo-regra-277-8.mts`, fora do git):
+  - Em dezembro saem da planilha R$ 484.718,35 (ISS R$ 246.591,34, PIS R$ 42.608,67, COFINS R$ 195.518,34), e fica a estimativa do Fiscal para novembro.
+    - O Fiscal calcula para novembro ISS de R$ 306.466,29, PIS de R$ 79.925,50 e COFINS de R$ 368.474,27 (com o cumulativo do 12.08), mais IOF.
+    - O Fiscal sai acima da planilha, sobretudo pela parte cumulativa do 12.08, que a planilha não separa.
+  - Sai a estimativa de IRPJ/CSLL do sistema: cerca de R$ 1,6 milhão por mês de janeiro a março de 2027.
+- **O fluxo estava quebrado desde 23/11 e voltou** (`20261126100003_fluxo_executa_as_funcoes_da_previsao.sql`, com o OK do Tiago).
+  - A view chama `_historico_previsoes_pagas` e `_previsao_de_nf_lancada`, que nasceram sem EXECUTE para `authenticated`. O Postgres confere essa permissão em quem lê a view.
+  - Por isso a página abria sem nenhuma linha da view: saldo projetado em −R$ 6,9 milhões, só as saídas do Fiscal.
+  - A migration concede EXECUTE a `authenticated` (`anon` continua sem). A página voltou, mas leva uns 30 s para carregar.
 
 ## 9. O ajuste da base do lucro real (implementado)
 

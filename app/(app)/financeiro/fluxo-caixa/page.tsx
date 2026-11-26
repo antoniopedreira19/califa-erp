@@ -135,6 +135,7 @@ export default async function FluxoCaixaPage({
         saidas: [],
         issRetidoPorParcela: new Map<string, number>(),
         baixaDoLancamento: new Map<string, { impostoId: string; descricao: string }>(),
+        previsoesDaPlanilhaQueSaem: new Set<string>(),
       };
     }),
     // O IOF do mútuo que fica junto dele (decisão 230): soma nas linhas de
@@ -166,35 +167,39 @@ export default async function FluxoCaixaPage({
       .map((i) => i.lancamento_id),
   );
 
-  const itensDaView: FluxoItem[] = (fluxoRes.data ?? []).map((r) => {
-    const doMutuo =
-      r.origem_lancamento === "mutuo_saida" ||
-      r.origem_lancamento === "mutuo_entrada" ||
-      iofJuntoDoMutuo.has(r.origem_id as string);
-    const item: FluxoItem = {
-      classe: r.classe as FluxoItem["classe"],
-      origem_tipo: doMutuo ? "mutuo" : (r.origem_tipo as string),
-      origem_id: r.origem_id as string,
-      conta_bancaria_id: (r.conta_bancaria_id as string | null) ?? null,
-      regional_id: (r.regional_id as string | null) ?? null,
-      data_evento: r.data_evento as string,
-      valor: Number(r.valor),
-      natureza: r.natureza as "entrada" | "saida",
-      descricao: r.descricao as string,
-      job_id: (r.job_id as string | null) ?? null,
-    };
-    // A baixa do imposto grava um lançamento por parte do rateio (e um de
-    // multa e juros): no detalhe, as partes voltam a ser uma linha só, com
-    // o nome do imposto — o mesmo que ele tinha como título.
-    const baixa =
-      r.origem_lancamento === "imposto_baixa" ? fiscal.baixaDoLancamento.get(item.origem_id) : undefined;
-    if (baixa) return { ...item, origem_id: `imposto:${baixa.impostoId}`, descricao: baixa.descricao };
-    // A parcela de PP em aberto sai sem o ISS retido, que desde a emissão
-    // da NF do fornecedor está na guia de ISS retido (cada real numa etapa só).
-    const iss = item.origem_tipo === "pp" ? fiscal.issRetidoPorParcela.get(item.origem_id) : undefined;
-    if (iss) return { ...item, valor: parcelaSemIssRetido(item.valor, iss) };
-    return item;
-  });
+  // Decisão 277 §8: a previsão de imposto da planilha que o Fiscal já cobre
+  // sai do fluxo — o mesmo imposto não aparece duas vezes.
+  const itensDaView: FluxoItem[] = (fluxoRes.data ?? [])
+    .filter((r) => !(r.origem_tipo === "previsao_planilha" && fiscal.previsoesDaPlanilhaQueSaem.has(r.origem_id as string)))
+    .map((r) => {
+      const doMutuo =
+        r.origem_lancamento === "mutuo_saida" ||
+        r.origem_lancamento === "mutuo_entrada" ||
+        iofJuntoDoMutuo.has(r.origem_id as string);
+      const item: FluxoItem = {
+        classe: r.classe as FluxoItem["classe"],
+        origem_tipo: doMutuo ? "mutuo" : (r.origem_tipo as string),
+        origem_id: r.origem_id as string,
+        conta_bancaria_id: (r.conta_bancaria_id as string | null) ?? null,
+        regional_id: (r.regional_id as string | null) ?? null,
+        data_evento: r.data_evento as string,
+        valor: Number(r.valor),
+        natureza: r.natureza as "entrada" | "saida",
+        descricao: r.descricao as string,
+        job_id: (r.job_id as string | null) ?? null,
+      };
+      // A baixa do imposto grava um lançamento por parte do rateio (e um de
+      // multa e juros): no detalhe, as partes voltam a ser uma linha só, com
+      // o nome do imposto — o mesmo que ele tinha como título.
+      const baixa =
+        r.origem_lancamento === "imposto_baixa" ? fiscal.baixaDoLancamento.get(item.origem_id) : undefined;
+      if (baixa) return { ...item, origem_id: `imposto:${baixa.impostoId}`, descricao: baixa.descricao };
+      // A parcela de PP em aberto sai sem o ISS retido, que desde a emissão
+      // da NF do fornecedor está na guia de ISS retido (cada real numa etapa só).
+      const iss = item.origem_tipo === "pp" ? fiscal.issRetidoPorParcela.get(item.origem_id) : undefined;
+      if (iss) return { ...item, valor: parcelaSemIssRetido(item.valor, iss) };
+      return item;
+    });
 
   // As saídas fiscais seguem o filtro de empresa que a view recebe no
   // servidor (sem empresa no rateio, só entram sem filtro).

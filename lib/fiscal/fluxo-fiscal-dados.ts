@@ -10,20 +10,25 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { notasEmitidasDosJobs } from "@/lib/data/faturamento-por-job";
-import { blocosAApurar, irpjCsllAApurar, type TituloAApurar } from "./a-apurar";
+import { blocosAApurar, type TituloAApurar } from "./a-apurar";
 import { carregarTitulosAApurar } from "./a-apurar-dados";
 import { calcularApuracao, estadoDaGuia } from "./apuracao";
 import { carregarFatosFiscais } from "./apuracao-fatos";
 import {
+  TRIBUTOS_SO_APROVADOS_NO_FLUXO,
+  chavesDoFiscalNoFluxo,
   descricaoDoImposto,
   ppsComIssNaGuia,
+  previsoesDaPlanilhaQueSaem,
   saidasAApurar,
   saidasDaApuracao,
   saidasDoCronogramaDeImpostos,
   saidasDosImpostosAPagar,
+  tributoDaLinhaDaPlanilha,
   type GuiaComEstado,
   type ImpostoEmAberto,
   type JobDoCronograma,
+  type PrevisaoDeImpostoDaPlanilha,
   type SaidaFiscalDoFluxo,
 } from "./fluxo-fiscal";
 
@@ -97,6 +102,51 @@ export async function carregarCronogramaDeImpostos(
   return [...porJob.values()];
 }
 
+/**
+ * As previsões de imposto da planilha ainda sem extrato (carga de previsão
+ * ativa), com o CNPJ da conta que paga — as candidatas a sair do fluxo pela
+ * regra da decisão 277 §8. Só o centro tributário (03 e 15).
+ */
+async function carregarPrevisoesDeImpostoDaPlanilha(
+  supabase: SupabaseClient,
+  tenantId: string,
+  fim: string,
+): Promise<PrevisaoDeImpostoDaPlanilha[]> {
+  const out: PrevisaoDeImpostoDaPlanilha[] = [];
+  const PAGINA = 1000;
+  for (let de = 0; de < 20_000; de += PAGINA) {
+    const { data, error } = await supabase
+      .from("historico_movimentos")
+      .select("id, data, descricao, plano_codigo, conta:contas_bancarias(empresa_contabil_id), carga:historico_cargas!inner(tipo, situacao)")
+      .eq("tenant_id", tenantId)
+      .eq("carga.tipo", "previsao")
+      .eq("carga.situacao", "ativa")
+      .is("extrato_linha_id", null)
+      .neq("valor", 0)
+      .lte("data", fim)
+      .or("plano_codigo.like.03.*,plano_codigo.like.15.*")
+      .order("id")
+      .range(de, de + PAGINA - 1);
+    if (error) {
+      console.error("[fluxo-fiscal.previsoes-da-planilha]", error.message);
+      return out;
+    }
+    const linhas = (data ?? []) as unknown as Array<{
+      id: string;
+      data: string;
+      descricao: string | null;
+      plano_codigo: string | null;
+      conta: { empresa_contabil_id: string | null } | null;
+    }>;
+    for (const l of linhas) {
+      const tributo = tributoDaLinhaDaPlanilha(l);
+      if (tributo) out.push({ id: l.id, pj: l.conta?.empresa_contabil_id ?? null, tributo, data: l.data });
+    }
+    if (linhas.length < PAGINA) break;
+  }
+  return out;
+}
+
 export interface FiscalDoFluxo {
   /** Os itens novos: imposto a pagar, guia da Apuração, "a apurar no recebimento" e cronograma da abertura. */
   saidas: SaidaFiscalDoFluxo[];
@@ -104,6 +154,12 @@ export interface FiscalDoFluxo {
   issRetidoPorParcela: Map<string, number>;
   /** Lançamento da baixa do imposto → o imposto e o nome dele (a tela junta as partes numa linha). */
   baixaDoLancamento: Map<string, { impostoId: string; descricao: string }>;
+  /**
+   * Decisão 277 §8: as previsões de imposto da planilha (`previsao_planilha`,
+   * pelo id da linha do histórico) que saem do fluxo porque o Fiscal já tem
+   * aquele imposto — cada real numa fonte só.
+   */
+  previsoesDaPlanilhaQueSaem: Set<string>;
 }
 
 /**
@@ -116,7 +172,7 @@ export async function carregarFiscalDoFluxo(
   hoje: string,
   janela: { inicio: string; fim: string },
 ): Promise<FiscalDoFluxo> {
-  const [fatos, impostosRes, cronograma, baixasRes] = await Promise.all([
+  const [fatos, impostosRes, cronograma, baixasRes, previsoesDaPlanilha] = await Promise.all([
     carregarFatosFiscais(supabase, tenantId).catch((e: unknown) => {
       console.error("[fluxo-fiscal.fatos]", e instanceof Error ? e.message : e);
       return null;
@@ -124,7 +180,7 @@ export async function carregarFiscalDoFluxo(
     supabase
       .from("impostos_a_pagar")
       .select(
-        "id, tributo, codigo_receita, descricao, vencimento, valor, rateio:impostos_a_pagar_rateio(empresa_id, regional_id, valor, ordem)",
+        "id, tributo, codigo_receita, descricao, vencimento, valor, empresa_contabil_id, competencia, rateio:impostos_a_pagar_rateio(empresa_id, regional_id, valor, ordem)",
       )
       .eq("tenant_id", tenantId)
       .eq("status", "a_pagar"),
@@ -136,17 +192,28 @@ export async function carregarFiscalDoFluxo(
       .eq("origem", "imposto_baixa")
       .gte("data_movimento", janela.inicio)
       .lte("data_movimento", janela.fim),
+    carregarPrevisoesDeImpostoDaPlanilha(supabase, tenantId, janela.fim).catch((e: unknown) => {
+      console.error("[fluxo-fiscal.previsoes-da-planilha]", e instanceof Error ? e.message : e);
+      return [] as PrevisaoDeImpostoDaPlanilha[];
+    }),
   ]);
   if (impostosRes.error) console.error("[fluxo-fiscal.impostos]", impostosRes.error.message);
   if (baixasRes.error) console.error("[fluxo-fiscal.baixas]", baixasRes.error.message);
 
-  const impostos: ImpostoEmAberto[] = ((impostosRes.data ?? []) as unknown as Array<
+  const impostosDoBanco = (impostosRes.data ?? []) as unknown as Array<
     Omit<ImpostoEmAberto, "valor" | "rateio"> & {
       valor: number | string;
+      empresa_contabil_id: string;
+      competencia: string;
       rateio: Array<{ empresa_id: string; regional_id: string | null; valor: number | string; ordem: number }> | null;
     }
-  >).map((t) => ({
-    ...t,
+  >;
+  const impostos: ImpostoEmAberto[] = impostosDoBanco.map((t) => ({
+    id: t.id,
+    tributo: t.tributo,
+    codigo_receita: t.codigo_receita,
+    descricao: t.descricao,
+    vencimento: t.vencimento,
     valor: Number(t.valor),
     rateio: (t.rateio ?? []).map((r) => ({ ...r, valor: Number(r.valor) })),
   }));
@@ -189,7 +256,9 @@ export async function carregarFiscalDoFluxo(
     }
     try {
       const blocos = blocosAApurar(fatos.cadastro, fatos.fatos, titulosAApurar, hoje);
-      aApurar = saidasAApurar(blocos, irpjCsllAApurar(fatos.cadastro, fatos.fatos, blocos, hoje), hoje);
+      // Decisão 277 §8: o IRPJ/CSLL a apurar no recebimento é estimativa — fica
+      // fora do fluxo até a guia ser aprovada (a planilha cobre até lá).
+      aApurar = saidasAApurar(blocos, [], hoje);
     } catch (e) {
       console.error("[fluxo-fiscal.a-apurar]", e instanceof Error ? e.message : e);
       aApurar = [];
@@ -206,15 +275,22 @@ export async function carregarFiscalDoFluxo(
     baixaDoLancamento.set(l.id, { impostoId: l.imposto_a_pagar_id, descricao: descricaoDoImposto(l.imposto) });
   }
 
+  // Decisão 277 §8: a estimativa de IRPJ/CSLL não entra antes da aprovação;
+  // o ISS, o PIS e a COFINS do Fiscal tiram a previsão da planilha do mesmo
+  // CNPJ, imposto e mês, e o título de IRPJ/CSLL, a do mesmo trimestre.
+  const guiasNoFluxo = guias.filter((g) => !TRIBUTOS_SO_APROVADOS_NO_FLUXO.has(g.tributo));
+  const chaves = chavesDoFiscalNoFluxo(guiasNoFluxo, impostosDoBanco);
+
   const dentro = (s: SaidaFiscalDoFluxo) => s.data_evento >= janela.inicio && s.data_evento <= janela.fim;
   return {
     saidas: [
       ...saidasDosImpostosAPagar(impostos),
-      ...saidasDaApuracao(guias, hoje),
+      ...saidasDaApuracao(guiasNoFluxo, hoje),
       ...aApurar,
       ...saidasDoCronogramaDeImpostos(cronograma, hoje),
     ].filter(dentro),
     issRetidoPorParcela,
     baixaDoLancamento,
+    previsoesDaPlanilhaQueSaem: previsoesDaPlanilhaQueSaem(previsoesDaPlanilha, chaves),
   };
 }
