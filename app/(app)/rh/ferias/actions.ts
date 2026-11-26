@@ -19,6 +19,11 @@ import {
 } from "@/lib/ferias/aprovar-ferias-fluxo-financeiro";
 import { overrideLiderRhSchema } from "@/lib/ferias/override-lider-rh-schema";
 import {
+  lancamentoEnviavel,
+  type FolhaMin,
+  type NfMin,
+} from "@/lib/ferias/lancamento-enviavel";
+import {
   gerarReciboFeriasPdf,
   type FormatoRecibo,
 } from "@/lib/pdf/recibo-ferias";
@@ -34,6 +39,9 @@ function assertRh(role: string): ActionResult | null {
   }
   return null;
 }
+
+export { dataPagamentoSchema } from "@/lib/ferias/enviar-pro-financeiro-schema";
+import { dataPagamentoSchema } from "@/lib/ferias/enviar-pro-financeiro-schema";
 
 async function carregarLancamento(id: string, tenantId: string) {
   const supabase = createClient();
@@ -846,6 +854,7 @@ export async function obterUrlRecibo(
  */
 export async function enviarProFinanceiro(
   lancamentoId: string,
+  opts?: { dataPagamento?: string },
 ): Promise<ActionResult> {
   const session = await requireSession();
   const bloqueio = assertRh(session.activeRole);
@@ -858,21 +867,77 @@ export async function enviarProFinanceiro(
   if (lanc.status === "enviado_financeiro") {
     return { ok: true, id: lanc.id };
   }
-  if (lanc.status !== "nf_anexada") {
+  // CLT puro nunca vira nf_anexada (não existe NF); o gate agora é
+  // completude dos anexos por folha, não só o status do lançamento.
+  if (lanc.status !== "aprovado" && lanc.status !== "nf_anexada") {
     return {
       ok: false,
       message:
-        "Só é possível enviar pro financeiro quando a NF já foi anexada.",
+        "Só é possível enviar pro financeiro quando o lançamento está aprovado.",
     };
   }
 
+  const dataParse = dataPagamentoSchema.safeParse(opts?.dataPagamento);
+  if (!dataParse.success) {
+    return { ok: false, message: "Data de pagamento inválida." };
+  }
+  const dataPagamento = dataParse.data;
+
   const supabase = createClient();
+
+  // Checa completude dos anexos por folha (NF pra california, anexo_url pra contabilidade).
+  const [folhasRes, nfsRes] = await Promise.all([
+    supabase
+      .from("folhas_pagamento")
+      .select("id, origem, tipo_folha_ferias, status, anexo_url")
+      .eq("tenant_id", tenantId)
+      .eq("lancamento_ferias_id", lancamentoId)
+      .eq("tipo", "ferias"),
+    supabase
+      .from("colaboradores_nf_anexos")
+      .select("escopo_tipo, escopo_id")
+      .eq("tenant_id", tenantId)
+      .eq("escopo_id", lancamentoId)
+      .in("escopo_tipo", ["ferias_usufruto", "ferias_abono"]),
+  ]);
+  if (folhasRes.error || nfsRes.error) {
+    console.error(
+      "[rh.ferias.enviarFinanceiro.read]",
+      folhasRes.error?.message ?? nfsRes.error?.message,
+    );
+    return { ok: false, message: "Falha ao verificar anexos do lançamento." };
+  }
+  const resultado = lancamentoEnviavel(
+    lancamentoId,
+    folhasRes.data as FolhaMin[],
+    nfsRes.data as NfMin[],
+  );
+  if (!resultado.ok) {
+    return {
+      ok: false,
+      message: "Faltam documentos: " + resultado.falta.join(", ") + ".",
+    };
+  }
+
+  // Se RH trocou a data, propaga pras folhas em rascunho antes do UPDATE de status.
+  if (dataPagamento) {
+    const { error: dtErr } = await supabase
+      .from("folhas_pagamento")
+      .update({ data_pagamento_prevista: dataPagamento })
+      .eq("tenant_id", tenantId)
+      .eq("lancamento_ferias_id", lancamentoId)
+      .eq("status", "rascunho");
+    if (dtErr) {
+      console.error("[rh.ferias.enviarFinanceiro.data]", dtErr.message);
+      return { ok: false, message: "Falha ao definir data de pagamento." };
+    }
+  }
 
   const { error: lancErr } = await supabase
     .from("colaboradores_ferias_lancamentos")
     .update({ status: "enviado_financeiro" })
     .eq("id", lancamentoId)
-    .eq("status", "nf_anexada");
+    .in("status", ["aprovado", "nf_anexada"]);
   if (lancErr) {
     console.error("[rh.ferias.enviarFinanceiro.lanc]", lancErr.message);
     return { ok: false, message: "Falha ao mudar status: " + lancErr.message };
@@ -908,6 +973,7 @@ export async function enviarProFinanceiro(
       colaborador_id: lanc.colaborador_id,
       tipo: lanc.tipo,
       dias: lanc.dias,
+      ...(dataPagamento ? { data_pagamento: dataPagamento } : {}),
     },
   });
 
