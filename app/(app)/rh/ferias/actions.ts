@@ -690,6 +690,7 @@ export async function lancarDiretoPeloRh(
         data_inicio: dados.data_inicio,
         data_fim: dados.data_fim,
         dias,
+        dias_abono: dados.tipo === "abono_combinado" ? dados.dias_abono ?? 0 : 0,
       },
       colaborador: colabInfo.data as {
         id: string;

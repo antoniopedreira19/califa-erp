@@ -182,6 +182,7 @@ export async function criarFolhasDePagamentoDeFerias(opts: {
     | "data_inicio"
     | "data_fim"
     | "dias"
+    | "dias_abono"
   >;
   colaborador: {
     id: string;
@@ -264,6 +265,8 @@ export async function criarFolhasDePagamentoDeFerias(opts: {
   let valoresCalifornia: Awaited<ReturnType<typeof calcularValoresLancamento>> = null;
   let baseClt: number | null = null;
 
+  const diasAbonoLanc = lancamento.dias_abono ?? 0;
+
   switch (colaborador.tipo_contratacao) {
     case "pj": {
       valoresCalifornia = await calcularValoresLancamento(
@@ -271,6 +274,7 @@ export async function criarFolhasDePagamentoDeFerias(opts: {
         lancamento.data_inicio,
         lancamento.tipo,
         lancamento.dias,
+        diasAbonoLanc,
         salario.valorTotal,
       );
       if (!valoresCalifornia) {
@@ -297,6 +301,7 @@ export async function criarFolhasDePagamentoDeFerias(opts: {
           lancamento.data_inicio,
           lancamento.tipo,
           lancamento.dias,
+          diasAbonoLanc,
           salario.parteRpa,
         );
         if (!valoresCalifornia) {

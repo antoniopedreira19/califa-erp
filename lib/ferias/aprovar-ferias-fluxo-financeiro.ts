@@ -19,7 +19,8 @@ export type LancamentoParaAprovar = {
   data_inicio: string;
   data_fim: string;
   dias: number;
-  dias_abono?: number;
+  /** Coluna NOT NULL com DEFAULT 0 no banco — sempre vem preenchida pelo SELECT. */
+  dias_abono: number;
   status: string;
   solicitado_por: string;
 };
