@@ -331,6 +331,15 @@ export function ModalDetalheSolicitacao({ row, onFechar, onSucesso }: Props) {
                 Voltar
               </Button>
               <Button
+                variant="outline"
+                onClick={() => setCancelandoAberto(true)}
+                disabled={enviando}
+                className="hover:bg-california-red/5 hover:text-california-red hover:border-california-red/30"
+              >
+                <X className="h-4 w-4 mr-1" />
+                Cancelar
+              </Button>
+              <Button
                 onClick={handleOverride}
                 disabled={enviando || carregando}
                 className="bg-emerald-600 hover:bg-emerald-700"

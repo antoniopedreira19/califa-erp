@@ -84,3 +84,16 @@ test("dias == saldo exato → ok", () => {
   });
   assert.deepEqual(r, { ok: true, dias: 10 });
 });
+
+test("ampliar dias no mesmo aquisitivo — dias_ocupados_outros exclui o próprio → ok", () => {
+  // Cenário: lançamento de 5 dias no aquisitivo com 30 dias de direito.
+  // Outro lançamento do colaborador ocupa 10 dias. O próprio lançamento
+  // NÃO deve entrar em dias_ocupados_outros (a action filtra por id).
+  // RH amplia de 5 para 20 dias → ok (20 <= 30 - 10 = 20).
+  const r = validarPeriodoEditado({
+    data_inicio: "2026-12-01",
+    data_fim: "2026-12-20",
+    aquisitivo: aquisitivo({ dias_direito: 30, dias_ocupados_outros: 10 }),
+  });
+  assert.deepEqual(r, { ok: true, dias: 20 });
+});

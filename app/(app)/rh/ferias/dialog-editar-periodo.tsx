@@ -137,6 +137,10 @@ export function DialogEditarPeriodo({
                 ))}
               </SelectContent>
             </Select>
+            <p className="text-[11px] text-muted-foreground">
+              O saldo exibido já inclui os dias deste lançamento — o servidor
+              recalcula ao salvar.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
