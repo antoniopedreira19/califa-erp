@@ -31,10 +31,10 @@ import type { SolicitacaoRow } from "./aba-fluxo";
 import {
   aprovarLancamento,
   aprovarLancamentoOverrideRh,
-  reprovarLancamento,
   previewValoresFerias,
   enviarProFinanceiro,
 } from "./actions";
+import { DialogCancelarLancamento } from "./dialog-cancelar-lancamento";
 
 type Props = {
   row: SolicitacaoRow;
@@ -59,8 +59,7 @@ export function ModalDetalheSolicitacao({ row, onFechar, onSucesso }: Props) {
   const [carregando, setCarregando] = React.useState(true);
   const [preview, setPreview] = React.useState<Preview | null>(null);
   const [erroCalc, setErroCalc] = React.useState<string | null>(null);
-  const [modoReprovar, setModoReprovar] = React.useState(false);
-  const [motivo, setMotivo] = React.useState("");
+  const [cancelandoAberto, setCancelandoAberto] = React.useState(false);
   const [modoOverride, setModoOverride] = React.useState(false);
   const [motivoOverride, setMotivoOverride] = React.useState("");
   const [enviando, setEnviando] = React.useState(false);
@@ -90,21 +89,6 @@ export function ModalDetalheSolicitacao({ row, onFechar, onSucesso }: Props) {
     setEnviando(true);
     setErro(null);
     const res = await aprovarLancamento(row.id);
-    setEnviando(false);
-    if (!res.ok) {
-      setErro(res.message);
-      return;
-    }
-    onSucesso();
-  }
-
-  async function handleReprovar() {
-    setEnviando(true);
-    setErro(null);
-    const res = await reprovarLancamento({
-      lancamento_id: row.id,
-      motivo,
-    });
     setEnviando(false);
     if (!res.ok) {
       setErro(res.message);
@@ -308,25 +292,6 @@ export function ModalDetalheSolicitacao({ row, onFechar, onSucesso }: Props) {
             </>
           )}
 
-          {/* Modo reprovar: textarea */}
-          {modoReprovar && (
-            <div className="space-y-2 rounded-xl border border-border bg-muted/20 p-4">
-              <Label htmlFor="motivo-reprovar">
-                Motivo da reprovação{" "}
-                <span className="text-muted-foreground">
-                  (pelo menos 3 caracteres)
-                </span>
-              </Label>
-              <Textarea
-                id="motivo-reprovar"
-                value={motivo}
-                onChange={(e) => setMotivo(e.target.value)}
-                placeholder="Explica pro colaborador o porquê"
-                rows={3}
-              />
-            </div>
-          )}
-
           {erro && (
             <div className="flex items-start gap-2 text-sm text-california-red">
               <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
@@ -383,6 +348,15 @@ export function ModalDetalheSolicitacao({ row, onFechar, onSucesso }: Props) {
               override só se precisar destravar.
             </div>
             <Button
+              variant="outline"
+              onClick={() => setCancelandoAberto(true)}
+              disabled={enviando || carregando}
+              className="hover:bg-california-red/5 hover:text-california-red hover:border-california-red/30"
+            >
+              <X className="h-4 w-4 mr-1" />
+              Cancelar
+            </Button>
+            <Button
               onClick={() => setModoOverride(true)}
               disabled={enviando || carregando}
               variant="outline"
@@ -402,6 +376,17 @@ export function ModalDetalheSolicitacao({ row, onFechar, onSucesso }: Props) {
               <User className="h-4 w-4" />
               Ver colaborador
             </Link>
+            {(row.status === "aprovado" || row.status === "nf_anexada") && (
+              <Button
+                variant="outline"
+                onClick={() => setCancelandoAberto(true)}
+                disabled={enviando}
+                className="hover:bg-california-red/5 hover:text-california-red hover:border-california-red/30"
+              >
+                <X className="h-4 w-4 mr-1" />
+                Cancelar
+              </Button>
+            )}
             {podeEnviarFinanceiro && (
               <Button
                 onClick={handleEnviarFinanceiro}
@@ -422,37 +407,16 @@ export function ModalDetalheSolicitacao({ row, onFechar, onSucesso }: Props) {
               </DialogClose>
             )}
           </DialogFooter>
-        ) : modoReprovar ? (
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setModoReprovar(false);
-                setMotivo("");
-              }}
-              disabled={enviando}
-            >
-              Voltar
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleReprovar}
-              disabled={enviando || motivo.trim().length < 3}
-            >
-              {enviando && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
-              Confirmar reprovação
-            </Button>
-          </DialogFooter>
         ) : (
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => setModoReprovar(true)}
+              onClick={() => setCancelandoAberto(true)}
               disabled={enviando || carregando}
               className="hover:bg-california-red/5 hover:text-california-red hover:border-california-red/30"
             >
               <X className="h-4 w-4 mr-1" />
-              Reprovar
+              Cancelar
             </Button>
             <Button
               onClick={handleAprovar}
@@ -468,6 +432,14 @@ export function ModalDetalheSolicitacao({ row, onFechar, onSucesso }: Props) {
             </Button>
           </DialogFooter>
         )}
+
+        <DialogCancelarLancamento
+          aberto={cancelandoAberto}
+          lancamentoId={row.id}
+          statusLancamento={row.status}
+          onFechar={() => setCancelandoAberto(false)}
+          onCancelado={onSucesso}
+        />
       </DialogContent>
     </Dialog>
   );
