@@ -891,6 +891,46 @@ export async function aprovarLinhaFolha(
 }
 
 /**
+ * Aprova um lote de linhas de folha em sequência, usando o valor, alocação,
+ * dados bancários e anexo que já estão no snapshot — nenhuma edição é feita.
+ *
+ * É a trilha da tabela People de contas-a-pagar, onde o financeiro marca
+ * várias caixas e manda aprovar. Cada linha passa pelo mesmo
+ * `aprovarLinhaFolha`, então valida NF obrigatória, dados bancários do
+ * colaborador e cria contas_avulsas do mesmo jeito que a aprovação
+ * individual. Falhas em uma linha não interrompem o lote — a linha fica
+ * como está e entra no resumo de erros.
+ */
+export async function aprovarLinhasFolhaEmLote(
+  folhaIds: string[],
+): Promise<ActionResult<{
+  aprovadas: number;
+  falhas: { folhaId: string; message: string }[];
+}>> {
+  const session = await requireSession();
+  const gate = await checarPermissao(session, "rh.folhas.aprovar_financeiro");
+  if (!gate.ok) return gate;
+
+  const ids = Array.from(new Set((folhaIds ?? []).filter((x) => typeof x === "string" && x.length > 0)));
+  if (ids.length === 0) {
+    return { ok: false, message: "Nenhuma linha selecionada." };
+  }
+
+  let aprovadas = 0;
+  const falhas: { folhaId: string; message: string }[] = [];
+  for (const id of ids) {
+    const res = await aprovarLinhaFolha(id);
+    if (res.ok) {
+      aprovadas += 1;
+    } else {
+      falhas.push({ folhaId: id, message: res.message });
+    }
+  }
+
+  return { ok: true, aprovadas, falhas };
+}
+
+/**
  * Devolve uma linha aprovada para "Aguardando aprovação" (decisão 132):
  * apaga o(s) título(s) que a aprovação criou e reabre a linha para o
  * financeiro corrigir o valor, a alocação ou o pagamento e aprovar de novo.

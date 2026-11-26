@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import { ArrowDown, ArrowUp, ArrowUpDown, CheckCircle2, ChevronDown, ChevronRight, Search, XCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowDown, ArrowUp, ArrowUpDown, CheckCircle2, ChevronDown, ChevronRight, Loader2, Search, XCircle } from "lucide-react";
 import {
   Tooltip,
   TooltipContent,
@@ -19,6 +20,7 @@ import type { PeopleAprovarItem, TipoContratacao } from "@/lib/types";
 import { tipoContratacaoLabel } from "@/lib/types";
 import type { ColaboradorPagamento } from "@/lib/financeiro/colaboradores-pagamento";
 import { RevisarFolhaDrawer } from "./revisar-folha-drawer";
+import { aprovarLinhasFolhaEmLote } from "./actions-folhas";
 import type { FolhaLinhaFinanceiro } from "./people-list-types";
 
 type OrdenacaoColuna = "nome" | "valor" | null;
@@ -162,6 +164,34 @@ function formatBRL(v: number): string {
 function competenciaLabel(ano: number | null, mes: number | null): string {
   if (!ano || !mes) return "—";
   return `${NOMES_MES[mes - 1]}/${ano}`;
+}
+
+// Duas regras repetidas nas linhas simples e nas filhas do grupo híbrido.
+// `mostraNf`  controla EXIBIÇÃO do badge na coluna NF (PJ/MEI/parte PJ).
+// `bloqueado` controla se a linha pode ser aprovada (precisa NF e não tem).
+// Espelha a regra do server (`actions-folhas.ts: exigeNf`) pra UI combinar
+// com o que o backend aceita.
+function calcularEstadoLinha(item: PeopleAprovarItem): {
+  mostraNf: boolean;
+  bloqueado: boolean;
+} {
+  const mostraNf =
+    item.tipo_contratacao === "pj" ||
+    item.tipo_contratacao === "mei" ||
+    (item.tipo_contratacao === "clt_recibo" && item.origem === "california");
+
+  const exigeNfLinha =
+    (item.escopo_tipo === "folha_mensal" ||
+      item.escopo_tipo === "decimo_terceiro_adiantamento") &&
+    item.origem === "california" &&
+    ["pj", "mei", "clt_recibo"].includes(item.tipo_contratacao);
+  const exigeNfFerias =
+    (item.escopo_tipo === "ferias_usufruto" ||
+      item.escopo_tipo === "ferias_abono") &&
+    item.origem === "california";
+  const exigeNfParaUI = exigeNfLinha || exigeNfFerias;
+
+  return { mostraNf, bloqueado: exigeNfParaUI && !item.nf_anexada };
 }
 
 type AlocacaoItem = {
@@ -324,7 +354,13 @@ export function PeopleList({
   empresas: { id: string; nome_fantasia: string }[];
   regionais: { id: string; nome: string; empresa_id: string }[];
 }) {
+  const router = useRouter();
   const [revisandoId, setRevisandoId] = React.useState<string | null>(null);
+
+  // Seleção em lote: Set de linha_id. Só linhas não-bloqueadas entram.
+  const [selecionados, setSelecionados] = React.useState<Set<string>>(new Set());
+  const [aprovando, startAprovar] = React.useTransition();
+  const [resumoAprovacao, setResumoAprovacao] = React.useState<string | null>(null);
 
   // Grupos híbridos (colab × escopo × competência com +1 parte) começam
   // recolhidos. Expandido mantém a chave do grupo no Set.
@@ -338,10 +374,31 @@ export function PeopleList({
     });
   }
 
+  function alternarSelecao(linhaId: string) {
+    setSelecionados((prev) => {
+      const next = new Set(prev);
+      if (next.has(linhaId)) next.delete(linhaId);
+      else next.add(linhaId);
+      return next;
+    });
+  }
+
+  function selecionarVarios(linhaIds: string[], marcar: boolean) {
+    setSelecionados((prev) => {
+      const next = new Set(prev);
+      for (const id of linhaIds) {
+        if (marcar) next.add(id);
+        else next.delete(id);
+      }
+      return next;
+    });
+  }
+
   // Filtros
   const [busca, setBusca] = React.useState("");
   const [filtroTipo, setFiltroTipo] = React.useState<string>("");
   const [filtroContratacao, setFiltroContratacao] = React.useState<string>("");
+  const [filtroDocumento, setFiltroDocumento] = React.useState<"" | "sim" | "nao">("");
   const [filtroEmpresa, setFiltroEmpresa] = React.useState<string>("");
   const [filtroRegional, setFiltroRegional] = React.useState<string>("");
 
@@ -397,6 +454,14 @@ export function PeopleList({
         if (!temRegional) return false;
       }
 
+      if (filtroDocumento) {
+        const { mostraNf } = calcularEstadoLinha(item);
+        // Linha sem coluna NF não participa do filtro de documento.
+        if (!mostraNf) return false;
+        if (filtroDocumento === "sim" && !item.nf_anexada) return false;
+        if (filtroDocumento === "nao" && item.nf_anexada) return false;
+      }
+
       if (buscaNormalizada) {
         const nome = (colaboradores[item.colaborador_id]?.nome ?? "").toLowerCase();
         if (!nome.includes(buscaNormalizada)) return false;
@@ -427,6 +492,7 @@ export function PeopleList({
     busca,
     filtroTipo,
     filtroContratacao,
+    filtroDocumento,
     filtroEmpresa,
     filtroRegional,
     alocacoesPorFolha,
@@ -484,40 +550,7 @@ export function PeopleList({
 
     const alocacoesLinha = alocacoesPorFolha[item.linha_id] ?? [];
 
-    // Duas regras diferentes na mesma coluna:
-    //
-    // 1) `mostraNf` controla EXIBIÇÃO do badge na UI. Mostra sempre que o
-    //    tipo gera NF: PJ, MEI, ou parte PJ do híbrido (clt_recibo com
-    //    origem california). CLT puro, estágio, sócio e parte CLT do
-    //    híbrido ficam em branco — independente do escopo.
-    //
-    // 2) `exigeNfParaUI` espelha a regra do server (actions-folhas.ts:
-    //    exigeNf) e controla se o botão "Revisar" fica BLOQUEADO
-    //    esperando o anexo. Regra do server:
-    //      folha_mensal + origem california + pj/mei/clt_recibo → NF
-    //      decimo_terceiro_adiantamento + origem california + pj/mei/clt_recibo → NF
-    //      Férias (usufruto/abono) → NF
-    //      CLT puro / sócio / estagio e parcelas 13° p1/p2 → não exigem
-    const mostraNf =
-      item.tipo_contratacao === "pj" ||
-      item.tipo_contratacao === "mei" ||
-      (item.tipo_contratacao === "clt_recibo" &&
-        item.origem === "california");
-    const exigeNfLinha =
-      (item.escopo_tipo === "folha_mensal" ||
-        item.escopo_tipo === "decimo_terceiro_adiantamento") &&
-      item.origem === "california" &&
-      ["pj", "mei", "clt_recibo"].includes(item.tipo_contratacao);
-    // Ferias só exigem NF pra parte california (PJ). A parte contabilidade
-    // (CLT) é destravada pelo recibo em folhas_pagamento.anexo_url, não
-    // por colaboradores_nf_anexos — a view nf_anexada não vê o recibo.
-    const exigeNfFerias =
-      (item.escopo_tipo === "ferias_usufruto" ||
-        item.escopo_tipo === "ferias_abono") &&
-      item.origem === "california";
-    const exigeNfParaUI = exigeNfLinha || exigeNfFerias;
-
-    const bloqueado = exigeNfParaUI && !item.nf_anexada;
+    const { mostraNf, bloqueado } = calcularEstadoLinha(item);
     const tooltipBloqueado = bloqueado
       ? item.origem === "contabilidade"
         ? "Aguardando o RH anexar o recibo da contabilidade."
@@ -525,6 +558,7 @@ export function PeopleList({
       : null;
 
     const ehFilha = modo === "filha";
+    const marcada = selecionados.has(item.linha_id);
 
     return (
       <tr
@@ -533,7 +567,19 @@ export function PeopleList({
           ehFilha ? "bg-muted/30" : ""
         }`}
       >
-        <td className={`px-4 py-3 ${ehFilha ? "pl-10" : ""}`}>
+        <td className="px-3 py-3 text-center">
+          <input
+            type="checkbox"
+            checked={marcada}
+            disabled={bloqueado}
+            onChange={() => alternarSelecao(item.linha_id)}
+            onClick={(e) => e.stopPropagation()}
+            aria-label={marcada ? "Tirar da seleção" : "Adicionar à seleção"}
+            title={bloqueado ? tooltipBloqueado ?? "Linha bloqueada" : undefined}
+            className="h-4 w-4 cursor-pointer accent-california-red disabled:cursor-not-allowed disabled:opacity-40"
+          />
+        </td>
+        <td className={`px-4 py-3 ${ehFilha ? "pl-6" : ""}`}>
           {ehFilha ? (
             <span
               className={`inline-flex items-center whitespace-nowrap rounded-full border px-2 py-0.5 text-xs font-semibold ${
@@ -636,12 +682,33 @@ export function PeopleList({
     // compartilham o mesmo rateio (mesmo colaborador, mesma competência).
     const alocacoesLinha = alocacoesPorFolha[first.linha_id] ?? [];
 
+    // Agrega estado de seleção/bloqueio das partes do híbrido.
+    const partesSelecionaveis = grupo.items.filter(
+      (i) => !calcularEstadoLinha(i).bloqueado,
+    );
+    const idsSelecionaveis = partesSelecionaveis.map((i) => i.linha_id);
+    const marcadas = idsSelecionaveis.filter((id) => selecionados.has(id));
+    const todasMarcadas =
+      idsSelecionaveis.length > 0 && marcadas.length === idsSelecionaveis.length;
+    const algumasMarcadas = marcadas.length > 0 && !todasMarcadas;
+    const nenhumaSelecionavel = idsSelecionaveis.length === 0;
+
     return (
       <tr
         key={grupo.chave}
         className="border-b border-border last:border-0 cursor-pointer hover:bg-muted/20"
         onClick={() => alternarExpansao(grupo.chave)}
       >
+        <td className="px-3 py-3 text-center">
+          <CaixaHibrida
+            todas={todasMarcadas}
+            algumas={algumasMarcadas}
+            desabilitada={nenhumaSelecionavel}
+            onAlternar={() =>
+              selecionarVarios(idsSelecionaveis, !todasMarcadas)
+            }
+          />
+        </td>
         <td className="px-4 py-3">
           <div className="flex items-center gap-2">
             {expandido ? (
@@ -682,6 +749,68 @@ export function PeopleList({
     );
   }
 
+  // Linhas visíveis que podem ser aprovadas (sem NF pendente). É o universo
+  // da caixa do cabeçalho e do botão "Aprovar" da barra de seleção.
+  const idsSelecionaveisVisiveis = React.useMemo(
+    () =>
+      itemsFiltrados
+        .filter((i) => !calcularEstadoLinha(i).bloqueado)
+        .map((i) => i.linha_id),
+    [itemsFiltrados],
+  );
+
+  // Quantidade e total das linhas que o financeiro marcou e que ainda estão
+  // visíveis no filtro atual — se sumir da tela, sai da soma.
+  const idsVisiveisSet = React.useMemo(
+    () => new Set(itemsFiltrados.map((i) => i.linha_id)),
+    [itemsFiltrados],
+  );
+  const idsSelecionadosVisiveis = React.useMemo(
+    () => Array.from(selecionados).filter((id) => idsVisiveisSet.has(id)),
+    [selecionados, idsVisiveisSet],
+  );
+  const totalSelecionado = React.useMemo(() => {
+    const porId = new Map(items.map((i) => [i.linha_id, i]));
+    return idsSelecionadosVisiveis.reduce((acc, id) => {
+      const it = porId.get(id);
+      const v = it?.valor != null ? Number(it.valor) : 0;
+      return acc + v;
+    }, 0);
+  }, [items, idsSelecionadosVisiveis]);
+
+  function handleAprovarLote() {
+    if (idsSelecionadosVisiveis.length === 0) return;
+    setResumoAprovacao(null);
+    const ids = [...idsSelecionadosVisiveis];
+    startAprovar(async () => {
+      const res = await aprovarLinhasFolhaEmLote(ids);
+      if (!res.ok) {
+        setResumoAprovacao(res.message);
+        return;
+      }
+      // Linhas aprovadas somem da aba (status vira 'aprovada', a view
+      // filtra 'enviada'). Tira elas da seleção antes do refresh pra barra
+      // não ficar com id fantasma.
+      const idsAprovados = new Set(
+        ids.filter(
+          (id) => !res.falhas.some((f) => f.folhaId === id),
+        ),
+      );
+      setSelecionados((prev) => {
+        const next = new Set(prev);
+        for (const id of idsAprovados) next.delete(id);
+        return next;
+      });
+      const msgAprovadas = `${res.aprovadas} ${res.aprovadas === 1 ? "linha aprovada" : "linhas aprovadas"}`;
+      const msgFalhas =
+        res.falhas.length > 0
+          ? ` · ${res.falhas.length} ${res.falhas.length === 1 ? "falha" : "falhas"}: ${res.falhas.map((f) => f.message).slice(0, 2).join("; ")}`
+          : "";
+      setResumoAprovacao(msgAprovadas + msgFalhas);
+      router.refresh();
+    });
+  }
+
   if (items.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-border py-16 text-center">
@@ -696,7 +825,7 @@ export function PeopleList({
     <div className="space-y-4">
       {/* Barra de filtros */}
       <div className="flex flex-wrap items-end gap-3">
-        <CampoFiltro rotulo="Buscar" className="min-w-[240px] flex-1">
+        <CampoFiltro rotulo="Buscar" className="min-w-[200px] max-w-[280px] flex-1">
           <div className="relative">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -706,6 +835,24 @@ export function PeopleList({
               className="pl-9"
             />
           </div>
+        </CampoFiltro>
+
+        <CampoFiltro rotulo="Documento Anexado" className="min-w-[170px]">
+          <Select
+            value={filtroDocumento || SEM_FILTRO}
+            onValueChange={(v) =>
+              setFiltroDocumento(v === SEM_FILTRO ? "" : (v as "sim" | "nao"))
+            }
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SEM_FILTRO}>Todos</SelectItem>
+              <SelectItem value="sim">Sim</SelectItem>
+              <SelectItem value="nao">Não</SelectItem>
+            </SelectContent>
+          </Select>
         </CampoFiltro>
 
         <CampoFiltro rotulo="Tipo" className="min-w-[160px]">
@@ -796,6 +943,22 @@ export function PeopleList({
         <table className="w-full text-sm">
           <thead className="border-b border-border bg-muted/40">
             <tr>
+              <th className="px-3 py-3 text-center font-medium text-muted-foreground w-10">
+                <CaixaHibrida
+                  todas={idsSelecionaveisVisiveis.length > 0 && idsSelecionaveisVisiveis.every((id) => selecionados.has(id))}
+                  algumas={
+                    idsSelecionaveisVisiveis.some((id) => selecionados.has(id)) &&
+                    !idsSelecionaveisVisiveis.every((id) => selecionados.has(id))
+                  }
+                  desabilitada={idsSelecionaveisVisiveis.length === 0}
+                  onAlternar={() => {
+                    const todas =
+                      idsSelecionaveisVisiveis.length > 0 &&
+                      idsSelecionaveisVisiveis.every((id) => selecionados.has(id));
+                    selecionarVarios(idsSelecionaveisVisiveis, !todas);
+                  }}
+                />
+              </th>
               <th className="px-4 py-3 text-left font-medium text-muted-foreground w-56">
                 Tipo
               </th>
@@ -837,7 +1000,7 @@ export function PeopleList({
             {itemsFiltrados.length === 0 && (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={9}
                   className="px-4 py-12 text-center text-sm text-muted-foreground"
                 >
                   Nenhum pagamento encontrado com os filtros atuais.
@@ -874,6 +1037,122 @@ export function PeopleList({
           }}
         />
       )}
+
+      {resumoAprovacao && (
+        <div className="rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm">
+          {resumoAprovacao}
+          <button
+            type="button"
+            onClick={() => setResumoAprovacao(null)}
+            className="ml-3 text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+          >
+            fechar
+          </button>
+        </div>
+      )}
+
+      <BarraAprovacaoEmLote
+        quantidade={idsSelecionadosVisiveis.length}
+        total={totalSelecionado}
+        aprovando={aprovando}
+        onLimpar={() => setSelecionados(new Set())}
+        onAprovar={handleAprovarLote}
+      />
+    </div>
+  );
+}
+
+function CaixaHibrida({
+  todas,
+  algumas,
+  onAlternar,
+  desabilitada,
+}: {
+  todas: boolean;
+  algumas: boolean;
+  onAlternar: () => void;
+  desabilitada?: boolean;
+}) {
+  const ref = React.useRef<HTMLInputElement>(null);
+  React.useEffect(() => {
+    if (ref.current) ref.current.indeterminate = algumas;
+  }, [algumas]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={todas}
+      disabled={desabilitada}
+      onChange={onAlternar}
+      onClick={(e) => e.stopPropagation()}
+      aria-label={todas ? "Tirar todas da seleção" : "Selecionar todas"}
+      className="h-4 w-4 cursor-pointer accent-california-red disabled:cursor-not-allowed disabled:opacity-40"
+    />
+  );
+}
+
+function moedaBRL(v: number): string {
+  return v.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function BarraAprovacaoEmLote({
+  quantidade,
+  total,
+  aprovando,
+  onLimpar,
+  onAprovar,
+}: {
+  quantidade: number;
+  total: number;
+  aprovando: boolean;
+  onLimpar: () => void;
+  onAprovar: () => void;
+}) {
+  if (quantidade === 0) return null;
+  return (
+    <div className="pointer-events-none sticky bottom-4 z-20 flex justify-center">
+      <div className="pointer-events-auto flex items-center gap-4 rounded-2xl bg-[#282828] py-2.5 pl-5 pr-2.5 text-sm text-white shadow-elevated">
+        <span className="font-semibold">
+          {quantidade}{" "}
+          {quantidade === 1 ? "linha selecionada" : "linhas selecionadas"}
+        </span>
+        <span className="h-4 w-px bg-white/20" />
+        <span className="text-white/75">
+          Total{" "}
+          <strong className="font-mono font-semibold text-white">
+            {moedaBRL(total)}
+          </strong>
+        </span>
+        <span className="h-4 w-px bg-white/20" />
+        <button
+          type="button"
+          onClick={onLimpar}
+          disabled={aprovando}
+          className="text-white/75 underline-offset-2 hover:text-white hover:underline disabled:opacity-50"
+        >
+          Limpar seleção
+        </button>
+        <button
+          type="button"
+          onClick={onAprovar}
+          disabled={aprovando}
+          className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 font-semibold text-white shadow-sm transition-colors hover:bg-emerald-700 disabled:opacity-60"
+        >
+          {aprovando ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Aprovando…
+            </>
+          ) : (
+            <>Aprovar {quantidade === 1 ? "linha" : "linhas"}</>
+          )}
+        </button>
+      </div>
     </div>
   );
 }
