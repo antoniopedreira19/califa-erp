@@ -35,17 +35,26 @@ export default async function ResponsaveisPage() {
   const supabase = createClient();
 
   // Profiles ativos do tenant com role que pode ser responsavel
-  // 1. Fonte da verdade: quem aparece como responsável em algum freela do
-  //    tenant (freelancers.responsavel_id). Vale pra mostrar todo mundo que
-  //    efetivamente gerencia alguém, independentemente do role atual.
+  // 1. Fonte da verdade: quem é responsável do contrato VIGENTE de algum
+  //    freela do tenant. Essa view já aplica status_real + data vigente.
+  //    Não existe "dono da pessoa" separado — responsabilidade é por contrato.
+  const hojeISO = new Date().toISOString().slice(0, 10);
   const { data: freelasRows } = await supabase
-    .from("freelancers")
-    .select("responsavel_id")
+    .from("freelancers_com_status")
+    .select("responsavel_id, status_real, data_inicio, data_termino")
     .eq("tenant_id", session.activeTenant.id)
     .not("responsavel_id", "is", null);
 
   const contagem = new Map<string, number>();
-  for (const row of (freelasRows ?? []) as Array<{ responsavel_id: string }>) {
+  for (const row of (freelasRows ?? []) as Array<{
+    responsavel_id: string;
+    status_real: boolean | null;
+    data_inicio: string | null;
+    data_termino: string | null;
+  }>) {
+    if (row.status_real !== true) continue;
+    if (!row.data_inicio || row.data_inicio > hojeISO) continue;
+    if (row.data_termino !== null && row.data_termino < hojeISO) continue;
     contagem.set(
       row.responsavel_id,
       (contagem.get(row.responsavel_id) ?? 0) + 1,

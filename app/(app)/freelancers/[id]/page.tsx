@@ -221,8 +221,10 @@ export default async function FreelancerPerfilPage({
     }
   }
 
-  // Resolve nomes dos profiles pra mostrar quem solicitou distrato + o dono
-  // da pessoa (freelancer.responsavel_id) + quem aprovou cada contrato.
+  // Resolve nomes dos profiles pra mostrar quem solicitou distrato + o
+  // responsável de cada contrato + quem aprovou cada contrato. O
+  // "responsável do freela" é o responsável do contrato vigente — não
+  // existe dono-da-pessoa separado.
   const profileIds = new Set<string>();
   for (const c of contratos) {
     if (c.responsavel_id) profileIds.add(c.responsavel_id);
@@ -231,7 +233,6 @@ export default async function FreelancerPerfilPage({
   for (const uid of Object.values(aprovadorPorContratoId)) {
     profileIds.add(uid);
   }
-  if (freelancer.responsavel_id) profileIds.add(freelancer.responsavel_id);
   let gpNomesPorId: Record<string, string> = {};
   let gpEmailsPorId: Record<string, string> = {};
   if (profileIds.size > 0) {
@@ -332,11 +333,15 @@ export default async function FreelancerPerfilPage({
     }
   }
 
-  const responsavelNome = freelancer.responsavel_id
-    ? (gpNomesPorId[freelancer.responsavel_id] ?? null)
+  // Responsável do freela = responsável do contrato vigente. Sem contrato
+  // vigente, não existe responsável atual (o histórico fica nos contratos
+  // encerrados).
+  const responsavelAtualId = contratoAtualObj?.responsavel_id ?? null;
+  const responsavelNome = responsavelAtualId
+    ? (gpNomesPorId[responsavelAtualId] ?? null)
     : null;
-  const responsavelEmail = freelancer.responsavel_id
-    ? (gpEmailsPorId[freelancer.responsavel_id] ?? null)
+  const responsavelEmail = responsavelAtualId
+    ? (gpEmailsPorId[responsavelAtualId] ?? null)
     : null;
 
   const jobsNovaSolic: JobItem[] = jobsCarregados;
@@ -454,6 +459,10 @@ export default async function FreelancerPerfilPage({
     freelancer.contato_emergencia
   );
 
+  // Transferir só faz sentido com contrato vigente. Sem contrato, o freela
+  // não tem responsável atual (e nada a transferir) — o botão some, o bloco
+  // mostra "Sem contrato vigente".
+  const temContratoVigente = contratoAtualObj != null;
   const blocoResponsavel = (
     <div className="rounded-2xl border border-border bg-white p-5 shadow-soft md:col-span-2">
       <div className="flex items-center justify-between gap-3 mb-4">
@@ -465,11 +474,11 @@ export default async function FreelancerPerfilPage({
             Responsável
           </h3>
         </div>
-        {podeTransferirResp && (
+        {podeTransferirResp && temContratoVigente && (
           <TransferirResponsavelDialog
             freelancerId={freelancer.id}
             freelancerNome={freelancer.nome_social}
-            responsavelAtualId={freelancer.responsavel_id}
+            responsavelAtualId={responsavelAtualId}
             responsavelAtualNome={responsavelNome}
             responsaveisDisponiveis={responsaveisDisponiveis}
           />
@@ -491,10 +500,14 @@ export default async function FreelancerPerfilPage({
             )}
           </div>
         </div>
+      ) : temContratoVigente ? (
+        <p className="text-sm text-muted-foreground">
+          Contrato vigente sem responsável atribuído.
+          {podeTransferirResp && " Use \"Transferir responsável\" acima."}
+        </p>
       ) : (
         <p className="text-sm text-muted-foreground">
-          Sem responsável atribuído.
-          {podeTransferirResp && " Use \"Transferir responsável\" acima."}
+          Sem contrato vigente — o responsável é definido por contrato.
         </p>
       )}
     </div>

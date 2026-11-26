@@ -518,12 +518,16 @@ export async function atualizarFreelancer(
 }
 
 /**
- * Transfere o "dono da pessoa" (freelancers.responsavel_id) de um freela
- * pra outro responsável. NÃO toca em contratos — por decisão, dono do freela
- * pode diferir do responsável de contrato específico (ex: GP empresta o freela
- * pra outro num job pontual).
+ * Transfere o responsável do CONTRATO vigente do freela pra outro responsável.
  *
- * Permissão: admin + rh (igual AgCaliforniaRH). Financeiro não transfere.
+ * O "responsável do freela" é sempre o responsável do contrato ativo — não
+ * existe dono-da-pessoa separado. Freela sem contrato vigente não tem o que
+ * transferir.
+ *
+ * O histórico é escrito pelo trigger `trg_freelancer_contrato_historico`
+ * ao fazer UPDATE da coluna `responsavel_id` em `freelancer_contratos`.
+ *
+ * Permissão: admin + rh. Financeiro não transfere.
  */
 export async function transferirResponsavelFreelancer(
   freelancerId: string,
@@ -544,47 +548,97 @@ export async function transferirResponsavelFreelancer(
 
   const supabase = createClient();
 
-  const { data: atual, error: errLer } = await supabase
+  const { data: freela, error: errFreela } = await supabase
     .from("freelancers")
-    .select("responsavel_id, nome_social, tenant_id")
+    .select("nome_social, tenant_id")
     .eq("id", freelancerId)
     .maybeSingle();
-  if (errLer || !atual) {
+  if (errFreela || !freela) {
     return { ok: false, message: "Freelancer não encontrado" };
   }
-  if (atual.tenant_id !== session.activeTenant.id) {
+  if (freela.tenant_id !== session.activeTenant.id) {
     return { ok: false, message: "Freelancer não pertence ao tenant ativo" };
   }
-  if (atual.responsavel_id === novoResponsavelId) {
+
+  // Contrato vigente hoje = status_real + data_inicio <= hoje + (termino null
+  // ou >= hoje). Mesma regra do perfil/header. Se houver mais de um ativo
+  // (não deveria, mas o banco não impede), pega o de data_inicio mais recente.
+  const hojeISO = new Date().toISOString().slice(0, 10);
+  const { data: contratos, error: errContratos } = await supabase
+    .from("freelancer_contratos")
+    .select("id, responsavel_id, data_inicio, data_termino, status_real")
+    .eq("freelancer_id", freelancerId)
+    .eq("tenant_id", session.activeTenant.id)
+    .eq("status_real", true)
+    .order("data_inicio", { ascending: false, nullsFirst: false });
+  if (errContratos) {
+    console.error("[freelancers.transferir_responsavel]", errContratos.message);
+    return { ok: false, message: errContratos.message };
+  }
+  const contratoAtual = (contratos ?? []).find(
+    (c) =>
+      c.data_inicio !== null &&
+      c.data_inicio <= hojeISO &&
+      (c.data_termino === null || c.data_termino >= hojeISO),
+  );
+  if (!contratoAtual) {
+    return {
+      ok: false,
+      message: "Freela sem contrato vigente — nada a transferir",
+    };
+  }
+  if (contratoAtual.responsavel_id === novoResponsavelId) {
     return { ok: false, message: "Esse já é o responsável atual" };
   }
 
   const { error } = await supabase
-    .from("freelancers")
-    .update({
-      responsavel_id: novoResponsavelId,
-      updated_by: session.profile.id,
-    })
-    .eq("id", freelancerId);
+    .from("freelancer_contratos")
+    .update({ responsavel_id: novoResponsavelId })
+    .eq("id", contratoAtual.id)
+    .eq("tenant_id", session.activeTenant.id);
 
   if (error) {
     console.error("[freelancers.transferir_responsavel]", error.message);
     return { ok: false, message: error.message };
   }
 
+  // Sincroniza `freelancers.responsavel_id` com o responsável do contrato
+  // vigente enquanto a coluna existe. A policy RLS
+  // `freelancers_select_responsavel_direto` ainda lê dela — sem isso o
+  // responsável anterior continuaria enxergando o freela pela policy direta.
+  // Esse espelhamento sai quando a coluna for dropada (fase 2).
+  const { error: errEspelho } = await supabase
+    .from("freelancers")
+    .update({
+      responsavel_id: novoResponsavelId,
+      updated_by: session.profile.id,
+    })
+    .eq("id", freelancerId)
+    .eq("tenant_id", session.activeTenant.id);
+  if (errEspelho) {
+    console.error(
+      "[freelancers.transferir_responsavel.espelho]",
+      errEspelho.message,
+    );
+    // Não trava o fluxo — o contrato já foi transferido, só avisa.
+  }
+
   await logAuditEvent({
     acao: "freelancer.responsavel_transferido",
     tenantId: session.activeTenant.id,
-    entidadeTipo: "freelancer",
-    entidadeId: freelancerId,
+    entidadeTipo: "freelancer_contrato",
+    entidadeId: contratoAtual.id,
     metadata: {
-      nome_social: atual.nome_social,
-      responsavel_anterior: atual.responsavel_id,
+      freelancer_id: freelancerId,
+      nome_social: freela.nome_social,
+      responsavel_anterior: contratoAtual.responsavel_id,
       responsavel_novo: novoResponsavelId,
     },
   });
 
+  revalidatePath("/freelancers");
   revalidatePath("/freelancers/lista");
+  revalidatePath("/freelancers/responsaveis");
   revalidatePath(`/freelancers/${freelancerId}`);
   return { ok: true };
 }

@@ -46,17 +46,16 @@ export default async function FreelancersListaPage({
 
   // Query principal consome a view `freelancers_com_status` — ela traz
   // cargo e status derivado do contrato ativo. GP/produtor vê só os freelas
-  // dos quais é responsavel direto (freelancers.responsavel_id). Essa é a
-  // fonte de verdade "dono da pessoa" — não some quando o contrato encerra.
-  // RLS: policies `freelancers_select_responsavel_direto` +
-  // `freelancers_select_responsavel_contrato` são ORed.
+  // dos quais é responsável do contrato vigente (view.responsavel_id, que
+  // vem de freelancer_contratos.responsavel_id). Não existe "dono da pessoa"
+  // separado — o responsável é por contrato.
   let query = supabase
     .from("freelancers_com_status")
     .select("*")
     .eq("tenant_id", session.activeTenant.id)
     .order("nome_social", { ascending: true });
   if (!isAprovador) {
-    query = query.eq("freela_responsavel_id", session.profile.id);
+    query = query.eq("responsavel_id", session.profile.id);
   }
 
   // Busca por nome/CPF é 100% client-side em `ListaClient` — sem round-trip
@@ -69,13 +68,13 @@ export default async function FreelancersListaPage({
     query = query.gte("data_inicio", inicioApos);
   }
 
-  // Filtro por responsáveis (multi) — usa o dono da pessoa, não do contrato
+  // Filtro por responsáveis (multi) — responsável do contrato vigente
   const responsavelFiltro = (searchParams.responsavel ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter((s) => /^[0-9a-f-]{36}$/i.test(s));
   if (responsavelFiltro.length > 0) {
-    query = query.in("freela_responsavel_id", responsavelFiltro);
+    query = query.in("responsavel_id", responsavelFiltro);
   }
 
   // Filtro por jobs (multi)
@@ -138,7 +137,7 @@ export default async function FreelancersListaPage({
     .select("status_real, status_calculado, data_termino")
     .eq("tenant_id", session.activeTenant.id);
   if (!isAprovador) {
-    totaisQuery = totaisQuery.eq("freela_responsavel_id", session.profile.id);
+    totaisQuery = totaisQuery.eq("responsavel_id", session.profile.id);
   }
 
   // Dados pro NovoFreelancerDialog (só carrega quando user pode criar).
@@ -189,19 +188,6 @@ export default async function FreelancersListaPage({
   if (cargosRes.error) {
     console.error("[freelancers.cargos]", cargosRes.error.message);
   }
-
-  // DEBUG temporario — pra investigar caso Carol/GP ver menos freelas do que o
-  // SQL direto mostra. Remover quando confirmado.
-  console.log("[DEBUG.freelancers.lista]", {
-    profile_id: session.profile.id,
-    role: session.activeRole,
-    isAprovador,
-    searchParams,
-    freelancersRes_count: freelancersRes.data?.length ?? 0,
-    freelancersRes_error: freelancersRes.error?.message ?? null,
-    totaisRes_count: totaisRes.data?.length ?? 0,
-    totaisRes_error: totaisRes.error?.message ?? null,
-  });
 
   const freelancers = freelancersRes.data ?? [];
   const cargos = cargosRes.data ?? [];
@@ -255,12 +241,12 @@ export default async function FreelancersListaPage({
   let dropdownsQuery = supabase
     .from("freelancers_com_status")
     .select(
-      "freela_responsavel_id, freela_responsavel_nome, job_id, job_codigo, job_nome, cargo_contrato",
+      "responsavel_id, responsavel_nome, job_id, job_codigo, job_nome, cargo_contrato",
     )
     .eq("tenant_id", session.activeTenant.id);
   if (!isAprovador) {
     dropdownsQuery = dropdownsQuery.eq(
-      "freela_responsavel_id",
+      "responsavel_id",
       session.profile.id,
     );
   }
@@ -270,8 +256,8 @@ export default async function FreelancersListaPage({
   const jobsMap = new Map<string, string>();
   const cargosSet = new Set<string>();
   for (const r of (todosRows ?? []) as any[]) {
-    if (r.freela_responsavel_id && r.freela_responsavel_nome) {
-      responsaveisMap.set(r.freela_responsavel_id, r.freela_responsavel_nome);
+    if (r.responsavel_id && r.responsavel_nome) {
+      responsaveisMap.set(r.responsavel_id, r.responsavel_nome);
     }
     if (r.job_id && r.job_nome) {
       jobsMap.set(
