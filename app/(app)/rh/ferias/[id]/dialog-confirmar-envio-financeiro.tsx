@@ -11,7 +11,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
+import { DatePicker } from "@/components/ui/date-picker";
 import { enviarProFinanceiro } from "../actions";
 
 export function DialogConfirmarEnvioFinanceiro({
@@ -80,11 +80,13 @@ export function DialogConfirmarEnvioFinanceiro({
         <div className="space-y-3 py-2">
           <div className="space-y-1.5">
             <Label htmlFor="data-pag">Data de pagamento</Label>
-            <Input
+            <DatePicker
               id="data-pag"
-              type="date"
+              name="data-pag"
               value={data}
-              onChange={(e) => setData(e.target.value)}
+              onDateChange={(d) =>
+                setData(d ? d.toISOString().slice(0, 10) : "")
+              }
             />
             <p className="text-[11px] text-muted-foreground">
               Padrão: 2 dias antes do início das férias. Pode ajustar se
