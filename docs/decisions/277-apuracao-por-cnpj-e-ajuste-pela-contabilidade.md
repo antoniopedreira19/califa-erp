@@ -178,7 +178,38 @@ O Tiago (25/11): "O rateio regional deve ser feito de acordo com a participaçã
   - Com uma regional só, a REG mostra a sigla, e a dica diz "pela receita do período".
 - **Saiu da tela:** o editor "Rateio por empresa gerencial" (`rateio-por-gerencial.tsx`). No lugar, a caixa só de leitura "Rateio · TDs (REC)" (`rateio-da-guia.tsx`), na aprovação e na Guia da contabilidade.
 
-**As 18 guias de imposto sobre a receita da carga do 4T** (pagas no histórico, divididas por gerencial como na planilha) ficam para refazer com o OK do Tiago: o antes e depois está em `.claude/prototipos/fiscal/rateio-pela-receita-24.mts` (fora do git). Refazer muda só o registro do título. O DRE e o fluxo dessas guias contam pela linha da planilha no histórico, com a regional da planilha, e não pelo rateio do título.
+**As 18 guias de imposto sobre a receita da carga do 4T** (pagas no histórico, divididas por gerencial como na planilha) **não se regravam** (Tiago, 25/11). O "TDs (REC)" pela receita do sistema tiraria custo da CCH só porque faltam notas dela no sistema. No ISS de Salvador de outubro, a planilha dá 31% à CCH, e a receita do sistema daria 14%. A divergência vem da base de receita incompleta, não da regra. O antes e depois ficou em `.claude/prototipos/fiscal/rateio-pela-receita-24.mts` (fora do git). Mesmo que fossem regravadas, só mudaria o registro do título: o DRE e o fluxo dessas guias contam pela linha da planilha no histórico.
+
+## 11. Outubro/2026 pela planilha (26/11, registrado pelo banco)
+
+O Tiago (25/11): "precisamos registrar os custos tributários de outubro manualmente, lançando 'na mão' para que no futuro possamos fazer as coisas certas e pelo sistema ... agora só precisamos deixar o sistema consistente com a planilha e com a realidade da operação".
+
+- **Como:** só outubro. De novembro em diante vale o "TDs (REC)" (§10).
+  - Cada guia leva o valor da planilha (Fin 10, 25/11) e a divisão da planilha: o valor de cada gerencial e, dentro dela, as regionais pela receita (a regra do §3).
+  - O registro foi feito pelo banco, sem tela nova: `supabase/migrations/20261126100001_impostos_de_outubro_pela_planilha.sql`. Ela chama `aprovar_guia_fiscal` e `lancar_guia_da_contabilidade` em nome do Tiago, com o pedido montado pelo código do sistema (`.claude/prototipos/fiscal/outubro-pela-planilha.mts`).
+  - A marca "TDs (REC)" sai desses títulos.
+  - A memória guardada na aprovação é só o calculado e o registro da planilha, com o motivo. A tela recalcula a memória completa.
+- **O que entrou** (os outros de outubro já estavam: ISS de São Paulo, ISS retido de Salvador e de Fortaleza; a primeira aprovação do ISS de Salvador):
+  - **ISS de Salvador:** a diferença de +R$ 2.509,17 foi aprovada sem guia complementar. O DARF pago, de R$ 175.230,82, já cobre o cálculo.
+  - **ISS da GoCrazy:** R$ 19.277,90, pago em 23/11 pela conta da GoCrazy (paga no histórico). Fica na SS.
+  - **PIS e COFINS da California:**
+    - PIS de R$ 46.091,59 e COFINS de R$ 212.730,42 entram nas guias não cumulativas (6912/5856). As cumulativas (8109/2172) foram aprovadas com R$ 0,00, porque a planilha traz um valor só por imposto.
+    - O valor é a soma das linhas da planilha menos as linhas de crédito. As linhas "Imposto retido na Fonte", da conta BB, são retenções sofridas e ficaram de fora.
+    - Os títulos estão a pagar (vencimento 25/11).
+  - **PIS e COFINS da GoCrazy:** as quatro guias foram aprovadas com R$ 0,00, porque na planilha os créditos zeram os débitos.
+  - **IOF do mútuo:**
+    - California: R$ 2.746,13, a pagar (a planilha não tem extrato).
+    - GoCrazy: R$ 4.766,77, pago em 23/11.
+    - Os dois ficam na SS, como na planilha.
+  - **IRRF pago pela GoCrazy em 19/11:** uma Guia da contabilidade (DARF 1708) de R$ 20.318,94, paga no histórico.
+    - São seis linhas da planilha: o aluguel do galpão SSB e as NFs 49, 50, 56, 57 e 58.
+    - Divisão: SS R$ 1.527,31, NO R$ 492,89 e Doca R$ 18.298,74.
+- **Ficou de fora:**
+  - as linhas de ISS retido de 09/11 (frete de R$ 2.116,50 sem extrato; PP-00227, R$ 618,50; NF 1017 da GoCrazy, R$ 3.511,22);
+  - o "IOF" de R$ 418,84 de 05/11, cobrança do banco, não guia;
+  - as linhas de 03/11 que citam ISS em descrição de salário.
+- **Depois:** quando o financeiro der a baixa do PIS, da COFINS e do IOF da California, a baixa se liga à linha da planilha (`ligar_baixa_ao_historico`), para o DRE não contar duas vezes.
+- **Conferido na produção:** as 13 guias de outubro estão aprovadas na Apuração, nenhuma a aprovar. Os títulos estão com a situação certa e o rateio fecha com o valor.
 
 **Conferido no Sandbox** (Empresa Teste, logado como admin):
 
