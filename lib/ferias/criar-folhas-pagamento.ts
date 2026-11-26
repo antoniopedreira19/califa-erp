@@ -31,11 +31,12 @@ export type FolhaAInserir = {
  *
  * Regras (ver docs/superpowers/specs/2026-10-26-quadro-nf-colaborador-design.md):
  *   - usufruto        → 1 folha usufruto, salario_base = valor_ferias + valor_um_terco
- *   - abono_avulso    → 1 folha abono,    salario_base = valor_abono
- *   - abono_excepcional → 1 folha abono,  salario_base = valor_abono
- *   - abono_combinado → 2 folhas:
- *       1ª: usufruto, salario_base = valor_ferias + valor_um_terco
- *       2ª: abono,    salario_base = valor_abono
+ *   - abono_avulso    → 1 folha abono,    salario_base = valor_abono + valor_um_terco
+ *   - abono_excepcional → 1 folha abono,  salario_base = valor_abono + valor_um_terco
+ *   - abono_combinado → 2 folhas (1/3 dividido proporcionalmente entre as duas):
+ *       1ª: usufruto, salario_base = valor_ferias + round2(valor_ferias/3)
+ *       2ª: abono,    salario_base = valor_abono + (valor_um_terco - round2(valor_ferias/3))
+ *      (o resíduo de arredondamento fica na folha de abono para fechar o total)
  *
  * Para clt_recibo (híbrido), o chamador passa valoresRpa e valoresClt separados;
  * cada parte gera suas próprias folhas (até 4 no caso de abono_combinado).
@@ -61,9 +62,8 @@ export function decidirFolhasAInserir(params: {
   // --- Parte california (PJ / RPA do híbrido) ---
   if (valoresCalifornia !== null) {
     switch (tipo) {
-      case "usufruto":
-      case "abono_combinado": {
-        // Folha de usufruto (férias + 1/3)
+      case "usufruto": {
+        // Folha de usufruto (férias + 1/3 cheio)
         const base = (
           valoresCalifornia.valor_ferias + valoresCalifornia.valor_um_terco
         ).toFixed(2);
@@ -75,8 +75,6 @@ export function decidirFolhasAInserir(params: {
         // Abono avulso/excepcional (modelo PJ California): colaborador
         // recebe valor_abono + 1/3. A NF deste tipo precisa casar com
         // esse total, então salario_base inclui o 1/3 constitucional.
-        // (Diferente do abono em abono_combinado, que segue CLT clássico
-        // e NÃO gera 1/3 sobre o abono — só sobre a parte folga.)
         const base = (
           valoresCalifornia.valor_abono + valoresCalifornia.valor_um_terco
         ).toFixed(2);
@@ -87,14 +85,36 @@ export function decidirFolhasAInserir(params: {
         });
         break;
       }
-    }
-    // Para abono_combinado, adiciona também a folha de abono (parte california)
-    if (tipo === "abono_combinado") {
-      inserts.push({
-        origem: "california",
-        salario_base: valoresCalifornia.valor_abono.toFixed(2),
-        tipo_folha_ferias: "abono",
-      });
+      case "abono_combinado": {
+        // 2 folhas: o 1/3 (que incide sobre férias + abono) é dividido
+        // proporcionalmente. Parte do 1/3 referente à folga vai pra NF de usufruto;
+        // parte referente ao abono vai pra NF de abono. O resíduo de
+        // arredondamento fica na NF de abono pra garantir que a soma
+        // dos salarios_base = valor_total do lançamento.
+        const umTercoFerias =
+          Math.round((valoresCalifornia.valor_ferias / 3) * 100) / 100;
+        const umTercoAbono =
+          Math.round(
+            (valoresCalifornia.valor_um_terco - umTercoFerias) * 100,
+          ) / 100;
+        const baseUsufruto = (
+          valoresCalifornia.valor_ferias + umTercoFerias
+        ).toFixed(2);
+        const baseAbono = (
+          valoresCalifornia.valor_abono + umTercoAbono
+        ).toFixed(2);
+        inserts.push({
+          origem: "california",
+          salario_base: baseUsufruto,
+          tipo_folha_ferias: "usufruto",
+        });
+        inserts.push({
+          origem: "california",
+          salario_base: baseAbono,
+          tipo_folha_ferias: "abono",
+        });
+        break;
+      }
     }
   }
 

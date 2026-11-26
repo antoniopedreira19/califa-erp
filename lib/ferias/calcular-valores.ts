@@ -29,7 +29,7 @@ export type ValoresLancamento = {
  *     diasFolga      = dias - diasAbono
  *     valor_ferias   = diario × diasFolga
  *     valor_abono    = diario × diasAbono
- *     valor_um_terco = valor_ferias / 3   (só sobre férias, CLT: abono não gera 1/3)
+ *     valor_um_terco = (valor_ferias + valor_abono) / 3   (1/3 sobre férias E abono — doutrina California, Súmula 328/TST)
  *
  * Fonte do salário: `colaboradores_salarios.valor` vigente na
  * `data_inicio` das férias.
@@ -83,8 +83,8 @@ export async function calcularValoresLancamento(
     const diasFolga = dias - diasAbono;
     valor_ferias = round2(diario * diasFolga);
     valor_abono = round2(diario * diasAbono);
-    // 1/3 só sobre férias (CLT: abono pecuniário não gera 1/3 constitucional)
-    valor_um_terco = round2(valor_ferias / 3);
+    // 1/3 sobre férias E abono (doutrina California, alinhada à Súmula 328/TST)
+    valor_um_terco = round2((valor_ferias + valor_abono) / 3);
   } else {
     // usufruto
     valor_ferias = round2(diario * dias);

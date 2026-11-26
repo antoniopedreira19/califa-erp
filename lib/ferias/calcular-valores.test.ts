@@ -49,8 +49,8 @@ test("abono_combinado: 20 folga + 10 abono = 30 dias", async () => {
   // dias_folga = 30 - 10 = 20
   assert.equal(v?.valor_ferias, 2000); // diario × dias_folga
   assert.equal(v?.valor_abono, 1000); // diario × dias_abono
-  assert.equal(v?.valor_um_terco, round2(2000 / 3)); // só sobre valor_ferias (CLT)
-  assert.equal(v?.valor_total, round2(2000 + 1000 + 2000 / 3));
+  assert.equal(v?.valor_um_terco, round2(3000 / 3)); // 1/3 sobre (ferias + abono)
+  assert.equal(v?.valor_total, round2(2000 + 1000 + 3000 / 3));
 });
 
 test("abono_excepcional: 15 dias", async () => {

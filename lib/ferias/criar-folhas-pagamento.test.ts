@@ -34,9 +34,9 @@ const valoresAbono = {
 
 const valoresCombinado = {
   valor_ferias: 3000,
-  valor_um_terco: 1000,
+  valor_um_terco: 1333.33, // 1/3 sobre (ferias + abono) = 4000/3
   valor_abono: 1000,
-  valor_total: 5000,
+  valor_total: 5333.33,
 };
 
 // ---------------------------------------------------------------------------
@@ -101,7 +101,7 @@ test("pj + abono_excepcional → 1 folha california abono (inclui 1/3)", () => {
 // PJ puro — tipo abono_combinado → 2 folhas
 // ---------------------------------------------------------------------------
 
-test("pj + abono_combinado → 2 folhas california (usufruto + abono)", () => {
+test("pj + abono_combinado → 2 folhas california (usufruto + abono, 1/3 dividido)", () => {
   const result = decidirFolhasAInserir({
     tipo: "abono_combinado",
     tipoContratacao: "pj",
@@ -118,11 +118,18 @@ test("pj + abono_combinado → 2 folhas california (usufruto + abono)", () => {
   assert.ok(abono, "deve ter folha abono");
 
   assert.equal(usufruto!.origem, "california");
-  // valor_ferias + valor_um_terco = 3000 + 1000 = 4000
+  // valor_ferias + round2(valor_ferias / 3) = 3000 + 1000 = 4000
   assert.equal(usufruto!.salario_base, "4000.00");
 
   assert.equal(abono!.origem, "california");
-  assert.equal(abono!.salario_base, "1000.00");
+  // valor_abono + (valor_um_terco - round2(valor_ferias/3))
+  //             = 1000 + (1333.33 - 1000) = 1333.33
+  assert.equal(abono!.salario_base, "1333.33");
+
+  // Fechamento: soma das 2 folhas = valor_total do lançamento
+  const soma =
+    Number(usufruto!.salario_base) + Number(abono!.salario_base);
+  assert.equal(soma, valoresCombinado.valor_total);
 });
 
 // ---------------------------------------------------------------------------

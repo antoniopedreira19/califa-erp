@@ -239,11 +239,11 @@ O 1/3 constitucional entra no total, na NF e no `salario_base` da folha de pagam
 | Tipo                     | 1/3 incide sobre         | NF emitida pelo colaborador        | `salario_base` da folha            |
 |--------------------------|--------------------------|------------------------------------|------------------------------------|
 | `usufruto`               | `valor_ferias`           | `valor_ferias + valor_um_terco`    | `valor_ferias + valor_um_terco`    |
-| `abono_combinado`        | **só** `valor_ferias`    | NF usufruto: `valor_ferias + valor_um_terco`; NF abono: `valor_abono` | Idem (2 folhas) |
+| `abono_combinado`        | `valor_ferias + valor_abono` | NF usufruto: `valor_ferias + (valor_ferias/3)`; NF abono: `valor_abono + (resto do 1/3)` | Idem (2 folhas, soma = `valor_total`) |
 | `abono_avulso`           | `valor_abono`            | `valor_abono + valor_um_terco`     | `valor_abono + valor_um_terco`     |
 | `abono_excepcional`      | `valor_abono`            | `valor_abono + valor_um_terco`     | `valor_abono + valor_um_terco`     |
 
-**Nota — `abono_combinado` segue a doutrina CLT**: o abono pecuniário dentro de um bloco de férias **não** gera 1/3 (CLT art. 143 — a venda não é rendimento constitucional). A regra `valor_um_terco = valor_ferias / 3` está travada por teste em `lib/ferias/calcular-valores.test.ts`.
+**Nota — `abono_combinado` é doutrina California (atualizada em 2026-11-26)**: o 1/3 constitucional incide sobre **férias + abono** (alinhado à Súmula 328/TST), e cada NF recebe sua parte proporcional. Implementação: `valor_um_terco = round2((valor_ferias + valor_abono) / 3)`. No split entre as 2 folhas, a parte do 1/3 referente à folga vai pra NF de usufruto (`round2(valor_ferias/3)`) e o resíduo (com o arredondamento) vai pra NF de abono — assim a soma dos 2 `salario_base` fecha exatamente com `valor_total` do lançamento. Travado por testes em `lib/ferias/calcular-valores.test.ts` e `lib/ferias/criar-folhas-pagamento.test.ts`.
 
 **Nota — `abono_avulso` / `abono_excepcional` são modelo PJ California**: venda de dias sem passar pelo bloco de férias, decisão de produto da agência (ver §4.4). Como o colaborador PJ não tem rendimento regido pela CLT, o 1/3 incide sobre o abono também — e por isso entra na NF e no `salario_base`. Alinhado em 2026-11-19 depois que a NF estava aparecendo R$ 777,78 menor que o `salario_base` da folha.
 

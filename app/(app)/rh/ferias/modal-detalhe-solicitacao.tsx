@@ -178,11 +178,19 @@ export function ModalDetalheSolicitacao({ row, onFechar, onSucesso }: Props) {
         valor: v.valor_abono + v.valor_um_terco,
       });
     } else if (row.tipo === "abono_combinado") {
+      // 1/3 incide sobre férias + abono; cada NF leva sua parte proporcional
+      // (resíduo de arredondamento vai pra NF de abono, pra fechar o total).
+      const umTercoFerias = Math.round((v.valor_ferias / 3) * 100) / 100;
+      const umTercoAbono =
+        Math.round((v.valor_um_terco - umTercoFerias) * 100) / 100;
       nfs.push({
         rotulo: "NF de férias (usufruto + 1/3)",
-        valor: v.valor_ferias + v.valor_um_terco,
+        valor: v.valor_ferias + umTercoFerias,
       });
-      nfs.push({ rotulo: "NF de abono", valor: v.valor_abono });
+      nfs.push({
+        rotulo: "NF de abono (+ 1/3)",
+        valor: v.valor_abono + umTercoAbono,
+      });
     }
   }
 
