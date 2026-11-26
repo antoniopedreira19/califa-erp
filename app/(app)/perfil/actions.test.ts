@@ -90,3 +90,16 @@ test("data_inicio dentro da antecedência mínima (< hoje+5) rejeitado", () => {
   });
   assert.equal(r.success, false);
 });
+
+// Em "Só venda" o colaborador não tira folga — o form manda data_inicio=hoje
+// só pra marcar competência. A regra de antecedência mínima não se aplica.
+test("abono_avulso: data_inicio=hoje é aceito (sem antecedência mínima)", () => {
+  const r = solicitarSchema.safeParse({
+    tipo: "abono_avulso",
+    periodo_id: UUID_FAKE,
+    data_inicio: dataFutura(0),
+    data_fim: dataFutura(9),
+    dias_abono: 0,
+  });
+  assert.equal(r.success, true);
+});

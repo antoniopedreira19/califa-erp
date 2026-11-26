@@ -43,16 +43,22 @@ export const solicitarFeriasSchema = z
           "A data de fim precisa ser igual ou posterior à data de início.",
       });
     }
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
-    const minimo = new Date(hoje);
-    minimo.setDate(hoje.getDate() + ANTECEDENCIA_MINIMA_DIAS);
-    if (ini < minimo) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["data_inicio"],
-        message: `A solicitação precisa ser feita com pelo menos ${ANTECEDENCIA_MINIMA_DIAS} dias de antecedência.`,
-      });
+    // Antecedência mínima só vale pra usufruto/combinado (o colaborador vai
+    // ficar de folga — RH precisa de prazo). Em abono_avulso (Só venda) o
+    // colaborador não tira folga, então a data_inicio vai como hoje só pra
+    // marcar competência da folha — ver solicitar-ferias-form.tsx.
+    if (data.tipo !== "abono_avulso") {
+      const hoje = new Date();
+      hoje.setHours(0, 0, 0, 0);
+      const minimo = new Date(hoje);
+      minimo.setDate(hoje.getDate() + ANTECEDENCIA_MINIMA_DIAS);
+      if (ini < minimo) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["data_inicio"],
+          message: `A solicitação precisa ser feita com pelo menos ${ANTECEDENCIA_MINIMA_DIAS} dias de antecedência.`,
+        });
+      }
     }
     if (data.tipo === "abono_combinado" && data.dias_abono <= 0) {
       ctx.addIssue({
