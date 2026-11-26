@@ -24,6 +24,10 @@ import {
   type NfMin,
 } from "@/lib/ferias/lancamento-enviavel";
 import {
+  decidirCancelamento,
+  type StatusLancamento,
+} from "@/lib/ferias/decidir-cancelamento";
+import {
   gerarReciboFeriasPdf,
   type FormatoRecibo,
 } from "@/lib/pdf/recibo-ferias";
@@ -361,75 +365,91 @@ export async function aprovarLancamentoOverrideRh(
   return { ok: true, id: lanc.id, aviso };
 }
 
-// ---------- Reprovar ----------
+// ---------- Cancelar ----------
 
-const reprovarSchema = z.object({
-  lancamento_id: z.string().uuid(),
-  motivo: z
-    .string()
-    .trim()
-    .min(5, "O motivo precisa ter pelo menos 5 caracteres.")
-    .max(500, "O motivo é longo demais."),
-});
-
-export async function reprovarLancamento(
-  input: unknown,
+/**
+ * Cancela uma solicitação de férias. Funciona em qualquer status antes de
+ * `enviado_financeiro`. Pra `aprovado`/`nf_anexada`, apaga as folhas em
+ * rascunho vinculadas pra não deixar título órfão no financeiro.
+ *
+ * `motivo_reprovacao` é reusada como coluna de "observação do cancelamento":
+ * nessa versão reprovar e cancelar são operacionalmente a mesma coisa, e
+ * criar uma coluna nova pra texto opcional não compensa.
+ */
+export async function cancelarLancamento(
+  lancamentoId: string,
+  opts?: { observacao?: string },
 ): Promise<ActionResult> {
   const session = await requireSession();
   const bloqueio = assertRh(session.activeRole);
   if (bloqueio) return bloqueio;
 
-  const parsed = reprovarSchema.safeParse(input);
-  if (!parsed.success) {
-    return {
-      ok: false,
-      message:
-        parsed.error.flatten().fieldErrors.motivo?.[0] ??
-        "Dados inválidos.",
-    };
-  }
-  const { lancamento_id: lancId, motivo } = parsed.data;
-
   const tenantId = session.activeTenant.id;
-  const lanc = await carregarLancamento(lancId, tenantId);
+  const lanc = await carregarLancamento(lancamentoId, tenantId);
   if (!lanc) return { ok: false, message: "Lançamento não encontrado." };
-  if (lanc.status !== "pendente_aprovacao") {
-    return {
-      ok: false,
-      message: "Só é possível reprovar solicitações pendentes.",
-    };
+
+  const decisao = decidirCancelamento(lanc.status as StatusLancamento);
+  if (!decisao.ok) {
+    return { ok: false, message: decisao.message };
+  }
+  if (decisao.idempotente) {
+    return { ok: true, id: lanc.id };
   }
 
+  const observacao = opts?.observacao?.trim() || null;
   const supabase = createClient();
+
+  let folhasApagadas = 0;
+  if (decisao.deve_apagar_folhas_rascunho) {
+    const { data: deletadas, error: delErr } = await supabase
+      .from("folhas_pagamento")
+      .delete()
+      .eq("tenant_id", tenantId)
+      .eq("lancamento_ferias_id", lancamentoId)
+      .eq("status", "rascunho")
+      .select("id");
+    if (delErr) {
+      console.error("[rh.ferias.cancelar.folhas]", delErr.message);
+      return {
+        ok: false,
+        message: "Falha ao apagar folhas em rascunho: " + delErr.message,
+      };
+    }
+    folhasApagadas = deletadas?.length ?? 0;
+  }
+
   const { error: updErr } = await supabase
     .from("colaboradores_ferias_lancamentos")
     .update({
-      status: "reprovado",
-      aprovado_por: session.profile.id,
-      aprovado_em: new Date().toISOString(),
-      motivo_reprovacao: motivo,
+      status: "cancelado",
+      motivo_reprovacao: observacao,
+      aprovado_por: null,
+      aprovado_em: null,
     })
-    .eq("id", lancId);
+    .eq("id", lancamentoId)
+    .eq("tenant_id", tenantId);
 
   if (updErr) {
-    console.error("[rh.ferias.reprovar]", updErr.message);
-    return { ok: false, message: "Falha ao reprovar: " + updErr.message };
+    console.error("[rh.ferias.cancelar.lanc]", updErr.message);
+    return { ok: false, message: "Falha ao cancelar: " + updErr.message };
   }
 
   await logAuditEvent({
-    acao: "ferias.lancamento.reprovado",
+    acao: "ferias.lancamento.cancelado_pelo_rh",
     tenantId,
     entidadeTipo: "ferias_lancamento",
     entidadeId: lanc.id,
     metadata: {
+      status_anterior: lanc.status,
       colaborador_id: lanc.colaborador_id,
-      motivo,
-      dias: lanc.dias,
+      folhas_apagadas: folhasApagadas,
+      observacao: observacao ?? undefined,
     },
   });
 
   revalidatePath("/rh/ferias");
   revalidatePath("/perfil");
+  revalidatePath("/financeiro/contas-a-pagar");
   return { ok: true, id: lanc.id };
 }
 
