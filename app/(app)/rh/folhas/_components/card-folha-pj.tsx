@@ -87,7 +87,7 @@ export function CardFolhaPJ(props: CardFolhaPJProps): JSX.Element {
           prefetch={false}
           className="underline hover:text-red-900 font-medium"
         >
-          /rh/benefícios
+          /rh/beneficios
         </Link>{" "}
         → Catálogo antes de enviar.
       </span>
@@ -182,20 +182,20 @@ export function CardFolhaPJ(props: CardFolhaPJProps): JSX.Element {
             <>
               <p className="text-sm text-muted-foreground">
                 {totalLinhas} {totalLinhas === 1 ? "linha" : "linhas"} ·{" "}
-                {brl.format(totalBruto / 100)} bruto −{" "}
-                {brl.format(pj.totalDescontoBeneficios / 100)} benefícios ={" "}
-                {brl.format(pj.totalLiquido / 100)} líquido
+                {brl.format(totalBruto)} bruto −{" "}
+                {brl.format(pj.totalDescontoBeneficios)} benefícios ={" "}
+                {brl.format(pj.totalLiquido)} líquido
               </p>
               <p className="mt-0.5 text-xs font-medium text-emerald-700">
                 ✓ Benefícios aplicados · {beneficios.qtdVinculos}{" "}
                 {beneficios.qtdVinculos === 1 ? "vínculo" : "vínculos"} ·{" "}
-                {brl.format(beneficios.totalIntegral / 100)}
+                {brl.format(beneficios.totalIntegral)}
               </p>
             </>
           ) : (
             <p className="text-sm text-muted-foreground">
               {totalLinhas} {totalLinhas === 1 ? "linha" : "linhas"} ·{" "}
-              {brl.format(pj.totalLiquido / 100)} líquido
+              {brl.format(pj.totalLiquido)} líquido
             </p>
           )}
         </div>
@@ -213,18 +213,18 @@ export function CardFolhaPJ(props: CardFolhaPJProps): JSX.Element {
     <div className="mt-1 space-y-0.5">
       <p className="text-sm text-muted-foreground">
         {totalLinhas} {totalLinhas === 1 ? "linha" : "linhas"} ·{" "}
-        {brl.format(totalBruto / 100)} bruto −{" "}
-        {brl.format(pj.totalDescontoBeneficios / 100)} benefícios ={" "}
-        {brl.format(pj.totalLiquido / 100)} líquido
+        {brl.format(totalBruto)} bruto −{" "}
+        {brl.format(pj.totalDescontoBeneficios)} benefícios ={" "}
+        {brl.format(pj.totalLiquido)} líquido
       </p>
       <p className="text-xs font-medium text-emerald-700">
         ✓ Benefícios aplicados · {beneficios.qtdVinculos}{" "}
         {beneficios.qtdVinculos === 1 ? "vínculo" : "vínculos"} ·{" "}
-        {brl.format(beneficios.totalIntegral / 100)}
+        {brl.format(beneficios.totalIntegral)}
       </p>
       {beneficios.avulsasGeradas && (
         <p className="text-xs text-muted-foreground">
-          {brl.format(beneficios.totalIntegral / 100)} em avulsas de operadora
+          {brl.format(beneficios.totalIntegral)} em avulsas de operadora
         </p>
       )}
     </div>
@@ -233,7 +233,7 @@ export function CardFolhaPJ(props: CardFolhaPJProps): JSX.Element {
     <div className="mt-1 space-y-0.5">
       <p className="text-sm text-muted-foreground">
         {totalLinhas} {totalLinhas === 1 ? "linha" : "linhas"} ·{" "}
-        {brl.format(totalBruto / 100)} bruto
+        {brl.format(totalBruto)} bruto
       </p>
       {/* Preview só aparece quando há vínculos e valor > 0 e não é null (catálogo incompleto) */}
       {pj.previewDescontoBeneficios !== null &&
@@ -241,7 +241,7 @@ export function CardFolhaPJ(props: CardFolhaPJProps): JSX.Element {
         pj.previewQtdVinculos > 0 &&
         pj.previewDescontoBeneficios > 0 && (
           <p className="text-xs text-muted-foreground">
-            Benefícios previstos: −{brl.format(pj.previewDescontoBeneficios / 100)}{" "}
+            Benefícios previstos: −{brl.format(pj.previewDescontoBeneficios)}{" "}
             (aplicados no Enviar)
           </p>
         )}

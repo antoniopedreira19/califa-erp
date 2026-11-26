@@ -8,7 +8,7 @@
  * - enviarFolhaCLT → origem "contabilidade" (CLT importado via PDF).
  *   Sem benefícios: só marca as linhas como enviadas.
  *
- * Spec: docs/superpowers/specs/2026-11-26-ferias-pagina-colaborador-documentos-por-folha-design.md
+ * Spec: docs/superpowers/specs/2026-11-26-folha-pj-clt-fluxos-independentes-design.md
  */
 
 import { revalidatePath } from "next/cache";

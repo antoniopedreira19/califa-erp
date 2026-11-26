@@ -459,7 +459,7 @@ export default async function FolhaCompetenciaPage({
             <span>
               ✓ Competência enviada · {totalLinhasEnviadas}{" "}
               {totalLinhasEnviadas === 1 ? "linha" : "linhas"} ·{" "}
-              {brl.format(totalEnviado / 100)}
+              {brl.format(totalEnviado)}
             </span>
             <Link
               href="/financeiro/contas-a-pagar"

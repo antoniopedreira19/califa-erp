@@ -90,7 +90,7 @@ export function CardFolhaCLT(props: CardFolhaCLTProps): JSX.Element {
       <h3 className="mt-0.5 text-lg font-semibold">Folha CLT</h3>
       <p className="text-sm text-muted-foreground">
         {totalLinhas} {totalLinhas === 1 ? "linha" : "linhas"} ·{" "}
-        {brl.format(clt.totalLiquido / 100)} líquido
+        {brl.format(clt.totalLiquido)} líquido
       </p>
       <p className="text-xs text-muted-foreground">
         Já vem descontado da contabilidade

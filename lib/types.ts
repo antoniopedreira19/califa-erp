@@ -6557,7 +6557,7 @@ export interface DreDespesaPessoalAjustadaMensal {
 
 /**
  * Fase 3 — retorno da RPC aplicar_fechamento_beneficios.
- * Nota: aplicar NÃO cria mais avulsas (migrou pro enviarCompetencia como portão
+ * Nota: aplicar NÃO cria mais avulsas (migrou pro enviarFolhaPJ como portão
  * único RH→Financeiro). Fica só com snapshot + folha reduzida.
  */
 export interface AplicarBeneficiosResult {
@@ -7194,7 +7194,7 @@ export interface ResumoCardsFolha {
 
 // ---------------------------------------------------------------------------
 // Envio de folha por origem
-// Ref: docs/superpowers/specs/2026-11-26-ferias-pagina-colaborador-documentos-por-folha-design.md
+// Ref: docs/superpowers/specs/2026-11-26-folha-pj-clt-fluxos-independentes-design.md
 // ---------------------------------------------------------------------------
 
 /** Avulsa de operadora gerada pelo RPC gerar_avulsas_fechamento_beneficios. */
