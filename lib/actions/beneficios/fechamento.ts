@@ -29,6 +29,7 @@ function traduzErroRpc(message: string): string {
   if (message.includes("nenhum_vinculo_ativo")) return "Nenhum vínculo de benefício ativo nesta competência.";
   if (message.includes("subtipo_beneficios_nao_encontrado")) return "Subtipo 'Benefícios' não encontrado no plano de contas.";
   if (message.includes("ja_reaberto")) return "Esta competência já foi reaberta.";
+  if (message.includes("folha_pj_ja_enviada")) return "Não dá pra desaplicar: a folha PJ dessa competência já foi enviada ao financeiro. Para corrigir, use o drawer linha a linha ou peça pro financeiro reprovar as linhas afetadas.";
   if (message.includes("avulsa_ja_paga")) {
     const codigo = message.split("avulsa_ja_paga:").pop()?.trim() ?? "sem código";
     return `Não dá pra desaplicar: avulsa ${codigo} já foi paga. Estorne a avulsa pelo financeiro antes.`;
