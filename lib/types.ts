@@ -7145,3 +7145,45 @@ export interface ComitePedidoRow {
   decidido_em: string | null;
   comentario: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Folha mensal: resumo dos dois cards (PJ/CLT)
+// ver docs/superpowers/specs/2026-11-26-folha-pj-clt-fluxos-independentes-design.md
+// ---------------------------------------------------------------------------
+
+/** Contadores e totais agregados por origem de folha (pj ou clt). */
+export interface ResumoFolhaOrigem {
+  linhasRascunho: number;
+  linhasPendenteCorrecao: number;
+  linhasEnviadas: number;
+  linhasAprovadas: number;
+  linhasPagas: number;
+  totalLiquido: number;             // soma de salario_base
+  totalDescontoBeneficios: number;  // soma de desconto_beneficios (CLT fica 0)
+}
+
+/** Shape completo retornado por `obterResumoCardsFolha`. */
+export interface ResumoCardsFolha {
+  pj: ResumoFolhaOrigem & {
+    /** Soma de valor_colaborador da RPC — só preenchido quando snapshot não aplicado. */
+    previewDescontoBeneficios: number | null;
+    /** Contagem de linhas da RPC — só preenchido quando snapshot não aplicado. */
+    previewQtdVinculos: number | null;
+  };
+  clt: ResumoFolhaOrigem;
+  beneficios: {
+    /** true quando existe fechamento vigente (reaberto_em is null). */
+    aplicado: boolean;
+    fechamentoId: string | null;
+    /** true quando existe ao menos uma conta_avulsa ligada ao fechamento. */
+    avulsasGeradas: boolean;
+    /** true quando ao menos uma avulsa está paga (pago_em not null). */
+    avulsaPaga: boolean;
+    qtdVinculos: number;
+    totalEmpresa: number;
+    totalColaborador: number;
+    totalIntegral: number;
+  };
+  /** Nome do primeiro benefício ativo com campo obrigatório faltando, ou null. */
+  catalogoIncompleto: string | null;
+}
