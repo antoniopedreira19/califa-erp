@@ -1,4 +1,5 @@
 import { notFound, redirect } from "next/navigation";
+import Link from "next/link";
 import { Receipt } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { createClient } from "@/lib/supabase/server";
@@ -15,12 +16,10 @@ import {
 } from "./folha-competencia-view";
 import { CardsResumoFolha } from "./cards-resumo-folha";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
-import { ChecklistCompetencia } from "../_components/checklist-competencia";
 import type { FolhaOrigem } from "@/lib/types";
-import {
-  obterFechamentoVigenteDaCompetencia,
-  temAvulsaPaga,
-} from "@/lib/queries/beneficios";
+import { obterResumoCardsFolha } from "@/lib/queries/folhas-resumo";
+import { CardFolhaPJ } from "../_components/card-folha-pj";
+import { CardFolhaCLT } from "../_components/card-folha-clt";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +37,8 @@ const NOMES_MES = [
   "Novembro",
   "Dezembro",
 ];
+
+const brl = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
 function parseCompetencia(chave: string): { ano: number; mes: number } | null {
   const m = chave.match(/^(\d{4})-(\d{2})$/);
@@ -74,7 +75,7 @@ export default async function FolhaCompetenciaPage({
   // anterior (só valor + status, pro card com delta). Empresas (4) e regionais (9)
   // do tenant são pequenas — vira Map local pra hidratar o snapshot de alocação
   // sem embed aninhado (docs/PERFORMANCE.md §C).
-  const [linhasRes, empresasRes, regionaisRes, linhasPrevRes, rateiosRes] = await Promise.all(
+  const [linhasRes, empresasRes, regionaisRes, linhasPrevRes, rateiosRes, resumo] = await Promise.all(
     [
       // Folha Mensal lista APENAS tipo='salario'. Férias e 13 têm fluxos
       // próprios e não devem aparecer aqui. Linhas com status
@@ -119,6 +120,7 @@ export default async function FolhaCompetenciaPage({
         .select("empresa_id, regional_id, percentual")
         .eq("tenant_id", session.activeTenant.id)
         .eq("ano_vigencia", ano),
+      obterResumoCardsFolha({ tenantId: session.activeTenant.id, ano, mes }),
     ],
   );
 
@@ -410,29 +412,15 @@ export default async function FolhaCompetenciaPage({
 
   const descricao = descreverEstadoFolha(linhas.length, contagem);
 
-  // Totais por origem para o checklist PJ / CLT.
-  const linhasPj = folhasRaw.filter((l) => l.origem === "california");
-  const linhasClt = folhasRaw.filter((l) => l.origem === "contabilidade");
-  const rascunhosAEnviar = folhasRaw.filter((l) => l.status === "rascunho").length;
-
-  // Fase 3: estado do checkpoint "Benefícios aplicados"
-  const fechamentoVigente = await obterFechamentoVigenteDaCompetencia({
-    tenantId: session.activeTenant.id,
-    ano,
-    mes,
-  });
-  const avulsaPaga = fechamentoVigente
-    ? await temAvulsaPaga({ fechamentoId: fechamentoVigente.id })
-    : false;
-  const beneficiosProp = {
-    aplicado: Boolean(fechamentoVigente),
-    fechamentoId: fechamentoVigente?.id ?? null,
-    qtdVinculos: fechamentoVigente?.qtd_vinculos ?? 0,
-    totalEmpresa: fechamentoVigente?.total_empresa ?? 0,
-    totalColaborador: fechamentoVigente?.total_colaborador ?? 0,
-    totalIntegral: fechamentoVigente?.valor_integral ?? 0,
-    avulsaPaga,
-  };
+  // Rodapé consolidado: totais e contagem de linhas já fora de rascunho.
+  const totalLinhasEnviadas =
+    resumo.pj.linhasEnviadas +
+    resumo.pj.linhasAprovadas +
+    resumo.pj.linhasPagas +
+    resumo.clt.linhasEnviadas +
+    resumo.clt.linhasAprovadas +
+    resumo.clt.linhasPagas;
+  const totalEnviado = resumo.pj.totalLiquido + resumo.clt.totalLiquido;
 
   return (
     <div className="space-y-6">
@@ -445,21 +433,43 @@ export default async function FolhaCompetenciaPage({
         icon={Receipt}
       />
 
-      <ChecklistCompetencia
-        ano={ano}
-        mes={mes}
-        pj={{
-          linhas: linhasPj.length,
-          total: linhasPj.reduce((a, l) => a + Number(l.salario_base), 0),
-        }}
-        clt={{
-          linhas: linhasClt.length,
-          total: linhasClt.reduce((a, l) => a + Number(l.salario_base), 0),
-        }}
-        beneficios={beneficiosProp}
-        rascunhosAEnviar={rascunhosAEnviar}
-        podeEditar={podeEditar}
-      />
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <CardFolhaPJ
+          ano={ano}
+          mes={mes}
+          pj={resumo.pj}
+          beneficios={resumo.beneficios}
+          catalogoIncompleto={resumo.catalogoIncompleto}
+          podeEditar={podeEditar}
+        />
+        <CardFolhaCLT
+          ano={ano}
+          mes={mes}
+          clt={resumo.clt}
+          podeEditar={podeEditar}
+        />
+      </div>
+
+      {resumo.pj.linhasRascunho === 0 &&
+        resumo.pj.linhasPendenteCorrecao === 0 &&
+        resumo.clt.linhasRascunho === 0 &&
+        resumo.clt.linhasPendenteCorrecao === 0 &&
+        totalLinhasEnviadas > 0 && (
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 px-4 py-3 text-sm text-emerald-900 flex items-center justify-between">
+            <span>
+              ✓ Competência enviada · {totalLinhasEnviadas}{" "}
+              {totalLinhasEnviadas === 1 ? "linha" : "linhas"} ·{" "}
+              {brl.format(totalEnviado / 100)}
+            </span>
+            <Link
+              href="/financeiro/contas-a-pagar"
+              prefetch={false}
+              className="font-medium underline"
+            >
+              Ver no financeiro →
+            </Link>
+          </div>
+        )}
 
       {linhas.length > 0 && (
         <CardsResumoFolha
