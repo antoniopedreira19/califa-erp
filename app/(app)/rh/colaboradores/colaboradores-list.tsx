@@ -139,7 +139,6 @@ export function ColaboradoresList({
   // marcado = sem filtro".
   const todosCargos = cargosOpcoes;
   const todosTipos = React.useMemo(() => OPCOES_TIPO.map((o) => o.value), []);
-  const todosStatus = React.useMemo(() => OPCOES_STATUS.map((o) => o.value), []);
   const todasEmpresas = React.useMemo(
     () => empresasOpcoes.map((e) => e.id),
     [empresasOpcoes],
@@ -164,7 +163,9 @@ export function ColaboradoresList({
   // Default "todos marcados" em cada filtro. Trocar o universo (ex.: lista
   // de empresas/cargos mudar de uma sessão para outra) não zera o estado:
   // os selecionados se mantêm, e novas opções entram marcadas automático.
-  const [status, setStatus] = React.useState<string[]>(todosStatus);
+  // Default: só Ativos. Inativos entram sob demanda via filtro — evita
+  // poluir a lista (e os KPIs derivados) com quem já saiu da agência.
+  const [status, setStatus] = React.useState<string[]>(["ativo"]);
   const [tipos, setTipos] = React.useState<string[]>(todosTipos);
   const [cargos, setCargos] = React.useState<string[]>(todosCargos);
   const [empresas, setEmpresas] = React.useState<string[]>(todasEmpresas);
