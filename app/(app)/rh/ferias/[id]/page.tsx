@@ -159,12 +159,15 @@ export default async function ColaboradorFeriasPage({
     usa_rateio_empresa: boolean | null;
   } | null;
 
-  // Agrupa NFs por lançamento (escopo_id) pra o card olhar em O(1).
-  const nfsPorLanc = new Map<
-    string,
-    { id: string; arquivo_nome: string; uploaded_at: string }
-  >();
-  const nfsMinPorLanc = new Map<string, NfMin[]>();
+  // Agrupa NFs por (lançamento, escopo_tipo) — um lançamento abono_combinado
+  // tem 2 NFs (usufruto + abono) com mesmo escopo_id. Guardar só por escopo_id
+  // sobrescreve uma pela outra.
+  type NfComMeta = {
+    escopo_tipo: "ferias_usufruto" | "ferias_abono";
+    arquivo_nome: string | null;
+    uploaded_at: string | null;
+  };
+  const nfsPorLancPorEscopo = new Map<string, NfComMeta[]>();
   for (const n of (nfsRes.data ?? []) as Array<{
     id: string;
     escopo_id: string | null;
@@ -173,14 +176,13 @@ export default async function ColaboradorFeriasPage({
     uploaded_at: string;
   }>) {
     if (!n.escopo_id) continue;
-    nfsPorLanc.set(n.escopo_id, {
-      id: n.id,
+    const atual = nfsPorLancPorEscopo.get(n.escopo_id) ?? [];
+    atual.push({
+      escopo_tipo: n.escopo_tipo,
       arquivo_nome: n.arquivo_nome,
       uploaded_at: n.uploaded_at,
     });
-    const atual = nfsMinPorLanc.get(n.escopo_id) ?? [];
-    atual.push({ escopo_tipo: n.escopo_tipo, escopo_id: n.escopo_id });
-    nfsMinPorLanc.set(n.escopo_id, atual);
+    nfsPorLancPorEscopo.set(n.escopo_id, atual);
   }
 
   // Agrupa folhas por lançamento pro bloco de documentos (NF x recibo).
@@ -376,10 +378,9 @@ export default async function ColaboradorFeriasPage({
               <CardSolicitacaoAtiva
                 key={l.id}
                 lancamento={l}
-                nf={nfsPorLanc.get(l.id) ?? null}
                 nomesAprovadores={nomesAprovadores}
                 folhasDoLanc={folhasPorLanc.get(l.id) ?? []}
-                nfsDoLanc={nfsMinPorLanc.get(l.id) ?? []}
+                nfsDoLanc={nfsPorLancPorEscopo.get(l.id) ?? []}
                 role={session.activeRole}
               />
             ))}
@@ -485,14 +486,12 @@ function CardVazioProximoPeriodo({
 
 function CardSolicitacaoAtiva({
   lancamento: l,
-  nf,
   nomesAprovadores,
   folhasDoLanc,
   nfsDoLanc,
   role,
 }: {
   lancamento: ColaboradorFeriasLancamento;
-  nf: { id: string; arquivo_nome: string; uploaded_at: string } | null;
   nomesAprovadores: Map<string, string>;
   folhasDoLanc: Array<
     FolhaMin & {
@@ -501,7 +500,11 @@ function CardSolicitacaoAtiva({
       data_pagamento_prevista: string | null;
     }
   >;
-  nfsDoLanc: NfMin[];
+  nfsDoLanc: Array<{
+    escopo_tipo: "ferias_usufruto" | "ferias_abono";
+    arquivo_nome: string | null;
+    uploaded_at: string | null;
+  }>;
   role: string;
 }) {
   const inicio = new Date(l.data_inicio + "T00:00:00").toLocaleDateString(
@@ -531,7 +534,11 @@ function CardSolicitacaoAtiva({
     aprovado: {
       label: "Aprovado",
       cls: "bg-emerald-100 text-emerald-800 border-emerald-300",
-      hint: hintAprovado(l.id, folhasDoLanc, nfsDoLanc),
+      hint: hintAprovado(
+        l.id,
+        folhasDoLanc,
+        nfsDoLanc.map((n) => ({ escopo_tipo: n.escopo_tipo, escopo_id: l.id })),
+      ),
     },
     nf_anexada: {
       label: "NF Anexada",
@@ -642,18 +649,14 @@ function CardSolicitacaoAtiva({
             salario_base: f.salario_base,
             data_pagamento_prevista: f.data_pagamento_prevista,
           }))}
-          nfsPorEscopo={nfsDoLanc.map((n) => ({
-            escopo_tipo: n.escopo_tipo,
-            arquivo_nome: nf?.arquivo_nome ?? null,
-            uploaded_at: nf?.uploaded_at ?? null,
-          }))}
+          nfsPorEscopo={nfsDoLanc}
           role={role}
         />
       )}
 
       <TimelineAprovacoes lancamento={l} nomesAprovadores={nomesAprovadores} />
 
-      {si.hint && (
+      {si.hint && !(l.status === "aprovado" && folhasDoLanc.length > 0) && (
         <p className="mt-2 text-xs text-muted-foreground">{si.hint}</p>
       )}
     </div>

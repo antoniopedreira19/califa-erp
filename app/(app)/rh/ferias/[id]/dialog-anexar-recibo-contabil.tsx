@@ -32,26 +32,40 @@ export function DialogAnexarReciboContabil({
 }) {
   const router = useRouter();
   const [arquivo, setArquivo] = React.useState<File | null>(null);
-  const [valor, setValor] = React.useState<string>(
-    valorBasePreview != null ? valorBasePreview.toFixed(2) : "",
-  );
+  const [valor, setValor] = React.useState<string>("");
   const [erro, setErro] = React.useState<string | null>(null);
   const [pending, startTransition] = React.useTransition();
 
   // Reseta quando o dialog abre com uma folha diferente.
+  // Nota: não pré-preenchemos o valor com salario_base pq ele é o BRUTO
+  // calculado pelo sistema — o líquido do recibo (com IR + INSS) é o que o
+  // RH precisa digitar. Mostramos o bruto só como referência no helper text.
   React.useEffect(() => {
     if (aberto) {
       setArquivo(null);
-      setValor(valorBasePreview != null ? valorBasePreview.toFixed(2) : "");
+      setValor("");
       setErro(null);
     }
-  }, [aberto, valorBasePreview, folhaId]);
+  }, [aberto, folhaId]);
 
   function handleAnexar() {
     setErro(null);
     const valorNum = Number(valor);
-    if (!arquivo || !Number.isFinite(valorNum) || valorNum <= 0) {
-      setErro("Selecione o PDF e informe o valor líquido.");
+    if (!arquivo) {
+      setErro("Selecione o PDF do recibo.");
+      return;
+    }
+    if (arquivo.type !== "application/pdf") {
+      setErro("Arquivo precisa ser PDF.");
+      return;
+    }
+    const DEZ_MB = 10 * 1024 * 1024;
+    if (arquivo.size > DEZ_MB) {
+      setErro("PDF muito grande (máx. 10 MB).");
+      return;
+    }
+    if (!Number.isFinite(valorNum) || valorNum <= 0) {
+      setErro("Informe o valor líquido do recibo.");
       return;
     }
 
@@ -138,6 +152,16 @@ export function DialogAnexarReciboContabil({
             <p className="text-[11px] text-muted-foreground">
               Valor que o financeiro vai pagar efetivamente, já com desconto
               de IR e INSS.
+              {valorBasePreview != null && (
+                <>
+                  {" "}Bruto calculado: R${" "}
+                  {valorBasePreview.toLocaleString("pt-BR", {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2,
+                  })}
+                  .
+                </>
+              )}
             </p>
           </div>
 

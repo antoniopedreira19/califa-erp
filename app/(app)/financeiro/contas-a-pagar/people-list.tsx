@@ -508,9 +508,13 @@ export function PeopleList({
         item.escopo_tipo === "decimo_terceiro_adiantamento") &&
       item.origem === "california" &&
       ["pj", "mei", "clt_recibo"].includes(item.tipo_contratacao);
+    // Ferias só exigem NF pra parte california (PJ). A parte contabilidade
+    // (CLT) é destravada pelo recibo em folhas_pagamento.anexo_url, não
+    // por colaboradores_nf_anexos — a view nf_anexada não vê o recibo.
     const exigeNfFerias =
-      item.escopo_tipo === "ferias_usufruto" ||
-      item.escopo_tipo === "ferias_abono";
+      (item.escopo_tipo === "ferias_usufruto" ||
+        item.escopo_tipo === "ferias_abono") &&
+      item.origem === "california";
     const exigeNfParaUI = exigeNfLinha || exigeNfFerias;
 
     const bloqueado = exigeNfParaUI && !item.nf_anexada;
