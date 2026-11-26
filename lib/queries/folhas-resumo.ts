@@ -110,6 +110,10 @@ export async function obterResumoCardsFolha(args: {
   const pjAcc = origemVazia();
   const cltAcc = origemVazia();
 
+  if (linhasResult.error) {
+    console.warn("[folhas-resumo] query folhas_pagamento falhou:", linhasResult.error.message);
+  }
+
   for (const linha of (linhasResult.data ?? []) as FolhaLinhaRaw[]) {
     const origem = linha.origem as FolhaOrigem;
     if (origem === "pj") {
@@ -178,6 +182,9 @@ export async function obterResumoCardsFolha(args: {
   }
 
   // ── Catálogo incompleto ───────────────────────────────────────────────────
+  if (catalogoResult.error) {
+    console.warn("[folhas-resumo] query beneficios (catálogo incompleto) falhou:", catalogoResult.error.message);
+  }
   const catalogoIncompleto =
     (catalogoResult.data as { nome: string } | null)?.nome ?? null;
 
