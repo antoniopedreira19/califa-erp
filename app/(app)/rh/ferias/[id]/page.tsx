@@ -24,6 +24,7 @@ import { formatDataAsHoraBr, formatDiaBr } from "@/lib/formatar-data-hora";
 import { BlocoDocumentosLancamento } from "./bloco-documentos-lancamento";
 import { BotoesRhLancamento } from "./botoes-rh-lancamento";
 import { hintAprovado } from "@/lib/ferias/hint-aprovado";
+import { STATUS_CONSOME_SALDO } from "@/lib/ferias/status-consome-saldo";
 import type {
   FolhaMin,
   NfMin,
@@ -220,17 +221,14 @@ export default async function ColaboradorFeriasPage({
     folhasPorLanc.set(f.lancamento_ferias_id, atual);
   }
 
-  // Saldo por período (dias de direito − dias já usados/ocupados)
+  // Saldo por período (dias de direito − dias já usados/ocupados).
+  // STATUS_CONSOME_SALDO cobre o fluxo inteiro + concluido, excluindo
+  // só cancelado/reprovado — senão o saldo volta ao cheio quando o
+  // lançamento passa de 'aprovado' pra 'nf_anexada' ou 'enviado_financeiro'.
   const diasOcupados = new Map<string, number>();
   for (const l of lancamentos) {
     if (!l.periodo_id) continue;
-    if (
-      l.status !== "aprovado" &&
-      l.status !== "concluido" &&
-      l.status !== "pendente_aprovacao"
-    ) {
-      continue;
-    }
+    if (!STATUS_CONSOME_SALDO.has(l.status)) continue;
     diasOcupados.set(
       l.periodo_id,
       (diasOcupados.get(l.periodo_id) ?? 0) + l.dias,

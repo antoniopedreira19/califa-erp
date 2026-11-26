@@ -7,6 +7,7 @@ import type {
   FeriasLancamentoTipo,
   TipoContratacao,
 } from "@/lib/types";
+import { STATUS_CONSOME_SALDO } from "@/lib/ferias/status-consome-saldo";
 
 type Lanc = {
   id: string;
@@ -42,16 +43,6 @@ type Grupo = {
   periodoNumero: number | null;
   lancamentos: Lanc[];
 };
-
-/** Status que efetivamente consomem dias do aquisitivo. Cancelado/reprovado
- *  não contam. */
-const STATUS_CONSOME_SALDO: FeriasLancamentoStatus[] = [
-  "aprovado",
-  "concluido",
-  "nf_anexada",
-  "aguardando_financeiro",
-  "enviado_financeiro",
-];
 
 function agrupar(
   lancs: Lanc[],
@@ -106,7 +97,7 @@ function agrupar(
 
 function diasConsumidosNoGrupo(g: Grupo): number {
   return g.lancamentos
-    .filter((l) => STATUS_CONSOME_SALDO.includes(l.status))
+    .filter((l) => STATUS_CONSOME_SALDO.has(l.status))
     .reduce((acc, l) => acc + l.dias, 0);
 }
 
