@@ -195,10 +195,10 @@ O Tiago (25/11): "precisamos registrar os custos tributários de outubro manualm
   - **PIS e COFINS da California:**
     - PIS de R$ 46.091,59 e COFINS de R$ 212.730,42 entram nas guias não cumulativas (6912/5856). As cumulativas (8109/2172) foram aprovadas com R$ 0,00, porque a planilha traz um valor só por imposto.
     - O valor é a soma das linhas da planilha menos as linhas de crédito. As linhas "Imposto retido na Fonte", da conta BB, são retenções sofridas e ficaram de fora.
-    - Os títulos estão a pagar (vencimento 25/11).
+    - Pagos em 24/11 pelo Santander da California, como na planilha recarregada em 26/11. O extrato dessa conta no sistema ainda vai só até 23/11.
   - **PIS e COFINS da GoCrazy:** as quatro guias foram aprovadas com R$ 0,00, porque na planilha os créditos zeram os débitos.
   - **IOF do mútuo:**
-    - California: R$ 2.746,13, a pagar (a planilha não tem extrato).
+    - California: R$ 2.746,13, pago em 23/11. O extrato tem o débito "TRIB FEDERAL", conciliado com a linha da planilha.
     - GoCrazy: R$ 4.766,77, pago em 23/11.
     - Os dois ficam na SS, como na planilha.
   - **IRRF pago pela GoCrazy em 19/11:** uma Guia da contabilidade (DARF 1708) de R$ 20.318,94, paga no histórico.
@@ -208,7 +208,9 @@ O Tiago (25/11): "precisamos registrar os custos tributários de outubro manualm
   - as linhas de ISS retido de 09/11 (frete de R$ 2.116,50 sem extrato; PP-00227, R$ 618,50; NF 1017 da GoCrazy, R$ 3.511,22);
   - o "IOF" de R$ 418,84 de 05/11, cobrança do banco, não guia;
   - as linhas de 03/11 que citam ISS em descrição de salário.
-- **Depois:** quando o financeiro der a baixa do PIS, da COFINS e do IOF da California, a baixa se liga à linha da planilha (`ligar_baixa_ao_historico`), para o DRE não contar duas vezes.
+- **Pagos (26/11):** o Tiago perguntou se esses impostos já não tinham saído na planilha. Tinham, e os três que a 20261126100001 deixou a pagar (PIS, COFINS e IOF da California) ficaram pagos no histórico pela `20261126100002_impostos_de_outubro_pagos_pela_planilha.sql`. Na produção não há mais imposto a pagar.
+  - O débito "TRIB FEDERAL" de 19/11 da GoCrazy, de R$ 21.024,62, é o IRRF acima mais um INSS de R$ 705,68. O INSS não é imposto do Fiscal e já está na planilha, conciliado com o extrato.
+  - As linhas de ISS retido de 09/11 são retenções de PP: custo do job, que a planilha já leva e que o Fiscal apura pela NF do fornecedor.
 - **Conferido na produção:** as 13 guias de outubro estão aprovadas na Apuração, nenhuma a aprovar. Os títulos estão com a situação certa e o rateio fecha com o valor.
 
 **Conferido no Sandbox** (Empresa Teste, logado como admin):
