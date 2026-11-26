@@ -22,6 +22,7 @@ import { BotaoLancarDiretoCliente } from "./botao-lancar-direto";
 import { HeroColaboradorFerias } from "./hero-colaborador-ferias";
 import { formatDataAsHoraBr, formatDiaBr } from "@/lib/formatar-data-hora";
 import { BlocoDocumentosLancamento } from "./bloco-documentos-lancamento";
+import { BotoesRhLancamento } from "./botoes-rh-lancamento";
 import { hintAprovado } from "@/lib/ferias/hint-aprovado";
 import type {
   FolhaMin,
@@ -382,6 +383,11 @@ export default async function ColaboradorFeriasPage({
                 folhasDoLanc={folhasPorLanc.get(l.id) ?? []}
                 nfsDoLanc={nfsPorLancPorEscopo.get(l.id) ?? []}
                 role={session.activeRole}
+                aquisitivosDisponiveis={periodosDisponiveis.map((p) => ({
+                  id: p.id,
+                  rotulo: `${p.aquisitivo_inicio.slice(0, 4)}/${p.aquisitivo_fim.slice(0, 4)}`,
+                  saldo: p.saldo,
+                }))}
               />
             ))}
           </div>
@@ -490,6 +496,7 @@ function CardSolicitacaoAtiva({
   folhasDoLanc,
   nfsDoLanc,
   role,
+  aquisitivosDisponiveis,
 }: {
   lancamento: ColaboradorFeriasLancamento;
   nomesAprovadores: Map<string, string>;
@@ -506,6 +513,7 @@ function CardSolicitacaoAtiva({
     uploaded_at: string | null;
   }>;
   role: string;
+  aquisitivosDisponiveis: Array<{ id: string; rotulo: string; saldo: number }>;
 }) {
   const inicio = new Date(l.data_inicio + "T00:00:00").toLocaleDateString(
     "pt-BR",
@@ -556,12 +564,12 @@ function CardSolicitacaoAtiva({
       hint: "",
     },
     reprovado: {
-      label: "Reprovado",
-      cls: "bg-red-100 text-red-800 border-red-300",
+      label: "Cancelada",
+      cls: "bg-muted text-muted-foreground border-border",
       hint: "",
     },
     cancelado: {
-      label: "Cancelado",
+      label: "Cancelada",
       cls: "bg-muted text-muted-foreground border-border",
       hint: "",
     },
@@ -658,6 +666,18 @@ function CardSolicitacaoAtiva({
 
       {si.hint && !(l.status === "aprovado" && folhasDoLanc.length > 0) && (
         <p className="mt-2 text-xs text-muted-foreground">{si.hint}</p>
+      )}
+
+      {(role === "rh" || role === "administrador") && (
+        <BotoesRhLancamento
+          lancamentoId={l.id}
+          status={l.status}
+          dataInicio={l.data_inicio}
+          dataFim={l.data_fim}
+          periodoId={l.periodo_id}
+          tipoLancamento={l.tipo}
+          aquisitivos={aquisitivosDisponiveis}
+        />
       )}
     </div>
   );
