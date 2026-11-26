@@ -21,6 +21,12 @@ import { HistoricoColapsavel } from "./historico-colapsavel";
 import { BotaoLancarDiretoCliente } from "./botao-lancar-direto";
 import { HeroColaboradorFerias } from "./hero-colaborador-ferias";
 import { formatDataAsHoraBr, formatDiaBr } from "@/lib/formatar-data-hora";
+import { BlocoDocumentosLancamento } from "./bloco-documentos-lancamento";
+import { hintAprovado } from "@/lib/ferias/hint-aprovado";
+import type {
+  FolhaMin,
+  NfMin,
+} from "@/lib/ferias/lancamento-enviavel";
 
 export const dynamic = "force-dynamic";
 
@@ -98,10 +104,13 @@ export default async function ColaboradorFeriasPage({
       // Folhas de pagamento de férias deste colaborador. Usado pra decidir
       // se um lançamento 'aprovado' é retroativo (sem folha = pagamento
       // feito fora do sistema, não espera NF) — nesse caso vai pro
-      // histórico em vez de "Em andamento".
+      // histórico em vez de "Em andamento". Também alimenta o bloco
+      // de documentos por folha (NF vs recibo contábil).
       supabase
         .from("folhas_pagamento")
-        .select("lancamento_ferias_id")
+        .select(
+          "id, lancamento_ferias_id, origem, tipo_folha_ferias, status, anexo_url, salario_base, data_pagamento_prevista",
+        )
         .eq("tenant_id", tenantId)
         .eq("colaborador_id", params.id)
         .eq("tipo", "ferias")
@@ -155,9 +164,11 @@ export default async function ColaboradorFeriasPage({
     string,
     { id: string; arquivo_nome: string; uploaded_at: string }
   >();
+  const nfsMinPorLanc = new Map<string, NfMin[]>();
   for (const n of (nfsRes.data ?? []) as Array<{
     id: string;
     escopo_id: string | null;
+    escopo_tipo: "ferias_usufruto" | "ferias_abono";
     arquivo_nome: string;
     uploaded_at: string;
   }>) {
@@ -167,6 +178,41 @@ export default async function ColaboradorFeriasPage({
       arquivo_nome: n.arquivo_nome,
       uploaded_at: n.uploaded_at,
     });
+    const atual = nfsMinPorLanc.get(n.escopo_id) ?? [];
+    atual.push({ escopo_tipo: n.escopo_tipo, escopo_id: n.escopo_id });
+    nfsMinPorLanc.set(n.escopo_id, atual);
+  }
+
+  // Agrupa folhas por lançamento pro bloco de documentos (NF x recibo).
+  type FolhaFull = FolhaMin & {
+    lancamento_ferias_id: string | null;
+    salario_base: string | number | null;
+    data_pagamento_prevista: string | null;
+  };
+  const folhasPorLanc = new Map<string, FolhaFull[]>();
+  for (const f of (folhasFeriasRes.data ?? []) as Array<{
+    id: string;
+    lancamento_ferias_id: string | null;
+    origem: "california" | "contabilidade";
+    tipo_folha_ferias: "usufruto" | "abono" | null;
+    status: string;
+    anexo_url: string | null;
+    salario_base: string | number | null;
+    data_pagamento_prevista: string | null;
+  }>) {
+    if (!f.lancamento_ferias_id) continue;
+    const atual = folhasPorLanc.get(f.lancamento_ferias_id) ?? [];
+    atual.push({
+      id: f.id,
+      lancamento_ferias_id: f.lancamento_ferias_id,
+      origem: f.origem,
+      tipo_folha_ferias: f.tipo_folha_ferias,
+      status: f.status,
+      anexo_url: f.anexo_url,
+      salario_base: f.salario_base,
+      data_pagamento_prevista: f.data_pagamento_prevista,
+    });
+    folhasPorLanc.set(f.lancamento_ferias_id, atual);
   }
 
   // Saldo por período (dias de direito − dias já usados/ocupados)
@@ -332,6 +378,9 @@ export default async function ColaboradorFeriasPage({
                 lancamento={l}
                 nf={nfsPorLanc.get(l.id) ?? null}
                 nomesAprovadores={nomesAprovadores}
+                folhasDoLanc={folhasPorLanc.get(l.id) ?? []}
+                nfsDoLanc={nfsMinPorLanc.get(l.id) ?? []}
+                role={session.activeRole}
               />
             ))}
           </div>
@@ -438,10 +487,22 @@ function CardSolicitacaoAtiva({
   lancamento: l,
   nf,
   nomesAprovadores,
+  folhasDoLanc,
+  nfsDoLanc,
+  role,
 }: {
   lancamento: ColaboradorFeriasLancamento;
   nf: { id: string; arquivo_nome: string; uploaded_at: string } | null;
   nomesAprovadores: Map<string, string>;
+  folhasDoLanc: Array<
+    FolhaMin & {
+      lancamento_ferias_id: string | null;
+      salario_base: string | number | null;
+      data_pagamento_prevista: string | null;
+    }
+  >;
+  nfsDoLanc: NfMin[];
+  role: string;
 }) {
   const inicio = new Date(l.data_inicio + "T00:00:00").toLocaleDateString(
     "pt-BR",
@@ -470,7 +531,7 @@ function CardSolicitacaoAtiva({
     aprovado: {
       label: "Aprovado",
       cls: "bg-emerald-100 text-emerald-800 border-emerald-300",
-      hint: "Aguardando colaborador anexar a NF.",
+      hint: hintAprovado(l.id, folhasDoLanc, nfsDoLanc),
     },
     nf_anexada: {
       label: "NF Anexada",
@@ -567,26 +628,28 @@ function CardSolicitacaoAtiva({
         </div>
       </div>
 
-      {/* Bloco da NF: anexada ou pendente */}
-      {nf ? (
-        <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50/50 px-3 py-2 text-sm">
-          <FileText className="h-4 w-4 text-sky-700 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <p className="font-medium text-sky-900 truncate">
-              {nf.arquivo_nome}
-            </p>
-            <p className="text-[11px] text-sky-800/70">
-              Anexada em{" "}
-              {formatDiaBr(nf.uploaded_at)}
-            </p>
-          </div>
-        </div>
-      ) : l.status === "aprovado" ? (
-        <div className="flex items-center gap-2 rounded-lg border border-dashed border-amber-300 bg-amber-50/50 px-3 py-2 text-sm text-amber-900">
-          <Clock className="h-4 w-4 shrink-0" />
-          <span>Aguardando o colaborador anexar a NF.</span>
-        </div>
-      ) : null}
+      {/* Bloco de documentos por folha (NF do colaborador + recibo contábil do RH) */}
+      {folhasDoLanc.length > 0 && (
+        <BlocoDocumentosLancamento
+          lancamentoId={l.id}
+          statusLancamento={l.status}
+          folhas={folhasDoLanc.map((f) => ({
+            id: f.id,
+            origem: f.origem,
+            tipo_folha_ferias: f.tipo_folha_ferias,
+            status: f.status,
+            anexo_url: f.anexo_url,
+            salario_base: f.salario_base,
+            data_pagamento_prevista: f.data_pagamento_prevista,
+          }))}
+          nfsPorEscopo={nfsDoLanc.map((n) => ({
+            escopo_tipo: n.escopo_tipo,
+            arquivo_nome: nf?.arquivo_nome ?? null,
+            uploaded_at: nf?.uploaded_at ?? null,
+          }))}
+          role={role}
+        />
+      )}
 
       <TimelineAprovacoes lancamento={l} nomesAprovadores={nomesAprovadores} />
 
