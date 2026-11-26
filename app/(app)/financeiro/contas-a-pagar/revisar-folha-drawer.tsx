@@ -1,15 +1,42 @@
 "use client";
 
+/**
+ * A tela de revisão da linha da folha no financeiro (26/11/2026).
+ *
+ * Mesmo padrão da PP (`pp-tela.tsx`): a NF ou o recibo que o colaborador
+ * anexou fica à esquerda, no `PainelDocumento`, e a decisão do financeiro
+ * (valor, pagamento, alocação, aprovar/reprovar) fica à direita — assim
+ * o valor é conferido contra o documento sem trocar de tela. O desenho
+ * substitui a drawer antiga, que só mostrava o nome do arquivo e um
+ * botão "Baixar".
+ *
+ * Linhas que não exigem NF (CLT importado da contabilidade) seguem com a
+ * coluna da esquerda vazia, com o aviso correspondente — a tela continua
+ * cheia só do lado direito, sem piscar entre dois layouts.
+ */
+
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Trash2, CheckCircle2, XCircle } from "lucide-react";
+import {
+  AlertCircle,
+  CheckCircle2,
+  FileText,
+  Paperclip,
+  Trash2,
+  X,
+  XCircle,
+} from "lucide-react";
 import {
   Dialog,
-  DialogHeader,
   DialogTitle,
   DialogDescription,
-  DrawerContent,
+  FullscreenContent,
 } from "@/components/ui/dialog";
+import {
+  PainelDocumento,
+  VazioDoPainel,
+  enderecoParaVisualizar,
+} from "@/components/documentos/painel-documento";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { MoedaInput } from "@/components/ui/moeda-input";
@@ -20,6 +47,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { baixarNfColaborador } from "@/lib/nf/anexos-actions";
+import { janelaDaNf } from "@/lib/folha/janela-pagamento";
 import type { Empresa } from "@/lib/types";
 import { folhaLinhaStatusLabel, tipoContratacaoLabel } from "@/lib/types";
 import {
@@ -28,7 +57,6 @@ import {
   salvarPagamentoDaFolha,
   type PagamentoDaFolhaInput,
 } from "./actions-folhas";
-import { BlocoNfDrawer } from "./_components/bloco-nf-drawer";
 import type { FolhaLinhaFinanceiro } from "./people-list-types";
 import {
   PagamentoDaFolha,
@@ -43,11 +71,23 @@ type AlocEdit = {
   percentual: string;
 };
 
+type Expandido = "nf" | "dados" | null;
+
 function formatBRL(v: string | number): string {
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
   }).format(Number(v));
+}
+
+/** Etiqueta do painel da esquerda — recibo nas linhas CLT+Recibo, NF nas demais. */
+function tituloDoDocumento(
+  linha: FolhaLinhaFinanceiro,
+): { titulo: string; legendaPadrao: string } {
+  if (linha.colaborador.tipo_contratacao === "clt_recibo") {
+    return { titulo: "Recibo do mês", legendaPadrao: "Nenhum recibo anexado" };
+  }
+  return { titulo: "Nota fiscal do mês", legendaPadrao: "Nenhuma NF anexada" };
 }
 
 export function RevisarFolhaDrawer({
@@ -80,6 +120,10 @@ export function RevisarFolhaDrawer({
   const [errosPagamento, setErrosPagamento] = React.useState<
     Record<string, string[]>
   >({});
+  // Documento anexo: URL assinada do PDF para o painel da esquerda.
+  const [urlNf, setUrlNf] = React.useState<string | null>(null);
+  const [carregandoNf, setCarregandoNf] = React.useState(false);
+  const [expandido, setExpandido] = React.useState<Expandido>(null);
 
   // Reinicia só quando abre ou troca de linha. Depender do objeto `linha`
   // apagaria o que foi digitado a cada router.refresh() — e salvar o
@@ -101,16 +145,41 @@ export function RevisarFolhaDrawer({
     setEditandoPagamento(false);
     setPagamento(pagamentoInicial(linha.colaborador));
     setErrosPagamento({});
+    setExpandido(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, linha.id]);
 
+  // Puxa a URL assinada do anexo quando a tela abre e há NF. Depende do
+  // id do anexo (e não do objeto `linha`) pra `router.refresh()` não
+  // refazer a URL à toa.
+  const nfId = linha.nf?.id ?? null;
+  React.useEffect(() => {
+    if (!open || !nfId) {
+      setUrlNf(null);
+      return;
+    }
+    let cancelado = false;
+    setCarregandoNf(true);
+    setUrlNf(null);
+    (async () => {
+      const r = await baixarNfColaborador(nfId);
+      if (cancelado) return;
+      if (r.ok) setUrlNf(r.url);
+      else setError(r.message);
+      setCarregandoNf(false);
+    })();
+    return () => {
+      cancelado = true;
+    };
+  }, [open, nfId]);
+
   const podeAgir = linha.status === "enviada";
-  const exigeNfSemAnexo =
+  const exigeNf =
     linha.origem === "california" &&
     ["pj", "mei", "clt_recibo"].includes(
       linha.colaborador.tipo_contratacao,
-    ) &&
-    !linha.nf;
+    );
+  const exigeNfSemAnexo = exigeNf && !linha.nf;
 
   const soma = alocacoes.reduce(
     (acc, a) => acc + (Number(String(a.percentual).replace(",", ".")) || 0),
@@ -229,291 +298,407 @@ export function RevisarFolhaDrawer({
     });
   }
 
+  const { titulo: tituloDoc, legendaPadrao } = tituloDoDocumento(linha);
+  const nfEhImagem =
+    linha.nf != null && /\.(png|jpe?g|webp|gif)$/i.test(linha.nf.arquivo_nome);
+  const legendaDoc = linha.nf?.arquivo_nome ?? legendaPadrao;
+  const janelaDoDoc = linha.nf
+    ? janelaDaNf({
+        uploadedAt: linha.nf.uploaded_at,
+        competenciaAno: linha.competencia_ano,
+        competenciaMes: linha.competencia_mes,
+      })
+    : null;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DrawerContent>
-        <DialogHeader className="border-b border-border p-6">
-          <DialogTitle className="flex flex-wrap items-center gap-2">
-            {linha.colaborador.nome}
-            <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
-              {tipoContratacaoLabel(linha.colaborador.tipo_contratacao)}
+      <FullscreenContent
+        className="bg-[#181818]/[0.82] p-5"
+        aria-describedby="revisar-folha-descricao"
+      >
+        <div className="flex flex-none flex-wrap items-center gap-3 pb-3">
+          <DialogTitle asChild>
+            <span className="text-[15px] font-bold text-white">
+              {linha.colaborador.nome}
             </span>
           </DialogTitle>
-          <DialogDescription>
-            {linha.colaborador.funcao} · Status atual:{" "}
-            <span className="font-semibold text-foreground">
-              {folhaLinhaStatusLabel(linha.status)}
+          <span className="rounded-full border border-white/25 bg-white/10 px-2 py-0.5 text-[11px] font-semibold text-white">
+            {tipoContratacaoLabel(linha.colaborador.tipo_contratacao)}
+          </span>
+          <DialogDescription asChild>
+            <span id="revisar-folha-descricao" className="text-xs text-white/60">
+              {linha.colaborador.funcao} · Status atual:{" "}
+              <span className="font-semibold text-white">
+                {folhaLinhaStatusLabel(linha.status)}
+              </span>
             </span>
           </DialogDescription>
-        </DialogHeader>
+          <button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            className="ml-auto inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-white/20"
+          >
+            <X className="h-3 w-3" />
+            Fechar
+          </button>
+        </div>
 
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-6 space-y-5">
-            {!podeAgir && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                {linha.status === "pendente_correcao"
-                  ? "Aguardando o RH corrigir e reenviar. Não há ação sua neste momento."
-                  : `Linha em status ${folhaLinhaStatusLabel(linha.status)} — sem ação disponível.`}
-                {linha.status === "pendente_correcao" &&
-                  linha.motivo_pendencia && (
-                    <div className="mt-2">
-                      <strong>Motivo que você registrou:</strong>{" "}
-                      {linha.motivo_pendencia}
-                    </div>
-                  )}
-              </div>
-            )}
-
-            <BlocoNfDrawer
-              origem={linha.origem}
-              tipoContratacao={linha.colaborador.tipo_contratacao}
-              competenciaAno={linha.competencia_ano}
-              competenciaMes={linha.competencia_mes}
-              nf={linha.nf}
-            />
-
-            <div className="space-y-2">
-              <Label htmlFor="salario_base">Valor a pagar</Label>
-              <MoedaInput
-                key={linha.id + linha.salario_base}
-                id="salario_base"
-                defaultValue={linha.salario_base}
-                disabled={!podeAgir || modoReprova}
-                onCentavosChange={(centavos) => {
-                  if (!centavos) {
-                    setSalarioBase("");
-                    return;
-                  }
-                  const inteiros = centavos.slice(0, -2) || "0";
-                  const dec = centavos.slice(-2).padStart(2, "0");
-                  setSalarioBase(`${inteiros}.${dec}`);
-                }}
-              />
-              <p className="text-xs text-muted-foreground">
-                {valorMudou
-                  ? `Enviado pelo RH: ${formatBRL(linha.salario_base)}. `
-                  : ""}
-                O salário do cadastro não muda.
-              </p>
-            </div>
-
-            <PagamentoDaFolha
-              colaborador={linha.colaborador}
-              podeEditar={podeAgir && !modoReprova}
-              editando={editandoPagamento}
-              onEditandoChange={(v) => {
-                setEditandoPagamento(v);
-                if (!v) {
-                  setPagamento(pagamentoInicial(linha.colaborador));
-                  setErrosPagamento({});
-                }
-              }}
-              valores={pagamento}
-              onValoresChange={setPagamento}
-              fieldErrors={errosPagamento}
-              salvando={salvandoPagamento}
-              onSalvar={handleSalvarPagamento}
-            />
-
-            <div className="space-y-2">
-              <Label>Alocação da folha</Label>
-              <div className="space-y-2">
-                {alocacoes.map((a, i) => {
-                  const regionaisDaEmpresa = regionais
-                    .filter((r) => r.empresa_id === a.empresa_id)
-                    .sort((x, y) => x.nome.localeCompare(y.nome, "pt-BR"));
-                  return (
-                    <div
-                      key={a.key}
-                      className="grid gap-2 rounded-lg border border-border p-3 md:grid-cols-[1fr_1fr_120px_auto]"
-                    >
-                      <Select
-                        value={a.empresa_id}
-                        onValueChange={(v) =>
-                          atualizar(i, { empresa_id: v, regional_id: "" })
-                        }
-                        disabled={!podeAgir || modoReprova}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Empresa" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {empresas.map((e) => (
-                            <SelectItem key={e.id} value={e.id}>
-                              {e.nome_fantasia}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Select
-                        value={a.regional_id}
-                        onValueChange={(v) => atualizar(i, { regional_id: v })}
-                        disabled={!podeAgir || modoReprova || !a.empresa_id}
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Regional" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {regionaisDaEmpresa.map((r) => (
-                            <SelectItem key={r.id} value={r.id}>
-                              {r.nome}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <div className="relative">
-                        <Input
-                          value={a.percentual}
-                          onChange={(e) =>
-                            atualizar(i, { percentual: e.target.value })
-                          }
-                          disabled={!podeAgir || modoReprova}
-                          placeholder="0,00"
-                          className="pr-7"
-                          inputMode="decimal"
-                        />
-                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                          %
-                        </span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => remover(i)}
-                        disabled={
-                          !podeAgir || modoReprova || alocacoes.length === 1
-                        }
-                        className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-california-red transition-colors disabled:opacity-30"
-                        title="Remover"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-              {podeAgir && !modoReprova && (
-                <div className="flex items-center justify-between pt-1">
-                  <button
-                    type="button"
-                    onClick={adicionar}
-                    className="text-xs font-medium text-california-red hover:underline"
-                  >
-                    + Adicionar alocação
-                  </button>
-                  <p
-                    className={`text-xs font-medium ${
-                      somaOk ? "text-emerald-600" : "text-california-red"
-                    }`}
-                  >
-                    Soma: {soma.toFixed(2)}%
-                  </p>
-                </div>
-              )}
-              <p className="text-xs text-muted-foreground">
-                {new Set(alocacoes.map((a) => a.regional_id).filter(Boolean)).size > 1 ? (
-                  <>
-                    Ao aprovar, a linha vira um título em &ldquo;Títulos a
-                    Pagar&rdquo;, com o valor rateado entre as regionais — um
-                    pagamento só.
-                  </>
-                ) : (
-                  <>Ao aprovar, a linha vira um título em &ldquo;Títulos a Pagar&rdquo;.</>
-                )}
-              </p>
-            </div>
-
-            {modoReprova && podeAgir && (
-              <form onSubmit={handleReprovar} className="space-y-2">
-                <Label htmlFor="motivo">Motivo da pendência</Label>
-                <Input
-                  id="motivo"
-                  autoFocus
-                  required
-                  maxLength={500}
-                  value={motivoReprova}
-                  onChange={(e) => setMotivoReprova(e.target.value)}
-                  placeholder="Ex.: PIX errado, salário fora do combinado"
-                />
-                <p className="text-xs text-muted-foreground">
-                  O RH vai receber este motivo, corrigir e reenviar.
-                </p>
-              </form>
-            )}
-
-            {error && (
-              <div className="flex items-start gap-2 rounded-lg border border-california-red/20 bg-california-red/5 px-3 py-2 text-xs text-california-red">
-                <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                <span>{error}</span>
-              </div>
-            )}
-          </div>
-
-          <div className="flex items-center justify-between gap-3 border-t border-border p-4">
+        {error && (
+          <div className="mb-3 flex items-start gap-2 rounded-lg border border-california-red/50 bg-california-red/15 p-3 text-sm text-white">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+            <span className="flex-1">{error}</span>
             <button
               type="button"
-              onClick={() => onOpenChange(false)}
-              className="rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
+              onClick={() => setError(null)}
+              aria-label="Fechar aviso"
             >
-              Fechar
+              <X className="h-4 w-4" />
             </button>
+          </div>
+        )}
 
-            {podeAgir && (
-              <div className="flex items-center gap-2">
-                {modoReprova ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setModoReprova(false)}
-                      className="rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted transition-colors"
-                    >
-                      Voltar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleReprovar as any}
-                      disabled={pending || motivoReprova.trim().length < 3}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red/90 disabled:opacity-50 transition-colors"
-                    >
-                      <XCircle className="h-4 w-4" />
-                      Enviar reprovação
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setModoReprova(true)}
-                      disabled={pending}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/30 bg-white px-4 py-2 text-sm font-semibold text-california-red hover:bg-california-red/5 disabled:opacity-50 transition-colors"
-                    >
-                      <XCircle className="h-4 w-4" />
-                      Reprovar
-                    </button>
-                    <button
-                      type="button"
-                      onClick={handleAprovar}
-                      disabled={pending || salvandoPagamento || !somaOk || exigeNfSemAnexo}
-                      title={
-                        exigeNfSemAnexo
-                          ? "NF não anexada — colaborador precisa anexar em /perfil"
-                          : undefined
-                      }
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
-                    >
-                      <CheckCircle2 className="h-4 w-4" />
-                      {pending
-                        ? "Aprovando..."
-                        : salarioBase
-                          ? `Aprovar ${formatBRL(salarioBase)}`
-                          : "Aprovar"}
-                    </button>
-                  </>
-                )}
-              </div>
+        {/* Os painéis ficam SEMPRE montados: expandir esconde por CSS e
+            não desmonta o `<iframe>`. Desmontar jogaria fora página,
+            zoom e rolagem de quem só quis ampliar um instante. */}
+        <div
+          className={
+            expandido
+              ? "grid min-h-0 flex-1 gap-3 grid-cols-1"
+              : "grid min-h-0 flex-1 gap-3 grid-cols-1 lg:grid-cols-[1fr_520px]"
+          }
+        >
+          <PainelDocumento
+            icone={<Paperclip className="h-4 w-4 text-violet-700" />}
+            titulo={tituloDoc}
+            legenda={legendaDoc}
+            oculto={expandido === "dados"}
+            url={urlNf}
+            nomeArquivo={linha.nf?.arquivo_nome ?? ""}
+            expandido={expandido === "nf"}
+            onExpandir={() =>
+              setExpandido((a) => (a === "nf" ? null : "nf"))
+            }
+            onErro={setError}
+            extra={
+              janelaDoDoc ? (
+                <span className="rounded-md bg-emerald-100 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                  {janelaDoDoc.janela === "salarios"
+                    ? `Janela de salários (${janelaDoDoc.data_prevista})`
+                    : `Janela de fornecedores (${janelaDoDoc.data_prevista})`}
+                </span>
+              ) : null
+            }
+          >
+            {!linha.nf ? (
+              <VazioDoPainel
+                texto={
+                  exigeNf
+                    ? "NF não anexada. O colaborador anexa em /perfil ou o RH em /rh/colaboradores. A aprovação fica bloqueada até isso ser feito."
+                    : "Esta linha não exige NF nem recibo (CLT importada da contabilidade)."
+                }
+              />
+            ) : urlNf ? (
+              nfEhImagem ? (
+                <div className="flex h-full w-full items-center justify-center overflow-auto bg-muted/40 p-3">
+                  {/* URL assinada: `next/image` exigiria domínio configurado
+                      e não agregaria nada. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={urlNf}
+                    alt={linha.nf.arquivo_nome}
+                    className="max-h-full max-w-full object-contain"
+                  />
+                </div>
+              ) : (
+                <iframe
+                  key={linha.nf.id}
+                  src={enderecoParaVisualizar(urlNf)}
+                  title={linha.nf.arquivo_nome}
+                  className="h-full w-full border-0"
+                />
+              )
+            ) : (
+              <VazioDoPainel
+                texto={carregandoNf ? "Carregando o anexo..." : "Anexo indisponível."}
+              />
             )}
+          </PainelDocumento>
+
+          {/* Coluna da direita: o cartão branco com os dados e as ações. */}
+          <div
+            className={
+              expandido === "nf"
+                ? "hidden"
+                : "flex min-h-0 flex-col overflow-hidden rounded-2xl bg-white"
+            }
+          >
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              {!podeAgir && (
+                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                  {linha.status === "pendente_correcao"
+                    ? "Aguardando o RH corrigir e reenviar. Não há ação sua neste momento."
+                    : `Linha em status ${folhaLinhaStatusLabel(linha.status)} — sem ação disponível.`}
+                  {linha.status === "pendente_correcao" &&
+                    linha.motivo_pendencia && (
+                      <div className="mt-2">
+                        <strong>Motivo que você registrou:</strong>{" "}
+                        {linha.motivo_pendencia}
+                      </div>
+                    )}
+                </div>
+              )}
+
+              {exigeNfSemAnexo && (
+                <div className="flex items-start gap-2 rounded-lg border border-california-red/20 bg-california-red/5 px-3 py-2 text-xs text-california-red">
+                  <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+                  <div>
+                    <p className="font-medium">
+                      NF não anexada — aprovação bloqueada
+                    </p>
+                    <p className="opacity-80">
+                      Peça pro colaborador anexar em /perfil, ou use o cadastro em
+                      /rh/colaboradores.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="salario_base">Valor a pagar</Label>
+                <MoedaInput
+                  key={linha.id + linha.salario_base}
+                  id="salario_base"
+                  defaultValue={linha.salario_base}
+                  disabled={!podeAgir || modoReprova}
+                  onCentavosChange={(centavos) => {
+                    if (!centavos) {
+                      setSalarioBase("");
+                      return;
+                    }
+                    const inteiros = centavos.slice(0, -2) || "0";
+                    const dec = centavos.slice(-2).padStart(2, "0");
+                    setSalarioBase(`${inteiros}.${dec}`);
+                  }}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {valorMudou
+                    ? `Enviado pelo RH: ${formatBRL(linha.salario_base)}. `
+                    : ""}
+                  O salário do cadastro não muda.
+                </p>
+              </div>
+
+              <PagamentoDaFolha
+                colaborador={linha.colaborador}
+                podeEditar={podeAgir && !modoReprova}
+                editando={editandoPagamento}
+                onEditandoChange={(v) => {
+                  setEditandoPagamento(v);
+                  if (!v) {
+                    setPagamento(pagamentoInicial(linha.colaborador));
+                    setErrosPagamento({});
+                  }
+                }}
+                valores={pagamento}
+                onValoresChange={setPagamento}
+                fieldErrors={errosPagamento}
+                salvando={salvandoPagamento}
+                onSalvar={handleSalvarPagamento}
+              />
+
+              <div className="space-y-2">
+                <Label>Alocação da folha</Label>
+                <div className="space-y-2">
+                  {alocacoes.map((a, i) => {
+                    const regionaisDaEmpresa = regionais
+                      .filter((r) => r.empresa_id === a.empresa_id)
+                      .sort((x, y) => x.nome.localeCompare(y.nome, "pt-BR"));
+                    return (
+                      <div
+                        key={a.key}
+                        className="grid gap-2 rounded-lg border border-border p-3 md:grid-cols-[1fr_1fr_120px_auto]"
+                      >
+                        <Select
+                          value={a.empresa_id}
+                          onValueChange={(v) =>
+                            atualizar(i, { empresa_id: v, regional_id: "" })
+                          }
+                          disabled={!podeAgir || modoReprova}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Empresa" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {empresas.map((e) => (
+                              <SelectItem key={e.id} value={e.id}>
+                                {e.nome_fantasia}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Select
+                          value={a.regional_id}
+                          onValueChange={(v) => atualizar(i, { regional_id: v })}
+                          disabled={!podeAgir || modoReprova || !a.empresa_id}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Regional" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {regionaisDaEmpresa.map((r) => (
+                              <SelectItem key={r.id} value={r.id}>
+                                {r.nome}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <div className="relative">
+                          <Input
+                            value={a.percentual}
+                            onChange={(e) =>
+                              atualizar(i, { percentual: e.target.value })
+                            }
+                            disabled={!podeAgir || modoReprova}
+                            placeholder="0,00"
+                            className="pr-7"
+                            inputMode="decimal"
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+                            %
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => remover(i)}
+                          disabled={
+                            !podeAgir || modoReprova || alocacoes.length === 1
+                          }
+                          className="rounded-md p-2 text-muted-foreground hover:bg-muted hover:text-california-red transition-colors disabled:opacity-30"
+                          title="Remover"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+                {podeAgir && !modoReprova && (
+                  <div className="flex items-center justify-between pt-1">
+                    <button
+                      type="button"
+                      onClick={adicionar}
+                      className="text-xs font-medium text-california-red hover:underline"
+                    >
+                      + Adicionar alocação
+                    </button>
+                    <p
+                      className={`text-xs font-medium ${
+                        somaOk ? "text-emerald-600" : "text-california-red"
+                      }`}
+                    >
+                      Soma: {soma.toFixed(2)}%
+                    </p>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  {new Set(alocacoes.map((a) => a.regional_id).filter(Boolean)).size > 1 ? (
+                    <>
+                      Ao aprovar, a linha vira um título em &ldquo;Títulos a
+                      Pagar&rdquo;, com o valor rateado entre as regionais — um
+                      pagamento só.
+                    </>
+                  ) : (
+                    <>Ao aprovar, a linha vira um título em &ldquo;Títulos a Pagar&rdquo;.</>
+                  )}
+                </p>
+              </div>
+
+              {modoReprova && podeAgir && (
+                <form onSubmit={handleReprovar} className="space-y-2">
+                  <Label htmlFor="motivo">Motivo da pendência</Label>
+                  <Input
+                    id="motivo"
+                    autoFocus
+                    required
+                    maxLength={500}
+                    value={motivoReprova}
+                    onChange={(e) => setMotivoReprova(e.target.value)}
+                    placeholder="Ex.: PIX errado, salário fora do combinado"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    O RH vai receber este motivo, corrigir e reenviar.
+                  </p>
+                </form>
+              )}
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-border p-4">
+              <button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
+              >
+                Fechar
+              </button>
+
+              {podeAgir && (
+                <div className="flex items-center gap-2">
+                  {modoReprova ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setModoReprova(false)}
+                        className="rounded-lg px-3 py-2 text-sm text-muted-foreground hover:bg-muted transition-colors"
+                      >
+                        Voltar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleReprovar as unknown as React.MouseEventHandler<HTMLButtonElement>}
+                        disabled={pending || motivoReprova.trim().length < 3}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white hover:bg-california-red/90 disabled:opacity-50 transition-colors"
+                      >
+                        <XCircle className="h-4 w-4" />
+                        Enviar reprovação
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setModoReprova(true)}
+                        disabled={pending}
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-california-red/30 bg-white px-4 py-2 text-sm font-semibold text-california-red hover:bg-california-red/5 disabled:opacity-50 transition-colors"
+                      >
+                        <XCircle className="h-4 w-4" />
+                        Reprovar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleAprovar}
+                        disabled={pending || salvandoPagamento || !somaOk || exigeNfSemAnexo}
+                        title={
+                          exigeNfSemAnexo
+                            ? "NF não anexada — colaborador precisa anexar em /perfil"
+                            : undefined
+                        }
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
+                      >
+                        <CheckCircle2 className="h-4 w-4" />
+                        {pending
+                          ? "Aprovando..."
+                          : salarioBase
+                            ? `Aprovar ${formatBRL(salarioBase)}`
+                            : "Aprovar"}
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-      </DrawerContent>
+      </FullscreenContent>
     </Dialog>
   );
 }
