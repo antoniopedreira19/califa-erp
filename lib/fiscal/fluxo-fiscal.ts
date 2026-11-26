@@ -321,3 +321,94 @@ export function ppsComIssNaGuia(
 
 /** O valor da parcela de PP em aberto sem o ISS retido (o protótipo: `t.valor − t.valor × ISS%`). */
 export const parcelaSemIssRetido = (valor: number, aliquotaIss: number) => r2(valor - r2((valor * aliquotaIss) / 100));
+
+// ---------------------------------------------------------------------------
+// Decisão 277 §8: cada imposto uma vez só no fluxo — planilha ou Fiscal
+// ---------------------------------------------------------------------------
+
+/**
+ * O fluxo somava a previsão de imposto da planilha e o que o Fiscal projeta.
+ * A regra (Tiago, 23/11 e 26/11):
+ *  - ISS, PIS e COFINS, de novembro/2026 em diante: o Fiscal é a fonte. A
+ *    previsão da planilha sai quando o Fiscal tem, no fluxo, a guia daquele
+ *    CNPJ (o da conta que paga), imposto e mês — a estimativa da Apuração ou
+ *    o título a pagar. Sem guia do Fiscal, a planilha fica;
+ *  - IRPJ e CSLL: a planilha fica até a guia ser aprovada; antes disso, a
+ *    estimativa do sistema não entra (o lucro real estimado pelo lucro bruto
+ *    sai alto demais). Aprovada, o título substitui a previsão da planilha
+ *    daquele CNPJ e trimestre.
+ * O que já foi pago (linha com extrato, ou guia paga no histórico, que não
+ * entra no fluxo pelo Fiscal) não muda.
+ */
+export const INICIO_DA_REGRA_DO_FLUXO = "2026-11-01";
+export const TRIBUTOS_DA_APURACAO_NO_FLUXO: ReadonlySet<string> = new Set(["ISS", "PIS", "COFINS"]);
+export const TRIBUTOS_SO_APROVADOS_NO_FLUXO: ReadonlySet<string> = new Set(["IRPJ", "CSLL"]);
+
+export type TributoDaPlanilha = "ISS" | "PIS" | "COFINS" | "IRPJ" | "CSLL";
+
+/** Uma previsão de imposto da planilha que ainda não saiu do banco (sem extrato). */
+export interface PrevisaoDeImpostoDaPlanilha {
+  id: string;
+  /** O CNPJ que paga: a empresa contábil da conta da linha. */
+  pj: string | null;
+  tributo: TributoDaPlanilha;
+  /** A data da linha na planilha (sem rolar para hoje). */
+  data: string;
+}
+
+/**
+ * O imposto de uma linha da planilha, pelo centro tributário (03 ou 15) e
+ * pela descrição. A "COFINS crédito" é da COFINS. Ficam de fora a retenção
+ * sofrida no recebimento ("Imposto retido na Fonte ...") e a restituição ou
+ * devolução: não são guia.
+ */
+export function tributoDaLinhaDaPlanilha(l: { descricao: string | null; plano_codigo: string | null }): TributoDaPlanilha | null {
+  const plano = l.plano_codigo ?? "";
+  if (!(plano.startsWith("03.") || plano.startsWith("15."))) return null;
+  const d = l.descricao ?? "";
+  if (/(retido na fonte|restitu|devolu)/i.test(d)) return null;
+  const m = d.toUpperCase().match(/\b(ISS|PIS|COFINS|IRPJ|CSLL)\b/);
+  return m ? (m[1] as TributoDaPlanilha) : null;
+}
+
+/** O trimestre da guia de IRPJ/CSLL paga no mês da linha: o trimestre anterior ("2027-02" → "2026-T4"). */
+export function trimestreDaCota(data: string): string {
+  const [y, m] = data.split("-").map(Number);
+  const q = Math.ceil(m / 3);
+  return q === 1 ? `${y - 1}-T4` : `${y}-T${q - 1}`;
+}
+
+/** O imposto da guia, com o cumulativo junto do não cumulativo (a planilha não separa). */
+const tributoBase = (t: string) => (t === "ISS_RET" ? null : t);
+
+/** O que o Fiscal põe no fluxo, para a planilha sair: as chaves "pj|imposto|mês" e "pj|imposto|trimestre". */
+export function chavesDoFiscalNoFluxo(
+  guias: Array<Pick<GuiaComEstado, "empresa_contabil_id" | "tributo" | "estado" | "vencimento">>,
+  titulos: Array<{ empresa_contabil_id: string; tributo: string; vencimento: string; competencia: string }>,
+): Set<string> {
+  const chaves = new Set<string>();
+  for (const g of guias) {
+    const t = tributoBase(g.tributo);
+    if (g.estado === "aprovada" || !t || !TRIBUTOS_DA_APURACAO_NO_FLUXO.has(t)) continue;
+    chaves.add(`${g.empresa_contabil_id}|${t}|${g.vencimento.slice(0, 7)}`);
+  }
+  for (const i of titulos) {
+    const t = tributoBase(i.tributo);
+    if (!t) continue;
+    if (TRIBUTOS_DA_APURACAO_NO_FLUXO.has(t)) chaves.add(`${i.empresa_contabil_id}|${t}|${i.vencimento.slice(0, 7)}`);
+    else if (TRIBUTOS_SO_APROVADOS_NO_FLUXO.has(t) && /-T\d$/.test(i.competencia)) chaves.add(`${i.empresa_contabil_id}|${t}|${i.competencia}`);
+  }
+  return chaves;
+}
+
+/** As previsões da planilha que saem do fluxo porque o Fiscal já tem aquele imposto (os ids das linhas). */
+export function previsoesDaPlanilhaQueSaem(previsoes: PrevisaoDeImpostoDaPlanilha[], chaves: ReadonlySet<string>): Set<string> {
+  const saem = new Set<string>();
+  for (const p of previsoes) {
+    if (!p.pj) continue;
+    if (TRIBUTOS_DA_APURACAO_NO_FLUXO.has(p.tributo)) {
+      if (p.data >= INICIO_DA_REGRA_DO_FLUXO && chaves.has(`${p.pj}|${p.tributo}|${p.data.slice(0, 7)}`)) saem.add(p.id);
+    } else if (chaves.has(`${p.pj}|${p.tributo}|${trimestreDaCota(p.data)}`)) saem.add(p.id);
+  }
+  return saem;
+}

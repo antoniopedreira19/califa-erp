@@ -6,14 +6,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Guia, ItemMemoria } from "./apuracao";
 import {
+  chavesDoFiscalNoFluxo,
   cronogramaQueSobra,
   descricaoDoImposto,
   parcelaSemIssRetido,
   ppsComIssNaGuia,
+  previsoesDaPlanilhaQueSaem,
   rolar,
   saidasDaApuracao,
   saidasDoCronogramaDeImpostos,
   saidasDosImpostosAPagar,
+  tributoDaLinhaDaPlanilha,
+  trimestreDaCota,
   type GuiaComEstado,
 } from "./fluxo-fiscal";
 
@@ -193,4 +197,44 @@ test("ISS retido: só a PP que está numa guia de ISS retido sai do título sem 
   assert.deepEqual([...pps.entries()], [["pp-110", 5]]);
   assert.equal(parcelaSemIssRetido(8000, 5), 7600);
   assert.equal(parcelaSemIssRetido(333.33, 2), 326.66);
+});
+
+test("decisão 277 §8: o imposto da linha da planilha — centro tributário, sem retenção sofrida nem restituição", () => {
+  assert.equal(tributoDaLinhaDaPlanilha({ descricao: "COFINS crédito", plano_codigo: "03.999" }), "COFINS");
+  assert.equal(tributoDaLinhaDaPlanilha({ descricao: "ISS a faturar", plano_codigo: "03.999" }), "ISS");
+  assert.equal(tributoDaLinhaDaPlanilha({ descricao: "Imposto IRPJ", plano_codigo: "15.999" }), "IRPJ");
+  assert.equal(tributoDaLinhaDaPlanilha({ descricao: "Imposto retido na Fonte PIS", plano_codigo: "03.999" }), null);
+  assert.equal(tributoDaLinhaDaPlanilha({ descricao: "Restituição ISS", plano_codigo: "03.999" }), null);
+  assert.equal(tributoDaLinhaDaPlanilha({ descricao: "PP-00227 seguranças ISS RETIDO", plano_codigo: "02.999" }), null);
+  assert.equal(trimestreDaCota("2027-02-26"), "2026-T4");
+  assert.equal(trimestreDaCota("2026-11-30"), "2026-T3");
+});
+
+test("decisão 277 §8: ISS/PIS/COFINS do Fiscal tiram a planilha do mesmo CNPJ, imposto e mês; IRPJ/CSLL só pelo título", () => {
+  const chaves = chavesDoFiscalNoFluxo(
+    [
+      { empresa_contabil_id: "cal", tributo: "PIS", estado: "em_curso", vencimento: "2026-12-24" },
+      { empresa_contabil_id: "cal", tributo: "ISS", estado: "a_aprovar", vencimento: "2026-12-05" },
+      // Aprovada: o título é quem entra (abaixo); a guia não conta.
+      { empresa_contabil_id: "go", tributo: "COFINS", estado: "aprovada", vencimento: "2026-12-24" },
+    ],
+    [
+      { empresa_contabil_id: "go", tributo: "COFINS", vencimento: "2026-12-24", competencia: "2026-11" },
+      { empresa_contabil_id: "cal", tributo: "IRPJ", vencimento: "2027-01-29", competencia: "2026-T4" },
+    ],
+  );
+  const saem = previsoesDaPlanilhaQueSaem(
+    [
+      { id: "pis-cal-dez", pj: "cal", tributo: "PIS", data: "2026-12-23" },
+      { id: "cofins-cal-dez", pj: "cal", tributo: "COFINS", data: "2026-12-23" }, // o Fiscal não tem: fica
+      { id: "iss-cal-dez", pj: "cal", tributo: "ISS", data: "2026-12-04" },
+      { id: "cofins-go-dez", pj: "go", tributo: "COFINS", data: "2026-12-22" },
+      { id: "pis-cal-out", pj: "cal", tributo: "PIS", data: "2026-10-24" }, // antes de novembro: fica
+      { id: "irpj-cal-4t", pj: "cal", tributo: "IRPJ", data: "2027-02-26" },
+      { id: "csll-cal-4t", pj: "cal", tributo: "CSLL", data: "2027-02-26" }, // sem título de CSLL: fica
+      { id: "sem-cnpj", pj: null, tributo: "PIS", data: "2026-12-23" },
+    ],
+    chaves,
+  );
+  assert.deepEqual([...saem].sort(), ["cofins-go-dez", "irpj-cal-4t", "iss-cal-dez", "pis-cal-dez"]);
 });
