@@ -85,7 +85,7 @@ export function CardFolhaCLT(props: CardFolhaCLTProps): JSX.Element {
   const cabecalho = (
     <div>
       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        Folha CLT · {mes.toString().padStart(2, "0")}/{ano}
+        Folha CLT · {competenciaLabel}
       </p>
       <h3 className="mt-0.5 text-lg font-semibold">Folha CLT</h3>
       <p className="text-sm text-muted-foreground">
@@ -103,7 +103,8 @@ export function CardFolhaCLT(props: CardFolhaCLTProps): JSX.Element {
     <div className="mt-3 flex flex-wrap gap-1.5">
       {clt.linhasRascunho > 0 && (
         <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
-          {clt.linhasRascunho} rascunho
+          {clt.linhasRascunho}{" "}
+          {clt.linhasRascunho === 1 ? "rascunho" : "rascunhos"}
         </span>
       )}
       {clt.linhasPendenteCorrecao > 0 && (
