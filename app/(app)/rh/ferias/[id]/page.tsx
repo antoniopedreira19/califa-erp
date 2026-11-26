@@ -164,6 +164,7 @@ export default async function ColaboradorFeriasPage({
   // tem 2 NFs (usufruto + abono) com mesmo escopo_id. Guardar só por escopo_id
   // sobrescreve uma pela outra.
   type NfComMeta = {
+    id: string;
     escopo_tipo: "ferias_usufruto" | "ferias_abono";
     arquivo_nome: string | null;
     uploaded_at: string | null;
@@ -179,6 +180,7 @@ export default async function ColaboradorFeriasPage({
     if (!n.escopo_id) continue;
     const atual = nfsPorLancPorEscopo.get(n.escopo_id) ?? [];
     atual.push({
+      id: n.id,
       escopo_tipo: n.escopo_tipo,
       arquivo_nome: n.arquivo_nome,
       uploaded_at: n.uploaded_at,
@@ -508,6 +510,7 @@ function CardSolicitacaoAtiva({
     }
   >;
   nfsDoLanc: Array<{
+    id: string;
     escopo_tipo: "ferias_usufruto" | "ferias_abono";
     arquivo_nome: string | null;
     uploaded_at: string | null;

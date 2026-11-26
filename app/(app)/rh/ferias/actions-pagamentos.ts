@@ -365,3 +365,131 @@ export async function gerarUrlUploadReciboContabil(input: {
 
   return { ok: true, signed_url: data.signedUrl, path };
 }
+
+// ---------- Baixar recibo da contabilidade (CLT) ----------
+
+/**
+ * Signed URL temporária (10 min) pra baixar o PDF do recibo contábil
+ * anexado em `folhas_pagamento.anexo_url`. RH/admin podem baixar a
+ * qualquer momento; o próprio colaborador vê pelo /perfil (outro fluxo).
+ */
+export async function baixarReciboContabilFolhaFerias(
+  folhaId: string,
+): Promise<{ ok: true; url: string } | { ok: false; message: string }> {
+  const session = await requireSession();
+  const bloqueio = assertRh(session.activeRole);
+  if (bloqueio) return bloqueio as { ok: false; message: string };
+
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const { data: folha } = await supabase
+    .from("folhas_pagamento")
+    .select("id, anexo_url, origem")
+    .eq("id", folhaId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+
+  if (!folha) return { ok: false, message: "Folha não encontrada." };
+  if (folha.origem !== "contabilidade") {
+    return {
+      ok: false,
+      message: "Essa folha não é CLT contabilidade.",
+    };
+  }
+  if (!folha.anexo_url) {
+    return { ok: false, message: "Nenhum recibo anexado." };
+  }
+
+  const { data, error } = await supabase.storage
+    .from("recibos-ferias")
+    .createSignedUrl(folha.anexo_url, 600);
+
+  if (error || !data?.signedUrl) {
+    console.error(
+      "[rh.ferias.pagamentos.baixar]",
+      error?.message ?? "sem url",
+    );
+    return { ok: false, message: "Falha ao gerar URL de download." };
+  }
+  return { ok: true, url: data.signedUrl };
+}
+
+// ---------- Remover recibo da contabilidade (CLT) ----------
+
+/**
+ * Remove o PDF do bucket e limpa `anexo_url` da folha. Só vale enquanto
+ * a folha está `rascunho` (uma vez enviada, o anexo é documento
+ * financeiro e sai por fluxo próprio). Substituir = remover + anexar de
+ * novo, OU simplesmente re-abrir o dialog de anexar (o UPDATE
+ * sobrescreve o `anexo_url`).
+ */
+export async function removerReciboContabilFolhaFerias(
+  folhaId: string,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const bloqueio = assertRh(session.activeRole);
+  if (bloqueio) return bloqueio;
+
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const { data: folha, error: selErr } = await supabase
+    .from("folhas_pagamento")
+    .select("id, status, origem, tipo, anexo_url, colaborador_id, lancamento_ferias_id")
+    .eq("id", folhaId)
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
+
+  if (selErr || !folha) {
+    return { ok: false, message: "Folha não encontrada." };
+  }
+  if (folha.tipo !== "ferias" || folha.origem !== "contabilidade") {
+    return {
+      ok: false,
+      message: "Essa folha não é recibo contábil de férias.",
+    };
+  }
+  if (folha.status !== "rascunho") {
+    return {
+      ok: false,
+      message:
+        "Folha já enviada ao financeiro — remova o anexo pelo fluxo financeiro.",
+    };
+  }
+  if (!folha.anexo_url) {
+    return { ok: false, message: "Nenhum recibo pra remover." };
+  }
+
+  // Remove do bucket primeiro; falha aqui não bloqueia a limpeza do DB
+  // (arquivo órfão é melhor do que referência quebrada).
+  const path = folha.anexo_url as string;
+  await supabase.storage.from("recibos-ferias").remove([path]);
+
+  const { error: updErr } = await supabase
+    .from("folhas_pagamento")
+    .update({ anexo_url: null })
+    .eq("id", folha.id);
+
+  if (updErr) {
+    console.error("[rh.ferias.pagamentos.remover]", updErr.message);
+    return { ok: false, message: "Falha ao limpar anexo: " + updErr.message };
+  }
+
+  await logAuditEvent({
+    acao: "folha.linha.editada_rh",
+    tenantId,
+    entidadeTipo: "folha_pagamento",
+    entidadeId: folha.id as string,
+    metadata: {
+      tipo: "ferias",
+      origem: "contabilidade",
+      acao: "anexo_removido",
+      colaborador_id: folha.colaborador_id,
+      lancamento_ferias_id: folha.lancamento_ferias_id,
+    },
+  });
+
+  revalidatePath("/rh/ferias");
+  return { ok: true };
+}

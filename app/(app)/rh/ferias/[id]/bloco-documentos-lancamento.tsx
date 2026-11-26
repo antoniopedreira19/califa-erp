@@ -1,7 +1,16 @@
 "use client";
 
 import * as React from "react";
-import { FileText, Clock, CheckCircle2, Paperclip } from "lucide-react";
+import { useRouter } from "next/navigation";
+import {
+  FileText,
+  Clock,
+  CheckCircle2,
+  Paperclip,
+  Download,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import { formatDiaBr } from "@/lib/formatar-data-hora";
 import {
   lancamentoEnviavel,
@@ -10,6 +19,15 @@ import {
 } from "@/lib/ferias/lancamento-enviavel";
 import { DialogAnexarReciboContabil } from "./dialog-anexar-recibo-contabil";
 import { DialogConfirmarEnvioFinanceiro } from "./dialog-confirmar-envio-financeiro";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import {
+  baixarReciboContabilFolhaFerias,
+  removerReciboContabilFolhaFerias,
+} from "../actions-pagamentos";
+import {
+  baixarNfColaborador,
+  removerNfColaborador,
+} from "@/lib/nf/anexos-actions";
 
 type FolhaComValor = FolhaMin & {
   salario_base: string | number | null;
@@ -17,6 +35,7 @@ type FolhaComValor = FolhaMin & {
 };
 
 type NfComMeta = {
+  id: string;
   escopo_tipo: "ferias_usufruto" | "ferias_abono";
   arquivo_nome: string | null;
   uploaded_at: string | null;
@@ -71,13 +90,71 @@ export function BlocoDocumentosLancamento({
   nfsPorEscopo: NfComMeta[];
   role: string;
 }) {
+  const router = useRouter();
   const [folhaAnexando, setFolhaAnexando] = React.useState<FolhaComValor | null>(
     null,
   );
   const [confirmandoEnvio, setConfirmandoEnvio] = React.useState(false);
+  const [pendingAcao, setPendingAcao] = React.useState<string | null>(null);
+  const [confirmarRemover, setConfirmarRemover] = React.useState<
+    | { tipo: "contabil"; folhaId: string; rotulo: string }
+    | { tipo: "nf"; anexoId: string; rotulo: string }
+    | null
+  >(null);
+  const [erroAcao, setErroAcao] = React.useState<string | null>(null);
 
   const ehRh = role === "rh" || role === "administrador";
   const fechado = STATUSES_FECHADOS.includes(statusLancamento);
+
+  async function handleBaixarContabil(folhaId: string) {
+    setErroAcao(null);
+    setPendingAcao("baixar:" + folhaId);
+    try {
+      const res = await baixarReciboContabilFolhaFerias(folhaId);
+      if (!res.ok) {
+        setErroAcao(res.message);
+        return;
+      }
+      window.open(res.url, "_blank", "noopener,noreferrer");
+    } finally {
+      setPendingAcao(null);
+    }
+  }
+
+  async function handleBaixarNf(anexoId: string) {
+    setErroAcao(null);
+    setPendingAcao("baixar:" + anexoId);
+    try {
+      const res = await baixarNfColaborador(anexoId);
+      if (!res.ok) {
+        setErroAcao(res.message);
+        return;
+      }
+      window.open(res.url, "_blank", "noopener,noreferrer");
+    } finally {
+      setPendingAcao(null);
+    }
+  }
+
+  async function handleRemoverConfirmado() {
+    if (!confirmarRemover) return;
+    setErroAcao(null);
+    setPendingAcao("remover");
+    try {
+      const res =
+        confirmarRemover.tipo === "contabil"
+          ? await removerReciboContabilFolhaFerias(confirmarRemover.folhaId)
+          : await removerNfColaborador(confirmarRemover.anexoId);
+      if (!res.ok) {
+        setErroAcao(res.message);
+        return;
+      }
+      setConfirmarRemover(null);
+      router.refresh();
+    } finally {
+      setPendingAcao(null);
+    }
+  }
 
   const nfsMin: NfMin[] = nfsPorEscopo.map((n) => ({
     escopo_tipo: n.escopo_tipo,
@@ -188,6 +265,74 @@ export function BlocoDocumentosLancamento({
                   Anexar
                 </button>
               )}
+              {anexado && ehRh && f.origem === "contabilidade" && (
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    title="Baixar PDF"
+                    onClick={() => handleBaixarContabil(f.id)}
+                    disabled={pendingAcao === "baixar:" + f.id}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sky-900/70 hover:text-sky-900 hover:bg-sky-100 transition-colors disabled:opacity-50"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                  </button>
+                  {!fechado && (
+                    <>
+                      <button
+                        type="button"
+                        title="Substituir por outro PDF"
+                        onClick={() => setFolhaAnexando(f)}
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sky-900/70 hover:text-sky-900 hover:bg-sky-100 transition-colors"
+                      >
+                        <RefreshCw className="h-3.5 w-3.5" />
+                      </button>
+                      <button
+                        type="button"
+                        title="Remover anexo"
+                        onClick={() =>
+                          setConfirmarRemover({
+                            tipo: "contabil",
+                            folhaId: f.id,
+                            rotulo: label,
+                          })
+                        }
+                        className="inline-flex h-7 w-7 items-center justify-center rounded-md text-california-red/70 hover:text-california-red hover:bg-california-red/10 transition-colors"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+              {anexado && ehRh && f.origem === "california" && nfAnexada && (
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    title="Baixar NF"
+                    onClick={() => handleBaixarNf(nfAnexada.id)}
+                    disabled={pendingAcao === "baixar:" + nfAnexada.id}
+                    className="inline-flex h-7 w-7 items-center justify-center rounded-md text-sky-900/70 hover:text-sky-900 hover:bg-sky-100 transition-colors disabled:opacity-50"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                  </button>
+                  {!fechado && (
+                    <button
+                      type="button"
+                      title="Remover NF (o colaborador anexa de novo pelo perfil)"
+                      onClick={() =>
+                        setConfirmarRemover({
+                          tipo: "nf",
+                          anexoId: nfAnexada.id,
+                          rotulo: label,
+                        })
+                      }
+                      className="inline-flex h-7 w-7 items-center justify-center rounded-md text-california-red/70 hover:text-california-red hover:bg-california-red/10 transition-colors"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              )}
             </li>
           );
         })}
@@ -233,6 +378,34 @@ export function BlocoDocumentosLancamento({
           dataPagamentoDefault={dataPagamentoDefault}
           onFechar={() => setConfirmandoEnvio(false)}
         />
+      )}
+
+      <ConfirmDialog
+        open={!!confirmarRemover}
+        onOpenChange={(o) => {
+          if (!o) {
+            setConfirmarRemover(null);
+            setErroAcao(null);
+          }
+        }}
+        title="Remover anexo?"
+        description={
+          confirmarRemover
+            ? confirmarRemover.tipo === "contabil"
+              ? `O PDF do ${confirmarRemover.rotulo} sai do bucket e a folha volta a ficar sem anexo. Você vai precisar anexar de novo pra enviar ao financeiro.`
+              : `A NF de ${confirmarRemover.rotulo} sai do sistema. O colaborador vai precisar reenviar pelo perfil.`
+            : undefined
+        }
+        variant="destructive"
+        confirmLabel="Remover"
+        pending={pendingAcao === "remover"}
+        onConfirm={handleRemoverConfirmado}
+      />
+
+      {erroAcao && !confirmarRemover && (
+        <p className="text-[11px] text-red-700 bg-red-50 border border-red-200 rounded px-2 py-1 mt-1">
+          {erroAcao}
+        </p>
       )}
     </div>
   );
