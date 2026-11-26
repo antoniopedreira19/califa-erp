@@ -34,7 +34,7 @@ export default async function AdiantamentosPage({ params }: Props) {
     supabase
       .from("decimo_terceiro_adiantamentos")
       .select(
-        `id, ano, colaborador_id, data, valor, obs, integral, folha_pagamento_id,
+        `id, ano, colaborador_id, data, valor, obs, integral, destino, folha_pagamento_id,
          colaborador:colaboradores!decimo_terceiro_adiantamentos_colaborador_id_fkey(nome, funcao, tipo_contratacao)`,
       )
       .eq("tenant_id", session.activeTenant.id)
@@ -141,6 +141,7 @@ export default async function AdiantamentosPage({ params }: Props) {
     valor: string;
     obs: string | null;
     integral: boolean;
+    destino: "ambos" | "clt" | "pj" | null;
     folha_pagamento_id: string | null;
     colaborador: ColabEmbed;
   }
@@ -194,11 +195,20 @@ export default async function AdiantamentosPage({ params }: Props) {
     ) {
       const sal = salarioPorHibrido.get(a.colaborador_id);
       if (sal && sal.salario > 0 && sal.valor_recibo > 0 && sal.valor_recibo <= sal.salario) {
-        const parteClt = Math.round((valorNum * (sal.salario - sal.valor_recibo)) / sal.salario * 100) / 100;
-        const partePj = Math.round((valorNum - parteClt) * 100) / 100;
         const calculadas: typeof partes = [];
-        if (partePj > 0) calculadas.push({ origem: "california", salario_base: partePj, status: null, tem_nf: false });
-        if (parteClt > 0) calculadas.push({ origem: "contabilidade", salario_base: parteClt, status: null, tem_nf: false });
+        // destino controla o split: 'pj' ou 'clt' vai inteiro pra uma parte só
+        // (ignora rateio proporcional); 'ambos' (ou null, legado anterior ao
+        // campo) continua com split proporcional pelo salário.
+        if (a.destino === "pj") {
+          calculadas.push({ origem: "california", salario_base: valorNum, status: null, tem_nf: false });
+        } else if (a.destino === "clt") {
+          calculadas.push({ origem: "contabilidade", salario_base: valorNum, status: null, tem_nf: false });
+        } else {
+          const parteClt = Math.round((valorNum * (sal.salario - sal.valor_recibo)) / sal.salario * 100) / 100;
+          const partePj = Math.round((valorNum - parteClt) * 100) / 100;
+          if (partePj > 0) calculadas.push({ origem: "california", salario_base: partePj, status: null, tem_nf: false });
+          if (parteClt > 0) calculadas.push({ origem: "contabilidade", salario_base: parteClt, status: null, tem_nf: false });
+        }
         partes = calculadas.sort((x, y) => x.origem.localeCompare(y.origem));
       }
     }

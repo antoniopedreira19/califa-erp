@@ -349,8 +349,11 @@ export function ListaAdiantamentos({
                   : bloqueadoNf
                     ? "Colaborador já anexou NF — remova a NF antes de excluir."
                     : null;
+                // Híbrido pode expandir pra mostrar o detalhamento das partes.
+                // Com destino='pj' ou 'clt', o adiantamento tem só 1 parte;
+                // com destino='ambos', tem 2. Em ambos os casos vale expandir.
                 const ehHibridoComSplit =
-                  a.colaborador_tipo === "clt_recibo" && a.partes.length >= 2;
+                  a.colaborador_tipo === "clt_recibo" && a.partes.length >= 1;
                 const expandida = expandidas.has(a.id);
 
                 return (
