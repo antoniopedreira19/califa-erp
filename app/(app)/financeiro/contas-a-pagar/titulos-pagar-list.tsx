@@ -311,7 +311,7 @@ const CHIP_ORIGEM: Array<{ key: "todas" | OrigemTitulo; label: string }> = [
   { key: "todas", label: "Todas as origens" },
   { key: "pp", label: "PPs" },
   { key: "avulso", label: "Avulsos" },
-  { key: "folha", label: "Folhas" },
+  { key: "folha", label: "People" },
   { key: "recorrencia", label: "Recorrências" },
   { key: "desembolso", label: "Desembolsos" },
   { key: "pp_devolucao_verba", label: "Estornos de verba" },
@@ -773,7 +773,7 @@ export function TitulosPagarList({
                   : conferindo.origem === "fatura_cartao"
                     ? `Fatura de cartão ${conferindo.origem_label}`
                     : conferindo.origem === "folha"
-                      ? "Folha de pagamento"
+                      ? "People"
                       : "Lançamento avulso",
         parcela: `${conferindo.parcela_numero}/${conferindo.parcela_total}`,
         valor: conferindo.valor,

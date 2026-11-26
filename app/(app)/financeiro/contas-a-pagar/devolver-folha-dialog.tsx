@@ -86,7 +86,7 @@ export function DevolverFolhaDialog({
             {descricao} ·{" "}
             {valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}.
             O título sai de Títulos a Pagar e a linha volta para
-            &ldquo;Aguardando aprovação&rdquo; em Folhas de Pagamento, onde
+            &ldquo;Aguardando aprovação&rdquo; na aba People, onde
             dá para corrigir e aprovar de novo.
           </DialogDescription>
         </DialogHeader>

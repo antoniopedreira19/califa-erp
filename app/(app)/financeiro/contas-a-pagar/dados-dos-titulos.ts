@@ -749,7 +749,7 @@ export function montarTitulosAPagar(e: {
           ? "recorrencia"
           : "avulso",
       origem_label: a.folha_id
-        ? "FOLHA"
+        ? "PEOPLE"
         : a.recorrente_id
           ? "RECORRÊNCIA"
           : "AVULSO",
