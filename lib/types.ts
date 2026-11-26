@@ -7187,3 +7187,15 @@ export interface ResumoCardsFolha {
   /** Nome do primeiro benefício ativo com campo obrigatório faltando, ou null. */
   catalogoIncompleto: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Envio de folha por origem
+// Ref: docs/superpowers/specs/2026-11-26-ferias-pagina-colaborador-documentos-por-folha-design.md
+// ---------------------------------------------------------------------------
+
+/** Avulsa de operadora gerada pelo RPC gerar_avulsas_fechamento_beneficios. */
+export interface AvulsaGerada {
+  id: string;
+  operadora: string;
+  valor: number;
+}
