@@ -624,9 +624,22 @@ export function TitulosPagarList({
     [hoje, nomesDasEmpresas, tipos, subtipos, cartoes, contas, extras],
   );
   const linhasDoTopo = React.useMemo(() => doTopo.map((r) => linhaAPagar(r, contexto)), [doTopo, contexto]);
+  // Filtro por "People" (folha): nenhum título de folha tem fornecedor ou
+  // job vinculado. A coluna de Fornecedor fica só com "—" e a de Job só com
+  // "Não Vinculado" — some junto com o filtro quando a aba é People.
+  const semContrapartePorFolha = filtroOrigem === "folha";
+  const semJobPorFolha = filtroOrigem === "folha";
   const colunasDoFiltro = React.useMemo(
-    () => colunasFiltraveis({ contaId: null, hoje, rotuloContraparte: "Fornecedor", status: true }),
-    [hoje],
+    () =>
+      colunasFiltraveis({
+        contaId: null,
+        hoje,
+        rotuloContraparte: "Fornecedor",
+        status: true,
+        semContraparte: semContrapartePorFolha,
+        semJob: semJobPorFolha,
+      }),
+    [hoje, semContrapartePorFolha, semJobPorFolha],
   );
   const colunas = useFiltrosDeColuna<Linha>(linhasDoTopo, colunasDoFiltro, { guardarEm: "contas-a-pagar-planilha" });
   const filtrados = colunas.visiveis;
@@ -1012,6 +1025,8 @@ export function TitulosPagarList({
         contaId={null}
         hoje={hoje}
         colunaStatus
+        semContraparte={semContrapartePorFolha}
+        semJob={semJobPorFolha}
         titulo={(chave) => colunas.titulo(chave)}
         cabecalhoDaSelecao={<CaixaDoCabecalho {...selecao.cabecalho} />}
         caixa={(l) => {

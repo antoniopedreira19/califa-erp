@@ -45,6 +45,13 @@ export interface OpcoesDaGrade {
   /** A coluna Crédito que o módulo nunca usa (Impostos a Pagar): fina, só
    *  com "—". */
   creditoFino: boolean;
+  /** Esconder a coluna de contraparte (Fornecedor/Cliente). Usada quando o
+   *  recorte da tela garante que nenhuma linha tem contraparte — por ex., a
+   *  aba Títulos a Pagar filtrada por "People" (folha nunca tem fornecedor). */
+  semContraparte?: boolean;
+  /** Esconder a coluna de Job. Mesmo caso da `semContraparte`: filtro por
+   *  People na aba Títulos a Pagar (folha nunca vincula job). */
+  semJob?: boolean;
 }
 
 /** As colunas na ordem da grade, com a largura (`null` = o que sobra). */
@@ -56,8 +63,8 @@ export function colunasDaGrade(o: OpcoesDaGrade): Array<[ChaveDaColuna, number |
     ["debito", 116],
     ...(o.saldo ? ([["saldo", 128]] as Array<[ChaveDaColuna, number]>) : []),
     ["descricao", null],
-    ["contraparte", 200],
-    ["job", 104],
+    ...(o.semContraparte ? [] : ([["contraparte", 200]] as Array<[ChaveDaColuna, number]>)),
+    ...(o.semJob ? [] : ([["job", 104]] as Array<[ChaveDaColuna, number]>)),
     ["centro", 176],
     ["tri", 58],
     ["empresa", 130],
@@ -136,6 +143,10 @@ export function colunasFiltraveis(e: {
   hoje: string;
   rotuloContraparte: string;
   status: boolean;
+  /** Esconder o filtro da coluna de contraparte (ver `OpcoesDaGrade.semContraparte`). */
+  semContraparte?: boolean;
+  /** Esconder o filtro da coluna de Job (ver `OpcoesDaGrade.semJob`). */
+  semJob?: boolean;
 }): ColunaFiltravel<LinhaDaPlanilha>[] {
   const valorNa = (coluna: "credito" | "debito") => (l: LinhaDaPlanilha) => {
     const c = colunaDoValor(l, e.contaId).coluna;
@@ -146,18 +157,31 @@ export function colunasFiltraveis(e: {
     { chave: "credito", rotulo: "Crédito", tipo: "valor", faixa: true, alinhar: "right", celula: valorNa("credito") },
     { chave: "debito", rotulo: "Débito", tipo: "valor", faixa: true, alinhar: "right", celula: valorNa("debito") },
     { chave: "descricao", rotulo: "Descrição", tipo: "texto", celula: (l) => celulaTexto(l.descricao) },
-    { chave: "contraparte", rotulo: e.rotuloContraparte, tipo: "texto", celula: (l) => celulaTexto(l.contraparte) },
-    {
-      chave: "job",
-      rotulo: "Job",
-      tipo: "texto",
-      celula: (l) =>
-        l.job
-          ? celulaTexto(l.job.codigo)
-          : l.jobsDaFatura.length > 0
-            ? l.jobsDaFatura.map((j) => celulaTexto(j))
-            : celulaTexto("Não Vinculado"),
-    },
+    ...(e.semContraparte
+      ? []
+      : [
+          {
+            chave: "contraparte" as const,
+            rotulo: e.rotuloContraparte,
+            tipo: "texto" as const,
+            celula: (l: LinhaDaPlanilha) => celulaTexto(l.contraparte),
+          },
+        ]),
+    ...(e.semJob
+      ? []
+      : [
+          {
+            chave: "job" as const,
+            rotulo: "Job",
+            tipo: "texto" as const,
+            celula: (l: LinhaDaPlanilha) =>
+              l.job
+                ? celulaTexto(l.job.codigo)
+                : l.jobsDaFatura.length > 0
+                  ? l.jobsDaFatura.map((j) => celulaTexto(j))
+                  : celulaTexto("Não Vinculado"),
+          },
+        ]),
     { chave: "centro", rotulo: "Centro de Custo", tipo: "texto", celula: (l) => celulaTexto(rotuloDoCentro(l)) },
     {
       chave: "tri",

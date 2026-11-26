@@ -97,6 +97,13 @@ export interface PropsDaPlanilha<L extends LinhaDaPlanilha> {
   agruparPorDia?: boolean;
   colunaStatus?: boolean;
   creditoFino?: boolean;
+  /** Esconder a coluna de contraparte (Fornecedor/Cliente). Usada quando o
+   *  recorte da tela garante que nenhuma linha tem contraparte — por ex., a
+   *  aba Títulos a Pagar filtrada por "People" (folha nunca tem fornecedor). */
+  semContraparte?: boolean;
+  /** Esconder a coluna de Job. Mesmo caso da `semContraparte`: filtro por
+   *  People na aba Títulos a Pagar (folha nunca vincula job). */
+  semJob?: boolean;
   /** O título de cada coluna com o filtro (`useFiltrosDeColuna().titulo`). */
   titulo: (chave: Exclude<ChaveDaColuna, "sel" | "saldo" | "acao">) => React.ReactNode;
   cabecalhoDaSelecao: React.ReactNode;
@@ -191,7 +198,13 @@ function TextoCortado({
 }
 
 export function PlanilhaDeTitulos<L extends LinhaDaPlanilha>(p: PropsDaPlanilha<L>) {
-  const grade = colunasDaGrade({ saldo: !!p.mostrarSaldo, status: !!p.colunaStatus, creditoFino: !!p.creditoFino });
+  const grade = colunasDaGrade({
+    saldo: !!p.mostrarSaldo,
+    status: !!p.colunaStatus,
+    creditoFino: !!p.creditoFino,
+    semContraparte: !!p.semContraparte,
+    semJob: !!p.semJob,
+  });
   const chaves = grade.map(([k]) => k);
   const [comItens, setComItens] = React.useState<Set<string>>(() => new Set());
   const alternarItens = (chave: string) =>
@@ -234,8 +247,8 @@ export function PlanilhaDeTitulos<L extends LinhaDaPlanilha>(p: PropsDaPlanilha<
               </th>
             )}
             <th className="px-3 py-3 text-left font-semibold">{p.titulo("descricao")}</th>
-            <th className="px-3 py-3 text-left font-semibold">{p.titulo("contraparte")}</th>
-            <th className="px-3 py-3 text-left font-semibold">{p.titulo("job")}</th>
+            {!p.semContraparte && <th className="px-3 py-3 text-left font-semibold">{p.titulo("contraparte")}</th>}
+            {!p.semJob && <th className="px-3 py-3 text-left font-semibold">{p.titulo("job")}</th>}
             <th className="px-3 py-3 text-left font-semibold">{p.titulo("centro")}</th>
             <th className="px-3 py-3 text-center font-semibold">{p.titulo("tri")}</th>
             <th className="px-3 py-3 text-left font-semibold">{p.titulo("empresa")}</th>
@@ -658,33 +671,37 @@ function LinhaDaTabela<L extends LinhaDaPlanilha>({
           )}
         </TextoCortado>
       </td>
-      <td className="px-3 py-2 text-xs">
-        <TextoCortado className="block truncate" texto={l.contraparte}>
-          {l.contraparte}
-          {/* Asterisco da decisão 067: o cadastro de hoje já não é o que este
-              pedido manda pagar. */}
-          {l.avisoDaContraparte && (
-            <Dica conteudo={l.avisoDaContraparte} rotulo="O cadastro do fornecedor mudou depois desta PP" className="ml-1 inline font-bold text-amber-600">
-              *
+      {!p.semContraparte && (
+        <td className="px-3 py-2 text-xs">
+          <TextoCortado className="block truncate" texto={l.contraparte}>
+            {l.contraparte}
+            {/* Asterisco da decisão 067: o cadastro de hoje já não é o que este
+                pedido manda pagar. */}
+            {l.avisoDaContraparte && (
+              <Dica conteudo={l.avisoDaContraparte} rotulo="O cadastro do fornecedor mudou depois desta PP" className="ml-1 inline font-bold text-amber-600">
+                *
+              </Dica>
+            )}
+          </TextoCortado>
+        </td>
+      )}
+      {!p.semJob && (
+        <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
+          {l.job ? (
+            // Decisão 243: o nome do job (o do financeiro) sempre
+            // ao passar o mouse, não só quando o código está cortado.
+            <Dica conteudo={(l.job.nome.startsWith(l.job.codigo + " ") ? l.job.nome.slice(l.job.codigo.length + 1) : l.job.nome) || null} className="block truncate text-california-red">
+              {l.job.codigo}
             </Dica>
+          ) : l.jobsDaFatura.length > 0 ? (
+            <Dica conteudo={l.jobsDaFatura.join(" · ")} className="font-sans underline decoration-dotted underline-offset-2">
+              {l.jobsDaFatura.length} {l.jobsDaFatura.length === 1 ? "job" : "jobs"}
+            </Dica>
+          ) : (
+            <span className="font-sans italic text-muted-foreground/70">Não Vinculado</span>
           )}
-        </TextoCortado>
-      </td>
-      <td className="whitespace-nowrap px-3 py-2 font-mono text-xs">
-        {l.job ? (
-          // Decisão 243: o nome do job (o do financeiro) sempre
-          // ao passar o mouse, não só quando o código está cortado.
-          <Dica conteudo={(l.job.nome.startsWith(l.job.codigo + " ") ? l.job.nome.slice(l.job.codigo.length + 1) : l.job.nome) || null} className="block truncate text-california-red">
-            {l.job.codigo}
-          </Dica>
-        ) : l.jobsDaFatura.length > 0 ? (
-          <Dica conteudo={l.jobsDaFatura.join(" · ")} className="font-sans underline decoration-dotted underline-offset-2">
-            {l.jobsDaFatura.length} {l.jobsDaFatura.length === 1 ? "job" : "jobs"}
-          </Dica>
-        ) : (
-          <span className="font-sans italic text-muted-foreground/70">Não Vinculado</span>
-        )}
-      </td>
+        </td>
+      )}
       <td className="px-3 py-2 text-xs">
         <CelulaDoCentro l={l} />
       </td>
