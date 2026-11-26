@@ -398,6 +398,12 @@ export function ColaboradoresList({
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground w-28">
                   Contrato
                 </th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground w-40">
+                  Regional
+                </th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground w-36">
+                  Localização
+                </th>
                 <th className="px-4 py-3 text-left font-medium text-muted-foreground w-64">
                   Alocação
                 </th>
@@ -484,6 +490,14 @@ export function ColaboradoresList({
                     {tipoContratacaoLabel(c.tipo_contratacao)}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
+                    {c.usa_rateio_empresa
+                      ? "Hub"
+                      : c.regional_nome ?? "—"}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
+                    {c.localizacao ?? "—"}
+                  </td>
+                  <td className="px-4 py-3 text-muted-foreground">
                     {formatarAlocacao(c)}
                   </td>
                 </tr>
@@ -501,7 +515,7 @@ export function ColaboradoresList({
                 <td className="px-4 py-3 text-right tabular-nums font-semibold">
                   {salariosOcultos ? "R$ ●●●●●●" : brl.format(totalFiltrado)}
                 </td>
-                <td colSpan={2} />
+                <td colSpan={4} />
               </tr>
             </tfoot>
           </table>

@@ -5110,13 +5110,13 @@ export const COLABORADOR_LOCALIZACOES: ColaboradorLocalizacao[] = [
 
 export function localizacaoLabel(l: ColaboradorLocalizacao): string {
   switch (l) {
-    case "SP":  return "SP";
-    case "NE":  return "Nordeste";
-    case "NO":  return "Norte";
+    case "SP":  return "São Paulo";
+    case "NE":  return "Salvador";
+    case "NO":  return "Fortaleza";
     case "RJ":  return "RJ";
-    case "SC":  return "SC";
-    case "BH":  return "BH";
-    case "SSB": return "Salvador";
+    case "SC":  return "Floripa";
+    case "BH":  return "Belo Horizonte";
+    case "SSB": return "São Sebastião/SP";
   }
 }
 
