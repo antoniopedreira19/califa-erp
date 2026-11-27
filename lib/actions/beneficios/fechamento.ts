@@ -35,6 +35,9 @@ function traduzErroRpc(message: string): string {
     return `Não dá pra desaplicar: avulsa ${codigo} já foi paga. Estorne a avulsa pelo financeiro antes.`;
   }
   if (message.includes("fechamento_nao_encontrado")) return "Fechamento não encontrado.";
+  if (message.includes("chk_folhas_salario_positivo")) {
+    return "Não foi possível aplicar: algum colaborador ficaria com salário negativo após o desconto. Revise os valores ou o catálogo de benefícios.";
+  }
   return message;
 }
 
