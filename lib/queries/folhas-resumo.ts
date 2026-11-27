@@ -21,7 +21,9 @@ type FolhaLinhaStatus =
   | "pendente_correcao"
   | "paga";
 
-type FolhaOrigem = "pj" | "clt";
+// Valores reais da coluna folhas_pagamento.origem (enum folha_origem):
+// 'california' → PJ gerada pelo sistema; 'contabilidade' → CLT importada do PDF.
+type FolhaOrigem = "california" | "contabilidade";
 
 type FolhaLinhaRaw = {
   salario_base: number;
@@ -116,9 +118,9 @@ export async function obterResumoCardsFolha(args: {
 
   for (const linha of (linhasResult.data ?? []) as FolhaLinhaRaw[]) {
     const origem = linha.origem as FolhaOrigem;
-    if (origem === "pj") {
+    if (origem === "california") {
       acumularLinha(pjAcc, linha);
-    } else if (origem === "clt") {
+    } else if (origem === "contabilidade") {
       acumularLinha(cltAcc, linha);
     } else {
       // Origem desconhecida: ignora silenciosamente.
