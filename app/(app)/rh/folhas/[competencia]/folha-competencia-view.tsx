@@ -439,6 +439,8 @@ export function FolhaCompetenciaView({
                   <ValorCell
                     liquido={Number(l.salario_base)}
                     desconto={Number(l.desconto_beneficios)}
+                    origem={l.origem}
+                    linhaId={l.id}
                   />
                 </td>
                 <td className="px-4 py-3">
@@ -711,11 +713,28 @@ const brlFmt = new Intl.NumberFormat("pt-BR", {
 function ValorCell({
   liquido,
   desconto,
+  origem,
+  linhaId,
 }: {
   liquido: number;
   desconto: number;
+  origem: FolhaOrigem;
+  linhaId: string;
 }) {
-  if (desconto <= 0) {
+  // Breakdown bruto/desc/líquido só em linhas PJ (origem california). CLT já vem
+  // líquido da contabilidade; se vier desconto > 0 em CLT, é bug de dado — log
+  // warning e renderiza só o valor simples.
+  const temDescontoEfetivo = desconto > 0 && origem === "california";
+  const temDescontoInvalido = desconto > 0 && origem !== "california";
+
+  if (temDescontoInvalido) {
+    console.warn(
+      "[folha-view] linha CLT com desconto_beneficios > 0 — não esperado",
+      { linhaId, desconto },
+    );
+  }
+
+  if (!temDescontoEfetivo) {
     return <span className="font-semibold">{brlFmt.format(liquido)}</span>;
   }
   const bruto = liquido + desconto;
