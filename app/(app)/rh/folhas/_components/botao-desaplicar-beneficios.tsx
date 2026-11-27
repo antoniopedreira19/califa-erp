@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { useRouter } from "next/navigation";
 import { AlertTriangle, Loader2, Undo2 } from "lucide-react";
 import {
   Dialog,
@@ -13,7 +12,6 @@ import {
 import { desaplicarBeneficios } from "@/lib/actions/beneficios/fechamento";
 
 export function BotaoDesaplicarBeneficios(props: { fechamentoId: string }) {
-  const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [pending, startTransition] = React.useTransition();
   const [erro, setErro] = React.useState<string | null>(null);
@@ -26,8 +24,10 @@ export function BotaoDesaplicarBeneficios(props: { fechamentoId: string }) {
         setErro(r.message);
         return;
       }
-      setOpen(false);
-      router.refresh();
+      // Hard reload: desaplicar vira todos os cards da folha (progresso, KPIs,
+      // 172 descontos revertidos). router.refresh() vinha deixando partes
+      // defasadas; reload garante estado novo e habilita o Aplicar de novo.
+      window.location.reload();
     });
   }
 
