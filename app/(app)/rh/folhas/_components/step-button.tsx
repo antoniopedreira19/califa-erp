@@ -23,18 +23,16 @@ export interface StepButtonProps {
   disabled?: boolean;
   /** Tooltip no hover (útil pra explicar por que está locked). */
   title?: string;
-  /** Text abaixo do label; ex.: contador, valor. */
-  sublabel?: string;
 }
 
 /**
  * Botão de passo da timeline do card de folha.
  *
- * Tamanho uniforme (`h-16`, `flex-1`) pra permitir alinhamento numa linha
- * horizontal via flex. Visual varia por `state`:
- * - done: fundo esmeralda claro, texto esmeralda, ícone Check.
- * - current: fundo California red, texto branco, negrito.
- * - locked: fundo muted, texto cinza, cursor-not-allowed.
+ * Minimalista: altura `h-10`, inline (ícone + número + label), `flex-1` pra
+ * alinhar numa linha horizontal via flex. Visual varia por `state`:
+ * - done: borda e texto esmeralda, fundo branco, ícone Check.
+ * - current: California red, texto branco, negrito.
+ * - locked: fundo transparente, texto cinza, cursor-not-allowed.
  */
 export function StepButton(props: StepButtonProps): JSX.Element {
   const { state, pending, disabled } = props;
@@ -43,13 +41,13 @@ export function StepButton(props: StepButtonProps): JSX.Element {
   const isDone = state === "done";
 
   const baseClass =
-    "group relative flex h-16 w-full flex-col items-center justify-center gap-0.5 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors";
+    "group relative inline-flex h-10 w-full items-center justify-center gap-2 rounded-lg border px-3 text-xs font-medium transition-colors";
 
   const stateClass = isCurrent
-    ? "border-california-red bg-california-red text-white shadow-sm hover:bg-california-red/90 disabled:opacity-60 disabled:cursor-not-allowed"
+    ? "border-california-red bg-california-red text-white shadow-sm hover:bg-california-red/90 disabled:opacity-60 disabled:cursor-not-allowed font-semibold"
     : isDone
-      ? "border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100"
-      : "border-border bg-muted/40 text-muted-foreground cursor-not-allowed";
+      ? "border-emerald-200 bg-white text-emerald-700 hover:bg-emerald-50"
+      : "border-border bg-transparent text-muted-foreground cursor-not-allowed";
 
   const Icon = isDone ? Check : props.icon;
 
@@ -61,22 +59,15 @@ export function StepButton(props: StepButtonProps): JSX.Element {
       title={props.title}
       className={`${baseClass} ${stateClass}`}
     >
-      <div className="flex items-center gap-1.5">
-        {pending ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <Icon className="h-4 w-4" aria-hidden />
-        )}
-        <span className="text-[10px] font-semibold uppercase tracking-wide opacity-80">
-          {props.step}
-        </span>
-        <span>{pending ? "Processando..." : props.label}</span>
-      </div>
-      {props.sublabel && !pending && (
-        <span className="text-[10px] font-normal opacity-80">
-          {props.sublabel}
-        </span>
+      {pending ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
+      ) : (
+        <Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
       )}
+      <span className="opacity-60 text-[10px] font-semibold">{props.step}</span>
+      <span className="truncate">
+        {pending ? "Processando..." : props.label}
+      </span>
     </button>
   );
 }
@@ -89,12 +80,12 @@ export function StepArrow(): JSX.Element {
   return (
     <div
       aria-hidden
-      className="hidden sm:flex items-center justify-center text-muted-foreground shrink-0 px-1"
+      className="hidden sm:flex items-center justify-center text-muted-foreground/60 shrink-0"
     >
       <svg
         xmlns="http://www.w3.org/2000/svg"
-        width="18"
-        height="18"
+        width="14"
+        height="14"
         viewBox="0 0 24 24"
         fill="none"
         stroke="currentColor"

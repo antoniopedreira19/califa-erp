@@ -108,7 +108,7 @@ function CardKpi({
       ? "text-california-red"
       : "text-foreground";
   return (
-    <div className="rounded-2xl border border-border bg-card p-5 shadow-soft flex flex-col justify-between min-h-[128px]">
+    <div className="rounded-2xl border border-border bg-card p-5 shadow-soft flex flex-col items-center justify-between text-center min-h-[128px]">
       <div className="flex items-center gap-2 text-muted-foreground">
         <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-california-red/10 text-california-red">
           {icone}
@@ -117,7 +117,7 @@ function CardKpi({
           {rotulo}
         </span>
       </div>
-      <div className="mt-3">
+      <div className="mt-3 flex flex-col items-center">
         <p
           className={`font-bold tabular-nums leading-none ${
             destaque ? "text-3xl" : "text-2xl"
@@ -229,7 +229,7 @@ function CardProgressoFluxo({
   ].filter((i) => i.n > 0);
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-5 shadow-soft flex flex-col justify-between min-h-[128px]">
+    <div className="rounded-2xl border border-border bg-card p-5 shadow-soft flex flex-col items-center text-center min-h-[128px]">
       <div className="flex items-center gap-2 text-muted-foreground">
         <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-california-red/10 text-california-red">
           <Activity className="h-4 w-4" />
@@ -239,8 +239,8 @@ function CardProgressoFluxo({
         </span>
       </div>
 
-      <div className="mt-3 space-y-2">
-        <div className="flex items-baseline justify-between gap-2">
+      <div className="mt-3 w-full space-y-2">
+        <div className="flex items-baseline justify-center gap-6">
           <span className="text-xs font-medium text-muted-foreground">
             Enviadas
           </span>
@@ -251,7 +251,7 @@ function CardProgressoFluxo({
             </span>
           </span>
         </div>
-        <div className="flex items-baseline justify-between gap-2">
+        <div className="flex items-baseline justify-center gap-6">
           <span className="text-xs font-medium text-muted-foreground">
             Pagas
           </span>
@@ -266,7 +266,7 @@ function CardProgressoFluxo({
         <BarraProgresso total={total} contagem={contagem} />
 
         {legendaItens.length > 0 && (
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+          <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
             {legendaItens.map((i, idx) => (
               <span key={idx} className="inline-flex items-center gap-1">
                 <span className={`inline-block h-2 w-2 rounded-sm ${i.cor}`} />
