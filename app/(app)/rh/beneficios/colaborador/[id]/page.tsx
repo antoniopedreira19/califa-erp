@@ -88,6 +88,7 @@ export default async function ColaboradorBeneficiosPage({
       {tab === "vinculos" && (
         <TabVinculos
           vinculos={vinculos}
+          breakdown={breakdown}
           colaboradorTemCpf={!!colaborador.cpf}
           colaboradorTemDataNasc={!!colaborador.data_nascimento}
         />

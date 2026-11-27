@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { HeartPulse, Smile, AlertTriangle } from "lucide-react";
+import { HeartPulse, Smile, AlertTriangle, Sparkles } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type { VinculoDoColaborador } from "@/lib/queries/beneficios";
-import type { BeneficioModoCusteio } from "@/lib/types";
+import type { BeneficioCustoMensalLinha, BeneficioModoCusteio } from "@/lib/types";
 import { coresBeneficio } from "@/lib/beneficios/cores";
 import {
   editarVinculo,
@@ -19,6 +19,14 @@ import {
   excluirVinculo,
   mudarModoCusteio,
 } from "@/lib/actions/beneficios/vinculos";
+import { ModalValorCustom } from "./modal-valor-custom";
+
+const formatarBrl = (n: number) =>
+  n.toLocaleString("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+    minimumFractionDigits: 2,
+  });
 
 const MODO_LABEL: Record<BeneficioModoCusteio, string> = {
   rateado: "Rateado 60/40",
@@ -33,15 +41,22 @@ const formatarData = (iso: string) => {
 
 export function TabVinculos({
   vinculos,
+  breakdown,
   colaboradorTemCpf,
   colaboradorTemDataNasc,
 }: {
   vinculos: VinculoDoColaborador[];
+  breakdown: BeneficioCustoMensalLinha[];
   colaboradorTemCpf: boolean;
   colaboradorTemDataNasc: boolean;
 }) {
   const ativos = vinculos.filter((v) => v.data_fim === null);
   const encerrados = vinculos.filter((v) => v.data_fim !== null);
+
+  const valorPadraoPorVinculo = new Map<string, number>();
+  for (const b of breakdown) {
+    valorPadraoPorVinculo.set(b.vinculo_id, Number(b.valor_desconto_padrao));
+  }
 
   const faltaCadastro = !colaboradorTemCpf || !colaboradorTemDataNasc;
 
@@ -75,7 +90,12 @@ export function TabVinculos({
           </h3>
           <div className="space-y-2">
             {ativos.map((v) => (
-              <LinhaVinculo key={v.id} vinculo={v} ativo />
+              <LinhaVinculo
+                key={v.id}
+                vinculo={v}
+                ativo
+                valorPadraoColaborador={valorPadraoPorVinculo.get(v.id) ?? null}
+              />
             ))}
           </div>
         </section>
@@ -88,7 +108,12 @@ export function TabVinculos({
           </h3>
           <div className="space-y-2">
             {encerrados.map((v) => (
-              <LinhaVinculo key={v.id} vinculo={v} ativo={false} />
+              <LinhaVinculo
+                key={v.id}
+                vinculo={v}
+                ativo={false}
+                valorPadraoColaborador={null}
+              />
             ))}
           </div>
         </section>
@@ -100,14 +125,17 @@ export function TabVinculos({
 function LinhaVinculo({
   vinculo,
   ativo,
+  valorPadraoColaborador,
 }: {
   vinculo: VinculoDoColaborador;
   ativo: boolean;
+  valorPadraoColaborador: number | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [mostrarMudar, setMostrarMudar] = useState(false);
   const [mostrarEditar, setMostrarEditar] = useState(false);
+  const [mostrarValorCustom, setMostrarValorCustom] = useState(false);
   const [novoModo, setNovoModo] = useState<BeneficioModoCusteio>(
     vinculo.modo_custeio,
   );
@@ -203,8 +231,19 @@ function LinhaVinculo({
             <Icon className="h-4 w-4" />
           </div>
           <div className="min-w-0">
-            <div className="font-medium text-foreground">
-              {vinculo.beneficio_nome}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="font-medium text-foreground">
+                {vinculo.beneficio_nome}
+              </span>
+              {vinculo.valor_colaborador_override !== null && (
+                <span
+                  className="inline-flex items-center gap-1 rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] font-medium text-amber-800"
+                  title={vinculo.override_motivo ?? ""}
+                >
+                  <Sparkles className="h-3 w-3" />
+                  Valor custom {formatarBrl(vinculo.valor_colaborador_override)}
+                </span>
+              )}
             </div>
             <div className="mt-0.5 text-xs text-muted-foreground">
               {MODO_LABEL[vinculo.modo_custeio]} · desde{" "}
@@ -213,6 +252,12 @@ function LinhaVinculo({
                 <> · até {formatarData(vinculo.data_fim)}</>
               )}
             </div>
+            {vinculo.valor_colaborador_override !== null &&
+              vinculo.override_motivo && (
+                <div className="mt-1 text-[11px] italic text-amber-700">
+                  Motivo: {vinculo.override_motivo}
+                </div>
+              )}
             {vinculo.observacao && (
               <div className="mt-1.5 text-xs italic text-muted-foreground">
                 {vinculo.observacao}
@@ -238,6 +283,16 @@ function LinhaVinculo({
                 className="font-medium text-california-red hover:underline"
               >
                 Mudar modo
+              </button>
+              <button
+                type="button"
+                onClick={() => setMostrarValorCustom(true)}
+                disabled={pending}
+                className="font-medium text-amber-700 hover:underline"
+              >
+                {vinculo.valor_colaborador_override !== null
+                  ? "Editar valor custom"
+                  : "Valor custom"}
               </button>
               <button
                 type="button"
@@ -361,6 +416,17 @@ function LinhaVinculo({
             Cancelar
           </button>
         </div>
+      )}
+      {mostrarValorCustom && (
+        <ModalValorCustom
+          vinculoId={vinculo.id}
+          beneficioNome={vinculo.beneficio_nome}
+          valorPadraoColaborador={valorPadraoColaborador}
+          overrideAtual={vinculo.valor_colaborador_override}
+          motivoAtual={vinculo.override_motivo}
+          open={mostrarValorCustom}
+          onClose={() => setMostrarValorCustom(false)}
+        />
       )}
     </div>
   );

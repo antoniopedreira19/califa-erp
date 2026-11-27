@@ -149,6 +149,8 @@ export interface VinculoDoColaborador {
   data_inicio: string;
   data_fim: string | null;
   observacao: string | null;
+  valor_colaborador_override: number | null;
+  override_motivo: string | null;
 }
 
 /**
@@ -164,6 +166,7 @@ export async function listarVinculosDoColaborador(args: {
     .from("colaborador_beneficio")
     .select(
       `id, modo_custeio, data_inicio, data_fim, observacao,
+       valor_colaborador_override, override_motivo,
        beneficio:beneficios ( id, nome, tipo )`,
     )
     .eq("tenant_id", args.tenantId)
@@ -178,6 +181,8 @@ export async function listarVinculosDoColaborador(args: {
     data_inicio: string;
     data_fim: string | null;
     observacao: string | null;
+    valor_colaborador_override: number | string | null;
+    override_motivo: string | null;
     beneficio: { id: string; nome: string; tipo: BeneficioTipo } | null;
   };
   return (data as unknown as Row[] | null ?? []).map((r) => ({
@@ -189,6 +194,11 @@ export async function listarVinculosDoColaborador(args: {
     data_inicio: r.data_inicio,
     data_fim: r.data_fim,
     observacao: r.observacao,
+    valor_colaborador_override:
+      r.valor_colaborador_override === null
+        ? null
+        : Number(r.valor_colaborador_override),
+    override_motivo: r.override_motivo,
   }));
 }
 

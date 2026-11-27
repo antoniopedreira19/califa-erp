@@ -303,6 +303,126 @@ export async function editarVinculo(
   return { ok: true, id: d.vinculoId };
 }
 
+const definirOverrideSchema = z.object({
+  vinculoId: z.string().uuid(),
+  valor: z.number().min(0, "Valor não pode ser negativo.").max(100000),
+  motivo: z
+    .string()
+    .trim()
+    .min(3, "Motivo é obrigatório — mínimo 3 caracteres.")
+    .max(500),
+});
+
+export async function definirOverrideBeneficio(
+  input: z.input<typeof definirOverrideSchema>,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const bloqueio = assertRh(session.activeRole);
+  if (bloqueio) return bloqueio;
+
+  const parsed = definirOverrideSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const d = parsed.data;
+
+  const supabase = createClient();
+  const { data: vinc } = await supabase
+    .from("colaborador_beneficio")
+    .select("id, colaborador_id, beneficio_id, valor_colaborador_override, override_motivo, data_fim")
+    .eq("id", d.vinculoId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+  if (!vinc) return { ok: false, message: "Vínculo não encontrado." };
+  if (vinc.data_fim) {
+    return {
+      ok: false,
+      message: "Vínculo encerrado não pode receber valor custom.",
+    };
+  }
+
+  const { error } = await supabase
+    .from("colaborador_beneficio")
+    .update({
+      valor_colaborador_override: d.valor,
+      override_motivo: d.motivo,
+    })
+    .eq("id", d.vinculoId);
+  if (error) return { ok: false, message: `Erro ao salvar valor custom: ${error.message}` };
+
+  await logAuditEvent({
+    acao: "beneficio.vinculo.override_definido",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "colaborador_beneficio",
+    entidadeId: d.vinculoId,
+    metadata: {
+      colaborador_id: vinc.colaborador_id,
+      beneficio_id: vinc.beneficio_id,
+      valor_anterior: vinc.valor_colaborador_override,
+      valor_novo: d.valor,
+      motivo_anterior: vinc.override_motivo,
+      motivo_novo: d.motivo,
+    },
+  });
+
+  revalidatePath("/rh/beneficios");
+  return { ok: true, id: d.vinculoId };
+}
+
+const removerOverrideSchema = z.object({
+  vinculoId: z.string().uuid(),
+});
+
+export async function removerOverrideBeneficio(
+  input: z.input<typeof removerOverrideSchema>,
+): Promise<ActionResult> {
+  const session = await requireSession();
+  const bloqueio = assertRh(session.activeRole);
+  if (bloqueio) return bloqueio;
+
+  const parsed = removerOverrideSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, message: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+
+  const supabase = createClient();
+  const { data: vinc } = await supabase
+    .from("colaborador_beneficio")
+    .select("id, colaborador_id, beneficio_id, valor_colaborador_override, override_motivo")
+    .eq("id", parsed.data.vinculoId)
+    .eq("tenant_id", session.activeTenant.id)
+    .maybeSingle();
+  if (!vinc) return { ok: false, message: "Vínculo não encontrado." };
+  if (vinc.valor_colaborador_override === null) {
+    return { ok: false, message: "Este vínculo já segue o cálculo padrão." };
+  }
+
+  const { error } = await supabase
+    .from("colaborador_beneficio")
+    .update({
+      valor_colaborador_override: null,
+      override_motivo: null,
+    })
+    .eq("id", parsed.data.vinculoId);
+  if (error) return { ok: false, message: `Erro ao remover valor custom: ${error.message}` };
+
+  await logAuditEvent({
+    acao: "beneficio.vinculo.override_removido",
+    tenantId: session.activeTenant.id,
+    entidadeTipo: "colaborador_beneficio",
+    entidadeId: parsed.data.vinculoId,
+    metadata: {
+      colaborador_id: vinc.colaborador_id,
+      beneficio_id: vinc.beneficio_id,
+      valor_removido: vinc.valor_colaborador_override,
+      motivo_removido: vinc.override_motivo,
+    },
+  });
+
+  revalidatePath("/rh/beneficios");
+  return { ok: true, id: parsed.data.vinculoId };
+}
+
 const mudarModoSchema = z.object({
   vinculoId: z.string().uuid(),
   novoModo: z.enum([

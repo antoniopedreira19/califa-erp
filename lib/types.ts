@@ -6486,7 +6486,12 @@ export interface BeneficioCustoMensalLinha {
   valor_colaborador_titular: number;
   qtde_dependentes: number;
   valor_dependentes_total: number;
+  /** Já reflete o override quando existe. */
   valor_desconto_folha_total: number;
+  /** O que o colaborador pagaria se não houvesse override. */
+  valor_desconto_padrao: number;
+  tem_override: boolean;
+  override_motivo: string | null;
 }
 
 /**
