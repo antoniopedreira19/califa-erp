@@ -6577,6 +6577,12 @@ export interface FechamentoRow extends BeneficioFechamentoMensal {
   qtd_vinculos: number;
 }
 
+/** Fase 3 — linha do fechamento enriquecida com dados do colaborador pra UI. */
+export interface BeneficioFechamentoLinhaUI extends BeneficioFechamentoLinha {
+  colaborador_nome: string;
+  tipo_contratacao: TipoContratacao | null;
+}
+
 /** Fase 3 — payload da página de detalhe /rh/beneficios/fechamentos/[id]. */
 export interface FechamentoDetalhe {
   cabecalho: FechamentoRow;
@@ -6591,7 +6597,7 @@ export interface FechamentoDetalhe {
     avulsa_vencimento: string | null;
     avulsa_pago_em: string | null;
   }>;
-  linhas: BeneficioFechamentoLinha[];
+  linhas: BeneficioFechamentoLinhaUI[];
 }
 
 /** Fase 3 — preview mostrado no confirm() do botão Aplicar descontos. */

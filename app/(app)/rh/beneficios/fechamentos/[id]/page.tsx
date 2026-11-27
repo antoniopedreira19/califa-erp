@@ -4,7 +4,7 @@ import { Receipt } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { PageHeader } from "@/components/ui/page-header";
 import { BotaoVoltar } from "@/components/voltar/botao-voltar";
-import { obterFechamento, temAvulsaPaga } from "@/lib/queries/beneficios";
+import { obterFechamento } from "@/lib/queries/beneficios";
 import { CabecalhoFechamento } from "./_components/cabecalho-fechamento";
 import { KpisFechamento } from "./_components/kpis-fechamento";
 import { CardsPorOperadora } from "./_components/cards-por-operadora";
@@ -37,11 +37,7 @@ export default async function FechamentoDetalhePage({
     redirect("/home?reason=sem_permissao_rh");
   }
 
-  const [detalhe, avulsaPaga] = await Promise.all([
-    obterFechamento({ fechamentoId: params.id }),
-    temAvulsaPaga({ fechamentoId: params.id }),
-  ]);
-
+  const detalhe = await obterFechamento({ fechamentoId: params.id });
   if (!detalhe) notFound();
 
   const label = `${NOMES_MES[detalhe.cabecalho.mes - 1]}/${detalhe.cabecalho.ano}`;
@@ -60,11 +56,7 @@ export default async function FechamentoDetalhePage({
         icon={Receipt}
       />
 
-      <CabecalhoFechamento
-        fechamentoId={detalhe.cabecalho.id}
-        reabertoEm={detalhe.cabecalho.reaberto_em}
-        avulsaPaga={avulsaPaga}
-      />
+      <CabecalhoFechamento reabertoEm={detalhe.cabecalho.reaberto_em} />
 
       <KpisFechamento detalhe={detalhe} />
 

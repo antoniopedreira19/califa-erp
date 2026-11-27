@@ -1,10 +1,7 @@
 import { CheckCircle2, Undo2 } from "lucide-react";
-import { BotaoDesaplicarBeneficios } from "../../../../folhas/_components/botao-desaplicar-beneficios";
 
 export function CabecalhoFechamento(props: {
-  fechamentoId: string;
   reabertoEm: string | null;
-  avulsaPaga: boolean;
 }) {
   const aplicado = props.reabertoEm === null;
   return (
@@ -22,15 +19,9 @@ export function CabecalhoFechamento(props: {
           </span>
         )}
       </div>
-      {aplicado && !props.avulsaPaga && (
-        <BotaoDesaplicarBeneficios fechamentoId={props.fechamentoId} />
-      )}
-      {aplicado && props.avulsaPaga && (
-        <p className="text-xs text-muted-foreground max-w-xs text-right">
-          Alguma avulsa deste fechamento já foi paga. Pra desaplicar, estorne a
-          avulsa pelo financeiro antes.
-        </p>
-      )}
+      <p className="text-xs text-muted-foreground max-w-xs text-right">
+        Pra desaplicar, use o botão na página da folha mensal.
+      </p>
     </div>
   );
 }

@@ -7,6 +7,8 @@ import type {
   FechamentoRow,
   FechamentoDetalhe,
   BeneficioFechamentoLinha,
+  BeneficioFechamentoLinhaUI,
+  TipoContratacao,
 } from "@/lib/types";
 
 export interface PlanoAtivoChip {
@@ -593,7 +595,49 @@ export async function obterFechamento(args: {
     supabase.from("profiles").select("nome").eq("id", cab.fechado_por).maybeSingle(),
   ]);
 
-  const linhas = (linhasData ?? []) as BeneficioFechamentoLinha[];
+  const linhasCru = (linhasData ?? []) as BeneficioFechamentoLinha[];
+
+  // Enriquece com nome + tipo_contratacao do vínculo ativo do colaborador
+  const colaboradorIds = Array.from(new Set(linhasCru.map((l) => l.colaborador_id)));
+  const [{ data: colaboradoresData }, { data: vinculosData }] = await Promise.all([
+    colaboradorIds.length
+      ? supabase.from("colaboradores").select("id, nome").in("id", colaboradorIds)
+      : Promise.resolve({ data: [] as Array<{ id: string; nome: string }> }),
+    colaboradorIds.length
+      ? supabase
+          .from("colaborador_vinculos")
+          .select("colaborador_id, tipo_contratacao, data_fim")
+          .in("colaborador_id", colaboradorIds)
+          .is("data_fim", null)
+      : Promise.resolve({
+          data: [] as Array<{
+            colaborador_id: string;
+            tipo_contratacao: TipoContratacao;
+            data_fim: string | null;
+          }>,
+        }),
+  ]);
+
+  const nomePorColaborador = new Map<string, string>();
+  for (const c of (colaboradoresData ?? []) as Array<{ id: string; nome: string }>) {
+    nomePorColaborador.set(c.id, c.nome);
+  }
+  const tipoPorColaborador = new Map<string, TipoContratacao>();
+  for (const v of (vinculosData ?? []) as Array<{
+    colaborador_id: string;
+    tipo_contratacao: TipoContratacao;
+  }>) {
+    // Se houver mais de um vínculo ativo (raro, só a sanity), fica o primeiro
+    if (!tipoPorColaborador.has(v.colaborador_id)) {
+      tipoPorColaborador.set(v.colaborador_id, v.tipo_contratacao);
+    }
+  }
+
+  const linhas: BeneficioFechamentoLinhaUI[] = linhasCru.map((l) => ({
+    ...l,
+    colaborador_nome: nomePorColaborador.get(l.colaborador_id) ?? "—",
+    tipo_contratacao: tipoPorColaborador.get(l.colaborador_id) ?? null,
+  }));
   const avulsas = (avulsasData ?? []) as Array<{
     id: string;
     codigo: string | null;

@@ -1,7 +1,8 @@
 "use client";
 
 import * as React from "react";
-import type { BeneficioFechamentoLinha } from "@/lib/types";
+import type { BeneficioFechamentoLinhaUI } from "@/lib/types";
+import { tipoContratacaoLabel } from "@/lib/types";
 
 const brl = new Intl.NumberFormat("pt-BR", {
   style: "currency",
@@ -15,38 +16,52 @@ const ROTULO_MODO: Record<string, string> = {
 };
 
 export function TabelaLinhasFechamento(props: {
-  linhas: BeneficioFechamentoLinha[];
+  linhas: BeneficioFechamentoLinhaUI[];
 }) {
   const [busca, setBusca] = React.useState("");
   const [operadoraFiltro, setOperadoraFiltro] = React.useState<string>("");
+  const [tipoFiltro, setTipoFiltro] = React.useState<string>("");
 
   const operadoras = React.useMemo(() => {
     return Array.from(new Set(props.linhas.map((l) => l.beneficio_operadora)));
+  }, [props.linhas]);
+
+  const tipos = React.useMemo(() => {
+    return Array.from(
+      new Set(
+        props.linhas
+          .map((l) => l.tipo_contratacao)
+          .filter((t): t is NonNullable<typeof t> => t !== null),
+      ),
+    ).sort();
   }, [props.linhas]);
 
   const linhasFiltradas = React.useMemo(() => {
     const buscaNorm = busca.trim().toLowerCase();
     return props.linhas.filter((l) => {
       if (operadoraFiltro && l.beneficio_operadora !== operadoraFiltro) return false;
+      if (tipoFiltro) {
+        if (tipoFiltro === "__sem__" && l.tipo_contratacao !== null) return false;
+        if (tipoFiltro !== "__sem__" && l.tipo_contratacao !== tipoFiltro) return false;
+      }
       if (buscaNorm) {
-        // Como o snapshot não tem o nome do colaborador congelado, caímos pro id
-        // (busca é pelos nomes de benefício/operadora/modo que estão em cada linha).
-        const combo = `${l.beneficio_nome} ${l.beneficio_operadora} ${l.modo_custeio}`.toLowerCase();
+        const combo =
+          `${l.colaborador_nome} ${l.beneficio_nome} ${l.beneficio_operadora} ${l.modo_custeio}`.toLowerCase();
         if (!combo.includes(buscaNorm)) return false;
       }
       return true;
     });
-  }, [props.linhas, busca, operadoraFiltro]);
+  }, [props.linhas, busca, operadoraFiltro, tipoFiltro]);
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <input
           type="text"
-          placeholder="Buscar benefício / operadora / modo..."
+          placeholder="Buscar colaborador / benefício / operadora..."
           value={busca}
           onChange={(e) => setBusca(e.target.value)}
-          className="flex-1 min-w-[220px] rounded-md border border-border bg-background px-3 py-1.5 text-sm"
+          className="flex-1 min-w-[260px] rounded-md border border-border bg-background px-3 py-1.5 text-sm"
         />
         <select
           value={operadoraFiltro}
@@ -60,6 +75,19 @@ export function TabelaLinhasFechamento(props: {
             </option>
           ))}
         </select>
+        <select
+          value={tipoFiltro}
+          onChange={(e) => setTipoFiltro(e.target.value)}
+          className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
+        >
+          <option value="">Todos tipos</option>
+          {tipos.map((t) => (
+            <option key={t} value={t}>
+              {tipoContratacaoLabel(t)}
+            </option>
+          ))}
+          <option value="__sem__">Sem vínculo cadastrado</option>
+        </select>
         <span className="text-xs text-muted-foreground">
           {linhasFiltradas.length} de {props.linhas.length}
         </span>
@@ -70,6 +98,8 @@ export function TabelaLinhasFechamento(props: {
           <table className="w-full text-sm">
             <thead className="bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
+                <th className="px-3 py-2 font-medium">Colaborador</th>
+                <th className="px-3 py-2 font-medium">Tipo</th>
                 <th className="px-3 py-2 font-medium">Benefício</th>
                 <th className="px-3 py-2 font-medium">Operadora</th>
                 <th className="px-3 py-2 font-medium">Modo custeio</th>
@@ -84,6 +114,12 @@ export function TabelaLinhasFechamento(props: {
             <tbody>
               {linhasFiltradas.map((l) => (
                 <tr key={l.id} className="border-t border-border hover:bg-muted/30">
+                  <td className="px-3 py-2 font-medium">{l.colaborador_nome}</td>
+                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                    {l.tipo_contratacao
+                      ? tipoContratacaoLabel(l.tipo_contratacao)
+                      : "—"}
+                  </td>
                   <td className="px-3 py-2">{l.beneficio_nome}</td>
                   <td className="px-3 py-2 text-muted-foreground">
                     {l.beneficio_operadora}
@@ -114,7 +150,7 @@ export function TabelaLinhasFechamento(props: {
               {linhasFiltradas.length === 0 && (
                 <tr>
                   <td
-                    colSpan={9}
+                    colSpan={11}
                     className="px-3 py-6 text-center text-sm text-muted-foreground"
                   >
                     Nenhuma linha encontrada com esses filtros.
