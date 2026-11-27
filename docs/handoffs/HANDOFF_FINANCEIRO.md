@@ -2237,9 +2237,12 @@ identificação. O componente é um só
 lista de tipos não divergirem entre as quatro telas — foi o que aconteceu
 com as cores das planilhas.
 
-A coluna mostra o primeiro anexo tipado como **nota ou recibo**
-(`DOCUMENTO_TIPOS_FISCAIS`). Contrato e boleto acompanham a compra, mas não
-são o documento que a contabilidade procura.
+A coluna mostra o primeiro anexo tipado como **comprovante fiscal**
+(`DOCUMENTO_TIPOS_FISCAIS`: NF, recibo, fatura, apólice). Contrato, boleto,
+guia e outros acompanham a compra, mas não são o documento que a
+contabilidade procura. A fatura entrou na decisão 178 (locação de bens
+móveis — fornecedor emite fatura, não NF); a apólice entrou na decisão 284
+(seguro — seguradora emite apólice + boleto, nunca NF).
 
 ### Onde cada documento entra
 

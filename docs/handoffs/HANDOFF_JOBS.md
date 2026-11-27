@@ -6920,3 +6920,28 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - **O que existia:** a produtora da equipe do P-0182/26 foi copiada para os quatro jobs reais (CAL-1004 a 1007) com a chave desligada.
 - **Conferido no Sandbox:** TES-1041/26 — produtora com a chave gerou e enviou a PP-00960 (depois do Comitê); sem a chave, o "Cancelar" da PP em avaliação sumiu para ela.
 
+
+## ⚠️ Nota de 2026-11-27 — "Apólice" no anexo, para pagamentos de seguro (decisão 284)
+
+Pedido do financeiro em 27/11/2026: começaram a lançar pagamentos de seguro
+(seguradora emite apólice + boleto, nunca NF de serviço) e o sistema pedia NF
+em todas as superfícies de anexo. Mesma receita da decisão 178 (fatura de
+locação). Regra completa na decisão 284.
+
+- **Tipo "Apólice"** entre Fatura e Boleto (enum `documento_tipo`, migration
+  `20261127100001`). Pede só o número, vale como comprovante
+  (`DOCUMENTO_TIPOS_FISCAIS`) e como "a nota" da PP paga por boleto. Não é
+  NF: não entra no cadastro de notas (152) nem no fiscal (não gera crédito
+  de PIS/COFINS). A prestação de verba segue só NF ou recibo.
+- **Vale nas quatro superfícies:** PP, conta avulsa, desembolso e lista de
+  comprovantes, que leem a mesma `DOCUMENTO_TIPOS_FISCAIS`
+  (`faltaNosAnexosDoEnvio`, `faltaNosAnexosParaEnviar`, `documentoTemCnpj`,
+  coluna Documento da Conciliação).
+- **CNPJ do segurado:** por estar em `DOCUMENTO_TIPOS_FISCAIS`, a apólice
+  pede "contra qual CNPJ foi emitida" no envio da PP (mesma regra da fatura
+  e do recibo, revisão da 156).
+- **A IA (192) passa a reconhecer a apólice** como tipo de documento
+  (`TIPOS_LIDOS` em `lib/ia/ler-nf.ts`).
+- **Enum do banco conferido pelo MCP:** `nota_fiscal, recibo, fatura,
+  apolice, boleto, guia, contrato, outro, cupom_fiscal, orcamento`.
+
