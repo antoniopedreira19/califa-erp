@@ -21,6 +21,7 @@ interface Resultado {
   atualizadas: number;
   inalteradas: number;
   puladas_sem_vigente: string[];
+  recalculadas_ferias: number;
 }
 
 export interface BotaoAtualizarFolhaPjProps {
@@ -56,6 +57,7 @@ export function BotaoAtualizarFolhaPj(props: BotaoAtualizarFolhaPjProps) {
         atualizadas: res.atualizadas,
         inalteradas: res.inalteradas,
         puladas_sem_vigente: res.puladas_sem_vigente,
+        recalculadas_ferias: res.recalculadas_ferias,
       });
     });
   }
@@ -75,7 +77,7 @@ export function BotaoAtualizarFolhaPj(props: BotaoAtualizarFolhaPjProps) {
           type="button"
           onClick={handleAtualizar}
           disabled={pending}
-          title="Puxa novamente o salário vigente de cada colaborador pras linhas PJ em rascunho desta competência."
+          title="Puxa o salário vigente de cada colaborador e aplica pro-rata de férias se houver. Preserva o desconto de benefícios já aplicado."
           className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50 transition-colors"
         >
           {pending ? (
@@ -119,11 +121,12 @@ export function BotaoAtualizarFolhaPj(props: BotaoAtualizarFolhaPjProps) {
                     <>
                       {resultado.atualizadas} linha
                       {resultado.atualizadas === 1 ? "" : "s"} atualizada
-                      {resultado.atualizadas === 1 ? "" : "s"} com o salário
-                      vigente.
+                      {resultado.atualizadas === 1 ? "" : "s"} (salário vigente
+                      {resultado.recalculadas_ferias > 0 ? " + pro-rata de férias" : ""}
+                      ).
                     </>
                   ) : (
-                    <>Nenhuma linha precisou de ajuste — todos os salários já estão alinhados com o vigente.</>
+                    <>Nenhuma linha precisou de ajuste — tudo já alinhado.</>
                   )}
                   {resultado.inalteradas > 0 && (
                     <>
@@ -134,6 +137,21 @@ export function BotaoAtualizarFolhaPj(props: BotaoAtualizarFolhaPjProps) {
                   )}
                 </span>
               </div>
+
+              {resultado.recalculadas_ferias > 0 && (
+                <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-xs text-sky-900">
+                  <p className="font-semibold mb-1">
+                    Férias aplicadas em {resultado.recalculadas_ferias}{" "}
+                    {resultado.recalculadas_ferias === 1
+                      ? "linha"
+                      : "linhas"}
+                  </p>
+                  <p className="opacity-80">
+                    Pro-rata: salário × (30 − dias de férias) / 30. A folha de
+                    férias cobre os dias fora.
+                  </p>
+                </div>
+              )}
 
               {resultado.puladas_sem_vigente.length > 0 && (
                 <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">

@@ -279,6 +279,7 @@ export async function ressincronizarSalariosPj(input: {
     atualizadas: number;
     inalteradas: number;
     puladas_sem_vigente: string[];
+    recalculadas_ferias: number;
   }>
 > {
   const session = await requireSession();
@@ -294,85 +295,33 @@ export async function ressincronizarSalariosPj(input: {
   const supabase = createClient();
   const tenantId = session.activeTenant.id;
 
-  const { data: linhas, error: lerr } = await supabase
-    .from("folhas_pagamento")
-    .select(
-      "id, salario_base, colaborador_id, colaborador:colaboradores(nome, tipo_contratacao)",
-    )
-    .eq("tenant_id", tenantId)
-    .eq("competencia_ano", ano)
-    .eq("competencia_mes", mes)
-    .eq("tipo", "salario")
-    .eq("origem", "california")
-    .eq("status", "rascunho");
-  if (lerr) {
-    console.error("[folha.ressync]", lerr.message);
-    return { ok: false, message: "Falha ao listar linhas." };
-  }
+  // RPC faz: puxa salário contratual vigente → aplica pro-rata de férias
+  // (fn_dias_ferias_na_competencia) → preserva desconto_beneficios já aplicado.
+  // Migration 20261127800001.
+  const { data, error } = await supabase.rpc("ressincronizar_salarios_pj", {
+    p_tenant_id: tenantId,
+    p_ano: ano,
+    p_mes: mes,
+  });
 
-  const colabIds = (linhas ?? []).map((l) => l.colaborador_id);
-  if (colabIds.length === 0) {
+  if (error) {
+    console.error("[folha.ressync]", error.message);
     return {
-      ok: true,
-      atualizadas: 0,
-      inalteradas: 0,
-      puladas_sem_vigente: [],
+      ok: false,
+      message: `Falha ao atualizar folha: ${error.message}`,
     };
   }
 
-  const { data: vigentes, error: verr } = await supabase
-    .from("colaboradores_salarios")
-    .select("colaborador_id, valor, valor_recibo")
-    .in("colaborador_id", colabIds)
-    .is("data_fim", null);
-  if (verr) {
-    console.error("[folha.ressync.vigentes]", verr.message);
-    return { ok: false, message: "Falha ao buscar salários vigentes." };
-  }
-  const vigentePorColab = new Map<
-    string,
-    { valor: number; valor_recibo: number | null }
-  >();
-  for (const v of vigentes ?? []) {
-    vigentePorColab.set(v.colaborador_id, {
-      valor: Number(v.valor),
-      valor_recibo: v.valor_recibo != null ? Number(v.valor_recibo) : null,
-    });
-  }
-
-  let atualizadas = 0;
-  let inalteradas = 0;
-  const puladas_sem_vigente: string[] = [];
-
-  for (const linha of linhas ?? []) {
-    const colab = linha.colaborador as unknown as {
-      nome: string;
-      tipo_contratacao: string;
-    } | null;
-    const vig = vigentePorColab.get(linha.colaborador_id);
-    if (!vig) {
-      if (colab?.nome) puladas_sem_vigente.push(colab.nome);
-      continue;
-    }
-    const alvo =
-      colab?.tipo_contratacao === "clt_recibo"
-        ? vig.valor - (vig.valor_recibo ?? vig.valor / 2)
-        : vig.valor;
-    const atual = Number(linha.salario_base);
-    if (alvo === atual) {
-      inalteradas += 1;
-      continue;
-    }
-    const { error: uerr } = await supabase
-      .from("folhas_pagamento")
-      .update({ salario_base: alvo.toFixed(2) })
-      .eq("id", linha.id);
-    if (uerr) {
-      console.error("[folha.ressync.update]", linha.id, uerr.message);
-      continue;
-    }
-    atualizadas += 1;
-  }
+  const resultado = (data ?? {}) as {
+    atualizadas?: number;
+    inalteradas?: number;
+    puladas_sem_vigente?: string[];
+    recalculadas_ferias?: number;
+  };
+  const atualizadas = resultado.atualizadas ?? 0;
+  const inalteradas = resultado.inalteradas ?? 0;
+  const puladas_sem_vigente = resultado.puladas_sem_vigente ?? [];
+  const recalculadas_ferias = resultado.recalculadas_ferias ?? 0;
 
   if (atualizadas > 0) {
     await logAuditEvent({
@@ -386,6 +335,7 @@ export async function ressincronizarSalariosPj(input: {
         atualizadas,
         inalteradas,
         puladas_sem_vigente,
+        recalculadas_ferias,
       },
     });
   }
@@ -393,7 +343,13 @@ export async function ressincronizarSalariosPj(input: {
   const chaveCompetencia = `${ano}-${String(mes).padStart(2, "0")}`;
   revalidatePath("/rh/folhas");
   revalidatePath(`/rh/folhas/${chaveCompetencia}`);
-  return { ok: true, atualizadas, inalteradas, puladas_sem_vigente };
+  return {
+    ok: true,
+    atualizadas,
+    inalteradas,
+    puladas_sem_vigente,
+    recalculadas_ferias,
+  };
 }
 
 /**
