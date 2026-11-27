@@ -519,6 +519,8 @@ export type AuditAction =
   | "beneficio.vinculo.encerrado"
   | "beneficio.vinculo.excluido"
   | "beneficio.vinculo.editado"
+  | "beneficio.vinculo.override_definido"
+  | "beneficio.vinculo.override_removido"
   | "beneficio.dependente.criado"
   | "beneficio.dependente.editado"
   | "beneficio.dependente.desativado"
