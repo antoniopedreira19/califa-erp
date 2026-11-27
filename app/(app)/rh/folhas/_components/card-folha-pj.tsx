@@ -6,6 +6,7 @@ import { AlertTriangle, Check } from "lucide-react";
 import type { ResumoCardsFolha } from "@/lib/types";
 import { BotaoGerarFolhaPj } from "./botao-gerar-folha-pj";
 import { BotaoAtualizarFolhaPj } from "./botao-atualizar-folha-pj";
+import { BotaoAplicarBeneficiosPJ } from "./botao-aplicar-beneficios-pj";
 import { BotaoDesaplicarBeneficios } from "./botao-desaplicar-beneficios";
 import { ModalEnviarFolhaPJ } from "./modal-enviar-folha-pj";
 
@@ -59,10 +60,27 @@ export function CardFolhaPJ(props: CardFolhaPJProps): JSX.Element {
   // Bruto = líquido + desconto (quando snapshot não aplicado, desconto=0 e líquido=bruto)
   const totalBruto = pj.totalLiquido + pj.totalDescontoBeneficios;
 
+  // Enviar PJ requer: permissão + linhas a enviar + catálogo OK + snapshot aplicado.
   const podeSendBtn =
     podeEditar &&
     linhasRascunhoOuPendente > 0 &&
-    catalogoIncompleto === null;
+    catalogoIncompleto === null &&
+    beneficios.aplicado;
+
+  // Aplicar requer: permissão + catálogo OK + snapshot ainda não aplicado.
+  const podeAplicar =
+    podeEditar && catalogoIncompleto === null && !beneficios.aplicado;
+
+  // Tooltip explicativo quando Enviar está desabilitado
+  const tooltipEnviar = !podeEditar
+    ? undefined
+    : catalogoIncompleto !== null
+      ? "Corrija o catálogo de benefícios antes de enviar."
+      : !beneficios.aplicado
+        ? "Aplique os benefícios antes de enviar."
+        : linhasRascunhoOuPendente === 0
+          ? "Nenhuma linha pendente de envio."
+          : undefined;
 
   // Condições para link "Desaplicar": snapshot aplicado, sem avulsa paga,
   // e TODAS as linhas ainda em rascunho (nenhuma saiu de rascunho).
@@ -187,9 +205,9 @@ export function CardFolhaPJ(props: CardFolhaPJProps): JSX.Element {
                 {brl.format(pj.totalLiquido)} líquido
               </p>
               <p className="mt-0.5 text-xs font-medium text-emerald-700">
-                ✓ Benefícios aplicados · {beneficios.qtdVinculos}{" "}
-                {beneficios.qtdVinculos === 1 ? "vínculo" : "vínculos"} ·{" "}
-                {brl.format(beneficios.totalIntegral)}
+                ✓ Benefícios aplicados · {pj.colaboradoresComDesconto}{" "}
+                {pj.colaboradoresComDesconto === 1 ? "colaborador" : "colaboradores"}{" "}
+                com desconto
               </p>
             </>
           ) : (
@@ -218,15 +236,10 @@ export function CardFolhaPJ(props: CardFolhaPJProps): JSX.Element {
         {brl.format(pj.totalLiquido)} líquido
       </p>
       <p className="text-xs font-medium text-emerald-700">
-        ✓ Benefícios aplicados · {beneficios.qtdVinculos}{" "}
-        {beneficios.qtdVinculos === 1 ? "vínculo" : "vínculos"} ·{" "}
-        {brl.format(beneficios.totalIntegral)}
+        ✓ Benefícios aplicados · {pj.colaboradoresComDesconto}{" "}
+        {pj.colaboradoresComDesconto === 1 ? "colaborador" : "colaboradores"}{" "}
+        com desconto
       </p>
-      {beneficios.avulsasGeradas && (
-        <p className="text-xs text-muted-foreground">
-          {brl.format(beneficios.totalIntegral)} em avulsas de operadora
-        </p>
-      )}
     </div>
   ) : (
     // Estado 2: snapshot não aplicado — mostrar bruto + preview se houver
@@ -266,12 +279,30 @@ export function CardFolhaPJ(props: CardFolhaPJProps): JSX.Element {
       {pilulas}
 
       <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4">
+        {/* Estado 2: snapshot NÃO aplicado → mostra Aplicar como primário, Enviar disabled */}
+        {!beneficios.aplicado && podeEditar && (
+          <div className="flex items-center justify-end gap-2 flex-wrap">
+            <BotaoAtualizarFolhaPj ano={ano} mes={mes} />
+            <BotaoAplicarBeneficiosPJ
+              ano={ano}
+              mes={mes}
+              previewDescontoBeneficios={pj.previewDescontoBeneficios}
+              previewQtdVinculos={pj.previewQtdVinculos}
+              disabled={!podeAplicar}
+            />
+          </div>
+        )}
+
+        {/* Enviar sempre visível; desabilitado se faltar pré-requisito */}
         <div className="flex items-center justify-end gap-2 flex-wrap">
-          <BotaoAtualizarFolhaPj ano={ano} mes={mes} />
+          {beneficios.aplicado && podeEditar && (
+            <BotaoAtualizarFolhaPj ano={ano} mes={mes} />
+          )}
           <button
             type="button"
             onClick={() => setModalEnvioAberto(true)}
             disabled={!podeSendBtn}
+            title={tooltipEnviar}
             className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-california-red/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             Enviar PJ ao financeiro →
