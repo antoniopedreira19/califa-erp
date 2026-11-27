@@ -4,7 +4,13 @@
  */
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pendenciasDoCadastroNaPP, temContaOuPix, type CadastroParaPP } from "./cadastro-do-fornecedor-na-pp";
+import {
+  dicaCnpjEhPix,
+  mensagemCadastroIncompleto,
+  pendenciasDoCadastroNaPP,
+  temContaOuPix,
+  type CadastroParaPP,
+} from "./cadastro-do-fornecedor-na-pp";
 import { listarPendencias } from "./fiscal/regime-do-fornecedor";
 
 const PJ_COMPLETA: CadastroParaPP = {
@@ -102,4 +108,62 @@ test("a mensagem lista na ordem do formulário", () => {
     listarPendencias(pendenciasDoCadastroNaPP(DA_PLANILHA_PJ, { pagaPeloCadastro: false })),
     "o e-mail, o telefone, o regime tributário e o CNAE",
   );
+});
+
+// Decisão 283 — dica "o CNPJ é a chave PIX" na mensagem de cadastro incompleto.
+
+test("dica CNPJ-vira-PIX: PJ com CNPJ válido e 'a conta ou o PIX' pendente", () => {
+  const cad: CadastroParaPP = {
+    ...DA_PLANILHA_PJ,
+    cpf_cnpj: "11.222.333/0001-81",
+  };
+  const pendencias = ["o e-mail", "a conta ou o PIX"];
+  const dica = dicaCnpjEhPix(cad, pendencias);
+  assert.ok(dica && dica.includes("CNPJ"), `esperava a dica, veio "${dica ?? "null"}"`);
+});
+
+test("dica CNPJ-vira-PIX: PF nunca recebe a dica (não existe PIX CNPJ em PF)", () => {
+  const cad: CadastroParaPP = {
+    ...DA_PLANILHA_PJ,
+    tipo_pessoa: "fisica",
+    cpf_cnpj: "11122233344",
+  };
+  assert.equal(dicaCnpjEhPix(cad, ["a conta ou o PIX"]), null);
+});
+
+test("dica CNPJ-vira-PIX: sem 'a conta ou o PIX' nas pendências, não sugere", () => {
+  const cad: CadastroParaPP = { ...DA_PLANILHA_PJ, cpf_cnpj: "11222333000181" };
+  assert.equal(dicaCnpjEhPix(cad, ["o e-mail", "o telefone"]), null);
+});
+
+test("dica CNPJ-vira-PIX: sem CNPJ válido, não sugere", () => {
+  const cad: CadastroParaPP = { ...DA_PLANILHA_PJ, cpf_cnpj: "" };
+  assert.equal(dicaCnpjEhPix(cad, ["a conta ou o PIX"]), null);
+});
+
+test("mensagemCadastroIncompleto: junta cabeçalho, caminho e dica", () => {
+  const cad = {
+    ...DA_PLANILHA_PJ,
+    nome: "FORNECEDOR NNN EXEMPLO",
+    cpf_cnpj: "11222333000181",
+  };
+  const msg = mensagemCadastroIncompleto(
+    cad,
+    ["o e-mail", "o telefone", "a conta ou o PIX"],
+    "lapis_edicao",
+  );
+  assert.ok(msg.startsWith("O cadastro de FORNECEDOR NNN EXEMPLO está incompleto: falta "));
+  assert.ok(msg.includes("Clique em Editar"));
+  assert.ok(msg.includes("CNPJ"));
+});
+
+test("mensagemCadastroIncompleto: sem dica quando a lista não tem 'a conta ou o PIX'", () => {
+  const cad = {
+    ...DA_PLANILHA_PJ,
+    nome: "FORNECEDOR NNN EXEMPLO",
+    cpf_cnpj: "11222333000181",
+  };
+  const msg = mensagemCadastroIncompleto(cad, ["o e-mail"], "peca_ao_financeiro");
+  assert.ok(!msg.includes("CNPJ"));
+  assert.ok(msg.includes("Peça ao financeiro"));
 });

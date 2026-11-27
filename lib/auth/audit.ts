@@ -272,6 +272,11 @@ export type AuditAction =
   // pronta para o GP enviar.
   | "pedido_compra.pronta_para_envio"
   | "pedido_compra.cancelada"
+  // Decisão 283: PP gerada volta a pagar pelo cadastro — produtor desfez o
+  // "fora do cadastro" sem cancelar nem passar pelo Comitê. Valor e
+  // cronograma seguem iguais; só o método de pagamento foi reescrito a
+  // partir do cadastro atual do fornecedor.
+  | "pedido_compra.pagamento_voltou_para_cadastro"
   // Decisão 236: o custo pago pelo sócio (Robotech, nos jobs da Ventura),
   // que entra no realizado do item sem virar PP.
   | "custo_do_socio.registrado"

@@ -446,9 +446,23 @@ export function FornecedorForm({
   const [tipoConta, setTipoConta] = React.useState<string>(
     fornecedor?.tipo_conta ?? "",
   );
-  const [pixTipo, setPixTipo] = React.useState<PixTipoChave | "">(
-    fornecedor?.pix_tipo ?? "",
-  );
+  /** Decisão 283 (27/11/2026): cadastro novo de fornecedor PJ nasce com o
+   *  tipo da chave PIX já escolhido como CNPJ, e a chave segue o documento
+   *  enquanto a pessoa não personalizar. 90% dos PJs usam PIX CNPJ, e o
+   *  seletor vazio era o que levava a produção a marcar "Sem conta nem PIX"
+   *  como atalho — caminho que travava a PP no envio pedindo boleto físico
+   *  (caso Executar, 26/11/2026). PF nova nasce com CPF pela mesma razão. */
+  const [pixTipo, setPixTipo] = React.useState<PixTipoChave | "">(() => {
+    if (fornecedor?.pix_tipo) return fornecedor.pix_tipo;
+    const semPixCadastrado = !fornecedor?.pix_tipo && !fornecedor?.pix_chave;
+    const semContaCadastrada = !fornecedor?.banco_codigo;
+    const naoMarcadoSemDados = !fornecedor?.sem_dados_pagamento;
+    if (semPixCadastrado && semContaCadastrada && naoMarcadoSemDados) {
+      const tipo = tipoPessoaDeFora ?? tipoPessoaLocal;
+      return tipo === "juridica" ? "cnpj" : tipo === "fisica" ? "cpf" : "";
+    }
+    return "";
+  });
   const [pixChave, setPixChave] = React.useState<string>(
     fornecedor?.pix_chave ?? "",
   );
@@ -795,6 +809,29 @@ export function FornecedorForm({
     // Só na abertura.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /** Decisão 283: quando o PIX é CPF/CNPJ e a pessoa ainda não personalizou
+   *  a chave (vazia OU igual aos dígitos do documento), seguir o CPF/CNPJ
+   *  digitado. Para de sincronizar assim que a pessoa muda a chave na mão. */
+  const docDigitado = onlyDigits(campos.cpf_cnpj ?? "");
+  const chaveAtualNormalizada = onlyDigits(pixChave);
+  const chaveSegueDoc =
+    (pixTipo === "cnpj" || pixTipo === "cpf") &&
+    (chaveAtualNormalizada === "" || chaveAtualNormalizada === docDigitado);
+  React.useEffect(() => {
+    if (!chaveSegueDoc) return;
+    if (docDigitado === chaveAtualNormalizada) return;
+    setPixChave(docDigitado);
+    if (pixMaskRef.current) {
+      const nativeSet = Object.getOwnPropertyDescriptor(
+        window.HTMLInputElement.prototype,
+        "value",
+      )?.set;
+      nativeSet?.call(pixMaskRef.current, docDigitado);
+      pixMaskRef.current.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [docDigitado, pixTipo]);
 
   // PIX repetido, com folga para terminar de digitar
   React.useEffect(() => {
@@ -1674,10 +1711,25 @@ export function FornecedorForm({
                 <span className="flex flex-col gap-0.5">
                   <span className="text-[13px] font-semibold">Sem conta nem PIX no cadastro</span>
                   <span className="text-[11.5px] leading-snug text-muted-foreground">
-                    A cada PP, ele manda boleto ou chave aleatória.
+                    Marque só se o fornecedor NÃO tem PIX nem conta.
+                    Cada PP dele vai exigir boleto físico, chave PIX
+                    aleatória ou link de pagamento no envio ao financeiro.
                   </span>
                 </span>
               </label>
+              {/* Decisão 283: avisar quando a pessoa marca "Sem conta nem PIX"
+                  mas digitou um CNPJ válido — o CNPJ serve de chave PIX
+                  direto e evita a trava do envio por boleto. */}
+              {semDadosPagamento && ehPj && docOk && (
+                <div className="flex items-start gap-1.5 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-[11.5px] text-amber-900">
+                  <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700" />
+                  <span>
+                    O CNPJ pode ser a chave PIX. Desmarque isto, escolha
+                    “CNPJ” no tipo da chave acima e o sistema preenche
+                    sozinho — evita exigir boleto físico no envio da PP.
+                  </span>
+                </div>
+              )}
               {semDadosPagamento && temAlgumDadoDePagamento && (
                 <div className="flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11.5px] text-amber-800">
                   <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-700" />

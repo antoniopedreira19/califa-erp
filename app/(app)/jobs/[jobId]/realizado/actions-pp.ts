@@ -63,9 +63,9 @@ import {
   type CnpjDoDocumento,
 } from "@/lib/fiscal/cnpj-da-pp";
 import { tomadoresPadrao } from "@/lib/fiscal/nf-da-pp";
-import { listarPendencias } from "@/lib/fiscal/regime-do-fornecedor";
 import {
   COLUNAS_DA_TRAVA_DA_PP,
+  mensagemCadastroIncompleto,
   pendenciasDoCadastroNaPP,
   type CadastroParaPP,
 } from "@/lib/cadastro-do-fornecedor-na-pp";
@@ -2548,6 +2548,164 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
 }
 
 /**
+ * Trocar o método de pagamento de uma PP gerada DE "fora do cadastro"
+ * PARA "pelo cadastro". Revisão enxuta da decisão 153 (27/11/2026):
+ *
+ *   A 153 trancou toda a PP depois de gerada — valor, parcelas, fornecedor
+ *   e método. Correto para o resto: quem redefine valor volta ao Comitê.
+ *   Só o método de pagamento não tem razão para isso: não muda valor nem
+ *   cronograma, nada contábil se altera — só muda COMO o dinheiro vai sair.
+ *
+ *   O caso real que motivou (PP-01767 Executar, 26/11/2026): o produtor
+ *   gerou "sem dados no cadastro / boleto" como atalho, sem ter boleto
+ *   físico. Ficou travado no envio (NF+boleto obrigatórios) e a saída era
+ *   cancelar + passar pelo Comitê de novo (R$ 118.970). Fix no banco
+ *   resolveu, mas sem UI o usuário comum não tem como.
+ *
+ *   Esta action só faz o caminho "volta para o cadastro": zera os campos
+ *   `pagamento_fora_do_cadastro_*` e copia a foto atual do PIX/conta do
+ *   cadastro do fornecedor. Trocar entre meios de FORA do cadastro (boleto
+ *   → chave aleatória, etc.) continua exigindo cancelar e refazer — menos
+ *   comum, deixa para outra entrega se precisar.
+ *
+ *   Permissão: a mesma de gerar PP (`jobs.emitir_pp`), porque é operação
+ *   anterior ao envio. Grava `pedido_compra.pagamento_voltou_para_cadastro`
+ *   no audit com o meio antigo, para rastrear.
+ */
+export async function voltarPPParaPagamentoDoCadastro(
+  pp_id: string,
+): Promise<Result> {
+  const session = await requireSession();
+  const permissao = await checarPermissao(session, "jobs.emitir_pp");
+  if (!permissao.ok) return permissao;
+  const supabase = createClient();
+  const tenantId = session.activeTenant.id;
+
+  const { data: pp } = await supabase
+    .from("pedidos_compra")
+    .select(
+      "id, codigo, status, job_id, item_realizado_id, fornecedor_id, " +
+        "pagamento_fora_do_cadastro_meio, pagamento_fora_do_cadastro_link",
+    )
+    .eq("id", pp_id)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<{
+      id: string;
+      codigo: string;
+      status: PPStatus;
+      job_id: string;
+      item_realizado_id: string;
+      fornecedor_id: string | null;
+      pagamento_fora_do_cadastro_meio: string | null;
+      pagamento_fora_do_cadastro_link: string | null;
+    }>();
+
+  if (!pp) return { ok: false, message: "PP não encontrada." };
+  if (pp.status !== "gerada") {
+    return {
+      ok: false,
+      message:
+        pp.status === "cancelada"
+          ? "PP cancelada não troca de método."
+          : `${pp.codigo} já saiu da produção.`,
+    };
+  }
+  if (!pp.pagamento_fora_do_cadastro_meio) {
+    return { ok: false, message: `${pp.codigo} já paga pelo cadastro.` };
+  }
+  if (!pp.fornecedor_id) {
+    return { ok: false, message: "Esta PP não tem fornecedor." };
+  }
+
+  // Gate do job: mesmo da geração. Sem ele, a PP não pode ser editada.
+  const gate = await checarGatesRealizado(pp.item_realizado_id);
+  if (!gate.ok) return gate;
+
+  const { data: cadastro } = await supabase
+    .from("fornecedores")
+    .select(`${COLUNAS_DA_TRAVA_DA_PP}, ${COLUNAS_DE_PAGAMENTO}`)
+    .eq("id", pp.fornecedor_id)
+    .eq("tenant_id", tenantId)
+    .maybeSingle<
+      CadastroParaPP & {
+        nome: string;
+        banco_codigo: string | null;
+        banco_nome: string | null;
+        agencia: string | null;
+        agencia_dv: string | null;
+        conta: string | null;
+        conta_dv: string | null;
+        tipo_conta: string | null;
+        pix_tipo: string | null;
+        pix_chave: string | null;
+      }
+    >();
+
+  if (!cadastro) return { ok: false, message: "Fornecedor não encontrado." };
+
+  // Mesma trava do cadastro que a PP paga pelo cadastro enfrenta na
+  // geração: e-mail, telefone, regime, CNAE e meio de pagamento próprio.
+  const falta = pendenciasDoCadastroNaPP(cadastro, { pagaPeloCadastro: true });
+  if (falta.length > 0) {
+    const completa =
+      pode(session.activeRole, "cadastros.fornecedores.editar") ||
+      pode(session.activeRole, "cadastros.fornecedores.inline");
+    return {
+      ok: false,
+      message: mensagemCadastroIncompleto(
+        cadastro,
+        falta,
+        completa ? "lapis_fornecedor" : "peca_ao_financeiro",
+      ),
+    };
+  }
+
+  const meioAntigo = pp.pagamento_fora_do_cadastro_meio;
+  const { error: updErr } = await supabase
+    .from("pedidos_compra")
+    .update({
+      pagamento_fora_do_cadastro_meio: null,
+      pagamento_fora_do_cadastro_motivo: null,
+      pagamento_fora_do_cadastro_aprovado_por: null,
+      pagamento_fora_do_cadastro_aprovado_em: null,
+      pagamento_fora_do_cadastro_link: null,
+      fornecedor_banco_codigo: cadastro.banco_codigo,
+      fornecedor_banco_nome: cadastro.banco_nome,
+      fornecedor_agencia: cadastro.agencia,
+      fornecedor_agencia_dv: cadastro.agencia_dv,
+      fornecedor_conta: cadastro.conta,
+      fornecedor_conta_dv: cadastro.conta_dv,
+      fornecedor_tipo_conta: cadastro.tipo_conta,
+      fornecedor_pix_tipo: cadastro.pix_tipo,
+      fornecedor_pix_chave: cadastro.pix_chave,
+      dados_pagamento_congelados_em: new Date().toISOString(),
+    })
+    .eq("id", pp_id)
+    .eq("tenant_id", tenantId)
+    .eq("status", "gerada");
+
+  if (updErr) {
+    return { ok: false, message: `Falha ao trocar o método: ${updErr.message}` };
+  }
+
+  await logAuditEvent({
+    acao: "pedido_compra.pagamento_voltou_para_cadastro",
+    tenantId,
+    entidadeTipo: "pedido_compra",
+    entidadeId: pp_id,
+    metadata: {
+      pp_codigo: pp.codigo,
+      job_id: pp.job_id,
+      meio_antigo: meioAntigo,
+      papel: session.activeRole,
+    },
+  });
+
+  revalidatePath(`/jobs/${pp.job_id}`);
+  return { ok: true };
+}
+
+/**
  * Prefixo do bucket onde o client sobe anexos novos de uma PP existente.
  * O client não conhece o tenant_id, então quem monta o path é o server —
  * que de quebra revalida os gates antes de liberar upload.
@@ -4486,11 +4644,11 @@ export async function gerarPPDaPPAEmitir(id: string): Promise<Result<{ codigo: s
         pode(session.activeRole, "cadastros.fornecedores.inline");
       return {
         ok: false,
-        message: `O cadastro de ${cadastro?.nome ?? "fornecedor"} está incompleto: falta ${listarPendencias(falta)}. ${
-          completa
-            ? "Clique em Editar e no lápis ao lado do fornecedor para completar."
-            : "Peça ao financeiro para completar o cadastro."
-        }`,
+        message: mensagemCadastroIncompleto(
+          cadastro,
+          falta,
+          completa ? "lapis_edicao" : "peca_ao_financeiro",
+        ),
       };
     }
   }
@@ -5385,11 +5543,11 @@ async function editarPPGeradaImpl(
         pode(session.activeRole, "cadastros.fornecedores.inline");
       return {
         ok: false,
-        message: `O cadastro de ${cadastro?.nome ?? "fornecedor"} está incompleto: falta ${listarPendencias(falta)}. ${
-          completa
-            ? "Clique no lápis ao lado do fornecedor para completar."
-            : "Peça ao financeiro para completar o cadastro."
-        }`,
+        message: mensagemCadastroIncompleto(
+          cadastro as (CadastroParaPP & { nome: string }) | null,
+          falta,
+          completa ? "lapis_fornecedor" : "peca_ao_financeiro",
+        ),
       };
     }
   }

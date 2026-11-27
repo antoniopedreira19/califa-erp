@@ -19,11 +19,14 @@
  * Função pura. Testes: node --import tsx --test lib/cadastro-do-fornecedor-na-pp.test.ts
  */
 
-import { pendenciasDoCadastroFiscal } from "@/lib/fiscal/regime-do-fornecedor";
+import { listarPendencias, pendenciasDoCadastroFiscal } from "@/lib/fiscal/regime-do-fornecedor";
 
-/** As colunas do cadastro que a trava lê. */
+/** As colunas do cadastro que a trava lê. Decisão 283 (27/11/2026) acrescentou
+ *  `cpf_cnpj` para a dica contextual da mensagem "cadastro incompleto"
+ *  sugerir "escolha CNPJ como tipo da chave PIX" quando a PJ já tem documento
+ *  válido. */
 export const COLUNAS_DA_TRAVA_DA_PP =
-  "nome, tipo_pessoa, regime_tributario, cnae, email, telefone, banco_codigo, pix_tipo, pix_chave, sem_dados_pagamento";
+  "nome, tipo_pessoa, regime_tributario, cnae, email, telefone, cpf_cnpj, banco_codigo, pix_tipo, pix_chave, sem_dados_pagamento";
 
 export interface CadastroParaPP {
   tipo_pessoa: string;
@@ -31,6 +34,7 @@ export interface CadastroParaPP {
   cnae: string | null;
   email?: string | null;
   telefone?: string | null;
+  cpf_cnpj?: string | null;
   banco_codigo?: string | null;
   pix_tipo?: string | null;
   pix_chave?: string | null;
@@ -65,4 +69,40 @@ export function pendenciasDoCadastroNaPP(
   }
   falta.push(...pendenciasDoCadastroFiscal(f));
   return falta;
+}
+
+/** Decisão 283 (27/11/2026): a PJ com CNPJ válido no cadastro e sem conta
+ *  nem PIX ganha a dica "o CNPJ também é a chave PIX" na mensagem de
+ *  "cadastro incompleto", porque esse foi o atalho que o form passou a
+ *  oferecer e evita que a produção marque "Sem conta nem PIX" como
+ *  bypass. Só rodada quando a lista de pendências contém "a conta ou o PIX". */
+export function dicaCnpjEhPix(
+  f: CadastroParaPP | null | undefined,
+  pendencias: readonly string[],
+): string | null {
+  if (!f || f.tipo_pessoa !== "juridica") return null;
+  if (!pendencias.includes("a conta ou o PIX")) return null;
+  const digitos = String(f.cpf_cnpj ?? "").replace(/\D/g, "");
+  if (digitos.length !== 14) return null;
+  return "Se o fornecedor recebe por PIX no CNPJ, escolha “CNPJ” no tipo da chave — o sistema já preenche a chave com os dígitos.";
+}
+
+/** Monta a mensagem de "cadastro incompleto" do servidor, com a dica do
+ *  CNPJ-vira-PIX quando ela se aplica. Centralizada para as duas chamadas
+ *  (`gerarPPDaPPAEmitir` e o `finalizarPedidoCompraImpl`). */
+export function mensagemCadastroIncompleto(
+  f: (CadastroParaPP & { nome?: string | null }) | null | undefined,
+  pendencias: readonly string[],
+  ondeEditar: "lapis_edicao" | "lapis_fornecedor" | "peca_ao_financeiro",
+): string {
+  const nomeReal = f?.nome ?? "fornecedor";
+  const cabecalho = `O cadastro de ${nomeReal} está incompleto: falta ${listarPendencias(pendencias)}.`;
+  const ondeEditarMsg =
+    ondeEditar === "lapis_edicao"
+      ? "Clique em Editar e no lápis ao lado do fornecedor para completar."
+      : ondeEditar === "lapis_fornecedor"
+        ? "Clique no lápis ao lado do fornecedor para completar."
+        : "Peça ao financeiro para completar o cadastro.";
+  const dica = dicaCnpjEhPix(f, pendencias);
+  return [cabecalho, ondeEditarMsg, dica].filter(Boolean).join(" ");
 }

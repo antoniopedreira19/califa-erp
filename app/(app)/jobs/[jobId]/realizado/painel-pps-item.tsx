@@ -107,6 +107,7 @@ import {
   Undo2,
   AlertCircle,
   Bot,
+  CreditCard,
 } from "lucide-react";
 import type { ComiteDaPP } from "@/lib/data/comite";
 import { ppCobertaPeloComite, ppPassaDoOrcadoNoComite } from "@/lib/calculos/limites-orcamento";
@@ -160,6 +161,7 @@ import {
   excluirPPAEmitir,
   gerarPPDaPPAEmitir,
   solicitarAprovacaoDaPP,
+  voltarPPParaPagamentoDoCadastro,
 } from "./actions-pp";
 import {
   EnvioDialog,
@@ -259,6 +261,11 @@ export interface PPDoItem {
    *  (decisão 161); a guia, só a guia (decisão 227). Null nos outros meios.
    *  Obrigatório pelo mesmo motivo do trio. */
   pagaPeloAnexo: MeioPeloAnexo | null;
+  /** Decisão 283 (27/11/2026): a PP paga fora do cadastro — qualquer meio,
+   *  não só o do anexo. Libera o botão "Voltar para o cadastro" quando a
+   *  produção quer tirar a PP gerada do "fora do cadastro" sem cancelar.
+   *  Obrigatório pelo mesmo motivo do trio; `false` quando paga pelo cadastro. */
+  foraDoCadastro: boolean;
   /** Decisão 209: a PP do cartão corporativo vai sem nota. Obrigatório
    *  pelo mesmo motivo do trio. */
   cartaoCorporativo: boolean;
@@ -671,6 +678,25 @@ export function PainelPPsItem({
     });
   }
 
+  /** Decisão 283: devolver a PP gerada ao "pelo cadastro" quando o produtor
+   *  escolheu "fora do cadastro" por engano ou atalho. Não cancela nem
+   *  reaprova — só zera os campos de fora do cadastro e copia a foto atual
+   *  do PIX/conta. */
+  function voltarParaCadastro(pp: PPDoItem) {
+    setErro(null);
+    startTransition(async () => {
+      const res = await voltarPPParaPagamentoDoCadastro(pp.id);
+      if (!res.ok) {
+        setErro(res.message);
+        return;
+      }
+      onMensagem?.(
+        `${pp.codigo}: método trocado para "pelo cadastro do fornecedor".`,
+      );
+      router.refresh();
+    });
+  }
+
   async function salvarCustoDoSocio(
     dados: Parameters<typeof registrarCustoDoSocio>[1],
   ): Promise<string | null> {
@@ -941,6 +967,7 @@ export function PainelPPsItem({
                     prontaParaEnvioEm: null,
                     prontaParaEnvioPorNome: null,
                     pagaPeloAnexo: meioPeloAnexo(a.dados.pagamento_fora_do_cadastro?.meio),
+                    foraDoCadastro: Boolean(a.dados.pagamento_fora_do_cadastro?.meio),
                     cartaoCorporativo: a.cartao_corporativo,
                     // A PP a emitir ganha a marca do atraso ao ser gerada.
                     pagamentoAtrasado: null,
@@ -1136,6 +1163,19 @@ export function PainelPPsItem({
                         >
                           <Download className="h-3 w-3" />
                         </BotaoIcone>
+                        {/* Decisão 283: "Voltar para o cadastro" quando a PP
+                            gerada paga fora do cadastro e o cadastro atual
+                            tem meio de pagamento. Evita cancelar + refazer
+                            quando o erro foi só na escolha do método. */}
+                        {podeAgir && pp.foraDoCadastro && (
+                          <BotaoIcone
+                            titulo="Voltar para o cadastro do fornecedor"
+                            onClick={() => voltarParaCadastro(pp)}
+                            disabled={pending || travaDaAbertura !== null}
+                          >
+                            <CreditCard className="h-3 w-3" />
+                          </BotaoIcone>
+                        )}
                         {podeAgir && (
                           <BotaoIcone
                             titulo="Cancelar PP"

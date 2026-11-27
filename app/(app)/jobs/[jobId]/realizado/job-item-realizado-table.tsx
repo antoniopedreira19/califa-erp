@@ -2915,6 +2915,7 @@ export function JobItemRealizadoTable({
                 prontaParaEnvioEm: pp.pronta_para_envio_em,
                 prontaParaEnvioPorNome: pp.pronta_para_envio_por_nome,
                 pagaPeloAnexo: meioPeloAnexo(pp.pagamento_fora_do_cadastro?.meio),
+                foraDoCadastro: Boolean(pp.pagamento_fora_do_cadastro?.meio),
                 cartaoCorporativo: pp.cartao_corporativo === true,
                 // Decisão 259: a marca da PP de pagamento atrasado.
                 pagamentoAtrasado: pp.pagamento_atrasado,
