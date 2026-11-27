@@ -4,11 +4,12 @@
  * Server actions de envio de folha por origem.
  *
  * - enviarFolhaPJ  → origem "california" (PJ gerado internamente).
- *   Aplica fechamento de benefícios (se necessário) e gera avulsas de operadora.
+ *   EXIGE que os benefícios já tenham sido aplicados (snapshot vigente).
+ *   Gera as avulsas de operadora e marca as linhas como enviadas.
  * - enviarFolhaCLT → origem "contabilidade" (CLT importado via PDF).
  *   Sem benefícios: só marca as linhas como enviadas.
  *
- * Spec: docs/superpowers/specs/2026-11-26-folha-pj-clt-fluxos-independentes-design.md
+ * Spec: docs/superpowers/specs/2026-11-27-aplicar-beneficios-passo-separado-design.md
  */
 
 import { revalidatePath } from "next/cache";
@@ -29,12 +30,15 @@ type ActionResult<T = Record<string, unknown>> =
 /**
  * Envia todas as linhas PJ (origem "california") de uma competência.
  *
+ * Pré-requisito: fechamento de benefícios vigente (aplicado pela Kika via o botão
+ * "Aplicar benefícios" no card PJ ANTES de enviar). Esta action NÃO aplica mais
+ * benefícios inline — se o snapshot não existir, devolve erro amigável.
+ *
  * Fluxo:
- * 1. Verifica se existe fechamento de benefícios vigente.
- * 2. Se não existir, aplica via RPC (podendo descobrir que não há vínculos ativos).
- * 3. Se há fechamento, gera as avulsas de operadora.
- * 4. Atualiza o status das linhas rascunho/pendente_correcao → enviada.
- * 5. Registra auditoria e revalida paths.
+ * 1. Verifica fechamento vigente. Se não existir → devolve "Aplique os benefícios".
+ * 2. Gera as avulsas de operadora (idempotente).
+ * 3. Atualiza o status das linhas rascunho/pendente_correcao → enviada.
+ * 4. Registra auditoria e revalida paths.
  */
 export async function enviarFolhaPJ(args: {
   ano: number;
@@ -42,9 +46,8 @@ export async function enviarFolhaPJ(args: {
 }): Promise<
   ActionResult<{
     linhas_enviadas: number;
-    fechamento_id: string | null;
+    fechamento_id: string;
     avulsas: AvulsaGerada[];
-    sem_beneficios: boolean;
   }>
 > {
   const { ano, mes } = args;
@@ -59,7 +62,7 @@ export async function enviarFolhaPJ(args: {
   const mesPad2 = String(mes).padStart(2, "0");
 
   // -------------------------------------------------------------------------
-  // Passo 3: Buscar fechamento de benefícios vigente
+  // Passo 1: Exigir fechamento de benefícios vigente
   // -------------------------------------------------------------------------
   const { data: fechamentoVigente } = await supabase
     .from("beneficio_fechamento_mensal")
@@ -70,49 +73,20 @@ export async function enviarFolhaPJ(args: {
     .is("reaberto_em", null)
     .maybeSingle();
 
-  let fechamentoId: string | null = fechamentoVigente?.id ?? null;
-  let semBeneficios = false;
+  if (!fechamentoVigente) {
+    return {
+      ok: false,
+      message: "Aplique os benefícios antes de enviar a folha PJ ao financeiro.",
+    };
+  }
+
+  const fechamentoId = fechamentoVigente.id;
   let avulsas: AvulsaGerada[] = [];
 
   // -------------------------------------------------------------------------
-  // Passo 4: Se não existir fechamento, aplicar via RPC
+  // Passo 2: Gerar avulsas de operadora (idempotente)
   // -------------------------------------------------------------------------
-  if (!fechamentoId) {
-    const { data: rpcData, error: rpcError } = await supabase.rpc(
-      "aplicar_fechamento_beneficios",
-      { p_tenant_id: tenantId, p_ano: ano, p_mes: mes },
-    );
-
-    if (rpcError) {
-      if (rpcError.message.includes("nenhum_vinculo_ativo")) {
-        // Tenant sem benefícios ativos nessa competência — OK, segue sem avulsa.
-        semBeneficios = true;
-        fechamentoId = null;
-      } else if (rpcError.message.includes("catalogo_incompleto")) {
-        // Extrair o nome do benefício que está incompleto (vem após "catalogo_incompleto: ")
-        const nomeBeneficio = rpcError.message
-          .split("catalogo_incompleto:")
-          .at(1)
-          ?.trim();
-        return {
-          ok: false,
-          message: `Catálogo de benefícios está incompleto: ${nomeBeneficio}. Edite em /rh/beneficios → Catálogo antes de enviar.`,
-        };
-      } else {
-        return {
-          ok: false,
-          message: `Falha ao aplicar benefícios: ${rpcError.message}`,
-        };
-      }
-    } else if (rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
-      fechamentoId = (rpcData[0] as { fechamento_id: string }).fechamento_id;
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Passo 5: Gerar avulsas de operadora (se há fechamento)
-  // -------------------------------------------------------------------------
-  if (fechamentoId) {
+  {
     const { data: avulsasData, error: errAvulsas } = await supabase.rpc(
       "gerar_avulsas_fechamento_beneficios",
       { p_fechamento_id: fechamentoId },
@@ -129,7 +103,7 @@ export async function enviarFolhaPJ(args: {
   }
 
   // -------------------------------------------------------------------------
-  // Passo 6: UPDATE folhas_pagamento (rascunho | pendente_correcao → enviada)
+  // Passo 3: UPDATE folhas_pagamento (rascunho | pendente_correcao → enviada)
   // -------------------------------------------------------------------------
   const { data: afetadas, error: errUpdate } = await supabase
     .from("folhas_pagamento")
@@ -165,7 +139,7 @@ export async function enviarFolhaPJ(args: {
   const linhasEnviadas = afetadas.length;
 
   // -------------------------------------------------------------------------
-  // Passo 7: Auditoria
+  // Passo 4: Auditoria
   // -------------------------------------------------------------------------
   await logAuditEvent({
     acao: "folha_competencia.enviada",
@@ -179,27 +153,22 @@ export async function enviarFolhaPJ(args: {
       linhas_enviadas: linhasEnviadas,
       fechamento_id: fechamentoId,
       avulsas,
-      sem_beneficios: semBeneficios,
     },
   });
 
   // -------------------------------------------------------------------------
-  // Passo 8: Revalidar paths
+  // Passo 5: Revalidar paths
   // -------------------------------------------------------------------------
   revalidatePath("/rh/folhas");
   revalidatePath(`/rh/folhas/${ano}-${mesPad2}`);
   revalidatePath("/rh/beneficios");
   revalidatePath("/financeiro/contas-a-pagar");
 
-  // -------------------------------------------------------------------------
-  // Passo 9: Retorno
-  // -------------------------------------------------------------------------
   return {
     ok: true,
     linhas_enviadas: linhasEnviadas,
     fechamento_id: fechamentoId,
     avulsas,
-    sem_beneficios: semBeneficios,
   };
 }
 

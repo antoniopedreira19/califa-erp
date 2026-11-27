@@ -7164,6 +7164,8 @@ export interface ResumoFolhaOrigem {
   linhasPagas: number;
   totalLiquido: number;             // soma de salario_base
   totalDescontoBeneficios: number;  // soma de desconto_beneficios (CLT fica 0)
+  /** Count distinct colaborador_id com desconto_beneficios > 0 (sempre 0 em CLT). */
+  colaboradoresComDesconto: number;
 }
 
 /** Shape completo retornado por `obterResumoCardsFolha`. */

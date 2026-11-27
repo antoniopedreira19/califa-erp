@@ -30,6 +30,7 @@ type FolhaLinhaRaw = {
   desconto_beneficios: number;
   status: string;
   origem: string;
+  colaborador_id: string;
 };
 
 /** Acumula contadores/totais por origem. */
@@ -42,6 +43,7 @@ function origemVazia(): ResumoFolhaOrigem {
     linhasPagas: 0,
     totalLiquido: 0,
     totalDescontoBeneficios: 0,
+    colaboradoresComDesconto: 0,
   };
 }
 
@@ -86,7 +88,7 @@ export async function obterResumoCardsFolha(args: {
     // 1. Linhas de folha — select leve, sem embed.
     supabase
       .from("folhas_pagamento")
-      .select("salario_base, desconto_beneficios, status, origem")
+      .select("salario_base, desconto_beneficios, status, origem, colaborador_id")
       .eq("tenant_id", tenantId)
       .eq("competencia_ano", ano)
       .eq("competencia_mes", mes)
@@ -116,10 +118,15 @@ export async function obterResumoCardsFolha(args: {
     console.warn("[folhas-resumo] query folhas_pagamento falhou:", linhasResult.error.message);
   }
 
+  const colaboradoresPjComDesconto = new Set<string>();
+
   for (const linha of (linhasResult.data ?? []) as FolhaLinhaRaw[]) {
     const origem = linha.origem as FolhaOrigem;
     if (origem === "california") {
       acumularLinha(pjAcc, linha);
+      if (Number(linha.desconto_beneficios) > 0) {
+        colaboradoresPjComDesconto.add(linha.colaborador_id);
+      }
     } else if (origem === "contabilidade") {
       acumularLinha(cltAcc, linha);
     } else {
@@ -127,6 +134,8 @@ export async function obterResumoCardsFolha(args: {
       console.warn("[folhas-resumo] origem desconhecida ignorada:", linha.origem);
     }
   }
+
+  pjAcc.colaboradoresComDesconto = colaboradoresPjComDesconto.size;
 
   // ── Estado de benefícios ──────────────────────────────────────────────────
   const fechamentoId = fechamento?.id ?? null;
