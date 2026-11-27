@@ -66,10 +66,10 @@ export async function salvarEquipeDoProjeto(
   const [projetoRes, vinculosRes, jobsRes, membrosRes] = await Promise.all([
     supabase
       .from("projetos")
-      .select("id, codigo")
+      .select("id, codigo, de_pagamentos")
       .eq("id", projetoId)
       .eq("tenant_id", tenantId)
-      .maybeSingle<{ id: string; codigo: string }>(),
+      .maybeSingle<{ id: string; codigo: string; de_pagamentos: boolean }>(),
     supabase
       .from("projeto_responsaveis")
       .select("profile_id, papel")
@@ -87,6 +87,14 @@ export async function salvarEquipeDoProjeto(
   ]);
   const projeto = projetoRes.data;
   if (!projeto) return { ok: false, message: "Projeto não encontrado." };
+  // Decisão 282: a equipe do projeto escondido dos jobs de pagamentos é a
+  // soma das equipes dos jobs dele, gravada pela função do banco — não se
+  // mexe nela direto.
+  if (projeto.de_pagamentos === true)
+    return {
+      ok: false,
+      message: "A equipe de cada job de pagamentos muda pelo botão Equipe do próprio job.",
+    };
 
   const vinculos = (vinculosRes.data ?? []) as Array<{
     profile_id: string;

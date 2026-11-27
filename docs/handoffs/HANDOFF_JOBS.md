@@ -6910,3 +6910,13 @@ A exceção da 204 deixou de ser "só o administrador". No formulário da PP, qu
 - **Conferido no Sandbox (TES-1026/26):** PP-00958 enviada com NF, aprovada e paga; BV de dezembro confirmado e na fila do financeiro com nome; extensão para 22/01/2027 mudou o período do job; PDF da PP-00959 com "Item: Salvador/BA · Fornecedor Teste".
 - **Card "Erratas":** saiu dos jobs de Mídia Off (produção e financeiro), a pedido do Tiago — a mídia não tem errata; o registro é o do "Planejado e realizado".
 - **Ainda aberto:** contrato do veículo.
+
+
+## ⚠️ Nota de 2026-11-27 — a equipe do job de pagamentos e o envio de PP pelo produtor (decisão 282)
+
+- **Equipe de cada job:** no job de pagamentos, o botão Equipe abre a equipe do próprio job (`jobs_equipe_de_pagamentos`), não a do projeto escondido. "+ Adicionar pessoas" marca várias de uma vez (GPs, Produtores, Freelancers); o ✕ tira. Mudam o financeiro, os GPs, os produtores e o administrador (e quem criou o job); job encerrado não muda.
+- **Chave "Envia PP" por produtor:** ligada, o produtor envia a PP ao financeiro como o GP (mesma aba de PPs: enviar, cancelar a em avaliação, prestar contas, corrigir a NF). Mais de um produtor pode ter a chave. GP e administrador enviam sempre; freelancer gera. O banco (`produtor_envia_pp_do_job`) e o TS (`JobParaEnvioDePP.enviam_pela_equipe`) dizem a mesma coisa.
+- **Projeto escondido:** a equipe dele é a soma das equipes dos jobs (gravada pela função), para a RLS do freelancer e o "Meus" da Home; a visão agregada não mostra mais o Equipe do projeto. Na lista de Jobs, o "Meus" do job de pagamentos é por job.
+- **O que existia:** a produtora da equipe do P-0182/26 foi copiada para os quatro jobs reais (CAL-1004 a 1007) com a chave desligada.
+- **Conferido no Sandbox:** TES-1041/26 — produtora com a chave gerou e enviou a PP-00960 (depois do Comitê); sem a chave, o "Cancelar" da PP em avaliação sumiu para ela.
+

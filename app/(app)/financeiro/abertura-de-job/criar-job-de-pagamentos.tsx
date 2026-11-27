@@ -42,6 +42,10 @@ import {
   type OpcoesDoJobDePagamentos,
 } from "./actions-job-de-pagamentos";
 import { conferirNomeDeProjetoFinanceiro, renomearProjetoFinanceiro } from "./actions";
+import {
+  EditorDaEquipeDePagamentos,
+  type EstadoDaEquipe,
+} from "@/app/(app)/jobs/_equipe/editor-da-equipe-de-pagamentos";
 
 type Chave = "nome" | "projeto" | "empresa_id" | "regional_id" | "competencia" | "descritivo";
 
@@ -96,6 +100,8 @@ interface Dados {
   projetoId: string;
   projetoNovo: string;
   descritivo: string;
+  /** Decisão 282: a equipe do job e quem dela envia PP. */
+  equipe: EstadoDaEquipe;
 }
 
 /** O botão da aba (na linha dos chips), com o pop-up e o aviso de criado. */
@@ -149,6 +155,7 @@ function CriarJobDePagamentosDialog({
     projetoId: "",
     projetoNovo: "",
     descritivo: "",
+    equipe: { ids: [], envia: [] },
   }));
   const [tentou, setTentou] = React.useState(false);
   const [salvando, setSalvando] = React.useState(false);
@@ -309,6 +316,10 @@ function CriarJobDePagamentosDialog({
       competencia_trimestre: trimestre,
       competencia_ano: ano,
       descritivo: dados.descritivo,
+      equipe: dados.equipe.ids.map((id) => ({
+        profile_id: id,
+        envia_pp: dados.equipe.envia.includes(id),
+      })),
     });
     setSalvando(false);
     if (!r.ok) {
@@ -331,8 +342,8 @@ function CriarJobDePagamentosDialog({
             <div className="min-w-0 space-y-1">
               <DialogTitle className="text-xl">Criar Job de Pagamentos</DialogTitle>
               <DialogDescription>
-                O job nasce aberto, sem faturamento e sem responsáveis, e aparece em Jobs para a
-                produção lançar os custos.
+                O job nasce aberto, sem faturamento e sem GP e produtor responsáveis, com a equipe
+                que você escolher, e aparece em Jobs para a produção lançar os custos.
               </DialogDescription>
             </div>
           </DialogHeader>
@@ -572,6 +583,22 @@ function CriarJobDePagamentosDialog({
               rows={2}
               className={cn("min-h-[68px] resize-y leading-relaxed", borda("descritivo"))}
               placeholder="O motivo da abertura: para que serve o job e que custos a produção vai lançar nele..."
+            />
+          </Campo>
+
+          {/* Linha 5 — a equipe do job (decisão 282), abaixo do Descritivo, na
+              largura toda. Opcional: completa-se depois, no Equipe do job. */}
+          <Campo
+            rotulo="Equipe"
+            className="md:col-span-3"
+            apoio="Só deste job. Ligue o “Envia PP” dos produtores que mandam as PPs ao financeiro (pode ser mais de um); os GPs enviam sempre e os freelancers geram."
+          >
+            <EditorDaEquipeDePagamentos
+              pessoas={opcoes?.pessoas ?? []}
+              valor={dados.equipe}
+              onChange={(equipe) => onChange({ equipe })}
+              podeMudar
+              noFormulario
             />
           </Campo>
         </div>

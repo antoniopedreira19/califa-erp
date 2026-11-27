@@ -61,7 +61,7 @@ import { salvarEquipeDoProjeto } from "./actions";
 // Peças
 // ---------------------------------------------------------------------------
 
-function corDoPapel(papel: AppRole | null): string {
+export function corDoPapel(papel: AppRole | null): string {
   switch (papel) {
     case "gerente_producao":
       return "bg-california-red/10 text-california-red";
@@ -76,7 +76,7 @@ function corDoPapel(papel: AppRole | null): string {
   }
 }
 
-const ROTULO_DO_PAPEL: Partial<Record<AppRole, string>> = {
+export const ROTULO_DO_PAPEL: Partial<Record<AppRole, string>> = {
   administrador: "Administrador",
   gerente_producao: "GP",
   produtor: "Produtor",
@@ -92,7 +92,7 @@ function iniciais(nome: string) {
   ).toUpperCase();
 }
 
-function Avatar({
+export function Avatar({
   pessoa,
   tamanho = "sm",
   className,
@@ -933,7 +933,7 @@ function CelulaDoResponsavel({
 }
 
 /** Os rostos da equipe, com o nome na dica. */
-function Rostos({
+export function Rostos({
   pessoas,
   max = 4,
 }: {

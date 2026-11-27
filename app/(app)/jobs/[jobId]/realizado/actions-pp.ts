@@ -30,6 +30,7 @@ import { LINK_DA_COMPRA, LINK_DA_COMPRA_MAX, PLATAFORMA_MAX } from "@/lib/valida
 import { checarPermissao } from "@/lib/permissoes-server";
 import { formatCurrency } from "@/lib/utils";
 import { cancelaPPNoPapel, enviaPPNoJob, pode, type JobParaEnvioDePP } from "@/lib/permissoes";
+import { quemEnviaPelaEquipeDePagamentos } from "@/lib/data/equipe-do-job-de-pagamentos";
 import {
   DOCUMENTO_TIPOS,
   DOCUMENTO_TIPOS_FISCAIS,
@@ -961,6 +962,9 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
         /** Quem envia PP do job além do GP (decisão 174). */
         produtor_id: string | null;
         produtor_envia_pp: boolean;
+        /** Decisão 282: no job de pagamentos, os produtores da equipe com a
+         *  chave "Envia PP". Vazio nos outros jobs. */
+        enviam_pela_equipe: string[];
         /** Decisão 216: o job Mídia System em auditoria dispensa a NF no
          *  envio. */
         midia_system: boolean;
@@ -1042,7 +1046,7 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
   const { data: jobRow, error: jobErr } = await supabase
     .from("jobs")
     .select(
-      "id, codigo, tenant_id, status, responsavel_id, empresa_id, produto, nome, projeto_id, orcamento_id, abertura_em_revisao, data_abertura_financeiro, regional_id, produtor_id, produtor_envia_pp, midia_system, midia_system_liberado_em",
+      "id, codigo, tenant_id, status, responsavel_id, empresa_id, produto, nome, projeto_id, orcamento_id, abertura_em_revisao, data_abertura_financeiro, regional_id, produtor_id, produtor_envia_pp, midia_system, midia_system_liberado_em, de_pagamentos",
     )
     .eq("id", item.job_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -1051,10 +1055,17 @@ async function checarGatesRealizado(itemRealizadoId: string): Promise<
   if (jobErr || !jobRow) {
     return { ok: false, message: "Job não encontrado." };
   }
+  // Decisão 282: só o job de pagamentos tem a equipe com a chave — uma
+  // leitura a mais só nele.
+  const enviamPelaEquipe =
+    (jobRow as any).de_pagamentos === true
+      ? await quemEnviaPelaEquipeDePagamentos(supabase, item.job_id, session.activeTenant.id)
+      : [];
   const job = {
     ...jobRow,
     abertura_em_revisao: (jobRow as any).abertura_em_revisao === true,
     produtor_envia_pp: (jobRow as any).produtor_envia_pp === true,
+    enviam_pela_equipe: enviamPelaEquipe,
     midia_system: (jobRow as any).midia_system === true,
     midia_system_liberado_em: ((jobRow as any).midia_system_liberado_em as string | null) ?? null,
   };
@@ -2408,7 +2419,7 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
   const { data: pp, error: ppErr } = await supabase
     .from("pedidos_compra")
     .select(
-      "id, tenant_id, codigo, job_id, item_realizado_id, status, jobs!inner(id, status, responsavel_id, produtor_id, produtor_envia_pp)",
+      "id, tenant_id, codigo, job_id, item_realizado_id, status, jobs!inner(id, status, responsavel_id, produtor_id, produtor_envia_pp, de_pagamentos)",
     )
     .eq("id", pp_id)
     .eq("tenant_id", session.activeTenant.id)
@@ -2435,7 +2446,13 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
 
   const job = (
     pp as unknown as {
-      jobs: { status: string; responsavel_id: string | null; produtor_id: string | null; produtor_envia_pp: boolean };
+      jobs: {
+        status: string;
+        responsavel_id: string | null;
+        produtor_id: string | null;
+        produtor_envia_pp: boolean;
+        de_pagamentos: boolean;
+      };
     }
   ).jobs;
   // Mesmo gate de gerar (decisão 056): quem pôde gerar a PP na
@@ -2456,7 +2473,16 @@ export async function cancelarPedidoCompra(pp_id: string): Promise<Result> {
   // para a produção e, até alguém cancelar, segue no realizado do item.
   const podeCancelar = cancelaPPNoPapel(
     pp.status as PPStatus,
-    enviaPPNoJob(session.activeRole, session.profile.id, job),
+    enviaPPNoJob(session.activeRole, session.profile.id, {
+      produtor_id: job.produtor_id,
+      produtor_envia_pp: job.produtor_envia_pp === true,
+      // Decisão 282: no job de pagamentos, o produtor da equipe com a chave
+      // cancela a em avaliação como o GP.
+      enviam_pela_equipe:
+        job.de_pagamentos === true
+          ? await quemEnviaPelaEquipeDePagamentos(supabase, pp.job_id as string, session.activeTenant.id)
+          : [],
+    }),
   );
   if (!podeCancelar) {
     await logAuditEvent({

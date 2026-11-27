@@ -95,6 +95,10 @@ export default async function JobsPage({
         // 16/10/2026 o recorte é a Equipe do projeto inteira — ver
         // `projetosNaEquipeDe`, lido junto desta query.
         "produtor_id, " +
+        // Decisão 282: no job de pagamentos, "Meus" é a equipe do próprio
+        // job (ou quem o criou), não a do projeto escondido, que é a soma
+        // das equipes dos jobs dele.
+        "de_pagamentos, created_by, " +
         // Os dois descritivos que a lista mostra em cartão (handoff
         // "Descritivos nas Listas", 04/09/2026): o do job na linha e o
         // do projeto na faixa do grupo. Texto curto — tetos de 500 e
@@ -157,13 +161,21 @@ export default async function JobsPage({
   // "Cancelamento solicitado" (decisão 169). Leitura do índice parcial.
   // O recorte "Meus" é a Equipe do projeto (16/10/2026); sem a chave
   // "Meus/Todos" (o freelancer), a RLS já fez esse recorte.
-  const [jobsRes, empresas, comPedidoDeCancelamento, projetosDaMinhaEquipe] =
+  const [jobsRes, empresas, comPedidoDeCancelamento, projetosDaMinhaEquipe, jobsDePagamentosMeus] =
     await Promise.all([
       jobsQuery,
       listEmpresasAtivas(session.activeTenant.id),
       jobsComCancelamentoPendente(supabase, session.activeTenant.id),
       podeAlternarMeusTodos
         ? projetosNaEquipeDe(supabase, session.activeTenant.id, session.profile.id)
+        : Promise.resolve(new Set<string>()),
+      podeAlternarMeusTodos
+        ? supabase
+            .from("jobs_equipe_de_pagamentos")
+            .select("job_id")
+            .eq("tenant_id", session.activeTenant.id)
+            .eq("profile_id", session.profile.id)
+            .then((r) => new Set(((r.data ?? []) as Array<{ job_id: string }>).map((l) => l.job_id)))
         : Promise.resolve(new Set<string>()),
     ]);
 
@@ -206,9 +218,11 @@ export default async function JobsPage({
     responsavel_id: r.responsavel_id ?? null,
     produtor_id: r.produtor_id ?? null,
     meu:
-      r.responsavel_id === session.profile.id ||
-      r.produtor_id === session.profile.id ||
-      projetosDaMinhaEquipe.has(r.projeto_id),
+      r.de_pagamentos === true
+        ? jobsDePagamentosMeus.has(r.id) || r.created_by === session.profile.id
+        : r.responsavel_id === session.profile.id ||
+          r.produtor_id === session.profile.id ||
+          projetosDaMinhaEquipe.has(r.projeto_id),
     observacoes: r.observacoes ?? null,
     projeto_codigo: r.projeto?.codigo ?? null,
     projeto_nome: r.projeto?.nome ?? null,

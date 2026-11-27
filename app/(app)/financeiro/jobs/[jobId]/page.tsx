@@ -76,6 +76,8 @@ import { midiaSystemDoJob, situacaoMidiaDaPP } from "@/lib/calculos/midia-system
 import { SeloMidiaSystem } from "@/app/(app)/jobs/_midia-system/midia-system";
 import type { PPSemNfNaAuditoria } from "../../abertura-de-job/[jobId]/campo-midia-system";
 import { parametrosGravadosDe } from "@/lib/data/parametros-do-job";
+import { carregarEquipeDoJobDePagamentos } from "@/lib/data/equipe-do-job-de-pagamentos";
+import { BotaoEquipeDoJobDePagamentos } from "@/app/(app)/jobs/_equipe/equipe-do-job-de-pagamentos";
 
 export const dynamic = "force-dynamic";
 
@@ -149,6 +151,7 @@ export default async function JobNoFinanceiroPage({
     resumoFinanceiro,
     saves,
     cancelamento,
+    equipeDePagamentos,
   ] = await Promise.all([
     carregarDetalheDoJob(session, params.jobId),
     carregarJobParaAbertura(tenantId, params.jobId),
@@ -222,6 +225,9 @@ export default async function JobNoFinanceiroPage({
     // O pedido de cancelamento no ar (decisão 169): o selo do cabeçalho e,
     // para quem vem do "Visualizar job" da fila, a faixa da planilha.
     cancelamentoDoJob(supabase, tenantId, params.jobId),
+    // Decisão 282: a Equipe do job de pagamentos, que o financeiro vê e
+    // muda daqui também. Null nos outros jobs.
+    carregarEquipeDoJobDePagamentos(supabase, tenantId, params.jobId),
   ]);
 
   if (!detalhe || !carregadoParaAbertura) notFound();
@@ -553,6 +559,17 @@ export default async function JobNoFinanceiroPage({
                 {situacaoMeta.rotulo}
               </Badge>
               <SeloMidiaSystem midia={midiaDoJob} />
+              {/* Decisão 282: a Equipe do job de pagamentos, como na produção. */}
+              {equipeDePagamentos && (
+                <BotaoEquipeDoJobDePagamentos
+                  equipe={equipeDePagamentos}
+                  noFinanceiro
+                  podeMudar={
+                    pode(session.activeRole, "jobs.editar_equipe_de_pagamentos") ||
+                    equipeDePagamentos.criadoPor === session.profile.id
+                  }
+                />
+              )}
               {/* Quem mandou para faturamento, e quando (decisão 136). */}
               {detalhe.etapasDoJob.envioFaturamentoEm && (
                 <span className="text-[12px] text-muted-foreground">

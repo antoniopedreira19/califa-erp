@@ -249,6 +249,7 @@ export async function carregarDetalheDoJob(
     socioDaEmpresaRes,
     liberacoesRes,
     jaFaturadoRes,
+    enviamPelaEquipeRes,
   ] = await Promise.all([
     // Os agrupamentos do JOB (decisão 162): a cópia dos da versão, com o
     // que as erratas renomearam, criaram e tiraram. O removido não aparece.
@@ -585,8 +586,22 @@ export async function carregarDetalheDoJob(
     jobFechado(raw.status)
       ? supabase.rpc("job_ja_faturado", { p_job_id: raw.id })
       : Promise.resolve({ data: false, error: null }),
+    // Decisão 282: no job de pagamentos, os produtores da equipe com a
+    // chave "Envia PP" — enviam como o GP.
+    raw.de_pagamentos === true
+      ? supabase
+          .from("jobs_equipe_de_pagamentos")
+          .select("profile_id")
+          .eq("job_id", raw.id)
+          .eq("tenant_id", session.activeTenant.id)
+          .eq("envia_pp", true)
+      : Promise.resolve({ data: [], error: null }),
   ]);
 
+  if (enviamPelaEquipeRes.error) console.error("[job.equipe_de_pagamentos]", enviamPelaEquipeRes.error.message);
+  const enviamPelaEquipe = ((enviamPelaEquipeRes.data ?? []) as Array<{ profile_id: string }>).map(
+    (l) => l.profile_id,
+  );
   if (custosDoSocioRes.error) console.error("[job.custos_do_socio]", custosDoSocioRes.error.message);
   if (liberacoesRes.error) console.error("[job.pagamentos_atrasados]", liberacoesRes.error.message);
   if (jaFaturadoRes.error) console.error("[job.job_ja_faturado]", jaFaturadoRes.error.message);
@@ -1911,9 +1926,14 @@ export async function carregarDetalheDoJob(
   // negociar seguem em `podeAcoesPlanilha`, para quem pode mexer no job.
   const podeConfirmarBv =
     podeAcoesPlanilha && pode(session.activeRole, "jobs.confirmar_bv");
-  // Quem envia PP deste job: o papel (decisão 136) ou o Produtor
-  // Responsável com a chave do GP (decisão 174).
-  const enviaPP = enviaPPNoJob(session.activeRole, session.profile.id, job);
+  // Quem envia PP deste job: o papel (decisão 136), o Produtor Responsável
+  // com a chave do GP (decisão 174) ou, no job de pagamentos, o produtor da
+  // equipe com a chave "Envia PP" (decisão 282).
+  const enviaPP = enviaPPNoJob(session.activeRole, session.profile.id, {
+    produtor_id: job.produtor_id,
+    produtor_envia_pp: job.produtor_envia_pp,
+    enviam_pela_equipe: enviamPelaEquipe,
+  });
   // A errata não trava mais o envio de PP (decisão 238, 05/11/2026): saíram
   // a linha alterada com a abertura em revisão (185) e a linha da errata
   // pronta (237). Fica a abertura do job.
@@ -2228,7 +2248,11 @@ export async function carregarDetalheDoJob(
     papelEnviaPP: enviaPP,
     // Corrigir a NF da PP em avaliação sem aprovar (revisão da decisão 152);
     // com a chave, o Produtor Responsável também (decisão 174).
-    papelCorrigeNf: corrigeNfNoJob(session.activeRole, session.profile.id, job),
+    papelCorrigeNf: corrigeNfNoJob(session.activeRole, session.profile.id, {
+      produtor_id: job.produtor_id,
+      produtor_envia_pp: job.produtor_envia_pp,
+      enviam_pela_equipe: enviamPelaEquipe,
+    }),
     podeConfirmarBv,
     podeAnexarDocumentosDaMidia,
     ppsQuePossoPrestarContas,

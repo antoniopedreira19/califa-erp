@@ -44,6 +44,8 @@ import {
 } from "@/lib/calculos/versao-totais";
 import { BotaoEquipe } from "../_equipe/equipe-dialog";
 import { carregarEquipeDoJob } from "@/lib/data/equipe-do-projeto";
+import { carregarEquipeDoJobDePagamentos } from "@/lib/data/equipe-do-job-de-pagamentos";
+import { BotaoEquipeDoJobDePagamentos } from "../_equipe/equipe-do-job-de-pagamentos";
 import { BarraAcoesJob } from "./barra-acoes-job";
 import { FichaJob } from "./ficha-job";
 import { JobRealizadoSection } from "./realizado/job-realizado-section";
@@ -114,7 +116,7 @@ export default async function JobDetailPage({
   // leituras independentes. A trava só interessa a quem pode pedir.
   const supabaseDoPedido = createClient();
   const podePedirCancelamento = pode(session.activeRole, "jobs.solicitar_cancelamento");
-  const [detalhe, cancelamento, travaDoPedido, equipe, comiteDaPP, emDecisao] = await Promise.all([
+  const [detalhe, cancelamento, travaDoPedido, equipe, equipeDePagamentos, comiteDaPP, emDecisao] = await Promise.all([
     carregarDetalheDoJob(session, params.jobId),
     cancelamentoDoJob(supabaseDoPedido, session.activeTenant.id, params.jobId),
     podePedirCancelamento
@@ -122,6 +124,8 @@ export default async function JobDetailPage({
       : Promise.resolve(null),
     // O botão "Equipe" (decisão 174).
     carregarEquipeDoJob(supabaseDoPedido, session.activeTenant.id, params.jobId),
+    // A Equipe do job de pagamentos (decisão 282): null nos outros jobs.
+    carregarEquipeDoJobDePagamentos(supabaseDoPedido, session.activeTenant.id, params.jobId),
     // Comitê de Aprovações (decisão 223): as PPs que passam do orçado.
     carregarComiteDaPP(
       supabaseDoPedido,
@@ -344,6 +348,15 @@ export default async function JobDetailPage({
                   não muda. No lugar dele, a Equipe — membros do projeto,
                   responsáveis do job e a chave do envio de PP pelo
                   Produtor Responsável. */}
+              {equipeDePagamentos && (
+                <BotaoEquipeDoJobDePagamentos
+                  equipe={equipeDePagamentos}
+                  podeMudar={
+                    pode(session.activeRole, "jobs.editar_equipe_de_pagamentos") ||
+                    equipeDePagamentos.criadoPor === session.profile.id
+                  }
+                />
+              )}
               {equipe && (
                 <BotaoEquipe
                   equipe={equipe}

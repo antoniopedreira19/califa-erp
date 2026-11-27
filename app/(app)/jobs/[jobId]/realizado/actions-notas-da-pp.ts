@@ -18,6 +18,7 @@ import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/auth/audit";
 import { checarPermissao } from "@/lib/permissoes-server";
 import { pode, produtorComAChave } from "@/lib/permissoes";
+import { quemEnviaPelaEquipeDePagamentos } from "@/lib/data/equipe-do-job-de-pagamentos";
 import { hojeEmSaoPauloIso } from "@/lib/calculos/janelas-pagamento";
 import { seguirDocumentosDaNotaCorrigida, type TrocaDeEmissora } from "./actions-pp";
 
@@ -146,15 +147,23 @@ async function checarCorrecaoDeNf(
   if (pode(session.activeRole, "jobs.corrigir_nf_pp")) return { ok: true };
   const { data } = await createClient()
     .from("pedidos_compra")
-    .select("jobs!inner(produtor_id, produtor_envia_pp)")
+    .select("job_id, jobs!inner(produtor_id, produtor_envia_pp, de_pagamentos)")
     .eq("id", ppId)
     .eq("tenant_id", session.activeTenant.id)
-    .maybeSingle<{ jobs: { produtor_id: string | null; produtor_envia_pp: boolean } }>();
+    .maybeSingle<{
+      job_id: string;
+      jobs: { produtor_id: string | null; produtor_envia_pp: boolean; de_pagamentos: boolean };
+    }>();
   if (
     data?.jobs &&
     produtorComAChave(session.profile.id, {
       produtor_id: data.jobs.produtor_id,
       produtor_envia_pp: data.jobs.produtor_envia_pp === true,
+      // Decisão 282: no job de pagamentos, o produtor da equipe com a chave.
+      enviam_pela_equipe:
+        data.jobs.de_pagamentos === true
+          ? await quemEnviaPelaEquipeDePagamentos(createClient(), data.job_id, session.activeTenant.id)
+          : [],
     })
   ) {
     return { ok: true };

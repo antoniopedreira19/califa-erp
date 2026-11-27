@@ -325,10 +325,12 @@ export async function carregarEquipeDoJob(
 ): Promise<EquipeDoProjeto | null> {
   const { data } = await supabase
     .from("jobs")
-    .select("projeto_id")
+    .select("projeto_id, de_pagamentos")
     .eq("id", jobId)
     .eq("tenant_id", tenantId)
-    .maybeSingle<{ projeto_id: string | null }>();
-  if (!data?.projeto_id) return null;
+    .maybeSingle<{ projeto_id: string | null; de_pagamentos: boolean }>();
+  // Decisão 282: o job de pagamentos tem a equipe dele
+  // (`carregarEquipeDoJobDePagamentos`), não a do projeto escondido.
+  if (!data?.projeto_id || data.de_pagamentos === true) return null;
   return carregarEquipeDoProjeto(supabase, tenantId, data.projeto_id);
 }

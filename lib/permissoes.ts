@@ -217,6 +217,12 @@ export const permissoes = {
    *  da visão agregada (decisão 174): GPs e produtores. Os mesmos papéis do
    *  "Editar projeto" (`orcamentos.editar`). */
   "projetos.editar_equipe":       ["administrador", "gerente_producao", "produtor"],
+  /** Pôr e tirar gente da Equipe do job de pagamentos e ligar a chave
+   *  "Envia PP" de cada produtor dela (decisão 282): o financeiro (que cria
+   *  o job), os GPs e os produtores. Quem criou o job também muda, mesmo
+   *  sem o papel. O banco confere de novo
+   *  (`salvar_equipe_do_job_de_pagamentos`). */
+  "jobs.editar_equipe_de_pagamentos": ["administrador", "financeiro", "gerente_producao", "produtor"],
   /** Enviar (e reenviar, se devolvido) o job para abertura no financeiro.
    *  Só o GP (Tiago, 22/09/2026): até aqui a action não tinha gate e o
    *  produtor enviava. */
@@ -354,22 +360,31 @@ export function pode(role: AppRole, recurso: Recurso): boolean {
   return rolesPermitidos.includes(role);
 }
 
-/** O job, no que decide quem envia PP dele (decisão 174). */
+/** O job, no que decide quem envia PP dele (decisões 174 e 282). */
 export interface JobParaEnvioDePP {
   produtor_id: string | null;
   produtor_envia_pp: boolean;
+  /** Decisão 282: no job de pagamentos, os produtores da equipe com a chave
+   *  "Envia PP" (`jobs_equipe_de_pagamentos`). Vazio nos outros jobs — quem
+   *  monta o objeto manda `[]` explícito, nunca omite. */
+  enviam_pela_equipe: string[];
 }
 
-/** O Produtor Responsável com a chave ligada pelo GP (decisão 174). */
+/** Quem tem a chave: o Produtor Responsável com a chave ligada pelo GP
+ *  (decisão 174) ou, no job de pagamentos, o produtor da equipe com a chave
+ *  "Envia PP" (decisão 282). A mesma regra de `produtor_envia_pp_do_job`. */
 export function produtorComAChave(profileId: string, job: JobParaEnvioDePP): boolean {
-  return job.produtor_envia_pp && job.produtor_id === profileId;
+  return (
+    (job.produtor_envia_pp && job.produtor_id === profileId) ||
+    job.enviam_pela_equipe.includes(profileId)
+  );
 }
 
 /**
  * Envia (e reenvia) PP deste job ao financeiro: o papel (`jobs.enviar_pp`,
- * decisão 136) ou o Produtor Responsável com a chave (decisão 174). Com a
- * chave, a tela dele é a do GP para a PP: enviar, reenviar a rejeitada e
- * cancelar a que está no financeiro.
+ * decisão 136) ou quem tem a chave (decisões 174 e 282). Com a chave, a
+ * tela dele é a do GP para a PP: enviar, reenviar a rejeitada e cancelar a
+ * que está no financeiro.
  */
 export function enviaPPNoJob(role: AppRole, profileId: string, job: JobParaEnvioDePP): boolean {
   return pode(role, "jobs.enviar_pp") || produtorComAChave(profileId, job);

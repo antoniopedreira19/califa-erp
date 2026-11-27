@@ -31,6 +31,12 @@ export const jobDePagamentosSchema = z
       .trim()
       .min(10, "Escreva o descritivo com pelo menos 10 caracteres.")
       .max(OBSERVACOES_MAX, `Máximo ${OBSERVACOES_MAX} caracteres.`),
+    /** Decisão 282: a equipe do job e a chave "Envia PP" de cada produtor.
+     *  Pode ir vazia (completa-se depois, no Equipe do job); o banco confere
+     *  quem entra. */
+    equipe: z
+      .array(z.object({ profile_id: z.string().uuid(), envia_pp: z.boolean() }))
+      .max(200, "A equipe passou de 200 pessoas."),
   })
   .refine(
     (v) => Boolean(v.projeto_financeiro_id) !== Boolean(v.projeto_financeiro_novo && v.projeto_financeiro_novo.length >= 2),

@@ -23,6 +23,8 @@ import { gerarCodigoProjeto } from "@/lib/codigos/projetos";
 import { gerarCodigoOrcamento } from "@/lib/codigos/orcamentos";
 import { gerarCodigoProjetoFinanceiro } from "@/lib/codigos/projetos-financeiro";
 import { listarProjetosFinanceiro } from "@/lib/data/projetos-financeiro";
+import { candidatosDaEquipeDePagamentos } from "@/lib/data/equipe-do-job-de-pagamentos";
+import type { PessoaDaEquipe } from "@/lib/data/equipe-do-projeto";
 import {
   jobDePagamentosSchema,
   type JobDePagamentosInput,
@@ -46,6 +48,8 @@ export interface OpcoesDoJobDePagamentos {
    *  (decisão 228). Sem job ainda, `empresaId` é nulo e o projeto serve a
    *  qualquer empresa. */
   projetos: { id: string; nome: string; empresaId: string | null; empresaNome: string | null }[];
+  /** Decisão 282: a produção ativa, para a Equipe do job. */
+  pessoas: PessoaDaEquipe[];
 }
 
 /**
@@ -69,7 +73,7 @@ export async function carregarOpcoesDoJobDePagamentos(): Promise<
     return r === "all" || (Array.isArray(r) && r.includes(regionalId));
   };
 
-  const [empresasRes, regionaisRes, projetos] = await Promise.all([
+  const [empresasRes, regionaisRes, projetos, pessoas] = await Promise.all([
     supabase
       .from("empresas")
       .select("id, nome_fantasia, cliente:clientes!cliente_id(codigo_curto)")
@@ -84,6 +88,7 @@ export async function carregarOpcoesDoJobDePagamentos(): Promise<
       .eq("disponivel_em_projetos", true)
       .order("nome"),
     listarProjetosFinanceiro(tenantId, null, ""),
+    candidatosDaEquipeDePagamentos(supabase, tenantId),
   ]);
   if (empresasRes.error || regionaisRes.error) {
     console.error("[job-de-pagamentos.opcoes]", (empresasRes.error ?? regionaisRes.error)?.message);
@@ -150,6 +155,7 @@ export async function carregarOpcoesDoJobDePagamentos(): Promise<
             (a.empresaNome ?? "~").localeCompare(b.empresaNome ?? "~", "pt-BR") ||
             a.nome.localeCompare(b.nome, "pt-BR"),
         ),
+      pessoas,
     },
   };
 }
@@ -247,6 +253,8 @@ export async function criarJobDePagamentos(
     p_codigo_projeto_financeiro: codigoProjetoFinanceiro,
     p_codigo_projeto: codigoProjeto,
     p_codigo_orcamento: codigoOrcamento,
+    // Decisão 282: a equipe grava na mesma transação do job.
+    p_equipe: d.equipe,
   });
   if (error || !data) {
     console.error("[job-de-pagamentos.criar]", error?.code, error?.message);
@@ -299,6 +307,8 @@ export async function criarJobDePagamentos(
       projeto_id: r.projeto_id,
       orcamento_id: r.orcamento_id,
       decisao: "266",
+      // Decisão 282: quem entrou na equipe já na criação.
+      equipe: d.equipe.map((m) => ({ id: m.profile_id, envia_pp: m.envia_pp })),
     },
   });
 
