@@ -2,13 +2,21 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { AlertTriangle, Check } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  PlayCircle,
+  RefreshCw,
+  Send,
+  Zap,
+} from "lucide-react";
 import type { ResumoCardsFolha } from "@/lib/types";
 import { BotaoGerarFolhaPj } from "./botao-gerar-folha-pj";
 import { BotaoAtualizarFolhaPj } from "./botao-atualizar-folha-pj";
 import { BotaoAplicarBeneficiosPJ } from "./botao-aplicar-beneficios-pj";
 import { BotaoDesaplicarBeneficios } from "./botao-desaplicar-beneficios";
 import { ModalEnviarFolhaPJ } from "./modal-enviar-folha-pj";
+import { StepArrow, StepButton } from "./step-button";
 
 const NOMES_MES = [
   "Janeiro",
@@ -50,37 +58,49 @@ export function CardFolhaPJ(props: CardFolhaPJProps): JSX.Element {
     pj.linhasPagas;
 
   const linhasRascunhoOuPendente = pj.linhasRascunho + pj.linhasPendenteCorrecao;
-  const linhasForaRascunho = pj.linhasEnviadas + pj.linhasAprovadas + pj.linhasPagas;
 
   const vazioTotal = totalLinhas === 0;
   const temRascunhoOuPendente = linhasRascunhoOuPendente > 0;
-  // estado 4: tem linhas mas nenhuma rascunho/pendente
   const tudoEnviado = !vazioTotal && !temRascunhoOuPendente;
 
-  // Bruto = líquido + desconto (quando snapshot não aplicado, desconto=0 e líquido=bruto)
+  // Bruto = líquido + desconto (quando snapshot não aplicado, desconto=0)
   const totalBruto = pj.totalLiquido + pj.totalDescontoBeneficios;
 
-  // Enviar PJ requer: permissão + linhas a enviar + catálogo OK + snapshot aplicado.
-  const podeSendBtn =
-    podeEditar &&
-    linhasRascunhoOuPendente > 0 &&
-    catalogoIncompleto === null &&
-    beneficios.aplicado;
+  const catalogoBloqueia = catalogoIncompleto !== null;
 
-  // Aplicar requer: permissão + catálogo OK + snapshot ainda não aplicado.
-  const podeAplicar =
-    podeEditar && catalogoIncompleto === null && !beneficios.aplicado;
+  // ── Estado de cada passo da timeline ─────────────────────────────────────────
+  // Passo 1: Gerar/Atualizar PJ
+  const step1State: "done" | "current" | "locked" = vazioTotal
+    ? "current"
+    : "done";
 
-  // Tooltip explicativo quando Enviar está desabilitado
-  const tooltipEnviar = !podeEditar
-    ? undefined
-    : catalogoIncompleto !== null
-      ? "Corrija o catálogo de benefícios antes de enviar."
-      : !beneficios.aplicado
-        ? "Aplique os benefícios antes de enviar."
-        : linhasRascunhoOuPendente === 0
-          ? "Nenhuma linha pendente de envio."
-          : undefined;
+  // Passo 2: Aplicar benefícios
+  const step2State: "done" | "current" | "locked" = vazioTotal
+    ? "locked"
+    : beneficios.aplicado
+      ? "done"
+      : catalogoBloqueia
+        ? "locked"
+        : "current";
+
+  // Passo 3: Enviar ao financeiro
+  const step3State: "done" | "current" | "locked" = tudoEnviado
+    ? "done"
+    : !beneficios.aplicado ||
+        !temRascunhoOuPendente ||
+        catalogoBloqueia ||
+        vazioTotal
+      ? "locked"
+      : "current";
+
+  // Tooltip explicativo quando Enviar está locked
+  const tooltipEnviar = catalogoBloqueia
+    ? "Corrija o catálogo de benefícios antes de enviar."
+    : !beneficios.aplicado
+      ? "Aplique os benefícios antes de enviar."
+      : !temRascunhoOuPendente
+        ? "Nenhuma linha pendente de envio."
+        : undefined;
 
   // Condições para link "Desaplicar": snapshot aplicado, sem avulsa paga,
   // e TODAS as linhas ainda em rascunho (nenhuma saiu de rascunho).
@@ -95,7 +115,7 @@ export function CardFolhaPJ(props: CardFolhaPJProps): JSX.Element {
     beneficios.fechamentoId !== null;
 
   // ── Alerta de catálogo incompleto ─────────────────────────────────────────
-  const alertaCatalogo = catalogoIncompleto !== null ? (
+  const alertaCatalogo = catalogoBloqueia ? (
     <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 flex items-start gap-2">
       <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
       <span>
@@ -112,38 +132,8 @@ export function CardFolhaPJ(props: CardFolhaPJProps): JSX.Element {
     </div>
   ) : null;
 
-  // ── Estado 1: VAZIO ──────────────────────────────────────────────────────────
-  if (vazioTotal) {
-    return (
-      <div className="rounded-2xl border border-border bg-card p-5 shadow-soft">
-        <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          FOLHA PJ · {competenciaLabel}
-        </p>
-        {alertaCatalogo && <div className="mt-3">{alertaCatalogo}</div>}
-        <div className="mt-8 flex flex-col items-center justify-center gap-4 pb-4 text-center">
-          <p className="text-sm text-muted-foreground">
-            Nenhuma linha PJ gerada ainda.
-          </p>
-          {podeEditar && (
-            <BotaoGerarFolhaPj ano={ano} mes={mes} />
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // ── Cabeçalho compartilhado (estados 2, 3 e 4) ───────────────────────────────
-  const cabecalhoBase = (
-    <div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-        FOLHA PJ · {competenciaLabel}
-      </p>
-      <h3 className="mt-0.5 text-lg font-semibold">Folha PJ</h3>
-    </div>
-  );
-
   // ── Pílulas de status ─────────────────────────────────────────────────────────
-  const pilulas = (
+  const pilulas = !vazioTotal ? (
     <div className="mt-3 flex flex-wrap gap-1.5">
       {pj.linhasRascunho > 0 && (
         <span className="inline-flex items-center rounded-full border border-border bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground">
@@ -178,56 +168,14 @@ export function CardFolhaPJ(props: CardFolhaPJProps): JSX.Element {
         </span>
       )}
     </div>
-  );
+  ) : null;
 
-  // ── Estado 4: TUDO ENVIADO / APROVADO / PAGO ─────────────────────────────────
-  if (tudoEnviado) {
-    void linhasForaRascunho; // confirma que o caso foi pensado
-
-    return (
-      <div className="rounded-2xl border border-border bg-card p-5 shadow-soft">
-        {alertaCatalogo && <div className="mb-4">{alertaCatalogo}</div>}
-        <div className="flex items-start justify-between gap-4 flex-wrap">
-          {cabecalhoBase}
-          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
-            <Check className="h-3.5 w-3.5" />
-            Enviada ao financeiro
-          </span>
-        </div>
-
-        <div className="mt-1">
-          {beneficios.aplicado ? (
-            <>
-              <p className="text-sm text-muted-foreground">
-                {totalLinhas} {totalLinhas === 1 ? "linha" : "linhas"} ·{" "}
-                {brl.format(totalBruto)} bruto −{" "}
-                {brl.format(pj.totalDescontoBeneficios)} benefícios ={" "}
-                {brl.format(pj.totalLiquido)} líquido
-              </p>
-              <p className="mt-0.5 text-xs font-medium text-emerald-700">
-                ✓ Benefícios aplicados · {pj.colaboradoresComDesconto}{" "}
-                {pj.colaboradoresComDesconto === 1 ? "colaborador" : "colaboradores"}{" "}
-                com desconto
-              </p>
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              {totalLinhas} {totalLinhas === 1 ? "linha" : "linhas"} ·{" "}
-              {brl.format(pj.totalLiquido)} líquido
-            </p>
-          )}
-        </div>
-
-        {pilulas}
-      </div>
-    );
-  }
-
-  // ── Estados 2 e 3: TEM RASCUNHO OU PENDENTE ──────────────────────────────────
-  // beneficios.aplicado distingue estado 2 (false) de estado 3 (true)
-
-  const subtitulo = beneficios.aplicado ? (
-    // Estado 3: snapshot aplicado — mostrar bruto − desconto = líquido
+  // ── Resumo (subtítulo) ───────────────────────────────────────────────────────
+  const subtitulo = vazioTotal ? (
+    <p className="mt-1 text-sm text-muted-foreground">
+      Nenhuma linha PJ gerada ainda.
+    </p>
+  ) : beneficios.aplicado ? (
     <div className="mt-1 space-y-0.5">
       <p className="text-sm text-muted-foreground">
         {totalLinhas} {totalLinhas === 1 ? "linha" : "linhas"} ·{" "}
@@ -242,20 +190,17 @@ export function CardFolhaPJ(props: CardFolhaPJProps): JSX.Element {
       </p>
     </div>
   ) : (
-    // Estado 2: snapshot não aplicado — mostrar bruto + preview se houver
     <div className="mt-1 space-y-0.5">
       <p className="text-sm text-muted-foreground">
         {totalLinhas} {totalLinhas === 1 ? "linha" : "linhas"} ·{" "}
         {brl.format(totalBruto)} bruto
       </p>
-      {/* Preview só aparece quando há vínculos e valor > 0 e não é null (catálogo incompleto) */}
       {pj.previewDescontoBeneficios !== null &&
         pj.previewQtdVinculos !== null &&
         pj.previewQtdVinculos > 0 &&
         pj.previewDescontoBeneficios > 0 && (
           <p className="text-xs text-muted-foreground">
-            Benefícios previstos: −{brl.format(pj.previewDescontoBeneficios)}{" "}
-            (aplicados no Enviar)
+            Benefícios previstos: −{brl.format(pj.previewDescontoBeneficios)}
           </p>
         )}
       {pj.previewQtdVinculos !== null && pj.previewQtdVinculos === 0 && (
@@ -266,55 +211,130 @@ export function CardFolhaPJ(props: CardFolhaPJProps): JSX.Element {
     </div>
   );
 
+  // ── Timeline de passos ───────────────────────────────────────────────────────
+  const timeline = (
+    <div className="mt-4 border-t border-border pt-4">
+      {/* Ajuste do empty state: timeline oculto se usuário não pode editar e card está vazio */}
+      {!podeEditar && vazioTotal ? null : (
+        <>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch">
+            {/* Passo 1: Gerar (vazio) OR Atualizar (gerado) */}
+            {vazioTotal ? (
+              <BotaoGerarFolhaPj
+                ano={ano}
+                mes={mes}
+                renderTrigger={({ onClick, pending, disabled }) => (
+                  <StepButton
+                    step={1}
+                    label="Gerar folha"
+                    state={step1State}
+                    icon={PlayCircle}
+                    onClick={onClick}
+                    pending={pending}
+                    disabled={disabled || !podeEditar}
+                  />
+                )}
+              />
+            ) : (
+              <BotaoAtualizarFolhaPj
+                ano={ano}
+                mes={mes}
+                renderTrigger={({ onClick, pending, disabled }) => (
+                  <StepButton
+                    step={1}
+                    label="Atualizar folha"
+                    state={step1State}
+                    icon={RefreshCw}
+                    onClick={onClick}
+                    pending={pending}
+                    disabled={disabled || !podeEditar}
+                    title="Resincroniza salários das linhas em rascunho com o vigente."
+                  />
+                )}
+              />
+            )}
+
+            <StepArrow />
+
+            {/* Passo 2: Aplicar benefícios */}
+            <BotaoAplicarBeneficiosPJ
+              ano={ano}
+              mes={mes}
+              previewDescontoBeneficios={pj.previewDescontoBeneficios}
+              previewQtdVinculos={pj.previewQtdVinculos}
+              disabled={
+                step2State !== "current" || !podeEditar
+              }
+              renderTrigger={({ onClick, pending, disabled }) => (
+                <StepButton
+                  step={2}
+                  label="Aplicar benefícios"
+                  state={step2State}
+                  icon={Zap}
+                  onClick={onClick}
+                  pending={pending}
+                  disabled={disabled || !podeEditar}
+                  title={
+                    step2State === "locked" && catalogoBloqueia
+                      ? "Corrija o catálogo de benefícios primeiro."
+                      : step2State === "locked" && vazioTotal
+                        ? "Gere a folha PJ antes de aplicar benefícios."
+                        : undefined
+                  }
+                />
+              )}
+            />
+
+            <StepArrow />
+
+            {/* Passo 3: Enviar ao financeiro */}
+            <StepButton
+              step={3}
+              label="Enviar ao financeiro"
+              state={step3State}
+              icon={Send}
+              onClick={() => setModalEnvioAberto(true)}
+              disabled={step3State !== "current" || !podeEditar}
+              title={tooltipEnviar}
+            />
+          </div>
+
+          {mostrarDesaplicar && (
+            <div className="mt-3 flex justify-end">
+              <BotaoDesaplicarBeneficios
+                fechamentoId={beneficios.fechamentoId!}
+              />
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+
   return (
     <div className="rounded-2xl border border-border bg-card p-5 shadow-soft">
       {alertaCatalogo && <div className="mb-4">{alertaCatalogo}</div>}
 
       <div className="flex items-start justify-between gap-4 flex-wrap">
-        {cabecalhoBase}
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            FOLHA PJ · {competenciaLabel}
+          </p>
+          <h3 className="mt-0.5 text-lg font-semibold">Folha PJ</h3>
+        </div>
+        {tudoEnviado && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+            <Check className="h-3.5 w-3.5" />
+            Enviada ao financeiro
+          </span>
+        )}
       </div>
 
       {subtitulo}
 
       {pilulas}
 
-      <div className="mt-4 flex flex-col gap-2 border-t border-border pt-4">
-        {/* Estado 2: snapshot NÃO aplicado → mostra Aplicar como primário, Enviar disabled */}
-        {!beneficios.aplicado && podeEditar && (
-          <div className="flex items-center justify-end gap-2 flex-wrap">
-            <BotaoAtualizarFolhaPj ano={ano} mes={mes} />
-            <BotaoAplicarBeneficiosPJ
-              ano={ano}
-              mes={mes}
-              previewDescontoBeneficios={pj.previewDescontoBeneficios}
-              previewQtdVinculos={pj.previewQtdVinculos}
-              disabled={!podeAplicar}
-            />
-          </div>
-        )}
-
-        {/* Enviar sempre visível; desabilitado se faltar pré-requisito */}
-        <div className="flex items-center justify-end gap-2 flex-wrap">
-          {beneficios.aplicado && podeEditar && (
-            <BotaoAtualizarFolhaPj ano={ano} mes={mes} />
-          )}
-          <button
-            type="button"
-            onClick={() => setModalEnvioAberto(true)}
-            disabled={!podeSendBtn}
-            title={tooltipEnviar}
-            className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-california-red/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            Enviar PJ ao financeiro →
-          </button>
-        </div>
-
-        {mostrarDesaplicar && (
-          <div className="flex justify-end">
-            <BotaoDesaplicarBeneficios fechamentoId={beneficios.fechamentoId!} />
-          </div>
-        )}
-      </div>
+      {timeline}
 
       <ModalEnviarFolhaPJ
         open={modalEnvioAberto}

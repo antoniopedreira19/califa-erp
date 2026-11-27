@@ -37,7 +37,10 @@ const brl = new Intl.NumberFormat("pt-BR", {
 export interface ImportarFolhaModalProps {
   ano: number;
   mes: number;
-  triggerLabel: React.ReactNode;
+  /** Conteúdo visual do botão trigger. Usado quando `renderTrigger` não é passado. */
+  triggerLabel?: React.ReactNode;
+  /** Render-prop pra customizar o trigger completo (ignora `triggerLabel`). */
+  renderTrigger?: () => React.ReactNode;
 }
 
 export function ImportarFolhaModal(props: ImportarFolhaModalProps) {
@@ -118,12 +121,16 @@ export function ImportarFolhaModal(props: ImportarFolhaModalProps) {
       }}
     >
       <DialogTrigger asChild>
-        <button
-          type="button"
-          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted transition-colors"
-        >
-          {props.triggerLabel}
-        </button>
+        {props.renderTrigger ? (
+          <>{props.renderTrigger()}</>
+        ) : (
+          <button
+            type="button"
+            className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted transition-colors"
+          >
+            {props.triggerLabel}
+          </button>
+        )}
       </DialogTrigger>
 
       <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">

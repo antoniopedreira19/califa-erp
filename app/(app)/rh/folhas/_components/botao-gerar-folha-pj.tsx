@@ -21,7 +21,18 @@ interface Resultado {
   descontados: DescontoFerias[];
 }
 
-export function BotaoGerarFolhaPj(props: { ano: number; mes: number }) {
+export interface BotaoGerarFolhaPjProps {
+  ano: number;
+  mes: number;
+  /** Render-prop pra customizar o trigger. Se não passado, usa o pill default. */
+  renderTrigger?: (bind: {
+    onClick: () => void;
+    pending: boolean;
+    disabled: boolean;
+  }) => React.ReactNode;
+}
+
+export function BotaoGerarFolhaPj(props: BotaoGerarFolhaPjProps) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [erro, setErro] = React.useState<string | null>(null);
@@ -55,19 +66,23 @@ export function BotaoGerarFolhaPj(props: { ano: number; mes: number }) {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={handleGerar}
-        disabled={pending}
-        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50 transition-colors"
-      >
-        {pending ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <Play className="h-3.5 w-3.5" />
-        )}
-        {pending ? "Gerando..." : "Gerar PJ"}
-      </button>
+      {props.renderTrigger ? (
+        props.renderTrigger({ onClick: handleGerar, pending, disabled: pending })
+      ) : (
+        <button
+          type="button"
+          onClick={handleGerar}
+          disabled={pending}
+          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50 transition-colors"
+        >
+          {pending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Play className="h-3.5 w-3.5" />
+          )}
+          {pending ? "Gerando..." : "Gerar PJ"}
+        </button>
+      )}
 
       <Dialog
         open={!!resultado || !!erro}

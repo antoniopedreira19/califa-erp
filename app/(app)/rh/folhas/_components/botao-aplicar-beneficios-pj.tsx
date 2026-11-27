@@ -33,6 +33,12 @@ export interface BotaoAplicarBeneficiosPJProps {
   /** Qtd de vínculos ativos no preview. Null idem; 0 significa "sem vínculos". */
   previewQtdVinculos: number | null;
   disabled?: boolean;
+  /** Render-prop pra customizar o trigger. Se não passado, usa o pill default. */
+  renderTrigger?: (bind: {
+    onClick: () => void;
+    pending: boolean;
+    disabled: boolean;
+  }) => React.ReactNode;
 }
 
 export function BotaoAplicarBeneficiosPJ(
@@ -76,27 +82,37 @@ export function BotaoAplicarBeneficiosPJ(
   }
 
   return (
-    <div className="flex flex-col items-end gap-2">
-      <button
-        type="button"
-        onClick={handleClick}
-        disabled={props.disabled || pending}
-        className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-california-red/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-      >
-        {pending ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
-        ) : (
-          <PlayCircle className="h-4 w-4" />
-        )}
-        {pending ? "Aplicando..." : "Aplicar benefícios"}
-      </button>
+    <>
+      {props.renderTrigger ? (
+        props.renderTrigger({
+          onClick: handleClick,
+          pending,
+          disabled: Boolean(props.disabled),
+        })
+      ) : (
+        <div className="flex flex-col items-end gap-2">
+          <button
+            type="button"
+            onClick={handleClick}
+            disabled={props.disabled || pending}
+            className="inline-flex items-center gap-2 rounded-lg bg-california-red px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-california-red/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {pending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <PlayCircle className="h-4 w-4" />
+            )}
+            {pending ? "Aplicando..." : "Aplicar benefícios"}
+          </button>
+        </div>
+      )}
 
       {erro && (
-        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 max-w-sm">
+        <div className="mt-2 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800 max-w-sm">
           <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
           <span>{erro}</span>
         </div>
       )}
-    </div>
+    </>
   );
 }

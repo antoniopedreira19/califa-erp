@@ -23,7 +23,18 @@ interface Resultado {
   puladas_sem_vigente: string[];
 }
 
-export function BotaoAtualizarFolhaPj(props: { ano: number; mes: number }) {
+export interface BotaoAtualizarFolhaPjProps {
+  ano: number;
+  mes: number;
+  /** Render-prop pra customizar o trigger. Se não passado, usa o pill default. */
+  renderTrigger?: (bind: {
+    onClick: () => void;
+    pending: boolean;
+    disabled: boolean;
+  }) => React.ReactNode;
+}
+
+export function BotaoAtualizarFolhaPj(props: BotaoAtualizarFolhaPjProps) {
   const router = useRouter();
   const [pending, startTransition] = React.useTransition();
   const [erro, setErro] = React.useState<string | null>(null);
@@ -57,20 +68,24 @@ export function BotaoAtualizarFolhaPj(props: { ano: number; mes: number }) {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={handleAtualizar}
-        disabled={pending}
-        title="Puxa novamente o salário vigente de cada colaborador pras linhas PJ em rascunho desta competência."
-        className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50 transition-colors"
-      >
-        {pending ? (
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <RefreshCw className="h-3.5 w-3.5" />
-        )}
-        {pending ? "Atualizando..." : "Atualizar PJ"}
-      </button>
+      {props.renderTrigger ? (
+        props.renderTrigger({ onClick: handleAtualizar, pending, disabled: pending })
+      ) : (
+        <button
+          type="button"
+          onClick={handleAtualizar}
+          disabled={pending}
+          title="Puxa novamente o salário vigente de cada colaborador pras linhas PJ em rascunho desta competência."
+          className="inline-flex items-center gap-1.5 rounded-md border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50 transition-colors"
+        >
+          {pending ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="h-3.5 w-3.5" />
+          )}
+          {pending ? "Atualizando..." : "Atualizar PJ"}
+        </button>
+      )}
 
       <Dialog
         open={!!resultado || !!erro}
