@@ -29,13 +29,14 @@ const ROTULO_DO_TIPO: Record<string, string> = {
   cupom_fiscal: "Cupom fiscal",
   recibo: "Recibo",
   fatura: "Fatura",
+  apolice: "Apólice",
   boleto: "Boleto",
   guia: "Guia",
   contrato: "Contrato",
   orcamento: "Orçamento",
   outro: "Outro",
 };
-const ORDEM_DO_COMPROVANTE = ["nota_fiscal", "cupom_fiscal", "recibo", "fatura", "boleto", "guia", "contrato", "orcamento", "outro"];
+const ORDEM_DO_COMPROVANTE = ["nota_fiscal", "cupom_fiscal", "recibo", "fatura", "apolice", "boleto", "guia", "contrato", "orcamento", "outro"];
 
 function acaoDaLinha(d: PedidoDeDesembolso): { rotulo: string; modo: ModoDoForm } | null {
   if (d.status === "rejeitada") return { rotulo: "Corrigir", modo: "corrigir" };

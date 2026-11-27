@@ -134,11 +134,12 @@ function garantirShapeDadosBrutosNF(parsed: unknown): DadosBrutosNF {
 // ---------------------------------------------------------------------------
 // Leitura do documento ao anexar (decisão 192, 19/10/2026): o
 // mesmo pedido da NF, mais o tipo do documento e o número dele. Vale para
-// NF, recibo, fatura, boleto, guia, contrato e outros. A guia (taxa,
+// NF, recibo, fatura, apólice, boleto, guia, contrato e outros. A guia (taxa,
 // licença ou alvará de órgão público) entrou na decisão 227 (29/10/2026).
+// A apólice (seguro) entrou na decisão 284 (27/11/2026).
 // ---------------------------------------------------------------------------
 
-export const TIPOS_LIDOS = ["nota_fiscal", "recibo", "fatura", "boleto", "guia", "contrato", "outro"] as const;
+export const TIPOS_LIDOS = ["nota_fiscal", "recibo", "fatura", "apolice", "boleto", "guia", "contrato", "outro"] as const;
 
 export interface DadosBrutosDocumento extends DadosBrutosNF {
   tipo_documento: (typeof TIPOS_LIDOS)[number] | null;

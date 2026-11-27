@@ -30,6 +30,7 @@ const ROTULO_DO_TIPO: Record<string, string> = {
   cupom_fiscal: "Cupom fiscal",
   recibo: "Recibo",
   fatura: "Fatura",
+  apolice: "Apólice",
   boleto: "Boleto",
   guia: "Guia",
   contrato: "Contrato",

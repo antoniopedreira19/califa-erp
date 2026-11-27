@@ -798,7 +798,7 @@ export async function encerrarContaRecorrente(
   return { ok: true, id };
 }
 
-const TIPOS_DE_DOCUMENTO: readonly DocumentoTipo[] = ["nota_fiscal", "recibo", "fatura", "boleto", "guia", "contrato", "outro"];
+const TIPOS_DE_DOCUMENTO: readonly DocumentoTipo[] = ["nota_fiscal", "recibo", "fatura", "apolice", "boleto", "guia", "contrato", "outro"];
 
 interface AnexoEnviado {
   /** O caminho no bucket `contas-avulsas`, que o navegador já enviou. */

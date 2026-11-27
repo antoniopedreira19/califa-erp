@@ -3584,12 +3584,14 @@ export type PPAnexoMimetype = (typeof PP_ANEXO_MIMETYPES_ACEITOS)[number];
  * locação de bens móveis o fornecedor emite fatura, não NF, e a produção
  * marcava o arquivo como Recibo. O contrato de locação é o "Contrato".
  * A guia entrou na decisão 227 (29/10/2026): taxa, licença ou alvará de
- * órgão público, paga sem NF.
+ * órgão público, paga sem NF. A apólice entrou na decisão 284 (27/11/2026):
+ * seguro, em que a seguradora emite apólice + boleto, nunca NF.
  */
 export const DOCUMENTO_TIPOS = [
   "nota_fiscal",
   "recibo",
   "fatura",
+  "apolice",
   "boleto",
   "guia",
   "contrato",
@@ -3610,6 +3612,8 @@ export function documentoTipoLabel(t: DocumentoTipo): string {
       return "Recibo";
     case "fatura":
       return "Fatura";
+    case "apolice":
+      return "Apólice";
     case "boleto":
       return "Boleto";
     case "guia":
@@ -3629,11 +3633,14 @@ export function documentoTipoLabel(t: DocumentoTipo): string {
  * acompanham a compra, mas não são o documento que a contabilidade
  * procura. A fatura faz o papel da nota onde não há NF, como na locação
  * (decisão 178): conta aqui e vale como "a nota" da PP paga por boleto (161).
+ * A apólice faz o mesmo papel para o seguro (decisão 284): a seguradora
+ * emite apólice + boleto, nunca NF de serviço.
  */
 export const DOCUMENTO_TIPOS_FISCAIS: readonly DocumentoTipo[] = [
   "nota_fiscal",
   "recibo",
   "fatura",
+  "apolice",
 ];
 
 /** O documento de um anexo, como as telas o consomem. */
