@@ -512,8 +512,8 @@ test("Equipe e a chave do envio de PP pelo Produtor Responsável (decisão 174)"
 
   const produtor = "00000000-0000-4000-8000-0000000prod1";
   const outro = "00000000-0000-4000-8000-0000000prod2";
-  const comChave = { produtor_id: produtor, produtor_envia_pp: true };
-  const semChave = { produtor_id: produtor, produtor_envia_pp: false };
+  const comChave = { produtor_id: produtor, produtor_envia_pp: true, enviam_pela_equipe: [] };
+  const semChave = { produtor_id: produtor, produtor_envia_pp: false, enviam_pela_equipe: [] };
   // O GP envia sempre; o produtor, só o responsável e só com a chave.
   assert.equal(enviaPPNoJob("gerente_producao", outro, semChave), true);
   assert.equal(enviaPPNoJob("produtor", produtor, semChave), false);
@@ -523,6 +523,28 @@ test("Equipe e a chave do envio de PP pelo Produtor Responsável (decisão 174)"
   assert.equal(corrigeNfNoJob("financeiro", outro, semChave), true);
   assert.equal(corrigeNfNoJob("produtor", produtor, semChave), false);
   assert.equal(corrigeNfNoJob("produtor", produtor, comChave), true);
+});
+
+test("Equipe do job de pagamentos e a chave de cada produtor (decisão 282)", () => {
+  const mudam = new Set(ROLES_VALIDAS.filter((r) => pode(r, "jobs.editar_equipe_de_pagamentos")));
+  assert.deepEqual(
+    mudam,
+    new Set<AppRole>(["administrador", "financeiro", "gerente_producao", "produtor"]),
+  );
+
+  const julia = "00000000-0000-4000-8000-0000000prod1";
+  const pedro = "00000000-0000-4000-8000-0000000prod2";
+  const outro = "00000000-0000-4000-8000-0000000prod3";
+  // Sem GP nem produtor responsáveis (decisão 266); dois produtores com a
+  // chave na equipe.
+  const job = { produtor_id: null, produtor_envia_pp: false, enviam_pela_equipe: [julia, pedro] };
+  assert.equal(enviaPPNoJob("produtor", julia, job), true);
+  assert.equal(enviaPPNoJob("produtor", pedro, job), true);
+  assert.equal(enviaPPNoJob("produtor", outro, job), false);
+  assert.equal(enviaPPNoJob("gerente_producao", outro, job), true);
+  // Com a chave, corrige a NF em avaliação como o Produtor Responsável.
+  assert.equal(corrigeNfNoJob("produtor", julia, job), true);
+  assert.equal(corrigeNfNoJob("produtor", outro, job), false);
 });
 
 test("Quem cancela a PP em cada situação (revisão de 16/11/2026 das 136 e 174)", () => {

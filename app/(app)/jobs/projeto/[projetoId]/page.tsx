@@ -38,7 +38,7 @@ export default async function ProjetoAgregadoPage({
   const { data: projeto } = await supabase
     .from("projetos")
     .select(
-      "id, codigo, nome, responsavel:profiles!responsavel_id(nome)",
+      "id, codigo, nome, de_pagamentos, responsavel:profiles!responsavel_id(nome)",
     )
     .eq("id", params.projetoId)
     .eq("tenant_id", session.activeTenant.id)
@@ -65,11 +65,15 @@ export default async function ProjetoAgregadoPage({
       // Ordem de criação, e não a do código: desde a decisão 114 o código
       // começa pela sigla do cliente, e o texto não diz mais a ordem.
       .order("created_at", { ascending: true }),
-    carregarEquipeDoProjeto(
-      supabase,
-      session.activeTenant.id,
-      params.projetoId,
-    ),
+    // Decisão 282: o projeto escondido dos jobs de pagamentos não tem
+    // Equipe própria — cada job tem a dele, e a do projeto é a soma.
+    (projeto as { de_pagamentos?: boolean }).de_pagamentos === true
+      ? Promise.resolve(null)
+      : carregarEquipeDoProjeto(
+          supabase,
+          session.activeTenant.id,
+          params.projetoId,
+        ),
   ]);
 
   // Nesta tela o status só vira selo e contagem, então já sai como o status

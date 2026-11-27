@@ -17,14 +17,14 @@ Há pagamentos que não pertencem a um job de cliente: acertos de coisas que já
    - **Empresa** ("É também o cliente do job.") · **Regional** (as da empresa) · **Competência** (trimestre e ano);
    - **Descritivo do Job**, obrigatório: o motivo da abertura.
 3. **Sem cliente e sem marca no formulário:** o cliente do job é a própria empresa. Cada empresa passa a apontar para o seu cliente (`empresas.cliente_id`). CCH e Ventura ganharam cliente (CCH e VEN); o cliente CAL passou a se chamar "Agência California", com o mesmo código e os mesmos jobs.
-4. **Sem GP e sem produtor responsáveis.** O banco aceita o vazio **só** no job e no projeto de pagamentos. Na Equipe do job não há troca de GP nem de produtor.
+4. **Sem GP e sem produtor responsáveis.** O banco aceita o vazio **só** no job e no projeto de pagamentos. Na Equipe do job não há troca de GP nem de produtor; a equipe é de cada job e tem a chave "Envia PP" por produtor (decisão 282).
 5. **O job nasce aberto**, sem orçamento visível e sem passar pela fila: aparece na hora em Jobs para a produção, e em Visualizar Jobs para o financeiro.
 6. **Do Interno, só o "não fatura":** serviço Pagamentos, tipo F · Interno, sem save, sem honorário, sem imposto e sem faturamento. **O planejado não acompanha o orçado** (o orçado é sempre zero).
 7. **Sem errata:** na planilha do job, item novo, linha vermelha, agrupamento novo e planejado entram direto, pelo "Salvar". A PP já pode ser gerada em seguida.
 8. **Rentabilidade como está:** o job aparece com faturamento zero e o custo planejado negativo, como qualquer custo.
 9. **No "Editar registro" do financeiro:** sem o campo Marca; serviço, categoria e empresa travados (a empresa é também o cliente); regional, competência, projeto unificado e contas seguem editáveis.
 10. **Sem curva de desembolso** (Tiago, 18/11/2026: "Sem curva"): o job de pagamentos não tem previsão de custos, com qualquer planejado. O custo só entra no fluxo de caixa quando a PP vira título (aprovada), "pulando" a etapa de previsão. A conta de pagamento fica opcional, como em todo job sem desembolso.
-11. **A PP segue a regra do Comitê, como no Interno** (Tiago, 18/11/2026): só o faturamento previsto fica zerado; o resto continua. Como o orçado do job de pagamentos é sempre zero, a PP de item com planejado passa do orçado e o produtor e o GP a mandam ao Comitê ("Solicitar aprovação"); aprovada, ela é gerada e enviada como as outras. A PP da linha vermelha não vai ao Comitê (a regra padrão deixa a linha vermelha de fora), e o administrador aprova direto. O envio ao financeiro é do GP, ou do administrador, como em todo job.
+11. **A PP segue a regra do Comitê, como no Interno** (Tiago, 18/11/2026): só o faturamento previsto fica zerado; o resto continua. Como o orçado do job de pagamentos é sempre zero, a PP de item com planejado passa do orçado e o produtor e o GP a mandam ao Comitê ("Solicitar aprovação"); aprovada, ela é gerada e enviada como as outras. A PP da linha vermelha não vai ao Comitê (a regra padrão deixa a linha vermelha de fora), e o administrador aprova direto. O envio ao financeiro é do GP, do administrador ou do produtor da equipe com a chave "Envia PP" (decisão 282).
 12. **O projeto e o orçamento escondidos não abrem em Orçamentos** (Tiago, 18/11/2026: "podem ficar 100% escondidos e sem acesso", o job não tem orçamento de verdade): o "Voltar" do job de pagamentos leva à lista de Jobs, e o job cancelado também; as páginas de Orçamentos daquele projeto redirecionam para a visão agregada da produção (que reúne os jobs de pagamentos do mesmo projeto unificado); as ações de orçamento recusam o projeto; e o banco recusa orçamento novo nele fora da função de criação.
 
 ## Implementação
@@ -51,3 +51,7 @@ Há pagamentos que não pertencem a um job de cliente: acertos de coisas que já
 - **PDF da PP:** a assinatura do GP sai em branco, porque o job não tem GP.
 - O projeto escondido aparece só na visão agregada da produção (com o nome do projeto unificado) e no quadro do job dentro do Comitê; na planilha do job, o rastro do orçamento é o nome do agrupamento "Pagamentos".
 - O cabeçalho do job mostra "sem planejado" e "sem realizado" sob o resultado: com valor do job zero não há percentual, como no Interno (rentabilidade "como está").
+
+## ⚠️ Nota de 2026-11-27 — a equipe de cada job e quem envia a PP (decisão 282)
+
+A equipe deixou de ser a do projeto escondido (uma por projeto unificado) e passou a ser de cada job de pagamentos, escolhida já no formulário e mudada pelo Equipe no módulo Jobs e no Financeiro. Cada produtor da equipe tem a chave "Envia PP": ligada, ele envia a PP como o GP. Ver `282-equipe-do-job-de-pagamentos.md`.

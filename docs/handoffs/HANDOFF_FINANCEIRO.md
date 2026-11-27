@@ -9406,3 +9406,10 @@ Regra completa na decisão 264. Substitui o fluxo antigo de desembolsos (drawer 
 - Desfazer, a baixa cancelada (`lancamento_desliga_a_linha`) e a carga desfeita (`_historico_apagar_linhas`) soltam os dois lados.
 - Na tela, o "Adicionar lançamento" oferece planilha e sistema juntos; com ajuste (juros, retenção, parcial) a linha ainda pede a baixa completa antes.
 - Migration `20261126300001`. Testada no Sandbox (Conta Teste, 20/10): título + planilha, baixa + planilha pela tela, retenção, desfazer e baixa cancelada.
+
+
+## ⚠️ Nota de 2026-11-27 — a equipe no "Criar Job de Pagamentos" e na página do job (decisão 282)
+
+- **Formulário:** campo **Equipe** logo abaixo do Descritivo do Job, opcional, com o "+ Adicionar pessoas" e a chave "Envia PP" de cada produtor. Grava na mesma transação do job (`criar_job_de_pagamentos(p_equipe)`).
+- **Página do job no Financeiro:** o botão Equipe do job de pagamentos ao lado dos selos do cabeçalho; o financeiro vê e muda a equipe e a chave também em jobs já abertos.
+
