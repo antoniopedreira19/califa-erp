@@ -489,6 +489,7 @@ export default async function FolhaCompetenciaPage({
         regionais={regionais}
         contagem={contagem}
         podeEditar={podeEditar}
+        beneficiosAplicado={resumo.beneficios.aplicado}
       />
     </div>
   );

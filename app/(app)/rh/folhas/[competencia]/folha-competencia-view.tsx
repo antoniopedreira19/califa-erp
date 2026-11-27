@@ -111,12 +111,14 @@ export function FolhaCompetenciaView({
   regionais,
   contagem,
   podeEditar,
+  beneficiosAplicado,
 }: {
   linhas: FolhaLinha[];
   empresas: Pick<Empresa, "id" | "nome_fantasia">[];
   regionais: { id: string; nome: string; empresa_id: string }[];
   contagem: ContagemStatus;
   podeEditar: boolean;
+  beneficiosAplicado: boolean;
 }) {
   const [busca, setBusca] = React.useState("");
   const [tab, setTab] = React.useState<StatusFiltro>("todos");
@@ -474,6 +476,7 @@ export function FolhaCompetenciaView({
           empresas={_empresas}
           regionais={regionais}
           podeEditar={podeEditar}
+          beneficiosAplicado={beneficiosAplicado}
           open={!!linhaEditando}
           onOpenChange={(next) => {
             if (!next) setLinhaEditando(null);

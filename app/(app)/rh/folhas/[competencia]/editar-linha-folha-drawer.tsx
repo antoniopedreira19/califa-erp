@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, Trash2 } from "lucide-react";
+import { AlertCircle, AlertTriangle, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogHeader,
@@ -37,6 +37,7 @@ export function EditarLinhaFolhaDrawer({
   empresas,
   regionais,
   podeEditar,
+  beneficiosAplicado,
   open,
   onOpenChange,
 }: {
@@ -44,6 +45,7 @@ export function EditarLinhaFolhaDrawer({
   empresas: Pick<Empresa, "id" | "nome_fantasia">[];
   regionais: { id: string; nome: string; empresa_id: string }[];
   podeEditar: boolean;
+  beneficiosAplicado: boolean;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -53,8 +55,14 @@ export function EditarLinhaFolhaDrawer({
   const [valor, setValor] = React.useState<string>("");
   const [alocacoes, setAlocacoes] = React.useState<LinhaEdit[]>([]);
 
+  // Edição bloqueada quando benefícios aplicados numa linha PJ. Pra editar,
+  // Kika precisa Desaplicar benefícios pelo card da folha.
+  const edicaoBloqueadaPorBeneficios =
+    beneficiosAplicado && linha.origem === "california";
+
   const modoEdicao =
     podeEditar &&
+    !edicaoBloqueadaPorBeneficios &&
     (linha.status === "rascunho" || linha.status === "pendente_correcao");
 
   React.useEffect(() => {
@@ -175,7 +183,16 @@ export function EditarLinhaFolhaDrawer({
               </div>
             )}
 
-            {!modoEdicao && (
+            {edicaoBloqueadaPorBeneficios && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                <span>
+                  Benefícios aplicados nesta competência. Para editar valores PJ,
+                  desaplique os benefícios no card da folha PJ primeiro.
+                </span>
+              </div>
+            )}
+            {!modoEdicao && !edicaoBloqueadaPorBeneficios && (
               <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
                 Esta linha está em <strong>{folhaLinhaStatusLabel(linha.status)}</strong> e não pode ser editada pelo RH agora.
               </div>
