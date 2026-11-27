@@ -155,7 +155,7 @@ export default async function FolhaCompetenciaPage({
   const primeiroDiaIso = primeiroDiaMes.toISOString().slice(0, 10);
   const ultimoDiaIso = ultimoDiaMes.toISOString().slice(0, 10);
 
-  const [colaboradoresRes, alocacoesRes, nfsAnexadasRes, feriasRes] = await Promise.all([
+  const [colaboradoresRes, alocacoesRes, nfsAnexadasRes, feriasRes, salariosRes] = await Promise.all([
     colaboradorIds.length > 0
       ? supabase
           .from("colaboradores")
@@ -191,6 +191,23 @@ export default async function FolhaCompetenciaPage({
           .lte("data_inicio", ultimoDiaIso)
           .gte("data_fim", primeiroDiaIso)
       : Promise.resolve({ data: [] as any[], error: null }),
+    // Salário vigente de cada colaborador — pra mostrar o breakdown
+    // Contratual − Férias − Benefícios = Líquido na UI.
+    colaboradorIds.length > 0
+      ? supabase
+          .from("colaboradores_salarios")
+          .select("colaborador_id, valor, valor_recibo")
+          .eq("tenant_id", session.activeTenant.id)
+          .in("colaborador_id", colaboradorIds)
+          .is("data_fim", null)
+      : Promise.resolve({
+          data: [] as {
+            colaborador_id: string;
+            valor: string | number;
+            valor_recibo: string | number | null;
+          }[],
+          error: null,
+        }),
   ]);
 
   const colabsComNf = new Set(
@@ -254,8 +271,26 @@ export default async function FolhaCompetenciaPage({
       cpf: c.cpf ?? null,
       funcao: c.funcao,
       tipo_contratacao: c.tipo_contratacao,
-      nivel_codigo: c.nivel?.codigo ?? null,
+      nivel_codigo: c.nivel_codigo ?? c.nivel?.codigo ?? null,
     });
+  }
+
+  // Salário contratual por colab (CLT-recibo usa só a parte recibo).
+  const salarioContratualPorColab = new Map<string, number>();
+  for (const s of ((salariosRes.data ?? []) as {
+    colaborador_id: string;
+    valor: string | number;
+    valor_recibo: string | number | null;
+  }[])) {
+    const colab = colaboradorPorId.get(s.colaborador_id);
+    const valor = Number(s.valor);
+    const valorRecibo =
+      s.valor_recibo != null ? Number(s.valor_recibo) : null;
+    const contratual =
+      colab?.tipo_contratacao === "clt_recibo"
+        ? valor - (valorRecibo ?? valor / 2)
+        : valor;
+    salarioContratualPorColab.set(s.colaborador_id, contratual);
   }
 
   const empresaNomePorId = new Map<string, string>();
@@ -373,6 +408,8 @@ export default async function FolhaCompetenciaPage({
       alocacoes_display: computaAlocacoesDisplay(alocs),
       tem_nf: colabsComNf.has(l.colaborador_id),
       dias_ferias_mes: diasFeriasPorColab.get(l.colaborador_id) ?? 0,
+      salario_contratual:
+        salarioContratualPorColab.get(l.colaborador_id) ?? null,
     };
   });
 

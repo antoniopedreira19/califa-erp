@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { AlertCircle, AlertTriangle, Trash2 } from "lucide-react";
+import { AlertCircle, AlertTriangle, Calculator, Trash2 } from "lucide-react";
 import {
   Dialog,
   DialogHeader,
@@ -198,6 +198,8 @@ export function EditarLinhaFolhaDrawer({
               </div>
             )}
 
+            <CalculoBreakdown linha={linha} />
+
             <div className="space-y-2">
               <Label htmlFor="salario_base">Valor da folha</Label>
               <MoedaInput
@@ -358,5 +360,148 @@ export function EditarLinhaFolhaDrawer({
         </form>
       </DrawerContent>
     </Dialog>
+  );
+}
+
+const brl = new Intl.NumberFormat("pt-BR", {
+  style: "currency",
+  currency: "BRL",
+});
+
+/**
+ * Bloco visual de breakdown do cálculo da linha: Contratual → Férias → Desc
+ * benefícios → Líquido. Só aparece quando há algum ajuste (férias OU
+ * desconto). Estilo inspirado no módulo de férias (bordas suaves, grid
+ * base + composição linha a linha + total destacado).
+ */
+function CalculoBreakdown({ linha }: { linha: FolhaLinha }) {
+  // Só PJ (origem california) tem breakdown; CLT vem líquido da contabilidade.
+  if (linha.origem !== "california") return null;
+
+  const liquido = Number(linha.salario_base);
+  const desconto = Number(linha.desconto_beneficios);
+  const diasFerias = linha.dias_ferias_mes;
+  const contratual = linha.salario_contratual;
+
+  const temDesconto = desconto > 0;
+  const temFerias = diasFerias > 0;
+
+  // Nada a exibir: sem férias E sem desconto.
+  if (!temDesconto && !temFerias) return null;
+
+  // Precisa do contratual pra calcular desconto de férias.
+  const brutoMes = liquido + desconto;
+  const temBreakdownFerias =
+    temFerias && contratual !== null && contratual > brutoMes;
+  const descontoFerias = temBreakdownFerias
+    ? (contratual as number) - brutoMes
+    : 0;
+  const diario = contratual !== null ? contratual / 30 : null;
+
+  return (
+    <div className="rounded-xl border border-border bg-muted/20 p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <Calculator className="h-4 w-4 text-muted-foreground" />
+        <h3 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+          Cálculo do mês
+        </h3>
+      </div>
+
+      {/* Base: contratual + diário */}
+      {contratual !== null && (
+        <div className="grid grid-cols-2 gap-3 text-xs mb-3 pb-3 border-b border-border">
+          <div>
+            <p className="text-muted-foreground">Salário contratual</p>
+            <p className="font-mono font-semibold text-sm mt-0.5">
+              {brl.format(contratual)}
+            </p>
+          </div>
+          {diario !== null && temBreakdownFerias && (
+            <div>
+              <p className="text-muted-foreground">Diário (/ 30)</p>
+              <p className="font-mono font-semibold text-sm mt-0.5">
+                {brl.format(diario)}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Composição */}
+      <div className="space-y-1.5 text-sm">
+        {temBreakdownFerias && (
+          <>
+            <LinhaCalculo
+              label={`Férias (${diasFerias} dia${diasFerias === 1 ? "" : "s"} × diário)`}
+              valor={-descontoFerias}
+              cor="amber"
+            />
+            <LinhaCalculo
+              label="Bruto do mês (pós-férias)"
+              valor={brutoMes}
+              sutil
+            />
+          </>
+        )}
+        {!temBreakdownFerias && (
+          <LinhaCalculo
+            label={temFerias ? `Bruto do mês` : "Bruto"}
+            valor={brutoMes}
+            sutil
+          />
+        )}
+        {temDesconto && (
+          <LinhaCalculo
+            label="Benefícios (operadora)"
+            valor={-desconto}
+            cor="vermelho"
+          />
+        )}
+      </div>
+
+      {/* Líquido final */}
+      <div className="mt-3 pt-3 border-t border-border flex items-center justify-between">
+        <span className="text-xs font-semibold uppercase tracking-wider text-foreground">
+          Líquido a pagar
+        </span>
+        <span className="font-mono text-lg font-bold text-foreground">
+          {brl.format(liquido)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function LinhaCalculo({
+  label,
+  valor,
+  cor,
+  sutil,
+}: {
+  label: string;
+  valor: number;
+  cor?: "vermelho" | "amber";
+  sutil?: boolean;
+}) {
+  const corTexto =
+    cor === "vermelho"
+      ? "text-california-red"
+      : cor === "amber"
+        ? "text-amber-700"
+        : sutil
+          ? "text-muted-foreground"
+          : "text-foreground";
+  const sinal = valor < 0 ? "−" : "";
+  const abs = Math.abs(valor);
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className={sutil ? "text-foreground/70" : "text-foreground/80"}>
+        {label}
+      </span>
+      <span className={`font-mono font-semibold ${corTexto}`}>
+        {sinal}
+        {brl.format(abs)}
+      </span>
+    </div>
   );
 }

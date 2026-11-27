@@ -84,6 +84,9 @@ export type FolhaLinha = {
   /** Dias de férias que caíram no mês e foram descontados do salário.
    *  0 quando o colaborador não teve férias nesse mês. */
   dias_ferias_mes: number;
+  /** Salário contratual vigente do colaborador (base PJ; CLT-recibo já é só
+   *  a parte "recibo"). Null quando colaborador não tem salário vigente. */
+  salario_contratual: number | null;
 };
 
 export type ContagemStatus = Record<
@@ -443,6 +446,8 @@ export function FolhaCompetenciaView({
                     desconto={Number(l.desconto_beneficios)}
                     origem={l.origem}
                     linhaId={l.id}
+                    salarioContratual={l.salario_contratual}
+                    diasFerias={l.dias_ferias_mes}
                   />
                 </td>
                 <td className="px-4 py-3">
@@ -718,37 +723,72 @@ function ValorCell({
   desconto,
   origem,
   linhaId,
+  salarioContratual,
+  diasFerias,
 }: {
   liquido: number;
   desconto: number;
   origem: FolhaOrigem;
   linhaId: string;
+  salarioContratual: number | null;
+  diasFerias: number;
 }) {
-  // Breakdown bruto/desc/líquido só em linhas PJ (origem california). CLT já vem
-  // líquido da contabilidade; se vier desconto > 0 em CLT, é bug de dado — log
-  // warning e renderiza só o valor simples.
+  // CLT não deve mostrar breakdown — já vem líquido da contabilidade.
   const temDescontoEfetivo = desconto > 0 && origem === "california";
-  const temDescontoInvalido = desconto > 0 && origem !== "california";
+  const temFeriasEfetiva = diasFerias > 0 && origem === "california";
 
-  if (temDescontoInvalido) {
+  if (desconto > 0 && origem !== "california") {
     console.warn(
       "[folha-view] linha CLT com desconto_beneficios > 0 — não esperado",
       { linhaId, desconto },
     );
   }
 
-  if (!temDescontoEfetivo) {
+  // Caso simples: sem nada a quebrar — mostra só o valor.
+  if (!temDescontoEfetivo && !temFeriasEfetiva) {
     return <span className="font-semibold">{brlFmt.format(liquido)}</span>;
   }
-  const bruto = liquido + desconto;
+
+  // bruto do mês = líquido + desconto (reverte o desconto de benefícios aplicado)
+  const brutoMes = liquido + desconto;
+  // Só mostra "Total" + "Férias" se conseguirmos computar o desconto de férias:
+  // precisa de salarioContratual e deve ser consistente (contratual > brutoMes).
+  const temBreakdownFerias =
+    temFeriasEfetiva &&
+    salarioContratual !== null &&
+    salarioContratual > brutoMes;
+  const descontoFerias = temBreakdownFerias
+    ? (salarioContratual as number) - brutoMes
+    : 0;
+
   return (
     <div className="space-y-0.5 text-right">
-      <div className="text-xs text-muted-foreground">
-        Bruto <span className="tabular-nums">{brlFmt.format(bruto)}</span>
-      </div>
-      <div className="text-xs text-california-red">
-        Desc. <span className="tabular-nums">−{brlFmt.format(desconto)}</span>
-      </div>
+      {temBreakdownFerias ? (
+        <>
+          <div className="text-xs text-muted-foreground">
+            Total{" "}
+            <span className="tabular-nums">
+              {brlFmt.format(salarioContratual as number)}
+            </span>
+          </div>
+          <div className="text-xs text-amber-700">
+            Férias ({diasFerias}d){" "}
+            <span className="tabular-nums">
+              −{brlFmt.format(descontoFerias)}
+            </span>
+          </div>
+        </>
+      ) : (
+        <div className="text-xs text-muted-foreground">
+          Bruto <span className="tabular-nums">{brlFmt.format(brutoMes)}</span>
+        </div>
+      )}
+      {temDescontoEfetivo && (
+        <div className="text-xs text-california-red">
+          Desc.{" "}
+          <span className="tabular-nums">−{brlFmt.format(desconto)}</span>
+        </div>
+      )}
       <div className="font-semibold">
         <span className="text-[10px] text-muted-foreground mr-1">Líquido</span>
         <span className="tabular-nums">{brlFmt.format(liquido)}</span>
